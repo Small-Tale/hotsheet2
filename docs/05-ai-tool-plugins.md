@@ -253,6 +253,17 @@ The actor is also recorded (HS2-32QDZ3):
 - **External trackers** attribute comments to their own authenticated account, so Hot
   Sheet does not write a separate actor trailer there.
 
+**The web client is a human actor (HS2-XF81CJ).** It adds `actor: {"role":"human"}` to
+the bodies of the actor-aware ticket routes: update, close, and batch. A checkout batch
+applies its single top-level `actor` to every update that does not name its own.
+
+- **Effect:** people are recorded as the authors of their notes and status changes, and are
+  never held to AI-only rules.
+- **Paste:** pasting a copied ticket keeps each note's original author, and sends `null`
+  for unknown authorship instead of claiming the paster wrote it.
+- **Still open (`HS2-XF81CJ`):** which further AI-only rules to enforce, and how
+  human-facing refusals should read, wait on the maintainer's decision.
+
 The bundled instruction blocks tell an AI to identify itself as the `ai` actor. Further
 role-specific rules and human-tailored feedback are follow-up work.
 

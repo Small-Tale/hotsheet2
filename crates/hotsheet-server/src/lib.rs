@@ -5172,6 +5172,9 @@ struct CheckoutBatchUpdateReq {
 #[derive(Deserialize)]
 struct CheckoutBatchReq {
     updates: Vec<CheckoutBatchUpdateReq>,
+    /// One actor for the whole bulk operation (HS2-XF81CJ); an update naming its own wins.
+    #[serde(default)]
+    actor: Option<ActorReq>,
 }
 
 /// Apply a multi-selection update through one checkout-scoped request. All optimistic
@@ -5190,7 +5193,10 @@ async fn batch_update_checkout_tickets(
     }
     let (_, settings) = checkout_settings(&state, &reference)?;
     let mut resolved = Vec::with_capacity(req.updates.len());
-    for item in req.updates {
+    for mut item in req.updates {
+        if item.update.actor.is_none() {
+            item.update.actor.clone_from(&req.actor);
+        }
         let (entry, ticket) = checkout_git_ticket(&state, &reference, &item.id)?;
         if item
             .update

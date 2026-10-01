@@ -19083,6 +19083,57 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
   }
 });
 
+test('records the web client as the human actor on the real server (HS2-XF81CJ)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<FullTicket>('/tickets', 'POST', { title: 'Completed by a person' });
+    await server.request<FullTicket>(`/tickets/${created.id}`, 'PATCH', { status: 'started' });
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    const inspector = page.locator('[data-component="ticket-inspector"][data-presentation="sidebar"]');
+    const status = inspector.locator('wa-select[name="inspector-status"]');
+    await status.click();
+    await status.locator('wa-option[value="completed"]').click();
+    // A person completes without a score: humans are never held to the AI rule.
+    await expect
+      .poll(async () => (await server.request<FullTicket>(`/tickets/${created.id}`)).status)
+      .toBe('completed');
+    const ticket = await server.request<FullTicket>(`/tickets/${created.id}`);
+    const transition = ticket.notes.find((note) => note.text.startsWith('Status changed from Started to Completed'));
+    expect(transition?.actor).toEqual({ role: 'human' });
+    await page.reload();
+    await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
+    await inspector.locator('[data-inspector-tab="timeline"]').click();
+    await expect(inspector.locator('[data-component="ticket-timeline"]')).toContainText('Completed');
+  } finally {
+    await server.stop();
+  }
+});
+
 test('loads board columns independently from the real server (HS2-HNZZHC)', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer();

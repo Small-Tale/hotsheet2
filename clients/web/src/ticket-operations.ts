@@ -1,3 +1,5 @@
+import type { NoteActor } from './api';
+
 export type TicketPatch = Record<string, unknown>;
 export interface TicketSnapshot {
   slug: string;
@@ -87,7 +89,8 @@ export interface ClipboardTicket {
   status?: string;
   up_next: boolean;
   tags: string[];
-  notes: Array<{ kind: string; text: string; summary?: string; confidence?: number }>;
+  /** `actor` keeps a pasted note's original authorship (HS2-XF81CJ). */
+  notes: Array<{ kind: string; text: string; summary?: string; confidence?: number; actor?: NoteActor }>;
   attachments: Array<{ id: string; filename: string }>;
 }
 export function deduplicateTitle(title: string, existing: readonly string[]): string {

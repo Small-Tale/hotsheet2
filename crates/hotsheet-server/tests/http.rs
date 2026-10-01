@@ -6817,6 +6817,36 @@ async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_a
         .unwrap();
     assert_eq!(batched.status(), StatusCode::OK);
     assert_eq!(body_json(batched).await[0]["category"], "bug");
+    // HS2-XF81CJ: a bulk operation's single actor applies to every update.
+    let bulk_completed = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/qual/batch",
+            Some(
+                &serde_json::json!({
+                    "updates":[{"id":qualified_id,"status":"completed"}],
+                    "actor":{"role":"human","id":"dana"}
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(bulk_completed.status(), StatusCode::OK);
+    let bulk = body_json(bulk_completed).await;
+    let transition = bulk[0]["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|note| note["text"].as_str().unwrap().ends_with("to Completed"))
+        .unwrap()
+        .clone();
+    assert_eq!(
+        transition["actor"],
+        serde_json::json!({"role":"human","id":"dana"})
+    );
 
     app.clone()
         .oneshot(authed(

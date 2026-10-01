@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Api, CHANGE_STREAM_CLIENT_ID, encodeAttachmentFilename, turnStreamEvents, TurnStreamReplayGuard } from './api';
+import {
+  Api,
+  CHANGE_STREAM_CLIENT_ID,
+  encodeAttachmentFilename,
+  turnStreamEvents,
+  TurnStreamReplayGuard,
+  withHumanActor,
+} from './api';
 import { serverInFlightCount } from './server-busy';
 
 describe('server-busy tracking option (HS2-AZZ9TF)', () => {
@@ -45,7 +52,11 @@ describe('qualified checkout ticket routes (HS2-HX0VM9)', () => {
       expect(fetchMock).toHaveBeenNthCalledWith(
         2,
         '/api/checkouts/mixed/tickets/jira-1%3APROJ-7',
-        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: 'Updated' }) }),
+        // Ticket updates from this client carry the human actor (HS2-XF81CJ).
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ title: 'Updated', actor: { role: 'human' } }),
+        }),
       );
     } finally {
       fetchMock.mockRestore();
@@ -625,7 +636,7 @@ describe('checkout bulk update transport', () => {
       '/api/checkouts/folder%20with%20spaces/batch',
       expect.objectContaining({
         method: 'POST',
-        body: '{"updates":[{"id":"one","status":"verified","expected_token":"token-1"},{"id":"two","priority":"highest","expected_token":"token-2"}]}',
+        body: '{"updates":[{"id":"one","status":"verified","expected_token":"token-1"},{"id":"two","priority":"highest","expected_token":"token-2"}],"actor":{"role":"human"}}',
       }),
     );
     fetchMock.mockRestore();
@@ -682,7 +693,7 @@ describe('structured ticket close transport', () => {
       '/api/checkouts/folder%20with%20spaces/tickets/source%2F1/close',
       expect.objectContaining({
         method: 'POST',
-        body: '{"reason":"duplicate","duplicate_of":{"project_id":"other-project","connection_id":"git-other","native_id":"target-1"}}',
+        body: '{"reason":"duplicate","duplicate_of":{"project_id":"other-project","connection_id":"git-other","native_id":"target-1"},"actor":{"role":"human"}}',
       }),
     );
     fetchMock.mockRestore();
@@ -843,5 +854,36 @@ describe('project session close (HS2-ARJ9J1)', () => {
       expect.objectContaining({ method: 'POST' }),
     );
     vi.unstubAllGlobals();
+  });
+});
+
+describe('withHumanActor (HS2-XF81CJ)', () => {
+  it('adds the human actor only to actor-aware ticket mutations', () => {
+    const body = JSON.stringify({ status: 'completed' });
+    const human = (path: string, method: string) =>
+      JSON.parse(withHumanActor(path, { method, body }).body as string) as Record<string, unknown>;
+    expect(human('/checkouts/c/tickets/HS2-1', 'PATCH').actor).toEqual({ role: 'human' });
+    expect(human('/checkouts/c/tickets/HS2-1/close', 'POST').actor).toEqual({ role: 'human' });
+    expect(human('/checkouts/c/batch', 'POST').actor).toEqual({ role: 'human' });
+    expect(human('/tickets/HS2-1?store=x', 'PATCH').actor).toEqual({ role: 'human' });
+    for (const [path, method] of [
+      ['/checkouts/c/tickets/HS2-1/attachments/a', 'PUT'],
+      ['/checkouts/c/tickets/HS2-1/notes/n', 'PATCH'],
+      ['/checkouts/c/tickets', 'POST'],
+      ['/checkouts/c/settings', 'PATCH'],
+    ] as const)
+      expect(human(path, method).actor, `${method} ${path}`).toBeUndefined();
+  });
+
+  it('keeps an explicit actor, null authorship, and non-object bodies unchanged', () => {
+    for (const body of [
+      JSON.stringify({ note: 'x', actor: { role: 'ai', id: 'codex-1' } }),
+      JSON.stringify({ note: 'x', actor: null }),
+      JSON.stringify(['a']),
+      'not json',
+    ])
+      expect(withHumanActor('/checkouts/c/tickets/HS2-1', { method: 'PATCH', body }).body).toBe(body);
+    const form = new FormData();
+    expect(withHumanActor('/checkouts/c/tickets/HS2-1', { method: 'PATCH', body: form }).body).toBe(form);
   });
 });

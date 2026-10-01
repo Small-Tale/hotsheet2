@@ -597,6 +597,36 @@ export const CHANGE_STREAM_CLIENT_ID =
     ? crypto.randomUUID()
     : `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
+/**
+ * Whether a request is one of the ticket mutations whose server route reads an `actor`
+ * (HS2-RD4M29): a ticket update, a close, or a batch update.
+ */
+export function isActorAwareRequest(method: string, path: string): boolean {
+  const pathname = path.split('?')[0];
+  if (method === 'PATCH') return /\/tickets\/[^/]+$/u.test(pathname);
+  if (method === 'POST') return /\/tickets\/[^/]+\/close$/u.test(pathname) || pathname.endsWith('/batch');
+  return false;
+}
+
+/**
+ * Ticket mutations from this client are a person acting (HS2-XF81CJ): add
+ * `actor: {"role":"human"}` to the JSON object bodies of the actor-aware routes so the server records human
+ * authorship and applies human (never AI-only) rules. A body that already names its actor,
+ * including an explicit `null` for unknown authorship, is left unchanged.
+ */
+export function withHumanActor(path: string, init: RequestInit): RequestInit {
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (typeof init.body !== 'string' || !isActorAwareRequest(method, path)) return init;
+  let body: unknown;
+  try {
+    body = JSON.parse(init.body);
+  } catch {
+    return init;
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body) || 'actor' in body) return init;
+  return { ...init, body: JSON.stringify({ ...body, actor: { role: 'human' } }) };
+}
+
 export class ApiHttpError extends Error {
   constructor(
     message: string,
@@ -618,7 +648,8 @@ export class Api {
   // `trackBusy` defaults to true so ordinary loads and mutations drive the server-busy indicator.
   // Idle long-poll streams (e.g. pollEvents) pass false: they sit pending by design and must not
   // read as the server being busy (HS2-MW1V3M).
-  private async request<T>(path: string, init: RequestInit = {}, trackRequest = true): Promise<T> {
+  private async request<T>(path: string, requested: RequestInit = {}, trackRequest = true): Promise<T> {
+    const init = withHumanActor(path, requested);
     const headers = new Headers(init.headers);
     headers.set('X-Hotsheet-Secret', this.secret);
     if (!(init.body instanceof FormData) && !headers.has('Content-Type'))

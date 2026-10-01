@@ -1138,6 +1138,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           text: note.text,
           summary: note.summary,
           confidence: note.confidence,
+          actor: note.actor,
         })) ?? [],
       attachments: full?.attachments.map((item) => ({ id: item.id, filename: item.filename })) ?? [],
     };
@@ -1177,6 +1178,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               note_kind: note.kind,
               note_summary: note.summary,
               note_confidence: note.confidence,
+              // A pasted note keeps its author; `null` keeps unknown authorship unattributed
+              // rather than claiming the paster wrote it (HS2-XF81CJ).
+              actor: note.actor ?? null,
             })
           ).ticket;
         for (const attachment of source.attachments)
