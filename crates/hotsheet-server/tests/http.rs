@@ -13891,3 +13891,131 @@ async fn checkout_providers_list_only_linked_sources_with_the_checkout_default()
         StatusCode::NOT_FOUND
     );
 }
+
+#[tokio::test]
+async fn stopping_server_cancels_a_held_permission_ask_with_503() {
+    // HS2-W1KJR4: a hook parked on a decision must not hold the shutdown drain open.
+    let (_d, st) = state();
+    let bridge = st.permission_bridge();
+    let stopper = st.clone();
+    let app = app(st);
+    let ask_app = app.clone();
+    let ask = tokio::spawn(async move {
+        ask_app
+            .oneshot(authed(
+                "POST",
+                "/permissions/ask",
+                Some(r#"{"connection":"codex-1","tool":"Bash","action":"ls","agent":"codex"}"#),
+            ))
+            .await
+            .unwrap()
+    });
+    for _ in 0..200 {
+        if bridge.pending().len() == 1 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    assert_eq!(bridge.pending().len(), 1);
+    assert!(!stopper.is_stopping());
+    stopper.begin_stopping();
+    stopper.begin_stopping(); // idempotent
+    assert!(stopper.is_stopping());
+    let resp = tokio::time::timeout(std::time::Duration::from_secs(2), ask)
+        .await
+        .expect("the held ask must end when the server stops")
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(
+        bridge.pending().is_empty(),
+        "the cancelled ask left a pending prompt"
+    );
+
+    // An ask that arrives after stopping began is refused immediately, not parked.
+    let resp = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        app.oneshot(authed(
+            "POST",
+            "/permissions/ask",
+            Some(r#"{"connection":"codex-2","tool":"Bash","action":"ls"}"#),
+        )),
+    )
+    .await
+    .expect("a late ask must not wait")
+    .unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(bridge.pending().is_empty());
+}
+
+#[tokio::test]
+async fn stopping_server_ends_an_idle_long_poll_with_an_empty_reply() {
+    // HS2-W1KJR4: a caught-up long poll returns its normal empty reply when stopping.
+    let (_d, st) = state();
+    let stopper = st.clone();
+    let app = app(st);
+    let cursor = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/ws/poll", None))
+            .await
+            .unwrap(),
+    )
+    .await["cursor"]
+        .as_u64()
+        .unwrap();
+    let poll_app = app.clone();
+    let uri = format!("/ws/poll?since={cursor}&timeout_ms=55000");
+    let poll_uri = uri.clone();
+    let poll = tokio::spawn(async move {
+        poll_app
+            .oneshot(authed("GET", &poll_uri, None))
+            .await
+            .unwrap()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    assert!(!poll.is_finished(), "the poll should be waiting");
+    stopper.begin_stopping();
+    let resp = tokio::time::timeout(std::time::Duration::from_secs(2), poll)
+        .await
+        .expect("the long poll must end when the server stops")
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    assert_eq!(body["events"], serde_json::json!([]));
+    assert_eq!(body["cursor"], cursor);
+
+    // A poll issued after stopping began returns at once instead of waiting 55 s.
+    let resp = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        app.oneshot(authed("GET", &uri, None)),
+    )
+    .await
+    .expect("a late poll must not wait")
+    .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn stopping_wakes_every_waiter_and_stays_resolved() {
+    let (_d, st) = state();
+    let waiters: Vec<_> = (0..3)
+        .map(|_| {
+            let st = st.clone();
+            tokio::spawn(async move { st.stopping().await })
+        })
+        .collect();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    assert!(waiters.iter().all(|w| !w.is_finished()));
+    st.begin_stopping();
+    for waiter in waiters {
+        tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+            .await
+            .expect("every waiter wakes")
+            .unwrap();
+    }
+    // Later waiters resolve immediately; releasing with nothing registered is a no-op.
+    tokio::time::timeout(std::time::Duration::from_millis(100), st.stopping())
+        .await
+        .expect("stopping stays resolved");
+    st.release_instances();
+    st.release_instances();
+}

@@ -84,8 +84,13 @@ impl TestServer {
             assert!(Instant::now() < deadline, "server did not shut down");
             std::thread::sleep(Duration::from_millis(25));
         }
-        // HS2-NPBZJ9 tracks stale instance cleanup after a successful graceful exit.
-        // Startup already ignores a dead pid; ready() asserts the replacement owns it.
+        // A graceful exit releases its registration explicitly (HS2-W1KJR4), even while
+        // the detached broker keeps running.
+        assert!(
+            !self.instance.exists(),
+            "stopped server left its instance file: {}",
+            fs::read_to_string(&self.log).unwrap()
+        );
     }
 }
 

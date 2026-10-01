@@ -202,6 +202,10 @@ struct LifecycleControl {
     active_mutations: AtomicUsize,
     active_background: AtomicUsize,
     shutdown: Notify,
+    /// Set once the process has begun its bounded shutdown drain (HS2-W1KJR4). Long waits
+    /// (`/permissions/ask`, `/ws/poll`) end promptly instead of holding the drain open.
+    stopping: AtomicBool,
+    stopping_changed: Notify,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -366,6 +370,52 @@ impl AppState {
     /// this process to restart. The binary races this with SIGTERM/Ctrl-C.
     pub async fn shutdown_requested(&self) {
         self.lifecycle.shutdown.notified().await;
+    }
+
+    /// Enter the shutdown drain (HS2-W1KJR4): the listener stops accepting and every
+    /// long-lived request waiting in [`Self::stopping`] is told to finish now. Idempotent.
+    pub fn begin_stopping(&self) {
+        if !self.lifecycle.stopping.swap(true, Ordering::AcqRel) {
+            self.lifecycle.stopping_changed.notify_waiters();
+        }
+    }
+
+    /// Whether [`Self::begin_stopping`] has been called.
+    pub fn is_stopping(&self) -> bool {
+        self.lifecycle.stopping.load(Ordering::Acquire)
+    }
+
+    /// Resolves once the server is stopping (immediately if it already is). Long waits
+    /// race this so an open hook or long poll cannot hold graceful shutdown open forever.
+    pub async fn stopping(&self) {
+        loop {
+            let notified = self.lifecycle.stopping_changed.notified();
+            let mut notified = std::pin::pin!(notified);
+            // Register before checking the flag so a concurrent `begin_stopping` is never
+            // missed between the check and the wait.
+            notified.as_mut().enable();
+            if self.is_stopping() {
+                return;
+            }
+            notified.await;
+        }
+    }
+
+    /// Remove every discovery instance file and release every hosted store's index-writer
+    /// lock now, instead of waiting for the last `AppState` clone to drop (HS2-W1KJR4).
+    /// Connection tasks and blocking work can outlive the listener; the files must not.
+    pub fn release_instances(&self) {
+        let guards: Vec<_> = self
+            .instance_guards
+            .lock()
+            .map(|mut g| g.drain().map(|(_, guard)| guard).collect())
+            .unwrap_or_default();
+        let locks: Vec<_> = self
+            .writer_locks
+            .lock()
+            .map(|mut w| w.drain().map(|(_, lock)| lock).collect())
+            .unwrap_or_default();
+        drop((guards, locks));
     }
 
     fn quiescence_report(&self) -> QuiescenceReport {
@@ -6787,10 +6837,11 @@ impl Drop for PermissionAskGuard {
 /// **block** until a human answers over the route-back (`POST /permissions/{id}`), up to a
 /// timeout then a safe `deny`. This is the *asking* side, for an external tool transport
 /// like the Claude PreToolUse hook (HS2-YMR9HE). An allow-rule answers immediately.
-async fn ask_permission(
-    State(state): State<AppState>,
-    Json(body): Json<AskBody>,
-) -> Json<serde_json::Value> {
+async fn ask_permission(State(state): State<AppState>, Json(body): Json<AskBody>) -> Response {
+    if state.is_stopping() {
+        return permission_ask_stopping();
+    }
+    let stopping = state.clone();
     let bridge = state.permissions.clone();
     let project = if body.project.is_empty() {
         state.store.root().display().to_string()
@@ -6807,7 +6858,7 @@ async fn ask_permission(
         state: cancellation.clone(),
     };
     // request_blocking_timeout blocks (Condvar); run it off the async runtime.
-    let decision = tokio::task::spawn_blocking(move || {
+    let blocking = tokio::task::spawn_blocking(move || {
         bridge.request_blocking_timeout_with_pending(
             hotsheet_aitools::PermissionAsk {
                 project,
@@ -6821,12 +6872,30 @@ async fn ask_permission(
             |id| cancellation.mark_pending(id),
             |_| {},
         )
-    })
-    .await
-    .unwrap_or(hotsheet_aitools::PermissionDecision::Deny);
+    });
+    // A stopping server must not hold the hook open (HS2-W1KJR4): answer 503 so the hook
+    // falls back to the tool's native prompt. Dropping the guard denies + removes the
+    // pending prompt, which also wakes the parked blocking thread.
+    let decision = tokio::select! {
+        joined = blocking => joined.unwrap_or(hotsheet_aitools::PermissionDecision::Deny),
+        () = stopping.stopping() => {
+            drop(guard);
+            return permission_ask_stopping();
+        }
+    };
     drop(guard);
     let allow = decision == hotsheet_aitools::PermissionDecision::Allow;
-    Json(serde_json::json!({ "decision": if allow { "allow" } else { "deny" } }))
+    Json(serde_json::json!({ "decision": if allow { "allow" } else { "deny" } })).into_response()
+}
+
+/// `503` for a permission ask on a stopping server: the hook treats it as a transport
+/// failure and falls back to the tool's native prompt (HS2-W1KJR4).
+fn permission_ask_stopping() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({ "error": "server is shutting down" })),
+    )
+        .into_response()
 }
 
 /// One driven connection as reported by `GET /connections`.
@@ -9530,7 +9599,13 @@ async fn poll_events(
             .unwrap_or(POLL_DEFAULT_MS)
             .min(POLL_MAX_MS),
     );
-    let (events, cursor, overflow) = match tokio::time::timeout(wait, rx.recv()).await {
+    // A stopping server ends the wait early with the ordinary empty "timeout" reply, so a
+    // long poll never holds the shutdown drain open (HS2-W1KJR4).
+    let next = tokio::select! {
+        received = tokio::time::timeout(wait, rx.recv()) => received.map_err(|_| ()),
+        () = state.stopping() => Err(()),
+    };
+    let (events, cursor, overflow) = match next {
         // Re-read the ring rather than returning only the wake-up event. This atomically
         // captures every event + the exact cursor through that span, so a burst racing the
         // response cannot advance the cursor past an event the client never received.

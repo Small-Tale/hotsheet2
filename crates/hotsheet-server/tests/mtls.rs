@@ -176,3 +176,74 @@ async fn explicit_acl_is_live_and_enforces_read_only_read_write_and_unknown() {
         .unwrap();
     assert!(denied_unknown.contains("403 Forbidden"), "{denied_unknown}");
 }
+
+#[tokio::test]
+async fn shutdown_stops_accepting_then_drains_open_tls_connections() {
+    // HS2-W1KJR4: the mTLS tier drains like plaintext — stop accepting, let in-flight
+    // requests finish, and return only once every tracked connection has closed.
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into()).unwrap();
+    let paths = Paths::at(dir.path().join("tls"));
+    init_ca(&paths, &[]).unwrap();
+    let config = hotsheet_server::tls::build_server_config(&paths).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let stopping = state.clone();
+    let serve = tokio::spawn(hotsheet_server::tls::serve_tls_with_acl(
+        listener,
+        app(state.clone()),
+        config,
+        None,
+        async move { stopping.stopping().await },
+    ));
+    let dev = issue_device(&paths, "laptop").unwrap();
+
+    // A request whose body has not finished arriving keeps its connection in flight.
+    let connector = TlsConnector::from(Arc::new(client_config(&paths, &dev)));
+    let tcp = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let mut stuck = connector
+        .connect(ServerName::try_from("localhost").unwrap(), tcp)
+        .await
+        .unwrap();
+    let body = br#"{"connection":"c","tool":"Bash","action":"ls"}"#;
+    let (first, rest) = body.split_at(14);
+    let head = format!(
+        "POST /permissions/ask HTTP/1.1\r\nHost: localhost\r\nX-Hotsheet-Secret: {SECRET}\r\n\
+         Content-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+        body.len()
+    );
+    stuck.write_all(head.as_bytes()).await.unwrap();
+    stuck.write_all(first).await.unwrap();
+    stuck.flush().await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    state.begin_stopping();
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(
+        !serve.is_finished(),
+        "the drain must wait for the in-flight connection"
+    );
+    assert!(
+        get_health(addr, client_config(&paths, &dev)).await.is_err(),
+        "a stopping server must not accept new connections"
+    );
+
+    // Completing the request lets it finish (503: the server is stopping) and the drain end.
+    stuck.write_all(rest).await.unwrap();
+    stuck.flush().await.unwrap();
+    let mut reply = Vec::new();
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        stuck.read_to_end(&mut reply),
+    )
+    .await
+    .expect("the stopping server closes the drained connection");
+    let reply = String::from_utf8_lossy(&reply);
+    assert!(reply.contains(" 503 "), "expected a 503, got:\n{reply}");
+    tokio::time::timeout(std::time::Duration::from_secs(5), serve)
+        .await
+        .expect("the drain completes once connections close")
+        .unwrap()
+        .unwrap();
+}

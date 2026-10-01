@@ -82,7 +82,15 @@ struct Cli {
     /// Worker id recorded on claims (default: the store's git email, else `server`).
     #[arg(long)]
     drive_worker: Option<String>,
+
+    /// How long a graceful stop waits for open connections before forcing exit, in
+    /// milliseconds (HS2-W1KJR4). Hidden: tests shorten or lengthen it.
+    #[arg(long, hide = true, default_value_t = DEFAULT_SHUTDOWN_DRAIN_MS)]
+    shutdown_drain_ms: u64,
 }
+
+/// Default bounded drain for a graceful stop (HS2-W1KJR4).
+const DEFAULT_SHUTDOWN_DRAIN_MS: u64 = 5_000;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -224,7 +232,7 @@ async fn main() -> Result<()> {
 
     // Take the exclusive index-writer lock before binding — a second server on this store
     // would otherwise double-write the index (join-don't-collide, HS2-59).
-    let _lock = hotsheet_server::lifecycle::acquire_writer_lock(&cli.path)
+    let writer_lock = hotsheet_server::lifecycle::acquire_writer_lock(&cli.path)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
     let listener = TcpListener::bind(addr).await?;
@@ -301,6 +309,10 @@ async fn main() -> Result<()> {
         None
     };
 
+    // Install stop-signal handling before any instance file exists, so a stop that lands
+    // during startup still runs the cleanup below instead of the default kill (HS2-W1KJR4).
+    let force = spawn_signal_listener(state.clone());
+
     // Register a discovery instance file for EVERY hosted store (the primary + any from
     // stores.json), all pointing at this one machine server — the topology-A reconciliation
     // (HS2-87): one server per machine, discoverable per project. Guards live in the state
@@ -312,55 +324,154 @@ async fn main() -> Result<()> {
     // finds it already discovered instead of paying the cold subprocess discovery inline
     // (HS2-MYDN7C / HS2-10R4VV). Never blocks serving.
     state.prewarm_ai_catalog();
-    let lifecycle_state = state.clone();
 
-    // Explicit shutdown only (HS2-59): serve until SIGTERM / Ctrl-C, then the guards drop
-    // (instance file + writer lock removed), and any in-flight work has already run in the
-    // separate process a client can't kill by closing.
-    match tls_config {
-        // Tier 1: serve over mutual TLS (manual acceptor; graceful stop-accepting on signal).
-        Some((config, acl_file)) => {
-            hotsheet_server::tls::serve_tls_with_acl(
+    // Explicit shutdown only (HS2-59), bounded (HS2-W1KJR4): the first SIGTERM / Ctrl-C (or
+    // a quiescent restart) stops accepting and tells long waits to finish; open connections
+    // then get `--shutdown-drain-ms` to complete. A deadline or a second signal forces the
+    // stop. Either way the instance files and writer locks are released explicitly before
+    // exit, because connection tasks and parked blocking work can outlive the listener.
+    let stopping = state.clone();
+    let stop_accepting = async move { stopping.stopping().await };
+    let serve: std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>> =
+        match tls_config {
+            // Tier 1: mutual TLS (manual acceptor that drains its tracked connections).
+            Some((config, acl_file)) => Box::pin(hotsheet_server::tls::serve_tls_with_acl(
                 listener,
-                app(state),
+                app(state.clone()),
                 config,
                 Some(acl_file),
-                shutdown_signal(lifecycle_state),
-            )
-            .await?;
+                stop_accepting,
+            )),
+            // Tier 0: plaintext loopback, with axum's per-connection graceful shutdown.
+            None => {
+                let serve = axum::serve(listener, app(state.clone()))
+                    .with_graceful_shutdown(stop_accepting);
+                Box::pin(async move { Ok(serve.await?) })
+            }
+        };
+    let drain = std::time::Duration::from_millis(cli.shutdown_drain_ms);
+    let outcome = drain_on_shutdown(serve, &state, drain, force).await;
+    state.release_instances();
+    drop(writer_lock);
+    match outcome {
+        DrainOutcome::Drained(result) => {
+            // Background blocking work (catalog discovery, a parked driven-tool approval)
+            // would otherwise keep the runtime from dropping; bound that too.
+            exit_after(drain);
+            result
         }
-        // Tier 0: plaintext loopback, with axum's per-connection graceful shutdown.
-        None => {
-            axum::serve(listener, app(state))
-                .with_graceful_shutdown(shutdown_signal(lifecycle_state))
-                .await?;
+        DrainOutcome::Forced(reason) => {
+            eprintln!("shutdown: {reason}; forcing exit with connections still open");
+            std::process::exit(0);
         }
     }
-    Ok(())
 }
 
 fn terminal_broker_enabled(no_terminal_broker: bool) -> bool {
     !no_terminal_broker
 }
 
-/// Resolve when the process is asked to stop: SIGTERM (the `--stop` path) or Ctrl-C.
-async fn shutdown_signal(state: AppState) {
-    let ctrl_c = async {
-        let _ = tokio::signal::ctrl_c().await;
-    };
-    #[cfg(unix)]
-    let term = async {
-        use tokio::signal::unix::{SignalKind, signal};
-        if let Ok(mut s) = signal(SignalKind::terminate()) {
-            s.recv().await;
-        }
-    };
-    #[cfg(not(unix))]
-    let term = std::future::pending::<()>();
+/// How a shutdown drain ended.
+#[derive(Debug)]
+enum DrainOutcome {
+    /// Serving ended on its own and every connection finished.
+    Drained(Result<()>),
+    /// The drain deadline passed or a second stop signal arrived.
+    Forced(&'static str),
+}
+
+/// Run `serve` until the server starts stopping, then give it `deadline` to finish its open
+/// connections, cut short by a second stop signal on `force` (HS2-W1KJR4).
+async fn drain_on_shutdown(
+    serve: impl std::future::Future<Output = Result<()>>,
+    state: &AppState,
+    deadline: std::time::Duration,
+    mut force: tokio::sync::mpsc::Receiver<()>,
+) -> DrainOutcome {
+    let mut serve = std::pin::pin!(serve);
     tokio::select! {
-        _ = ctrl_c => {},
-        _ = term => {},
-        _ = state.shutdown_requested() => {},
+        result = &mut serve => return DrainOutcome::Drained(result),
+        () = state.stopping() => {}
+    }
+    tokio::select! {
+        result = &mut serve => DrainOutcome::Drained(result),
+        () = tokio::time::sleep(deadline) => DrainOutcome::Forced("drain deadline passed"),
+        Some(()) = force.recv() => DrainOutcome::Forced("second stop signal"),
+    }
+}
+
+/// Exit the process from a watchdog thread if `main` has not returned within `after`.
+fn exit_after(after: std::time::Duration) {
+    std::thread::spawn(move || {
+        std::thread::sleep(after);
+        eprintln!("shutdown: background work outlived the drain; exiting");
+        std::process::exit(0);
+    });
+}
+
+/// Turn stop signals into the shutdown sequence: the first SIGTERM / Ctrl-C (or a quiescent
+/// restart request) begins stopping; any later signal is sent on the returned channel to
+/// force the stop. Handlers are installed once, up front, so a repeat is never lost.
+fn spawn_signal_listener(state: AppState) -> tokio::sync::mpsc::Receiver<()> {
+    let (force_tx, force_rx) = tokio::sync::mpsc::channel(1);
+    let mut signals = StopSignals::install();
+    tokio::spawn(async move {
+        tokio::select! {
+            () = signals.next() => {},
+            () = state.shutdown_requested() => {},
+        }
+        state.begin_stopping();
+        signals.next().await;
+        let _ = force_tx.send(()).await;
+    });
+    force_rx
+}
+
+/// Repeatable SIGTERM / SIGINT stream.
+struct StopSignals {
+    #[cfg(unix)]
+    term: Option<tokio::signal::unix::Signal>,
+    #[cfg(unix)]
+    int: Option<tokio::signal::unix::Signal>,
+}
+
+impl StopSignals {
+    fn install() -> Self {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{SignalKind, signal};
+            Self {
+                term: signal(SignalKind::terminate()).ok(),
+                int: signal(SignalKind::interrupt()).ok(),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            Self {}
+        }
+    }
+
+    /// Resolve on the next stop signal.
+    async fn next(&mut self) {
+        #[cfg(unix)]
+        {
+            async fn recv(signal: Option<&mut tokio::signal::unix::Signal>) {
+                match signal {
+                    Some(signal) => {
+                        signal.recv().await;
+                    }
+                    None => std::future::pending().await,
+                }
+            }
+            tokio::select! {
+                () = recv(self.term.as_mut()) => {},
+                () = recv(self.int.as_mut()) => {},
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = tokio::signal::ctrl_c().await;
+        }
     }
 }
 

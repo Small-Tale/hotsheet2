@@ -354,6 +354,21 @@ attach; a stale lock from a dead server is reclaimed), and **stop** (`hotsheet-s
 --stop` → SIGTERM). `serve` takes the lock, writes the instance file (removed by a
 guard on **graceful shutdown**: SIGTERM/Ctrl-C), and if a live server already serves
 the store it **prints how to attach and exits** instead of duplicating. E2E-verified.
+
+**Shutdown is bounded (HS2-W1KJR4).** The first SIGTERM/Ctrl-C (or an accepted quiescent
+restart) enters a _stopping_ state. The listener stops accepting on both the plaintext
+and mTLS tiers, and long waits end at once:
+
+- a parked `POST /permissions/ask` answers `503`, so the permission hook falls back to the
+  tool's native prompt, and its pending prompt is removed;
+- an idle `GET /ws/poll` returns its normal empty reply.
+
+Open connections then get a drain of 5 s (the hidden `--shutdown-drain-ms` flag changes it
+for tests). The process force-exits when that deadline passes or a **second** stop signal
+arrives. On every path it first releases each hosted store's instance file and
+index-writer lock explicitly, so a stuck connection can no longer leave a dead URL
+registered. After a clean drain, a watchdog thread also bounds any leftover blocking
+background work, such as AI catalog discovery.
 `hotsheet-cli serve` resolves the sibling `hotsheet-server` first, falls back to PATH,
 requires its version to match the CLI, and forwards foreground/stop arguments with
 clear missing-binary and mismatch diagnostics. Detached broker terminal hosting is the

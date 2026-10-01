@@ -81,6 +81,11 @@ pub async fn serve_tls_with_acl(
     use tokio_rustls::TlsAcceptor;
 
     let acceptor = TlsAcceptor::from(Arc::new(config));
+    // Track every served connection so a shutdown drains them like axum's plaintext
+    // `with_graceful_shutdown` (HS2-W1KJR4); the caller bounds how long that drain may take.
+    // Each connection task holds a sender clone; the drain ends when every clone is gone.
+    let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
+    let (live_tx, mut live_rx) = tokio::sync::mpsc::channel::<()>(1);
     let mut shutdown = std::pin::pin!(shutdown);
     loop {
         tokio::select! {
@@ -89,6 +94,8 @@ pub async fn serve_tls_with_acl(
                 let acceptor = acceptor.clone();
                 let app = app.clone();
                 let acl_file = acl_file.clone();
+                let mut stop_rx = stop_rx.clone();
+                let live = live_tx.clone();
                 tokio::spawn(async move {
                     // A failed TLS handshake (no/for bad client cert) just drops the connection.
                     let Ok(tls) = acceptor.accept(stream).await else { return };
@@ -104,14 +111,28 @@ pub async fn serve_tls_with_acl(
                         .layer(axum::Extension(access));
                     let io = TokioIo::new(tls);
                     let svc = TowerToHyperService::new(app);
-                    let _ = Builder::new(TokioExecutor::new())
-                        .serve_connection_with_upgrades(io, svc)
-                        .await;
+                    let builder = Builder::new(TokioExecutor::new());
+                    let connection = builder.serve_connection_with_upgrades(io, svc);
+                    let mut connection = std::pin::pin!(connection);
+                    tokio::select! {
+                        _ = connection.as_mut() => {}
+                        () = async { let _ = stop_rx.wait_for(|stop| *stop).await; } => {
+                            // Finish the in-flight request, then close (no keep-alive reuse).
+                            connection.as_mut().graceful_shutdown();
+                            let _ = connection.await;
+                        }
+                    }
+                    drop(live);
                 });
             }
             _ = &mut shutdown => break,
         }
     }
+    // Stop accepting, ask each open connection to finish its in-flight request, and wait.
+    drop(listener);
+    let _ = stop_tx.send(true);
+    drop(live_tx);
+    let _ = live_rx.recv().await;
     Ok(())
 }
 
