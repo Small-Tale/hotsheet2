@@ -40,6 +40,9 @@ describe('dialog layout primitives', () => {
     expect(css).not.toContain('border-bottom');
     expect(css).not.toContain('.kui-toolbar {');
     const commandCss = readFileSync(resolve(import.meta.dirname, 'command-settings-editor.css'), 'utf8');
-    expect(commandCss).toContain('button:not(:where(.kui-toolbar-control-group > button))');
+    // The editor styles only its own classed buttons, never a descendant `button` such as the Done control
+    // inside the Kerf ToolbarControlGroup or a nested component's buttons (HS2-JSSMFY).
+    expect(commandCss).toContain('.command-settings-editor__button {');
+    expect(commandCss).not.toMatch(/\.command-settings-editor\s+button\b/);
   });
 });
