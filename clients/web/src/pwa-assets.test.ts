@@ -23,6 +23,10 @@ describe('PWA identity', () => {
     expect(html).toContainSource('<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">');
     expect(html).toContainSource('<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">');
     expect(html).toContainSource('<meta name="apple-mobile-web-app-capable" content="yes">');
+    // iOS 26+ deprecated `black-translucent`; `default` keeps the status bar opaque and sharp above the
+    // toolbar, and the safe-area tokens still pad whatever inset the platform reports (HS2-7W39YD).
+    expect(html).toContainSource('<meta name="apple-mobile-web-app-status-bar-style" content="default">');
+    expect(html).not.toContain('black-translucent');
     expect(readFileSync(resolve(publicRoot, 'favicon.svg'), 'utf8')).toContain('<title>favicon</title>');
   });
 
