@@ -8675,6 +8675,60 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
   }
 });
 
+test('keeps a command edit made just before a reload through the real server (HS2-25HAK3)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    await mockProject(page);
+    // Only project discovery is a fixture; commands are the real server's (see HS2-EZ5KMC above).
+    await page.route(/\/__hotsheet\/project-api\/demo-checkout\/(commands|command-groups)$/, async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', `/checkouts/${server.checkoutId}`);
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const editor = page.locator('[data-component="command-settings-editor"]'),
+      commandDialog = page.locator('#command-editor-dialog'),
+      openCommandSettings = async () => {
+        await page.getByLabel('Settings view').click();
+        await page.getByRole('button', { name: 'Commands', exact: true }).click();
+        await expect(editor).toBeVisible();
+      },
+      storedTitles = async () =>
+        (await server.request<Array<{ title: string }>>(`/checkouts/${server.checkoutId}/commands`)).map(
+          (command) => command.title,
+        );
+    await openCommandSettings();
+    await editor.getByRole('button', { name: 'Add command' }).click();
+    await commandDialog.getByLabel('Button label').fill('Ship it');
+    await commandDialog.getByLabel('Shell command').fill('echo ship');
+    await commandDialog.getByRole('button', { name: 'Done' }).click();
+    // Hide the page inside the 600 ms autosave window, then reload: the page-hide flush must save the
+    // edit. The event is dispatched because Playwright cannot route the keepalive request a real
+    // unload sends to this test's real-server proxy (the real unload is in docs/manual-test-plan.md).
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
+    await page.reload();
+    await expect.poll(storedTitles).toEqual(['Ship it']);
+    await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
+    await openCommandSettings();
+    await expect(editor.locator('.command-settings-editor__row', { hasText: 'Ship it' })).toBeVisible();
+    // A later edit still autosaves normally after the reload.
+    await editor.locator('.command-settings-editor__row', { hasText: 'Ship it' }).dblclick();
+    await commandDialog.getByLabel('Button label').fill('Ship it now');
+    await commandDialog.getByRole('button', { name: 'Done' }).click();
+    await expect.poll(storedTitles).toEqual(['Ship it now']);
+  } finally {
+    await server.stop();
+  }
+});
+
 test('multi-selects command rows and drags the whole selection to reorder (HS2-VJYQHG)', async ({ page }) => {
   const writes: Array<Array<Record<string, unknown>>> = [];
   await mockProject(page);

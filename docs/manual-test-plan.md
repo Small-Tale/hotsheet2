@@ -142,6 +142,13 @@ manually: open two projects, enter Settings and select a non-default view (e.g. 
 in one, switch to the other project, and confirm it shows the same Settings view rather
 than resetting to Ticket sources (HS2-4J50K3).
 
+### Command edit survives an immediate reload (HS2-25HAK3)
+
+Playwright cannot route the `keepalive` request a real page unload sends, so the browser test
+dispatches `pagehide` before reloading. In the running app, open Project Settings → Commands,
+add or delete a command, and reload (or close the tab) within half a second. After reopening,
+confirm the edit is still there.
+
 ### New ticket survives an eventually-consistent index (HS2-Y5PDHW)
 
 The retention logic (`clients/web/src/pending-created-tickets.ts`) is unit-tested with

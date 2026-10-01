@@ -941,8 +941,12 @@ export class Api {
   ) => this.request<TerminalInfo>('/terminals', { method: 'POST', body: JSON.stringify(value) });
   deleteTerminal = (id: string) => this.request<void>(`/terminals/${encodeURIComponent(id)}`, { method: 'DELETE' });
   commands = () => this.request<CommandDefinition[]>('/commands');
-  saveCommands = (definitions: CommandDefinition[]) =>
-    this.request<CommandDefinition[]>('/commands', { method: 'PUT', body: JSON.stringify(definitions) });
+  saveCommands = (definitions: CommandDefinition[], options: { keepalive?: boolean } = {}) =>
+    this.request<CommandDefinition[]>('/commands', {
+      method: 'PUT',
+      body: JSON.stringify(definitions),
+      ...(options.keepalive ? { keepalive: true } : {}),
+    });
   /** Command groups kept even while empty, stored beside `commands` (HS2-EZ5KMC). */
   commandGroups = () => this.request<string[]>('/command-groups');
   saveCommandGroups = (groups: string[]) =>

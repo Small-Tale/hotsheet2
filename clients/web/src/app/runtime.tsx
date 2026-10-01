@@ -767,6 +767,7 @@ export async function startHotSheetWebClient() {
     reorderCommandSettings,
     addCommandGroup,
     deleteCommandGroup,
+    flushCommandAutosaves,
     commandRunFor,
     showCommandDialog,
     commandIcon,
@@ -5182,6 +5183,7 @@ export async function startHotSheetWebClient() {
   const flushOnHide = () => {
     flushProjectSessionPersistence();
     void flushTicketDrafts();
+    flushCommandAutosaves();
   };
   window.addEventListener('pagehide', flushOnHide);
   document.addEventListener('visibilitychange', () => {

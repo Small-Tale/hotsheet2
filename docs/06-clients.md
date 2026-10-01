@@ -515,7 +515,9 @@ and identity-less legacy entries remain conservatively blocking.
   outcome, and press-and-hold output history. Definitions are edited in Project
   Settings through a responsive master-detail editor with add, reorder, delete, typed
   target fields, validation, and debounced autosave; raw command JSON is not exposed as the
-  primary editing interface. Definitions persist to `<project-root>/.hotsheet2/settings.local.json`. Native
+  primary editing interface. Each project keeps its own pending save, and hiding or unloading
+  the page flushes every pending one with a `keepalive` write, so an edit made just before a
+  reload or tab close is kept (HS2-25HAK3). Definitions persist to `<project-root>/.hotsheet2/settings.local.json`. Native
   `program` definitions execute an exact program plus argument array; portable `shell`
   definitions store command text and resolve the current machine's shell only at run time.
   Running one creates a terminal named for the command, selects it, and opens the bottom

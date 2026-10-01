@@ -103,6 +103,53 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.commandSettingsMessage('b')).toBe('Saved.');
   });
 
+  it('keeps a pending command save per project and flushes every one on page hide (HS2-25HAK3)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      selectedProjectId = signal('a');
+    const owner = createCommandsController({
+      projects,
+      selectedProjectId,
+      storedWorkspacePreferences: DEFAULT_WORKSPACE_PREFERENCES,
+    });
+    const saves: Array<{ url: unknown; keepalive: boolean | undefined; ids: string[] }> = [];
+    fetchMock.mockImplementation(async (input, init) => {
+      if (typeof init?.body !== 'string') throw new Error('Expected JSON body');
+      const body = JSON.parse(init.body) as CommandDefinition[];
+      saves.push({ url: input, keepalive: init.keepalive, ids: body.map((item) => item.id) });
+      return json(body);
+    });
+    owner.setCommandSettingsDraft('a', JSON.stringify([command('a-one'), command('a-two')]));
+    owner.setCommandSettingsDraft('b', JSON.stringify([command('b-one')]));
+
+    // Editing a second project inside the debounce window no longer drops the first one's save.
+    owner.deleteCommandSetting('a', 'a-two');
+    owner.updateCommandSetting('b', 'b-one', 'title', 'B renamed');
+    await vi.advanceTimersByTimeAsync(600);
+    expect(saves.map((save) => [save.url, save.keepalive, save.ids])).toEqual([
+      ['/api/a/commands', undefined, ['a-one']],
+      ['/api/b/commands', undefined, ['b-one']],
+    ]);
+
+    // A page hide inside the window saves at once, with keepalive, and nothing fires afterwards.
+    saves.length = 0;
+    owner.deleteCommandSetting('a', 'a-one');
+    owner.flushCommandAutosaves();
+    expect(saves).toEqual([{ url: '/api/a/commands', keepalive: true, ids: [] }]);
+    await vi.advanceTimersByTimeAsync(600);
+    expect(saves).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.commandSettingsMessage('a')).toBe('Saved.');
+
+    // Flushing with nothing pending is a no-op, and later edits debounce normally again.
+    owner.flushCommandAutosaves();
+    expect(saves).toHaveLength(1);
+    owner.updateCommandSetting('b', 'b-one', 'title', 'B again');
+    await vi.advanceTimersByTimeAsync(599);
+    expect(saves).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(saves.at(-1)).toMatchObject({ url: '/api/b/commands', keepalive: undefined });
+  });
+
   it('persists kept command groups through add, populate, empty, reload, and delete (HS2-EZ5KMC)', async () => {
     const projects = signal([project('a')]),
       selectedProjectId = signal('a');

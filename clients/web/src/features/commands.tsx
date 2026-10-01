@@ -284,15 +284,30 @@ export function createCommandsController({
       commandSettingsExtraGroups(projectId).filter((item) => item !== group),
     );
   }
-  let commandAutosaveTimer: ReturnType<typeof setTimeout> | undefined;
+  /** One pending debounced save per project, so editing another project never drops it. */
+  const commandAutosaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   function scheduleCommandAutosave(projectId: string) {
-    if (commandAutosaveTimer) clearTimeout(commandAutosaveTimer);
-    commandAutosaveTimer = setTimeout(() => {
-      commandAutosaveTimer = undefined;
-      void saveCommandSettings(projectId);
-    }, 600);
+    clearTimeout(commandAutosaveTimers.get(projectId));
+    commandAutosaveTimers.set(
+      projectId,
+      setTimeout(() => {
+        commandAutosaveTimers.delete(projectId);
+        void saveCommandSettings(projectId);
+      }, 600),
+    );
   }
-  async function saveCommandSettings(projectId: string) {
+  /**
+   * Save every pending command edit now (HS2-25HAK3). Called when the page hides, so a reload or
+   * closed tab inside the debounce window keeps the edit; `keepalive` lets the write outlive the page.
+   */
+  function flushCommandAutosaves() {
+    for (const [projectId, timer] of commandAutosaveTimers) {
+      clearTimeout(timer);
+      commandAutosaveTimers.delete(projectId);
+      void saveCommandSettings(projectId, { keepalive: true });
+    }
+  }
+  async function saveCommandSettings(projectId: string, options: { keepalive?: boolean } = {}) {
     const current = projects.value.find((item) => item.id === projectId);
     if (!current) return;
     const definitions = commandSettingsDefinitions(projectId),
@@ -303,7 +318,7 @@ export function createCommandsController({
     }
     setCommandSettingsMessage(projectId, 'Saving…');
     try {
-      const saved = await new Api(current.apiPath).saveCommands(definitions);
+      const saved = await new Api(current.apiPath).saveCommands(definitions, options);
       if (!projects.value.some((item) => item.id === projectId)) return;
       if (selectedProjectId.value === projectId) commandDefinitions.value = saved;
       setCommandSettingsMessage(projectId, 'Saved.');
@@ -389,6 +404,7 @@ export function createCommandsController({
     reorderCommandSettings,
     addCommandGroup,
     deleteCommandGroup,
+    flushCommandAutosaves,
     commandRunFor,
     showCommandDialog,
     commandIcon,
