@@ -1,0 +1,45 @@
+/* Phone terminal Copy and Paste sheets (HS2-FRB545): app-owned native text fields inside raw Web
+   Awesome dialogs, sized to the phone with a 16px gutter. */
+.terminal-clipboard-dialog {
+  --width: min(remify(672px), calc(100vw - remify(32px)));
+}
+.terminal-clipboard-dialog__hint {
+  margin: 0;
+  color: var(--wa-color-text-quiet);
+  font-size: var(--wa-font-size-s);
+}
+.terminal-clipboard-dialog__text {
+  width: 100%;
+  min-width: 0;
+  height: min(remify(400px), 50dvh);
+  padding: var(--kui-space-xs);
+  box-sizing: border-box;
+  resize: none;
+  overflow: auto;
+  border: 1px solid var(--hs-terminal-control-border);
+  border-radius: var(--wa-border-radius-m);
+  color: var(--hs-terminal-foreground);
+  background: var(--hs-terminal-background);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* The 16px medium size keeps iOS Safari from zooming the page when the field takes focus. */
+  font-size: var(--wa-font-size-m);
+  line-height: 1.35;
+  white-space: pre;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.terminal-clipboard-dialog__text:focus-visible {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}
+/* The read-only copy view never raises the keyboard, so it can use the terminal's own compact size and
+   show more of each line on a phone. */
+.terminal-clipboard-dialog__text[readonly] {
+  font-size: var(--wa-font-size-xs);
+}
+@media (min-width: 640px) {
+  .terminal-clipboard-dialog__text {
+    font-size: var(--wa-font-size-s);
+  }
+}

@@ -120,6 +120,12 @@ import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bar
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
 import { SettingsWorkspace } from '../components/settings-workspace';
 import type { TicketStatus } from '../components/status-badge';
+import {
+  TerminalCopyDialog,
+  type TerminalCopyState,
+  TerminalPasteDialog,
+  type TerminalPasteState,
+} from '../components/terminal-clipboard-dialogs';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from '../components/terminal-dashboard';
 import { TerminalRenameDialog, type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import {
@@ -506,7 +512,10 @@ export async function startHotSheetWebClient() {
     terminalVisibilityNamePrompt = signal<TerminalVisibilityNamePrompt | undefined>(undefined);
   const terminalNames = signal(parseTerminalNames(localStorage.getItem('hotsheet.terminals.names'))),
     terminalContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined),
-    terminalRename = signal<TerminalRenameTarget | undefined>(undefined);
+    terminalRename = signal<TerminalRenameTarget | undefined>(undefined),
+    // Phone terminal Copy and Paste-fallback sheets (HS2-FRB545).
+    terminalCopy = signal<TerminalCopyState | undefined>(undefined),
+    terminalPaste = signal<TerminalPasteState | undefined>(undefined);
   /** Project-scoped keys of renames whose server write is still in flight (HS2-89FPV1). */
   const pendingTerminalRenames = new Set<string>();
   let terminalDashboardGeneration = 0,
@@ -4934,6 +4943,8 @@ export async function startHotSheetWebClient() {
           removingProviderId={providerRemovingId.value}
         />
         <TerminalRenameDialog target={terminalRename.value} />
+        <TerminalCopyDialog state={terminalCopy.value} />
+        <TerminalPasteDialog state={terminalPaste.value} />
         <TerminalVisibilityDialog
           open={Boolean(visibilityScope)}
           state={terminalVisibility.value}
@@ -5156,7 +5167,7 @@ export async function startHotSheetWebClient() {
     selectTerminalRailProject, selectTicketView, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
     terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
-    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
+    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, terminalCopy, terminalPaste, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
     closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, viewportMobile, sidebarCollapsed, inspectorCollapsed, revealInspectorOverlay,
     selectTickets, selectionOrder, visibleTickets, selectedView, hideVerifiedColumn, cancelTicketDrafts, openTicketReader, ticketContextMenu,

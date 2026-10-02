@@ -11,6 +11,13 @@ import {
   normalizeMobileTerminalColumns,
 } from './mobile-terminal-columns';
 import {
+  TERMINAL_PASTE_EVENT,
+  TERMINAL_READ_TEXT_EVENT,
+  terminalBufferText,
+  type TerminalPasteDetail,
+  type TerminalReadTextDetail,
+} from './terminal-clipboard';
+import {
   applyTerminalModifiersToText,
   encodeTerminalKey,
   NO_TERMINAL_MODIFIERS,
@@ -800,9 +807,10 @@ function initializeTerminalViewport(
       signalInteractionThrottled();
     }
   };
+  let pasting = false;
   const input = terminal.onData((value) => {
-    // A sticky key-bar modifier applies to the next typed character (HS2-CKS78M).
-    const active = modifiers?.current();
+    // A sticky key-bar modifier applies to the next typed character (HS2-CKS78M), never to a paste.
+    const active = pasting ? undefined : modifiers?.current();
     if (active && terminalModifiersActive(active)) {
       const modified = applyTerminalModifiersToText(value, active);
       if (modified !== value) modifiers?.consume();
@@ -829,6 +837,28 @@ function initializeTerminalViewport(
     element.addEventListener(TERMINAL_KEY_EVENT, sendSpecialKey);
     own(() => {
       element.removeEventListener(TERMINAL_KEY_EVENT, sendSpecialKey);
+    });
+    // Phone clipboard actions (HS2-FRB545): snapshot the active buffer as selectable text, and paste
+    // through xterm so bracketed-paste mode and newline normalization match a desktop paste.
+    const readText = (event: Event) => {
+      (event as CustomEvent<TerminalReadTextDetail>).detail.text = terminalBufferText(terminal.buffer.active);
+    };
+    const paste = (event: Event) => {
+      const text = (event as CustomEvent<TerminalPasteDetail>).detail.text;
+      if (!text) return;
+      terminal.scrollToBottom();
+      pasting = true;
+      try {
+        terminal.paste(text);
+      } finally {
+        pasting = false;
+      }
+    };
+    element.addEventListener(TERMINAL_READ_TEXT_EVENT, readText);
+    element.addEventListener(TERMINAL_PASTE_EVENT, paste);
+    own(() => {
+      element.removeEventListener(TERMINAL_READ_TEXT_EVENT, readText);
+      element.removeEventListener(TERMINAL_PASTE_EVENT, paste);
     });
   }
   connect();

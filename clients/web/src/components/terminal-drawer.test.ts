@@ -285,6 +285,7 @@ describe('TerminalDrawer', () => {
     expect(css).toContain('env(safe-area-inset-top, 0px)');
     // Off phones (no focusTextSize) the drawer focus mode shows only the Exit pill.
     expect(markup).not.toContain('terminal-drawer__focus-text-size');
+    expect(markup).not.toContain('terminal-drawer__focus-clipboard');
   });
   it('exposes the phone text-size control in drawer focus mode without an inline number (HS2-ZSFAHF)', () => {
     const base = {
@@ -316,7 +317,13 @@ describe('TerminalDrawer', () => {
     expect(markup).not.toContain('aria-hidden="true">60<');
     // Hidden while the keyboard is presented.
     expect(markup).toContain('data-keyboard-visible="false"');
-    expect(css).toMatchSource(".terminal-drawer__focus-text-size[data-keyboard-visible='true'] { display: none; }");
+    expect(css).toMatchSource(".terminal-drawer__focus-text-size[data-keyboard-visible='true'] { display: none; }"); // HS2-FRB545: the Copy/Paste pill sits beside it and hides with it while the keyboard is up.
+    expect(markup).toContain('class="terminal-drawer__focus-clipboard" role="group" aria-label="Clipboard"');
+    expect(markup).toContain('data-action="copy-terminal-text"');
+    expect(markup).toContain('data-action="paste-terminal-text"');
+    expect(markup).toContain('data-lucide="copy"');
+    expect(markup).toContain('data-lucide="clipboard-paste"');
+    expect(css).toMatchSource(".terminal-drawer__focus-clipboard[data-keyboard-visible='true'] { display: none; }");
   });
   it('keeps project-drawer visibility local and offers no grouping controls', () => {
     const markup = render();

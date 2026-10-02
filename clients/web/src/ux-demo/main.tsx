@@ -27,6 +27,7 @@ import { AppTab } from '@kerfjs/ui/app-tab';
 import { Catalog } from '@kerfjs/ui/catalog';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
@@ -57,6 +58,12 @@ import { showQuickTicketComposer } from '../components/quick-ticket-composer';
 import { SavedViewDialog } from '../components/saved-view-dialog';
 import { SettingsWorkspace } from '../components/settings-workspace';
 import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
+import {
+  TerminalCopyDialog,
+  type TerminalCopyState,
+  TerminalPasteDialog,
+  type TerminalPasteState,
+} from '../components/terminal-clipboard-dialogs';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { TerminalKeyBar } from '../components/terminal-key-bar';
@@ -80,6 +87,7 @@ import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
+import { terminalCopyMessage, terminalCopySelection } from '../terminal-clipboard';
 import {
   consumeTerminalModifiers,
   encodeTerminalKey,
@@ -440,6 +448,14 @@ const drawerFocusDemoColumns = signal(60);
 const keyBarDemoModifiers = signal<TerminalModifiers>(NO_TERMINAL_MODIFIERS),
   keyBarDemoFunctionRow = signal(false),
   keyBarDemoOutput = signal('');
+// HS2-FRB545 clipboard sheets: deterministic snapshot text; actions report what production would do.
+const CLIPBOARD_DEMO_TEXT = Array.from({ length: 40 }, (_, index) => `line ${index + 1}: build step ${index + 1} ok`)
+    .concat('$ npm test', 'All 1504 tests passed.', '$ ')
+    .join('\n'),
+  clipboardDemoCopy = signal<TerminalCopyState | undefined>(undefined),
+  clipboardDemoPaste = signal<TerminalPasteState | undefined>(undefined),
+  clipboardDemoOutput = signal(''),
+  clipboardDemoGeneration = signal(0);
 const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
 const markdownAutosave = createDebouncedAutosave((value: string) => {
   markdownSavedValue.value = value;
@@ -1044,6 +1060,31 @@ function demoContent(item: DemoDefinition) {
     );
   }
   if (item.id === 'terminal-visibility-dialog') return <TerminalVisibilityDialogDemo />;
+  if (item.id === 'terminal-copy-dialog' || item.id === 'terminal-paste-dialog') {
+    const copy = item.id === 'terminal-copy-dialog';
+    return (
+      <section class="terminal-clipboard-demo" aria-label={copy ? 'Terminal copy sheet' : 'Terminal paste sheet'}>
+        <Row gap="xs">
+          {copy ? (
+            <wa-button data-clipboard-demo-open="copy">Open copy sheet</wa-button>
+          ) : (
+            <>
+              <wa-button data-clipboard-demo-open="denied">Clipboard denied</wa-button>
+              <wa-button data-clipboard-demo-open="unavailable">Clipboard unavailable</wa-button>
+            </>
+          )}
+        </Row>
+        <p class="component-stage__event" data-clipboard-demo-output>
+          {clipboardDemoOutput.value || 'Open the sheet to try it.'}
+        </p>
+        {copy ? (
+          <TerminalCopyDialog state={clipboardDemoCopy.value} />
+        ) : (
+          <TerminalPasteDialog state={clipboardDemoPaste.value} />
+        )}
+      </section>
+    );
+  }
   if (item.id === 'terminal-rename-dialog')
     return (
       <TerminalRenameDialog target={{ projectId: 'demo', terminalId: 'shell', value: 'Development', session: 1 }} />
@@ -1655,6 +1696,67 @@ demoListeners.add(
     keyBarDemoOutput.value = `${key} → ${JSON.stringify(bytes).slice(1, -1)}`;
   }),
 );
+demoListeners.add(
+  delegate(
+    root,
+    'click',
+    '.terminal-key-bar-demo [data-action="copy-terminal-text"], .terminal-key-bar-demo [data-action="paste-terminal-text"]',
+    (_event, target) => {
+      keyBarDemoOutput.value =
+        (target as HTMLElement).dataset.action === 'copy-terminal-text'
+          ? 'Copy → opens the terminal Copy sheet'
+          : 'Paste → sends the clipboard to the terminal';
+    },
+  ),
+);
+// The clipboard sheet demos drive the same open/close/selection behavior as production (HS2-FRB545).
+demoListeners.add(
+  delegate(root, 'click', '[data-clipboard-demo-open]', (_event, target) => {
+    const kind = (target as HTMLElement).dataset.clipboardDemoOpen,
+      generation = (clipboardDemoGeneration.value += 1);
+    if (kind === 'copy')
+      clipboardDemoCopy.value = { open: true, title: 'Build', generation, text: CLIPBOARD_DEMO_TEXT };
+    else
+      clipboardDemoPaste.value = {
+        open: true,
+        title: 'Build',
+        generation,
+        reason: kind === 'unavailable' ? 'unavailable' : 'denied',
+      };
+  }),
+);
+const closeClipboardDemo = () => {
+  if (clipboardDemoCopy.value?.open) clipboardDemoCopy.value = { ...clipboardDemoCopy.value, open: false };
+  if (clipboardDemoPaste.value?.open) clipboardDemoPaste.value = { ...clipboardDemoPaste.value, open: false };
+};
+demoListeners.add(
+  delegate(root, 'click', '.terminal-clipboard-demo [data-action="confirm-terminal-copy"]', () => {
+    const field = root.querySelector<HTMLTextAreaElement>(
+      '.terminal-clipboard-demo textarea[name="terminal-copy-text"]',
+    );
+    if (!field) return;
+    const { text, selection } = terminalCopySelection(field.value, field.selectionStart, field.selectionEnd);
+    clipboardDemoOutput.value = terminalCopyMessage(text, selection);
+    closeClipboardDemo();
+  }),
+);
+demoListeners.add(
+  delegate(root, 'submit', '.terminal-clipboard-demo [data-action="submit-terminal-paste"]', (event, target) => {
+    event.preventDefault();
+    const text = target.querySelector<HTMLTextAreaElement>('textarea[name="terminal-paste-text"]')?.value ?? '';
+    clipboardDemoOutput.value = `Pasted → ${JSON.stringify(text.replace(/\r?\n/g, '\r')).slice(1, -1)}`;
+    closeClipboardDemo();
+  }),
+);
+demoListeners.add(
+  delegate(
+    root,
+    'click',
+    '.terminal-clipboard-demo [data-action="close-terminal-copy"], .terminal-clipboard-demo [data-action="cancel-terminal-paste"]',
+    closeClipboardDemo,
+  ),
+);
+demoListeners.add(delegate(root, 'wa-hide', '.terminal-clipboard-demo wa-dialog', closeClipboardDemo));
 // The drawer focus-mode text-size control cycles the demo's column fixture like production (HS2-01D4JP).
 demoListeners.add(
   delegate(root, 'click', '.terminal-drawer-focus-demo [data-action="cycle-mobile-terminal-columns"]', () => {

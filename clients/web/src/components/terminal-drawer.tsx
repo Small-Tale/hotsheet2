@@ -9,6 +9,8 @@ import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import {
   ALargeSmall,
   Bot,
+  ClipboardPaste,
+  Copy,
   FolderOpen,
   LayoutGrid,
   MessageSquare,
@@ -332,6 +334,26 @@ export function TerminalDrawer({
         >
           <LucideIcon icon={ALargeSmall} name="a-large-small" />
         </button>
+      )}
+      {focusMode && focusTextSize && (
+        <div
+          class="terminal-drawer__focus-clipboard"
+          role="group"
+          aria-label="Clipboard"
+          data-keyboard-visible={String(focusTextSize.keyboardVisible)}
+        >
+          <button
+            type="button"
+            {...TERMINALS_ACTIONS.copyTerminalText.attrs}
+            aria-label="Copy terminal text"
+            title="Copy terminal text"
+          >
+            <LucideIcon icon={Copy} name="copy" />
+          </button>
+          <button type="button" {...TERMINALS_ACTIONS.pasteTerminalText.attrs} aria-label="Paste" title="Paste">
+            <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
+          </button>
+        </div>
       )}
       {focusMode && (
         <button

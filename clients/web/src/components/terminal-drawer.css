@@ -99,6 +99,50 @@
 .terminal-drawer__focus-text-size[data-keyboard-visible='true'] {
   display: none;
 }
+/* Phone focus-mode Copy/Paste pill beside the text-size control (HS2-FRB545). With the keyboard up the
+   key bar's Fn row carries the same actions, so the pill hides with the text-size control. */
+.terminal-drawer__focus-clipboard {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--kui-space-xs) + env(safe-area-inset-top, 0px));
+  left: calc(var(--kui-space-xs) * 2 + remify(40px) + var(--hotsheet-safe-area-left, 0px));
+  display: inline-flex;
+  height: remify(40px);
+  box-sizing: border-box;
+  align-items: center;
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--hs-terminal-foreground);
+  background: color-mix(in srgb, var(--hs-terminal-background) 78%, transparent);
+  box-shadow: var(--wa-shadow-m);
+}
+.terminal-drawer__focus-clipboard[data-keyboard-visible='true'] {
+  display: none;
+}
+.terminal-drawer__focus-clipboard button {
+  display: inline-flex;
+  width: remify(40px);
+  height: 100%;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--wa-border-radius-pill);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.terminal-drawer__focus-clipboard button:hover {
+  background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 35%, var(--hs-terminal-background));
+}
+.terminal-drawer__focus-clipboard button:focus-visible {
+  outline: var(--wa-focus-ring);
+  outline-offset: -2px;
+}
+.terminal-drawer__focus-clipboard svg {
+  width: remify(16px);
+  height: remify(16px);
+}
 .terminal-drawer__rail {
   display: flex;
   min-height: remify(44px);

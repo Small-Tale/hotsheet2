@@ -134,6 +134,10 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('data-columns="60"');
     expect(markup).toContain('aria-label="Text size: 60 columns. Change text size"');
     expect(markup).not.toContain('aria-hidden="true">60<');
+    // HS2-FRB545: the phone toolbar carries Copy and Paste beside text size.
+    expect(markup).toContain('data-action="copy-terminal-text"');
+    expect(markup).toContain('data-action="paste-terminal-text"');
+    expect(String(FixedAspectTerminalCard({ session, mode: 'magnified' }))).not.toContain('copy-terminal-text');
   });
   it('keeps the smallest tile keyboard-focusable and makes its fitted magnified copy interactive', () => {
     const compact = String(TerminalDashboard({ groups, width: 900, height: 600, fitAcross: 7, fitHigh: 3 }));

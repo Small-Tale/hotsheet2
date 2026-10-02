@@ -1310,7 +1310,7 @@ test('sends special keys and sticky modifiers from the phone terminal key bar (H
   // The Fn row carries function and navigation keys.
   await keyBar.getByRole('button', { name: 'Function and navigation keys' }).click();
   await expect(keyBar.getByRole('button', { name: 'Up arrow' })).toHaveCount(0);
-  await expect(keyBar.locator('.terminal-key-bar__group')).toHaveCount(4);
+  await expect(keyBar.locator('.terminal-key-bar__group')).toHaveCount(5);
   before = (await sent()).length;
   await keyBar.getByRole('button', { name: 'F5', exact: true }).click();
   await keyBar.getByRole('button', { name: 'Page down' }).click();

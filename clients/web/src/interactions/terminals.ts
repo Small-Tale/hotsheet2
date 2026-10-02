@@ -4,6 +4,7 @@ import { type AiToolDefaults } from '../api';
 import { browserRandomId } from '../browser-id';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { type AppTabKind } from '../components/project-tab-context-menu';
+import { type TerminalCopyState, type TerminalPasteState } from '../components/terminal-clipboard-dialogs';
 import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../components/terminal-dashboard';
 import { type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
@@ -12,6 +13,14 @@ import { createDisposerScope } from '../disposer-scope';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { type DrawerAIChat } from '../project-drive';
+import {
+  pasteIntoTerminalViewport,
+  readClipboardText,
+  readTerminalViewportText,
+  terminalCopyMessage,
+  terminalCopySelection,
+  writeClipboardText,
+} from '../terminal-clipboard';
 import { adjustTerminalFit, terminalGridBasis } from '../terminal-grid-layout';
 import {
   NO_TERMINAL_MODIFIERS,
@@ -75,6 +84,10 @@ export interface TerminalInteractionsDependencies {
   /** Phone key-bar sticky modifiers and Fn-row state (HS2-CKS78M). */
   readonly terminalModifiers: Signal<TerminalModifiers>;
   readonly terminalFunctionRow: Signal<boolean>;
+  /** Phone terminal Copy and Paste-fallback sheets (HS2-FRB545). */
+  readonly terminalCopy: Signal<TerminalCopyState | undefined>;
+  readonly terminalPaste: Signal<TerminalPasteState | undefined>;
+  readonly showToast: (message: string) => void;
   readonly focusDrawerTab: (projectId: string, id: string) => void;
   readonly createProjectTerminal: (selection?: AiToolDefaults) => Promise<void>;
   readonly aiLaunchConfiguration: (
@@ -151,6 +164,9 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     cycleMobileTerminalColumns,
     terminalModifiers,
     terminalFunctionRow,
+    terminalCopy,
+    terminalPaste,
+    showToast,
     focusDrawerTab,
     createProjectTerminal,
     aiLaunchConfiguration,
@@ -346,6 +362,121 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       keepTerminalFocus(viewport);
     }),
   );
+  // Phone terminal clipboard (HS2-FRB545). The sheet keeps the viewport it was opened from, so a paste
+  // lands in that terminal even if the drawer selection changed underneath the dialog.
+  let clipboardViewport: HTMLElement | undefined,
+    refocusAfterPaste: HTMLElement | undefined,
+    clipboardGeneration = 0;
+  const viewportTitle = (viewport: HTMLElement) =>
+    viewport.getAttribute('aria-label')?.replace(/ interactive terminal$/, '') || 'the terminal';
+  const sheetField = (name: 'terminal-copy-text' | 'terminal-paste-text') =>
+    document.querySelector<HTMLTextAreaElement>(`textarea[name="${name}"]`);
+  const afterSheetRender = (callback: () => void) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(callback);
+    });
+  };
+  const closeCopySheet = () => {
+    const current = terminalCopy.peek();
+    if (current?.open) terminalCopy.value = { ...current, open: false };
+  };
+  const closePasteSheet = () => {
+    const current = terminalPaste.peek();
+    if (current?.open) terminalPaste.value = { ...current, open: false };
+  };
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.copyTerminalText.selector, (_event, target) => {
+      const viewport = keyBarViewport(target);
+      if (!viewport) return;
+      clipboardViewport = viewport;
+      terminalCopy.value = {
+        open: true,
+        title: viewportTitle(viewport),
+        generation: ++clipboardGeneration,
+        text: readTerminalViewportText(viewport) ?? '',
+      };
+      // Open on the newest output, where the text a user wants usually is.
+      afterSheetRender(() => {
+        const field = sheetField('terminal-copy-text');
+        if (field) field.scrollTop = field.scrollHeight;
+      });
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.confirmTerminalCopy.selector, () => {
+      const field = sheetField('terminal-copy-text');
+      if (!field) return;
+      const { text, selection } = terminalCopySelection(field.value, field.selectionStart, field.selectionEnd),
+        start = selection ? field.selectionStart : 0,
+        end = selection ? field.selectionEnd : field.value.length;
+      void writeClipboardText(text, navigator.clipboard as Clipboard | undefined, () => {
+        field.focus({ preventScroll: true });
+        field.setSelectionRange(start, end);
+        // Compatibility boundary (as in copy-text.ts): plain-HTTP LAN origins have no async Clipboard
+        // API. The shared off-screen copyWithSelection helper cannot select text outside this modal
+        // dialog (the rest of the page is inert), so select within the sheet's own field instead.
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        return document.execCommand('copy');
+      }).then((copied) => {
+        if (!copied) {
+          showToast('Could not copy. Touch and hold the text to copy it.');
+          return;
+        }
+        showToast(terminalCopyMessage(text, selection));
+        closeCopySheet();
+      });
+    }),
+  );
+  lifetime.add(delegate(document.body, 'click', TERMINALS_ACTIONS.closeTerminalCopy.selector, closeCopySheet));
+  lifetime.add(delegate(document.body, 'wa-hide', TERMINALS_TARGETS.terminalCopyDialog.selector, closeCopySheet));
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.pasteTerminalText.selector, (_event, target) => {
+      const viewport = keyBarViewport(target);
+      if (!viewport) return;
+      clipboardViewport = viewport;
+      void readClipboardText(navigator.clipboard as Clipboard | undefined).then((result) => {
+        if (result.status === 'ok') {
+          if (result.text) pasteIntoTerminalViewport(viewport, result.text);
+          else showToast('The clipboard is empty');
+          keepTerminalFocus(viewport);
+          return;
+        }
+        terminalPaste.value = {
+          open: true,
+          title: viewportTitle(viewport),
+          generation: ++clipboardGeneration,
+          reason: result.status,
+        };
+        afterSheetRender(() => sheetField('terminal-paste-text')?.focus());
+      });
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', TERMINALS_ACTIONS.submitTerminalPaste.selector, (event, target) => {
+      event.preventDefault();
+      const text = target.querySelector<HTMLTextAreaElement>('textarea[name="terminal-paste-text"]')?.value ?? '',
+        viewport = clipboardViewport;
+      closePasteSheet();
+      if (!viewport?.isConnected) return;
+      if (text) pasteIntoTerminalViewport(viewport, text);
+      // The dialog hands focus back to its opener once hidden; return it to the terminal instead.
+      refocusAfterPaste = viewport;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'wa-after-hide', TERMINALS_TARGETS.terminalPasteDialog.selector, (event, target) => {
+      if (event.target !== target) return;
+      const viewport = refocusAfterPaste;
+      refocusAfterPaste = undefined;
+      // Web Awesome refocuses the opener in a task queued before this event; run after it.
+      if (viewport?.isConnected)
+        window.setTimeout(() => {
+          keepTerminalFocus(viewport);
+        });
+    }),
+  );
+  lifetime.add(delegate(document.body, 'click', TERMINALS_ACTIONS.cancelTerminalPaste.selector, closePasteSheet));
+  lifetime.add(delegate(document.body, 'wa-hide', TERMINALS_TARGETS.terminalPasteDialog.selector, closePasteSheet));
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.cycleMobileTerminalColumns.selector, () => {
       cycleMobileTerminalColumns();

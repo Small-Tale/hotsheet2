@@ -201,6 +201,8 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
         'focusin',
         'focusout',
         'hotsheet-terminal-key',
+        'hotsheet-terminal-paste',
+        'hotsheet-terminal-read-text',
         TERMINAL_VIEWPORT_PARK_EVENT,
         TERMINAL_VIEWPORT_RESUME_EVENT,
         'pointerdown',

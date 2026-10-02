@@ -1368,9 +1368,9 @@
       "id": "terminal-key-bar",
       "name": "TerminalKeyBar",
       "kind": "component",
-      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with F1–F12 and Home/End/PgUp/PgDn.",
+      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.",
       "useWhen": [
-        "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with F1–F12 and Home/End/PgUp/PgDn."
+        "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalKeyBar behavior."
@@ -1399,6 +1399,50 @@
       ],
       "publicClasses": [
         "terminal-visibility-dialog"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
+      "id": "terminal-copy-dialog",
+      "name": "TerminalCopyDialog",
+      "kind": "component",
+      "purpose": "Phone terminal Copy sheet: the buffer as native, long-press-selectable text; Copy takes the selection or everything.",
+      "useWhen": [
+        "Hot Sheet needs phone terminal Copy sheet: the buffer as native, long-press-selectable text; Copy takes the selection or everything."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalCopyDialog behavior."
+      ],
+      "publicClasses": [
+        "terminal-copy-dialog"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
+      "id": "terminal-paste-dialog",
+      "name": "TerminalPasteDialog",
+      "kind": "component",
+      "purpose": "Phone terminal Paste fallback when the clipboard cannot be read (denied or unavailable): paste natively, then send.",
+      "useWhen": [
+        "Hot Sheet needs phone terminal Paste fallback when the clipboard cannot be read (denied or unavailable): paste natively, then send."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalPasteDialog behavior."
+      ],
+      "publicClasses": [
+        "terminal-paste-dialog"
       ],
       "publicTokens": [],
       "geometry": {

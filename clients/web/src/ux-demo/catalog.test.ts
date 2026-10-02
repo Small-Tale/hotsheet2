@@ -100,6 +100,8 @@ describe('UX demo catalog', () => {
       'fixed-aspect-terminal-card',
       'terminal-key-bar',
       'terminal-visibility-dialog',
+      'terminal-copy-dialog',
+      'terminal-paste-dialog',
       'terminal-rename-dialog',
       'app-empty-state',
       'content-transition',

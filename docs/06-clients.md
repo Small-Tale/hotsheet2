@@ -2608,6 +2608,30 @@ F1–F4, `CSI n~` for F5–F12/PgUp/PgDn, Shift+Tab as `CSI Z`, Ctrl+letter cont
 prefix for Alt. The bar's buttons are never focusable and a capture-phase `pointerdown` guard keeps
 focus in the terminal, so tapping a key never dismisses the keyboard.
 
+**Phone terminal copy and paste (HS2-FRB545).** xterm's surface cannot be natively selected by touch
+and its hidden input offers no Paste callout, so phone terminals expose explicit **Copy** (Lucide
+`copy`) and **Paste** (Lucide `clipboard-paste`) actions. With the keyboard hidden they sit beside the
+text-size control: a Copy/Paste pill in drawer focus mode and two buttons in the magnified terminal's
+top toolbar. With the keyboard up they live in the key bar's Fn row as a Clipboard group after the
+modifiers (the main row stays unchanged and fits 390px).
+
+- **Copy** snapshots the active buffer (scrollback plus screen; soft-wrapped rows rejoined, row padding
+  and trailing blank rows trimmed) into the _Copy terminal text_ sheet: a native read-only text view
+  scrolled to the newest output, where long-press selection works. **Copy** writes the selection, or
+  all the text when nothing is selected, then closes the sheet and toasts what was copied (lines
+  counted). It uses `navigator.clipboard.writeText` and falls back to selecting within the sheet's own
+  field plus the legacy copy command (plain-HTTP LAN origins have no async Clipboard API). **Done**
+  closes without copying. Each opening takes a fresh snapshot with no stale selection.
+- **Paste** reads `navigator.clipboard.readText()` and sends the text through xterm's paste path, so
+  bracketed-paste mode and newline normalization (`\n` → `\r`) match a desktop paste. Sticky key-bar
+  modifiers never apply to pasted text and stay armed for the next typed key. An empty clipboard
+  sends nothing and toasts that the clipboard is empty. When the read is denied or the API is
+  unavailable, the _Paste into terminal_ sheet opens with a focused, empty field and a reason-specific
+  hint; the user pastes with the platform callout and submits **Paste** (sent to the terminal the
+  sheet was opened from, which regains focus) or **Cancel** (sends nothing).
+- Desktop layouts render none of these controls; xterm's own mouse selection and keyboard copy/paste
+  shortcuts are unchanged.
+
 **Phone magnified terminal chrome (HS2-WMN626).** On a phone the magnified terminal overlay is
 positioned from the live `VisualViewport` (offset and size), so presenting the virtual keyboard
 shrinks it — and its M rows — to the visible area above the keyboard instead of leaving the

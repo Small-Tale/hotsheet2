@@ -73,6 +73,16 @@ When automation lands, remove the manual-only step and record it below.
     opens help. In `htop` or `mc`: F-keys and PgUp/PgDn work. Double-tap Alt to lock it, confirm the
     underline, and confirm leaving the terminal clears it. Automated coverage asserts the exact bytes
     and focus retention in Chromium; only a device proves keyboard retention and IME interplay.
+11. HS2-FRB545 — on a **physical phone** (iOS Safari and Android Chrome), over both HTTPS and the
+    plain-HTTP LAN host: in drawer focus mode and the magnified terminal, tap **Copy**, long-press to
+    select part of the text with the native handles, tap **Copy**, and paste into another app to
+    confirm only the selection was copied; repeat with nothing selected for the full text. Copy text
+    in another app, tap **Paste** (accept the iOS Paste confirmation) and confirm it reaches the shell;
+    deny it (or use the HTTP host, where the API is missing) and confirm the paste sheet opens, the
+    native Paste callout works in its field, and **Paste** sends it with the keyboard returning to the
+    terminal. With the keyboard up, confirm Fn shows the Clipboard group and using it keeps the
+    keyboard up. Automated Chromium coverage grants or stubs clipboard permissions; only a device
+    proves native selection handles, the iOS paste prompt, and the legacy copy fallback.
 
 ### Local production host over the LAN
 

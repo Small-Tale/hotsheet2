@@ -90,6 +90,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-touch-scroll.ts # Phone finger-drag scrolling: gesture/momentum controller and pixel-to-row scrollback/arrow-key conversion (HS2-KFBRSB)
     src/terminal-keys.ts     #   Phone key-bar special keys and sticky modifiers encoded as xterm sequences (HS2-CKS78M)
     src/components/terminal-key-bar.tsx # Phone terminal accessory bar above the soft keyboard (HS2-CKS78M)
+    src/terminal-clipboard.ts # Phone terminal copy/paste: buffer-text snapshot, viewport events, clipboard read/write fallbacks (HS2-FRB545)
+    src/components/terminal-clipboard-dialogs.tsx # Phone terminal Copy sheet and Paste-fallback sheet (HS2-FRB545)
+    tests/terminal-clipboard.spec.ts # Phone terminal copy/paste flows, denied/unavailable fallback, desktop absence (HS2-FRB545)
     src/terminal-viewport-runtime.test.ts # Partial setup failure/cleanup and successful refill with idempotent teardown
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails

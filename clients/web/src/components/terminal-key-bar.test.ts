@@ -14,6 +14,7 @@ describe('TerminalKeyBar', () => {
     expect(markup).not.toContain('data-component="toolbar-control-group"');
     expect(markup).toContain('data-key="Escape"');
     expect(markup).toContain('data-key="ArrowRight"');
+    expect(markup).not.toContain('aria-label="Clipboard"');
   });
 
   it('replaces arrows with navigation/function keys and retains locked modifiers', () => {
@@ -29,6 +30,11 @@ describe('TerminalKeyBar', () => {
     expect(markup).toContain('data-key="F12"');
     expect(markup).toContain('aria-label="Alt (locked)"');
     expect(markup).not.toContain('data-key="ArrowRight"');
-    expect(markup.match(/tabindex="-1"/g)).toHaveLength(22);
+    // HS2-FRB545: the Fn row's clipboard group follows the modifiers, before the navigation keys.
+    expect(markup).toContain('aria-label="Clipboard"');
+    expect(markup.indexOf('aria-label="Clipboard"')).toBeLessThan(markup.indexOf('aria-label="Navigation keys"'));
+    expect(markup).toContain('data-action="copy-terminal-text"');
+    expect(markup).toContain('data-action="paste-terminal-text"');
+    expect(markup.match(/tabindex="-1"/g)).toHaveLength(24);
   });
 });

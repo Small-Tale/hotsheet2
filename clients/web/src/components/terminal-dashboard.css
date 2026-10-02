@@ -493,7 +493,8 @@
   overflow: clip;
 }
 .terminal-tile__close,
-.terminal-tile__text-size {
+.terminal-tile__text-size,
+.terminal-tile__clipboard {
   display: inline-flex;
   min-width: remify(40px);
   height: remify(40px);
@@ -509,11 +510,13 @@
   font-variant-numeric: tabular-nums;
 }
 .terminal-tile__close:hover,
-.terminal-tile__text-size:hover {
+.terminal-tile__text-size:hover,
+.terminal-tile__clipboard:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
 .terminal-tile__close svg,
-.terminal-tile__text-size svg {
+.terminal-tile__text-size svg,
+.terminal-tile__clipboard svg {
   width: remify(16px);
   height: remify(16px);
 }

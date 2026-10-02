@@ -6282,6 +6282,56 @@ test('catalogs the TerminalKeyBar rows, sticky modifiers, and sent bytes (HS2-CK
   await expect(output).toHaveText('F12 → \\u001b[24~');
   await expect(keys.getByRole('button', { name: 'Escape' })).toHaveCSS('cursor', 'pointer');
   await demo.screenshot({ path: test.info().outputPath('hs2-cks78m-demo.png') });
+  // HS2-FRB545: the Fn row's clipboard group reports what production does.
+  await keys.getByRole('button', { name: 'Paste' }).click();
+  await expect(output).toHaveText('Paste → sends the clipboard to the terminal');
+  await keys.getByRole('button', { name: 'Copy terminal text' }).click();
+  await expect(output).toHaveText('Copy → opens the terminal Copy sheet');
+});
+
+test('catalogs the terminal Copy and Paste sheets with every variant (HS2-FRB545)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=terminal-copy-dialog');
+    const copyDemo = page.getByRole('region', { name: 'Terminal copy sheet' }),
+      copySheet = copyDemo.locator('[data-component="terminal-copy-dialog"]'),
+      output = copyDemo.locator('[data-clipboard-demo-output]'),
+      field = copySheet.getByRole('textbox', { name: 'Terminal text' });
+    await copyDemo.getByRole('button', { name: 'Open copy sheet' }).click();
+    await expect(copySheet).toHaveJSProperty('open', true);
+    await expect(field).toHaveJSProperty('readOnly', true);
+    await expect(field).toHaveValue(/All 1504 tests passed\./);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: test.info().outputPath(`hs2-frb545-copy-demo-${width}.png`) });
+    await field.evaluate((node: HTMLTextAreaElement) => {
+      node.setSelectionRange(0, 'line 1'.length);
+    });
+    await copySheet.getByRole('button', { name: 'Copy', exact: true }).click();
+    await expect(copySheet).toHaveJSProperty('open', false);
+    await expect(output).toHaveText('Copied selection (1 line)');
+    await copyDemo.getByRole('button', { name: 'Open copy sheet' }).click();
+    await copySheet.getByRole('button', { name: 'Copy', exact: true }).click();
+    await expect(output).toHaveText('Copied terminal text (43 lines)');
+
+    await page.goto('/ux-demo?component=terminal-paste-dialog');
+    const pasteDemo = page.getByRole('region', { name: 'Terminal paste sheet' }),
+      pasteSheet = pasteDemo.locator('[data-component="terminal-paste-dialog"]'),
+      pasteOutput = pasteDemo.locator('[data-clipboard-demo-output]'),
+      pasteField = pasteSheet.getByRole('textbox', { name: 'Text to paste' });
+    await pasteDemo.getByRole('button', { name: 'Clipboard denied' }).click();
+    await expect(pasteSheet).toContainText('Clipboard access was not allowed.');
+    await pasteField.fill('ls\npwd');
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: test.info().outputPath(`hs2-frb545-paste-demo-${width}.png`) });
+    await pasteSheet.getByRole('button', { name: 'Paste', exact: true }).click();
+    await expect(pasteSheet).toHaveJSProperty('open', false);
+    await expect(pasteOutput).toHaveText('Pasted → ls\\rpwd');
+    await pasteDemo.getByRole('button', { name: 'Clipboard unavailable' }).click();
+    await expect(pasteSheet).toContainText('This browser does not let Hot Sheet read the clipboard.');
+    await expect(pasteField).toHaveValue('');
+    await pasteSheet.getByRole('button', { name: 'Cancel' }).click();
+    await expect(pasteSheet).toHaveJSProperty('open', false);
+  }
 });
 
 test('renders project ticket sources and the machine connection catalog at wide and phone widths (HS2-3SCH1K)', async ({

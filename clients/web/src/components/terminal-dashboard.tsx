@@ -8,7 +8,19 @@ import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ALargeSmall, Ellipsis, ExternalLink, Eye, EyeOff, MessageSquare, Minus, Plus, X } from 'lucide';
+import {
+  ALargeSmall,
+  ClipboardPaste,
+  Copy,
+  Ellipsis,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  MessageSquare,
+  Minus,
+  Plus,
+  X,
+} from 'lucide';
 
 import { contextPopupMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
@@ -275,6 +287,28 @@ function TerminalCard({
             title="Change text size"
           >
             <LucideIcon icon={ALargeSmall} name="a-large-small" />
+          </button>
+        )}
+        {magnified && mobile && (
+          <button
+            type="button"
+            class="terminal-tile__clipboard"
+            {...TERMINALS_ACTIONS.copyTerminalText.attrs}
+            aria-label="Copy terminal text"
+            title="Copy terminal text"
+          >
+            <LucideIcon icon={Copy} name="copy" />
+          </button>
+        )}
+        {magnified && mobile && (
+          <button
+            type="button"
+            class="terminal-tile__clipboard"
+            {...TERMINALS_ACTIONS.pasteTerminalText.attrs}
+            aria-label="Paste"
+            title="Paste"
+          >
+            <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
           </button>
         )}
         <button

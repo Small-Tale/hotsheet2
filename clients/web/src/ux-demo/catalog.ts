@@ -580,7 +580,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'terminal-key-bar',
         'TerminalKeyBar',
-        'Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with F1–F12 and Home/End/PgUp/PgDn.',
+        'Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.',
         'feature-floor',
         true,
         ['toolbar-control-group'],
@@ -592,6 +592,20 @@ export const demoCatalog: DemoCategory[] = [
         'feature-floor',
         true,
         ['list-item'],
+      ),
+      demo(
+        'terminal-copy-dialog',
+        'TerminalCopyDialog',
+        'Phone terminal Copy sheet: the buffer as native, long-press-selectable text; Copy takes the selection or everything.',
+        'feature-floor',
+        true,
+      ),
+      demo(
+        'terminal-paste-dialog',
+        'TerminalPasteDialog',
+        'Phone terminal Paste fallback when the clipboard cannot be read (denied or unavailable): paste natively, then send.',
+        'feature-floor',
+        true,
       ),
       demo(
         'terminal-rename-dialog',

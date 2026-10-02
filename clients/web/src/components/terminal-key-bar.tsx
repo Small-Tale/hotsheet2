@@ -1,7 +1,7 @@
 import './terminal-key-bar.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from 'lucide';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardPaste, Copy } from 'lucide';
 
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { TerminalModifier, TerminalModifiers, TerminalSpecialKey } from '../terminal-keys';
@@ -59,8 +59,8 @@ function ModifierButton({ modifier, modifiers }: { modifier: TerminalModifier; m
 
 /**
  * Phone terminal accessory bar (HS2-CKS78M). The main row (Fn, Esc, Tab, sticky Ctrl/Alt, arrows)
- * fits a 390px phone without scrolling; Fn swaps in a scrolling row with Shift, Home/End/PgUp/PgDn,
- * and F1–F12, and stays at the leading edge so it is always reachable. Buttons are not focusable and
+ * fits a 390px phone without scrolling; Fn swaps in a scrolling row with Shift, the Copy/Paste clipboard
+ * actions (HS2-FRB545), Home/End/PgUp/PgDn, and F1–F12, and stays at the leading edge so it is always reachable. Buttons are not focusable and
  * a capture-phase `pointerdown` guard keeps focus in the terminal, so the soft keyboard stays up.
  */
 export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBarProps) {
@@ -96,6 +96,26 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
       </div>
       {functionRow ? (
         <>
+          <div class="terminal-key-bar__group" role="group" aria-label="Clipboard">
+            <button
+              type="button"
+              tabindex="-1"
+              {...TERMINALS_ACTIONS.copyTerminalText.attrs}
+              aria-label="Copy terminal text"
+              title="Copy terminal text"
+            >
+              <LucideIcon icon={Copy} name="copy" />
+            </button>
+            <button
+              type="button"
+              tabindex="-1"
+              {...TERMINALS_ACTIONS.pasteTerminalText.attrs}
+              aria-label="Paste"
+              title="Paste"
+            >
+              <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
+            </button>
+          </div>
           <div class="terminal-key-bar__group" role="group" aria-label="Navigation keys">
             {NAVIGATION.map((item) => (
               <KeyButton keyName={item.key} label={item.label}>

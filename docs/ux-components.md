@@ -2284,3 +2284,10 @@ and fit the dashboard header at desktop and phone widths.
 HS2-2TN51D gives the phone terminal key bar app-owned compact groups. Its Fn control can
 stay sticky in the same horizontal scroll container as the function keys, while the
 ordinary row fits the phone viewport and all keys retain their dark treatment.
+
+HS2-FRB545 adds phone terminal copy and paste. `TerminalKeyBar`'s Fn row gains a Clipboard group
+(Copy, Paste) after the modifiers; the drawer focus mode shows a matching Copy/Paste pill beside the
+text-size control, and the magnified terminal toolbar adds the same two buttons. `TerminalCopyDialog`
+(a raw `wa-dialog` with an app-owned, read-only, terminal-colored native text view) and
+`TerminalPasteDialog` (the denied/unavailable fallback with an editable native field) are cataloged
+as `terminal-copy-dialog` and `terminal-paste-dialog`, with both paste reasons exposed in the demo.
