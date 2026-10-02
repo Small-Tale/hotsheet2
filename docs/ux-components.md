@@ -2118,9 +2118,11 @@ pointer cursor; the HS1 dialog styles its own path elements and the HS1 banners 
 stacked copy layout and action-button padding; the ticket-close dialog styles its own project and
 title spans; inspector tab and ticket-source trailing icons size through `LucideIcon size`; the
 inspector field headers keep Kerf's label line height; and the UX catalog stage is an app-owned
-labelled section rather than a width-capped CatalogExampleStack. The remaining doctor warnings are
-tracked under HS2-9ME409 (delegate disposers, attr selectors) and `KF-VXWMM9` (root-level wiring
-for KUI-L401).
+labelled section rather than a width-capped CatalogExampleStack. HS2-G838PZ and HS2-NZT3MT then
+cleared every `kerfjs/require-delegate-disposer` and `kerfjs/prefer-attr-selector` warning, and the
+doctor gate now budgets warnings as well: every warning id is held at 0 except the 56 `KUI-L401`
+wiring findings, which wait on Kerf accepting wiring done once at the app entry (`KF-VXWMM9`,
+HS2-Y2QG3G).
 HS2-TAZJ0V wires Kerf's `wireScrollDividers()` once, page-lifetime, at the production app root
 (`clients/web/src/app/runtime.tsx`). Kerf toolbars draw no divider by default; with the wiring each
 Pane header gains its bottom divider (`data-scroll-divider` containing `b`) only while content is

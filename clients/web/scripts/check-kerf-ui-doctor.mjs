@@ -25,6 +25,12 @@ export const KERF_UI_DOCTOR_BUDGET = {
     'KUI-L008': 0,
     'KUI-L017': 0,
   },
+  // Warnings are budgeted too, so cleared ids (for example eslint:kerfjs/require-delegate-disposer
+  // and eslint:kerfjs/prefer-attr-selector, HS2-9ME409) stay at zero. KUI-L401 remains until Kerf
+  // accepts wiring done once at the app entry (KF-VXWMM9, HS2-Y2QG3G).
+  warning: {
+    'KUI-L401': 56,
+  },
 };
 
 function countsFor(diagnostics, severity) {
@@ -51,10 +57,10 @@ export function assertKerfUiDoctorBaseline(report, budget = KERF_UI_DOCTOR_BUDGE
     throw new Error('The CI doctor gate must keep browser evaluation opt-in.');
 
   const failures = [];
-  for (const severity of ['error', 'review']) {
+  for (const severity of ['error', 'review', 'warning']) {
     const actual = countsFor(report.diagnostics, severity);
     for (const [id, count] of Object.entries(actual)) {
-      const limit = budget[severity][id] ?? 0;
+      const limit = budget[severity]?.[id] ?? 0;
       if (count > limit) failures.push(`${severity} ${id}: ${count} found, budget ${limit}`);
     }
   }

@@ -43,6 +43,16 @@ describe('Kerf UI doctor baseline', () => {
       diagnostics: [...report().diagnostics, { id: 'KUI-L004', severity: 'review' }],
     });
     expect(() => assertKerfUiDoctorBaseline(increased)).toThrow('review KUI-L004: 1 found, budget 0');
+    const clearedWarning = report({
+      diagnostics: [...report().diagnostics, { id: 'eslint:kerfjs/require-delegate-disposer', severity: 'warning' }],
+    });
+    expect(() => assertKerfUiDoctorBaseline(clearedWarning)).toThrow(
+      'warning eslint:kerfjs/require-delegate-disposer: 1 found, budget 0',
+    );
+    const moreWiring = report({
+      diagnostics: [...report().diagnostics, { id: 'KUI-L401', severity: 'warning' }],
+    });
+    expect(() => assertKerfUiDoctorBaseline(moreWiring)).toThrow('warning KUI-L401: 57 found, budget 56');
   });
 
   it('rejects failed stages, configuration failures, and an enabled browser stage', () => {
