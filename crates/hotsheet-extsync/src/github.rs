@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
 use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
@@ -13,7 +15,9 @@ use hotsheet_ticketing::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::github_attachments::{self, AttachmentMarker, GitHubAttachmentRepository};
 use crate::note_trailer;
+use hotsheet_ticketing::wire::ApiAttachment;
 
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
@@ -27,6 +31,8 @@ pub struct GitHubConfig {
     pub api_base: String,
     pub token: String,
     pub default: bool,
+    /// Assets repository for attachments (HS2-HSA64D); attachments are unsupported without one.
+    pub attachments: Option<GitHubAttachmentRepository>,
 }
 
 impl GitHubConfig {
@@ -41,7 +47,14 @@ impl GitHubConfig {
             api_base: "https://api.github.com".into(),
             token: token.into(),
             default: false,
+            attachments: None,
         }
+    }
+
+    /// Enable attachments through an assets repository.
+    pub fn with_attachments(mut self, attachments: GitHubAttachmentRepository) -> Self {
+        self.attachments = Some(attachments);
+        self
     }
 
     pub fn from_connection(
@@ -65,6 +78,12 @@ impl GitHubConfig {
                 .into(),
             token: token.into(),
             default: connection.default,
+            attachments: GitHubAttachmentRepository::from_settings(&connection.settings).map_err(
+                |message| ProviderError::Conflict {
+                    ticket: connection.id.clone(),
+                    message,
+                },
+            )?,
         })
     }
 }
@@ -184,6 +203,14 @@ impl GitHubProvider {
             "{}/repos/{}/{}",
             self.config.api_base.trim_end_matches('/'),
             self.config.repository,
+            suffix.trim_start_matches('/')
+        )
+    }
+
+    fn repository_endpoint(&self, repository: &str, suffix: &str) -> String {
+        format!(
+            "{}/repos/{repository}/{}",
+            self.config.api_base.trim_end_matches('/'),
             suffix.trim_start_matches('/')
         )
     }
@@ -337,8 +364,21 @@ impl GitHubProvider {
             .and_then(parse_priority)
             .unwrap_or_default();
         let status = issue_status(&issue.state, &labels);
+        // Attachment link comments this provider wrote project as attachments, not notes.
+        let mut attachments = Vec::new();
         let notes = comments
             .into_iter()
+            .filter_map(|comment| {
+                if let Some((id, marker)) = github_attachments::parse_comment(&comment.body) {
+                    attachments.push(github_attachments::api_attachment(
+                        id,
+                        marker,
+                        comment.created_at,
+                    ));
+                    return None;
+                }
+                Some(comment)
+            })
             .map(|comment| {
                 let (text, confidence) = note_trailer::parse_comment(&comment.body);
                 ApiNote {
@@ -418,7 +458,7 @@ impl GitHubProvider {
             schema: 1,
             notes,
             latest_confidence,
-            attachments: vec![],
+            attachments,
             warnings: vec![],
             auto_context: vec![],
         }
@@ -512,7 +552,7 @@ impl TicketProvider for GitHubProvider {
             display_name: format!("GitHub {}", self.config.repository),
             locator: self.config.repository.clone(),
             default: self.config.default,
-            capabilities: github_capabilities(),
+            capabilities: github_capabilities(self.config.attachments.is_some()),
         }
     }
 
@@ -882,6 +922,109 @@ impl TicketProvider for GitHubProvider {
         self.get(native_id)
     }
 
+    /// Upload to the assets repository, then link it from one marked issue comment
+    /// (HS2-HSA64D). The marker makes a retry return the existing attachment.
+    fn add_attachment(
+        &self,
+        native_id: &str,
+        attachment: ApiAttachment,
+        bytes: Vec<u8>,
+    ) -> Result<ApiTicket, ProviderError> {
+        validate_number(native_id)?;
+        let Some(assets) = self.config.attachments.clone() else {
+            return self.unsupported("attachments");
+        };
+        if !github_attachments::valid_attachment_id(&attachment.id) {
+            return Err(ProviderError::InvalidNativeId {
+                provider: "github",
+                id: attachment.id,
+            });
+        }
+        let key = github_attachments::marker_key(&attachment.id);
+        if self
+            .comments(native_id)?
+            .iter()
+            .any(|comment| comment.body.contains(&key))
+        {
+            return self.get(native_id);
+        }
+        let path = assets.file_path(&attachment.id, &attachment.filename);
+        let file = self.upload_asset(&assets, &path, &attachment.filename, native_id, &bytes)?;
+        let url = assets.link_url(&self.config.api_base, &file.path, file.html_url.as_deref());
+        let marker = AttachmentMarker {
+            filename: attachment.filename,
+            path: file.path,
+            repository: assets.repository,
+            branch: assets.branch,
+            sha: Some(file.sha),
+            batch_id: attachment.batch_id,
+            batch_label: attachment.batch_label,
+            actor: attachment.actor,
+            purpose: attachment.purpose,
+        };
+        let body = github_attachments::compose_comment(&attachment.id, &url, &marker);
+        self.request(
+            "POST",
+            &self.endpoint(&format!("issues/{native_id}/comments")),
+            Some(&json!({ "body": body })),
+        )?;
+        self.get(native_id)
+    }
+
+    /// Read an attachment's bytes through the authenticated API, so private assets
+    /// repositories render without exposing a token to the browser.
+    fn attachment_bytes(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+    ) -> Result<Vec<u8>, ProviderError> {
+        validate_number(native_id)?;
+        let marker = self
+            .comments(native_id)?
+            .into_iter()
+            .find_map(|comment| {
+                github_attachments::parse_comment(&comment.body)
+                    .filter(|(id, _)| id == attachment_id)
+                    .map(|(_, marker)| marker)
+            })
+            .ok_or_else(|| ProviderError::NotFound {
+                connection_id: self.config.connection_id.clone(),
+                native_id: attachment_id.into(),
+            })?;
+        let encoded = match &marker.sha {
+            Some(sha) => {
+                let blob: GitHubBlob = self.json(self.request(
+                    "GET",
+                    &self.repository_endpoint(&marker.repository, &format!("git/blobs/{sha}")),
+                    None,
+                )?)?;
+                blob.content
+            }
+            None => {
+                let file: GitHubContentFile = self.json(self.request(
+                    "GET",
+                    &self.repository_endpoint(
+                        &marker.repository,
+                        &format!(
+                            "contents/{}?ref={}",
+                            github_attachments::encode_path(&marker.path),
+                            github_attachments::encode_path(&marker.branch)
+                        ),
+                    ),
+                    None,
+                )?)?;
+                file.content.unwrap_or_default()
+            }
+        };
+        let compact: String = encoded.chars().filter(|c| !c.is_whitespace()).collect();
+        BASE64
+            .decode(compact)
+            .map_err(|error| ProviderError::Conflict {
+                ticket: format!("{}:{native_id}", self.config.connection_id),
+                message: format!("invalid attachment content from GitHub: {error}"),
+            })
+    }
+
     fn close(
         &self,
         native_id: &str,
@@ -960,6 +1103,51 @@ impl TicketProvider for GitHubProvider {
 }
 
 impl GitHubProvider {
+    /// Commit one attachment file to the assets repository. A path that already exists
+    /// (a retry after the upload succeeded but the link comment failed) is reused.
+    fn upload_asset(
+        &self,
+        assets: &GitHubAttachmentRepository,
+        path: &str,
+        filename: &str,
+        native_id: &str,
+        bytes: &[u8],
+    ) -> Result<GitHubContentFile, ProviderError> {
+        let url = self.repository_endpoint(
+            &assets.repository,
+            &format!("contents/{}", github_attachments::encode_path(path)),
+        );
+        let body = json!({
+            "message": format!(
+                "Upload attachment: {filename} ({}#{native_id})",
+                self.config.repository
+            ),
+            "content": BASE64.encode(bytes),
+            "branch": assets.branch,
+        });
+        match self.request("PUT", &url, Some(&body)) {
+            Ok(response) => {
+                let written: GitHubContentWrite = self.json(response)?;
+                Ok(written.content)
+            }
+            Err(error @ ProviderError::Conflict { .. }) => {
+                let existing = self.request(
+                    "GET",
+                    &format!(
+                        "{url}?ref={}",
+                        github_attachments::encode_path(&assets.branch)
+                    ),
+                    None,
+                );
+                match existing {
+                    Ok(response) => self.json(response),
+                    Err(_) => Err(error),
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn unsupported<T>(&self, capability: &'static str) -> Result<T, ProviderError> {
         Err(ProviderError::Unsupported {
             connection_id: self.config.connection_id.clone(),
@@ -997,6 +1185,26 @@ struct GitHubUser {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+struct GitHubContentWrite {
+    content: GitHubContentFile,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubContentFile {
+    path: String,
+    sha: String,
+    #[serde(default)]
+    html_url: Option<String>,
+    #[serde(default)]
+    content: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubBlob {
+    content: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 struct GitHubIssueEvent {
     event: String,
     created_at: String,
@@ -1014,7 +1222,7 @@ struct GitHubComment {
     updated_at: Option<String>,
 }
 
-fn github_capabilities() -> ProviderCapabilities {
+fn github_capabilities(attachments: bool) -> ProviderCapabilities {
     ProviderCapabilities {
         create: true,
         update: true,
@@ -1022,7 +1230,9 @@ fn github_capabilities() -> ProviderCapabilities {
         notes: true,
         note_edit: false,
         note_delete: false,
-        attachments: false,
+        // Append-only evidence through the configured assets repository (HS2-HSA64D).
+        attachments,
+        attachment_edit: false,
         assignment: true,
         review_requests: false,
         dependencies: false,
@@ -2329,5 +2539,300 @@ mod tests {
             )
             .unwrap();
         assert_eq!(rescored.latest_confidence, Some(88));
+    }
+
+    // ---- Attachments through an assets repository (HS2-HSA64D) ----
+
+    fn assets_provider(transport: Arc<dyn GitHubTransport>) -> GitHubProvider {
+        let mut config = GitHubConfig::new("github-main", "acme/widgets", "test-token")
+            .with_attachments(GitHubAttachmentRepository::new("acme/assets", None, None).unwrap());
+        config.api_base = "https://api.test".into();
+        GitHubProvider::new(config, transport)
+    }
+
+    fn evidence(id: &str, filename: &str) -> ApiAttachment {
+        ApiAttachment {
+            id: id.into(),
+            filename: filename.into(),
+            created_at: "2026-10-01T00:00:00Z".into(),
+            batch_id: Some("batch-1".into()),
+            batch_label: Some("Repro".into()),
+            actor: Some(hotsheet_model::AttachmentActor {
+                identity: None,
+                display_name: None,
+                role: hotsheet_model::AttachmentActorRole::Human,
+            }),
+            purpose: Some(hotsheet_model::AttachmentPurpose::ProblemEvidence),
+            annotations: vec![],
+        }
+    }
+
+    const ATTACHMENT_ID: &str = "01K6ATTACHMENT0000000000AB";
+
+    fn content_file(path: &str) -> Value {
+        json!({
+            "path": path,
+            "sha": "blobsha1",
+            "html_url": format!("https://ghe.test/acme/assets/blob/main/{path}"),
+        })
+    }
+
+    fn uploaded_comment(id: u64, attachment_id: &str, filename: &str) -> Value {
+        let marker = AttachmentMarker {
+            filename: filename.into(),
+            path: format!("hotsheet-attachments/{attachment_id}-{filename}"),
+            repository: "acme/assets".into(),
+            branch: "main".into(),
+            sha: Some("blobsha1".into()),
+            batch_id: Some("batch-1".into()),
+            batch_label: Some("Repro".into()),
+            actor: None,
+            purpose: Some(hotsheet_model::AttachmentPurpose::ProblemEvidence),
+        };
+        json!({
+            "id": id,
+            "body": github_attachments::compose_comment(attachment_id, "https://x/y", &marker),
+            "created_at": "2026-10-01T00:00:05Z",
+        })
+    }
+
+    #[test]
+    fn attachments_are_unsupported_without_an_assets_repository() {
+        let transport = FakeTransport::with(vec![]);
+        let github = provider(transport.clone());
+        let capabilities = github.descriptor().capabilities;
+        assert!(!capabilities.attachments);
+        assert!(!capabilities.attachment_edit);
+        let error = github
+            .add_attachment("42", evidence(ATTACHMENT_ID, "a.txt"), b"x".to_vec())
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            ProviderError::Unsupported {
+                capability: "attachments",
+                ..
+            }
+        ));
+        assert!(transport.requests.lock().unwrap().is_empty());
+        let assets = assets_provider(FakeTransport::with(vec![]));
+        assert!(assets.descriptor().capabilities.attachments);
+        assert!(!assets.descriptor().capabilities.attachment_edit);
+    }
+
+    #[test]
+    fn add_attachment_commits_to_the_assets_repository_and_links_it_from_a_comment() {
+        let path = format!("hotsheet-attachments/{ATTACHMENT_ID}-shot_1.png");
+        let transport = FakeTransport::with(vec![
+            response(200, json!([])),
+            response(201, json!({ "content": content_file(&path) })),
+            response(201, json!({"id": 7})),
+            response(200, issue(42, "broken widget", "details")),
+            response(
+                200,
+                json!([
+                    {"id": 5, "body": "a human note", "created_at": "2026-10-01T00:00:01Z"},
+                    uploaded_comment(6, ATTACHMENT_ID, "shot_1.png"),
+                ]),
+            ),
+        ]);
+        let ticket = assets_provider(transport.clone())
+            .add_attachment(
+                "42",
+                evidence(ATTACHMENT_ID, "shot 1.png"),
+                vec![0, 159, 255],
+            )
+            .unwrap();
+        let requests = transport.requests.lock().unwrap();
+        let (method, url, _, body) = &requests[1];
+        assert_eq!(method, "PUT");
+        assert_eq!(
+            url,
+            &format!("https://api.test/repos/acme/assets/contents/{path}")
+        );
+        let body = body.as_ref().unwrap();
+        assert_eq!(body["branch"], "main");
+        assert_eq!(body["content"], "AJ//");
+        assert_eq!(
+            body["message"],
+            "Upload attachment: shot 1.png (acme/widgets#42)"
+        );
+        let (method, url, _, comment) = &requests[2];
+        assert_eq!(method, "POST");
+        assert_eq!(
+            url,
+            "https://api.test/repos/acme/widgets/issues/42/comments"
+        );
+        let comment = comment.as_ref().unwrap()["body"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        // A non-github.com API base links the Enterprise file page's raw form.
+        assert!(
+            comment.starts_with(&format!(
+                "![shot 1.png](https://ghe.test/acme/assets/raw/main/{path})"
+            )),
+            "{comment}"
+        );
+        let (id, marker) = github_attachments::parse_comment(&comment).unwrap();
+        assert_eq!(id, ATTACHMENT_ID);
+        assert_eq!(marker.sha.as_deref(), Some("blobsha1"));
+        assert_eq!(marker.batch_label.as_deref(), Some("Repro"));
+        // The link comment projects as an attachment and is not repeated as a note.
+        assert_eq!(ticket.notes.len(), 1);
+        assert_eq!(ticket.notes[0].text, "a human note");
+        assert_eq!(ticket.attachments.len(), 1);
+        let attachment = &ticket.attachments[0];
+        assert_eq!(attachment.id, ATTACHMENT_ID);
+        assert_eq!(attachment.filename, "shot_1.png");
+        assert_eq!(attachment.created_at, "2026-10-01T00:00:05Z");
+        assert_eq!(attachment.batch_id.as_deref(), Some("batch-1"));
+        assert_eq!(
+            attachment.purpose,
+            Some(hotsheet_model::AttachmentPurpose::ProblemEvidence)
+        );
+    }
+
+    #[test]
+    fn github_com_links_use_the_permanent_raw_url() {
+        let path = format!("hotsheet-attachments/{ATTACHMENT_ID}-notes.txt");
+        let transport = FakeTransport::with(vec![
+            response(200, json!([])),
+            response(201, json!({ "content": content_file(&path) })),
+            response(201, json!({"id": 7})),
+            response(200, issue(42, "broken widget", "details")),
+            response(200, json!([])),
+        ]);
+        let config = GitHubConfig::new("github-main", "acme/widgets", "t")
+            .with_attachments(GitHubAttachmentRepository::new("acme/assets", None, None).unwrap());
+        GitHubProvider::new(config, transport.clone())
+            .add_attachment("42", evidence(ATTACHMENT_ID, "notes.txt"), b"hi".to_vec())
+            .unwrap();
+        let requests = transport.requests.lock().unwrap();
+        assert!(
+            requests[1]
+                .1
+                .starts_with("https://api.github.com/repos/acme/assets/contents/")
+        );
+        let comment = requests[2].3.as_ref().unwrap()["body"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(comment.starts_with(&format!(
+            "[notes.txt](https://raw.githubusercontent.com/acme/assets/main/{path})"
+        )));
+    }
+
+    #[test]
+    fn a_retried_attachment_is_not_uploaded_or_linked_twice() {
+        // Already linked: only the read happens.
+        let linked = FakeTransport::with(vec![
+            response(200, json!([uploaded_comment(6, ATTACHMENT_ID, "a.txt")])),
+            response(200, issue(42, "broken widget", "details")),
+            response(200, json!([uploaded_comment(6, ATTACHMENT_ID, "a.txt")])),
+        ]);
+        let ticket = assets_provider(linked.clone())
+            .add_attachment("42", evidence(ATTACHMENT_ID, "a.txt"), b"x".to_vec())
+            .unwrap();
+        assert_eq!(ticket.attachments.len(), 1);
+        assert!(
+            linked
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|(method, ..)| method == "GET")
+        );
+        // Uploaded but never linked (the comment failed): the existing file is reused.
+        let path = format!("hotsheet-attachments/{ATTACHMENT_ID}-a.txt");
+        let half = FakeTransport::with(vec![
+            response(200, json!([])),
+            response(422, json!({"message": "\"sha\" wasn't supplied."})),
+            response(200, content_file(&path)),
+            response(201, json!({"id": 8})),
+            response(200, issue(42, "broken widget", "details")),
+            response(200, json!([uploaded_comment(8, ATTACHMENT_ID, "a.txt")])),
+        ]);
+        let ticket = assets_provider(half.clone())
+            .add_attachment("42", evidence(ATTACHMENT_ID, "a.txt"), b"x".to_vec())
+            .unwrap();
+        assert_eq!(ticket.attachments.len(), 1);
+        let requests = half.requests.lock().unwrap();
+        assert_eq!(
+            requests[2].1,
+            format!("https://api.test/repos/acme/assets/contents/{path}?ref=main")
+        );
+        assert_eq!(requests[3].0, "POST");
+    }
+
+    #[test]
+    fn a_failed_upload_surfaces_the_github_error_and_posts_no_comment() {
+        let transport = FakeTransport::with(vec![
+            response(200, json!([])),
+            response(422, json!({"message": "Branch media not found"})),
+            response(404, json!({"message": "Not Found"})),
+        ]);
+        let error = assets_provider(transport.clone())
+            .add_attachment("42", evidence(ATTACHMENT_ID, "a.txt"), b"x".to_vec())
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("Branch media not found"),
+            "{error}"
+        );
+        assert_eq!(transport.requests.lock().unwrap().len(), 3);
+        let invalid = assets_provider(FakeTransport::with(vec![]))
+            .add_attachment("42", evidence("../x", "a.txt"), b"x".to_vec())
+            .unwrap_err();
+        assert!(matches!(invalid, ProviderError::InvalidNativeId { .. }));
+    }
+
+    #[test]
+    fn attachment_bytes_read_the_blob_through_the_authenticated_api() {
+        let transport = FakeTransport::with(vec![
+            response(200, json!([uploaded_comment(6, ATTACHMENT_ID, "a.bin")])),
+            response(
+                200,
+                json!({"content": "AJ//\nAA==\n", "encoding": "base64"}),
+            ),
+            response(200, json!([uploaded_comment(6, ATTACHMENT_ID, "a.bin")])),
+        ]);
+        let github = assets_provider(transport.clone());
+        assert_eq!(
+            github.attachment_bytes("42", ATTACHMENT_ID).unwrap(),
+            vec![0, 159, 255, 0]
+        );
+        assert_eq!(
+            transport.requests.lock().unwrap()[1].1,
+            "https://api.test/repos/acme/assets/git/blobs/blobsha1"
+        );
+        assert!(matches!(
+            github.attachment_bytes("42", "01K6OTHER").unwrap_err(),
+            ProviderError::NotFound { .. }
+        ));
+    }
+
+    #[test]
+    fn from_connection_reads_and_validates_the_assets_repository_settings() {
+        let mut connection = ProviderConnection {
+            id: "gh".into(),
+            provider: "github".into(),
+            locator: "acme/widgets".into(),
+            name: None,
+            default: false,
+            settings: json!({"attachment_repo": "acme/assets", "attachment_branch": "media"}),
+            disabled: false,
+        };
+        let config = GitHubConfig::from_connection(&connection, "t").unwrap();
+        let assets = config.attachments.unwrap();
+        assert_eq!(assets.folder, "hotsheet-attachments");
+        assert_eq!(assets.branch, "media");
+        connection.settings = json!({"attachment_repo": "not-a-repo"});
+        assert!(GitHubConfig::from_connection(&connection, "t").is_err());
+        connection.settings = json!({});
+        assert!(
+            GitHubConfig::from_connection(&connection, "t")
+                .unwrap()
+                .attachments
+                .is_none()
+        );
     }
 }

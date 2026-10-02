@@ -4,6 +4,7 @@
 
 pub mod github;
 pub mod github_app_config;
+pub mod github_attachments;
 pub mod github_credential;
 pub mod github_device;
 pub mod gitlab;
@@ -14,6 +15,7 @@ pub use github::{
     GitHubConfig, GitHubProvider, GitHubTransport, GitHubWebhook, HttpResponse,
     UreqGitHubTransport, parse_webhook,
 };
+pub use github_attachments::GitHubAttachmentRepository;
 pub use github_credential::{
     GitHubCredentialError, connection_access_token, store_device_authorization,
 };

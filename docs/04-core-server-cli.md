@@ -508,6 +508,8 @@ hotsheet key list                         # provider names only, never values
 hotsheet providers --json                 # git + configured external connections/capabilities
 hotsheet github-sign-in                    # print GitHub device URL/code, then save a keychain reference
 hotsheet github-connect acme/repo --credential github-app-<id> --checkout <checkout-id> --default
+hotsheet github-connect acme/repo --credential github-app-<id> --attachment-repo acme/assets  # enable attachments
+hotsheet provider-attach github-main 42 screenshot.png log.txt   # upload through the provider (one batch)
 hotsheet provider-ls github-main
 hotsheet provider-get github-main 42
 hotsheet provider-new github-main "Bug title"
@@ -527,7 +529,13 @@ connection in `providers.json` and optionally links a registered checkout. Repea
 for the same repository keeps the existing connection id and checkout source; `--id`
 selects a specific existing id for a name or credential update. It accepts a keychain
 reference from `github-sign-in` or `key set`, and GitHub App bundles refresh when a
-provider command reads them (HS2-DJA052).
+provider command reads them (HS2-DJA052). `--attachment-repo OWNER/REPO` (with optional
+`--attachment-folder`, default `hotsheet-attachments`, and `--attachment-branch`, default
+`main`) enables GitHub attachments through an assets repository; a later reconnect without
+those flags keeps the repository, and `--no-attachments` removes it (HS2-HSA64D, see
+[16](16-external-sync-interface.md)). `provider-attach <connection> <id> <files…>` uploads
+files to a provider-native ticket and fails explicitly when the connection reports no
+attachment support.
 
 `--note` accepts one argument exactly as supplied by the caller. For multiline Markdown,
 use `--note-file <path>` or `--note-file -` (stdin) so real line breaks are preserved

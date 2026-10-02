@@ -264,6 +264,11 @@ pub struct ProviderCapabilities {
     pub note_edit: bool,
     pub note_delete: bool,
     pub attachments: bool,
+    /// Existing attachments can be renamed, deleted, re-labelled, and annotated
+    /// (HS2-HSA64D). A provider that can only append evidence (GitHub's assets
+    /// repository) reports `attachments` without this.
+    #[serde(default)]
+    pub attachment_edit: bool,
     pub assignment: bool,
     pub review_requests: bool,
     pub dependencies: bool,
@@ -295,6 +300,7 @@ impl ProviderCapabilities {
             note_edit: true,
             note_delete: true,
             attachments: true,
+            attachment_edit: true,
             assignment: true,
             review_requests: true,
             dependencies: true,
@@ -1736,6 +1742,13 @@ pub fn copy_between(
     }
     for (present, supported, field) in [
         (!ticket.notes.is_empty(), capabilities.notes, "notes"),
+        // Checked up front so an attachment-less destination fails before the copy exists
+        // rather than after creating it (HS2-HSA64D).
+        (
+            !attachments.is_empty(),
+            capabilities.attachments,
+            "attachments",
+        ),
         (
             !ticket.assignees.is_empty(),
             capabilities.assignment,
@@ -2742,6 +2755,76 @@ mod tests {
         assert!(matches!(
             error,
             TransferError::UnsupportedField { field: "notes", .. }
+        ));
+        assert!(destination_store.list_tickets().unwrap().is_empty());
+    }
+
+    /// HS2-HSA64D: attachments are checked with the other fields, so a destination
+    /// without attachment support refuses the copy before creating anything.
+    #[test]
+    fn transfer_rejects_attachments_before_creating_the_destination_ticket() {
+        let (_source_dir, source) = git_provider();
+        let destination_dir = tempfile::tempdir().unwrap();
+        let destination_store =
+            FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
+        let mut capabilities = ProviderCapabilities::git();
+        capabilities.attachments = false;
+        capabilities.attachment_edit = false;
+        let destination = GitProvider::new("destination", destination_store.clone())
+            .with_test_capabilities(capabilities);
+        let source_id = Ulid::new();
+        source
+            .create(
+                ctx(source_id, "2026-08-26T03:00:00Z"),
+                ProviderDraft {
+                    title: "has evidence".into(),
+                    category: "task".into(),
+                    priority: Priority::Default,
+                    status: Status::NotStarted,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        source
+            .add_attachment(
+                &source_id.to_string(),
+                ApiAttachment {
+                    id: Ulid::new().to_string(),
+                    filename: "proof.txt".into(),
+                    created_at: "2026-08-26T03:01:00Z".into(),
+                    batch_id: None,
+                    batch_label: None,
+                    actor: None,
+                    purpose: None,
+                    annotations: vec![],
+                },
+                b"evidence".to_vec(),
+            )
+            .unwrap();
+        let registry = ProviderRegistry::default();
+        registry.register(Arc::new(source)).unwrap();
+        registry.register(Arc::new(destination)).unwrap();
+        let error = copy_between(
+            &registry,
+            TicketRef {
+                connection_id: "local".into(),
+                native_id: source_id.to_string(),
+            },
+            "destination",
+            "attachment-op",
+            Timestamp::new("2026-08-26T03:02:00Z"),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            TransferError::UnsupportedField {
+                field: "attachments",
+                ..
+            }
         ));
         assert!(destination_store.list_tickets().unwrap().is_empty());
     }

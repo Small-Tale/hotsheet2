@@ -162,6 +162,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, fake + opt-in live tests (HS2-JAXS4Z)
       src/gitlab.rs            #   GitLab Issues mapping, native IDs/URLs, pagination/incremental reads, typed errors/concurrency, fake + opt-in live drift tests (HS2-0RK4YC)
       src/jira.rs              #   Jira Cloud issue/ADF mapping, token pagination/incremental JQL, honest workflow capabilities, fake + opt-in live drift tests (HS2-0RK4YC)
+      src/github_attachments.rs #   GitHub assets-repository attachments: HS1 setting keys/defaults, file path + raw link URL, marked link comment write/parse (HS2-HSA64D)
       src/note_trailer.rs      #   shared comment encoding for external trackers: note-id marker + strict `Confidence: NN%` trailer write/parse, latest_confidence for comment-only providers (HS2-5YNASC)
     hotsheet-model/          # pure domain model + ticket file format (no I/O)
       src/lib.rs             #   re-exports; SCHEMA_VERSION
@@ -203,7 +204,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary + note confidence and derived latest_confidence (HS2-DWTJ43), ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, Trash `restore`/`purge-trash`, providers/provider-ls/get/new/edit/close/disable/enable/remove, provider-copy/move, setup/plugins/settings/server/workflows
+      src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, Trash `restore`/`purge-trash`, providers/provider-ls/get/new/edit/close/attach/disable/enable/remove, github-connect (incl. assets-repository attachment settings, HS2-HSA64D), provider-copy/move, setup/plugins/settings/server/workflows
       src/permission_hook.rs #   Claude permission-hook adapter (HS2-YMR9HE/N4R6F3): interactive PermissionRequest events and explicitly marked headless PreToolUse events map to bridge (tool,action) + their distinct Claude response schemas; unrelated interactive PreToolUse events remain native; the `permission-hook` cmd POSTs /permissions/ask when governed
       src/external_launch.rs #   capability-aware external-terminal launch preparation: per-store server-instance discovery + permission route-back data; Claude hook supported, native Codex rejected until adapted (HS2-C46G58)
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)

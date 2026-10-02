@@ -9,6 +9,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+base64.workspace = true
 hotsheet-model.workspace = true
 hotsheet-ticketing.workspace = true
 serde.workspace = true

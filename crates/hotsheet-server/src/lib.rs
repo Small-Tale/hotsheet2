@@ -5377,6 +5377,36 @@ async fn add_checkout_ticket_attachment(
     body: Bytes,
 ) -> Result<(StatusCode, Json<ResolvedTicket>), ApiError> {
     let (_, settings) = checkout_settings(&state, &reference)?;
+    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
+    if source.provider != "git" {
+        // An external provider stores the file natively when its capability allows it
+        // (GitHub through its assets repository, HS2-HSA64D); otherwise it refuses explicitly.
+        let filename = attachment_filename(&headers)?;
+        let metadata = attachment_metadata(&headers)?;
+        let ticket = provider_for(&state, &source.connection_id)?
+            .add_attachment(
+                &native_id,
+                ApiAttachment {
+                    id: Ulid::new().to_string(),
+                    filename,
+                    created_at: now().as_str().to_string(),
+                    batch_id: metadata.batch_id,
+                    batch_label: metadata.batch_label,
+                    actor: metadata.actor,
+                    purpose: metadata.purpose,
+                    annotations: vec![],
+                },
+                body.to_vec(),
+            )
+            .map_err(provider_transfer_error)?;
+        return Ok((
+            StatusCode::CREATED,
+            Json(ResolvedTicket {
+                store: source.connection_id,
+                ticket: contextualize_api_ticket(ticket, &settings)?,
+            }),
+        ));
+    }
     let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
     let filename = attachment_filename(&headers)?;
     let metadata = attachment_metadata(&headers)?;
@@ -5408,6 +5438,17 @@ fn checkout_git_ticket(
     id: &str,
 ) -> Result<(StoreEntry, Ticket), ApiError> {
     let (source, native_id) = checkout_ticket_owner(state, reference, id)?;
+    if source.provider != "git" {
+        // Store-only operations (attachment edits, thumbnails, local file actions, note
+        // deletion) name the provider instead of reporting a missing git store (HS2-HSA64D).
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!(
+                "provider connection '{}' ({}) does not support this operation",
+                source.connection_id, source.provider
+            ),
+        ));
+    }
     let entry = state.hosted_source(&source).ok_or_else(|| {
         ApiError::new(
             StatusCode::CONFLICT,
@@ -5418,11 +5459,50 @@ fn checkout_git_ticket(
     Ok((entry, ticket))
 }
 
+/// Serve an external provider's attachment through the provider (HS2-HSA64D), so the
+/// browser never needs the provider's credentials. Returns `None` for a git-owned ticket.
+fn provider_attachment_response(
+    state: &AppState,
+    reference: &str,
+    id: &str,
+    matches: impl Fn(&ApiAttachment) -> bool,
+    range: Option<&str>,
+) -> Result<Option<Response>, ApiError> {
+    let (source, native_id) = checkout_ticket_owner(state, reference, id)?;
+    if source.provider == "git" {
+        return Ok(None);
+    }
+    let provider = provider_for(state, &source.connection_id)?;
+    let ticket = provider.get(&native_id).map_err(provider_transfer_error)?;
+    let attachment = ticket
+        .attachments
+        .iter()
+        .find(|attachment| matches(attachment))
+        .ok_or_else(|| ApiError::not_found(id))?;
+    let bytes = provider
+        .attachment_bytes(&native_id, &attachment.id)
+        .map_err(provider_transfer_error)?;
+    Ok(Some(media::attachment_response(
+        &attachment.filename,
+        bytes,
+        range,
+    )))
+}
+
 async fn get_checkout_ticket_attachment(
     State(state): State<AppState>,
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    if let Some(response) = provider_attachment_response(
+        &state,
+        &reference,
+        &id,
+        |attachment| attachment.id == attachment_id,
+        headers.get("range").and_then(|value| value.to_str().ok()),
+    )? {
+        return Ok(response);
+    }
     let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
@@ -5452,6 +5532,15 @@ async fn get_checkout_ticket_attachment_by_name(
     Path((reference, id, filename)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    if let Some(response) = provider_attachment_response(
+        &state,
+        &reference,
+        &id,
+        |attachment| attachment.filename == filename,
+        headers.get("range").and_then(|value| value.to_str().ok()),
+    )? {
+        return Ok(response);
+    }
     let (entry, ticket, attachment_id) =
         checkout_attachment_by_name(&state, &reference, &id, &filename)?;
     let attachment = ticket

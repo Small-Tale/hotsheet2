@@ -790,6 +790,7 @@ dependencies = [
 name = "hotsheet-extsync"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "hotsheet-model",
  "hotsheet-ticketing",
  "serde",

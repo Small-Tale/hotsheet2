@@ -14678,3 +14678,160 @@ async fn confidence_report_route_serves_per_band_calibration() {
     assert_eq!(report["events"][1]["outcome"], "verified");
     assert_eq!(report["events"][1]["confidence"], 55);
 }
+
+/// HS2-HSA64D: a GitHub source with an assets repository takes attachments through the
+/// same checkout attachment route the composer uses, serves them back through the
+/// provider, and refuses store-only edits explicitly; one without a repository refuses
+/// the upload by capability.
+#[tokio::test]
+async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_back() {
+    let (_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let linked_id = "01K6SERVERATTACHMENT00000A";
+    let marker = hotsheet_extsync::github_attachments::AttachmentMarker {
+        filename: "proof.png".into(),
+        path: format!("hotsheet-attachments/{linked_id}-proof.png"),
+        repository: "acme/assets".into(),
+        branch: "main".into(),
+        sha: Some("blobsha".into()),
+        batch_id: None,
+        batch_label: None,
+        actor: None,
+        purpose: None,
+    };
+    let link_comment = serde_json::json!([{
+        "id": 9,
+        "body": hotsheet_extsync::github_attachments::compose_comment(linked_id, "https://x/y", &marker),
+        "created_at": "2026-10-01T00:00:05Z",
+    }]);
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                // Upload: idempotency check, Contents API write, link comment, re-read.
+                github_response(200, serde_json::json!([])),
+                github_response(
+                    201,
+                    serde_json::json!({"content": {
+                        "path": "hotsheet-attachments/x-proof.png",
+                        "sha": "blobsha",
+                        "html_url": "https://github.test/acme/assets/blob/main/hotsheet-attachments/x-proof.png"
+                    }}),
+                ),
+                github_response(201, serde_json::json!({"id": 9})),
+                github_response(200, github_issue(42, "with evidence")),
+                github_response(200, link_comment.clone()),
+                // Read back: ticket detail, then the blob through the authenticated API.
+                github_response(200, github_issue(42, "with evidence")),
+                github_response(200, link_comment.clone()),
+                github_response(200, link_comment),
+                github_response(200, serde_json::json!({"content": "cG5nIGJ5dGVz\n"})),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let assets = GitHubProvider::new(
+        GitHubConfig::new("github-assets", "acme/repo", "fixture-token").with_attachments(
+            hotsheet_extsync::GitHubAttachmentRepository::new("acme/assets", None, None).unwrap(),
+        ),
+        transport.clone(),
+    );
+    let bare_transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(VecDeque::new()),
+        requests: Mutex::new(Vec::new()),
+    });
+    let bare = GitHubProvider::new(
+        GitHubConfig::new("github-bare", "acme/other", "fixture-token"),
+        bare_transport.clone(),
+    );
+    let app = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(assets))
+        .with_ticket_provider(Arc::new(bare)));
+    let registration = serde_json::json!({
+        "root": checkout.path(),
+        "alias": "external-assets",
+        "sources": [
+            {"connection_id":"github-assets","provider":"github","locator":"acme/repo"},
+            {"connection_id":"github-bare","provider":"github","locator":"acme/other"}
+        ],
+        "default_source": "github-assets"
+    })
+    .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let upload = |source: &str| {
+        Request::builder()
+            .method("POST")
+            .uri(format!(
+                "/checkouts/external-assets/tickets/{source}:42/attachments"
+            ))
+            .header("x-hotsheet-secret", SECRET)
+            .header("x-hotsheet-filename", "proof.png")
+            .header("x-hotsheet-attachment-purpose", "problem_evidence")
+            .body(Body::from("png bytes"))
+            .unwrap()
+    };
+    let response = app.clone().oneshot(upload("github-assets")).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let attached = body_json(response).await;
+    assert_eq!(attached["store"], "github-assets");
+    assert_eq!(attached["attachments"][0]["id"], linked_id);
+    assert_eq!(attached["attachments"][0]["filename"], "proof.png");
+    assert!(attached["notes"].as_array().unwrap().is_empty());
+    {
+        let bodies = transport.requests.lock().unwrap();
+        assert_eq!(bodies[0]["content"], "cG5nIGJ5dGVz");
+        assert_eq!(bodies[0]["branch"], "main");
+        let comment = bodies[1]["body"].as_str().unwrap();
+        assert!(
+            comment.starts_with(
+                "![proof.png](https://raw.githubusercontent.com/acme/assets/main/hotsheet-attachments/x-proof.png)"
+            ),
+            "{comment}"
+        );
+        assert!(
+            comment.contains("\"purpose\":\"problem_evidence\""),
+            "{comment}"
+        );
+    }
+    let read = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/external-assets/tickets/github-assets:42/attachments/{linked_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::OK);
+    assert_eq!(read.headers()[header::CONTENT_TYPE], "image/png");
+    let bytes = read.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(&bytes[..], b"png bytes");
+    // Store-only edits are refused by name rather than as a missing git store.
+    let deleted = app
+        .clone()
+        .oneshot(authed(
+            "DELETE",
+            &format!("/checkouts/external-assets/tickets/github-assets:42/attachments/{linked_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::CONFLICT);
+    let message = body_json(deleted).await.to_string();
+    assert!(
+        message.contains("does not support this operation"),
+        "{message}"
+    );
+    // A GitHub source without an assets repository refuses the upload by capability.
+    let refused = app.oneshot(upload("github-bare")).await.unwrap();
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    let message = body_json(refused).await.to_string();
+    assert!(message.contains("attachments"), "{message}");
+    assert!(bare_transport.requests.lock().unwrap().is_empty());
+    assert!(transport.responses.lock().unwrap().is_empty());
+}

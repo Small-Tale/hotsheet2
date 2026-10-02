@@ -5350,3 +5350,94 @@ fn confidence_report_compares_scores_with_reopen_and_verified_outcomes() {
         ]
     );
 }
+
+/// HS2-HSA64D: the GitHub assets repository is configured headlessly, survives a plain
+/// reconnect, is validated, can be removed, and drives the reported capability.
+#[test]
+fn github_connect_configures_the_attachment_repository_headlessly() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path())
+            .env("HOTSHEET_API_KEY_CLI_GITHUB", "fixture-token")
+            .args(args);
+        cmd
+    };
+    let connection = || -> serde_json::Value {
+        let file: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.path().join("providers.json")).unwrap(),
+        )
+        .unwrap();
+        file["connections"][0].clone()
+    };
+    run(&["init"]).assert().success();
+    let connect = ["github-connect", "acme/repo", "--credential", "cli-github"];
+    run(&connect)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Attachments: off"));
+    // Without a repository the provider refuses attachments before any network call.
+    let evidence = dir.path().join("proof.txt");
+    std::fs::write(&evidence, "evidence").unwrap();
+    run(&[
+        "provider-attach",
+        "github-acme-repo",
+        "42",
+        evidence.to_str().unwrap(),
+    ])
+    .assert()
+    .failure()
+    .stderr(predicate::str::contains("--attachment-repo"));
+    let mut with_repo = connect.to_vec();
+    with_repo.extend([
+        "--attachment-repo",
+        "acme/assets",
+        "--attachment-branch",
+        "media",
+    ]);
+    run(&with_repo)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Attachments: acme/assets (hotsheet-attachments/ on media)",
+        ));
+    let settings = connection()["settings"].clone();
+    assert_eq!(settings["attachment_repo"], "acme/assets");
+    assert_eq!(settings["attachment_folder"], "hotsheet-attachments");
+    assert_eq!(settings["attachment_branch"], "media");
+    assert_eq!(settings["credential"]["secret"], "cli-github");
+    // A plain reconnect (for example a credential refresh) keeps the repository.
+    run(&connect).assert().success();
+    assert_eq!(connection()["settings"]["attachment_repo"], "acme/assets");
+    let providers = run(&["providers", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let providers = String::from_utf8(providers).unwrap();
+    assert!(providers.contains("\"attachments\": true"), "{providers}");
+    assert!(
+        providers.contains("\"attachment_edit\": false"),
+        "{providers}"
+    );
+    // Invalid values fail without touching the saved connection.
+    let mut invalid = connect.to_vec();
+    invalid.extend(["--attachment-repo", "not-a-repo"]);
+    run(&invalid)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("owner/repository"));
+    assert_eq!(connection()["settings"]["attachment_branch"], "media");
+    let mut folder_only = connect.to_vec();
+    folder_only.extend(["--attachment-folder", "x"]);
+    run(&folder_only).assert().failure();
+    let mut remove = connect.to_vec();
+    remove.push("--no-attachments");
+    run(&remove)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Attachments: off"));
+    assert!(connection()["settings"].get("attachment_repo").is_none());
+}

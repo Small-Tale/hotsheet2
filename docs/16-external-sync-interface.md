@@ -244,8 +244,43 @@ labels, ordinary labels, assignees, and comments directly to the normalized cont
 It paginates while excluding pull requests, sends incremental `since` queries, exposes
 webhook invalidations for authoritative re-read, checks opaque optimistic-concurrency
 tokens, and maps authentication/rate-limit/conflict failures to typed provider errors.
-Unsupported claims, dependencies, review requests, attachments, Up Next, and query
-dimensions are declared or rejected rather than discarded.
+Unsupported claims, dependencies, review requests, Up Next, and query
+dimensions are declared or rejected rather than discarded. Attachments are supported only
+through a configured assets repository (below).
+
+**GitHub attachments through an assets repository (HS2-HSA64D).** GitHub has no
+issue-attachment API usable by app or personal tokens (its `user-attachments` upload is a
+browser-only flow), so, like the original Hot Sheet GitHub plugin, the provider commits each
+file to a configured **assets repository** through the Contents API and links it from one
+issue comment. The connection settings keep the original plugin's keys:
+`attachment_repo` (`owner/repo`), `attachment_folder` (default `hotsheet-attachments`), and
+`attachment_branch` (default `main`); the headless path is `github-connect
+--attachment-repo/--attachment-folder/--attachment-branch/--no-attachments`, and a
+reconnect without them keeps the repository. The provider reports `attachments: true` only
+when `attachment_repo` is set; otherwise an upload fails with an explicit capability error.
+
+- **Upload:** `PUT /repos/{assets}/contents/{folder}/{attachment-id}-{safe-name}` on the
+  branch (the plugin's `[A-Za-z0-9._-]` sanitizer). The attachment id keeps the path unique
+  and makes a retry address the same file; an existing file is reused.
+- **Link comment:** `![name](url)` for images and `[name](url)` otherwise, where the URL is
+  the permanent `raw.githubusercontent.com/{assets}/{branch}/{path}` form on github.com (not
+  the short-lived `download_url`) and the file page's `/raw/` form on GitHub Enterprise. The
+  comment ends with a hidden `<!-- hotsheet-attachment:<id> {…} -->` marker carrying the
+  filename, path, repository, branch, blob sha, and batch/purpose/actor metadata. A retried
+  upload finds the marker and changes nothing.
+- **Projection:** marker comments become the ticket's `attachments` (created at the comment
+  time) and are not repeated as notes. Ordinary comments, including ones with similar text,
+  stay notes. Like notes, attachments appear on detail reads, not list pages.
+- **Reading:** `attachment_bytes` reads the blob (`git/blobs/{sha}`) through the
+  authenticated API, so the checkout attachment route serves private assets repositories
+  to the browser without exposing a token or a short-lived signed URL.
+- **Editing:** the new `attachment_edit` capability is `false`. Renaming, deleting,
+  re-labelling, annotating, video posters, and local file actions stay git-only and are
+  refused by name (`provider connection '…' (github) does not support this operation`).
+  Deleting the committed file is left to the assets repository's owner.
+- **Transfers:** copying or moving a ticket with attachments checks the destination's
+  `attachments` capability before creating anything, so a destination without attachment
+  support refuses the transfer up front instead of leaving a partial copy.
 
 GitHub has only `open`/`closed` plus a `completed`/`not_planned` close reason, so the
 provider carries the rest of Hot Sheet's state on **provider-owned labels** it writes and
@@ -338,6 +373,11 @@ they need live credentials:
 | Note edit (text or confidence) | yes                      | no (`note_edit` capability off)      | no                                       | no                                             |
 | Activity `summary`             | yes                      | no (falls back to the comment body)  | no                                       | no                                             |
 | `latest_confidence` derivation | current completion cycle | since last `reopened` event (detail) | since last reopened state event (detail) | since last changelog exit from `done` (detail) |
+
+| Attachment capability                                   | git              | GitHub Issues                                           | GitLab | Jira |
+| ------------------------------------------------------- | ---------------- | ------------------------------------------------------- | ------ | ---- |
+| `attachments` (add and read)                            | yes, store files | only with `attachment_repo`; assets repo + link comment | no     | no   |
+| `attachment_edit` (rename, delete, labels, annotations) | yes              | no                                                      | no     | no   |
 
 In the web dialog a new GitHub connection starts from sign-in (HS2-1JT25R): its other settings
 stay hidden and **Connect** stays disabled until GitHub authorizes. **Sign in with GitHub**

@@ -178,6 +178,27 @@ enum Cmd {
         /// Also link the connection to this registered checkout (id, alias, or path).
         #[arg(long)]
         checkout: Option<String>,
+        /// Enable attachments by committing files to this `owner/repo` assets repository
+        /// and linking them from issue comments (HS2-HSA64D). Kept on a later reconnect.
+        #[arg(long, value_name = "OWNER/REPO", conflicts_with = "no_attachments")]
+        attachment_repo: Option<String>,
+        /// Folder inside the assets repository (default `hotsheet-attachments`).
+        #[arg(long, requires = "attachment_repo")]
+        attachment_folder: Option<String>,
+        /// Branch uploads are committed to (default `main`).
+        #[arg(long, requires = "attachment_repo")]
+        attachment_branch: Option<String>,
+        /// Remove the assets repository; the connection then reports no attachment support.
+        #[arg(long)]
+        no_attachments: bool,
+    },
+    /// Attach files to a provider-native ticket through its connection (for GitHub, its
+    /// configured assets repository). Fails explicitly when the provider cannot.
+    ProviderAttach {
+        connection: String,
+        id: String,
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
     },
     /// List tickets from one configured provider connection.
     ProviderLs { connection: String },
@@ -1132,6 +1153,10 @@ fn main() -> Result<()> {
             id,
             default,
             checkout,
+            attachment_repo,
+            attachment_folder,
+            attachment_branch,
+            no_attachments,
         } => cmd_github_connect(
             &cli.path,
             &locator,
@@ -1140,7 +1165,18 @@ fn main() -> Result<()> {
             id,
             default,
             checkout,
+            GitHubAttachmentChange::from_flags(
+                attachment_repo,
+                attachment_folder,
+                attachment_branch,
+                no_attachments,
+            ),
         ),
+        Cmd::ProviderAttach {
+            connection,
+            id,
+            files,
+        } => cmd_provider_attach(&cli.path, &connection, &id, &files),
         Cmd::ProviderLs { connection } => cmd_provider_ls(&cli.path, &connection),
         Cmd::ProviderGet { connection, id } => cmd_provider_get(&cli.path, &connection, &id),
         Cmd::ProviderDisable { connection } => {
@@ -2163,6 +2199,36 @@ fn cmd_github_sign_in(web_base: &str) -> Result<()> {
     bail!("GitHub device code expired; run github-sign-in again")
 }
 
+/// How `github-connect` changes a connection's attachment repository (HS2-HSA64D).
+enum GitHubAttachmentChange {
+    Keep,
+    Set {
+        repository: String,
+        folder: Option<String>,
+        branch: Option<String>,
+    },
+    Remove,
+}
+
+impl GitHubAttachmentChange {
+    fn from_flags(
+        repository: Option<String>,
+        folder: Option<String>,
+        branch: Option<String>,
+        remove: bool,
+    ) -> Self {
+        match (repository, remove) {
+            (Some(repository), _) => Self::Set {
+                repository,
+                folder,
+                branch,
+            },
+            (None, true) => Self::Remove,
+            (None, false) => Self::Keep,
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn cmd_github_connect(
     path: &Path,
@@ -2172,6 +2238,7 @@ fn cmd_github_connect(
     id: Option<String>,
     make_default: bool,
     checkout: Option<String>,
+    attachments: GitHubAttachmentChange,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
     let home = hotsheet_plugins::hotsheet_home();
@@ -2230,6 +2297,30 @@ fn cmd_github_connect(
     if let Some(api_base) = api_base {
         settings["api_base"] = api_base.into();
     }
+    // A reconnect keeps the existing assets repository unless the flags change it.
+    let attachment_repository = match attachments {
+        GitHubAttachmentChange::Set {
+            repository,
+            folder,
+            branch,
+        } => Some(
+            hotsheet_extsync::GitHubAttachmentRepository::new(
+                &repository,
+                folder.as_deref(),
+                branch.as_deref(),
+            )
+            .map_err(anyhow::Error::msg)?,
+        ),
+        GitHubAttachmentChange::Remove => None,
+        GitHubAttachmentChange::Keep => existing
+            .map(|item| hotsheet_extsync::GitHubAttachmentRepository::from_settings(&item.settings))
+            .transpose()
+            .map_err(anyhow::Error::msg)?
+            .flatten(),
+    };
+    if let Some(repository) = &attachment_repository {
+        repository.write_settings(&mut settings);
+    }
     let connection = hotsheet_ticketing::ProviderConnection {
         id: connection_id.clone(),
         provider: "github".into(),
@@ -2262,6 +2353,62 @@ fn cmd_github_connect(
         )?;
     }
     println!("Connected GitHub Issues as '{connection_id}'.");
+    match attachment_repository {
+        Some(repository) => println!(
+            "Attachments: {} ({}/ on {})",
+            repository.repository,
+            if repository.folder.is_empty() {
+                "."
+            } else {
+                repository.folder.as_str()
+            },
+            repository.branch
+        ),
+        None => println!("Attachments: off (configure with --attachment-repo OWNER/REPO)"),
+    }
+    Ok(())
+}
+
+fn cmd_provider_attach(path: &Path, connection: &str, id: &str, files: &[PathBuf]) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    if !provider.descriptor().capabilities.attachments {
+        bail!(
+            "provider connection '{connection}' does not support attachments{}",
+            if provider.descriptor().provider == "github" {
+                "; configure an assets repository with `github-connect --attachment-repo OWNER/REPO`"
+            } else {
+                ""
+            }
+        );
+    }
+    let batch_id = hotsheet_model::Ulid::new().to_string();
+    let mut ticket = None;
+    for file in files {
+        let bytes = std::fs::read(file).with_context(|| format!("reading {}", file.display()))?;
+        let filename = file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| anyhow::anyhow!("{} has no UTF-8 file name", file.display()))?
+            .to_string();
+        ticket = Some(
+            provider.add_attachment(
+                id,
+                hotsheet_ticketing::wire::ApiAttachment {
+                    id: hotsheet_model::Ulid::new().to_string(),
+                    filename,
+                    created_at: OffsetDateTime::now_utc()
+                        .format(&time::format_description::well_known::Rfc3339)?,
+                    batch_id: (files.len() > 1).then(|| batch_id.clone()),
+                    batch_label: None,
+                    actor: None,
+                    purpose: None,
+                    annotations: vec![],
+                },
+                bytes,
+            )?,
+        );
+    }
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())
 }
 
