@@ -4945,9 +4945,33 @@ test('previews running project resources with shared menus and explicit keep-run
   await expect(dialog).toContainText('Terminals and AI chat tabs return when reopened');
   await expect(dialog.getByRole('button', { name: 'Keep Running' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Stop & Close' })).toBeVisible();
+  // The live preview scales its 1280x768 canvas to the frame like a dashboard tile, so every line
+  // stays inside the frame instead of a native-size crop (HS2-S7E53Q).
+  const previewFit = () =>
+    viewport.evaluate((node) => {
+      const frame = node.parentElement!.getBoundingClientRect(),
+        rows = [...node.querySelectorAll<HTMLElement>('.xterm-rows > div')].filter((row) => row.textContent.trim());
+      return {
+        scale: Number(node.dataset.previewScale),
+        rows: rows.length,
+        inside: rows.every((row) => {
+          const box = row.getBoundingClientRect();
+          return box.left >= frame.left - 0.5 && box.right <= frame.right + 0.5 && box.bottom <= frame.bottom + 0.5;
+        }),
+      };
+    });
+  const expectPreviewFits = async () => {
+    await expect.poll(async () => (await previewFit()).inside).toBe(true);
+    const fit = await previewFit();
+    expect(fit.rows).toBeGreaterThan(0);
+    expect(fit.scale).toBeGreaterThan(0);
+    expect(fit.scale).toBeLessThanOrEqual(1);
+  };
+  await expectPreviewFits();
   await page.screenshot({ path: '/private/tmp/hs2-6c0wzn-project-close-wide-after.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog).toHaveJSProperty('open', true);
+  await expectPreviewFits();
   await expect
     .poll(() =>
       dialog.evaluate((element) => {

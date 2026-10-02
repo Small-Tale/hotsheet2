@@ -1654,7 +1654,11 @@ Styling ownership (HS2-DR549A):
   `--terminal-preview-inset` (frame inset, default `--kui-space-l`) and
   `--terminal-preview-radius` (frame radius, default `--wa-border-radius-m`). `ProjectCloseDialog`
   composes it and narrows the inset to `--kui-space-m` on phones; its UX demo now switches between
-  the chat and terminal previews.
+  the chat and terminal previews. Its canvas takes the dashboard tile's preview-scale contract:
+  every `scaled-preview` viewport, with or without the dashboard's 80×24 grid policy, is scaled by
+  `terminalPreviewScale(frame)` (exposed as `data-preview-scale`) in both the live and static
+  runtimes, so all lines fit inside the frame at every width instead of a native-size crop
+  (HS2-S7E53Q). The preview stays non-claiming, so a borrowed terminal keeps its PTY geometry.
 
 Grid scale is a discrete fit count controlled by icon-only minus/plus buttons with visible
 tooltip and accessible names. Plus zooms in (fewer terminals on the controlling axis);

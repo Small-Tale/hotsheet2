@@ -100,6 +100,19 @@ function mountWithCleanup(initialize: (own: OwnTerminalResource) => void): () =>
   return dispose;
 }
 
+/**
+ * Scales a `scaled-preview` viewport's fixed 1280×768 canvas to fit its frame (the parent), the
+ * dashboard tile's preview-scale contract. Every scaled preview takes it, with or without the
+ * dashboard's 80×24 grid policy, so a TerminalPreview never shows a native-size crop (HS2-S7E53Q).
+ */
+function applyScaledPreviewTransform(element: HTMLElement): number {
+  const frame = element.parentElement,
+    scale = terminalPreviewScale(frame?.clientWidth ?? 0, frame?.clientHeight ?? 0);
+  element.style.transform = `scale(${scale})`;
+  element.dataset.previewScale = String(scale);
+  return scale;
+}
+
 export function mountStaticTerminalViewportRuntime(
   element: HTMLElement,
   options: { output: string; autoFocus?: boolean },
@@ -172,6 +185,7 @@ function initializeStaticTerminalViewport(
     if (!fixedDashboardGrid) {
       fit.fit();
       terminal.element.style.transform = '';
+      if (scaledPreview) applyScaledPreviewTransform(element);
       element.dataset.scale = '1';
       element.dataset.physicalScale = '1';
       element.dataset.ptySize = `${terminal.cols}x${terminal.rows}`;
@@ -384,12 +398,10 @@ function initializeTerminalViewport(
     !fixedDashboardGrid && !mobile80xM() && lastSettledGeometry ? lastSettledGeometry : proposed();
   const reconcileScale = () => {
     if (!terminal.element) return;
+    const previewScale = scaledPreview ? applyScaledPreviewTransform(element) : 1;
     if (fixedDashboardGrid || mobile80xM()) {
-      const scale = scaledPreview
-        ? terminalPreviewScale(element.parentElement?.clientWidth ?? 0, element.parentElement?.clientHeight ?? 0)
-        : 1;
-      element.style.transform = scaledPreview ? `scale(${scale})` : '';
-      if (!mobile80xM()) element.dataset.scale = String(scale);
+      if (!scaledPreview) element.style.transform = '';
+      if (!mobile80xM()) element.dataset.scale = String(previewScale);
       delete element.dataset.viewingLabel;
       element.removeAttribute('aria-description');
       return;

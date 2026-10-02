@@ -6487,6 +6487,58 @@ test('previews a running terminal through the shared TerminalPreview in the Proj
   await expect(preview).toHaveCount(0);
 });
 
+test('scales the ProjectCloseDialog TerminalPreview canvas to fit its frame at wide and phone widths (HS2-S7E53Q)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');
+  const dialog = page.locator('[data-component="project-close-dialog"]');
+  await expect(dialog).toHaveJSProperty('open', true);
+  await dialog.getByRole('button', { name: /Tests/ }).click();
+  const region = dialog.getByRole('region', { name: 'Tests terminal preview' }),
+    viewport = region.locator('[data-component="terminal-viewport"]');
+  await expect(viewport).toHaveAttribute('data-connection', 'connected');
+  const fit = () =>
+    viewport.evaluate((node) => {
+      const frame = node.parentElement!.getBoundingClientRect(),
+        rows = [...node.querySelectorAll<HTMLElement>('.xterm-rows > div')].filter((row) => row.textContent.trim()),
+        outside = rows
+          .map((row) => row.getBoundingClientRect())
+          .filter(
+            (box) =>
+              box.left < frame.left - 0.5 ||
+              box.top < frame.top - 0.5 ||
+              box.right > frame.right + 0.5 ||
+              box.bottom > frame.bottom + 0.5,
+          ).length,
+        screen = node.querySelector('.xterm-screen')!.getBoundingClientRect();
+      return {
+        scale: Number(node.dataset.previewScale),
+        transform: getComputedStyle(node).transform,
+        rows: rows.length,
+        outside,
+        screenInside: screen.right <= frame.right + 0.5 && screen.bottom <= frame.bottom + 0.5,
+      };
+    });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await expect
+      .poll(async () => {
+        const result = await fit();
+        return result.rows > 0 && result.outside === 0 && result.screenInside;
+      }, `every preview line fits inside the frame at ${width}px`)
+      .toBe(true);
+    const result = await fit();
+    // The canvas takes the dashboard tile's preview scale: shrunk to the frame, never enlarged.
+    expect(result.scale).toBeGreaterThan(0);
+    expect(result.scale).toBeLessThanOrEqual(1);
+    expect(result.transform).not.toBe('none');
+    await region.screenshot({
+      path: test.info().outputPath(`s7e53q-close-preview-${width}.png`),
+    });
+  }
+});
+
 test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKKS05)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');

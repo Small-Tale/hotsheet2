@@ -507,3 +507,123 @@ describe('unpainted until the first geometry pass (HS2-MHPHZB)', () => {
     disposeSettled();
   });
 });
+
+describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
+  function previewElement(gridPolicy?: string) {
+    const created = element().viewport,
+      frame = { clientWidth: 318, clientHeight: 240 };
+    Object.assign(created.dataset, { displayMode: 'scaled-preview' }, gridPolicy ? { gridPolicy } : {});
+    Object.assign(created as unknown as Record<string, unknown>, { parentElement: frame, removeAttribute: vi.fn() });
+    return { viewport: created, frame };
+  }
+  function captureFrames() {
+    const frames = new Map<number, () => void>();
+    let next = 0;
+    windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
+      next += 1;
+      frames.set(next, callback);
+      return next;
+    }) as never);
+    windowMock.cancelAnimationFrame.mockImplementation(((handle: number) => {
+      frames.delete(handle);
+    }) as never);
+    return () => {
+      for (let pass = 0; pass < 3 && frames.size; pass += 1) {
+        const due = [...frames.values()];
+        frames.clear();
+        for (const callback of due) callback();
+      }
+    };
+  }
+  function giveScreen(terminal: (typeof allocated.terminals)[number]) {
+    Object.assign((terminal as unknown as { element: Record<string, unknown> }).element, {
+      querySelector: () => ({ offsetWidth: 1000, offsetHeight: 600 }),
+    });
+  }
+
+  it('scales a live TerminalPreview (no grid policy) to its frame and follows resizes without claiming sizing', async () => {
+    allocated.openElement = true;
+    const runFrames = captureFrames(),
+      { viewport, frame } = previewElement(),
+      dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'close-preview' }),
+      sent: string[] = [];
+    giveScreen(allocated.terminals[0]);
+    expect(viewport.style.width).toBe('1280px');
+    expect(viewport.style.height).toBe('768px');
+    const socket = sockets[0] as unknown as EventTarget & { readyState: number; send: (value: string) => void };
+    socket.send = (value: string) => sent.push(value);
+    socket.readyState = 1;
+    socket.dispatchEvent(new Event('open'));
+    runFrames();
+    // A 318px frame scales the 1280px canvas by 318/1280 instead of showing a native-size crop.
+    expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+    expect(viewport.dataset.previewScale).toBe(String(318 / 1280));
+    // A height-bound frame scales by height.
+    Object.assign(frame, { clientWidth: 1200, clientHeight: 360 });
+    resize[0].callback();
+    runFrames();
+    expect(viewport.style.transform).toBe(`scale(${360 / 768})`);
+    // Shrinking back (repeated, coalesced observations) tracks the new frame.
+    Object.assign(frame, { clientWidth: 318, clientHeight: 240 });
+    resize[0].callback();
+    resize[0].callback();
+    runFrames();
+    expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+    // A server size message reconciles the inner mismatch scale without dropping the canvas scale.
+    socket.dispatchEvent(
+      new MessageEvent('message', {
+        data: JSON.stringify({ pty_size: { cols: 200, rows: 60 }, driven_by: 'drawer' }),
+      }),
+    );
+    await Promise.resolve();
+    expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+    // The borrowed terminal keeps its geometry: the preview never claims PTY sizing (HS2-6C0WZN).
+    expect(viewport.dataset.sizingFocus).toBe('false');
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((value) => !value.includes('"focus":true'))).toBe(true);
+    dispose();
+  });
+
+  it('keeps the dashboard tile preview on the same scale contract', () => {
+    allocated.openElement = true;
+    const runFrames = captureFrames(),
+      { viewport } = previewElement('dashboard-80x24'),
+      dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'tile' });
+    giveScreen(allocated.terminals[0]);
+    sockets[0].readyState = 1;
+    sockets[0].dispatchEvent(new Event('open'));
+    runFrames();
+    expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+    expect(viewport.dataset.scale).toBe(String(318 / 1280));
+    expect(viewport.dataset.previewScale).toBe(String(318 / 1280));
+    dispose();
+  });
+
+  it('scales a static (demo) TerminalPreview canvas to its frame and tracks resizes', () => {
+    allocated.openElement = true;
+    const runFrames = captureFrames(),
+      { viewport, frame } = previewElement(),
+      dispose = mountStaticTerminalViewportRuntime(viewport, { output: 'PASS\r\n' });
+    giveScreen(allocated.terminals[0]);
+    runFrames();
+    expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+    expect(viewport.dataset.geometryReady).toBe('true');
+    Object.assign(frame, { clientWidth: 640, clientHeight: 600 });
+    resize[0].callback();
+    runFrames();
+    expect(viewport.style.transform).toBe(`scale(${640 / 1280})`);
+    dispose();
+  });
+
+  it('leaves a static interactive viewport untransformed', () => {
+    allocated.openElement = true;
+    const runFrames = captureFrames(),
+      { viewport } = element(),
+      dispose = mountStaticTerminalViewportRuntime(viewport, { output: 'hello' });
+    giveScreen(allocated.terminals[0]);
+    runFrames();
+    expect(viewport.style.transform).toBeUndefined();
+    expect(viewport.dataset.previewScale).toBeUndefined();
+    dispose();
+  });
+});
