@@ -227,8 +227,26 @@ test('orders terminal and AI-chat tabs as one persistent, keyboard-accessible dr
   });
   await expect.poll(() => drawerOrder(drawer)).toEqual([chatId!, 'shell-two', 'shell-one']);
   await page.screenshot({ path: '/private/tmp/hs2-41q0ha-drawer-tab-bar-narrow.png', fullPage: true });
-  await chat.getByRole('tab').click();
-  await chat.getByRole('tab').focus();
+  // Selecting a drawer tab on desktop defers input focus into the selected item's composer by two
+  // frames. Wait for that documented consequence before returning focus to the tab; otherwise the
+  // deferred focus can land between `focus()` and Delete and swallow the key (HS2-8TS2Z1).
+  const chatTab = chat.getByRole('tab');
+  await chatTab.click();
+  await expect(drawer.getByRole('textbox', { name: /^Message / })).toBeFocused();
+  await chatTab.focus();
+  await expect(chatTab).toBeFocused();
+  // Two more frames prove no stale deferred input focus is still pending to steal the key.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
+  await expect(chatTab).toBeFocused();
   await page.keyboard.press('Delete');
   await expect.poll(() => drawerOrder(drawer)).toEqual(['shell-two', 'shell-one']);
   await expect(shellTwo).toHaveAttribute('aria-selected', 'true');
