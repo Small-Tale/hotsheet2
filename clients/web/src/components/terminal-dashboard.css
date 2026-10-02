@@ -1,7 +1,4 @@
 .terminal-dashboard {
-  --terminal-tile-frame-inset: var(--wa-space-s);
-  --terminal-tile-footer-height: remify(43.2px);
-  --terminal-tile-border-width: 0px;
   position: relative;
   display: flex;
   min-width: 0;
@@ -144,7 +141,11 @@
 .terminal-dashboard[data-basis='high'][data-fit='1'] .terminal-dashboard__project {
   height: 100%;
 }
+/* The tile's own tokens hang off its root, so the card renders the same with or without a
+   TerminalDashboard around it (HS2-0X36TX). */
 .terminal-tile {
+  --terminal-tile-frame-inset: var(--wa-space-s);
+  --terminal-tile-footer-height: remify(43.2px);
   display: flex;
   min-width: 0;
   width: var(--terminal-tile-width);
@@ -165,7 +166,7 @@
   outline: var(--wa-focus-ring);
   outline-offset: 2px;
 }
-.terminal-dashboard .terminal-tile__preview {
+.terminal-tile__preview {
   position: relative;
   display: block;
   min-height: 0;
@@ -177,7 +178,7 @@
   text-align: left;
   flex: 1;
 }
-.terminal-dashboard .workspace-chat-tile__preview {
+.workspace-chat-tile__preview {
   padding: var(--terminal-tile-frame-inset);
   color: var(--wa-color-neutral-on-normal);
   background: var(--wa-color-surface-default);
@@ -537,6 +538,24 @@
    rather than scroll: otherwise the oversized layout box pans the terminal off screen. */
 .terminal-tile[data-mobile-chrome='true'] .terminal-viewport {
   overflow: clip;
+}
+/* `fit="aspect"`: the card takes its container's width and its own intrinsic height, with the
+   viewport at the terminal's fixed 5:3 aspect (HS2-0X36TX). It follows the mobile-chrome rules so
+   it also sizes a phone-chrome card. */
+.terminal-tile[data-fit='aspect'] {
+  width: 100%;
+  height: auto;
+}
+.terminal-tile[data-fit='aspect'] .terminal-tile__preview > pre {
+  position: absolute;
+  inset: var(--terminal-tile-frame-inset);
+  height: auto;
+}
+.terminal-tile[data-fit='aspect'] .terminal-tile__viewport-frame {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  aspect-ratio: 5 / 3;
 }
 .terminal-tile__close,
 .terminal-tile__text-size,

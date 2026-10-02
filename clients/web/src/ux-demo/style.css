@@ -650,12 +650,17 @@ body[data-resizing-project-sidebar='true'] {
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-l);
 }
-.fixed-aspect-terminal-card-demo.terminal-dashboard {
+/* The demo stage owns only its grid shell; the cards size themselves through `fit="aspect"`
+   (HS2-0X36TX). */
+.fixed-aspect-terminal-card-demo {
+  position: relative;
   display: grid;
   width: min(remify(1152px), 100%);
-  height: auto;
+  min-width: 0;
+  min-height: 0;
   padding: var(--wa-space-l);
   overflow: auto;
+  background: var(--wa-color-surface-lowered);
   grid-template-columns: minmax(remify(256px), remify(352px)) minmax(0, 1fr);
   gap: var(--wa-space-xl);
   align-items: start;
@@ -667,28 +672,8 @@ body[data-resizing-project-sidebar='true'] {
   margin: 0 0 var(--wa-space-s);
   font-size: var(--wa-font-size-s);
 }
-.fixed-aspect-terminal-card-demo .terminal-tile {
-  --terminal-tile-width: 100%;
-  height: auto;
-}
-.fixed-aspect-terminal-card-demo .terminal-tile__preview {
-  min-height: 0;
-  padding: var(--terminal-tile-frame-inset);
-  flex: none;
-}
-.fixed-aspect-terminal-card-demo .terminal-tile__preview > pre {
-  position: absolute;
-  inset: var(--terminal-tile-frame-inset);
-  height: auto;
-}
-.fixed-aspect-terminal-card-demo .terminal-tile__viewport-frame {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  aspect-ratio: 5 / 3;
-}
 @media (max-width: 700px) {
-  .fixed-aspect-terminal-card-demo.terminal-dashboard {
+  .fixed-aspect-terminal-card-demo {
     grid-template-columns: 1fr;
   }
 }

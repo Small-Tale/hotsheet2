@@ -349,4 +349,25 @@ describe('TerminalDashboard', () => {
       /\.terminal-viewport\.terminal-viewport--scaled-preview \{[^}]*width: 1280px;[^}]*height: 768px;/,
     );
   });
+  it('renders the tile independently of a dashboard ancestor, with grid and aspect fits (HS2-0X36TX)', () => {
+    const session = { id: 't1', projectId: 'p', projectName: 'P', alive: true, busy: false, scrollback: 'ready' };
+    expect(String(FixedAspectTerminalCard({ session }))).toContain('data-fit="grid"');
+    expect(String(FixedAspectTerminalCard({ session, fit: 'aspect' }))).toContain('data-fit="aspect"');
+    expect(String(FixedAspectTerminalCard({ session, mode: 'magnified', fit: 'aspect' }))).toMatch(
+      /data-fixed-aspect-terminal-card="magnified" data-fit="aspect"/,
+    );
+    // The tile's tokens and preview styling hang off its own root, not a .terminal-dashboard ancestor.
+    expect(css).toMatchSource(
+      /\.terminal-tile \{ --terminal-tile-frame-inset: var\(--wa-space-s\); --terminal-tile-footer-height: remify\(43\.2px\);/,
+    );
+    expect(css).not.toMatch(/\.terminal-dashboard \{[^}]*--terminal-tile-/);
+    expect(css).not.toContain('.terminal-dashboard .terminal-tile');
+    expect(css).not.toContain('.terminal-dashboard .workspace-chat-tile');
+    expect(css).toMatchSource(/\.terminal-tile\[data-fit='aspect'\] \{ width: 100%; height: auto; \}/);
+    expect(css).toMatchSource(
+      /\.terminal-tile\[data-fit='aspect'\] \.terminal-tile__viewport-frame \{[^}]*aspect-ratio: 5 \/ 3;/,
+    );
+    const demoCss = readFileSync(new URL('../ux-demo/style.css', import.meta.url), 'utf8');
+    expect(demoCss).not.toMatch(/\.fixed-aspect-terminal-card-demo[^{]*\.terminal-/);
+  });
 });

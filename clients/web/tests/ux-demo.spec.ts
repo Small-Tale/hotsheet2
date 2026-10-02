@@ -1214,6 +1214,17 @@ test('catalogs every FixedAspectTerminalCard variant and its dashboard relations
   await expect(magnifiedViewport.locator('.xterm-rows')).toContainText('GNU nano 8.4');
   await expect(preview).toHaveCSS('border-width', '0px');
   await expect(magnified).toHaveCSS('border-width', '0px');
+  // The stage styles only its own grid shell; every card sizes itself through `fit="aspect"` with no
+  // TerminalDashboard ancestor supplying its tokens (HS2-0X36TX).
+  await expect(stage).not.toHaveClass(/terminal-dashboard/);
+  await expect(stage.locator('[data-fixed-aspect-terminal-card]')).toHaveCount(4);
+  for (const card of await stage.locator('[data-fixed-aspect-terminal-card]').all())
+    await expect(card).toHaveAttribute('data-fit', 'aspect');
+  const frameAspect = await preview.evaluate((card) => {
+    const frame = card.querySelector('[data-display-mode="scaled-preview"]')!.parentElement!.getBoundingClientRect();
+    return frame.width / frame.height;
+  });
+  expect(frameAspect).toBeCloseTo(5 / 3, 2);
   const sizing = await stage.evaluate((element) => {
     const preview = element
         .querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"]')!

@@ -363,37 +363,6 @@
       "selector": ".ticket-status-menu > wa-select::part(combobox)",
       "ticket": "HS2-WQ8T6B",
       "reason": "foreign-element: <wa-select> below .ticket-status-menu is not authored by src/components/ticket-status-menu.tsx; it can only be the root of <Select>. Kept until a published @kerfjs/ui ships Select presentation=\"inline\" (KF-V2Y51V)"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".fixed-aspect-terminal-card-demo.terminal-dashboard",
-      "count": 2,
-      "ticket": "HS2-0X36TX",
-      "reason": "foreign-class: .terminal-dashboard belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".fixed-aspect-terminal-card-demo .terminal-tile",
-      "ticket": "HS2-0X36TX",
-      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".fixed-aspect-terminal-card-demo .terminal-tile__preview",
-      "ticket": "HS2-0X36TX",
-      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".fixed-aspect-terminal-card-demo .terminal-tile__preview > pre",
-      "ticket": "HS2-0X36TX",
-      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".fixed-aspect-terminal-card-demo .terminal-tile__viewport-frame",
-      "ticket": "HS2-0X36TX",
-      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
     }
   ]
 }

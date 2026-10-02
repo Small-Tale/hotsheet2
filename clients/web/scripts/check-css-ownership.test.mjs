@@ -342,7 +342,6 @@ describe('the clients/web workspace', () => {
         'src/components/ai-conversation.css .ai-conversation__activity svg',
         'src/components/terminal-drawer.css .terminal-drawer__rail svg',
         'src/components/terminal-drawer.css .terminal-drawer__rail .terminal-tab i',
-        'src/ux-demo/style.css .fixed-aspect-terminal-card-demo.terminal-dashboard',
       ]),
     );
   });

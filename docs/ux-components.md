@@ -1742,6 +1742,12 @@ keyboard presented (toolbar hidden; HS2-WMN626) — a deterministic ANSI fixture
 reverse-video Nano bars explicitly paint all 80 terminal cells,
 and representative preview-versus-magnified sizing. `TerminalDashboard` lists it as a related
 component so the production composition is explicit rather than only inferable from source.
+The card is self-contained (HS2-0X36TX): its `--terminal-tile-frame-inset` and
+`--terminal-tile-footer-height` tokens and its preview styling hang off the `.terminal-tile` root,
+so it renders the same with or without a `TerminalDashboard` around it. Its `fit` prop chooses the
+sizing: `grid` (default) takes the tile size its grid sets, and `aspect` takes the container's
+width and an intrinsic height with the viewport at 5:3. The catalog stage renders every variant
+with `fit="aspect"` and styles only its own grid shell.
 Late development-only source metadata waits for every open catalog Select or related-components
 dropdown to finish closing before it rerenders the shell, so background discovery never dismisses
 the popup a user is reading (HS2-S59CRP).

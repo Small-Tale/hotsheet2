@@ -186,16 +186,24 @@ export function TerminalDashboardControls({
   );
 }
 
+/**
+ * How a terminal card sizes itself: `grid` takes the tile size its grid sets, and `aspect` takes its
+ * container's width and an intrinsic height with a 5:3 viewport (HS2-0X36TX).
+ */
+export type TerminalCardFit = 'grid' | 'aspect';
+
 function TerminalCard({
   session,
   mode = 'preview',
   previewPaused = false,
   mobile,
+  fit = 'grid',
 }: {
   session: TerminalDashboardSession;
   mode?: 'preview' | 'magnified';
   previewPaused?: boolean;
   mobile?: MobileMagnifiedTerminal;
+  fit?: TerminalCardFit;
 }) {
   const key = keyFor(session);
   const dashboardPreview = mode === 'preview',
@@ -233,6 +241,7 @@ function TerminalCard({
       data-key={key}
       {...TERMINALS_TARGETS.terminalTile.attrs}
       data-fixed-aspect-terminal-card={mode}
+      data-fit={fit}
       data-terminal-key={key}
       data-busy={String(session.busy)}
       data-alive={String(session.alive)}
@@ -346,12 +355,15 @@ export function FixedAspectTerminalCard({
   session,
   mode = 'preview',
   mobile,
+  fit = 'grid',
 }: {
   session: TerminalDashboardSession;
   mode?: 'preview' | 'magnified';
   mobile?: MobileMagnifiedTerminal;
+  /** `grid` (default) sizes from the enclosing grid; `aspect` fills the container's width at 5:3. */
+  fit?: TerminalCardFit;
 }) {
-  return <TerminalCard session={session} mode={mode} mobile={mobile} />;
+  return <TerminalCard session={session} mode={mode} mobile={mobile} fit={fit} />;
 }
 
 /**

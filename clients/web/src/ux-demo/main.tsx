@@ -1080,23 +1080,21 @@ function demoContent(item: DemoDefinition) {
       scrollback: 'GNU nano 8.4\n80 columns × 24 rows\n^X Exit',
     };
     return (
-      <section
-        class="fixed-aspect-terminal-card-demo terminal-dashboard"
-        aria-label="Fixed aspect terminal card variants"
-      >
+      <section class="fixed-aspect-terminal-card-demo" aria-label="Fixed aspect terminal card variants">
         <div>
           <h2 class="fixed-aspect-terminal-card-demo__caption">Grid preview</h2>
-          <FixedAspectTerminalCard session={session} />
+          <FixedAspectTerminalCard session={session} fit="aspect" />
         </div>
         <div class="fixed-aspect-terminal-card-demo__magnified">
           <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified interactive</h2>
-          <FixedAspectTerminalCard session={session} mode="magnified" />
+          <FixedAspectTerminalCard session={session} mode="magnified" fit="aspect" />
         </div>
         <div class="fixed-aspect-terminal-card-demo__magnified fixed-aspect-terminal-card-demo__phone">
           <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified phone toolbar</h2>
           <FixedAspectTerminalCard
             session={session}
             mode="magnified"
+            fit="aspect"
             mobile={{ viewport: { left: 0, top: 0, width: 390, height: 844 }, keyboardVisible: false, columns: 60 }}
           />
         </div>
@@ -1105,6 +1103,7 @@ function demoContent(item: DemoDefinition) {
           <FixedAspectTerminalCard
             session={session}
             mode="magnified"
+            fit="aspect"
             mobile={{ viewport: { left: 0, top: 0, width: 390, height: 500 }, keyboardVisible: true, columns: 60 }}
           />
         </div>
