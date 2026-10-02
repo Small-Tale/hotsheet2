@@ -43,7 +43,6 @@ import type { ProviderAccount } from '../api';
 import type { CommandDropTarget } from '../command-order';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
-import { BulkTicketDialog } from '../components/bulk-ticket-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { KeyboardSettings } from '../components/keyboard-settings';
@@ -55,6 +54,7 @@ import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { ProviderSetupForm } from '../components/provider-setup-form';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
 import { SavedViewDialog } from '../components/saved-view-dialog';
+import type { SettingsCategory } from '../components/settings-navigation';
 import { SettingsWorkspace } from '../components/settings-workspace';
 import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import {
@@ -85,8 +85,10 @@ import { createDisposerScope } from '../disposer-scope';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
+import type { PermissionAutomationAction } from '../permission-notifications';
 import { terminalCopyMessage, terminalCopySelection } from '../terminal-clipboard';
 import {
   consumeTerminalModifiers,
@@ -133,6 +135,15 @@ import {
   shellStatsProjectName,
   shellTerminalDrawerVisible,
 } from './app-shell-demo';
+import {
+  BulkTicketDialogDemo,
+  type BulkTicketDialogScenario,
+  BulkTicketDialogSettings,
+  closeBulkTicketDialogDemo,
+  openBulkTicketDialogDemo,
+  resetBulkTicketDialogDemo,
+  setBulkTicketDialogScenario,
+} from './bulk-ticket-dialog-demo';
 import { demoCatalog, type DemoDefinition, findDemo, kerfCatalogSections, usesCatalogGeometryOverlay } from './catalog';
 import { applyAfterCatalogPopupsClose } from './catalog-update';
 import {
@@ -285,6 +296,11 @@ import {
   resetRepositoryStatusDemo,
 } from './repository-status-demo';
 import { SelectDemo } from './select-demo';
+import {
+  resetSettingsWorkspaceDemo,
+  SettingsWorkspaceSettings,
+  settingsWorkspaceSettings,
+} from './settings-workspace-demo';
 import { resetStatusBadgeDemo, StatusBadgeDemo, StatusBadgeSettings, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from './tag-chip-demo';
 import { syncTerminalDemoViewports } from './terminal-demo';
@@ -741,10 +757,7 @@ function demoContent(item: DemoDefinition) {
       />
     );
   if (item.id === 'command-run-dialog') return <CommandRunDialogDemo />;
-  if (item.id === 'bulk-ticket-dialog')
-    return (
-      <BulkTicketDialog state={{ kind: 'tag', mode: 'add', count: 5, choices: ['bug', 'ui', 'backend', 'docs'] }} />
-    );
+  if (item.id === 'bulk-ticket-dialog') return <BulkTicketDialogDemo />;
   if (item.id === 'saved-view-dialog')
     return <SavedViewDialog open mode="create" name="Blocked bugs" searchModel={savedViewDemoSearchModel} />;
   if (item.id === 'ticket-link-choice-dialog')
@@ -860,14 +873,17 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'settings-workspace')
     return (
       <SettingsWorkspace
-        category="sources"
+        category={settingsWorkspaceSettings.category.value}
         sources={{ sources: DEMO_PROJECT_SOURCES.slice(0, 1) }}
         accounts={{ accounts: DEMO_ACCOUNTS }}
         ai={{ tools: [], selection: { tool: 'codex' }, loading: false, message: '' }}
         commands={{ commands: [] }}
         lifecycle={{ days: 30, message: '' }}
         terminals={{ inheritGlobalShellHistory: false, message: '' }}
-        permissions={{ automation: { action: 'off', delayMs: 60_000 }, delays: [0, 15_000, 60_000, 120_000] }}
+        permissions={{
+          automation: { action: settingsWorkspaceSettings.permissionAction.value, delayMs: 60_000 },
+          delays: [0, 15_000, 60_000, 120_000],
+        }}
         columns={{ hideVerified: false }}
         general={{ showLoadingActivity: true }}
         keyboard={{ overrides: {}, apple: true }}
@@ -1199,6 +1215,8 @@ function DemoApp() {
     selected.id === 'quick-ticket-composer' ||
     selected.id === 'ticket-inspector' ||
     selected.id === 'markdown-editor' ||
+    selected.id === 'bulk-ticket-dialog' ||
+    selected.id === 'settings-workspace' ||
     selected.id === 'command-run-dialog';
   const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : ''].filter(Boolean).join(' '),
     modified = demoModified.value[selected.id];
@@ -1288,6 +1306,10 @@ function DemoApp() {
             <MarkdownEditorSettings />
           ) : selected.id === 'command-run-dialog' ? (
             <CommandRunDialogSettings />
+          ) : selected.id === 'bulk-ticket-dialog' ? (
+            <BulkTicketDialogSettings />
+          ) : selected.id === 'settings-workspace' ? (
+            <SettingsWorkspaceSettings />
           ) : (
             <p>This demo has no adjustable settings.</p>
           )}
@@ -2264,6 +2286,8 @@ demoListeners.add(
     if (selectedId.value === 'permission-request') resetPermissionRequestDemo(root);
     if (selectedId.value === 'command-run-dialog') resetCommandRunDialogDemo(root);
     if (selectedId.value === 'markdown-editor') resetMarkdownEditorDemo(root);
+    if (selectedId.value === 'bulk-ticket-dialog') resetBulkTicketDialogDemo(root);
+    if (selectedId.value === 'settings-workspace') resetSettingsWorkspaceDemo(root);
   }),
 );
 const openAIConversationDemo = () => {
@@ -2611,6 +2635,73 @@ demoListeners.add(
   delegate(root, 'change', '[data-settings="markdown-editor"] [name="markdown-inset"]', (_event, target) => {
     markdownInset.value = (target as FormControl).value as MarkdownEditorInsetDemo;
   }),
+);
+demoListeners.add(
+  delegate(root, 'change', '[data-settings="bulk-ticket-dialog"] [name="bulk-scenario"]', (_event, target) => {
+    setBulkTicketDialogScenario((target as FormControl).value as BulkTicketDialogScenario);
+  }),
+);
+demoListeners.add(delegate(root, 'click', DEMO_ACTIONS.openBulkTicketDialogDemo.selector, openBulkTicketDialogDemo));
+// Fixture stand-ins for the production selection handlers (`interactions/ticket-selection.ts`): every
+// rendered BulkTicketDialog action closes the dialog and reports what production would request.
+demoListeners.add(
+  delegate(root, 'click', TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.selector, () => {
+    closeBulkTicketDialogDemo('Cancelled; the selection is unchanged.');
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', TICKET_SELECTION_ACTIONS.chooseBulkTag.selector, (_event, target) => {
+    const input = root.querySelector<FormControl>('[name="bulk-ticket-tag"]');
+    if (!input) return;
+    input.value = (target as HTMLElement).dataset.tag ?? '';
+    input.focus();
+  }),
+);
+demoListeners.add(
+  delegate(root, 'submit', TICKET_SELECTION_ACTIONS.submitBulkTag.selector, (event, target) => {
+    event.preventDefault();
+    const tag = target.querySelector<FormControl>('[name="bulk-ticket-tag"]')?.value.trim() ?? '',
+      adding = (target as HTMLElement).dataset.tagMode === 'add';
+    closeBulkTicketDialogDemo(
+      `${adding ? 'Add' : 'Remove'} tag “${tag}” ${adding ? 'to' : 'from'} 5 tickets requested.`,
+    );
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', TICKET_SELECTION_ACTIONS.confirmBulkDelete.selector, () => {
+    closeBulkTicketDialogDemo('Delete 5 tickets requested.');
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', TICKET_SELECTION_ACTIONS.confirmEmptyTrash.selector, () => {
+    closeBulkTicketDialogDemo('Empty Trash requested for 5 tickets.');
+  }),
+);
+demoListeners.add(
+  delegate(
+    root,
+    'wa-hide',
+    '[data-component="bulk-tag-dialog"], [data-component="bulk-delete-dialog"], [data-component="empty-trash-dialog"]',
+    (event, target) => {
+      if (event.target !== target) return;
+      closeBulkTicketDialogDemo('Dismissed; the selection is unchanged.');
+    },
+  ),
+);
+demoListeners.add(
+  delegate(root, 'change', '[data-settings="settings-workspace"] [name="workspace-category"]', (_event, target) => {
+    settingsWorkspaceSettings.category.value = (target as FormControl).value as SettingsCategory;
+  }),
+);
+demoListeners.add(
+  delegate(
+    root,
+    'change',
+    '[data-settings="settings-workspace"] [name="workspace-permission-action"]',
+    (_event, target) => {
+      settingsWorkspaceSettings.permissionAction.value = (target as FormControl).value as PermissionAutomationAction;
+    },
+  ),
 );
 demoListeners.add(
   delegate(root, 'change', '[data-settings="ticket-inspector"] [name="inspector-live-claim"]', (_event, target) => {

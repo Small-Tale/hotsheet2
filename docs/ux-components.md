@@ -1034,6 +1034,11 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
   fresh provider concurrency tokens and participate in field-aware Undo. Capture-phase
   composed-path containment keeps shadow-DOM menu interactions open and dismisses on every
   true outside pointer-down or Escape.
+- `BulkTicketDialog` — **demo built**: the add-tag and remove-tag dialogs (remove mode offers the
+  selection's tags as `.bulk-ticket-dialog__choice` pills that fill the field), the bulk delete
+  confirmation, and the Empty Trash confirmation with its busy and error states. The
+  `bulk-ticket-dialog` UX demo's Presentation setting previews each of these, and Reset returns to
+  add-tag. Fixture stand-ins handle Cancel, choice, submit, confirm, and dismissal (HS2-PS9BQV).
 - `CopyMoveTicketDialog` — tracked by HS2-77M88K.
 - `UndoToast` / `UndoHistory` — tracked by HS2-4CAN74.
 
@@ -1854,6 +1859,11 @@ conversation save share this visual contract; save scope pushes forward and pops
 
 - `SettingsWindow`
 - `SettingsNavigation`
+- `SettingsWorkspace` — **demo built**: one category-selected settings surface. The
+  `settings-workspace` UX demo's Category setting covers all ten categories, including the
+  permission grid and its note, terminals, column view, and general. Its Permission automation
+  setting (Off, Auto-allow, Auto-deny) shows the delay select disabled and enabled, and Reset
+  returns to Ticket sources with automation off (HS2-PS9BQV).
 - `SettingsSection`
 - `EffectiveSettingField`
 - `SettingScopePicker`

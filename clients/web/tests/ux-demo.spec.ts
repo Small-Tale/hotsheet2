@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Locator, test } from '@playwright/test';
 
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 
@@ -2402,6 +2402,163 @@ test('catalogs ProviderIcon kinds at the m and l size variants (HS2-PK8THJ)', as
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await demo.screenshot({ path: `/private/tmp/claude/hs2-pk8thj-provider-icon-${width}.png` });
+  }
+});
+
+test('previews every BulkTicketDialog presentation through demo settings, then resets (HS2-PS9BQV)', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=bulk-ticket-dialog&dev-review=false');
+    const tagDialog = page.locator('[data-component="bulk-tag-dialog"]'),
+      deleteDialog = page.locator('[data-component="bulk-delete-dialog"]'),
+      trashDialog = page.locator('[data-component="empty-trash-dialog"]'),
+      event = page.locator('.component-stage__event'),
+      scenario = page.locator('[data-settings="bulk-ticket-dialog"] [name="bulk-scenario"]'),
+      choose = (value: string) =>
+        scenario.evaluate((node: HTMLElement & { value: string }, next) => {
+          node.value = next;
+          node.dispatchEvent(new Event('change', { bubbles: true }));
+        }, value),
+      shot = (name: string) => page.screenshot({ path: `/private/tmp/claude/hs2-ps9bqv-bulk-${name}-${width}.png` });
+
+    // Default add-tag mode, then Cancel closes it so the demo settings are reachable.
+    await expect(tagDialog).toHaveJSProperty('open', true);
+    await expect(tagDialog.locator('form')).toHaveAttribute('data-tag-mode', 'add');
+    await expect(tagDialog.locator('.bulk-ticket-dialog__choice')).toHaveCount(0);
+    await tagDialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(tagDialog).toHaveCount(0);
+    await expect(event).toHaveText('Cancelled; the selection is unchanged.');
+    await page.locator('[data-action="toggle-settings"]').click();
+    await expect(scenario).toHaveJSProperty('value', 'add-tag');
+
+    // Remove mode offers the selection's tags as choices; a choice fills the field and submit reports it.
+    await choose('remove-tag');
+    await expect(tagDialog).toHaveJSProperty('open', true);
+    await expect(tagDialog).toHaveAttribute('label', 'Remove tag — 5 selected');
+    await expect(tagDialog.locator('form')).toHaveAttribute('data-tag-mode', 'remove');
+    await expect(tagDialog.locator('.bulk-ticket-dialog__choice')).toHaveText(['bug', 'ui', 'backend', 'docs']);
+    await shot('remove-tag');
+    await tagDialog.getByRole('button', { name: 'backend' }).click();
+    await expect(tagDialog.locator('wa-input[name="bulk-ticket-tag"]')).toHaveJSProperty('value', 'backend');
+    await tagDialog.getByRole('button', { name: 'Remove tag' }).click();
+    await expect(tagDialog).toHaveCount(0);
+    await expect(event).toHaveText('Remove tag “backend” from 5 tickets requested.');
+
+    await choose('delete');
+    await expect(deleteDialog).toHaveJSProperty('open', true);
+    await expect(deleteDialog).toHaveAttribute('label', 'Delete 5 tickets?');
+    await shot('delete');
+    await deleteDialog.getByRole('button', { name: 'Delete 5 tickets' }).click();
+    await expect(deleteDialog).toHaveCount(0);
+    await expect(event).toHaveText('Delete 5 tickets requested.');
+
+    await choose('empty-trash');
+    await expect(trashDialog).toHaveJSProperty('open', true);
+    await expect(trashDialog.getByRole('alert')).toHaveCount(0);
+    await shot('empty-trash');
+    await trashDialog.getByRole('button', { name: 'Empty Trash' }).click();
+    await expect(trashDialog).toHaveCount(0);
+    await expect(event).toHaveText('Empty Trash requested for 5 tickets.');
+
+    await choose('empty-trash-busy');
+    await expect(trashDialog.getByRole('button', { name: 'Emptying…' })).toHaveJSProperty('disabled', true);
+    await expect(trashDialog.getByRole('button', { name: 'Cancel' })).toHaveJSProperty('disabled', true);
+    await shot('empty-trash-busy');
+
+    await choose('empty-trash-error');
+    await expect(trashDialog.getByRole('alert')).toContainText('Could not empty Trash');
+    await expect(trashDialog.getByRole('button', { name: 'Empty Trash' })).toHaveJSProperty('disabled', false);
+    await shot('empty-trash-error');
+    await page.keyboard.press('Escape');
+    await expect(trashDialog).toHaveCount(0);
+    await expect(event).toHaveText('Dismissed; the selection is unchanged.');
+    await expect(scenario).toHaveJSProperty('value', 'empty-trash-error');
+
+    // Reset restores add-tag in the dialog and the live control, then another edit still applies.
+    await page.locator('[data-settings="bulk-ticket-dialog"] [data-action="reset-settings"]').click();
+    await expect(tagDialog).toHaveJSProperty('open', true);
+    await expect(tagDialog.locator('form')).toHaveAttribute('data-tag-mode', 'add');
+    await expect(scenario).toHaveJSProperty('value', 'add-tag');
+    await choose('delete');
+    await expect(deleteDialog).toHaveJSProperty('open', true);
+    await expect(tagDialog).toHaveCount(0);
+  }
+});
+
+test('switches the SettingsWorkspace demo across every category, then resets (HS2-PS9BQV)', async ({ page }) => {
+  const categories = [
+    ['sources', 'Ticket sources'],
+    ['ai', 'AI tools'],
+    ['commands', 'Commands'],
+    ['lifecycle', 'Lifecycle'],
+    ['terminals', 'Terminals'],
+    ['permissions', 'Permissions'],
+    ['columns', 'Column view'],
+    ['general', 'General'],
+    ['accounts', 'Accounts'],
+    ['keyboard', 'Keyboard shortcuts'],
+  ] as const;
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=settings-workspace&dev-review=false');
+    const workspace = page.locator('[data-component="settings-workspace"]'),
+      settings = page.locator('[data-settings="settings-workspace"]'),
+      category = settings.locator('[name="workspace-category"]'),
+      action = settings.locator('[name="workspace-permission-action"]'),
+      delay = workspace.locator('[name="permission-automation-delay"]'),
+      choose = (control: typeof category, value: string) =>
+        control.evaluate((node: HTMLElement & { value: string }, next) => {
+          node.value = next;
+          node.dispatchEvent(new Event('change', { bubbles: true }));
+        }, value),
+      shot = async (name: string, ...visible: Locator[]) => {
+        // The phone-width settings inspector takes the whole viewport, so check and capture the workspace
+        // with the inspector closed, then reopen it.
+        await page.locator('.settings-inspector [data-action="toggle-settings"]').click();
+        for (const locator of visible) await expect(locator).toBeVisible();
+        await workspace.screenshot({ path: `/private/tmp/claude/hs2-ps9bqv-workspace-${name}-${width}.png` });
+        await page.locator('[data-action="toggle-settings"]').click();
+      };
+    await expect(workspace).toHaveAttribute('data-settings-category', 'sources');
+    await page.locator('[data-action="toggle-settings"]').click();
+    await expect(category).toHaveJSProperty('value', 'sources');
+    await expect(action).toHaveJSProperty('value', 'off');
+
+    for (const [id, title] of categories) {
+      await choose(category, id);
+      await expect(workspace).toHaveAttribute('data-settings-category', id);
+      await expect(workspace).toHaveAttribute('aria-label', `${title} settings`);
+    }
+
+    await choose(category, 'terminals');
+    await shot('terminals', workspace.getByRole('checkbox', { name: /global shell history/ }));
+    await expect(category).toHaveJSProperty('value', 'terminals');
+
+    await choose(category, 'permissions');
+    await expect(workspace.locator('.project-settings__permission-note')).toContainText('floating permission popup');
+    await expect(workspace.locator('[name="permission-automation-action"]')).toHaveJSProperty('value', 'off');
+    await expect(delay).toHaveJSProperty('disabled', true);
+    await shot('permissions-off', workspace.locator('.project-settings__permission-grid'));
+    await choose(action, 'allow');
+    await expect(workspace.locator('[name="permission-automation-action"]')).toHaveJSProperty('value', 'allow');
+    await expect(delay).toHaveJSProperty('disabled', false);
+    await shot('permissions-allow');
+
+    await choose(category, 'columns');
+    await shot('columns', workspace.getByRole('checkbox', { name: /Hide Verified column/ }));
+    await choose(category, 'general');
+    await shot('general', workspace.getByRole('checkbox', { name: /Show loading activity/ }));
+
+    // Reset restores the sources category and Off automation in the render and both live controls.
+    await settings.locator('[data-action="reset-settings"]').click();
+    await expect(workspace).toHaveAttribute('data-settings-category', 'sources');
+    await expect(category).toHaveJSProperty('value', 'sources');
+    await expect(action).toHaveJSProperty('value', 'off');
+    await choose(category, 'permissions');
+    await expect(workspace.locator('[name="permission-automation-action"]')).toHaveJSProperty('value', 'off');
+    await expect(delay).toHaveJSProperty('disabled', true);
   }
 });
 
