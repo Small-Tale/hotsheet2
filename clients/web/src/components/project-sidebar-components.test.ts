@@ -210,7 +210,9 @@ describe('ProjectSidebar component slice', () => {
         items: [{ id: 'errors', label: 'Ticket errors', count: 2, attention: true, icon: 'errors' }],
       }),
     );
-    expect(markup).toContain('menu-item--errors');
+    // The danger tone rides on the app-owned row wrapper as ListItem tokens, not a ListItem class (HS2-QM0C3T).
+    expect(markup).toContain('data-view-tone="danger"');
+    expect(markup).not.toContain('menu-item--errors');
     expect(markup).toContain('data-lucide="file-warning"');
     expect(markup).toContain('aria-current="page"');
   });
@@ -235,6 +237,7 @@ describe('ProjectSidebar component slice', () => {
     );
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain('Running Test');
+    expect(markup).toContain('<i class="command-navigation__running" aria-hidden="true"></i>');
     expect(markup).toContain('data-lucide="test-tube-2"');
     expect(markup).toContain('data-command-color="#3b82f6"');
     expect(markup).toContain('data-command-palette="blue"');

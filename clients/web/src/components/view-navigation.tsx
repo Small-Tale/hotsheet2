@@ -60,7 +60,7 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
         actionLabel="Add view"
         actionIcon={<LucideIcon icon={Plus} name="plus" />}
       />
-      <ul>
+      <ul class="view-navigation__list">
         {items.map((item) => {
           const [icon, name] = icons[item.icon],
             count =
@@ -98,16 +98,16 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                       ? 'not_started'
                       : undefined;
           return (
-            <li>
+            <li class="view-navigation__entry">
               <div
                 class="view-navigation__item"
+                data-view-tone={item.id === 'errors' ? 'danger' : undefined}
                 data-saved-view-id={item.manageable ? item.id : undefined}
                 data-saved-view-label={item.manageable ? item.label : undefined}
               >
                 <ListItem
                   action="select-view"
                   itemId={item.id}
-                  className={item.id === 'errors' ? 'menu-item--errors' : ''}
                   rootAttributes={{ 'data-ticket-drop-status': dropStatus }}
                   selected={item.id === selectedId}
                   icon={<LucideIcon icon={icon} name={name} />}

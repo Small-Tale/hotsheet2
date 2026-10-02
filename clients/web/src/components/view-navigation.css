@@ -2,14 +2,14 @@
   display: grid;
   gap: var(--kui-space-2xs);
 }
-.view-navigation ul {
+.view-navigation__list {
   display: grid;
   margin: 0;
   padding: 0;
   gap: var(--kui-space-none);
   list-style: none;
 }
-.view-navigation li {
+.view-navigation__entry {
   margin: 0;
 }
 .view-navigation__item {
@@ -86,13 +86,11 @@
   width: 1px;
   height: 1px;
 }
-.view-navigation .menu-item--errors {
-  color: var(--wa-color-danger-on-quiet);
-}
-.view-navigation .menu-item--errors:hover {
-  background: var(--wa-color-danger-fill-quiet);
-}
-.view-navigation .menu-item--errors[aria-current='page'] {
-  color: var(--wa-color-danger-on-normal);
-  background: var(--wa-color-danger-fill-normal);
+/* The Errors view row takes a danger tone through ListItem's public tokens on its app-owned wrapper
+   (the item itself stays unstyled by app CSS, HS2-QM0C3T). */
+.view-navigation__item[data-view-tone='danger'] {
+  --kui-list-item-color: var(--wa-color-danger-on-quiet);
+  --kui-list-item-hover-background: var(--wa-color-danger-fill-quiet);
+  --kui-list-item-selected-color: var(--wa-color-danger-on-normal);
+  --kui-list-item-selected-background: var(--wa-color-danger-fill-normal);
 }

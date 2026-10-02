@@ -4,8 +4,8 @@
     {
       "file": "src/components/active-claim.css",
       "selector": ".active-claim-spinner > svg",
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: <svg> below .active-claim-spinner is not authored by src/components/active-claim.tsx; it can only be the root of <LoadingSpinner>"
+      "ticket": "HS2-JVPPVV",
+      "reason": "foreign-element: <svg> below .active-claim-spinner is not authored by src/components/active-claim.tsx; it can only be the root of <LoadingSpinner>. Kept until a published @kerfjs/ui ships a LoadingSpinner size prop (KF-PA81HY); a pixel wrapper font-size would break the typography-scale rule"
     },
     {
       "file": "src/components/ai-conversation.css",
@@ -66,13 +66,6 @@
       "selector": ".bulk-ticket-dialog__choices button:hover",
       "ticket": "HS2-4V4CV2",
       "reason": "foreign-element: the descendant selector below .bulk-ticket-dialog__choices also reaches inside <Row>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/command-navigation.css",
-      "selector": ".command-navigation__command i",
-      "count": 2,
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: the descendant selector below .command-navigation__command also reaches inside <ListItem>; use a child combinator, an own class, or the child's props"
     },
     {
       "file": "src/components/command-settings-editor.css",
@@ -146,13 +139,6 @@
       "selector": ".connection-details-dialog .connection-details-dialog__metadata dd",
       "ticket": "HS2-4V4CV2",
       "reason": "hook-descendant: .connection-details-dialog__metadata is a hook class on <ValueTable>'s root; <dd> sits inside that component"
-    },
-    {
-      "file": "src/components/corrupt-ticket-row.css",
-      "selector": ".corrupt-ticket-row.ticket-list-row--selected",
-      "count": 2,
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-class: .ticket-list-row belongs to src/components/ticket-row.tsx"
     },
     {
       "file": "src/components/hs1-migration.css",
@@ -237,8 +223,8 @@
     {
       "file": "src/components/project-tab.css",
       "selector": ".project-tab__busy-spinner > svg",
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: <svg> below .project-tab__busy-spinner is not authored by src/components/project-tab.tsx; it can only be the root of <LoadingSpinner>"
+      "ticket": "HS2-JVPPVV",
+      "reason": "foreign-element: <svg> below .project-tab__busy-spinner is not authored by src/components/project-tab.tsx; it can only be the root of <LoadingSpinner>. Kept until a published @kerfjs/ui ships a LoadingSpinner size prop (KF-PA81HY); a pixel wrapper font-size would break the typography-scale rule"
     },
     {
       "file": "src/components/provider-setup-form.css",
@@ -287,30 +273,6 @@
       "selector": ".quick-ticket-composer__footer wa-button svg",
       "ticket": "HS2-4V4CV2",
       "reason": "foreign-element: the descendant selector below .quick-ticket-composer__footer also reaches inside <Select>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/repository-status-popover.css",
-      "selector": ".repository-status-popover__values dd svg",
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: the descendant selector below .repository-status-popover__values also reaches inside <ValueTable>, <ValueTableRow>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/repository-status-popover.css",
-      "selector": ".repository-status-popover nav",
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: the descendant selector below .repository-status-popover also reaches inside <ListHeader>, <ListItem>, <RepositorySetup>, <TicketCodeReview>, <Toolbar>, <ToolbarControlGroup>, <ToolbarText>, <ValueTable>, <ValueTableRow>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/repository-status-popover.css",
-      "selector": ".repository-status-popover__navigation nav",
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: the descendant selector below .repository-status-popover__navigation also reaches inside <ListHeader>, <ListItem>, <ValueTable>, <ValueTableRow>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/repository-summary.css",
-      "selector": ".repository-summary svg",
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: the descendant selector below .repository-summary also reaches inside <ListItem>; use a child combinator, an own class, or the child's props"
     },
     {
       "file": "src/components/settings-workspace.css",
@@ -399,26 +361,8 @@
     {
       "file": "src/components/ticket-status-menu.css",
       "selector": ".ticket-status-menu > wa-select::part(combobox)",
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: <wa-select> below .ticket-status-menu is not authored by src/components/ticket-status-menu.tsx; it can only be the root of <Select>"
-    },
-    {
-      "file": "src/components/view-navigation.css",
-      "selector": ".view-navigation ul",
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: the descendant selector below .view-navigation also reaches inside <ListHeader>, <ListItem>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/view-navigation.css",
-      "selector": ".view-navigation li",
-      "ticket": "HS2-QM0C3T",
-      "reason": "foreign-element: the descendant selector below .view-navigation also reaches inside <ListHeader>, <ListItem>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/workspace-header.css",
-      "selector": ".workspace-header__utility-group > button:disabled",
-      "ticket": "HS2-QM0C3T",
-      "reason": "hook-descendant: .workspace-header__utility-group is a hook class on <ToolbarControlGroup>'s root; <button> sits inside that component"
+      "ticket": "HS2-WQ8T6B",
+      "reason": "foreign-element: <wa-select> below .ticket-status-menu is not authored by src/components/ticket-status-menu.tsx; it can only be the root of <Select>. Kept until a published @kerfjs/ui ships Select presentation=\"inline\" (KF-V2Y51V)"
     },
     {
       "file": "src/ux-demo/style.css",

@@ -4,6 +4,9 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ArrowDown, ArrowUp, CircleAlert, GitBranch } from 'lucide';
 
+/** The summary's icons render below Kerf's 18px ListItem icon default, through LucideIcon's own size (HS2-QM0C3T). */
+const REPOSITORY_SUMMARY_ICON_SIZE = 14.4;
+
 export interface RepositorySummaryProps {
   branch: string;
   unpushed: number;
@@ -48,6 +51,7 @@ export function RepositorySummary({
           <LucideIcon
             icon={error || conflicted ? CircleAlert : GitBranch}
             name={error || conflicted ? 'circle-alert' : 'git-branch'}
+            size={REPOSITORY_SUMMARY_ICON_SIZE}
           />
         }
         label={<span class="repository-summary__branch-name">{branch}</span>}
@@ -58,12 +62,12 @@ export function RepositorySummary({
             ) : (
               <>
                 <span class="repository-summary__metric" title={`${unpushed} unpushed commits`}>
-                  <LucideIcon icon={ArrowUp} name="arrow-up" />
+                  <LucideIcon icon={ArrowUp} name="arrow-up" size={REPOSITORY_SUMMARY_ICON_SIZE} />
                   {unpushed}
                 </span>
                 {behind > 0 && (
                   <span class="repository-summary__metric" title={`${behind} commits behind`}>
-                    <LucideIcon icon={ArrowDown} name="arrow-down" />
+                    <LucideIcon icon={ArrowDown} name="arrow-down" size={REPOSITORY_SUMMARY_ICON_SIZE} />
                     {behind}
                   </span>
                 )}

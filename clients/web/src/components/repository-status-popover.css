@@ -30,12 +30,13 @@
 .repository-status-popover__values + .repository-status-popover__values {
   margin-top: var(--kui-space-m);
 }
-.repository-status-popover__values dd svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
+/* The synchronization values' direction icons are app markup in the ValueTableRow value; the
+   wrapper tints them and LucideIcon's own size scales them (HS2-QM0C3T). */
+.repository-status-popover__sync-icon {
+  display: inline-flex;
   color: var(--wa-color-text-quiet);
 }
-.repository-status-popover nav {
+.repository-status-popover__nav {
   display: grid;
   row-gap: var(--kui-space-2xs);
 }
@@ -255,10 +256,10 @@
     border-right: 0;
     border-bottom: 1px solid var(--wa-color-surface-border);
   }
-  .repository-status-popover__navigation > :is(nav, .repository-status-popover__metadata) {
+  .repository-status-popover__navigation > :is(.repository-status-popover__nav, .repository-status-popover__metadata) {
     flex: none;
   }
-  .repository-status-popover__navigation nav {
+  .repository-status-popover__nav {
     order: -1;
   }
 }

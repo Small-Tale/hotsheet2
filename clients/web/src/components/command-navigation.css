@@ -65,7 +65,8 @@
   width: remify(16px);
   height: remify(16px);
 }
-.command-navigation__command i {
+/* The running indicator is this module's own trailing markup, passed into the Kerf ListItem. */
+.command-navigation__running {
   width: remify(8px);
   height: remify(8px);
   border: 2px solid color-mix(in srgb, var(--wa-color-neutral-on-loud) 45%, transparent);
@@ -79,7 +80,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .command-navigation__command i {
+  .command-navigation__running {
     animation: none;
     border-color: var(--wa-color-neutral-on-loud);
   }

@@ -19,7 +19,10 @@
   line-height: 1;
   place-items: center;
 }
-.workspace-header__utility-group > button:disabled {
+/* The utility group's own native buttons dim while no selection enables them and paint no hover
+   chrome, through the group's public control tokens. TEMPORARY until ToolbarControlGroup owns a
+   disabled native-button state (KF-FTADQT). */
+.workspace-header__utility-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   --kui-toolbar-control-hover-background: transparent;

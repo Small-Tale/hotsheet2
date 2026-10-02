@@ -5,7 +5,8 @@
   gap: var(--kui-space-xs);
   padding: var(--kui-space-xs) var(--kui-space-m);
 }
-.corrupt-ticket-row.ticket-list-row--selected {
+/* The row's own selected state (its `data-selected`), not TicketRow's selected modifier (HS2-QM0C3T). */
+.corrupt-ticket-row[data-selected='true'] {
   animation: corrupt-ticket-selected-wiggle 150ms ease-out;
 }
 @keyframes corrupt-ticket-selected-wiggle {
@@ -121,7 +122,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .corrupt-ticket-row.ticket-list-row--selected {
+  .corrupt-ticket-row[data-selected='true'] {
     animation: none;
   }
 }

@@ -41,8 +41,3 @@
 .repository-summary__metric--error {
   font-size: var(--wa-font-size-2xs);
 }
-.repository-summary svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-  flex: none;
-}

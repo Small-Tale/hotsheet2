@@ -238,7 +238,9 @@ export function RepositoryStatusPopover({
                     label="Ahead"
                     value={
                       <>
-                        <LucideIcon icon={ArrowUp} name="arrow-up" />
+                        <span class="repository-status-popover__sync-icon">
+                          <LucideIcon icon={ArrowUp} name="arrow-up" size={14.4} />
+                        </span>
                         {status.ahead}
                       </>
                     }
@@ -247,7 +249,9 @@ export function RepositoryStatusPopover({
                     label="Behind"
                     value={
                       <>
-                        <LucideIcon icon={ArrowDown} name="arrow-down" />
+                        <span class="repository-status-popover__sync-icon">
+                          <LucideIcon icon={ArrowDown} name="arrow-down" size={14.4} />
+                        </span>
                         {status.behind}
                       </>
                     }
@@ -255,7 +259,7 @@ export function RepositoryStatusPopover({
                 </ValueTable>
               </div>
             </div>
-            <nav aria-label="Repository views">
+            <nav class="repository-status-popover__nav" aria-label="Repository views">
               <ListHeader label="Views" />
               <div class="repository-status-popover__views">
                 {viewDefinitions.map((item) => (
@@ -451,7 +455,7 @@ export function ChangeEvidenceDialog({
       </div>
       <div class="repository-status-popover__layout change-evidence-dialog__layout">
         <aside class="repository-status-popover__navigation">
-          <nav aria-label="Change evidence views">
+          <nav class="repository-status-popover__nav" aria-label="Change evidence views">
             <ListHeader label="Views" />
             <div class="repository-status-popover__views">
               {evidenceViews.map((item) => (

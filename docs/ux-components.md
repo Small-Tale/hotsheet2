@@ -2259,6 +2259,35 @@ The first fix moved `.app-empty` out of `style.css` into `AppEmptyState`'s own
 previously lacked. The cross-project stats placeholder now composes the new `AppMessageState`
 instead of borrowing the class.
 
+HS2-QM0C3T removed nine of its twelve list, navigation, tab, and popover entries (11 of 14
+findings) without changing a rendered pixel or computed style. Each fix gives app markup its own class or uses a child prop:
+
+- **Own classes.** `CommandNavigation`'s running indicator is `.command-navigation__running`.
+  `ViewNavigation` renders `.view-navigation__list` and `.view-navigation__entry`. Both popover
+  `<nav>`s are `.repository-status-popover__nav`. The workspace header's utility buttons are
+  `.workspace-header__utility-action`, which keeps its disabled dimming until Kerf's group owns
+  that state (`KF-FTADQT`).
+- **Child props.** `RepositorySummary` and the popover's synchronization values size their icons
+  through `LucideIcon`'s `size`. The popover tints them through an app wrapper,
+  `.repository-status-popover__sync-icon`.
+- **ListItem tokens.** The Errors view row takes its danger tone from ListItem tokens on its app
+  wrapper (`data-view-tone="danger"`) instead of a class on the ListItem.
+- **Own state.** `CorruptTicketRow`'s selected wiggle keys off its own `data-selected` instead of
+  TicketRow's modifier. `HS2-QSR1TG` tracks the remaining borrowed `ticket-list-row` markup
+  classes.
+
+Three entries remain, waiting on Kerf releases:
+
+| Entry                                             | Waits for                                    | Adoption ticket |
+| ------------------------------------------------- | -------------------------------------------- | --------------- |
+| `.active-claim-spinner > svg`                     | `LoadingSpinner` `size` prop (`KF-PA81HY`)   | `HS2-JVPPVV`    |
+| `.project-tab__busy-spinner > svg`                | `LoadingSpinner` `size` prop (`KF-PA81HY`)   | `HS2-JVPPVV`    |
+| `.ticket-status-menu > wa-select::part(combobox)` | Select `presentation="inline"` (`KF-V2Y51V`) | `HS2-WQ8T6B`    |
+
+A pixel `font-size` on the spinner wrappers would size the 1em spinner without reaching into it,
+but it breaks the typography-scale rule in `theme.test.ts`. `KF-V2Y51V` is done in Kerf but not
+yet in a published `@kerfjs/ui`.
+
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
 rail's controls Toolbar now sizes the expanded search itself. HS2-402AXQ replaced the project
 tab strip's Add-project `wa-button` (and a stale `wa-dropdown` rule) with an app-styled native
