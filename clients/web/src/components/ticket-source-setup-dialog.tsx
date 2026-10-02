@@ -83,7 +83,7 @@ export function TicketSourceSetupDialog({
 }: TicketSourceSetupDialogProps) {
   const editing = providerConnections.find((item) => item.id === editingProviderId),
     machineEdit = Boolean(editing) && editScope === 'machine',
-    disclosure = <LucideIcon icon={ChevronRight} name="chevron-right" />,
+    disclosure = <LucideIcon icon={ChevronRight} name="chevron-right" size={16} />,
     created = createdGitTicketStore,
     defaultStore = `${target?.root}.hs2`,
     defaultExists = Boolean(target?.stores.includes(defaultStore));

@@ -73,10 +73,6 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .co
   --kui-list-item-hover-background: var(--wa-color-brand-fill-quiet);
   --kui-list-item-trailing-color: var(--wa-color-neutral-on-quiet);
 }
-.ticket-source-setup__options .kui-list-item__trailing svg {
-  width: var(--wa-space-m);
-  height: var(--wa-space-m);
-}
 .ticket-source-setup__option-copy {
   display: grid;
   min-width: 0;

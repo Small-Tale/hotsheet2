@@ -2104,6 +2104,17 @@ also ships the APIs several tickets wait on: the guarded post-commit caret (`KF-
 the PopupMenu submenu race fix (`KF-A388BJ`, `HS2-ZKMCVW`), phone submenus placed outside their
 parent menu (`KF-5PZ768`, `HS2-282GTZ`), ListItem tone inheritance (`KF-XD6YH1`, `HS2-C3SPM6`), and
 TokenSearchField's own deferred blur collapse through a pointer click (`KF-64W0RN`).
+HS2-9ME409 upgraded to 5.0.0-beta.67 and drove every Kerf UI doctor error to zero (the budgets
+are now 0 for all error and review ids). Beta.67 catalogs FloatingToolbar as a ToolbarControlGroup
+parent (`KF-QMRNQC`) and detects rules that reach unclassed descendants inside a component
+(`KF-1M836P`). The fixes, all without overriding Kerf: `wa-dropdown-item` keeps Web Awesome's own
+pointer cursor; the HS1 dialog styles its own path elements and the HS1 banners rely on Kerf's
+stacked copy layout and action-button padding; the ticket-close dialog styles its own project and
+title spans; inspector tab and ticket-source trailing icons size through `LucideIcon size`; the
+inspector field headers keep Kerf's label line height; and the UX catalog stage is an app-owned
+labelled section rather than a width-capped CatalogExampleStack. The remaining doctor warnings are
+tracked under HS2-9ME409 (delegate disposers, attr selectors) and `KF-VXWMM9` (root-level wiring
+for KUI-L401).
 HS2-8R25B6 upgraded to 5.0.0-beta.66: `WorkbenchPanel` is now a union of a static panel and a
 `navStack` navigation panel (`KF-WW33YJ`), so the shell's rails are typed `WorkbenchStaticPanel`. It
 also ships `KF-SCS4RH` (Toolbar zone focus rings stay unclipped) and `KF-6P4NAV` (the form-field

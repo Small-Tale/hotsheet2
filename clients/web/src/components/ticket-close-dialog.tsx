@@ -67,9 +67,9 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                 <span>
                   <strong>
                     {state.selected.slug}
-                    <small>{state.selected.projectName}</small>
+                    <small class="ticket-close-dialog__project">{state.selected.projectName}</small>
                   </strong>
-                  <span>{state.selected.title}</span>
+                  <span class="ticket-close-dialog__title">{state.selected.title}</span>
                 </span>
                 <wa-button type="button" appearance="plain" size="small" data-action="clear-ticket-close-target">
                   Change
@@ -91,9 +91,9 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                       <span class="ticket-close-dialog__candidate">
                         <strong>
                           {candidate.slug}
-                          <small>{candidate.projectName}</small>
+                          <small class="ticket-close-dialog__project">{candidate.projectName}</small>
                         </strong>
-                        <span>{candidate.title}</span>
+                        <span class="ticket-close-dialog__title">{candidate.title}</span>
                       </span>
                     }
                     multiline

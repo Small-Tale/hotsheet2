@@ -93,7 +93,7 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
                 selected={tab.id === 'info'}
                 closable={false}
                 placeholder
-                leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
+                leading={<LucideIcon icon={tab.icon} name={tab.iconName} size={14.4} />}
               />
             ))}
           </TabBar>

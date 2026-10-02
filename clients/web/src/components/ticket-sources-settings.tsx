@@ -153,7 +153,7 @@ export function TicketSourcesSettings({
                   divider={index > 0 ? 'before' : 'none'}
                   accessibleLabel={`Use ${connection.name ?? connection.id} in this project`}
                   icon={<LucideIcon icon={Cable} name="cable" />}
-                  trailing={<LucideIcon icon={Plus} name="plus" />}
+                  trailing={<LucideIcon icon={Plus} name="plus" size={16} />}
                   label={
                     <ConnectionCopy
                       name={connection.name ?? connection.id}
@@ -222,7 +222,7 @@ export function ConnectionsSettings({ connections, error = '', setupOpen = false
                   divider={index > 0 ? 'before' : 'none'}
                   accessibleLabel={`Edit ${connection.name ?? connection.id} for every project`}
                   icon={<LucideIcon icon={Cable} name="cable" />}
-                  trailing={<LucideIcon icon={ChevronRight} name="chevron-right" />}
+                  trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
                   label={
                     <ConnectionCopy
                       name={connection.name ?? connection.id}

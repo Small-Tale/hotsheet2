@@ -46,8 +46,7 @@
   align-items: baseline;
   gap: var(--kui-space-xs);
 }
-.ticket-close-dialog__results .kui-list-item__label small,
-.ticket-close-dialog__selected small {
+.ticket-close-dialog__project {
   overflow: hidden;
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
@@ -55,7 +54,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ticket-close-dialog__results .kui-list-item__label span {
+.ticket-close-dialog__results .ticket-close-dialog__title {
   overflow: hidden;
   color: var(--wa-color-neutral-on-quiet);
   text-overflow: ellipsis;

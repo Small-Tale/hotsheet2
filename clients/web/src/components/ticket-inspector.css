@@ -158,10 +158,6 @@
   --kui-layout-item-gap: var(--kui-space-2xs);
   padding: 0 var(--kui-space-xs) var(--kui-space-xs);
 }
-.ticket-inspector__tabs .kui-app-tab__select > svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-}
 .ticket-inspector__tab-count {
   display: inline-grid;
   min-width: remify(16px);

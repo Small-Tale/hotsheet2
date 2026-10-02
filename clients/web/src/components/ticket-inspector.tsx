@@ -327,7 +327,7 @@ export function ticketInspectorPanel({
               presentation={presentation === 'reader' ? 'segmented' : 'icon-only'}
               size="compact"
               rootAttributes={{ 'data-inspector-tab': tab.id }}
-              leading={<LucideIcon icon={tab.icon} name={tab.iconName} />}
+              leading={<LucideIcon icon={tab.icon} name={tab.iconName} size={14.4} />}
               trailing={
                 tab.id === 'attachments' && attachments?.length ? (
                   <span class="ticket-inspector__tab-count">

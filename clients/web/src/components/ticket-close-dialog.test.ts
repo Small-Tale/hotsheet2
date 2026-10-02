@@ -47,8 +47,8 @@ describe('TicketCloseDialog', () => {
     expect(markup).toContain('data-action="select-ticket-close-target" data-item-id="beta::git-beta%3Atarget"');
     expect(markup).not.toContain('data-item-id="alpha::git-alpha%3Asource"');
     expect(markup).toContain('data-item-id="gamma::git-gamma%3Acollision"');
-    expect(markup).toContain('<small>Beta</small>');
-    expect(markup).toContain('<small>Gamma</small>');
+    expect(markup).toContain('<small class="ticket-close-dialog__project">Beta</small>');
+    expect(markup).toContain('<small class="ticket-close-dialog__project">Gamma</small>');
     expect(markup).toContain('Select the existing ticket');
     expect(markup).toContain('disabled>Mark as duplicate');
   });

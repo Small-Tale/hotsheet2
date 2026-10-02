@@ -50,9 +50,9 @@ export function Hs1MigrationDialog({
           </div>
         </div>
         <ValueTable label="Detected Hot Sheet 1 source">
-          <ValueTableRow label="Project" value={<code>{projectRoot}</code>} />
-          <ValueTableRow label="Data folder" value={<code>{sourcePath}</code>} />
-          <ValueTableRow label="Database" value={<code>{databasePath}</code>} />
+          <ValueTableRow label="Project" value={<code class="hs1-migration-dialog__path">{projectRoot}</code>} />
+          <ValueTableRow label="Data folder" value={<code class="hs1-migration-dialog__path">{sourcePath}</code>} />
+          <ValueTableRow label="Database" value={<code class="hs1-migration-dialog__path">{databasePath}</code>} />
           {postgresVersion ? <ValueTableRow label="PostgreSQL" value={postgresVersion} /> : <></>}
         </ValueTable>
         <div class="hs1-migration-dialog__destination">

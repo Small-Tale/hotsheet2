@@ -115,10 +115,6 @@
   --kui-list-header-border-width: 0;
   --kui-list-header-title-padding-inline: 1px;
 }
-.ticket-inspector__status-field .kui-list-header__label,
-.ticket-inspector__details-section .kui-list-header__label {
-  line-height: var(--wa-line-height-condensed);
-}
 .ticket-inspector__details-surface {
   min-width: 0;
   max-width: 100%;

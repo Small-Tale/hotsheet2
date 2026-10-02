@@ -72,10 +72,6 @@
   border-radius: var(--wa-border-radius-l);
   background: var(--wa-color-surface-default);
 }
-.ticket-provider-settings__connections .kui-list-item__trailing svg {
-  width: var(--wa-space-m);
-  height: var(--wa-space-m);
-}
 .ticket-provider-settings__connection-copy {
   display: grid;
   min-width: 0;

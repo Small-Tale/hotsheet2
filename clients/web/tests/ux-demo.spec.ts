@@ -489,7 +489,8 @@ test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2
           buttonPadding: [button.paddingLeft, button.paddingRight],
         };
       }),
-    ).toEqual({ padding: '8px 16px', gap: '16px', copyGap: '4px', buttonPadding: ['8px', '8px'] });
+      // The action buttons keep Kerf's own StateBanner padding; the app no longer restyles them (HS2-9ME409).
+    ).toEqual({ padding: '8px 16px', gap: '16px', copyGap: '4px', buttonPadding: ['11.2px', '11.2px'] });
   }
   await expect(cleanup.locator('.kui-state-banner__action > .hs1-cleanup-banner__actions')).toHaveCount(1);
   await page.locator('.dialog-layout-demo').screenshot({ path: '/private/tmp/hs2-750wsy-hs1-state-banners-wide.png' });

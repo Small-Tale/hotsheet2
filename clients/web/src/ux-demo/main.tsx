@@ -24,7 +24,7 @@ import '../hot-sheet-tokens.css';
 import './style.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
-import { Catalog, CatalogExampleStack } from '@kerfjs/ui/catalog';
+import { Catalog } from '@kerfjs/ui/catalog';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { clampRegionSize, type ResizableRegionEdge, resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
@@ -1125,9 +1125,9 @@ function DemoApp() {
         theme={catalogTheme.value}
         geometryOverlay={usesCatalogGeometryOverlay(selected.id)}
         content={
-          <CatalogExampleStack className="demo-catalog-examples" label={`${selected.name} examples`}>
+          <section class="demo-catalog-examples" data-catalog-example-stack aria-label={`${selected.name} examples`}>
             {demoContent(selected)}
-          </CatalogExampleStack>
+          </section>
         }
         status={
           <span>

@@ -7,10 +7,10 @@ import ts from 'typescript';
 
 export const KERF_UI_DOCTOR_BUDGET = {
   error: {
-    'KUI-L001': 2,
+    'KUI-L001': 0,
     'KUI-L011': 0,
     'KUI-L017': 0,
-    'KUI-L019': 1,
+    'KUI-L019': 0,
     'KUI-L020': 0,
     'KUI-L022': 0,
     'KUI-L101': 0,

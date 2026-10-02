@@ -17,7 +17,7 @@
   margin: var(--kui-space-2xs) 0 0;
   color: var(--wa-color-neutral-on-quiet);
 }
-.hs1-migration-dialog .kui-value-table__row code {
+.hs1-migration-dialog__path {
   font-size: var(--wa-font-size-xs);
 }
 .hs1-migration-dialog__destination {
@@ -71,10 +71,6 @@
 .hs1-migration-banner {
   --kui-state-banner-copy-gap: var(--kui-space-2xs);
 }
-.hs1-cleanup-banner .kui-state-banner__action button,
-.hs1-migration-banner .kui-state-banner__action button {
-  padding-inline: var(--kui-space-xs);
-}
 .hs1-cleanup-banner__actions {
   display: flex;
   gap: var(--kui-space-xs);
@@ -82,9 +78,6 @@
 @media (max-width: remify(576px)) {
   .hs1-migration-dialog__destination {
     grid-template-columns: 1fr;
-  }
-  .hs1-migration-banner .kui-state-banner__copy span {
-    white-space: normal;
   }
 }
 
@@ -101,9 +94,5 @@
 .hs1-job__connection {
   margin: var(--kui-space-xs) var(--kui-space-m);
   font-size: var(--wa-font-size-s);
-  overflow-wrap: anywhere;
-}
-.hs1-job .kui-state-banner__copy span {
-  white-space: normal;
   overflow-wrap: anywhere;
 }

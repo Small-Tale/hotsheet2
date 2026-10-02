@@ -28,9 +28,10 @@ describe('HS1 migration presentation', () => {
       /\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*--kui-state-banner-border:transparent/,
     );
     expect(css).not.toMatch(/\.hs1-cleanup-banner,\.hs1-migration-banner \{[^}]*border-width/);
-    expect(css).toMatchSource(
-      /\.hs1-migration-dialog \.kui-value-table__row code \{[^}]*font-size:var\(--wa-font-size-xs\)/,
-    );
+    // The dialog styles its own path elements, never ValueTable's anatomy (Kerf doctor KUI-L019).
+    expect(css).toMatchSource(/\.hs1-migration-dialog__path \{[^}]*font-size:var\(--wa-font-size-xs\)/);
+    expect(css).not.toContain('.kui-value-table__row');
+    expect(css).not.toContain('.kui-state-banner__');
   });
 
   it('asks only where to store tickets and describes the complete import', () => {

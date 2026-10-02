@@ -21,10 +21,11 @@ wa-input:not([disabled])::part(input) {
 wa-button:not([disabled])::part(base),
 wa-checkbox:not([disabled])::part(checkbox),
 wa-select:not([disabled])::part(combobox),
-wa-tag[with-remove]:not([data-disabled='true'])::part(remove-button__base),
-wa-dropdown-item:not([disabled]) {
+wa-tag[with-remove]:not([data-disabled='true'])::part(remove-button__base) {
   cursor: pointer;
 }
+/* wa-dropdown-item owns its pointer and not-allowed cursors (Web Awesome's own styles), so the app
+   no longer restyles the element (Kerf doctor KUI-L019, HS2-9ME409). */
 
 wa-button[disabled]::part(base),
 wa-checkbox[disabled]::part(checkbox),
