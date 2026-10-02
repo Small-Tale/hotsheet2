@@ -10314,6 +10314,14 @@ for (const viewport of [
     await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dispatchEvent('dblclick');
     await expect(drawer).toHaveAttribute('data-maximized', 'true');
     await expect(popup).toBeVisible();
+    // The maximize attribute flips before the drawer finishes growing, so wait for the settled
+    // geometry: the expanded drawer reaches under the popup (HS2-ZESCM2 test raced the transition).
+    await expect
+      .poll(async () => {
+        const [drawerBox, popupBox] = await Promise.all([drawer.boundingBox(), popup.boundingBox()]);
+        return drawerBox && popupBox ? popupBox.y + popupBox.height - drawerBox.y : -1;
+      })
+      .toBeGreaterThan(0);
     const drawerBounds = (await drawer.boundingBox())!,
       popupBounds = (await popup.boundingBox())!;
     expect(popupBounds.x).toBeGreaterThanOrEqual(0);
