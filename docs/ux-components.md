@@ -2104,6 +2104,9 @@ also ships the APIs several tickets wait on: the guarded post-commit caret (`KF-
 the PopupMenu submenu race fix (`KF-A388BJ`, `HS2-ZKMCVW`), phone submenus placed outside their
 parent menu (`KF-5PZ768`, `HS2-282GTZ`), ListItem tone inheritance (`KF-XD6YH1`, `HS2-C3SPM6`), and
 TokenSearchField's own deferred blur collapse through a pointer click (`KF-64W0RN`).
+HS2-10KEHN removed the doctor's FloatingToolbar adapter: beta.67's composition catalog lists
+FloatingToolbar as a ToolbarControlGroup parent (`KF-QMRNQC`), so the documented composition passes
+`KUI-L201` directly and the gate reads the raw doctor report.
 HS2-9ME409 upgraded to 5.0.0-beta.67 and drove every Kerf UI doctor error to zero (the budgets
 are now 0 for all error and review ids). Beta.67 catalogs FloatingToolbar as a ToolbarControlGroup
 parent (`KF-QMRNQC`) and detects rules that reach unclassed descendants inside a component
