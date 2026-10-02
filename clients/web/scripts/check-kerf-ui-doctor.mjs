@@ -26,10 +26,12 @@ export const KERF_UI_DOCTOR_BUDGET = {
     'KUI-L017': 0,
   },
   // Warnings are budgeted too, so cleared ids (for example eslint:kerfjs/require-delegate-disposer
-  // and eslint:kerfjs/prefer-attr-selector, HS2-9ME409) stay at zero. KUI-L401 remains until Kerf
-  // accepts wiring done once at the app entry (KF-VXWMM9, HS2-Y2QG3G).
+  // and eslint:kerfjs/prefer-attr-selector, HS2-9ME409) stay at zero. The profile's wiring entries
+  // (beta.68, KF-VXWMM9) check KUI-L401 once per entry; the residual waits on Kerf crediting calls
+  // reachable from the entry and app-owned helpers (KF-KWMJMS, HS2-Y2QG3G) and on wireCatalog satisfying
+  // wireScrollDividers in the UX demo (KF-XKMC7W).
   warning: {
-    'KUI-L401': 56,
+    'KUI-L401': 13,
   },
 };
 

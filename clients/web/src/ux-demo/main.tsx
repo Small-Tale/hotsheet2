@@ -1275,40 +1275,44 @@ demoListeners.add(
 // The same shared TicketSearchField wiring the application uses, routed to demo state (HS2-N5G6JS);
 // it is wired before Kerf's so its focus handlers see a chip before Kerf removes or expands it.
 const demoSearchModel = (id: string) => (id === 'workspace-search' ? workspaceSearchModel : ticketSearchDemoModel(id));
-wireTicketSearchFields(root, {
-  applyDate: (id, _prefix, value) => {
-    demoSearchModel(id)?.commit(value);
-  },
-  toggleHelp: (id) => {
-    if (id === 'workspace-search') workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
-    else toggleDemoHelp(id);
-  },
-  clear: (id) => {
-    if (id === 'workspace-search') {
-      workspaceSearchHelpOpen.value = false;
-      queueMicrotask(() => {
-        focusWorkspaceSearch(root);
-      });
-    }
-  },
-  removeToken: () => undefined,
-  editToken: () => undefined,
-});
+demoListeners.add(
+  wireTicketSearchFields(root, {
+    applyDate: (id, _prefix, value) => {
+      demoSearchModel(id)?.commit(value);
+    },
+    toggleHelp: (id) => {
+      if (id === 'workspace-search') workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
+      else toggleDemoHelp(id);
+    },
+    clear: (id) => {
+      if (id === 'workspace-search') {
+        workspaceSearchHelpOpen.value = false;
+        queueMicrotask(() => {
+          focusWorkspaceSearch(root);
+        });
+      }
+    },
+    removeToken: () => undefined,
+    editToken: () => undefined,
+  }),
+);
 // Kerf owns editor chrome, collapsible behavior, and, through the registered models, parsing,
 // chips, suggestions, chip edit/removal, and clear (HS2-5JXBQY).
-wireTokenSearchFields(root, {
-  models: { 'workspace-search': workspaceSearchModel, ...ticketSearchDemoModels },
-  // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
-  onSubmit: ({ id }) => {
-    restoreInlineSearchCaret(root, `[data-token-search-editor="${id}"]`);
-  },
-  collapsible: {
-    signals: {
-      'workspace-search': workspaceSearchOpen,
-      'ticket-search-demo-collapsible': ticketSearchDemoCollapsibleOpen,
+demoListeners.add(
+  wireTokenSearchFields(root, {
+    models: { 'workspace-search': workspaceSearchModel, ...ticketSearchDemoModels },
+    // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
+    onSubmit: ({ id }) => {
+      restoreInlineSearchCaret(root, `[data-token-search-editor="${id}"]`);
     },
-  },
-});
+    collapsible: {
+      signals: {
+        'workspace-search': workspaceSearchOpen,
+        'ticket-search-demo-collapsible': ticketSearchDemoCollapsibleOpen,
+      },
+    },
+  }),
+);
 wireCatalog(root, {
   // Kerf 5.0.0-beta.56: with the app-owned flag the sidebar is a transient overlay on a small screen
   // (collapsed at the breakpoint, closed on Escape, an outside press, or a selection) instead of
@@ -2286,7 +2290,7 @@ demoListeners.add(
       confidenceBadgeSettings.appearance.value = control.value as typeof confidenceBadgeSettings.appearance.value;
   }),
 );
-wireWorkspaceOverflowKeyboard(root);
+demoListeners.add(wireWorkspaceOverflowKeyboard(root));
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.setToolbarGroupDemoMode.selector, (_event, target) => {
     toolbarGroupDemoMode.value = (target as HTMLElement).dataset.segmentValue as typeof toolbarGroupDemoMode.value;

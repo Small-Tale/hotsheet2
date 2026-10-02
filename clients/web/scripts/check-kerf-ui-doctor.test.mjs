@@ -52,7 +52,7 @@ describe('Kerf UI doctor baseline', () => {
     const moreWiring = report({
       diagnostics: [...report().diagnostics, { id: 'KUI-L401', severity: 'warning' }],
     });
-    expect(() => assertKerfUiDoctorBaseline(moreWiring)).toThrow('warning KUI-L401: 57 found, budget 56');
+    expect(() => assertKerfUiDoctorBaseline(moreWiring)).toThrow('warning KUI-L401: 14 found, budget 13');
   });
 
   it('rejects failed stages, configuration failures, and an enabled browser stage', () => {

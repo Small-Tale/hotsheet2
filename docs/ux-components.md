@@ -2123,6 +2123,15 @@ cleared every `kerfjs/require-delegate-disposer` and `kerfjs/prefer-attr-selecto
 doctor gate now budgets warnings as well: every warning id is held at 0 except the 56 `KUI-L401`
 wiring findings, which wait on Kerf accepting wiring done once at the app entry (`KF-VXWMM9`,
 HS2-Y2QG3G).
+HS2-TF76Z2 upgraded to 5.0.0-beta.68 and declared `src/main.tsx` and `src/ux-demo/main.tsx` as
+`wiring.entries` in `.kerf-ui-profile.json`, so application-scoped wiring obligations are checked
+once per entry instead of in every rendering file, and moved the single page-lifetime
+`wireScrollDividers(appRoot)` into `src/main.tsx` (56 to 13 `KUI-L401`). The UX demo now retains
+its search-field and workspace-overflow disposers (`KUI-L402`). The residual waits on Kerf
+crediting helper calls in modules reachable from an entry and resolving app-owned helpers by
+source file (`KF-KWMJMS`), and on Kerf recognizing that `wireCatalog` already installs
+`wireScrollDividers` (the UX demo must not add a second instance: two instances on one root loop
+forever, HS2-E6AG7W, `KF-XKMC7W`).
 HS2-TAZJ0V wires Kerf's `wireScrollDividers()` once, page-lifetime, at the production app root
 (`clients/web/src/app/runtime.tsx`). Kerf toolbars draw no divider by default; with the wiring each
 Pane header gains its bottom divider (`data-scroll-divider` containing `b`) only while content is

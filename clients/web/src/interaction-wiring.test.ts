@@ -153,8 +153,11 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   });
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
-    expect(main.split('\n')).toHaveLength(14);
-    expect(main).toContain('await startHotSheetWebClient();');
+    expect(main.split('\n')).toHaveLength(19);
+    expect(main).toContain('const { appRoot } = await startHotSheetWebClient();');
+    // The single page-lifetime scroll-divider instance lives at the entry (HS2-TF76Z2).
+    expect(main).toContain('void wireScrollDividers(appRoot);');
+    expect(runtime).not.toContain('wireScrollDividers(');
     expect(main).not.toMatch(/\b(?:signal|mount|effect|wire\w+Interactions)\s*\(/);
     expect(runtime).not.toMatch(/from ['"][^'"]*\/main['"]/);
   });

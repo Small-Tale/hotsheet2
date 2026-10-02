@@ -8,6 +8,11 @@ import './components/heading.css';
 import './hot-sheet-tokens.css';
 import './style.css';
 
+import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
+
 import { startHotSheetWebClient } from './app/runtime';
 
-await startHotSheetWebClient();
+const { appRoot } = await startHotSheetWebClient();
+// Kerf panes, NavStacks, TabScaffolds, and TabBar strips draw their chrome dividers only while content
+// scrolls beneath them; one page-lifetime instance at the application root (HS2-TAZJ0V, HS2-TF76Z2).
+void wireScrollDividers(appRoot);
