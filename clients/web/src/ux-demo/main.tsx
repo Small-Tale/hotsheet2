@@ -27,11 +27,12 @@ import { AppTab } from '@kerfjs/ui/app-tab';
 import { Catalog } from '@kerfjs/ui/catalog';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { clampRegionSize, type ResizableRegionEdge, resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
+import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
+import { reorderTabs, wireTabBars } from '@kerfjs/ui/wire-tab-bars';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
@@ -49,6 +50,7 @@ import { KeyboardSettings } from '../components/keyboard-settings';
 import { ManualModelDialog } from '../components/manual-model-dialog';
 import { ProjectCloseDialog } from '../components/project-close-dialog';
 import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
+import { PROJECT_TAB_BAR_ID } from '../components/project-tab-bar';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { ProviderSetupForm } from '../components/provider-setup-form';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
@@ -110,8 +112,6 @@ import {
   ProjectTabBarDemo,
   ProjectTabDemo,
   projectTabs,
-  regionBounds,
-  regionSize,
   ResizableRegionDemo,
   resizeDemoCollapsed,
   selectProjectTab,
@@ -464,19 +464,6 @@ const tagsAutosave = createDebouncedAutosave((value: string[]) => {
   return Promise.resolve(true);
 });
 let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
-let regionResizeDrag:
-  | {
-      id: string;
-      axis: 'horizontal' | 'vertical';
-      edge: ResizableRegionEdge;
-      startPoint: number;
-      startSize: number;
-      region: HTMLElement;
-      handle: HTMLElement;
-      pendingSize: number;
-      frame?: number;
-    }
-  | undefined;
 let devReviewController: { destroy(): void } | undefined;
 const usesCollectionState = () =>
   [
@@ -1264,6 +1251,27 @@ wireWorkbench(root, {
   id: 'app',
   panels: { leftRail: { size: shellSidebarSize }, rightRail: { size: shellInspectorSize } },
 });
+// Tab strips reorder, roam, and edge-autoscroll through the same Kerf wiring the application installs on
+// its body (HS2-KB5PJQ); a reorder only rewrites the controlled demo state that owns that strip.
+demoListeners.add(
+  wireTabBars(root, {
+    activation: 'manual',
+    onReorder: ({ barId, sourceId, targetId, position, source }) => {
+      if (barId === PROJECT_TAB_BAR_ID)
+        projectTabs.value = reorderTabs(projectTabs.value, (tab) => tab.id, sourceId, targetId, position);
+      shellEvent.value = `Moved ${sourceId} ${position} ${targetId} by ${source}.`;
+    },
+  }),
+);
+// ResizableRegion demos resize through Kerf's pointer and separator-keyboard wiring; the commit only
+// mirrors the settled size into the demo signal that renders it (HS2-KB5PJQ).
+demoListeners.add(
+  wireResizableRegions(root, {
+    onCommit: ({ id, size }) => {
+      setRegionSize(id, size);
+    },
+  }),
+);
 // The same shared TicketSearchField wiring the application uses, routed to demo state (HS2-N5G6JS);
 // it is wired before Kerf's so its focus handlers see a chip before Kerf removes or expands it.
 const demoSearchModel = (id: string) => (id === 'workspace-search' ? workspaceSearchModel : ticketSearchDemoModel(id));
@@ -2035,79 +2043,6 @@ demoListeners.add(
   }),
 );
 demoListeners.add(
-  delegate(root, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
-    const handle = target as HTMLElement;
-    // The AppShell demo's Workbench rails are wired by Kerf; only the ResizableRegion demo drags here.
-    if (handle.dataset.regionId?.startsWith('app-')) return;
-    event.preventDefault();
-    const region = handle.closest<HTMLElement>(
-      '[data-workbench-rail], [data-workbench-drawer], [data-component="resizable-region"]',
-    )!;
-    const axis = region.dataset.axis as 'horizontal' | 'vertical';
-    const id = handle.dataset.regionId!;
-    const startSize = regionSize(id);
-    regionResizeDrag = {
-      id,
-      axis,
-      edge: region.dataset.edge as ResizableRegionEdge,
-      startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY,
-      startSize,
-      region,
-      handle,
-      pendingSize: startSize,
-    };
-    region.dataset.resizing = 'true';
-    document.body.dataset.resizingRegion = axis;
-  }),
-);
-demoListeners.add(
-  delegate(root, 'keydown', '[data-kui-resize-handle]', (event, target) => {
-    const handle = target as HTMLElement;
-    if (handle.dataset.regionId?.startsWith('app-')) return;
-    const region = handle.closest<HTMLElement>(
-      '[data-workbench-rail], [data-workbench-drawer], [data-component="resizable-region"]',
-    )!;
-    const axis = region.dataset.axis as 'horizontal' | 'vertical';
-    const key = (event as KeyboardEvent).key;
-    if (
-      (axis === 'horizontal' && key !== 'ArrowLeft' && key !== 'ArrowRight') ||
-      (axis === 'vertical' && key !== 'ArrowUp' && key !== 'ArrowDown')
-    )
-      return;
-    event.preventDefault();
-    const direction = key === 'ArrowRight' || key === 'ArrowDown' ? 1 : -1;
-    const edge = region.dataset.edge as ResizableRegionEdge;
-    setRegionSize(
-      handle.dataset.regionId!,
-      resizeRegionFromPointer(regionSize(handle.dataset.regionId!), direction * 16, edge),
-    );
-    shellEvent.value = `${region.getAttribute('aria-label')} resized.`;
-  }),
-);
-demoListeners.add(
-  delegate(root, 'keydown', DEMO_ACTIONS.selectProjectTab.selector, (event, target) => {
-    const key = (event as KeyboardEvent).key;
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
-    event.preventDefault();
-    const tabs = projectTabs.value;
-    const current = tabs.findIndex(
-      (tab) => tab.id === target.closest<HTMLElement>('[data-tab-kind="project"]')?.dataset.projectId,
-    );
-    const next =
-      key === 'Home'
-        ? 0
-        : key === 'End'
-          ? tabs.length - 1
-          : (current + (key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-    const id = tabs[next]?.id;
-    if (!id) return;
-    selectProjectTab(id);
-    queueMicrotask(() =>
-      root.querySelector<HTMLElement>(`[data-tab-kind="project"][data-project-id="${id}"] [role="tab"]`)?.focus(),
-    );
-  }),
-);
-demoListeners.add(
   delegate(root, 'pointerdown', DEMO_ACTIONS.resizeProjectSidebar.selector, (event) => {
     event.preventDefault();
     sidebarResizeDrag = {
@@ -2133,38 +2068,11 @@ window.addEventListener('pointermove', (event) => {
     sidebarResizeDrag.startHeight + event.clientY - sidebarResizeDrag.startY,
   );
 });
-window.addEventListener('pointermove', (event) => {
-  if (!regionResizeDrag) return;
-  const drag = regionResizeDrag,
-    point = drag.axis === 'horizontal' ? event.clientX : event.clientY,
-    bounds = regionBounds[drag.id];
-  drag.pendingSize = clampRegionSize(
-    resizeRegionFromPointer(drag.startSize, point - drag.startPoint, drag.edge),
-    bounds.min,
-    bounds.max,
-  );
-  if (drag.frame !== undefined) return;
-  drag.frame = requestAnimationFrame(() => {
-    drag.frame = undefined;
-    drag.region.style.setProperty('--kui-resizable-region-size', `${drag.pendingSize}px`);
-    drag.handle.setAttribute('aria-valuenow', String(drag.pendingSize));
-  });
-});
 window.addEventListener('pointerup', () => {
   if (!sidebarResizeDrag) return;
   sidebarResizeDrag = undefined;
   delete document.body.dataset.resizingProjectSidebar;
   sidebarEvent.value = `Sidebar height ${projectSidebarHeight.value} pixels.`;
-});
-window.addEventListener('pointerup', () => {
-  if (!regionResizeDrag) return;
-  const drag = regionResizeDrag;
-  if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
-  delete drag.region.dataset.resizing;
-  setRegionSize(drag.id, drag.pendingSize);
-  shellEvent.value = `Region resized to ${drag.pendingSize} pixels.`;
-  regionResizeDrag = undefined;
-  delete document.body.dataset.resizingRegion;
 });
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') tabContextMenu.value = undefined;

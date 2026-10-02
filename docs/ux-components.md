@@ -148,10 +148,13 @@ Supporting components:
 
 - `ResizableRegion` — **demo built**: horizontal and vertical accessible splitters
   with pointer/keyboard sizing, clamped ranges, and collapse/restore without losing
-  the restored size. Pointer drags update the region's CSS geometry at most once per
-  animation frame and commit reactive state only on release, so large ticket
-  collections are not rebuilt for every pointer event. Sidebar, inspector, and
-  bottom-drawer sizes are local UI state.
+  the restored size. The demo wires its regions through Kerf's `wireResizableRegions`
+  (HS2-KB5PJQ): pointer drags update the region's CSS geometry directly and commit
+  reactive state only on release (`onCommit`), so large ticket collections are not
+  rebuilt for every pointer event; arrow keys step 16 px, Shift+arrow 64 px, and
+  Home/End jump to the bounds. Sidebar, inspector, and bottom-drawer sizes are local
+  UI state. The catalog's tab strips likewise use the application's `wireTabBars`
+  wiring (manual activation, drag and Alt+Shift+Arrow reorder, edge autoscroll).
 - `ConnectionStateBanner` — **demo built**: connecting, reconnecting, offline,
   incompatible-server, and authentication variants with state-specific Lucide icons,
   live-region semantics, details, and relevant recovery actions.

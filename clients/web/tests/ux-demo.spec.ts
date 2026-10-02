@@ -5045,7 +5045,12 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
   await tabBar.getByRole('tab', { name: /Internal API/ }).click();
   await expect(tabBar.getByRole('tab', { name: /Internal API/ })).toHaveAttribute('aria-selected', 'true');
+  // Project tabs use the application's manual activation through Kerf's wireTabBars (HS2-KB5PJQ):
+  // arrows move roving focus only, and Enter selects the focused project.
   await page.keyboard.press('ArrowLeft');
+  await expect(tabBar.getByRole('tab', { name: /Small Tale Website/ })).toBeFocused();
+  await expect(tabBar.getByRole('tab', { name: /Internal API/ })).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Enter');
   await expect(tabBar.getByRole('tab', { name: /Small Tale Website/ })).toHaveAttribute('aria-selected', 'true');
   await expect(tabBar.getByRole('tab', { name: /Small Tale Website/ })).toBeFocused();
   await tabBar.getByRole('tab', { name: /Internal API/ }).click();
@@ -5090,6 +5095,95 @@ test('operates resizable-region keyboard and collapse transitions', async ({ pag
   await expect(horizontalHandle).toHaveAttribute('aria-hidden', 'true');
   await page.getByRole('button', { name: 'Restore horizontal region' }).click();
   await expect(page.getByRole('separator', { name: 'Resize Example sidebar' })).toHaveAttribute('aria-valuenow', '250');
+});
+
+test('resizes ResizableRegion demos through Kerf wireResizableRegions pointer and keyboard paths (HS2-KB5PJQ)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=resizable-region');
+  const demo = page.getByRole('region', { name: 'ResizableRegion demo' });
+  const horizontal = page.getByRole('separator', { name: 'Resize Example sidebar' });
+  const vertical = page.getByRole('separator', { name: 'Resize Example drawer' });
+  await expect(horizontal).toHaveAttribute('aria-valuenow', '260');
+  const box = (await horizontal.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2, { steps: 4 });
+  await expect(horizontal).toHaveAttribute('aria-valuenow', '320');
+  await page.mouse.move(box.x + box.width / 2 + 600, box.y + box.height / 2, { steps: 4 });
+  await expect(horizontal).toHaveAttribute('aria-valuenow', '420');
+  await page.mouse.up();
+  await expect(demo.getByText('420px')).toBeVisible();
+  await horizontal.focus();
+  await page.keyboard.press('Home');
+  await expect(horizontal).toHaveAttribute('aria-valuenow', '250');
+  await expect(demo.getByText('250px')).toBeVisible();
+  await page.keyboard.press('Shift+ArrowRight');
+  await expect(horizontal).toHaveAttribute('aria-valuenow', '314');
+  await page.keyboard.press('End');
+  await expect(horizontal).toHaveAttribute('aria-valuenow', '420');
+  const verticalBox = (await vertical.boundingBox())!;
+  await page.mouse.move(verticalBox.x + verticalBox.width / 2, verticalBox.y + verticalBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(verticalBox.x + verticalBox.width / 2, verticalBox.y + verticalBox.height / 2 - 40, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect(vertical).toHaveAttribute('aria-valuenow', '140');
+  await expect(demo.getByText('140px')).toBeVisible();
+  // Reset through collapse/restore and drag again: the controlled size and the wiring stay in sync.
+  await page.getByRole('button', { name: 'Collapse horizontal region' }).click();
+  await page.getByRole('button', { name: 'Restore horizontal region' }).click();
+  const restored = page.getByRole('separator', { name: 'Resize Example sidebar' });
+  await expect(restored).toHaveAttribute('aria-valuenow', '420');
+  const restoredBox = (await restored.boundingBox())!;
+  await page.mouse.move(restoredBox.x + restoredBox.width / 2, restoredBox.y + restoredBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(restoredBox.x + restoredBox.width / 2 - 100, restoredBox.y + restoredBox.height / 2, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect(restored).toHaveAttribute('aria-valuenow', '320');
+  await expect(demo.getByText('320px')).toBeVisible();
+});
+
+test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (HS2-KB5PJQ)', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/ux-demo?component=project-tabs');
+  const bar = page.getByRole('navigation', { name: 'Open projects', exact: true });
+  const names = () =>
+    bar
+      .locator('[data-tab-kind="project"]')
+      .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.tabId));
+  await expect.poll(names).toEqual(['hotsheet', 'website', 'api', 'archive']);
+  await bar.getByRole('tab', { name: /Hot Sheet 2/ }).focus();
+  await page.keyboard.press('Alt+Shift+ArrowRight');
+  await expect.poll(names).toEqual(['website', 'hotsheet', 'api', 'archive']);
+  await expect(bar.getByRole('tab', { name: /Hot Sheet 2/ })).toBeFocused();
+  // Both ProjectTabBar demos render the same controlled order.
+  const second = page.getByRole('navigation', { name: 'Open projects with workspace action' });
+  await expect
+    .poll(() =>
+      second
+        .locator('[data-tab-kind="project"]')
+        .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.tabId)),
+    )
+    .toEqual(['website', 'hotsheet', 'api', 'archive']);
+  await expect(page.locator('.project-tab-bar-demo .component-stage__event')).toHaveText(
+    'Moved hotsheet after website by keyboard.',
+  );
+  await bar
+    .locator('[data-component="app-tab"][data-tab-id="archive"]')
+    .dragTo(bar.locator('[data-component="app-tab"][data-tab-id="website"]'), { targetPosition: { x: 4, y: 10 } });
+  await expect.poll(names).toEqual(['archive', 'website', 'hotsheet', 'api']);
+  await expect(page.locator('.project-tab-bar-demo .component-stage__event')).toHaveText(
+    'Moved archive before website by pointer.',
+  );
+  // Delete closes the focused tab through the same wiring.
+  await bar.getByRole('tab', { name: /Internal API/ }).focus();
+  await page.keyboard.press('Delete');
+  await expect.poll(names).toEqual(['archive', 'website', 'hotsheet']);
 });
 
 test('renders and reconnects the connection-state banner variants', async ({ page }) => {
