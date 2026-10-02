@@ -216,13 +216,17 @@
 }
 /* `layer="flow"`: the popup takes its place in its host's layout instead of anchoring to the host's
    corner, so a host such as the AI conversation's foreground lays it out (HS2-M2W2DP). It stays
-   interactive inside a pointer-transparent host. */
+   interactive inside a pointer-transparent host. It sizes to its host's content box rather than the
+   viewport and never takes the corner or phone placement, so the host's padding alone sets its insets
+   (HS2-SH3DR7). */
 .permission-request-popup[data-layer='flow'] {
   position: relative;
-  top: auto;
-  right: auto;
-  width: min(remify(704px), calc(100vw - remify(32px)));
+  z-index: auto;
+  inset: auto;
+  width: min(remify(704px), 100%);
   height: fit-content;
+  max-height: 100%;
+  overflow-y: auto;
   pointer-events: auto;
 }
 /* The shell's popup is a manual popover in the browser top layer (HS2-ZESCM2), so the Workbench's
@@ -293,7 +297,7 @@
   }
 }
 @media (max-width: remify(672px)) {
-  .permission-request-popup,
+  .permission-request-popup[data-layer='inline'],
   .permission-request-popup[data-layer='top'] {
     position: fixed;
     z-index: 100;

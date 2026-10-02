@@ -111,11 +111,14 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+/* The foreground covers the dialog panel (its positioned `dialog` part), not the viewport, so its
+   padding alone insets a foreground popup symmetrically inside the dialog, below the heading
+   (HS2-SH3DR7). */
 .ai-conversation__foreground {
-  position: fixed;
+  position: absolute;
   z-index: 100;
   display: flex;
-  padding: remify(72px) remify(16px) remify(16px);
+  padding: remify(96px) remify(32px) remify(16px);
   pointer-events: none;
   inset: 0;
   justify-content: center;
@@ -468,7 +471,7 @@
     bottom: remify(8px);
   }
   .ai-conversation__foreground {
-    padding: remify(60px) remify(8.8px) remify(8.8px);
+    padding-inline: remify(16px);
   }
   .ai-conversation__message {
     max-width: 92%;

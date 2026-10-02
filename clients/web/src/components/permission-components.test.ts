@@ -111,7 +111,12 @@ describe('permission presentation components', () => {
     expect(flow).not.toContain('popover=');
     const css = readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8');
     expect(css).toMatchSource(
-      /\.permission-request-popup\[data-layer='flow'\] \{[^}]*position:relative;[^}]*width:min\(remify\(704px\), calc\(100vw - remify\(32px\)\)\);[^}]*pointer-events:auto/,
+      /\.permission-request-popup\[data-layer='flow'\] \{[^}]*position:relative;[^}]*inset:auto;[^}]*width:min\(remify\(704px\), 100%\);[^}]*pointer-events:auto/,
+    );
+    // The phone placement is for the corner-anchored layers only, so it never offsets the in-flow copy
+    // inside its host (HS2-SH3DR7).
+    expect(css).toContain(
+      "  .permission-request-popup[data-layer='inline'],\n  .permission-request-popup[data-layer='top'] {",
     );
     expect(css).toContain('@supports (position-anchor: --app-shell-main)');
     expect(css).toContain('position-anchor: --app-shell-main;');

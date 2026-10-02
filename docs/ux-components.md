@@ -1481,7 +1481,13 @@ capability-aware sections when their underlying features and data contracts land
 - `PermissionRequestPopup` — non-modal presentation of the shared request card. Its `layer`
   variant anchors it to its host's top-right corner (`inline`), places it in its host's layout so
   the host positions it (`flow`, the AI conversation's foreground), or lifts it into the browser
-  top layer (`top`, the shell popup). The UX demo previews all three.
+  top layer (`top`, the shell popup). The UX demo previews all three. The `flow` layer sizes to
+  its host's content box (`min(704px, 100%)`), scrolls within the host's height, and never takes
+  the corner or phone placement. The phone placement (pinned 8px from both viewport edges at
+  672px and below) applies only to `inline` and `top`. So the host's padding alone sets a `flow`
+  popup's insets. The AI conversation's foreground covers the dialog panel (not the viewport) and
+  opens the popup below the heading, with symmetric 32px insets (16px at 640px and below), fully
+  inside the dialog (HS2-SH3DR7).
 - `PermissionSummary`
 - `PermissionDetailDisclosure`
 - allow/deny/session-scope actions

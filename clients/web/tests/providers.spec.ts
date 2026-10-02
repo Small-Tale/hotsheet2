@@ -12298,6 +12298,71 @@ test('keeps activity before the result that resumes after a permission pause', a
   await dialog.screenshot({ path: '/private/tmp/hs2-kv6sad-ordered-conversation-narrow.png' });
 });
 
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 1280, height: 800 },
+]) {
+  test(`keeps the foreground permission popup inside the conversation dialog with symmetric insets at ${viewport.width}px (HS2-SH3DR7)`, async ({
+    page,
+  }) => {
+    await mockProject(page);
+    await page.route('**/permissions', (route) =>
+      route.fulfill({
+        json: [
+          { id: 42, connection: 'codex-session', tool: 'Bash', action: 'npm run test', always_allow_supported: true },
+        ],
+      }),
+    );
+    await page.route('**/ws/poll*', (route) => {
+      if (new URL(route.request().url()).searchParams.get('since') === null)
+        return route.fulfill({ json: { cursor: 0, events: [], overflow: false } });
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+    await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+    const conversation = page.locator('[data-component="ai-conversation"]'),
+      dialog = conversation.getByRole('dialog'),
+      popup = conversation.locator('.ai-conversation__foreground [data-component="permission-request-popup"]');
+    await expect(dialog).toBeVisible();
+    await expect(popup).toBeVisible();
+    await page.setViewportSize(viewport);
+    await expect(popup).toHaveAttribute('data-layer', 'flow');
+    // The phone placement belongs to the corner-anchored layers only; the in-flow copy keeps no offset.
+    await expect(popup).toHaveCSS('position', 'relative');
+    await expect(popup).toHaveCSS('left', '0px');
+    const geometry = () =>
+      Promise.all([dialog.boundingBox(), popup.boundingBox()]).then(([dialogBox, popupBox]) => ({
+        left: Math.round(popupBox!.x - dialogBox!.x),
+        right: Math.round(dialogBox!.x + dialogBox!.width - (popupBox!.x + popupBox!.width)),
+        top: Math.round(popupBox!.y - dialogBox!.y),
+        bottom: Math.round(dialogBox!.y + dialogBox!.height - (popupBox!.y + popupBox!.height)),
+      }));
+    // The foreground covers the dialog panel, so the popup sits fully inside it with symmetric insets:
+    // 16px on a phone, 32px wide (HS2-SH3DR7).
+    const expectedInset = viewport.width === 390 ? 16 : 32;
+    await expect
+      .poll(async () => {
+        const { left, right } = await geometry();
+        return { left, right };
+      })
+      .toEqual({ left: expectedInset, right: expectedInset });
+    await page.screenshot({ path: `/tmp/claude/hs2-sh3dr7-foreground-popup-${viewport.width}.png` });
+    const [insets, headingBox, popupBox] = await Promise.all([
+      geometry(),
+      conversation.locator('.app-heading').boundingBox(),
+      popup.boundingBox(),
+    ]);
+    expect(insets.top).toBeGreaterThanOrEqual(0);
+    expect(insets.bottom).toBeGreaterThanOrEqual(0);
+    // It opens below the conversation heading rather than over it.
+    expect(popupBox!.y).toBeGreaterThanOrEqual(headingBox!.y + headingBox!.height);
+    await expect(popup.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
+  });
+}
+
 test('clears a foreground permission from its authoritative event while the Allow response is delayed', async ({
   page,
 }) => {
