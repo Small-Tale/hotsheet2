@@ -5,6 +5,8 @@ import type { SafeHtml } from 'kerfjs/jsx-runtime';
 export type ContentTransitionSide = 'a' | 'b';
 export type ContentTransitionStyle = 'none' | 'crossfade' | 'push';
 export type ContentTransitionDirection = 'forward' | 'backward';
+/** How each side lays out its children: `block` (normal flow) or `actions` (an end-aligned, wrapping action row). */
+export type ContentTransitionSideLayout = 'block' | 'actions';
 
 export function ContentTransition({
   active,
@@ -14,6 +16,7 @@ export function ContentTransition({
   b,
   label = 'Changing content',
   region = 'content',
+  sideLayout = 'block',
 }: {
   active: ContentTransitionSide;
   style?: ContentTransitionStyle;
@@ -22,6 +25,7 @@ export function ContentTransition({
   b: SafeHtml;
   label?: string;
   region?: 'content' | 'label' | 'footer';
+  sideLayout?: ContentTransitionSideLayout;
 }) {
   return (
     <section
@@ -31,6 +35,7 @@ export function ContentTransition({
       data-transition-style={style}
       data-transition-direction={direction}
       data-transition-region={region}
+      data-side-layout={sideLayout}
       slot={region === 'content' ? undefined : region}
       aria-label={label}
     >

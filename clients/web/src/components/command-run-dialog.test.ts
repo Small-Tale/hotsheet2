@@ -20,10 +20,22 @@ describe('CommandRunDialog', () => {
     expect(css).toMatch(
       /command-run-dialog__summary \{[^}]*margin-bottom: var\(--kui-space-m\)[^}]*gap: var\(--kui-space-xs\)/,
     );
-    expect(css).toMatchSource(/command-run-dialog"\] pre \{[^}]*padding: var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(
-      /command-run-dialog"\], \[data-component="command-cancellation-dialog"\] \{[^}]*padding: var\(--kui-space-l\)/,
-    );
+    expect(css).toMatchSource(/\.command-run-dialog__output \{[^}]*padding: var\(--kui-space-xs\)/);
+    expect(css).toMatchSource(/\.command-run-dialog \{[^}]*padding: var\(--kui-space-l\)/);
+  });
+
+  it('styles only its own classes and sizes icons through the LucideIcon prop (HS2-29Q3XG)', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'command-run-dialog.css'), 'utf8');
+    expect(css).not.toContain('[data-component');
+    expect(css).not.toMatch(/\bsvg\b/);
+    const output = String(CommandRunDialog({ command, run })),
+      stop = String(CommandRunDialog({ command, run, confirmStop: true }));
+    for (const markup of [output, stop]) {
+      expect(markup).toMatch(/<dialog class="command-run-dialog"/);
+      expect(markup).toContain('class="command-run-dialog__title"');
+      expect(markup).toMatch(/<svg[^>]*data-size="13\.6"[^>]*--_kui-lucide-size:0\.85rem/);
+    }
+    expect(output).toContain('class="command-run-dialog__output"');
   });
 
   it('renders command output and a stop confirmation as distinct surfaces', () => {

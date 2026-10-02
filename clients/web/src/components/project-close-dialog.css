@@ -101,9 +101,6 @@
   padding: 0;
   overflow: hidden;
 }
-.project-close-dialog__chat > .ai-conversation {
-  height: 100%;
-}
 .project-close-dialog__detail--empty {
   display: grid;
   color: var(--wa-color-neutral-on-quiet);

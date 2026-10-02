@@ -170,6 +170,12 @@
       "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: attachment-gallery__annotation-label, attachment-gallery__volume-popup."
     },
     {
+      "id": "intentional-nested-inset-command-run-dialog",
+      "rules": ["KUI-L004"],
+      "target": "src/components/command-run-dialog.tsx",
+      "rationale": "Reviewed HS2-29Q3XG: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: command-run-dialog__output."
+    },
+    {
       "id": "intentional-nested-inset-command-settings-editor",
       "rules": ["KUI-L004"],
       "target": "src/components/command-settings-editor.tsx",

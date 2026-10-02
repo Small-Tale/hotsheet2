@@ -652,7 +652,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'content-transition',
         'ContentTransition',
-        'Reusable A/B push and crossfade transitions.',
+        'Reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts.',
         'feature-floor',
         true,
       ),

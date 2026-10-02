@@ -38,6 +38,21 @@ describe('ContentTransition', () => {
       ),
     ).toContain('slot="footer"');
   });
+  it('defaults to block sides and exposes the action-row side layout as a variant (HS2-29Q3XG)', async () => {
+    expect(String(ContentTransition({ active: 'a', a: 'A' as never, b: 'B' as never }))).toContain(
+      'data-side-layout="block"',
+    );
+    expect(
+      String(
+        ContentTransition({ active: 'a', region: 'footer', sideLayout: 'actions', a: 'A' as never, b: 'B' as never }),
+      ),
+    ).toContain('data-side-layout="actions"');
+    const css = await readFile(new URL('./content-transition.css', import.meta.url), 'utf8');
+    expect(css).toMatchSource(/data-transition-region='label'\],[^{]*data-transition-region='footer'\]\{width:100%/);
+    expect(css).toMatchSource(
+      /data-side-layout='actions'\]>\.content-transition__side\{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end/,
+    );
+  });
   it('pairs full-width incoming and outgoing animations and honors reduced motion', async () => {
     const css = await readFile(new URL('./content-transition.css', import.meta.url), 'utf8');
     expect(css).toMatchSource(/data-active-side="b"[^}]+data-side="a"[^}]+push-out-start/);

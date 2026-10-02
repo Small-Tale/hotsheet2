@@ -5,7 +5,7 @@
   justify-content: space-between;
   gap: var(--kui-space-xs);
 }
-[data-component='command-run-dialog'] pre {
+.command-run-dialog__output {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -43,17 +43,12 @@
   align-items: center;
   gap: var(--kui-space-2xs);
 }
-.command-run-dialog__actions svg {
-  width: remify(13.6px);
-  height: remify(13.6px);
-}
 .command-run-dialog__actions .command-run-dialog__stop {
   border-color: var(--wa-color-danger-fill-loud);
   color: var(--wa-color-neutral-on-loud);
   background: var(--wa-color-danger-fill-loud);
 }
-[data-component='command-run-dialog'],
-[data-component='command-cancellation-dialog'] {
+.command-run-dialog {
   position: fixed;
   z-index: 1100;
   box-sizing: border-box;
@@ -70,8 +65,7 @@
   box-shadow: var(--wa-shadow-xl);
   color: var(--wa-color-text-normal);
 }
-[data-component='command-run-dialog'] h2,
-[data-component='command-cancellation-dialog'] h2 {
+.command-run-dialog__title {
   margin: 0 0 var(--kui-space-m);
   font-size: var(--wa-font-size-m);
 }

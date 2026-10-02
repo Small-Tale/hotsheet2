@@ -6230,6 +6230,13 @@ test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKK
   await expect(projectClose.locator('.project-close-dialog__resources')).toHaveCSS('overflow', 'auto');
   // The selected AI-chat resource renders its embedded conversation preview.
   await expect(projectClose.locator('[data-component="ai-conversation"]')).toBeVisible();
+  // The embedded presentation fills the chat preview by itself; the dialog does not size it (HS2-29Q3XG).
+  const chatFill = await projectClose.locator('.project-close-dialog__chat').evaluate((node) => ({
+    section: node.getBoundingClientRect().height,
+    chat: node.querySelector('[data-component="ai-conversation"]')!.getBoundingClientRect().height,
+  }));
+  expect(chatFill.section).toBeGreaterThan(0);
+  expect(chatFill.chat).toBeCloseTo(chatFill.section, 0);
   await expect(projectClose).toContainText('Kerf');
   await projectClose.evaluate((node) =>
     Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),

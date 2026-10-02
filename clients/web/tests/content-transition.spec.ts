@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Locator, test } from '@playwright/test';
 
 const pausedMotion = '.content-transition__side { animation-play-state: paused !important; }';
 
@@ -81,4 +81,60 @@ test('demonstrates adjacent full-width A-B push/pop with chrome crossfades and r
   await crossfadePause.evaluate((node) => {
     node.parentNode?.removeChild(node);
   });
+});
+
+test('lays out dialog footers through the ContentTransition action-row variant (HS2-29Q3XG)', async ({ page }) => {
+  const right = (locator: Locator) => locator.evaluate((node) => node.getBoundingClientRect().right),
+    actionRow = async (footer: Locator) => {
+      const side = footer.locator(':scope > [data-active="true"]');
+      await expect(footer).toHaveAttribute('data-side-layout', 'actions');
+      await expect(side).toHaveCSS('display', 'flex');
+      await expect(side).toHaveCSS('flex-wrap', 'wrap');
+      await expect(side).toHaveCSS('justify-content', 'flex-end');
+      return side;
+    },
+    selectScenario = (dialog: Locator, value: string) =>
+      dialog
+        .locator('[data-demo-ticket-source-scenario] wa-select')
+        .evaluate((node: HTMLElement & { value: string }, next) => {
+          node.value = next;
+          node.dispatchEvent(new Event('change', { bubbles: true }));
+        }, value);
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=content-transition&dev-review=false');
+    await expect(page.locator('[data-transition-region="content"]')).toHaveAttribute('data-side-layout', 'block');
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    const demoSide = await actionRow(page.locator('[data-transition-region="footer"]'));
+    expect(await right(demoSide.getByRole('button', { name: 'Connect' }))).toBeCloseTo(await right(demoSide), 0);
+
+    await page.goto('/ux-demo?component=ticket-source-setup-dialog&dev-review=false');
+    const setup = page.locator('[data-ticket-source-setup-dialog]'),
+      setupFooter = setup.locator('[data-transition-region="footer"]'),
+      label = setup.locator('[data-transition-region="label"]'),
+      rootSide = await actionRow(setupFooter);
+    // The slotted label and footer regions span their dialog slots instead of shrinking to content.
+    const dialogWidth = await setup.evaluate(
+      (node) => node.shadowRoot!.querySelector('[part~="dialog"]')!.getBoundingClientRect().width,
+    );
+    expect(await setupFooter.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(dialogWidth / 2);
+    expect(await label.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(dialogWidth / 2);
+    // The root step's lone Cancel keeps its start alignment through the dialog's own button class.
+    expect(
+      await rootSide.getByRole('button', { name: 'Cancel' }).evaluate((node) => node.getBoundingClientRect().left),
+    ).toBeCloseTo(await rootSide.evaluate((node) => node.getBoundingClientRect().left), 0);
+    await selectScenario(setup, 'editing');
+    await expect(setup).toHaveAttribute('data-preview-scenario', 'editing');
+    const editSide = await actionRow(setupFooter);
+    await expect(editSide.getByRole('button', { name: 'Save changes' })).toBeVisible();
+    expect(await right(editSide.getByRole('button', { name: 'Save changes' }))).toBeCloseTo(await right(editSide), 0);
+
+    await page.goto('/ux-demo?component=conversation-export-dialog&dev-review=false');
+    const exportSide = await actionRow(
+      page.locator('[data-component="conversation-export-dialog"] [data-transition-region="footer"]'),
+    );
+    const submit = exportSide.getByRole('button', { name: 'Save conversation' });
+    expect(await right(submit)).toBeCloseTo(await right(exportSide), 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
 });

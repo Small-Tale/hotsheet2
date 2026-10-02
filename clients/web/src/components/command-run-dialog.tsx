@@ -18,8 +18,12 @@ export function CommandRunDialog({
   if (!command) return null;
   if (confirmStop)
     return (
-      <dialog aria-label={`Stop ${command.title}?`} data-component="command-cancellation-dialog">
-        <h2>Stop {command.title}?</h2>
+      <dialog
+        class="command-run-dialog"
+        aria-label={`Stop ${command.title}?`}
+        data-component="command-cancellation-dialog"
+      >
+        <h2 class="command-run-dialog__title">Stop {command.title}?</h2>
         <p>The command is still running. Stop it now?</p>
         <footer class="command-run-dialog__actions">
           <button type="button" {...COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.attrs}>
@@ -31,26 +35,26 @@ export function CommandRunDialog({
             {...COMMANDS_AND_AI_ACTIONS.confirmStopCommand.attrs}
             data-run-id={run?.id}
           >
-            <LucideIcon icon={Square} name="square" /> Stop command
+            <LucideIcon icon={Square} name="square" size={13.6} /> Stop command
           </button>
         </footer>
       </dialog>
     );
   return (
-    <dialog aria-label={command.title} data-component="command-run-dialog">
-      <h2>{command.title}</h2>
+    <dialog class="command-run-dialog" aria-label={command.title} data-component="command-run-dialog">
+      <h2 class="command-run-dialog__title">{command.title}</h2>
       <header class="command-run-dialog__summary">
         <strong>{run ? run.state : 'Never run'}</strong>
         {run?.exit_code !== undefined && <span>Exit {run.exit_code}</span>}
       </header>
-      <pre aria-label="Command output">
+      <pre class="command-run-dialog__output" aria-label="Command output">
         {run?.output.length
           ? run.output.map((line) => `${line.stream === 'stderr' ? 'error: ' : ''}${line.text}`).join('\n')
           : 'No output recorded.'}
       </pre>
       <footer class="command-run-dialog__actions">
         <button type="button" {...COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.attrs}>
-          <LucideIcon icon={X} name="x" /> Close
+          <LucideIcon icon={X} name="x" size={13.6} /> Close
         </button>
       </footer>
     </dialog>

@@ -368,7 +368,8 @@ does not introduce polling or another network request.
     stable preview identity while users switch between terminal and chat resources. The native
     project-close dialog composes shared `ListHeader`/`ListItem` resource navigation with 24px
     detail, 16px warning, 8px pane/action, and zero-gap connected-row spacing while retaining
-    explicit live-preview geometry (HS2-4Y6SM9)
+    explicit live-preview geometry (HS2-4Y6SM9). The chat preview relies on the `embedded`
+    presentation filling its container; the dialog never sizes `.ai-conversation` (HS2-29Q3XG)
   - state: Kerf owns per-connection transcript/draft/open state; the existing replay-safe
     WebSocket/long-poll stream is the only live update source, and no conversation timer
     issues network requests. Reopening a locally closed project reconciles eligible
@@ -1464,7 +1465,10 @@ capability-aware sections when their underlying features and data contracts land
 - `CommandRunDialog` owns output and cancellation presentation. Its dialog surface uses a
   24 px major inset, 16 px between regions, 8 px within output/action groups, and 4 px between
   an action icon and its label (HS2-4Y6SM9). Completion and stop changes arrive through the
-  existing long poll; the client never interval-polls.
+  existing long poll; the client never interval-polls. Both native dialogs style only their
+  own `command-run-dialog` classes (root, `__title`, `__output`, `__actions`) and size their
+  action icons through the `LucideIcon` `size` prop, never through `[data-component]` roots or
+  descendant `svg` selectors (HS2-29Q3XG).
 - `CommandSettingsEditor` (Project Settings → Commands) is an HS1-style WYSIWYG editor:
   a sidebar-aligned grouped list of command rows (drag handle, colored icon, name, type)
   whose group headers come from each command's `group`, with ungrouped commands at the top.
@@ -1731,8 +1735,14 @@ semantic actions; Kerf owns state and composition.
 
 `ContentTransition` is the shared two-screen navigation primitive. It retains stable
 A/B DOM sides and supports paired forward push, backward pop, crossfade, and no-motion
-replacement. Inactive content is inert and hidden after the transition. Its UX demo
-exposes every transition style and both visible sides.
+replacement. Inactive content is inert and hidden after the transition. Slotted `label` and
+`footer` regions span their dialog slot. The `sideLayout` variant sets how each side lays out
+its children: `block` (default, normal flow) or `actions`, an end-aligned, wrapping action
+row with the shared extra-small gap for dialog footers. Consumers choose the variant and
+never style `.content-transition__side` themselves. An action that belongs at the row's
+start, such as the ticket-source setup root Cancel or Remove/Disable, sets its own
+`margin-inline-end: auto` (HS2-29Q3XG). Its UX demo exposes every transition style, both
+visible sides, and both side layouts (block content, action-row footer).
 
 `FlowBackButton` is the corresponding in-content back affordance for multi-screen dialogs:
 a quiet brand-colored chevron and destination label at the start of the detail screen.

@@ -45,17 +45,14 @@ export function ContentTransitionDemo() {
             active={transitionSide.value}
             style="crossfade"
             region="footer"
+            sideLayout="actions"
             label="Setup actions transition"
-            a={
-              <div class="content-transition-demo__footer-actions">
-                <wa-button>Cancel</wa-button>
-              </div>
-            }
+            a={<wa-button>Cancel</wa-button>}
             b={
-              <div class="content-transition-demo__footer-actions">
+              <>
                 <wa-button>Skip</wa-button>
                 <wa-button appearance="accent">Connect</wa-button>
-              </div>
+              </>
             }
           />
         </footer>

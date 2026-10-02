@@ -20,7 +20,7 @@ describe('Kerf application UI profile', () => {
       readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8'),
     ) as KerfProfile;
     expect(profile.scope).toBe('workspace');
-    expect(profile.exceptions).toHaveLength(76);
+    expect(profile.exceptions).toHaveLength(77);
     for (const exception of profile.exceptions.slice(0, 22)) {
       expect(exception.id).toMatch(/^web-awesome-/);
       expect(exception.rules).toEqual(['KUI-L011']);
@@ -49,7 +49,7 @@ describe('Kerf application UI profile', () => {
       expect(exception.rules).toEqual([exception.id.startsWith('intentional-') ? 'KUI-L004' : 'KUI-L008']);
       expect(exception.target).toMatch(/^src\/(?:components|ux-demo)\/[a-z0-9-]+\.tsx$/);
       expect(existsSync(new URL(`../${exception.target}`, import.meta.url)), exception.target).toBe(true);
-      expect(exception.rationale).toMatch(/^Reviewed HS2-M6B8AD: /);
+      expect(exception.rationale).toMatch(/^Reviewed HS2-[0-9A-Z]{6}: /);
       if (exception.rules[0] === 'KUI-L004') expect(exception.rationale).toMatch(/design: [a-z][a-z0-9-]*__[a-z0-9-]+/);
       else expect(exception.rationale).toMatch(/Expressions: class(?:Name)?=\{/);
       expect(ids.has(exception.id), exception.id).toBe(false);

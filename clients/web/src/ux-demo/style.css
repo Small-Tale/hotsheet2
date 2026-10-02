@@ -109,11 +109,6 @@ body[data-resizing-project-sidebar='true'] {
   padding: var(--wa-space-m) var(--wa-space-2xl);
   border-top: 1px solid var(--wa-color-neutral-border-quiet);
 }
-.content-transition-demo__footer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--wa-space-xs);
-}
 .content-transition-demo__card {
   min-height: remify(256px);
   padding: var(--wa-space-2xl);

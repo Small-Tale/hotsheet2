@@ -267,7 +267,11 @@ export function TicketSourceSetupDialog({
     <></>
   );
   const rootActions = (
-      <wa-button appearance="plain" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
+      <wa-button
+        class="ticket-source-setup__root-cancel"
+        appearance="plain"
+        {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}
+      >
         Cancel
       </wa-button>
     ),
@@ -404,6 +408,7 @@ export function TicketSourceSetupDialog({
         style="crossfade"
         direction={direction}
         region="footer"
+        sideLayout="actions"
         label="Ticket source setup actions"
         a={rootActions}
         b={detailActions}

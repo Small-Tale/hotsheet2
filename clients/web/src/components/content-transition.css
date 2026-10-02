@@ -8,6 +8,19 @@
   min-width: 0;
   grid-area: 1 / 1;
 }
+/* Slotted dialog label/footer regions span their slot instead of shrinking to content. */
+.content-transition[data-transition-region='label'],
+.content-transition[data-transition-region='footer'] {
+  width: 100%;
+}
+/* Action-row sides: end-aligned buttons that wrap at narrow widths (HS2-29Q3XG). */
+.content-transition[data-side-layout='actions'] > .content-transition__side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--kui-space-xs);
+}
 .content-transition__side[data-active='false'] {
   position: absolute;
   inset: 0;

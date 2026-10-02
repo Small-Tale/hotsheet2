@@ -1,26 +1,6 @@
 wa-dialog[data-ticket-source-setup-dialog] {
   --width: min(remify(576px), calc(100vw - remify(32px)));
 }
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='label'],
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] {
-  width: 100%;
-}
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='label'] {
-  font: inherit;
-}
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .content-transition__side {
-  display: flex;
-  flex-wrap: wrap;
-  width: 100%;
-  align-items: center;
-  gap: var(--wa-space-xs);
-}
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .content-transition__side[data-side='a'] {
-  justify-content: flex-start;
-}
-wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .content-transition__side[data-side='b'] {
-  justify-content: flex-end;
-}
 .ticket-source-setup__removal {
   display: grid;
   width: 100%;
@@ -28,7 +8,9 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .co
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--wa-space-xs);
 }
-/* Destructive and availability actions group at the start; Cancel/Save stay at the end. */
+/* The root step's lone Cancel and the destructive/availability actions sit at the start of the
+   ContentTransition action row; Cancel/Save stay at its end. */
+.ticket-source-setup__root-cancel,
 .ticket-source-setup__toggle,
 .ticket-source-setup__remove {
   margin-inline-end: auto;
@@ -154,9 +136,4 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region='footer'] .co
 .ticket-source-setup__remote-help {
   color: var(--wa-color-text-link);
   font-size: var(--wa-font-size-xs);
-}
-@media (prefers-reduced-motion: reduce) {
-  wa-dialog[data-ticket-source-setup-dialog] .content-transition__side {
-    animation-duration: 1ms !important;
-  }
 }

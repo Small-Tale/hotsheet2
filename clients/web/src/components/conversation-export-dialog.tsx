@@ -251,6 +251,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
         style="crossfade"
         direction={direction}
         region="footer"
+        sideLayout="actions"
         label="Save conversation actions"
         a={scopeActions}
         b={bundleActions}

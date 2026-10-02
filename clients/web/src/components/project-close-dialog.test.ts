@@ -147,7 +147,8 @@ describe('ProjectCloseDialog', () => {
     expect(css).toMatchSource(/@media \(max-width:remify\(672px\)\)[\s\S]*grid-template-columns:1fr/);
     expect(css).toContainSource('background:var(--wa-color-surface-default)');
     expect(css).toContain('.project-close-dialog__terminal .terminal-viewport--scaled-preview');
-    expect(css).toContain('.project-close-dialog__chat > .ai-conversation');
+    // The embedded AIConversation presentation fills the preview itself (HS2-29Q3XG).
+    expect(css).not.toContain('.ai-conversation');
   });
 
   it('uses canonical dialog-region spacing while retaining preview and control geometry', () => {

@@ -5,16 +5,6 @@
 .conversation-export-dialog::part(body) {
   padding-block: var(--kui-space-m);
 }
-.conversation-export-dialog [data-transition-region='footer'] {
-  width: 100%;
-}
-.conversation-export-dialog [data-transition-region='footer'] .content-transition__side {
-  display: flex;
-  width: 100%;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--kui-space-xs);
-}
 .conversation-export-dialog__form {
   display: grid;
   gap: var(--kui-space-l);

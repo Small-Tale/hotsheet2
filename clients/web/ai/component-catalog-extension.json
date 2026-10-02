@@ -1544,9 +1544,9 @@
       "id": "content-transition",
       "name": "ContentTransition",
       "kind": "component",
-      "purpose": "Reusable A/B push and crossfade transitions.",
+      "purpose": "Reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts.",
       "useWhen": [
-        "Hot Sheet needs reusable A/B push and crossfade transitions."
+        "Hot Sheet needs reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific ContentTransition behavior."
