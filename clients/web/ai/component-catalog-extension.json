@@ -1673,6 +1673,28 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "provider-icon",
+      "name": "ProviderIcon",
+      "kind": "component",
+      "purpose": "Provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes.",
+      "useWhen": [
+        "Hot Sheet needs provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific ProviderIcon behavior."
+      ],
+      "publicClasses": [
+        "provider-icon"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "none",
+        "padding": "none"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "ticket-source-setup-dialog",
       "name": "TicketSourceSetupDialog",
       "kind": "component",

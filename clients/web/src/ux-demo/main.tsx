@@ -270,6 +270,7 @@ import {
   updateCommandEditorField,
   ViewNavigationDemo,
 } from './project-sidebar-demo';
+import { ProviderIconDemo } from './provider-icon-demo';
 import {
   changeEvidenceDemoView,
   ChangeEvidenceDialogDemo,
@@ -592,6 +593,7 @@ function demoContent(item: DemoDefinition) {
     );
   if (item.id === 'dialog-header') return <DialogHeaderDemo />;
   if (item.id === 'value-table') return <ValueTableDemo />;
+  if (item.id === 'provider-icon') return <ProviderIconDemo />;
   if (item.id === 'hs1-migration-dialog') return <Hs1MigrationDialogDemo />;
   if (item.id === 'hs1-migration-banner') return <Hs1MigrationBannerDemo />;
   if (item.id === 'project-setup-warning-banner')

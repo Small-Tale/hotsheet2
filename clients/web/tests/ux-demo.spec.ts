@@ -2371,6 +2371,40 @@ test('switches the MarkdownEditor demo appearance and inset, then resets them (H
   }
 });
 
+test('catalogs ProviderIcon kinds at the m and l size variants (HS2-PK8THJ)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=provider-icon&dev-review=false');
+    const demo = page.locator('.provider-icon-demo');
+    for (const size of ['m', 'l'] as const) {
+      const variant = demo.locator(`[data-size-variant="${size}"]`);
+      await expect(variant.locator('figcaption')).toContainText(`size="${size}"`);
+      for (const [kind, label] of [
+        ['github', 'GitHub'],
+        ['gitlab', 'GitLab'],
+        ['jira', 'Jira'],
+      ] as const) {
+        const icon = variant.getByRole('img', { name: label });
+        await expect(icon).toHaveAttribute('data-provider-icon', kind);
+        const { box, fontSize } = await icon.evaluate((node) => ({
+          box: node.getBoundingClientRect().toJSON() as DOMRect,
+          fontSize: parseFloat(getComputedStyle(node.parentElement!).fontSize),
+        }));
+        // m follows the surrounding font size (1em); l is the fixed 24px identity mark.
+        const expected = size === 'm' ? fontSize : 24;
+        expect(box.width).toBeCloseTo(expected, 1);
+        expect(box.height).toBeCloseTo(expected, 1);
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(width);
+        if (size === 'm') await expect(icon).not.toHaveAttribute('data-size');
+        else await expect(icon).toHaveAttribute('data-size', 'l');
+      }
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await demo.screenshot({ path: `/private/tmp/claude/hs2-pk8thj-provider-icon-${width}.png` });
+  }
+});
+
 test('lets the TicketReader native dialog complete dismissal before leaving the demo', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-H892P1' });

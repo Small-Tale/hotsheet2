@@ -38,6 +38,8 @@ const selfGeometryIds = new Set([
   'status-badge',
   'ticket-row',
 ]);
+// Intrinsically sized marks with no box chrome: the embedding layout places them, nothing else applies.
+const intrinsicGeometryIds = new Set(['provider-icon']);
 const publicClassOverrides = {
   'app-empty-state': ['app-empty'],
   'fixed-aspect-terminal-card': ['terminal-tile'],
@@ -97,6 +99,7 @@ function geometry(id) {
       ],
     };
   if (selfGeometryIds.has(id)) return { margin: 'none', border: 'self', padding: 'self' };
+  if (intrinsicGeometryIds.has(id)) return { margin: 'none', border: 'none', padding: 'none' };
   return { margin: 'none', border: 'child', padding: 'child' };
 }
 

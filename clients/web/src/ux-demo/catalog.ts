@@ -768,12 +768,19 @@ export const demoCatalog: DemoCategory[] = [
         true,
       ),
       demo(
+        'provider-icon',
+        'ProviderIcon',
+        'Provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes.',
+        'feature-floor',
+        true,
+      ),
+      demo(
         'ticket-source-setup-dialog',
         'TicketSourceSetupDialog',
         'Choose and configure a git or external ticket source.',
         'feature-floor',
         true,
-        ['content-transition', 'list-item'],
+        ['content-transition', 'list-item', 'provider-icon'],
       ),
       demo(
         'provider-setup-form',
@@ -781,6 +788,7 @@ export const demoCatalog: DemoCategory[] = [
         'Provider credentials, repository locator, and default-source settings.',
         'feature-floor',
         true,
+        ['provider-icon'],
       ),
       demo(
         'ticket-sources-settings',
@@ -788,7 +796,7 @@ export const demoCatalog: DemoCategory[] = [
         "One project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares.",
         'feature-floor',
         true,
-        ['list', 'list-item'],
+        ['list', 'list-item', 'provider-icon'],
       ),
       demo(
         'accounts-settings',

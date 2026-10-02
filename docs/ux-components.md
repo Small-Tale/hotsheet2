@@ -1853,6 +1853,11 @@ conversation save share this visual contract; save scope pushes forward and pops
 - `SettingScopePicker`
 - `SecretReferenceField`
 - `TicketProviderConnections`
+- `ProviderIcon` — **demo built** (HS2-PK8THJ): the GitHub, GitLab, and Jira brand marks used by
+  the ticket-source setup dialog, the provider setup form, and the ticket-source settings rows.
+  `size="m"` (default) follows the surrounding font size (1em); `size="l"` is the fixed 24px
+  identity mark on the Accounts card header. The icon owns its size and has no border or padding.
+  The `provider-icon` UX demo shows every kind at both sizes.
 - `ToolPluginSettings`
 - `NotificationSettings`
 - `TerminalSettings`

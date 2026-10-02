@@ -637,6 +637,39 @@ body[data-resizing-project-sidebar='true'] {
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-l);
 }
+/* ProviderIcon gallery (HS2-PK8THJ): demo-owned rows that lay out the icons; the icon sizes itself. */
+.provider-icon-demo__variant {
+  display: grid;
+  width: min(remify(448px), 100%);
+  margin: 0;
+  justify-items: center;
+  gap: remify(8px);
+}
+.provider-icon-demo__variant > figcaption {
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: var(--wa-font-weight-semibold);
+}
+.provider-icon-demo__variant > .component-stage__canvas {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+.provider-icon-demo__providers {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: remify(16px) remify(24px);
+  list-style: none;
+}
+.provider-icon-demo__provider {
+  display: flex;
+  align-items: center;
+  gap: remify(8px);
+}
 .project-summary-demo__variants {
   display: grid;
   gap: var(--wa-space-m);
