@@ -22,7 +22,26 @@ impl StreamChild {
         cwd: &Path,
         envs: &[(String, String)],
     ) -> std::io::Result<Self> {
+        Self::spawn_with(program, args, cwd, envs, false)
+    }
+
+    /// [`StreamChild::spawn`], optionally leading its own process group so a short-lived
+    /// probe (and anything it starts) can be killed as one (HS2-BJ7A59).
+    pub(crate) fn spawn_with(
+        program: &str,
+        args: &[&str],
+        cwd: &Path,
+        envs: &[(String, String)],
+        own_group: bool,
+    ) -> std::io::Result<Self> {
         let mut cmd = Command::new(program);
+        #[cfg(unix)]
+        if own_group {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+        #[cfg(not(unix))]
+        let _ = own_group;
         cmd.args(args)
             .current_dir(cwd)
             .stdin(Stdio::piped())
@@ -34,6 +53,11 @@ impl StreamChild {
         Ok(Self {
             child: cmd.spawn()?,
         })
+    }
+
+    /// The child's process id.
+    pub(crate) fn id(&self) -> u32 {
+        self.child.id()
     }
 
     /// Split into the write half and the read half (the latter owns the [`Child`]).

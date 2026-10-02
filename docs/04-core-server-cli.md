@@ -383,7 +383,10 @@ probe is itself bounded (HS2-BH3M53). It runs in its own process group with a 5 
 deadline is killed with everything it spawned, and that tool falls back to its manifest catalog,
 so a hung tool can no longer hold the shared catalog lock that `/ai-tools`, `/ai-settings`,
 and terminal-launch validation wait on. A stop kills every in-flight probe and refuses new
-ones, so no probe child outlives the server.
+ones, so no probe child outlives the server. The short-lived `codex app-server` that lists
+Codex's models is a probe too (HS2-BJ7A59): it leads its own process group, is killed and
+reaped when its listing returns or times out, at the probe deadline, or when the server stops,
+while long-lived drive sessions keep their own lifecycle.
 
 **Owned servers stop with their owner (HS2-VQ8ZWT).** A process that owns a server,
 such as a test harness or the scale-stress script, passes the hidden

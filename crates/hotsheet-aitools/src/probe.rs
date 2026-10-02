@@ -44,10 +44,12 @@ pub fn set_probe_timeout(timeout: Duration) {
 /// Kill every probe still running, with its process group. A stopping server calls this so
 /// no tool probe outlives it; the probes' callers then see a failed probe.
 pub fn kill_in_flight_probes() -> usize {
-    let pids: Vec<u32> = IN_FLIGHT
-        .lock()
-        .map(|guard| guard.iter().flatten().copied().collect())
-        .unwrap_or_default();
+    // Signal under the lock: a probe leaves the set before it is reaped, so every pid seen
+    // here is still this process's own unreaped child.
+    let Ok(guard) = IN_FLIGHT.lock() else {
+        return 0;
+    };
+    let pids: Vec<u32> = guard.iter().flatten().copied().collect();
     for pid in &pids {
         kill_group(*pid);
     }
@@ -65,6 +67,107 @@ pub fn stop_probes() -> usize {
     }
     kill_in_flight_probes()
 }
+
+/// Whether this process has begun stopping its probes ([`stop_probes`]).
+pub fn probes_stopped() -> bool {
+    STOPPED.load(Ordering::SeqCst)
+}
+
+/// A long-running probe child the caller talks to itself (the codex app-server model
+/// catalog, HS2-BJ7A59). The child must lead its own process group. The guard registers it
+/// with the in-flight probes (so [`stop_probes`] kills it), kills the group once `deadline`
+/// passes, and kills and reaps it when dropped — on success, error, or timeout alike.
+pub struct ProbeGroup {
+    pid: u32,
+    finished: std::sync::Arc<Mutex<bool>>,
+    disarm: Option<mpsc::Sender<()>>,
+}
+
+impl ProbeGroup {
+    /// Track the probe child `pid` (its own process-group leader) until the guard drops,
+    /// killing and reaping it at `deadline` if it is still running then.
+    pub fn track(pid: u32, deadline: Duration) -> Self {
+        track(pid, true);
+        let finished = std::sync::Arc::new(Mutex::new(false));
+        let (disarm, disarmed) = mpsc::channel::<()>();
+        let watchdog = finished.clone();
+        std::thread::spawn(move || {
+            if let Err(mpsc::RecvTimeoutError::Timeout) = disarmed.recv_timeout(deadline) {
+                finish(pid, &watchdog);
+            }
+        });
+        Self {
+            pid,
+            finished,
+            disarm: Some(disarm),
+        }
+    }
+}
+
+impl Drop for ProbeGroup {
+    fn drop(&mut self) {
+        drop(self.disarm.take());
+        finish(self.pid, &self.finished);
+    }
+}
+
+/// Kill a tracked probe group once, stop tracking it, and reap its leader. The leader is
+/// reaped only after it leaves the in-flight set (under that set's lock), so a pid that
+/// [`kill_in_flight_probes`] can still see is never one the kernel could have reused. Its
+/// `Child` handle (owned by a stream reader) is dropped without waiting, so without this
+/// the killed child would linger as a zombie.
+fn finish(pid: u32, finished: &Mutex<bool>) {
+    let Ok(mut finished) = finished.lock() else {
+        return;
+    };
+    if *finished {
+        return;
+    }
+    *finished = true;
+    kill_group(pid);
+    if let Ok(mut guard) = IN_FLIGHT.lock() {
+        if let Some(set) = guard.as_mut() {
+            set.remove(&pid);
+        }
+        reap(pid);
+    }
+}
+
+/// Block until child `pid` has exited, without reaping it.
+#[cfg(unix)]
+fn wait_exited(pid: u32) {
+    let id = libc::id_t::from(pid);
+    loop {
+        // SAFETY: an all-zero siginfo_t is a valid out-parameter for waitid.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // SAFETY: waits (WNOWAIT: without reaping) only for this probe's own child.
+        let result =
+            unsafe { libc::waitid(libc::P_PID, id, &mut info, libc::WEXITED | libc::WNOWAIT) };
+        if result == 0 || std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted
+        {
+            return;
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn wait_exited(_pid: u32) {}
+
+/// Wait for a SIGKILLed probe leader, so it cannot linger as a zombie.
+#[cfg(unix)]
+fn reap(pid: u32) {
+    let Ok(pid) = i32::try_from(pid) else {
+        return;
+    };
+    let mut status = 0;
+    // SAFETY: waits only for this probe's own, just-killed child pid.
+    unsafe {
+        libc::waitpid(pid, &mut status, 0);
+    }
+}
+
+#[cfg(not(unix))]
+fn reap(_pid: u32) {}
 
 /// The number of probes currently running (diagnostics and tests).
 pub fn in_flight_probes() -> usize {
@@ -106,7 +209,18 @@ pub fn run_probe_within(command: &mut Command, timeout: Duration) -> Result<Outp
     let stderr = drain(child.stderr.take());
     let (done_tx, done_rx) = mpsc::channel();
     let waiter = std::thread::spawn(move || {
-        let status = child.wait();
+        // Leave the in-flight set before reaping, so a pid `kill_in_flight_probes` can
+        // still see is never one the kernel could already have reused.
+        wait_exited(pid);
+        let status = match IN_FLIGHT.lock() {
+            Ok(mut guard) => {
+                if let Some(set) = guard.as_mut() {
+                    set.remove(&pid);
+                }
+                child.wait()
+            }
+            Err(_) => child.wait(),
+        };
         let _ = done_tx.send(());
         status
     });
@@ -117,7 +231,6 @@ pub fn run_probe_within(command: &mut Command, timeout: Duration) -> Result<Outp
     let status = waiter
         .join()
         .map_err(|_| format!("'{program}' waiter panicked"))?;
-    track(pid, false);
     let status = status.map_err(|error| format!("waiting for '{program}': {error}"))?;
     let stdout = stdout.join().unwrap_or_default();
     let stderr = stderr.join().unwrap_or_default();

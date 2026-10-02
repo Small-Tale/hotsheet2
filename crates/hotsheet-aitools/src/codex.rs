@@ -903,6 +903,26 @@ impl StdioTransport {
     }
 }
 
+impl StdioTransport {
+    /// Spawn a short-lived `program app-server` for a capability probe (the model catalog,
+    /// HS2-BJ7A59): it leads its own process group and is tracked as an in-flight probe, so
+    /// the returned guard kills it at `deadline`, on drop, or when the process stops probing.
+    /// Long-lived drive sessions keep using [`StdioTransport::spawn`].
+    pub fn spawn_probe(
+        program: &str,
+        cwd: &Path,
+        env: &[(String, String)],
+        deadline: std::time::Duration,
+    ) -> std::io::Result<(Box<Self>, crate::probe::ProbeGroup)> {
+        if crate::probe::probes_stopped() {
+            return Err(std::io::Error::other("not probed: the process is stopping"));
+        }
+        let child = StreamChild::spawn_with(program, &["app-server"], cwd, env, true)?;
+        let guard = crate::probe::ProbeGroup::track(child.id(), deadline);
+        Ok((Box::new(Self(child)), guard))
+    }
+}
+
 impl RpcTransport for StdioTransport {
     fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
         self.0.into_halves()

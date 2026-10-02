@@ -152,8 +152,16 @@ impl RuntimeModelCatalogSource for AppServerModelCatalog {
     }
 
     fn discover(&self, cwd: &Path) -> Result<RuntimeModelCatalog, String> {
-        let transport = StdioTransport::spawn(&self.program, cwd, &self.env)
-            .map_err(|error| format!("starting '{} app-server': {error}", self.program))?;
+        // A probe child, not a session (HS2-BJ7A59): its own process group, killed at the
+        // probe deadline, when the probe is stopped, and when this listing returns (`_guard`
+        // drops last), so a wedged app-server can never outlive it.
+        let (transport, _guard) = StdioTransport::spawn_probe(
+            &self.program,
+            cwd,
+            &self.env,
+            crate::probe::probe_timeout(),
+        )
+        .map_err(|error| format!("starting '{} app-server': {error}", self.program))?;
         CodexAppServer::connect_with_timeout(transport, MODEL_CATALOG_REQUEST_TIMEOUT)
             .map_err(|error| error.to_string())?
             .list_models()
@@ -211,5 +219,114 @@ impl TurnHandle for AppServerTurnHandle {
 
     fn usage(&mut self) -> Option<crate::drive::Usage> {
         self.turn.usage()
+    }
+}
+
+#[cfg(all(test, unix))]
+mod catalog_probe_tests {
+    //! HS2-BJ7A59: the codex app-server started for a model listing is a probe child. A fake
+    //! `codex` that answers `--version` but wedges as `app-server` (never replying, ignoring
+    //! stdin EOF) must not outlive the listing, its deadline, or a stopped probe set.
+
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
+
+    use super::*;
+
+    /// A fake `codex` whose `app-server` records its pid and then hangs forever.
+    fn wedged_codex(dir: &Path) -> (String, PathBuf) {
+        let program = dir.join("codex");
+        let pid_file = dir.join("app-server.pid");
+        std::fs::write(
+            &program,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = --version ]; then echo codex-test 1.0; exit 0; fi\n\
+                 echo $$ > '{}'\nexec sleep 30\n",
+                pid_file.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(
+            &program,
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .unwrap();
+        (program.display().to_string(), pid_file)
+    }
+
+    fn app_server_pid(pid_file: &Path) -> i32 {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Some(pid) = std::fs::read_to_string(pid_file)
+                .ok()
+                .and_then(|text| text.trim().parse().ok())
+            {
+                return pid;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the fake app-server never started"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn assert_gone(pid: i32) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        // SAFETY: signal 0 only checks whether the pid still exists.
+        while unsafe { libc::kill(pid, 0) } == 0 {
+            assert!(
+                Instant::now() < deadline,
+                "app-server {pid} outlived its probe"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    #[test]
+    fn a_wedged_catalog_app_server_is_killed_when_its_listing_times_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let (program, pid_file) = wedged_codex(dir.path());
+        let catalog = AppServerModelCatalog::new(program, Vec::new());
+        assert_eq!(catalog.version().unwrap(), "codex-test 1.0");
+        let started = Instant::now();
+        let error = catalog.discover(dir.path()).unwrap_err();
+        assert!(error.contains("initialize"), "{error}");
+        assert!(started.elapsed() < MODEL_CATALOG_REQUEST_TIMEOUT + Duration::from_secs(2));
+        assert_gone(app_server_pid(&pid_file));
+        assert_eq!(crate::probe::in_flight_probes(), 0);
+    }
+
+    #[test]
+    fn stopping_probes_kills_a_catalog_app_server_mid_listing_and_refuses_new_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let (program, pid_file) = wedged_codex(dir.path());
+        let listing = {
+            let catalog = AppServerModelCatalog::new(program.clone(), Vec::new());
+            let cwd = dir.path().to_path_buf();
+            std::thread::spawn(move || catalog.discover(&cwd))
+        };
+        let pid = app_server_pid(&pid_file);
+        assert!(crate::probe::stop_probes() >= 1);
+        assert_gone(pid);
+        assert!(listing.join().unwrap().is_err());
+        // A listing that starts after the stop never spawns an app-server.
+        std::fs::remove_file(&pid_file).unwrap();
+        let catalog = AppServerModelCatalog::new(program, Vec::new());
+        let error = catalog.discover(dir.path()).unwrap_err();
+        assert!(error.contains("stopping"), "{error}");
+        assert!(!pid_file.exists());
+    }
+
+    #[test]
+    fn the_probe_deadline_kills_a_wedged_app_server_child() {
+        // Each JSON-RPC request is bounded, but the probe deadline bounds the child itself.
+        let dir = tempfile::tempdir().unwrap();
+        let (program, pid_file) = wedged_codex(dir.path());
+        let (_transport, guard) =
+            StdioTransport::spawn_probe(&program, dir.path(), &[], Duration::from_millis(1_500))
+                .unwrap();
+        assert_gone(app_server_pid(&pid_file));
+        drop(guard);
     }
 }
