@@ -225,8 +225,6 @@
   inset: auto;
   width: min(remify(704px), 100%);
   height: fit-content;
-  max-height: 100%;
-  overflow-y: auto;
   pointer-events: auto;
 }
 /* The shell's popup is a manual popover in the browser top layer (HS2-ZESCM2), so the Workbench's
