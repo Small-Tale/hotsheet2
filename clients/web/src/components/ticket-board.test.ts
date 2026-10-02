@@ -59,7 +59,12 @@ describe('TicketBoard', () => {
     expect(css).toMatch(
       /\[data-layout='paged'\] \.ticket-board__columns \{[^}]*grid-auto-columns: calc\(100cqi - remify\(24px\)\)/,
     );
-    expect(css).toMatch(/\[data-layout='paged'\] \.ticket-board-column \{[^}]*scroll-snap-align: start/);
+    // The board never styles its columns; a paged board opts each column into snapping (HS2-4APEJP).
+    expect(css).not.toMatch(/\.ticket-board-column/);
+    expect(String(TicketBoard({ columns, layout: 'paged' })).match(/data-scroll-snap="start"/g)).toHaveLength(2);
+    expect(String(TicketBoard({ columns }))).not.toContain('data-scroll-snap');
+    const columnCss = readFileSync(resolve(import.meta.dirname, 'ticket-board-column.css'), 'utf8');
+    expect(columnCss).toMatch(/\.ticket-board-column\[data-scroll-snap='start'\] \{[^}]*scroll-snap-align: start/);
     expect(css).toMatch(/prefers-reduced-motion: reduce\)[^}]*\{[^}]*scroll-behavior: auto/);
   });
 

@@ -75,6 +75,13 @@ export function ProjectSummaryDemo() {
           trend={completionTrend.map((value) => value * 2)}
           chartTone="success"
         />
+        <ProjectSummary
+          completedToday={2}
+          inProgress={4}
+          trend={completionTrend}
+          backgroundTrend={completionTrend.map((value) => value * 2)}
+          size="compact"
+        />
       </div>
     </DemoFrame>
   );

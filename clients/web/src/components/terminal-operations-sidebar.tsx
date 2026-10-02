@@ -48,6 +48,7 @@ export function terminalOperationsPanel({
               inProgress={group.inProgress}
               trend={group.trend}
               projectId={group.id}
+              size="compact"
               chartTone={group.id === 'all' ? 'success' : 'brand'}
               chartMaximum={chartMaximum}
               backgroundTrend={group.id === 'all' ? undefined : aggregate?.trend}

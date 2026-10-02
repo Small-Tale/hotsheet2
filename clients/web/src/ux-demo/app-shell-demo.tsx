@@ -192,17 +192,21 @@ export function ProjectTabDemo() {
 export function ProjectTabBarDemo() {
   return (
     <section class="project-tab-bar-demo" aria-label="ProjectTabBar demo">
-      <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} />
-      <ProjectTabBar
-        tabs={projectTabs.value}
-        label="Open projects with workspace action"
-        mode={shellMode.value}
-        workspaceAction={
-          <wa-button variant="brand" data-action="demo-new-ticket">
-            New ticket…
-          </wa-button>
-        }
-      />
+      <div class="project-tab-bar-demo__frame">
+        <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} />
+      </div>
+      <div class="project-tab-bar-demo__frame">
+        <ProjectTabBar
+          tabs={projectTabs.value}
+          label="Open projects with workspace action"
+          mode={shellMode.value}
+          workspaceAction={
+            <wa-button variant="brand" data-action="demo-new-ticket">
+              New ticket…
+            </wa-button>
+          }
+        />
+      </div>
       <p class="component-stage__event" aria-live="polite">
         {shellEvent.value}
       </p>

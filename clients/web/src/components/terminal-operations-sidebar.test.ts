@@ -62,6 +62,17 @@ describe('TerminalOperationsSidebar', () => {
     expect(css).toMatch(/terminal-operations-sidebar__group-heading \{[^}]*padding-inline: var\(--kui-space-s\)/);
     expect(css).not.toContain('--kui-layout-inline-margin');
     expect(css).not.toContain('--kui-layout-item-padding');
-    expect(css).toMatch(/terminal-operations-sidebar__group > \.project-summary \{[^}]*padding: var\(--kui-space-s\)/);
+    // Each group's summary is ProjectSummary's compact size; the sidebar styles no child component (HS2-4APEJP).
+    expect(css).not.toContain('project-summary');
+    expect(markup.match(/class="project-summary" data-component="project-summary" data-size="compact"/g)).toHaveLength(
+      projects.length + 1,
+    );
+    const summaryCss = readFileSync(new URL('./project-summary.css', import.meta.url), 'utf8');
+    expect(summaryCss).toMatch(
+      /\.project-summary\[data-size='compact'\] \{[^}]*min-height: remify\(68px\);[^}]*padding: var\(--kui-space-s\)/,
+    );
+    expect(summaryCss).toMatch(
+      /\.project-summary\[data-size='compact'\] \.project-summary__chart \{[^}]*height: remify\(44px\)/,
+    );
   });
 });

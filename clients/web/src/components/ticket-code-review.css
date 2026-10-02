@@ -4,6 +4,11 @@
   --kui-toolbar-gap: 0px;
   display: grid;
 }
+/* Embedded in another surface (the repository status popover), the review spaces its heading from the
+   commit list itself rather than leaving the host to reach in (HS2-4APEJP). */
+.ticket-code-review[data-embedded='true'] .ticket-code-review__header {
+  margin-bottom: var(--kui-space-m);
+}
 .ticket-code-review__evidence {
   display: block;
   width: 100%;

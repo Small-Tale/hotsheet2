@@ -26,7 +26,9 @@ export function TicketStatusMenu({
         choices={TICKET_STATUS_CHOICES}
         disabled={disabled}
         placeholder={placeholder}
-        renderSelected={(choice) => <StatusBadge status={choice.value} />}
+        presentation="toolbar-borderless"
+        caret={false}
+        renderSelected={(choice) => <StatusBadge status={choice.value} weight="semibold" />}
       />
     </span>
   );

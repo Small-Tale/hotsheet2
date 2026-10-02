@@ -10,6 +10,8 @@ export interface ProjectSummaryProps {
   chartTone?: 'brand' | 'success';
   chartMaximum?: number;
   backgroundTrend?: number[];
+  /** `compact` is the shorter, more padded summary stacked per project in the terminal operations sidebar. */
+  size?: 'default' | 'compact';
 }
 
 export function chartDomainMaximum(values: readonly number[], sharedMaximum?: number): number {
@@ -31,6 +33,7 @@ export function ProjectSummary({
   chartTone = 'brand',
   chartMaximum,
   backgroundTrend,
+  size = 'default',
 }: ProjectSummaryProps) {
   const chartLength = Math.max(trend.length, backgroundTrend?.length ?? 0);
   const alignedTrend = Array.from({ length: chartLength }, (_, index) => trend.at(index - chartLength) ?? 0);
@@ -41,6 +44,7 @@ export function ProjectSummary({
       type="button"
       class="project-summary"
       data-component="project-summary"
+      data-size={size}
       data-chart-tone={chartTone}
       data-chart-maximum={maximum}
       data-chart-background={String(Boolean(backgroundTrend))}

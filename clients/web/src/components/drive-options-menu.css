@@ -1,8 +1,5 @@
 /* The drive options menu is a context-mode Kerf PopupMenu anchored above the drive row
-   (HS2-2EHD8R); the wrapper only names it and hands the anchor coordinates down. */
-.project-sidebar__drive-row {
-  position: relative;
-}
+   (HS2-2EHD8R); the wrapper only names it and hands the viewport anchor coordinates down. */
 .drive-options-menu {
   position: fixed;
   z-index: 80;

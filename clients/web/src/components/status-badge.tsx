@@ -5,6 +5,8 @@ import { Archive, BadgeCheck, Circle, CircleCheck, Clock, Clock3, type IconNode,
 
 export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog' | 'archive' | 'deleted';
 export type StatusBadgeAppearance = 'filled' | 'plain';
+/** Label weight: `semibold` is the quieter trigger label inside the TicketStatusMenu. */
+export type StatusBadgeWeight = 'bold' | 'semibold';
 
 export interface StatusBadgeProps {
   status: TicketStatus;
@@ -12,6 +14,7 @@ export interface StatusBadgeProps {
   appearance?: StatusBadgeAppearance;
   compact?: boolean;
   interactive?: boolean;
+  weight?: StatusBadgeWeight;
   actionLabel?: string;
   slot?: string;
 }
@@ -36,11 +39,12 @@ export function StatusBadge({
   appearance = 'filled',
   compact = false,
   interactive = false,
+  weight = 'bold',
   actionLabel,
   slot,
 }: StatusBadgeProps) {
   const value = statusPresentation(status);
-  const className = `status-badge status-badge--${status} status-badge--${appearance}${compact ? ' status-badge--compact' : ''}${interactive ? ' status-badge--interactive' : ''}`;
+  const className = `status-badge status-badge--${status} status-badge--${appearance}${compact ? ' status-badge--compact' : ''}${interactive ? ' status-badge--interactive' : ''}${weight === 'semibold' ? ' status-badge--semibold' : ''}`;
   const content = (
     <>
       {showIcon && (

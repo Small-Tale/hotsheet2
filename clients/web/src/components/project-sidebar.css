@@ -9,8 +9,8 @@
   row-gap: var(--kui-space-m);
   padding-block: var(--kui-space-xs);
 }
-.project-sidebar__content > .project-summary {
-  width: auto;
+/* App-owned box that insets the ProjectSummary from the pane edge (the summary is not a menu row). */
+.project-sidebar__summary {
   margin-inline: var(--kui-space-xs);
 }
 .project-sidebar__footer-content {
@@ -25,14 +25,12 @@
   line-height: 1.25;
   text-align: center;
 }
+/* The row's grid track sizes the DriveControl; the fixed-position options menu takes no track. */
 .project-sidebar__drive-row {
-  display: flex;
+  display: grid;
   min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--kui-space-xs);
-}
-.project-sidebar__drive-row .drive-control {
-  min-width: 0;
-  flex: 1;
 }
 .project-sidebar__conversation {
   display: grid;

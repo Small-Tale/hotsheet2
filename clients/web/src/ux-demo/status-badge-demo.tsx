@@ -1,7 +1,12 @@
 import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
-import { StatusBadge, type StatusBadgeAppearance, type TicketStatus } from '../components/status-badge';
+import {
+  StatusBadge,
+  type StatusBadgeAppearance,
+  type StatusBadgeWeight,
+  type TicketStatus,
+} from '../components/status-badge';
 import { syncSettingsControls } from './settings-controls';
 
 export const statusBadgeSettings = {
@@ -9,6 +14,7 @@ export const statusBadgeSettings = {
   showIcon: signal(true),
   appearance: signal<StatusBadgeAppearance>('filled'),
   compact: signal(false),
+  weight: signal<StatusBadgeWeight>('bold'),
 };
 
 export function resetStatusBadgeDemo(root?: ParentNode): void {
@@ -16,9 +22,14 @@ export function resetStatusBadgeDemo(root?: ParentNode): void {
   statusBadgeSettings.showIcon.value = true;
   statusBadgeSettings.appearance.value = 'filled';
   statusBadgeSettings.compact.value = false;
+  statusBadgeSettings.weight.value = 'bold';
   if (root)
     syncSettingsControls(root, 'status-badge', {
-      values: { status: statusBadgeSettings.status.value, appearance: statusBadgeSettings.appearance.value },
+      values: {
+        status: statusBadgeSettings.status.value,
+        appearance: statusBadgeSettings.appearance.value,
+        weight: statusBadgeSettings.weight.value,
+      },
       checked: { 'show-icon': statusBadgeSettings.showIcon.value, compact: statusBadgeSettings.compact.value },
     });
 }
@@ -32,6 +43,7 @@ export function StatusBadgeDemo() {
           showIcon: statusBadgeSettings.showIcon.value,
           appearance: statusBadgeSettings.appearance.value,
           compact: statusBadgeSettings.compact.value,
+          weight: statusBadgeSettings.weight.value,
         })}
       </div>
       <p class="component-stage__guidance">
@@ -60,6 +72,15 @@ export function StatusBadgeSettings() {
         choices={[
           { value: 'filled', label: 'Filled' },
           { value: 'plain', label: 'Plain' },
+        ]}
+      />
+      <Select
+        name="weight"
+        label="Weight"
+        value={statusBadgeSettings.weight.value}
+        choices={[
+          { value: 'bold', label: 'Bold' },
+          { value: 'semibold', label: 'Semibold (status menu trigger)' },
         ]}
       />
       <wa-checkbox name="show-icon" checked={statusBadgeSettings.showIcon.value}>

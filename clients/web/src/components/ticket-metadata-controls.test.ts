@@ -96,6 +96,15 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(status).toContain('<wa-option value="archive"');
     expect(status).toContain('data-lucide="badge-check"');
     expect(status.match(/data-lucide=/g)).toHaveLength(7);
+    // Kerf props, not consumer part overrides, drop the trigger chrome and caret; the badge is semibold
+    // through its own prop (HS2-4APEJP).
+    expect(status).toContain('data-presentation="toolbar-borderless"');
+    expect(status).toContain('data-caret="false"');
+    expect(status).toContain('status-badge--semibold');
+    const css = readFileSync(new URL('./ticket-status-menu.css', import.meta.url), 'utf8');
+    expect(css).not.toContain('status-badge');
+    expect(css).not.toMatch(/::part\((start|expand-icon|label)\)/);
+    expect(css).toContain('KF-V2Y51V');
   });
 
   it('renders inspector sections independently of the inspector shell', () => {

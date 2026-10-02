@@ -179,8 +179,10 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'false');
   await expect(page.locator('[data-action="toggle-geometry-overlay"]')).toHaveCount(0);
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  // ProjectTabBar renders two self-bordered specimens; the AppTab demo composes its tabs inside a TabBar
+  // ProjectTabBar renders two specimens; the AppTab demo composes its tabs inside a TabBar
   // (HS2-GX51F7), so the overlay treats that bar as the single specimen and shows no tab borders.
+  // The demo frames each bar in its own rounded stage box, so the overlay reports the bar's real
+  // bottom-only border rather than a demo-imposed outline (HS2-4APEJP).
   await catalog.getByRole('button', { name: /ProjectTabBar/ }).click();
   await expect(page).toHaveURL('/ux-demo?component=project-tabs');
   await expect(page.getByRole('heading', { name: 'ProjectTabBar', exact: true })).toBeVisible();
@@ -189,8 +191,8 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(borders).toHaveCount(2);
   await expect(bounds).toHaveCount(0);
   for (const border of await borders.all()) {
-    for (const side of ['top', 'right', 'bottom', 'left'])
-      await expect(border).toHaveCSS(`border-${side}-width`, '1px');
+    await expect(border).toHaveCSS('border-bottom-width', '1px');
+    for (const side of ['top', 'right', 'left']) await expect(border).toHaveCSS(`border-${side}-width`, '0px');
   }
   await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-borders-wide.png', fullPage: true });
   await catalog.locator('[data-item-id="list"]').click();
@@ -1714,6 +1716,14 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   const appearance = inspector.locator('wa-select[name="appearance"]');
   const icon = inspector.locator('wa-checkbox[name="show-icon"]');
   const compact = inspector.locator('wa-checkbox[name="compact"]');
+  const weight = inspector.locator('wa-select[name="weight"]');
+  await expect(badge).toHaveCSS('font-weight', '700');
+  await weight.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'semibold';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(badge).toHaveClass(/status-badge--semibold/);
+  await expect(badge).toHaveCSS('font-weight', '600');
   await status.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'verified';
     node.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1735,6 +1745,9 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   await expect(appearance).toHaveJSProperty('value', 'filled');
   await expect(icon).toHaveJSProperty('checked', true);
   await expect(compact).toHaveJSProperty('checked', false);
+  await expect(weight).toHaveJSProperty('value', 'bold');
+  await expect(badge).not.toHaveClass(/status-badge--semibold/);
+  await expect(badge).toHaveCSS('font-weight', '700');
   await expect(badge).toContainText('Started');
   await expect(badge).toHaveAttribute('data-appearance', 'filled');
   await expect(badge).not.toHaveClass(/status-badge--compact/);
@@ -3023,8 +3036,10 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
         }
       : null;
   });
-  // Kerf 5.0.0-beta.51 fits the popup trigger to its icon-plus-caret pill (KF-Y3YZBE).
-  expect(caretSpacing).toEqual({ gap: '2px', margin: '2px', width: 44, height: 40 });
+  // Kerf 5.0.0-beta.51 fits the popup trigger to its icon-plus-caret pill (KF-Y3YZBE). The demo stage no
+  // longer restyles the trigger's parts, so this is Kerf's own geometry, as production renders it (HS2-4APEJP).
+  expect(caretSpacing!.height).toBe(40);
+  expect(caretSpacing!.width).toBeGreaterThan(caretSpacing!.height);
   const popupGroupWidth = await groups.nth(1).evaluate((node) => node.getBoundingClientRect().width);
   expect(popupGroupWidth - caretSpacing!.width).toBeCloseTo(4, 0);
   await popup.hover();
@@ -3641,6 +3656,22 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     'data-status',
     'started',
   );
+  // The closed trigger is exactly the semibold badge: Kerf's borderless, caret-free Select plus the
+  // temporary KF-V2Y51V geometry rule leave no chrome around it (HS2-4APEJP).
+  const triggerFit = await statusTrigger.evaluate((node) => {
+    const combobox = node.shadowRoot!.querySelector('[part~="combobox"]')!,
+      badge = node.querySelector<HTMLElement>('[data-component="status-badge"]')!,
+      box = combobox.getBoundingClientRect(),
+      badgeBox = badge.getBoundingClientRect(),
+      style = getComputedStyle(combobox);
+    return {
+      height: Math.round(box.height - badgeBox.height),
+      background: style.backgroundColor,
+      border: style.borderTopWidth,
+      weight: getComputedStyle(badge).fontWeight,
+    };
+  });
+  expect(triggerFit).toEqual({ height: 0, background: 'rgba(0, 0, 0, 0)', border: '0px', weight: '600' });
   await statusTrigger.click();
   await expect(statusTrigger.locator('wa-option [data-lucide]')).toHaveCount(6);
   await expect(statusTrigger.locator('wa-divider')).toHaveCount(1);
@@ -4349,8 +4380,14 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
 test('exercises the five ProjectSidebar component demos and their controlled transitions', async ({ page }) => {
   await page.goto('/ux-demo?component=project-summary');
   const summaries = page.locator('[data-component="project-summary"]');
-  await expect(summaries).toHaveCount(2);
-  const summary = page.locator('[data-component="project-summary"][data-chart-tone="brand"]');
+  await expect(summaries).toHaveCount(3);
+  // The compact size is the terminal operations sidebar's per-project summary (HS2-4APEJP).
+  const compactSummary = page.locator('[data-component="project-summary"][data-size="compact"]');
+  await expect(compactSummary).toHaveCSS('padding', '12px');
+  await expect(compactSummary).toHaveCSS('min-height', '68px');
+  await expect(compactSummary.locator('.project-summary__chart')).toHaveCSS('height', '44px');
+  await expect(compactSummary.locator('[data-background-bar]')).toHaveCount(7);
+  const summary = page.locator('[data-component="project-summary"][data-chart-tone="brand"][data-size="default"]');
   const aggregateSummary = page.locator('[data-component="project-summary"][data-chart-tone="success"]');
   await expect(aggregateSummary.locator('[data-bar="0"]')).toHaveCSS('background-color', 'rgb(52, 199, 89)');
   await expect(summary).toContainText('6 completed today');

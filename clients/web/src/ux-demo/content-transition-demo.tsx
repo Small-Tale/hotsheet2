@@ -46,12 +46,16 @@ export function ContentTransitionDemo() {
             style="crossfade"
             region="footer"
             label="Setup actions transition"
-            a={<wa-button>Cancel</wa-button>}
+            a={
+              <div class="content-transition-demo__footer-actions">
+                <wa-button>Cancel</wa-button>
+              </div>
+            }
             b={
-              <>
+              <div class="content-transition-demo__footer-actions">
                 <wa-button>Skip</wa-button>
                 <wa-button appearance="accent">Connect</wa-button>
-              </>
+              </div>
             }
           />
         </footer>

@@ -225,13 +225,17 @@ does not introduce polling or another network request.
   on one shared numeric domain while retaining safe local scaling elsewhere. Brand and success
   chart-tone variants let an aggregate read separately from its constituent projects. An optional
   aligned background trend draws a slightly wider neutral bar behind each foreground bar, so a
-  project can show its contribution against an aggregate without adding another chart. Both tones
-  variants appear in the catalog. The whole summary is an accessible action that opens the selected project's
+  project can show its contribution against an aggregate without adding another chart. A `size`
+  variant is `default` or `compact`: compact is a shorter (68px minimum, 44px chart) summary with `--kui-space-s`
+  padding, used for the per-project groups stacked in the terminal operations sidebar
+  (HS2-4APEJP). The tones, the background trend, and both sizes appear in the catalog. Hosts inset
+  the summary with their own wrapper, as the project sidebar's `project-sidebar__summary` does, and
+  never restyle its root. The whole summary is an accessible action that opens the selected project's
   statistics surface; HS2-38RJMK owns the full charts behind the current placeholder.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
 - `TerminalOperationsSidebar` — **demo built**: the Terminal Dashboard's left rail
-  reuses `ListHeader` and `ProjectSummary` for each open project. When two or more
+  reuses `ListHeader` and a `size="compact"` `ProjectSummary` for each open project. When two or more
   projects are open, an `All projects` group precedes them and sums aligned trend days,
   completed-today counts, and in-progress counts. The maximum summed daily value becomes the
   shared scale for the aggregate and every constituent chart, making cross-project bar heights
@@ -660,7 +664,10 @@ always retain native clipboard behavior.
   comfortable list width with platform-style replacement, Command/Ctrl toggle, Shift
   range, arrow-key range extension, and Select All semantics and no parallel row
   markup; it fills the width supplied by its host (which owns the standard workspace
-  margins), and the list shell and its first/last rows share rounded outer corners
+  margins), and the list shell and its first/last rows share rounded outer corners. The list never
+  styles its rows: it passes each healthy and corrupt row a `listEdge` (`start`, `end`, or `only`)
+  prop, and the row rounds its own matching corners. The row also owns the overlap of
+  adjacent selected list rows (HS2-4APEJP)
   - composes the shared `TicketEmptyState` when no healthy or corrupt row exists,
     with distinct new-project, empty-view, searching, and no-match language
   - later data integration: virtualization for exceptionally large result sets
@@ -749,7 +756,9 @@ always retain native clipboard behavior.
   is the board's visible width minus 24px so the next column peeks in, and mandatory horizontal
   scroll snapping settles a released scroll or swipe on the nearest column start with a smooth
   animated scroll (instant under `prefers-reduced-motion`). Trailing room lets the last column rest
-  at the same 8px inset. The production app uses `paged` below the mobile breakpoint; the demo
+  at the same 8px inset. A paged board opts each column into snapping through
+  `TicketBoardColumn`'s `scrollSnap` prop rather than styling the column (HS2-4APEJP). The
+  production app uses `paged` below the mobile breakpoint; the demo
   shows both variants. Changing `layout` remounts the board, so a paged scroll offset never leaves
   the grid mid-column.
 - `TicketBoardColumn` — **demo built**: owns one heading, count derived from its ticket
@@ -760,6 +769,8 @@ always retain native clipboard behavior.
   Its semantic `h2` resets inherited browser heading typography and the selectable
   control has an explicit compact 2rem height, so native heading metrics cannot expand
   the board's header track.
+  Its `scrollSnap` prop (default off) makes the column a `scroll-snap-align: start` target
+  for a horizontally scrolling host such as the paged `TicketBoard`.
   It also has a standalone demo that preserves the 250px production minimum and shared
   responsive `TicketRow` composition. Loading and mutation-error variants are tracked
   by HS2-0W67Y6; an empty column intentionally retains only its heading and count.
@@ -1110,7 +1121,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     The A/B side toggle is a Kerf `ToolbarControlGroup` with `selectedChrome="filled"`
     and real `aria-pressed` values, and commit bodies use the inherited-tone, small,
     compact `MarkdownPreview` variants; the review stylesheet styles no other component
-    (HS2-7RY5GK).
+    (HS2-7RY5GK). Its `embedded` presentation (the repository status popover) marks the root
+    `data-embedded` and owns the 16px gap below its heading, so hosts never style its header
+    (HS2-4APEJP).
   - `TicketAttachments` — **demo built**: attachment rows with a subtle count badge beside
     the aligned section heading, plus native browse and drop entry points; no redundant
     total line is rendered below the collection.
@@ -1134,7 +1147,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
     selected-value and popup-option presentations
   - `TicketStatusMenu` — **demo built**: a shared `Select` whose custom selected-value
-    renderer retains the compact `StatusBadge` presentation with lighter typography;
+    renderer retains the `StatusBadge` presentation at its `semibold` weight. Kerf's
+    `presentation="toolbar-borderless"` and `caret={false}` remove the trigger chrome and caret.
+    One temporary trigger-geometry rule (zero min-height, padding, and border width) remains
+    until Kerf ships a bare inline trigger (KF-V2Y51V, HS2-4APEJP);
     every normally weighted popup option carries its semantic Lucide icon, and the
     selected control intentionally hides the redundant dropdown caret. Inspector and
     row-context status menus share one canonical order: Not started, Started,
@@ -1142,8 +1158,8 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     clock metaphor; Archive uses the archive-box metaphor.
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text with status-specific tone,
-    optional reinforcing Lucide icon, filled/plain appearances, and regular/compact
-    sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
+    optional reinforcing Lucide icon, filled/plain appearances, regular/compact
+    sizing, and a bold (default) or `semibold` label `weight`; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
   - `ConfidenceCalibration` — **built** (`components/confidence-calibration.tsx`,
     HS2-Q1WCCY): a project's per-band calibration table, with a reopen-rate bar and
     recent completions. Its `/ux-demo` entry exposes the report, empty, loading, and error

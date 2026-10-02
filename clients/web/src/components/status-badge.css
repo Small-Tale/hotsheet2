@@ -63,6 +63,9 @@
   width: remify(12px);
   height: remify(12px);
 }
+.status-badge--semibold {
+  font-weight: 600;
+}
 .status-badge--interactive {
   border: 0;
   appearance: none;

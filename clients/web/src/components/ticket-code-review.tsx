@@ -63,6 +63,7 @@ export function TicketCodeReview({
     <div
       class={`${embedded ? '' : 'ticket-inspector__content '}ticket-code-review`}
       data-component="ticket-code-review"
+      data-embedded={embedded ? 'true' : undefined}
     >
       <section>
         <div class="ticket-code-review__header">

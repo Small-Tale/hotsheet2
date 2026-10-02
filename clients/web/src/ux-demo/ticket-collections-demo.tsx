@@ -334,19 +334,25 @@ export function TicketBoardDemo() {
   ];
   return (
     <section class="collection-demo collection-demo--board" aria-label="TicketBoard demo">
-      <TicketBoard columns={columns} label="Example status board" />
+      <div class="collection-demo__board-stage">
+        <TicketBoard columns={columns} label="Example status board" />
+      </div>
       <article class="collection-demo__paged-board">
         <h3>Paged layout</h3>
         <p>Phone widths show one column at a time and snap to the nearest column when a swipe is released.</p>
-        <TicketBoard columns={columns} layout="paged" label="Paged status board" />
+        <div class="collection-demo__board-stage">
+          <TicketBoard columns={columns} layout="paged" label="Paged status board" />
+        </div>
       </article>
       <article class="collection-demo__empty-board">
         <h3>Empty search</h3>
-        <TicketBoard
-          columns={columns.map((column) => ({ ...column, tickets: [] }))}
-          emptyState={{ kind: 'search', query: 'parser' }}
-          label="Empty search board"
-        />
+        <div class="collection-demo__board-stage">
+          <TicketBoard
+            columns={columns.map((column) => ({ ...column, tickets: [] }))}
+            emptyState={{ kind: 'search', query: 'parser' }}
+            label="Empty search board"
+          />
+        </div>
       </article>
       <p class="component-stage__event" aria-live="polite">
         {collectionEvent.value}
@@ -363,7 +369,9 @@ export function TicketBoardColumnDemo() {
   const tickets = collectionTickets.value.filter((ticket) => ticket.status === 'started');
   return (
     <section class="collection-demo collection-demo--column" aria-label="TicketBoardColumn demo">
-      <TicketBoardColumn id="in-progress-demo" title="In progress" tickets={tickets} />
+      <div class="collection-demo__column-stage">
+        <TicketBoardColumn id="in-progress-demo" title="In progress" tickets={tickets} />
+      </div>
       <p class="component-stage__event" aria-live="polite">
         {collectionEvent.value}
       </p>

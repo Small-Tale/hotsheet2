@@ -11,6 +11,10 @@
   font: inherit;
   text-align: left;
 }
+.project-summary[data-size='compact'] {
+  min-height: remify(68px);
+  padding: var(--kui-space-s);
+}
 .project-summary__content {
   display: grid;
   width: 100%;
@@ -31,6 +35,9 @@
   height: remify(51.2px);
   align-items: end;
   gap: remify(4.8px);
+}
+.project-summary[data-size='compact'] .project-summary__chart {
+  height: remify(44px);
 }
 .project-summary__bar-slot {
   position: relative;

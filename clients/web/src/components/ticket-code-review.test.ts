@@ -51,6 +51,16 @@ describe('TicketCodeReview', () => {
     expect(markup).toContain('role="heading" aria-level="2"');
     expect(markup).toContain('class="kui-toolbar-text" data-component="toolbar-text" data-size="small"');
     expect(markup).toContain('<div class="ticket-code-review__header"><header class="kui-toolbar"');
+    // The embedded review owns its heading spacing; hosts such as the repository popover never reach in
+    // (HS2-4APEJP).
+    expect(markup).not.toContain('data-embedded');
+    expect(String(TicketCodeReview({ review, embedded: true }))).toContain('data-embedded="true"');
+    expect(css).toMatch(
+      /\.ticket-code-review\[data-embedded='true'\] \.ticket-code-review__header \{[^}]*margin-bottom: var\(--kui-space-m\)/,
+    );
+    expect(readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8')).not.toContain(
+      'ticket-code-review',
+    );
     expect(css).toMatchSource(/__evidence \{[^}]*margin-bottom: var\(--kui-space-m\); padding: var\(--kui-space-xs\)/);
     expect(css).toMatch(/__evidence-grid span \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).toMatchSource(

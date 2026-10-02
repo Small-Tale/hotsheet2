@@ -27,7 +27,7 @@
 }
 /* Paged layout (HS2-ZYJMDP): each column is nearly the board's visible width, so the next column
    peeks in at the edge. Mandatory snapping lets the browser settle a released drag, swipe, or
-   momentum scroll onto the nearest column start with its own animated scroll. */
+   momentum scroll onto the nearest column start (each column opts in with `scrollSnap`). */
 .ticket-board[data-layout='paged'] {
   container-type: inline-size;
   overscroll-behavior-x: contain;
@@ -47,9 +47,6 @@
   grid-template-columns: none;
   /* Trailing room (the peek plus the board inset) lets the last column also snap to the leading inset. */
   padding-inline-end: remify(24px);
-}
-.ticket-board[data-layout='paged'] .ticket-board-column {
-  scroll-snap-align: start;
 }
 @media (prefers-reduced-motion: reduce) {
   .ticket-board[data-layout='paged'] {

@@ -17,6 +17,22 @@
   outline: none;
   user-select: none;
 }
+/* A list section clips to a rounded box; the rows at its edges round to match (HS2-4APEJP). */
+.ticket-list-row[data-list-edge='start'] {
+  border-radius: remify(10.4px) remify(10.4px) 0 0;
+}
+.ticket-list-row[data-list-edge='end'] {
+  border-radius: 0 0 remify(10.4px) remify(10.4px);
+}
+.ticket-list-row[data-list-edge='only'] {
+  border-radius: remify(10.4px);
+}
+/* Adjacent selected list rows overlap their shared border so the pair reads as one selection. */
+.ticket-list-row-container:has(> .ticket-list-row--list.ticket-list-row--selected)
+  + .ticket-list-row-container:has(> .ticket-list-row--list.ticket-list-row--selected) {
+  position: relative;
+  margin-top: var(--hs-selected-row-overlap);
+}
 .ticket-list-row:hover {
   border-color: var(--wa-color-brand-border-normal);
 }

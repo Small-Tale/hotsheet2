@@ -19,6 +19,11 @@ import { TagChip } from './tag-chip';
 
 export type TicketPriority = 'low' | 'default' | 'high' | 'urgent';
 export type TicketRowPresentation = 'list' | 'column';
+/**
+ * Where a list row sits against its rounded, clipping list container: its matching corners round so the
+ * row's hover and selection border follows the container's curve (HS2-4APEJP).
+ */
+export type TicketRowListEdge = 'start' | 'end' | 'only';
 
 export interface TicketRowProps {
   slug: string;
@@ -49,6 +54,7 @@ export interface TicketRowProps {
   latestConfidence?: number;
   cutPending?: boolean;
   presentation?: TicketRowPresentation;
+  listEdge?: TicketRowListEdge;
 }
 
 export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;
@@ -144,6 +150,7 @@ export function TicketRow(raw: TicketRowProps) {
         class={`ticket-list-row ticket-list-row--${props.presentation}${props.selected ? ' ticket-list-row--selected' : ''}`}
         data-component="ticket-list-row"
         data-presentation={props.presentation}
+        data-list-edge={props.listEdge}
         data-status={props.status}
         data-ticket-slug={props.slug}
         data-attachment-drop-target="true"

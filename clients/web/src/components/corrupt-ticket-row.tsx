@@ -6,6 +6,7 @@ import { Bot, FileWarning, FolderOpen, RefreshCw } from 'lucide';
 import type { CorruptTicket } from '../api';
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
+import type { TicketRowListEdge } from './ticket-row';
 
 const filename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1);
 
@@ -58,10 +59,13 @@ export function CorruptTicketRow({
   ticket,
   recovery,
   selected = false,
+  listEdge,
 }: {
   ticket: CorruptTicket;
   recovery?: CorruptTicketRecoveryState;
   selected?: boolean;
+  /** Rounds the row's corners at the edge of its clipping list section, as TicketRow does. */
+  listEdge?: TicketRowListEdge;
 }) {
   const identity = corruptTicketIdentity(ticket);
   const upgradeRequired = ticket.error_code === 'upgrade_required';
@@ -70,6 +74,7 @@ export function CorruptTicketRow({
     <article
       class={`ticket-list-row ticket-list-row--list corrupt-ticket-row${selected ? ' ticket-list-row--selected' : ''}`}
       data-component="corrupt-ticket-row"
+      data-list-edge={listEdge}
       data-selected={String(selected)}
       role="group"
       aria-label={`Unreadable ticket ${identity}`}

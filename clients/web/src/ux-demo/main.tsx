@@ -1055,11 +1055,15 @@ function demoContent(item: DemoDefinition) {
       <section class="terminal-key-bar-demo" aria-label="Terminal key bar variants">
         <div>
           <h2>Keys</h2>
-          <TerminalKeyBar modifiers={keyBarDemoModifiers.value} functionRow={keyBarDemoFunctionRow.value} />
+          <div class="terminal-key-bar-demo__frame">
+            <TerminalKeyBar modifiers={keyBarDemoModifiers.value} functionRow={keyBarDemoFunctionRow.value} />
+          </div>
         </div>
         <div>
           <h2>Function row</h2>
-          <TerminalKeyBar modifiers={{ ctrl: 'once', alt: 'locked', shift: 'off' }} functionRow />
+          <div class="terminal-key-bar-demo__frame">
+            <TerminalKeyBar modifiers={{ ctrl: 'once', alt: 'locked', shift: 'off' }} functionRow />
+          </div>
         </div>
         <p class="component-stage__event" data-key-bar-demo-output>
           {keyBarDemoOutput.value || 'Tap a key to see the bytes it sends.'}
@@ -2431,6 +2435,8 @@ demoListeners.add(
       statusBadgeSettings.status.value = control.value as typeof statusBadgeSettings.status.value;
     if (control.getAttribute('name') === 'appearance')
       statusBadgeSettings.appearance.value = control.value as typeof statusBadgeSettings.appearance.value;
+    if (control.getAttribute('name') === 'weight')
+      statusBadgeSettings.weight.value = control.value as typeof statusBadgeSettings.weight.value;
     if (control.getAttribute('name') === 'show-icon') statusBadgeSettings.showIcon.value = control.checked;
     if (control.getAttribute('name') === 'compact') statusBadgeSettings.compact.value = control.checked;
   }),

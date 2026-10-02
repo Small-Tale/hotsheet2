@@ -184,7 +184,9 @@ export function PermissionRequestDemo() {
           layer={permissionRequestSettings.presentation.value === 'top-layer' ? 'top' : 'inline'}
         />
       ) : (
-        <PermissionRequestCard {...props} presentation="list" />
+        <div class="permission-request-demo__list">
+          <PermissionRequestCard {...props} presentation="list" />
+        </div>
       )}
     </section>
   );

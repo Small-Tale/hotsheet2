@@ -101,11 +101,13 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
   );
   const content = (
     <div class="project-sidebar__content">
-      <ProjectSummary
-        completedToday={props.completedToday}
-        inProgress={props.inProgress}
-        trend={props.completionTrend}
-      />
+      <div class="project-sidebar__summary">
+        <ProjectSummary
+          completedToday={props.completedToday}
+          inProgress={props.inProgress}
+          trend={props.completionTrend}
+        />
+      </div>
       <RepositorySummary
         branch={props.branch}
         unpushed={props.unpushed}

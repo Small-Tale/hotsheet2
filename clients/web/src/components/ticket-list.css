@@ -15,31 +15,8 @@
   min-width: 0;
   min-height: 0;
 }
-.ticket-list__tickets:has(> .ticket-empty-state) {
+.ticket-list[data-empty='true'] > .ticket-list__tickets {
   min-height: remify(288px);
-}
-.ticket-list__diagnostics > .corrupt-ticket-row:first-child {
-  border-start-start-radius: remify(10.4px);
-  border-start-end-radius: remify(10.4px);
-}
-.ticket-list__diagnostics > .corrupt-ticket-row:last-child {
-  border-end-start-radius: remify(10.4px);
-  border-end-end-radius: remify(10.4px);
-}
-.ticket-list__tickets > .ticket-list-row-container:first-child .ticket-list-row {
-  border-radius: remify(10.4px) remify(10.4px) 0 0;
-}
-.ticket-list__tickets > .ticket-list-row-container:last-child .ticket-list-row {
-  border-radius: 0 0 remify(10.4px) remify(10.4px);
-}
-.ticket-list__tickets > .ticket-list-row-container:only-child .ticket-list-row {
-  border-radius: remify(10.4px);
-}
-.ticket-list__tickets
-  > .ticket-list-row-container:has(> .ticket-list-row--selected)
-  + .ticket-list-row-container:has(> .ticket-list-row--selected) {
-  position: relative;
-  margin-top: var(--hs-selected-row-overlap);
 }
 .ticket-list__progress {
   padding: var(--kui-space-m);

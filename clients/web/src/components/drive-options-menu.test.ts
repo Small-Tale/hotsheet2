@@ -82,5 +82,7 @@ describe('DriveOptionsMenu', () => {
     expect(css).not.toContain('wa-dropdown-item');
     expect(css).not.toContain('wa-divider');
     expect(css).toContainSource('.drive-options-menu { position:fixed; z-index:80; width:1px; height:1px; }');
+    // The fixed menu needs no positioned ancestor, so it styles nothing outside its own wrapper (HS2-4APEJP).
+    expect(css).not.toContain('project-sidebar');
   });
 });

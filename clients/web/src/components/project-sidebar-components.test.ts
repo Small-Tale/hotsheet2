@@ -421,7 +421,11 @@ describe('ProjectSidebar component slice', () => {
     expect(shell).not.toContain('--kui-layout-inline-margin');
     expect(shell).not.toContain('--kui-layout-item-padding');
     // Non-menu content children self-inset instead of leaning on the shell.
-    expect(css).toMatch(/\.project-sidebar__content > \.project-summary \{[^}]*margin-inline: var\(--kui-space-xs\)/);
+    // The app-owned summary box insets the ProjectSummary; the sidebar styles no child component (HS2-4APEJP).
+    expect(markup).toContain('<div class="project-sidebar__summary"><button type="button" class="project-summary"');
+    expect(css).toMatch(/\.project-sidebar__summary \{[^}]*margin-inline: var\(--kui-space-xs\)/);
+    expect(css).not.toMatch(/\.(project-summary|drive-control)\b/);
+    expect(css).toMatch(/\.project-sidebar__drive-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto/);
     expect(css).toMatch(/\.project-sidebar__footer-content \{[^}]*padding: var\(--kui-space-xs\)/);
     // Kerf's Toolbar pins its zones to their columns, so the lone collapse control already sits at the
     // gutter; the app adds no rule on the pane header toolbar (HS2-PKPGGZ).

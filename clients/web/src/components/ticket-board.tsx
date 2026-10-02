@@ -40,7 +40,7 @@ export function TicketBoard({ columns, label = 'Ticket board', emptyState, layou
       >
         {/* Each column carries its own continuation so every column paginates independently (HS2-8NBGBX). */}
         {columns.map((column) => (
-          <TicketBoardColumn {...column} selectionRoot={false} />
+          <TicketBoardColumn {...column} selectionRoot={false} scrollSnap={layout === 'paged'} />
         ))}
       </div>
       {empty && emptyState && (
