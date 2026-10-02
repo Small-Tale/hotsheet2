@@ -34,6 +34,7 @@ import {
 } from 'lucide';
 
 import type { CodeReview, CodeReviewFile, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
+import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { RepositorySetup, type RepositorySetupStep } from './repository-setup';
 import { type CodeReviewComparison, TicketCodeReview } from './ticket-code-review';
 
@@ -144,7 +145,7 @@ export function RepositoryStatusPopover({
         <ToolbarControlGroup label="Repository comparison" buttonAppearance="push" single>
           <button
             type="button"
-            data-action="toggle-repository-comparison"
+            {...REPOSITORY_ACTIONS.toggleRepositoryComparison.attrs}
             aria-label="Compare two commits"
             title="Compare two commits"
             aria-pressed={String(comparison.active)}
@@ -157,7 +158,7 @@ export function RepositoryStatusPopover({
         <button
           type="button"
           class="repository-status-popover__refresh"
-          data-action="refresh-repository-status"
+          {...REPOSITORY_ACTIONS.refreshRepositoryStatus.attrs}
           disabled={refreshing}
           aria-label={refreshing ? 'Refreshing repository status' : 'Refresh repository status'}
         >
@@ -382,7 +383,7 @@ function RepositoryFileList({
             trailing={
               <span
                 class="repository-status-popover__file-menu-trigger"
-                data-action="open-repository-file-menu-trigger"
+                {...REPOSITORY_ACTIONS.openRepositoryFileMenuTrigger.attrs}
                 data-item-id={file.path}
                 data-file-menu-source="repository"
                 role="button"
@@ -526,7 +527,7 @@ function CodeReviewFileList({
           trailing={
             <span
               class="repository-status-popover__file-menu-trigger"
-              data-action="open-repository-file-menu-trigger"
+              {...REPOSITORY_ACTIONS.openRepositoryFileMenuTrigger.attrs}
               data-item-id={file.path}
               data-file-menu-source="ticket"
               role="button"

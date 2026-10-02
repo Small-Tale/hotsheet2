@@ -4,6 +4,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Square, X } from 'lucide';
 
 import type { CommandDefinition, CommandRun } from '../api';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 
 export function CommandRunDialog({
   command,
@@ -21,13 +22,13 @@ export function CommandRunDialog({
         <h2>Stop {command.title}?</h2>
         <p>The command is still running. Stop it now?</p>
         <footer class="command-run-dialog__actions">
-          <button type="button" data-action="dismiss-command-dialog">
+          <button type="button" {...COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.attrs}>
             Keep running
           </button>
           <button
             type="button"
             class="command-run-dialog__stop"
-            data-action="confirm-stop-command"
+            {...COMMANDS_AND_AI_ACTIONS.confirmStopCommand.attrs}
             data-run-id={run?.id}
           >
             <LucideIcon icon={Square} name="square" /> Stop command
@@ -48,7 +49,7 @@ export function CommandRunDialog({
           : 'No output recorded.'}
       </pre>
       <footer class="command-run-dialog__actions">
-        <button type="button" data-action="dismiss-command-dialog">
+        <button type="button" {...COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.attrs}>
           <LucideIcon icon={X} name="x" /> Close
         </button>
       </footer>

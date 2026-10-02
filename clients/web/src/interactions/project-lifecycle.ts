@@ -2,6 +2,7 @@ import { delegate, type Signal } from 'kerfjs';
 
 import { isRemoteClient } from '../client-origin';
 import { type ExternalProviderKind } from '../components/provider-setup-form';
+import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
 import { type MigrationJobClient } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
 import { dismissHs1CleanupPrompt, dismissHs1MigrationPrompt } from '../workspace-session';
@@ -79,30 +80,30 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     recoverUnhealthyProjectServer,
   } = dependencies;
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="add-project"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.addProject.selector, () => {
       openProjectPicker();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="choose-project"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.chooseProject.selector, () => {
       if (isRemoteClient()) void openRemoteProjectDialog();
       else void chooseAndOpenProject();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-open-project"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.cancelOpenProject.selector, () => {
       unhealthyServerRecovery.value = undefined;
       projectDialogOpen.value = false;
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-remote-checkout"]', (_event, target) => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.openRemoteCheckout.selector, (_event, target) => {
       const root = data(target.closest<HTMLElement>('[data-checkout-root]')!).checkoutRoot;
       if (root) void openRemoteCheckout(root);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-remote-project"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.cancelRemoteProject.selector, () => {
       remoteProjectDialogOpen.value = false;
     }),
   );
@@ -118,18 +119,18 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="import-hs1-project"]', (event, target) => {
+    delegate(document.body, 'submit', PROJECT_LIFECYCLE_ACTIONS.importHs1Project.selector, (event, target) => {
       event.preventDefault();
       void importHs1Project(target as HTMLFormElement);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="browse-hs1-ticket-store"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.browseHs1TicketStore.selector, () => {
       void chooseHs1TicketStore();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="dismiss-hs1-migration"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissHs1Migration.selector, () => {
       const target = hs1MigrationProject.value;
       if (!target || hs1MigrationBusy.value) return;
       dismissHs1MigrationPrompt(localStorage, target.id, hs1SourceIdentity(target));
@@ -137,7 +138,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', '[data-component="hs1-migration-dialog"]', () => {
+    delegate(document.body, 'wa-hide', PROJECT_LIFECYCLE_TARGETS.hs1MigrationDialog.selector, () => {
       const target = hs1MigrationProject.value;
       if (!target || hs1MigrationBusy.value) return;
       dismissHs1MigrationPrompt(localStorage, target.id, hs1SourceIdentity(target));
@@ -145,7 +146,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-hs1-migration"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.openHs1Migration.selector, () => {
       const current = project();
       if (!current?.needsHs1Migration) return;
       hs1MigrationProject.value = current;
@@ -157,13 +158,13 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="migration-job-details"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.migrationJobDetails.selector, () => {
       const root = project()?.root;
       if (root) migrationJobDetails.value = { ...migrationJobDetails.value, [root]: !migrationJobDetails.value[root] };
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="reconnect-migration-job"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.reconnectMigrationJob.selector, () => {
       const root = project()?.root;
       if (root)
         void migrationJobs.join(root).catch((reason: unknown) => {
@@ -172,7 +173,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="retry-migration-job"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.retryMigrationJob.selector, () => {
       const target = project(),
         job = target && migrationJobsByRoot.value[target.root];
       if (target && job)
@@ -194,7 +195,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="backup-migration-job"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.backupMigrationJob.selector, () => {
       const target = project(),
         job = target && migrationJobsByRoot.value[target.root];
       if (!target || !job || job.status === 'running' || (job.kind === 'import' && job.status !== 'succeeded')) return;
@@ -204,12 +205,12 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="remove-hs1-data"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.removeHs1Data.selector, () => {
       void removeOldHs1Data();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="dismiss-project-setup-warning"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissProjectSetupWarning.selector, () => {
       const current = project();
       if (!current) return;
       projects.value = projects.value.map((item) =>
@@ -218,7 +219,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="dismiss-hs1-cleanup"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissHs1Cleanup.selector, () => {
       const current = project();
       if (!current) return;
       dismissHs1CleanupPrompt(localStorage, current.id, hs1SourceIdentity(current));
@@ -238,7 +239,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="dismiss-ticket-source-setup"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.selector, () => {
       ticketSourceSetupProject.value = undefined;
       providerSetupKind.value = undefined;
       providerEditingId.value = undefined;
@@ -248,45 +249,45 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="submit-ticket-store-remote"]', () =>
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.submitTicketStoreRemote.selector, () =>
       document.querySelector<HTMLFormElement>('#ticket-source-remote-form')?.requestSubmit(),
     ),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="connect-ticket-store-remote"]', (event, target) => {
+    delegate(document.body, 'submit', PROJECT_LIFECYCLE_ACTIONS.connectTicketStoreRemote.selector, (event, target) => {
       event.preventDefault();
       void connectCreatedGitRemote(target as HTMLFormElement);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="back-ticket-store-remote"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.backTicketStoreRemote.selector, () => {
       ticketSourceSetupNavigation.value = 'pop';
       createdGitTicketStore.value = '';
       ticketSourceRemoteError.value = '';
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="create-project-git-source"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.createProjectGitSource.selector, () => {
       void createProjectGitSource();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="create-project-git-source-custom"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.createProjectGitSourceCustom.selector, () => {
       void createProjectGitSource(true);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="browse-project-path"]', (_event, target) => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.selector, (_event, target) => {
       void chooseProjectPath(target);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="recover-unhealthy-server"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.recoverUnhealthyServer.selector, () => {
       void recoverUnhealthyProjectServer();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="reload-client"]', () => {
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.reloadClient.selector, () => {
       window.location.reload();
     }),
   );

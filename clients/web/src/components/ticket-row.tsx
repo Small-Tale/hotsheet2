@@ -4,6 +4,8 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ChevronDown, ChevronsUp, ChevronUp, CircleAlert, type IconNode, Minus, Star } from 'lucide';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
+import { SEARCH_AND_COMPOSER_ACTIONS } from '../interaction-attrs/search-and-composer';
+import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { ActiveClaimSpinner, ClaimEta } from './active-claim';
 import {
   categoryAbbreviation,
@@ -148,7 +150,7 @@ export function TicketRow(raw: TicketRowProps) {
         data-selected={String(props.selected)}
         data-busy={String(props.busy)}
         data-cut-pending={String(Boolean(props.cutPending))}
-        data-action="select-ticket-row"
+        {...TICKET_SELECTION_ACTIONS.selectTicketRow.attrs}
         aria-label={`${props.slug}: ${props.title}`}
         aria-selected={String(props.selected)}
         role="option"
@@ -187,7 +189,7 @@ export function TicketRow(raw: TicketRowProps) {
                 <button
                   type="button"
                   class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`}
-                  data-action="toggle-row-up-next"
+                  {...SEARCH_AND_COMPOSER_ACTIONS.toggleRowUpNext.attrs}
                   aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
                   title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
                 >

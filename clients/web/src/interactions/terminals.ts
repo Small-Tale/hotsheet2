@@ -8,6 +8,7 @@ import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../c
 import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
+import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { type DrawerAIChat } from '../project-drive';
 import { adjustTerminalFit, terminalGridBasis } from '../terminal-grid-layout';
 import {
@@ -180,7 +181,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="exit-terminal-focus-mode"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.exitTerminalFocusMode.selector, () => {
       terminalModifiers.value = NO_TERMINAL_MODIFIERS;
       terminalFunctionRow.value = false;
       const current = project(),
@@ -192,7 +193,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="zoom-terminal-grid"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.zoomTerminalGrid.selector, (_event, target) => {
       const drawer = Boolean(target.closest('[data-component="terminal-drawer"]')),
         bounds = drawer ? terminalDrawerBounds.value : terminalDashboardSize.value,
         basis = drawer ? 'high' : terminalGridBasis(bounds.height),
@@ -210,7 +211,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="preview-terminal"]', (event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.previewTerminal.selector, (event, target) => {
       if ((event.target as Element).closest('button') || (event as MouseEvent).detail > 1) return;
       if (dependencies.terminalPreviewClickTimer !== undefined)
         window.clearTimeout(dependencies.terminalPreviewClickTimer);
@@ -225,7 +226,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-action="preview-terminal"]', (event, target) => {
+    delegate(document.body, 'keydown', TERMINALS_ACTIONS.previewTerminal.selector, (event, target) => {
       const keyboard = event as KeyboardEvent;
       if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
       event.preventDefault();
@@ -237,7 +238,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-component="terminal-tile"]', (event, target) => {
+    delegate(document.body, 'dblclick', TERMINALS_TARGETS.terminalTile.selector, (event, target) => {
       if (data(target).magnified === 'true') return;
       event.preventDefault();
       if (dependencies.terminalPreviewClickTimer !== undefined) {
@@ -255,7 +256,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'contextmenu', '[data-component="terminal-tile"]', (event, target) => {
+    delegate(document.body, 'contextmenu', TERMINALS_TARGETS.terminalTile.selector, (event, target) => {
       if (data(target).magnified === 'true') return;
       event.preventDefault();
       const pointer = event as MouseEvent;
@@ -269,7 +270,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-terminal-context-menu"]', (event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.openTerminalContextMenu.selector, (event, target) => {
       event.preventDefault();
       const box = target.getBoundingClientRect();
       terminalContextMenu.value = {
@@ -282,7 +283,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="dismiss-magnified-terminal"]', (event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.dismissMagnifiedTerminal.selector, (event, target) => {
       // Only the desktop scrim dismisses on click-away. The phone overlay is a full-bleed terminal
       // whose blackout backdrop and safe-area insets are not a scrim, and it has an explicit Close
       // (HS2-SB1FSQ).
@@ -296,7 +297,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalFunctionRow.value = false;
   };
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="close-magnified-terminal"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.closeMagnifiedTerminal.selector, () => {
       magnifiedTerminalKey.value = undefined;
       resetKeyBar();
     }),
@@ -305,7 +306,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   // dispatched for touch taps) keeps the terminal's textarea focused so the soft keyboard stays up, and
   // each action restores that focus if something else took it.
   lifetime.add(
-    delegate(document.body, 'mousedown', '[data-component="terminal-key-bar"]', (event) => {
+    delegate(document.body, 'mousedown', TERMINALS_TARGETS.terminalKeyBar.selector, (event) => {
       event.preventDefault();
     }),
   );
@@ -320,14 +321,14 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     if (input && document.activeElement !== input) input.focus({ preventScroll: true });
   };
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-terminal-modifier"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalModifier.selector, (_event, target) => {
       const modifier = data(target).modifier as TerminalModifier | undefined;
       if (modifier) terminalModifiers.value = toggleTerminalModifier(terminalModifiers.value, modifier);
       keepTerminalFocus(keyBarViewport(target));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-terminal-function-row"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalFunctionRow.selector, (_event, target) => {
       terminalFunctionRow.value = !terminalFunctionRow.value;
       // Each row starts at its leading edge, so a swapped row never opens mid-scroll.
       target.closest('[data-component="terminal-key-bar"]')?.scrollTo({ left: 0 });
@@ -335,7 +336,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="send-terminal-key"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.sendTerminalKey.selector, (_event, target) => {
       const key = data(target).key as TerminalSpecialKey | undefined,
         viewport = keyBarViewport(target);
       if (key && viewport) viewport.dispatchEvent(new CustomEvent(TERMINAL_KEY_EVENT, { detail: { key } }));
@@ -343,12 +344,12 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cycle-mobile-terminal-columns"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.cycleMobileTerminalColumns.selector, () => {
       cycleMobileTerminalColumns();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="hide-dashboard-terminal"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.hideDashboardTerminal.selector, (_event, target) => {
       const key = data(target).terminalKey ?? data(target).itemId,
         scope = terminalVisibilityScopeFor(target),
         active = activeTerminalVisibilityGroup(terminalVisibility.value, scope);
@@ -361,7 +362,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalVisibilityFilter.value = types;
   });
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-terminal-visibility"]', (event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.openTerminalVisibility.selector, (event, target) => {
       event.stopImmediatePropagation();
       terminalVisibilityContextMenu.value = undefined;
       terminalVisibilityFilter.value = TERMINAL_VISIBILITY_TYPES;
@@ -377,14 +378,14 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[name="terminal-visibility-group"]', (_event, target) => {
+    delegate(document.body, 'change', TERMINALS_TARGETS.terminalVisibilityGroupField.selector, (_event, target) => {
       const scope = terminalVisibilityScopeFor(target),
         id = (target as Control).value;
       persistTerminalVisibility(selectTerminalVisibilityGroup(terminalVisibility.value, scope, id));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-terminal-visibility-tab"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.selectTerminalVisibilityTab.selector, (_event, target) => {
       const scope = terminalVisibilityDialogScope.value,
         id = data(target).itemId;
       terminalVisibilityContextMenu.value = undefined;
@@ -403,7 +404,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="add-terminal-visibility-group"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.addTerminalVisibilityGroup.selector, () => {
       terminalVisibilityContextMenu.value = undefined;
       terminalVisibilityNamePrompt.value = { mode: 'add', value: '' };
       requestAnimationFrame(() =>
@@ -414,7 +415,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="rename-terminal-visibility-group"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.renameTerminalVisibilityGroup.selector, () => {
       const menu = terminalVisibilityContextMenu.value,
         group = terminalVisibility.value.groups.find((item) => item.id === menu?.id);
       terminalVisibilityContextMenu.value = undefined;
@@ -428,14 +429,14 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="remove-terminal-visibility-group"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.removeTerminalVisibilityGroup.selector, () => {
       const id = terminalVisibilityContextMenu.value?.id;
       terminalVisibilityContextMenu.value = undefined;
       if (id) persistTerminalVisibility(removeTerminalVisibilityGroup(terminalVisibility.value, id));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="submit-terminal-visibility-name"]', (event, target) => {
+    delegate(document.body, 'submit', TERMINALS_ACTIONS.submitTerminalVisibilityName.selector, (event, target) => {
       event.preventDefault();
       const prompt = terminalVisibilityNamePrompt.value,
         scope = terminalVisibilityDialogScope.value,
@@ -450,7 +451,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-terminal-visibility-name"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.cancelTerminalVisibilityName.selector, () => {
       terminalVisibilityNamePrompt.value = undefined;
     }),
   );
@@ -460,7 +461,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-terminal-visibility"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalVisibility.selector, (_event, target) => {
       const scope = terminalVisibilityDialogScope.value,
         key = data(target).itemId;
       if (!scope || !key) return;
@@ -491,17 +492,17 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-terminal-project"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.openTerminalProject.selector, (_event, target) => {
       openTerminalInProject(data(target).terminalKey ?? data(target).itemId!);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-grid-ai-chat"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.openGridAiChat.selector, (_event, target) => {
       openGridAIChat(data(target).projectId!, data(target).chatId!);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-component="workspace-chat-tile"]', (event, target) => {
+    delegate(document.body, 'keydown', TERMINALS_TARGETS.workspaceChatTile.selector, (event, target) => {
       const keyboard = event as KeyboardEvent;
       if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
       event.preventDefault();
@@ -509,12 +510,12 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-terminal-drawer"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalDrawer.selector, () => {
       setTerminalDrawerVisible(!terminalDrawerVisible.value);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-action="toggle-terminal-drawer-maximize"]', (event) => {
+    delegate(document.body, 'dblclick', TERMINALS_ACTIONS.toggleTerminalDrawerMaximize.selector, (event) => {
       if ((event.target as Element).closest('button, input, textarea, select, a, [data-tab-kind="terminal"]')) return;
       toggleTerminalDrawerMaximized();
     }),
@@ -527,7 +528,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-drawer-item"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.selectDrawerItem.selector, (_event, target) => {
       const tab = target.closest<HTMLElement>('[data-tab-kind]');
       selectDrawerItem(tab?.dataset.terminalId || tab?.dataset.chatId || data(target).itemId || 'grid');
     }),
@@ -540,7 +541,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     allowInterruptedDrawerPopupShow(menu);
   });
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="create-terminal-drawer-item"]', (event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.createTerminalDrawerItem.selector, (event, target) => {
       const kind = data(target).itemId as 'default-shell' | 'ai-shell' | 'ai-chat';
       if (kind === 'default-shell') {
         void createProjectTerminal();
@@ -553,23 +554,23 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-saved-conversation"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.openSavedConversation.selector, () => {
       void openSavedConversation();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="create-project-terminal"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.createProjectTerminal.selector, () => {
       void createProjectTerminal();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="close-project-tab"]', (event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.closeProjectTab.selector, (event, target) => {
       event.stopPropagation();
       requestProjectClose([data(target.closest<HTMLElement>('[data-tab-kind="project"]')!).projectId!]);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-project-close-resource"]', (_event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.selectProjectCloseResource.selector, (_event, target) => {
       const state = projectCloseDialog.value,
         key = data(target).itemId;
       if (!state || !key || key === state.selectedKey) return;
@@ -578,33 +579,33 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-project-close"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.cancelProjectClose.selector, () => {
       cancelProjectClose();
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', '[data-component="project-close-dialog"]', () => {
+    delegateCapture(document.body, 'wa-hide', TERMINALS_TARGETS.projectCloseDialog.selector, () => {
       if (!projectCloseDialog.value?.operation) cancelProjectClose();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="confirm-close-project"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.confirmCloseProject.selector, () => {
       confirmProjectClose();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="close-all-project-resources"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.closeAllProjectResources.selector, () => {
       void closeAllProjectResources();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="close-terminal-tab"]', (event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.closeTerminalTab.selector, (event, target) => {
       event.stopPropagation();
       void closeTerminalIds([data(target.closest<HTMLElement>('[data-tab-kind="terminal"]')!).terminalId!]);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="close-ai-chat-tab"]', (event, target) => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.closeAiChatTab.selector, (event, target) => {
       event.stopPropagation();
       closeDrawerAIChat(data(target.closest<HTMLElement>('[data-tab-kind="ai-chat"]')!).chatId!);
     }),
@@ -665,7 +666,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     ),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="rename-terminal-form"]', (event, target) => {
+    delegate(document.body, 'submit', TERMINALS_ACTIONS.renameTerminalForm.selector, (event, target) => {
       event.preventDefault();
       const rename = terminalRename.value,
         name = target.querySelector<Control>('[name="terminal-name"]')?.value ?? '';
@@ -675,7 +676,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-terminal-rename"]', () => {
+    delegate(document.body, 'click', TERMINALS_ACTIONS.cancelTerminalRename.selector, () => {
       terminalRename.value = undefined;
     }),
   );

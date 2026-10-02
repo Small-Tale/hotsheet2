@@ -54,6 +54,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
       controllers.test.ts     # Project replacement, delayed response, rollback, reset/refill transition matrix
       terminal-viewports.test.ts # Viewport focus, mount/disposal, cancellation, refill, and park/restore/evict transitions
+    src/interaction-attrs/    # Per-domain Kerf attr()/action() spec tables (`<DOMAIN>_ACTIONS`, `<DOMAIN>_TARGETS`): handlers use `.selector`, components spread `.attrs`
     src/interactions/         # Twelve feature wiring modules: project-lifecycle, repository, navigation-and-tabs, terminals, ticket-selection, views-and-saved-views, commands-and-ai, notifications-and-links, search-and-composer, attachments-and-gallery, inspector-and-editor, shell-and-global
       types.ts                # Shared DOM/application contracts; no state ownership or import of main
       dom.ts                  # Shared delegated-host dataset helper

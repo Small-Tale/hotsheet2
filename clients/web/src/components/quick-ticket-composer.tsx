@@ -8,6 +8,8 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { Paperclip, Plus, Star, Trash2, Upload } from 'lucide';
 
+import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
+import { SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { TicketCategorySelect } from './ticket-category-select';
 
 export interface QuickTicketComposerProps {
@@ -80,9 +82,9 @@ export function QuickTicketLauncher({
       type="button"
       class="quick-ticket-composer__launcher"
       data-component="quick-ticket-composer-launcher"
-      data-action="expand-ticket-composer"
-      data-new-ticket-drop-target="true"
-      data-ticket-drop-action="duplicate"
+      {...SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.attrs}
+      {...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs}
+      {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
       title={
         attachmentsEnabled
           ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here'
@@ -118,7 +120,7 @@ export function QuickTicketComposer({
   return (
     <wa-dialog
       class="quick-ticket-dialog"
-      data-component="quick-ticket-composer"
+      {...SEARCH_AND_COMPOSER_TARGETS.quickTicketComposer.attrs}
       data-key="quick-ticket-composer"
       label="Create ticket"
       role="dialog"
@@ -134,9 +136,9 @@ export function QuickTicketComposer({
       {expanded && (
         <form
           class="quick-ticket-composer"
-          data-action="create-ticket-form"
-          data-new-ticket-drop-target="true"
-          data-ticket-drop-action="duplicate"
+          {...SEARCH_AND_COMPOSER_ACTIONS.createTicketForm.attrs}
+          {...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs}
+          {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
           data-submitting={String(submitting)}
         >
           <wa-input name="new-ticket-title" label="Ticket title" value={title} autofocus required></wa-input>
@@ -145,7 +147,7 @@ export function QuickTicketComposer({
             <button
               type="button"
               class="quick-ticket-composer__up-next"
-              data-action="toggle-new-ticket-up-next"
+              {...SEARCH_AND_COMPOSER_ACTIONS.toggleNewTicketUpNext.attrs}
               aria-pressed={String(upNext)}
               aria-label={upNext ? 'Remove new ticket from Up Next' : 'Add new ticket to Up Next'}
               title={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
@@ -180,7 +182,7 @@ export function QuickTicketComposer({
               {strandedAttachments && (
                 <button
                   type="button"
-                  data-action="clear-new-ticket-attachments"
+                  {...SEARCH_AND_COMPOSER_ACTIONS.clearNewTicketAttachments.attrs}
                   aria-label="Remove all staged attachments"
                   disabled={submitting}
                 >
@@ -197,7 +199,7 @@ export function QuickTicketComposer({
                     <span title={item.name}>{item.name}</span>
                     <button
                       type="button"
-                      data-action="remove-new-ticket-attachment"
+                      {...SEARCH_AND_COMPOSER_ACTIONS.removeNewTicketAttachment.attrs}
                       data-pending-attachment-id={item.id}
                       aria-label={`Remove ${item.name}`}
                       title={`Remove ${item.name}`}

@@ -6,6 +6,7 @@ import { StateBanner } from '@kerfjs/ui/state-banner';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
 import { ArchiveRestore, Database, Trash2 } from 'lucide';
 
+import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
 import { migrationCounter, type MigrationJob, migrationPercent, migrationPhaseLabel } from '../migration-progress';
 
 export interface Hs1MigrationDialogProps {
@@ -33,12 +34,12 @@ export function Hs1MigrationDialog({
 }: Hs1MigrationDialogProps) {
   return (
     <wa-dialog
-      data-component="hs1-migration-dialog"
+      {...PROJECT_LIFECYCLE_TARGETS.hs1MigrationDialog.attrs}
       label="Import Hot Sheet 1 project"
       open={open}
       data-controlled-open={String(open)}
     >
-      <form class="hs1-migration-dialog" data-action="import-hs1-project">
+      <form class="hs1-migration-dialog" {...PROJECT_LIFECYCLE_ACTIONS.importHs1Project.attrs}>
         <div class="hs1-migration-dialog__intro">
           <LucideIcon icon={ArchiveRestore} name="archive-restore" />
           <div>
@@ -63,7 +64,12 @@ export function Hs1MigrationDialog({
             required
             disabled={busy}
           ></wa-input>
-          <wa-button appearance="outlined" type="button" data-action="browse-hs1-ticket-store" disabled={busy}>
+          <wa-button
+            appearance="outlined"
+            type="button"
+            {...PROJECT_LIFECYCLE_ACTIONS.browseHs1TicketStore.attrs}
+            disabled={busy}
+          >
             Choose…
           </wa-button>
         </div>
@@ -79,7 +85,12 @@ export function Hs1MigrationDialog({
           </p>
         )}
         <footer>
-          <wa-button appearance="plain" type="button" data-action="dismiss-hs1-migration" disabled={busy}>
+          <wa-button
+            appearance="plain"
+            type="button"
+            {...PROJECT_LIFECYCLE_ACTIONS.dismissHs1Migration.attrs}
+            disabled={busy}
+          >
             Not now
           </wa-button>
           <wa-button appearance="accent" type="submit" disabled={busy}>
@@ -102,7 +113,7 @@ export function Hs1MigrationBanner({ databasePath }: { databasePath: string }) {
         copyLayout="stacked"
         icon={<LucideIcon icon={Database} name="database" />}
         action={
-          <button type="button" data-action="open-hs1-migration">
+          <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.openHs1Migration.attrs}>
             Import…
           </button>
         }
@@ -123,10 +134,10 @@ export function Hs1CleanupBanner() {
         icon={<LucideIcon icon={Trash2} name="trash-2" />}
         action={
           <div class="hs1-cleanup-banner__actions">
-            <button type="button" data-action="dismiss-hs1-cleanup">
+            <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissHs1Cleanup.attrs}>
               Dismiss
             </button>
-            <button type="button" data-action="remove-hs1-data">
+            <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.removeHs1Data.attrs}>
               Delete old files…
             </button>
           </div>
@@ -180,16 +191,20 @@ export function Hs1JobBanner({
         icon={<LucideIcon icon={ArchiveRestore} name="archive-restore" />}
         action={
           <div class="hs1-cleanup-banner__actions">
-            <button type="button" data-action="migration-job-details" aria-expanded={String(details)}>
+            <button
+              type="button"
+              {...PROJECT_LIFECYCLE_ACTIONS.migrationJobDetails.attrs}
+              aria-expanded={String(details)}
+            >
               Details
             </button>
             {(failed || (!running && job.warnings.length > 0)) && (
-              <button type="button" data-action="retry-migration-job">
+              <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.retryMigrationJob.attrs}>
                 Retry
               </button>
             )}
             {!running && ((!failed && job.kind === 'import') || (failed && job.kind === 'backup')) && (
-              <button type="button" data-action="backup-migration-job">
+              <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.backupMigrationJob.attrs}>
                 {job.kind === 'backup' ? 'Change backup…' : 'Connect backup…'}
               </button>
             )}
@@ -207,7 +222,7 @@ export function Hs1JobBanner({
       {connectionError && (
         <p class="hs1-job__connection">
           {connectionError}{' '}
-          <button type="button" data-action="reconnect-migration-job">
+          <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.reconnectMigrationJob.attrs}>
             Reconnect
           </button>
         </p>

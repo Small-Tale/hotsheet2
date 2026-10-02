@@ -6,9 +6,11 @@ import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+
 export function TrashSettings({ days, message = '' }: { days: number; message?: string }) {
   return (
-    <form data-component="trash-settings" data-action="save-trash-settings">
+    <form data-component="trash-settings" {...COMMANDS_AND_AI_ACTIONS.saveTrashSettings.attrs}>
       <div class="trash-settings">
         <List gap="l">
           <header>

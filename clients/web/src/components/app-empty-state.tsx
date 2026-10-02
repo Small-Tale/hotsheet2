@@ -1,9 +1,11 @@
+import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
+
 export function AppEmptyState() {
   return (
     <section class="app-empty">
       <h1>Open a Hot Sheet project</h1>
       <p>Choose a code checkout to discover its ticket sources and start working.</p>
-      <wa-button appearance="accent" data-action="add-project">
+      <wa-button appearance="accent" {...PROJECT_LIFECYCLE_ACTIONS.addProject.attrs}>
         Open project
       </wa-button>
     </section>

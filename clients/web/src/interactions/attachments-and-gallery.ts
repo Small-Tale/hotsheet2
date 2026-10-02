@@ -24,6 +24,10 @@ import {
 } from '../components/attachment-gallery';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
+import {
+  ATTACHMENTS_AND_GALLERY_ACTIONS,
+  ATTACHMENTS_AND_GALLERY_TARGETS,
+} from '../interaction-attrs/attachments-and-gallery';
 import { data } from './dom';
 import { createInteractionLifetime } from './lifetime';
 import { type AttachmentMenu, type GallerySource, type Project } from './types';
@@ -229,43 +233,58 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     ),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-action="edit-attachment-batch-label"]', (_event, target) => {
-      const batch = target.closest<HTMLElement>('[data-attachment-ids]'),
-        input = batch?.querySelector<HTMLInputElement>('[name="attachment-batch-label"]');
-      if (!batch || !input || input.disabled) return;
-      batch.dataset.editingLabel = 'true';
-      input.dataset.originalValue = input.value;
-      queueMicrotask(() => {
-        input.focus();
-        input.select();
-      });
-    }),
+    delegate(
+      document.body,
+      'dblclick',
+      ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.selector,
+      (_event, target) => {
+        const batch = target.closest<HTMLElement>('[data-attachment-ids]'),
+          input = batch?.querySelector<HTMLInputElement>('[name="attachment-batch-label"]');
+        if (!batch || !input || input.disabled) return;
+        batch.dataset.editingLabel = 'true';
+        input.dataset.originalValue = input.value;
+        queueMicrotask(() => {
+          input.focus();
+          input.select();
+        });
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[name="attachment-batch-label"]', (event, target) => {
-      const input = target as HTMLInputElement,
-        key = (event as KeyboardEvent).key;
-      if (key !== 'Escape' && key !== 'Enter') return;
-      const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
-      if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
-      input.blur();
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (ids)
-            document.body
-              .querySelector<HTMLElement>(
-                `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
-              )
-              ?.focus();
-        }),
-      );
-    }),
+    delegate(
+      document.body,
+      'keydown',
+      ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
+      (event, target) => {
+        const input = target as HTMLInputElement,
+          key = (event as KeyboardEvent).key;
+        if (key !== 'Escape' && key !== 'Enter') return;
+        const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
+        if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
+        input.blur();
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            if (ids)
+              document.body
+                .querySelector<HTMLElement>(
+                  `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
+                )
+                ?.focus();
+          }),
+        );
+      },
+    ),
   );
   lifetime.add(
-    delegateCapture(document.body, 'blur', '[name="attachment-batch-label"]', (_event, target) => {
-      delete target.closest<HTMLElement>('[data-attachment-ids]')?.dataset.editingLabel;
-      delete (target as HTMLInputElement).dataset.originalValue;
-    }),
+    delegateCapture(
+      document.body,
+      'blur',
+      ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
+      (_event, target) => {
+        delete target.closest<HTMLElement>('[data-attachment-ids]')?.dataset.editingLabel;
+        delete (target as HTMLInputElement).dataset.originalValue;
+      },
+    ),
   );
   function clearGroupedAttachmentDrag(surface?: HTMLElement) {
     dependencies.draggedGroupedAttachmentId = undefined;
@@ -356,67 +375,77 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     ),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-action="open-attachment-row"]', (event, target) => {
+    delegate(document.body, 'dblclick', ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentRow.selector, (event, target) => {
       if ((event.target as Element).closest('button, input, a')) return;
       void openSelectedAttachment(data(target).attachmentActionId!);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-attachment-gallery"]', (_event, target) => {
-      // Media in a stacked reader belongs to that reader's ticket, not the workspace selection.
-      const source = gallerySourceFor(target),
-        selection = data(target),
-        url = attachmentGallerySelectionUrl(galleryImages(source?.ticket, source?.project), {
-          url: selection.attachmentUrl,
-          ticket: selection.attachmentTicket,
-          name: selection.attachmentName,
-          attachmentId: selection.galleryAttachmentId,
-        });
-      if (url) resetAttachmentGallery(url, source);
-    }),
+    delegate(
+      document.body,
+      'click',
+      ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentGallery.selector,
+      (_event, target) => {
+        // Media in a stacked reader belongs to that reader's ticket, not the workspace selection.
+        const source = gallerySourceFor(target),
+          selection = data(target),
+          url = attachmentGallerySelectionUrl(galleryImages(source?.ticket, source?.project), {
+            url: selection.attachmentUrl,
+            ticket: selection.attachmentTicket,
+            name: selection.attachmentName,
+            attachmentId: selection.galleryAttachmentId,
+          });
+        if (url) resetAttachmentGallery(url, source);
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="close-attachment-gallery"]', () => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.closeAttachmentGallery.selector, () => {
       resetAttachmentGallery();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="previous-gallery-image"]', () => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.previousGalleryImage.selector, () => {
       shiftGallery(-1);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="next-gallery-image"]', () => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.nextGalleryImage.selector, () => {
       shiftGallery(1);
     }),
   );
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click','[data-action="zoom-gallery-image"]',(_event,target)=>{const model=attachmentGalleryZoomModel(attachmentGalleryGeometry.value,attachmentGalleryScale.value),direction=data(target).zoomDirection==='out'?-1:1,next=model.stops[model.index+direction];if(next!==undefined)attachmentGalleryScale.value=next}));
+  lifetime.add(delegate(document.body,'click',ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.selector,(_event,target)=>{const model=attachmentGalleryZoomModel(attachmentGalleryGeometry.value,attachmentGalleryScale.value),direction=data(target).zoomDirection==='out'?-1:1,next=model.stops[model.index+direction];if(next!==undefined)attachmentGalleryScale.value=next}));
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-gallery-attachment-menu"]', (_event, target) => {
-      const active = attachmentGalleryUrl.value,
-        images = galleryImages(),
-        index = active ? attachmentGalleryImageIndex(images, active) : -1,
-        image = index >= 0 ? images[index] : undefined;
-      if (!image?.ticket) return;
-      const rect = target.getBoundingClientRect(),
-        position = viewportSafeContextMenuPosition(rect.right, rect.bottom, window.innerWidth, window.innerHeight, {
-          width: 224,
-          height: ATTACHMENT_CONTEXT_MENU_HEIGHT,
-        });
-      attachmentMenu.value = {
-        ...position,
-        ticket: image.ticket,
-        name: image.name,
-        url: image.url,
-        id: image.attachmentId,
-        kind: 'host',
-      };
-    }),
+    delegate(
+      document.body,
+      'click',
+      ATTACHMENTS_AND_GALLERY_ACTIONS.openGalleryAttachmentMenu.selector,
+      (_event, target) => {
+        const active = attachmentGalleryUrl.value,
+          images = galleryImages(),
+          index = active ? attachmentGalleryImageIndex(images, active) : -1,
+          image = index >= 0 ? images[index] : undefined;
+        if (!image?.ticket) return;
+        const rect = target.getBoundingClientRect(),
+          position = viewportSafeContextMenuPosition(rect.right, rect.bottom, window.innerWidth, window.innerHeight, {
+            width: 224,
+            height: ATTACHMENT_CONTEXT_MENU_HEIGHT,
+          });
+        attachmentMenu.value = {
+          ...position,
+          ticket: image.ticket,
+          name: image.name,
+          url: image.url,
+          id: image.attachmentId,
+          kind: 'host',
+        };
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-attachment-menu"]', (event, target) => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.selector, (event, target) => {
       event.stopPropagation();
       const item = target.closest<HTMLElement>('[data-component="ticket-attachment-item"]'),
         ticket = selectedTicket.value,
@@ -441,30 +470,40 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'load', '[data-gallery-image="true"]', () => {
+    delegateCapture(document.body, 'load', ATTACHMENTS_AND_GALLERY_TARGETS.galleryImage.selector, () => {
       syncAttachmentGalleryMeasurement();
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'loadedmetadata', '[data-gallery-media="true"]', (event, target) => {
-      syncAttachmentGalleryMeasurement();
-      if (target instanceof HTMLVideoElement && activeAttachmentGalleryVideo(event.target))
-        attachmentGalleryDuration.value = Math.round(target.duration * 1000);
-    }),
+    delegateCapture(
+      document.body,
+      'loadedmetadata',
+      ATTACHMENTS_AND_GALLERY_TARGETS.galleryMedia.selector,
+      (event, target) => {
+        syncAttachmentGalleryMeasurement();
+        if (target instanceof HTMLVideoElement && activeAttachmentGalleryVideo(event.target))
+          attachmentGalleryDuration.value = Math.round(target.duration * 1000);
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-referenced-attachment"]', (event, target) => {
-      event.preventDefault();
-      const current = project(),
-        ticket = data(target).attachmentTicket,
-        name = data(target).attachmentName;
-      if (current && ticket && name)
-        void api()
-          .checkoutAttachmentByNameAction(current.id, routedTicketId(ticket), name, 'open')
-          .catch((reason: unknown) => {
-            error.value = reason instanceof Error ? reason.message : String(reason);
-          });
-    }),
+    delegate(
+      document.body,
+      'click',
+      ATTACHMENTS_AND_GALLERY_ACTIONS.openReferencedAttachment.selector,
+      (event, target) => {
+        event.preventDefault();
+        const current = project(),
+          ticket = data(target).attachmentTicket,
+          name = data(target).attachmentName;
+        if (current && ticket && name)
+          void api()
+            .checkoutAttachmentByNameAction(current.id, routedTicketId(ticket), name, 'open')
+            .catch((reason: unknown) => {
+              error.value = reason instanceof Error ? reason.message : String(reason);
+            });
+      },
+    ),
   );
   lifetime.add(
     delegate(document.body, 'contextmenu', '[data-attachment-url]', (event, target) => {
@@ -502,74 +541,79 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       : api().checkoutAttachmentByNameAction(current.id, routedTicketId(menu.ticket), menu.name, action);
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="attachment-menu-action"]', (_event, target) => {
-      const menu = attachmentMenu.value,
-        action = data(target).itemId;
-      if (!menu) return;
-      attachmentMenu.value = undefined;
-      if (action === 'download') {
-        const link = document.createElement('a');
-        link.href = menu.url;
-        link.download = menu.name;
-        link.click();
-        return;
-      }
-      if (action === 'copy-reference') {
-        const local = menu.ticket === selectedTicket.value?.slug;
-        void copyText(`attachment:${local ? '' : `[${menu.ticket}]`}${menu.name}`)
-          .then(() => {
-            showToast('Attachment reference copied to clipboard.');
-          })
-          .catch((reason: unknown) => {
-            error.value = `Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`;
-          });
-        return;
-      }
-      if (action === 'copy-path') {
-        void attachmentMenuHostAction(menu, 'path')
-          .then(
-            (result) =>
-              result &&
-              copyText(result.path).then(() => {
-                showToast('Attachment path copied to clipboard.');
-              }),
-          )
-          .catch((reason: unknown) => {
-            error.value = reason instanceof Error ? reason.message : String(reason);
-          });
-        return;
-      }
-      if (action === 'rename') {
-        const current = project(),
-          ticket = selectedTicket.value,
-          filename = window.prompt('Attachment filename', menu.name);
-        if (current && ticket && menu.id && filename?.trim())
-          void api()
-            .renameCheckoutAttachment(current.id, ticket.qualified_id, menu.id, filename.trim())
-            .then((result) => {
-              selectedTicket.value = result.ticket;
-              showToast('Attachment renamed.');
-              return refreshProject();
+    delegate(
+      document.body,
+      'click',
+      ATTACHMENTS_AND_GALLERY_ACTIONS.attachmentMenuAction.selector,
+      (_event, target) => {
+        const menu = attachmentMenu.value,
+          action = data(target).itemId;
+        if (!menu) return;
+        attachmentMenu.value = undefined;
+        if (action === 'download') {
+          const link = document.createElement('a');
+          link.href = menu.url;
+          link.download = menu.name;
+          link.click();
+          return;
+        }
+        if (action === 'copy-reference') {
+          const local = menu.ticket === selectedTicket.value?.slug;
+          void copyText(`attachment:${local ? '' : `[${menu.ticket}]`}${menu.name}`)
+            .then(() => {
+              showToast('Attachment reference copied to clipboard.');
+            })
+            .catch((reason: unknown) => {
+              error.value = `Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`;
+            });
+          return;
+        }
+        if (action === 'copy-path') {
+          void attachmentMenuHostAction(menu, 'path')
+            .then(
+              (result) =>
+                result &&
+                copyText(result.path).then(() => {
+                  showToast('Attachment path copied to clipboard.');
+                }),
+            )
+            .catch((reason: unknown) => {
+              error.value = reason instanceof Error ? reason.message : String(reason);
+            });
+          return;
+        }
+        if (action === 'rename') {
+          const current = project(),
+            ticket = selectedTicket.value,
+            filename = window.prompt('Attachment filename', menu.name);
+          if (current && ticket && menu.id && filename?.trim())
+            void api()
+              .renameCheckoutAttachment(current.id, ticket.qualified_id, menu.id, filename.trim())
+              .then((result) => {
+                selectedTicket.value = result.ticket;
+                showToast('Attachment renamed.');
+                return refreshProject();
+              })
+              .catch((reason: unknown) => {
+                error.value = reason instanceof Error ? reason.message : String(reason);
+              });
+          return;
+        }
+        if (action === 'remove') {
+          if (menu.kind === 'host') resetAttachmentGallery();
+          void removeSelectedAttachment(menu.id);
+          return;
+        }
+        if (action === 'open' || action === 'reveal')
+          void attachmentMenuHostAction(menu, action)
+            .then(() => {
+              showToast(action === 'open' ? 'Opened attachment.' : 'Opened attachment location.');
             })
             .catch((reason: unknown) => {
               error.value = reason instanceof Error ? reason.message : String(reason);
             });
-        return;
-      }
-      if (action === 'remove') {
-        if (menu.kind === 'host') resetAttachmentGallery();
-        void removeSelectedAttachment(menu.id);
-        return;
-      }
-      if (action === 'open' || action === 'reveal')
-        void attachmentMenuHostAction(menu, action)
-          .then(() => {
-            showToast(action === 'open' ? 'Opened attachment.' : 'Opened attachment location.');
-          })
-          .catch((reason: unknown) => {
-            error.value = reason instanceof Error ? reason.message : String(reason);
-          });
-    }),
+      },
+    ),
   );
   const clampAnnotation = (value: number) => Math.max(0, Math.min(10_000, Math.round(value)));
   function annotationPoint(event: PointerEvent, surface: DOMRect) {
@@ -579,7 +623,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     };
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-gallery-markup"]', () => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMarkup.selector, () => {
       if (attachmentGalleryMarkup.value) {
         attachmentGalleryMarkup.value = false;
         finishGalleryAnnotationSession();
@@ -592,32 +636,42 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-gallery-draw"]', () => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryDraw.selector, () => {
       attachmentGalleryDrawMode.value = !attachmentGalleryDrawMode.value;
       attachmentGallerySelectedAnnotation.value = undefined;
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-gallery-annotation"]', (event, target) => {
-      event.stopPropagation();
-      attachmentGallerySelectedAnnotation.value = data(target).annotationId;
-    }),
+    delegate(
+      document.body,
+      'click',
+      ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.selector,
+      (event, target) => {
+        event.stopPropagation();
+        attachmentGallerySelectedAnnotation.value = data(target).annotationId;
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-action="edit-gallery-annotation"]', (event, target) => {
-      event.stopPropagation();
-      const id = data(target).annotationId,
-        annotation = attachmentGalleryAnnotations.value.find((item) => item.id === id);
-      if (!annotation) return;
-      const text = window.prompt('Annotation note (optional)', annotation.text);
-      if (text === null) return;
-      attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
-        item.id === id ? { ...item, text } : item,
-      );
-    }),
+    delegate(
+      document.body,
+      'dblclick',
+      ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryAnnotation.selector,
+      (event, target) => {
+        event.stopPropagation();
+        const id = data(target).annotationId,
+          annotation = attachmentGalleryAnnotations.value.find((item) => item.id === id);
+        if (!annotation) return;
+        const text = window.prompt('Annotation note (optional)', annotation.text);
+        if (text === null) return;
+        attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
+          item.id === id ? { ...item, text } : item,
+        );
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="delete-gallery-annotation"]', () => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.deleteGalleryAnnotation.selector, () => {
       const id = attachmentGallerySelectedAnnotation.value;
       if (!id || !window.confirm('Delete this annotation?')) return;
       attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.filter((item) => item.id !== id);
@@ -643,13 +697,18 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     });
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="seek-gallery-annotation"]', (_event, target) => {
-      const annotationId = data(target).annotationId,
-        milliseconds = Number(data(target).annotationTime);
-      if (!annotationId || !Number.isFinite(milliseconds)) return;
-      setGalleryPlayhead(milliseconds);
-      if (attachmentGalleryMarkup.value) attachmentGallerySelectedAnnotation.value = annotationId;
-    }),
+    delegate(
+      document.body,
+      'click',
+      ATTACHMENTS_AND_GALLERY_ACTIONS.seekGalleryAnnotation.selector,
+      (_event, target) => {
+        const annotationId = data(target).annotationId,
+          milliseconds = Number(data(target).annotationTime);
+        if (!annotationId || !Number.isFinite(milliseconds)) return;
+        setGalleryPlayhead(milliseconds);
+        if (attachmentGalleryMarkup.value) attachmentGallerySelectedAnnotation.value = annotationId;
+      },
+    ),
   );
   lifetime.add(
     delegateCapture(document.body, 'pointerdown', '[data-gallery-range-handle]', (event, target) => {
@@ -692,57 +751,65 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'pointerdown', '[data-gallery-annotation-surface="true"]', (event, target) => {
-      if (!attachmentGalleryMarkup.value) return;
-      const pointer = event as PointerEvent,
-        surface = target.getBoundingClientRect(),
-        button = (pointer.target as Element).closest<HTMLElement>('[data-annotation-id]'),
-        handle = (pointer.target as HTMLElement).dataset.annotationHandle;
-      if (button) {
-        const annotation = attachmentGalleryAnnotations.value.find((item) => item.id === button.dataset.annotationId);
-        if (!annotation) return;
+    delegateCapture(
+      document.body,
+      'pointerdown',
+      ATTACHMENTS_AND_GALLERY_TARGETS.galleryAnnotationSurface.selector,
+      (event, target) => {
+        if (!attachmentGalleryMarkup.value) return;
+        const pointer = event as PointerEvent,
+          surface = target.getBoundingClientRect(),
+          button = (pointer.target as Element).closest<HTMLElement>('[data-annotation-id]'),
+          handle = (pointer.target as HTMLElement).dataset.annotationHandle;
+        if (button) {
+          const annotation = attachmentGalleryAnnotations.value.find((item) => item.id === button.dataset.annotationId);
+          if (!annotation) return;
+          event.preventDefault();
+          event.stopPropagation();
+          attachmentGallerySelectedAnnotation.value = annotation.id;
+          dependencies.attachmentAnnotationGesture = {
+            kind: handle ? 'resize' : 'move',
+            pointerId: pointer.pointerId,
+            startX: pointer.clientX,
+            startY: pointer.clientY,
+            surface,
+            annotation: { ...annotation },
+            handle,
+          };
+          return;
+        }
+        attachmentGallerySelectedAnnotation.value = undefined;
+        if (!attachmentGalleryDrawMode.value) return;
         event.preventDefault();
         event.stopPropagation();
+        const point = annotationPoint(pointer, surface),
+          timed = attachmentGalleryDuration.value > 0,
+          annotation: MediaAnnotation = {
+            id: browserRandomId(),
+            x: point.x,
+            y: point.y,
+            width: 1,
+            height: 1,
+            text: '',
+            ...(timed
+              ? attachmentGalleryDefaultRange(
+                  dependencies.attachmentGalleryLivePlayhead,
+                  attachmentGalleryDuration.value,
+                )
+              : {}),
+          };
+        attachmentGalleryAnnotations.value = [...attachmentGalleryAnnotations.value, annotation];
         attachmentGallerySelectedAnnotation.value = annotation.id;
         dependencies.attachmentAnnotationGesture = {
-          kind: handle ? 'resize' : 'move',
+          kind: 'draw',
           pointerId: pointer.pointerId,
           startX: pointer.clientX,
           startY: pointer.clientY,
           surface,
-          annotation: { ...annotation },
-          handle,
+          annotation,
         };
-        return;
-      }
-      attachmentGallerySelectedAnnotation.value = undefined;
-      if (!attachmentGalleryDrawMode.value) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const point = annotationPoint(pointer, surface),
-        timed = attachmentGalleryDuration.value > 0,
-        annotation: MediaAnnotation = {
-          id: browserRandomId(),
-          x: point.x,
-          y: point.y,
-          width: 1,
-          height: 1,
-          text: '',
-          ...(timed
-            ? attachmentGalleryDefaultRange(dependencies.attachmentGalleryLivePlayhead, attachmentGalleryDuration.value)
-            : {}),
-        };
-      attachmentGalleryAnnotations.value = [...attachmentGalleryAnnotations.value, annotation];
-      attachmentGallerySelectedAnnotation.value = annotation.id;
-      dependencies.attachmentAnnotationGesture = {
-        kind: 'draw',
-        pointerId: pointer.pointerId,
-        startX: pointer.clientX,
-        startY: pointer.clientY,
-        surface,
-        annotation,
-      };
-    }),
+      },
+    ),
   );
   document.addEventListener(
     'pointermove',
@@ -860,12 +927,12 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     }
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-gallery-playback"]', () => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryPlayback.selector, () => {
       toggleGalleryPlayback();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-component="attachment-gallery"]', (event) => {
+    delegate(document.body, 'keydown', ATTACHMENTS_AND_GALLERY_TARGETS.attachmentGallery.selector, (event) => {
       const keyboard = event as KeyboardEvent,
         origin = event.target as Element,
         playheadControl = origin.matches('input[name="gallery-playhead"]');
@@ -902,7 +969,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-gallery-volume"]', (event) => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryVolume.selector, (event) => {
       event.stopPropagation();
       attachmentGalleryVolumeOpen.value = !attachmentGalleryVolumeOpen.value;
     }),
@@ -925,7 +992,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-gallery-muted"]', (event) => {
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMuted.selector, (event) => {
       event.stopPropagation();
       const video = document.querySelector<HTMLVideoElement>('.attachment-gallery video'),
         unmute = attachmentGalleryMuted.value || dependencies.attachmentGalleryLiveVolume === 0;
@@ -968,24 +1035,29 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     { signal: lifetime.signal },
   );
   lifetime.add(
-    delegateCapture(document.body, 'pointerdown', '[data-component="attachment-gallery"]', (event) => {
-      const pointer = event as PointerEvent,
-        origin = event.target instanceof Element ? event.target : undefined,
-        stage = origin?.closest<HTMLElement>('[data-gallery-zoom-stage="true"]');
-      dependencies.attachmentSwipeGesture = attachmentGallerySwipeGesture({
-        pointerId: pointer.pointerId,
-        clientX: pointer.clientX,
-        clientY: pointer.clientY,
-        button: pointer.button,
-        markup: attachmentGalleryMarkup.value,
-        stage: Boolean(stage),
-        interactive: Boolean(origin?.closest('button,input,textarea,select,a,[contenteditable="true"]')),
-        horizontallyScrollable: Boolean(stage && stage.scrollWidth > stage.clientWidth + 1),
-      });
-    }),
+    delegateCapture(
+      document.body,
+      'pointerdown',
+      ATTACHMENTS_AND_GALLERY_TARGETS.attachmentGallery.selector,
+      (event) => {
+        const pointer = event as PointerEvent,
+          origin = event.target instanceof Element ? event.target : undefined,
+          stage = origin?.closest<HTMLElement>('[data-gallery-zoom-stage="true"]');
+        dependencies.attachmentSwipeGesture = attachmentGallerySwipeGesture({
+          pointerId: pointer.pointerId,
+          clientX: pointer.clientX,
+          clientY: pointer.clientY,
+          button: pointer.button,
+          markup: attachmentGalleryMarkup.value,
+          stage: Boolean(stage),
+          interactive: Boolean(origin?.closest('button,input,textarea,select,a,[contenteditable="true"]')),
+          horizontallyScrollable: Boolean(stage && stage.scrollWidth > stage.clientWidth + 1),
+        });
+      },
+    ),
   );
   lifetime.add(
-    delegateCapture(document.body, 'pointerup', '[data-component="attachment-gallery"]', (event) => {
+    delegateCapture(document.body, 'pointerup', ATTACHMENTS_AND_GALLERY_TARGETS.attachmentGallery.selector, (event) => {
       const pointer = event as PointerEvent,
         direction = attachmentGallerySwipeDirection(
           dependencies.attachmentSwipeGesture,

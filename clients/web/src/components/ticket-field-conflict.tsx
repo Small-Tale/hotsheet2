@@ -4,6 +4,7 @@ import './ticket-field-conflict.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { GitMerge, RotateCcw } from 'lucide';
 
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
 
 export interface TicketFieldConflictProps {
@@ -43,11 +44,11 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
         </textarea>
       </label>
       <footer>
-        <button type="button" data-action="accept-remote-ticket-field">
+        <button type="button" {...INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.attrs}>
           <LucideIcon icon={RotateCcw} name="rotate-ccw" />
           Use theirs
         </button>
-        <button type="button" data-action="apply-ticket-field-merge">
+        <button type="button" {...INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.attrs}>
           <LucideIcon icon={GitMerge} name="git-merge" />
           Apply merged value
         </button>

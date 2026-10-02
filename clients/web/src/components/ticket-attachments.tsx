@@ -5,6 +5,7 @@ import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
 
 import type { AttachmentActor, AttachmentPurpose } from '../api';
 import { isGalleryMediaAttachment, isVideoAttachment } from '../attachment-references';
+import { ATTACHMENTS_AND_GALLERY_ACTIONS } from '../interaction-attrs/attachments-and-gallery';
 
 export interface TicketAttachmentItem {
   id: string;
@@ -160,7 +161,7 @@ export function TicketAttachments({
                     <button
                       class="ticket-attachments__batch-title"
                       type="button"
-                      data-action="edit-attachment-batch-label"
+                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.attrs}
                       aria-label={`Edit batch label ${shownLabel}`}
                       title="Double-click to edit batch label"
                     >
@@ -224,7 +225,7 @@ export function TicketAttachments({
                       <button
                         class="ticket-inspector__attachment-menu"
                         type="button"
-                        data-action="open-attachment-menu"
+                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.attrs}
                         aria-label={`More actions for ${attachment.name}`}
                         title={`More actions for ${attachment.name}`}
                       >
@@ -244,7 +245,7 @@ export function TicketAttachments({
                         type="button"
                         draggable={manageable ? 'true' : undefined}
                         data-drag-attachment-id={manageable ? item.id : undefined}
-                        data-action="open-attachment-gallery"
+                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentGallery.attrs}
                         data-gallery-attachment-id={item.id}
                         data-attachment-url={item.url}
                         data-attachment-name={item.name}

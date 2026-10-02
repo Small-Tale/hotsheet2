@@ -45,8 +45,8 @@ function applyDate(root: HTMLElement, target: Element, handlers: TicketSearchFie
     const date = scope.querySelector<HTMLInputElement>(`[name="${TICKET_SEARCH_DATE_INPUT}"]`)?.value;
     if (!date) return;
     const time = scope.querySelector<HTMLInputElement>(`[name="${TICKET_SEARCH_TIME_INPUT}"]`)?.value ?? '',
-      prefix = scope.querySelector<HTMLElement>(`[data-action="${TICKET_SEARCH_ACTIONS.applyDate}"]`)?.dataset
-        .datePrefix as SearchDatePrefix | undefined,
+      prefix = scope.querySelector<HTMLElement>(TICKET_SEARCH_ACTIONS.applyDate.selector)?.dataset.datePrefix as
+        SearchDatePrefix | undefined,
       token = prefix ? dateTokenFromInput(prefix, date, time, navigator.language) : undefined;
     if (prefix && token) handlers.applyDate(id, prefix, `${date}${time ? `T${time}` : ''}`);
   });
@@ -62,7 +62,6 @@ function applyDate(root: HTMLElement, target: Element, handlers: TicketSearchFie
  */
 export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearchFieldHandlers): InteractionTeardown {
   const lifetime = createInteractionLifetime();
-  const action = (name: string) => `[data-action="${name}"]`;
   lifetime.add(
     delegate(
       root,
@@ -78,7 +77,7 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
     ),
   );
   lifetime.add(
-    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.removeToken), (_event, target) => {
+    delegate(root, 'click', TICKET_SEARCH_ACTIONS.removeToken.selector, (_event, target) => {
       const raw = data(target).tokenValue;
       if (raw)
         withField(root, target, (id) => {
@@ -87,7 +86,7 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
     }),
   );
   lifetime.add(
-    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.editToken), (_event, target) => {
+    delegate(root, 'click', TICKET_SEARCH_ACTIONS.editToken.selector, (_event, target) => {
       const raw = data(target).tokenValue;
       if (raw)
         withField(root, target, (id) => {
@@ -96,14 +95,14 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
     }),
   );
   lifetime.add(
-    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.toggleHelp), (_event, target) => {
+    delegate(root, 'click', TICKET_SEARCH_ACTIONS.toggleHelp.selector, (_event, target) => {
       withField(root, target, (id) => {
         handlers.toggleHelp(id);
       });
     }),
   );
   lifetime.add(
-    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.applyDate), (_event, target) => {
+    delegate(root, 'click', TICKET_SEARCH_ACTIONS.applyDate.selector, (_event, target) => {
       applyDate(root, target, handlers);
     }),
   );
@@ -116,12 +115,12 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
     }),
   );
   lifetime.add(
-    delegate(root, 'mousedown', action(TICKET_SEARCH_ACTIONS.clear), (event) => {
+    delegate(root, 'mousedown', TICKET_SEARCH_ACTIONS.clear.selector, (event) => {
       event.preventDefault();
     }),
   );
   lifetime.add(
-    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.clear), (_event, target) => {
+    delegate(root, 'click', TICKET_SEARCH_ACTIONS.clear.selector, (_event, target) => {
       withField(root, target, (id) => {
         handlers.clear(id);
       });

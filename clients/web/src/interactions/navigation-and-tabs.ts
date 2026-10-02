@@ -6,6 +6,7 @@ import { corruptTicketKey } from '../components/corrupt-ticket-row';
 import { PROJECT_TAB_BAR_ID, type ProjectTabBarMode } from '../components/project-tab-bar';
 import { TERMINAL_DRAWER_TAB_BAR_ID } from '../components/terminal-drawer';
 import { reorderDrawerTabIds } from '../drawer-tab-order';
+import { NAVIGATION_AND_TABS_ACTIONS, NAVIGATION_AND_TABS_TARGETS } from '../interaction-attrs/navigation-and-tabs';
 import { reorderTabs } from '../tab-order';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
@@ -83,7 +84,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[role="tab"]', (event, target) => {
+    delegate(document.body, 'keydown', NAVIGATION_AND_TABS_TARGETS.tabRole.selector, (event, target) => {
       const keyboard = event as KeyboardEvent,
         key = keyboard.key;
       if (event.defaultPrevented) return;
@@ -117,17 +118,17 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="reveal-corrupt-ticket"]', (_event, target) => {
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.revealCorruptTicket.selector, (_event, target) => {
       void revealCorruptTicket(data(target).corruptKey!);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="repair-corrupt-ticket"]', (_event, target) => {
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.repairCorruptTicket.selector, (_event, target) => {
       void queueCorruptTicketRepair(data(target).corruptKey!);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-corrupt-ticket"]', (_event, target) => {
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.selectCorruptTicket.selector, (_event, target) => {
       const key = data(target).corruptKey;
       if (!key || !corruptTickets.value.some((ticket) => corruptTicketKey(ticket) === key)) return;
       selectedCorruptKey.value = key;
@@ -139,7 +140,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.setShellMode.selector, (_event, target) => {
       statsProjectId.value = undefined;
       setShellMode(data(target).shellMode as ProjectTabBarMode);
     }),
@@ -160,7 +161,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-project-stats"]', (_event, target) => {
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.openProjectStats.selector, (_event, target) => {
       const current = project();
       if (!current) return;
       const requested = data(target).projectId;
@@ -169,7 +170,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-project-tab"]', (_event, target) => {
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.selectProjectTab.selector, (_event, target) => {
       selectProjectTab(data(target.closest<HTMLElement>('[data-tab-kind="project"]')!).projectId!);
     }),
   );
@@ -179,7 +180,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="retry-project-restore"]', (_event, target) => {
+    delegate(document.body, 'click', NAVIGATION_AND_TABS_ACTIONS.retryProjectRestore.selector, (_event, target) => {
       const root = data(target).projectRoot;
       if (root) void retryProjectRestore(root);
     }),

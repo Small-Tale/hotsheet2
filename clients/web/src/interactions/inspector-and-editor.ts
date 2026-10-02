@@ -13,6 +13,7 @@ import { type DebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
+import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
 import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind } from '../ticket-editor-size';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
@@ -187,12 +188,12 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     codeReview,
   } = dependencies;
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-inspector-up-next"]', () => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.toggleInspectorUpNext.selector, () => {
       if (selectedTicket.value) void updateSelectedTracked({ up_next: !selectedTicket.value.up_next });
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="copy-ticket-slug"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.copyTicketSlug.selector, (_event, target) => {
       const slug = target.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug;
       if (!slug) return;
       void copyText(slug)
@@ -205,17 +206,27 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[name="inspector-category"]', (_event, target) => {
-      void updateSelectedTracked({ category: (target as Control).value });
-    }),
+    delegate(
+      document.body,
+      'change',
+      INSPECTOR_AND_EDITOR_TARGETS.inspectorCategoryField.selector,
+      (_event, target) => {
+        void updateSelectedTracked({ category: (target as Control).value });
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[name="inspector-priority"]', (_event, target) => {
-      void updateSelectedTracked({ priority: (target as Control).value });
-    }),
+    delegate(
+      document.body,
+      'change',
+      INSPECTOR_AND_EDITOR_TARGETS.inspectorPriorityField.selector,
+      (_event, target) => {
+        void updateSelectedTracked({ priority: (target as Control).value });
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[name="inspector-status"]', (_event, target) => {
+    delegate(document.body, 'change', INSPECTOR_AND_EDITOR_TARGETS.inspectorStatusField.selector, (_event, target) => {
       const select = target as Control & { open?: boolean },
         value = select.value,
         apply = () => {
@@ -266,12 +277,17 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     return { [conflict.field]: value };
   }
   lifetime.add(
-    delegate(document.body, 'input', '[name="ticket-conflict-resolution"]', (_event, target) => {
-      fieldConflictResolution.value = (target as HTMLTextAreaElement).value;
-    }),
+    delegate(
+      document.body,
+      'input',
+      INSPECTOR_AND_EDITOR_TARGETS.ticketConflictResolutionField.selector,
+      (_event, target) => {
+        fieldConflictResolution.value = (target as HTMLTextAreaElement).value;
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="accept-remote-ticket-field"]', () => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.selector, () => {
       const conflict = fieldConflict.value;
       if (!conflict) return;
       updateConflictDraft(conflict.field, conflict.theirs);
@@ -280,7 +296,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="apply-ticket-field-merge"]', () => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.selector, () => {
       const conflict = fieldConflict.value;
       if (!conflict) return;
       const value = fieldConflictResolution.value;
@@ -304,25 +320,25 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
   }
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-action="edit-ticket-title"]', () => {
+    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_ACTIONS.editTicketTitle.selector, () => {
       beginTitleEdit();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-action="edit-ticket-title"]', (event) => {
+    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.editTicketTitle.selector, (event) => {
       if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
       event.preventDefault();
       beginTitleEdit();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="ticket-title"]', (_event, target) => {
+    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.ticketTitleField.selector, (_event, target) => {
       titleDraft.value = (target as HTMLInputElement).value;
       if (titleDraft.value.trim()) titleAutosave.schedule(titleDraft.value);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'focusout', '[name="ticket-title"]', () => {
+    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.ticketTitleField.selector, () => {
       if (!titleDraft.value.trim()) return;
       void titleAutosave.flush().then((saved) => {
         if (saved) titleEditing.value = false;
@@ -340,7 +356,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     setSelectedTags(next);
   }
   lifetime.add(
-    delegate(document.body, 'keydown', '[name="ticket-tag-input"]', (event, target) => {
+    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.ticketTagInputField.selector, (event, target) => {
       const keyboard = event as KeyboardEvent;
       if (!['Enter', ','].includes(keyboard.key)) return;
       event.preventDefault();
@@ -348,7 +364,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'focusout', '[name="ticket-tag-input"]', (_event, target) => {
+    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.ticketTagInputField.selector, (_event, target) => {
       if ((target as HTMLInputElement).value.trim()) addTagFromInput(target as HTMLInputElement);
       void tagsAutosave.flush();
     }),
@@ -375,17 +391,17 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-action="edit-markdown"]', (_event, target) => {
+    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, (_event, target) => {
       beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="edit-markdown"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, (_event, target) => {
       if (data(target).empty === 'true') beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-action="edit-markdown"]', (event, target) => {
+    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, (event, target) => {
       const keyboard = event as KeyboardEvent;
       if (!['Enter', ' '].includes(keyboard.key)) return;
       event.preventDefault();
@@ -393,7 +409,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="markdown-source"]', (_event, target) => {
+    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.markdownSourceField.selector, (_event, target) => {
       const frame = linkedReaderFrame(target),
         value = (target as HTMLTextAreaElement).value;
       if (frame) {
@@ -412,7 +428,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'focusout', '[name="markdown-source"]', (event, target) => {
+    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.markdownSourceField.selector, (event, target) => {
       const frame = linkedReaderFrame(target);
       if (frame) {
         void linkedReaderSaves(frame.id)
@@ -479,7 +495,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     );
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="add-ticket-note"]', () => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.addTicketNote.selector, () => {
       if (!canAddNotes()) return;
       editingNoteId.value = undefined;
       composingNote.value = true;
@@ -489,20 +505,20 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="new-note-body"]', (_event, target) => {
+    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.newNoteBodyField.selector, (_event, target) => {
       newNoteDraft.value = (target as HTMLTextAreaElement).value;
       scheduleProjectSessionPersistence();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-new-note"]', () => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.cancelNewNote.selector, () => {
       composingNote.value = false;
       newNoteDraft.value = '';
       scheduleProjectSessionPersistence();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="create-note-form"]', (event) => {
+    delegate(document.body, 'submit', INSPECTOR_AND_EDITOR_ACTIONS.createNoteForm.selector, (event) => {
       event.preventDefault();
       const text = newNoteDraft.value.trim();
       if (!text || !canAddNotes()) return;
@@ -516,7 +532,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-edit-on-double-click="true"]', (_event, target) => {
+    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_TARGETS.editOnDoubleClick.selector, (_event, target) => {
       beginNoteEdit(
         data(target.closest('[data-note-id]')!).noteId!,
         isReaderSurface(target),
@@ -525,14 +541,14 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-edit-on-double-click="true"]', (event, target) => {
+    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.editOnDoubleClick.selector, (event, target) => {
       if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
       event.preventDefault();
       beginNoteEdit(data(target.closest('[data-note-id]')!).noteId!, isReaderSurface(target));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="note-body"]', (_event, target) => {
+    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.noteBodyField.selector, (_event, target) => {
       const frame = linkedReaderFrame(target),
         id = data(target).noteId,
         value = (target as HTMLTextAreaElement).value;
@@ -580,43 +596,58 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
   function inlineFeedbackClickOffset(event:MouseEvent,target:Element){const start=Number(data(target).segmentStart),end=Number(data(target).segmentEnd),noteId=data(target).noteId!,source=feedbackSource(noteId)?.slice(start,end)??'',caretDocument=document as Document&{caretPositionFromPoint?:(x:number,y:number)=>{offsetNode:Node;offset:number}|null},position=caretDocument.caretPositionFromPoint?.(event.clientX,event.clientY);if(!position||!target.contains(position.offsetNode))return end;const range=document.createRange();range.selectNodeContents(target);range.setEnd(position.offsetNode,position.offset);return start+sourceOffsetForVisibleOffset(source,target.textContent??'',range.toString().length)}
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="add-inline-feedback-reply"]', (event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.addInlineFeedbackReply.selector, (event, target) => {
       if ((event.target as Element).closest('a')) return;
       focusInlineFeedbackReply(data(target).noteId!, inlineFeedbackClickOffset(event as MouseEvent, target));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-action="add-inline-feedback-reply"]', (event, target) => {
-      if ((event.target as Element).closest('a') || !['Enter', ' '].includes((event as KeyboardEvent).key)) return;
-      event.preventDefault();
-      focusInlineFeedbackReply(data(target).noteId!, Number(data(target).segmentEnd));
-    }),
+    delegate(
+      document.body,
+      'keydown',
+      INSPECTOR_AND_EDITOR_ACTIONS.addInlineFeedbackReply.selector,
+      (event, target) => {
+        if ((event.target as Element).closest('a') || !['Enter', ' '].includes((event as KeyboardEvent).key)) return;
+        event.preventDefault();
+        focusInlineFeedbackReply(data(target).noteId!, Number(data(target).segmentEnd));
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="inline-feedback-response"]', (_event, target) => {
-      const noteId = data(target).noteId!,
-        offset = Number(data(target).offset),
-        existing = readerInlineFeedbackReplies.value[noteId] ?? [];
-      readerInlineFeedbackReplies.value = {
-        ...readerInlineFeedbackReplies.value,
-        [noteId]: existing.map((reply) =>
-          reply.offset === offset ? { ...reply, text: (target as HTMLTextAreaElement).value } : reply,
-        ),
-      };
-      scheduleProjectSessionPersistence();
-    }),
+    delegate(
+      document.body,
+      'input',
+      INSPECTOR_AND_EDITOR_TARGETS.inlineFeedbackResponseField.selector,
+      (_event, target) => {
+        const noteId = data(target).noteId!,
+          offset = Number(data(target).offset),
+          existing = readerInlineFeedbackReplies.value[noteId] ?? [];
+        readerInlineFeedbackReplies.value = {
+          ...readerInlineFeedbackReplies.value,
+          [noteId]: existing.map((reply) =>
+            reply.offset === offset ? { ...reply, text: (target as HTMLTextAreaElement).value } : reply,
+          ),
+        };
+        scheduleProjectSessionPersistence();
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="remove-inline-feedback-reply"]', (_event, target) => {
-      const noteId = data(target).noteId!,
-        offset = Number(data(target).offset),
-        existing = readerInlineFeedbackReplies.value[noteId] ?? [];
-      readerInlineFeedbackReplies.value = {
-        ...readerInlineFeedbackReplies.value,
-        [noteId]: existing.filter((reply) => reply.offset !== offset),
-      };
-      scheduleProjectSessionPersistence();
-    }),
+    delegate(
+      document.body,
+      'click',
+      INSPECTOR_AND_EDITOR_ACTIONS.removeInlineFeedbackReply.selector,
+      (_event, target) => {
+        const noteId = data(target).noteId!,
+          offset = Number(data(target).offset),
+          existing = readerInlineFeedbackReplies.value[noteId] ?? [];
+        readerInlineFeedbackReplies.value = {
+          ...readerInlineFeedbackReplies.value,
+          [noteId]: existing.filter((reply) => reply.offset !== offset),
+        };
+        scheduleProjectSessionPersistence();
+      },
+    ),
   );
   function toggleFeedbackChoice(event: MouseEvent | KeyboardEvent, target: Element) {
     const noteId = data(target).noteId!,
@@ -636,13 +667,13 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     scheduleProjectSessionPersistence();
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-feedback-choice"]', (event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.selector, (event, target) => {
       if ((event.target as Element).closest('a,[data-action="open-attachment-gallery"]')) return;
       toggleFeedbackChoice(event as MouseEvent, target);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-action="toggle-feedback-choice"]', (event, target) => {
+    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.selector, (event, target) => {
       if (
         !['Enter', ' '].includes((event as KeyboardEvent).key) ||
         (event.target as Element).closest('a,[data-action="open-attachment-gallery"]')
@@ -653,7 +684,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'focusout', '[name="note-body"]', (_event, target) => {
+    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.noteBodyField.selector, (_event, target) => {
       if (data(target).noteResponse === 'true') return;
       const frame = linkedReaderFrame(target);
       if (frame) {
@@ -681,7 +712,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="save-note-edit"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.selector, (_event, target) => {
       const reader = isReaderSurface(target),
         editing = reader ? readerEditingNoteId : editingNoteId,
         draft = reader ? readerNoteDraft : noteDraft,
@@ -712,7 +743,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="dismiss-feedback"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.selector, (_event, target) => {
       const id = data(target).noteId;
       if (!id) return;
       void updateSelected({ note: 'No response needed', note_kind: 'regular' }).then((saved) => {
@@ -725,7 +756,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="delete-note"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.deleteNote.selector, (_event, target) => {
       const current = project(),
         ticket = selectedTicket.value,
         noteId = data(target).noteId;
@@ -744,7 +775,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="load-next-ticket-page"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.loadNextTicketPage.selector, (_event, target) => {
       const columnId = target.closest<HTMLElement>('[data-component="ticket-board-column"]')?.dataset.columnId;
       if (
         columnId &&
@@ -786,24 +817,24 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="blocked-reason"]')?.focus());
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="edit-blocked-reason"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editBlockedReason.selector, (_event, target) => {
       beginBlockedReasonEdit(isReaderSurface(target), linkedReaderFrame(target));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-edit-blocked-reason="true"]', (_event, target) => {
+    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_TARGETS.editBlockedReason.selector, (_event, target) => {
       beginBlockedReasonEdit(isReaderSurface(target), linkedReaderFrame(target));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-edit-blocked-reason="true"]', (event, target) => {
+    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.editBlockedReason.selector, (event, target) => {
       if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
       event.preventDefault();
       beginBlockedReasonEdit(isReaderSurface(target));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="blocked-reason"]', (_event, target) => {
+    delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.blockedReasonField.selector, (_event, target) => {
       const frame = linkedReaderFrame(target),
         value = (target as HTMLTextAreaElement).value;
       if (frame) {
@@ -822,7 +853,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'focusout', '[name="blocked-reason"]', (_event, target) => {
+    delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.blockedReasonField.selector, (_event, target) => {
       const frame = linkedReaderFrame(target);
       if (frame) {
         void linkedReaderSaves(frame.id)
@@ -865,7 +896,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-ticket-reader"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openTicketReader.selector, (_event, target) => {
       presentTicketReaderDialog('workspace-reader', target as HTMLElement, () => {
         readerOpen.value = true;
         if (readerTab.value === 'code-review' && !codeReviewLoading.value) void refreshCodeReview();
@@ -873,7 +904,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="respond-to-feedback"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.respondToFeedback.selector, (_event, target) => {
       const noteId = data(target).noteId;
       if (!noteId) return;
       readerTab.value = 'info';
@@ -899,7 +930,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', '[data-component="ticket-reader"]', (event, target) => {
+    delegateCapture(document.body, 'wa-hide', INSPECTOR_AND_EDITOR_TARGETS.ticketReader.selector, (event, target) => {
       if (event.target !== target) return;
       const dialog = target as TicketReaderDialogElement,
         id = dialog.dataset.readerFrameId;
@@ -910,18 +941,23 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-after-hide', '[data-component="ticket-reader"]', (event, target) => {
-      if (event.target === target) finishTicketReaderClose(target as TicketReaderDialogElement);
-    }),
+    delegateCapture(
+      document.body,
+      'wa-after-hide',
+      INSPECTOR_AND_EDITOR_TARGETS.ticketReader.selector,
+      (event, target) => {
+        if (event.target === target) finishTicketReaderClose(target as TicketReaderDialogElement);
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-reader-text-size"]', () => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.toggleReaderTextSize.selector, () => {
       readerLargeText.value = !readerLargeText.value;
       localStorage.setItem('hotsheet.reader.large-text', String(readerLargeText.value));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="set-inspector-tab"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorTab.selector, (_event, target) => {
       const tab = data(target).tabId as InspectorTab,
         frameId = target.closest<HTMLElement>('[data-reader-frame-id]')?.dataset.readerFrameId;
       if (frameId && frameId !== 'workspace-reader')
@@ -936,7 +972,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-code-review"]', (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openCodeReview.selector, (_event, target) => {
       const current = project(),
         ticket = selectedTicket.value,
         reviewTarget = codeReviewTarget(data(target));

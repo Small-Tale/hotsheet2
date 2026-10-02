@@ -3,6 +3,8 @@ import './drive-control.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Triangle } from 'lucide';
 
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+
 export interface DriveControlProps {
   running: boolean;
   tool?: string;
@@ -25,7 +27,7 @@ export function DriveControl({
       <button
         type="button"
         class="drive-control__primary"
-        data-action="toggle-drive"
+        {...COMMANDS_AND_AI_ACTIONS.toggleDrive.attrs}
         aria-label={actionLabel}
         disabled={disabled || undefined}
         title={disabledReason ?? actionLabel}
@@ -35,7 +37,7 @@ export function DriveControl({
       <button
         type="button"
         class="drive-control__options"
-        data-action="toggle-drive-options"
+        {...COMMANDS_AND_AI_ACTIONS.toggleDriveOptions.attrs}
         aria-label="Choose Drive provider, model, and effort"
         aria-expanded={String(optionsOpen)}
         disabled={optionsDisabled || undefined}

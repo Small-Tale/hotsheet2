@@ -5,6 +5,10 @@ import './ticket-link-choice-dialog.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ArrowRight, CircleDot, GitBranch } from 'lucide';
 
+import {
+  NOTIFICATIONS_AND_LINKS_ACTIONS,
+  NOTIFICATIONS_AND_LINKS_TARGETS,
+} from '../interaction-attrs/notifications-and-links';
 import { ticketLinkMatchKey, type TicketLinkResolution } from '../ticket-link-resolution';
 
 export type TicketLinkChoice = Extract<TicketLinkResolution, { kind: 'choose' }>;
@@ -14,7 +18,7 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
   return (
     <wa-dialog
       class="ticket-link-choice-dialog"
-      data-component="ticket-link-choice-dialog"
+      {...NOTIFICATIONS_AND_LINKS_TARGETS.ticketLinkChoiceDialog.attrs}
       label={`Choose ${choice.reference.slug}`}
       open
       with-footer
@@ -26,7 +30,7 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
             <li>
               <button
                 type="button"
-                data-action="select-ticket-link-match"
+                {...NOTIFICATIONS_AND_LINKS_ACTIONS.selectTicketLinkMatch.attrs}
                 data-match-key={ticketLinkMatchKey(match)}
                 data-ticket-project-id={match.projectId}
                 data-ticket-qualified-id={match.qualifiedId}
@@ -52,7 +56,11 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
         </ul>
       </div>
       <div slot="footer" class="ticket-link-choice-dialog__actions">
-        <wa-button type="button" appearance="outlined" data-action="cancel-ticket-link-choice">
+        <wa-button
+          type="button"
+          appearance="outlined"
+          {...NOTIFICATIONS_AND_LINKS_ACTIONS.cancelTicketLinkChoice.attrs}
+        >
           Cancel
         </wa-button>
       </div>

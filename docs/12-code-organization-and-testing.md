@@ -198,6 +198,14 @@ registrations pass `lifetime.signal`. `wireHotSheetInteractions` composes the tw
 group teardowns into one page-lifetime teardown that the runtime returns as
 `disposeInteractions`, so no delegate disposer is discarded (HS2-NZT3MT).
 
+Delegated selectors are Kerf `attr()`/`action()` specs, never literal `[name="value"]`
+strings. Each interaction domain owns one module under `src/interaction-attrs/`
+(for example `PROJECT_LIFECYCLE_ACTIONS` for `data-action` values and
+`PROJECT_LIFECYCLE_TARGETS` for components, named fields, and flags); handlers register
+`SPEC.selector` and the components that render a literal attribute spread `SPEC.attrs`,
+so markup and handler share one definition. `interaction-wiring.test.ts` resolves each
+spec back to its selector string and checks it against `registration-inventory.txt`.
+
 Signal objects and functions can be passed directly. Shared mutable plain bindings
 such as selection anchors, long-press flags, drag state, gesture state, and editor
 draft bases cross the boundary as typed getters/setters; handlers read them through

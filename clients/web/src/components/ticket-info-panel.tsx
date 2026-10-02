@@ -11,6 +11,7 @@ import { CircleAlert, Plus } from 'lucide';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { DETAILS_FEEDBACK_ID, textRequestsFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
 import { FeedbackPrompt, type NoteCardProps } from './note-card';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
@@ -165,7 +166,7 @@ export function TicketInfoPanel({
                   <wa-button
                     size="small"
                     appearance="outlined"
-                    data-action="dismiss-feedback"
+                    {...INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.attrs}
                     data-note-id={DETAILS_FEEDBACK_ID}
                     title="Clear this feedback request without replying"
                   >
@@ -174,7 +175,7 @@ export function TicketInfoPanel({
                   <wa-button
                     size="small"
                     appearance="accent"
-                    data-action="save-note-edit"
+                    {...INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.attrs}
                     data-note-id={DETAILS_FEEDBACK_ID}
                     data-note-response="true"
                   >
@@ -199,7 +200,7 @@ export function TicketInfoPanel({
                 <wa-button
                   class="note-card__respond"
                   appearance="outlined"
-                  data-action="respond-to-feedback"
+                  {...INSPECTOR_AND_EDITOR_ACTIONS.respondToFeedback.attrs}
                   data-note-id={DETAILS_FEEDBACK_ID}
                 >
                   Respond to Feedback

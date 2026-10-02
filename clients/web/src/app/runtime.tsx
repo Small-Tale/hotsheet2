@@ -199,6 +199,8 @@ import {
   tokenQuery,
 } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
+import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { beginInteractionTiming } from '../interaction-performance';
 import type {
   Control,
@@ -4111,7 +4113,7 @@ export async function startHotSheetWebClient() {
         <button
           type="button"
           class="ticket-page-more"
-          data-action="load-next-ticket-page"
+          {...INSPECTOR_AND_EDITOR_ACTIONS.loadNextTicketPage.attrs}
           disabled={ticketPageLoading.value}
         >
           {ticketPageLoading.value ? 'Loading…' : 'Load more tickets'}
@@ -4333,7 +4335,7 @@ export async function startHotSheetWebClient() {
         class="workspace-header__text-action"
         appearance="outlined"
         variant="danger"
-        data-action="open-empty-trash"
+        {...TICKET_SELECTION_ACTIONS.openEmptyTrash.attrs}
       >
         <span class="workspace-header__text-action-label">
           <LucideIcon icon={Trash2} name="trash-2" />

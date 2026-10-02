@@ -3,6 +3,7 @@ import './terminal-key-bar.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from 'lucide';
 
+import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { TerminalModifier, TerminalModifiers, TerminalSpecialKey } from '../terminal-keys';
 
 export interface TerminalKeyBarProps {
@@ -28,7 +29,13 @@ const FUNCTION_KEYS = Array.from({ length: 12 }, (_, index) => `F${index + 1}` a
 
 function KeyButton({ keyName, label, children }: { keyName: TerminalSpecialKey; label: string; children: unknown }) {
   return (
-    <button type="button" tabindex="-1" data-action="send-terminal-key" data-key={keyName} aria-label={label}>
+    <button
+      type="button"
+      tabindex="-1"
+      {...TERMINALS_ACTIONS.sendTerminalKey.attrs}
+      data-key={keyName}
+      aria-label={label}
+    >
       {children}
     </button>
   );
@@ -39,7 +46,7 @@ function ModifierButton({ modifier, modifiers }: { modifier: TerminalModifier; m
     <button
       type="button"
       tabindex="-1"
-      data-action="toggle-terminal-modifier"
+      {...TERMINALS_ACTIONS.toggleTerminalModifier.attrs}
       data-modifier={modifier}
       data-state={modifiers[modifier]}
       aria-pressed={String(modifiers[modifier] !== 'off')}
@@ -60,7 +67,7 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
   return (
     <div
       class="terminal-key-bar"
-      data-component="terminal-key-bar"
+      {...TERMINALS_TARGETS.terminalKeyBar.attrs}
       data-function-row={String(functionRow)}
       role="toolbar"
       aria-label="Terminal keys"
@@ -69,7 +76,7 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
         <button
           type="button"
           tabindex="-1"
-          data-action="toggle-terminal-function-row"
+          {...TERMINALS_ACTIONS.toggleTerminalFunctionRow.attrs}
           aria-pressed={String(functionRow)}
           aria-label="Function and navigation keys"
         >

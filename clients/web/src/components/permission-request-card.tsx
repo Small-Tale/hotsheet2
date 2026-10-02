@@ -3,6 +3,7 @@ import './permission-request-card.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Bot, Check, CircleAlert, Clock3, ExternalLink, Pause, ShieldCheck, X } from 'lucide';
 
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 
 export type PermissionRequestCardState = 'pending' | 'resolving' | 'failed' | 'disconnected';
@@ -135,7 +136,7 @@ export function PermissionRequestCard({
           <button
             type="button"
             class="permission-request-card__quiet-action"
-            data-action="ignore-permission"
+            {...NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.attrs}
             data-request-key={item.key}
           >
             Ignore
@@ -153,7 +154,7 @@ export function PermissionRequestCard({
                 <button
                   type="button"
                   class="permission-request-card__stop-automation"
-                  data-action="cancel-permission-automation"
+                  {...NOTIFICATIONS_AND_LINKS_ACTIONS.cancelPermissionAutomation.attrs}
                   data-request-key={item.key}
                   aria-label={`Stop auto-${countdownAction} countdown`}
                   title={`Stop auto-${countdownAction} countdown for this request`}
@@ -165,7 +166,7 @@ export function PermissionRequestCard({
             <div class="permission-request-card__buttons">
               <button
                 type="button"
-                data-action="resolve-permission"
+                {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
                 data-decision="deny"
                 data-scope="once"
                 data-request-key={item.key}
@@ -176,7 +177,7 @@ export function PermissionRequestCard({
               {alwaysSupported && (
                 <button
                   type="button"
-                  data-action="resolve-permission"
+                  {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
                   data-decision="allow"
                   data-scope="always"
                   data-request-key={item.key}
@@ -188,7 +189,7 @@ export function PermissionRequestCard({
               <button
                 type="button"
                 class="permission-request-card__primary"
-                data-action="resolve-permission"
+                {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
                 data-decision="allow"
                 data-scope="once"
                 data-request-key={item.key}

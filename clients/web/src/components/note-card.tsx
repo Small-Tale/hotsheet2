@@ -7,6 +7,7 @@ import { Activity, Check, CircleAlert, FilePenLine, MessageSquareText, RefreshCw
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { parseFeedbackChoices } from '../feedback-choices';
 import { type InlineFeedbackReply, splitFeedbackPrompt } from '../feedback-replies';
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { AIContentLabel } from './ai-content-label';
 import { ConfidenceBadge } from './confidence-badge';
 import { MarkdownPreview } from './markdown-preview';
@@ -69,7 +70,7 @@ function FeedbackBlocks({
           {segment.markdown && (
             <div
               class="note-card__feedback-block"
-              data-action="add-inline-feedback-reply"
+              {...INSPECTOR_AND_EDITOR_ACTIONS.addInlineFeedbackReply.attrs}
               data-note-id={noteId}
               data-segment-start={sourceStart + segment.start}
               data-segment-end={sourceStart + segment.end}
@@ -93,7 +94,7 @@ function FeedbackBlocks({
               </textarea>
               <button
                 type="button"
-                data-action="remove-inline-feedback-reply"
+                {...INSPECTOR_AND_EDITOR_ACTIONS.removeInlineFeedbackReply.attrs}
                 data-note-id={noteId}
                 data-offset={sourceStart + segment.reply.offset}
                 aria-label={`Remove response at character ${sourceStart + segment.reply.offset}`}
@@ -138,7 +139,7 @@ export function FeedbackPrompt({
             {choiceGroup.choices.map((choice) => (
               <div
                 class="note-card__choice"
-                data-action="toggle-feedback-choice"
+                {...INSPECTOR_AND_EDITOR_ACTIONS.toggleFeedbackChoice.attrs}
                 data-note-id={id}
                 data-choice-id={choice.id}
                 role="button"
@@ -238,7 +239,12 @@ export function NoteCard({
         <span class="note-card__header-end">
           {!editorOpen && deletable && (
             <span class="note-card__actions">
-              <button type="button" data-action="delete-note" data-note-id={id} aria-label="Delete note">
+              <button
+                type="button"
+                {...INSPECTOR_AND_EDITOR_ACTIONS.deleteNote.attrs}
+                data-note-id={id}
+                aria-label="Delete note"
+              >
                 <LucideIcon icon={Trash2} name="trash-2" />
               </button>
             </span>
@@ -279,7 +285,7 @@ export function NoteCard({
                 <wa-button
                   size="small"
                   appearance="outlined"
-                  data-action="dismiss-feedback"
+                  {...INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.attrs}
                   data-note-id={id}
                   title="Clear this feedback request without replying"
                 >
@@ -289,7 +295,7 @@ export function NoteCard({
               <wa-button
                 size="small"
                 appearance="accent"
-                data-action="save-note-edit"
+                {...INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.attrs}
                 data-note-id={id}
                 data-note-response={feedbackResponse ? 'true' : undefined}
               >
@@ -304,7 +310,12 @@ export function NoteCard({
         </div>
       )}
       {respondToFeedback && !readerMode && (
-        <wa-button class="note-card__respond" appearance="outlined" data-action="respond-to-feedback" data-note-id={id}>
+        <wa-button
+          class="note-card__respond"
+          appearance="outlined"
+          {...INSPECTOR_AND_EDITOR_ACTIONS.respondToFeedback.attrs}
+          data-note-id={id}
+        >
           Respond to Feedback
         </wa-button>
       )}

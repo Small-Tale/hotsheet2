@@ -20,6 +20,7 @@ import {
 } from 'lucide';
 
 import { orderedDrawerTabIds } from '../drawer-tab-order';
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { terminalGridContentSize } from '../terminal-grid-layout';
 import {
@@ -227,7 +228,7 @@ export function TerminalDrawer({
       {!focusMode && (
         <header
           class="terminal-drawer__rail"
-          data-action="toggle-terminal-drawer-maximize"
+          {...TERMINALS_ACTIONS.toggleTerminalDrawerMaximize.attrs}
           title={`Double-click to ${maximized ? 'restore' : 'maximize'} terminal drawer`}
         >
           <div class="terminal-drawer__views">
@@ -279,7 +280,7 @@ export function TerminalDrawer({
                 <ToolbarControlGroup className="terminal-drawer__actions" appearance="borderless" single>
                   <button
                     type="button"
-                    data-action="toggle-terminal-drawer"
+                    {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
                     aria-label="Hide terminal drawer"
                     title="Hide terminal drawer"
                   >
@@ -323,7 +324,7 @@ export function TerminalDrawer({
         <button
           type="button"
           class="terminal-drawer__focus-text-size"
-          data-action="cycle-mobile-terminal-columns"
+          {...TERMINALS_ACTIONS.cycleMobileTerminalColumns.attrs}
           data-columns={String(focusTextSize.columns)}
           data-keyboard-visible={String(focusTextSize.keyboardVisible)}
           aria-label={`Text size: ${focusTextSize.columns} columns. Change text size`}
@@ -336,7 +337,7 @@ export function TerminalDrawer({
         <button
           type="button"
           class="terminal-drawer__focus-exit"
-          data-action="exit-terminal-focus-mode"
+          {...TERMINALS_ACTIONS.exitTerminalFocusMode.attrs}
           aria-label="Exit terminal focus"
           title="Exit terminal focus"
         >

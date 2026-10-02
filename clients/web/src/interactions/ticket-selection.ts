@@ -6,6 +6,7 @@ import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { adjacentTicketSlug, isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
 import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from '../context-menu-position';
+import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { shouldAutoOpenInspectorOnTap } from '../mobile-layout';
 import { ticketBoardGroups } from '../ticket-board-layout';
@@ -125,7 +126,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     appleShortcutPlatform,
   } = dependencies;
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-ticket-row"]', (event, target) => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
       if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
       const pointer = event as MouseEvent,
         rail = Boolean(target.closest('[data-component="terminal-ticket-rail-list"]'));
@@ -154,29 +155,34 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'pointerdown', '[data-action="select-ticket-row"]', (event, target) => {
-      const pointer = event as PointerEvent,
-        active = document.activeElement,
-        slug = data(target).ticketSlug!;
-      if (
-        pointer.button === 0 &&
-        active instanceof HTMLElement &&
-        active.closest(
-          '[data-component="ticket-inspector-header"], [data-component="ticket-inspector-body"], [data-component="ticket-reader"]',
-        ) &&
-        active.matches(
-          'input, textarea, select, wa-input, wa-textarea, wa-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
-        ) &&
-        isPlainTicketReselection(selectedTicketSlugs.value, selectedTicket.value?.slug, slug, {
-          range: pointer.shiftKey,
-          toggle: pointer.metaKey || pointer.ctrlKey,
-        })
-      )
-        event.preventDefault();
-    }),
+    delegateCapture(
+      document.body,
+      'pointerdown',
+      TICKET_SELECTION_ACTIONS.selectTicketRow.selector,
+      (event, target) => {
+        const pointer = event as PointerEvent,
+          active = document.activeElement,
+          slug = data(target).ticketSlug!;
+        if (
+          pointer.button === 0 &&
+          active instanceof HTMLElement &&
+          active.closest(
+            '[data-component="ticket-inspector-header"], [data-component="ticket-inspector-body"], [data-component="ticket-reader"]',
+          ) &&
+          active.matches(
+            'input, textarea, select, wa-input, wa-textarea, wa-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
+          ) &&
+          isPlainTicketReselection(selectedTicketSlugs.value, selectedTicket.value?.slug, slug, {
+            range: pointer.shiftKey,
+            toggle: pointer.metaKey || pointer.ctrlKey,
+          })
+        )
+          event.preventDefault();
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-ticket-column"]', (event, target) => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.selectTicketColumn.selector, (event, target) => {
       event.stopImmediatePropagation();
       const column = target.closest<HTMLElement>('[data-component="ticket-board-column"]'),
         columnId = column?.dataset.columnId;
@@ -194,13 +200,13 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', '[data-action="select-ticket-row"]', (event, target) => {
+    delegate(document.body, 'dblclick', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
       if ((event.target as Element).closest('button, input, textarea, select, a, [contenteditable="true"]')) return;
       void openTicketReader(data(target).ticketSlug!, selectionOrder(target), target as HTMLElement);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'contextmenu', '[data-action="select-ticket-row"]', (event, target) => {
+    delegate(document.body, 'contextmenu', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
       event.preventDefault();
       const pointer = event as MouseEvent,
         slug = data(target).ticketSlug!;
@@ -213,7 +219,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
   );
   wireWorkspaceOverflowKeyboard(document.body);
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-selected-up-next"]', () => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.toggleSelectedUpNext.selector, () => {
       const selected = selectedRows();
       if (selected.length === 0) return;
       void executeBulkTicketAction(
@@ -223,7 +229,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-selected-ticket-actions"]', (_event, target) => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.openSelectedTicketActions.selector, (_event, target) => {
       const selected = selectedRows();
       if (selected.length === 0) return;
       const rect = target.getBoundingClientRect(),
@@ -255,7 +261,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-context-action="Report not working"]', (event) => {
+    delegate(document.body, 'click', TICKET_SELECTION_TARGETS.reportNotWorkingContextAction.selector, (event) => {
       event.stopImmediatePropagation();
       const menu = ticketContextMenu.value;
       if (!menu) return;
@@ -265,7 +271,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-context-action="Reopen ticket"]', (event) => {
+    delegate(document.body, 'click', TICKET_SELECTION_TARGETS.reopenTicketContextAction.selector, (event) => {
       event.stopImmediatePropagation();
       const menu = ticketContextMenu.value;
       if (!menu) return;
@@ -275,7 +281,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-context-action="Close ticket"]', (event) => {
+    delegate(document.body, 'click', TICKET_SELECTION_TARGETS.closeTicketContextAction.selector, (event) => {
       event.stopImmediatePropagation();
       const menu = ticketContextMenu.value;
       if (!menu) return;
@@ -343,7 +349,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="submit-bulk-tag"]', (event, target) => {
+    delegate(document.body, 'submit', TICKET_SELECTION_ACTIONS.submitBulkTag.selector, (event, target) => {
       event.preventDefault();
       const value = target.querySelector<Control>('[name="bulk-ticket-tag"]')?.value ?? '',
         mode = data(target).tagMode;
@@ -355,7 +361,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="choose-bulk-tag"]', (_event, target) => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.chooseBulkTag.selector, (_event, target) => {
       const input = document.querySelector<Control>('[name="bulk-ticket-tag"]');
       if (input) {
         input.value = data(target).tag ?? '';
@@ -364,33 +370,38 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-bulk-ticket-action"]', () => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.selector, () => {
       bulkTicketDialog.value = undefined;
       dependencies.bulkTicketSlugs = [];
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-empty-trash"]', () => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.openEmptyTrash.selector, () => {
       openEmptyTrash();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="confirm-empty-trash"]', () => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.confirmEmptyTrash.selector, () => {
       void emptyTrash();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[name="ticket-close-reason"]', (_event, target) => {
+    delegate(document.body, 'change', TICKET_SELECTION_TARGETS.ticketCloseReasonField.selector, (_event, target) => {
       setTicketCloseReason((target as Control).value as TicketCloseReason);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="ticket-close-target-search"]', (_event, target) => {
-      searchTicketCloseTargets((target as Control).value);
-    }),
+    delegate(
+      document.body,
+      'input',
+      TICKET_SELECTION_TARGETS.ticketCloseTargetSearchField.selector,
+      (_event, target) => {
+        searchTicketCloseTargets((target as Control).value);
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-ticket-close-target"]', (_event, target) => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.selectTicketCloseTarget.selector, (_event, target) => {
       const current = ticketCloseDialog.value,
         candidate = current?.candidates.find((item) => duplicateTargetKey(item) === data(target).itemId);
       if (current && candidate)
@@ -398,7 +409,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="clear-ticket-close-target"]', () => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.clearTicketCloseTarget.selector, () => {
       const current = ticketCloseDialog.value;
       if (!current) return;
       ticketCloseDialog.value = { ...current, selected: undefined, query: '', candidates: [], error: '' };
@@ -406,29 +417,29 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="submit-ticket-close"]', (event) => {
+    delegate(document.body, 'submit', TICKET_SELECTION_ACTIONS.submitTicketClose.selector, (event) => {
       event.preventDefault();
       void submitTicketClose();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-ticket-close"]', () => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.cancelTicketClose.selector, () => {
       closeTicketCloseDialog();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', '[data-component="ticket-close-dialog"]', (event, target) => {
+    delegate(document.body, 'wa-hide', TICKET_SELECTION_TARGETS.ticketCloseDialog.selector, (event, target) => {
       if (event.composedPath()[0] === target) closeTicketCloseDialog();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-duplicate-target"]', (_event, target) => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.openDuplicateTarget.selector, (_event, target) => {
       dependencies.ticketLinkReturnFocus = target as HTMLElement;
       void openDuplicateTarget(data(target).targetId ?? data(target).itemId!);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="confirm-bulk-delete"]', () => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.confirmBulkDelete.selector, () => {
       void executeBulkTicketAction({ kind: 'delete' }, dependencies.bulkTicketSlugs);
     }),
   );
@@ -444,7 +455,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     ),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="not-working-note"]', (_event, target) => {
+    delegate(document.body, 'input', TICKET_SELECTION_TARGETS.notWorkingNoteField.selector, (_event, target) => {
       notWorkingNote.value = (target as HTMLTextAreaElement).value;
       scheduleProjectSessionPersistence();
       presentNotWorkingDialog();
@@ -458,7 +469,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="remove-not-working-attachment"]', (_event, target) => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.removeNotWorkingAttachment.selector, (_event, target) => {
       const id = data(target).pendingAttachmentId;
       if (id) void deleteDraftFiles(draftScope('not-working', notWorkingTarget.value.projectId), [id]);
       notWorkingFiles.value = notWorkingFiles.value.filter((item) => item.id !== id);
@@ -466,18 +477,18 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dragover', '[data-not-working-dropzone="true"]', (event, target) => {
+    delegate(document.body, 'dragover', TICKET_SELECTION_TARGETS.notWorkingDropzone.selector, (event, target) => {
       event.preventDefault();
       (target as HTMLElement).dataset.dragging = 'true';
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dragleave', '[data-not-working-dropzone="true"]', (_event, target) => {
+    delegate(document.body, 'dragleave', TICKET_SELECTION_TARGETS.notWorkingDropzone.selector, (_event, target) => {
       delete (target as HTMLElement).dataset.dragging;
     }),
   );
   lifetime.add(
-    delegate(document.body, 'drop', '[data-not-working-dropzone="true"]', (event, target) => {
+    delegate(document.body, 'drop', TICKET_SELECTION_TARGETS.notWorkingDropzone.selector, (event, target) => {
       event.preventDefault();
       delete (target as HTMLElement).dataset.dragging;
       const files = (event as DragEvent).dataTransfer?.files;
@@ -485,18 +496,18 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="submit-not-working"]', (event) => {
+    delegate(document.body, 'submit', TICKET_SELECTION_ACTIONS.submitNotWorking.selector, (event) => {
       event.preventDefault();
       void submitNotWorking();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-not-working"]', () => {
+    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.cancelNotWorking.selector, () => {
       closeNotWorking();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', '[data-component="not-working-dialog"]', (_event, dialog) => {
+    delegate(document.body, 'wa-hide', TICKET_SELECTION_TARGETS.notWorkingDialog.selector, (_event, dialog) => {
       const target = notWorkingTarget.value,
         activeLabel = target.mode === 'reopen' ? `Reopen Ticket — ${target.slug}` : `Not Working — ${target.slug}`;
       if (!notWorkingSubmitting.value && target.slug && dialog.getAttribute('aria-label') === activeLabel)
@@ -504,7 +515,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-action="select-ticket-row"]', (event, target) => {
+    delegate(document.body, 'keydown', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
       const keyboard = event as KeyboardEvent,
         row = target as HTMLElement,
         slug = data(row).ticketSlug!,

@@ -5,6 +5,8 @@ import './bulk-ticket-dialog.css';
 
 import { Row } from '@kerfjs/ui/row';
 
+import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
+
 export type BulkTicketDialogState =
   | { kind: 'tag'; mode: 'add' | 'remove'; count: number; choices: string[] }
   | { kind: 'delete'; count: number }
@@ -26,10 +28,14 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
         )}
         <div slot="footer" class="bulk-ticket-dialog__actions">
           <Row hAlign="right" vAlign="middle" gap="xs">
-            <wa-button data-action="cancel-bulk-ticket-action" appearance="outlined" disabled={state.busy}>
+            <wa-button
+              {...TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.attrs}
+              appearance="outlined"
+              disabled={state.busy}
+            >
               Cancel
             </wa-button>
-            <wa-button data-action="confirm-empty-trash" variant="danger" disabled={state.busy}>
+            <wa-button {...TICKET_SELECTION_ACTIONS.confirmEmptyTrash.attrs} variant="danger" disabled={state.busy}>
               {state.busy ? 'Emptying…' : 'Empty Trash'}
             </wa-button>
           </Row>
@@ -48,10 +54,10 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
         </p>
         <div slot="footer" class="bulk-ticket-dialog__actions">
           <Row hAlign="right" vAlign="middle" gap="xs">
-            <wa-button data-action="cancel-bulk-ticket-action" appearance="outlined">
+            <wa-button {...TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.attrs} appearance="outlined">
               Cancel
             </wa-button>
-            <wa-button data-action="confirm-bulk-delete" variant="danger">
+            <wa-button {...TICKET_SELECTION_ACTIONS.confirmBulkDelete.attrs} variant="danger">
               Delete {state.count} ticket{state.count === 1 ? '' : 's'}
             </wa-button>
           </Row>
@@ -65,13 +71,13 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
       data-component="bulk-tag-dialog"
       label={`${adding ? 'Add' : 'Remove'} tag — ${state.count} selected`}
     >
-      <form data-action="submit-bulk-tag" data-tag-mode={state.mode}>
+      <form {...TICKET_SELECTION_ACTIONS.submitBulkTag.attrs} data-tag-mode={state.mode}>
         <wa-input name="bulk-ticket-tag" label={adding ? 'Tag to add' : 'Tag to remove'} required autofocus></wa-input>
         {!adding && state.choices.length > 0 && (
           <div class="bulk-ticket-dialog__choices" aria-label="Tags in selection">
             <Row gap="xs" wrap>
               {state.choices.map((tag) => (
-                <button type="button" data-action="choose-bulk-tag" data-tag={tag}>
+                <button type="button" {...TICKET_SELECTION_ACTIONS.chooseBulkTag.attrs} data-tag={tag}>
                   {tag}
                 </button>
               ))}
@@ -79,7 +85,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
           </div>
         )}
         <Row className="bulk-ticket-dialog__actions" hAlign="right" vAlign="middle" gap="xs">
-          <wa-button type="button" data-action="cancel-bulk-ticket-action" appearance="outlined">
+          <wa-button type="button" {...TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.attrs} appearance="outlined">
             Cancel
           </wa-button>
           <wa-button type="submit" variant="brand">

@@ -27,13 +27,13 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(markup).toContain('role="searchbox" aria-label="Search tickets"');
     expect(markup).toContain('data-token-value="is:open"');
     expect(markup).toContain('>parser</span>');
-    expect(markup).toContain(`data-action="${TICKET_SEARCH_ACTIONS.editToken}"`);
-    expect(markup).toContain(`data-action="${TICKET_SEARCH_ACTIONS.removeToken}"`);
-    expect(markup).toContain(`data-action="${TICKET_SEARCH_ACTIONS.clear}"`);
+    expect(markup).toContain(`data-action="${TICKET_SEARCH_ACTIONS.editToken.value}"`);
+    expect(markup).toContain(`data-action="${TICKET_SEARCH_ACTIONS.removeToken.value}"`);
+    expect(markup).toContain(`data-action="${TICKET_SEARCH_ACTIONS.clear.value}"`);
     expect(markup).toContain('aria-label="Clear search"');
     expect(markup).toMatch(
       new RegExp(
-        `class="ticket-search-field__help-button" data-action="${TICKET_SEARCH_ACTIONS.toggleHelp}" aria-label="Search syntax help" aria-expanded="false"`,
+        `class="ticket-search-field__help-button" data-action="${TICKET_SEARCH_ACTIONS.toggleHelp.value}" aria-label="Search syntax help" aria-expanded="false"`,
       ),
     );
     expect(markup).toContain('data-lucide="circle-help"');
@@ -72,7 +72,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(date).toContain('role="group" aria-label="Date and time helper"');
     expect(date).toContain('name="ticket-search-date" type="date"');
     expect(date).toContain('name="ticket-search-time" type="time"');
-    expect(date).toContain(`data-action="${TICKET_SEARCH_ACTIONS.applyDate}" data-date-prefix="updated-after"`);
+    expect(date).toContain(`data-action="${TICKET_SEARCH_ACTIONS.applyDate.value}" data-date-prefix="updated-after"`);
     expect(date).not.toContain('aria-label="Search syntax"');
     const help = String(TicketSearchField({ id: 'f', label: 'Search', model: model(), helpOpen: true }));
     expect(help).toContain('aria-expanded="true"');

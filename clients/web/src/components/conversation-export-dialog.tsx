@@ -11,6 +11,7 @@ import {
   conversationExportValidation,
   selectedConversationMessages,
 } from '../conversation-export';
+import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { ContentTransition } from './content-transition';
 import { FlowBackButton } from './flow-back-button';
 
@@ -62,7 +63,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
   const scopeScreen = (
     <form
       class="conversation-export-dialog__form conversation-export-dialog__screen"
-      data-action="submit-conversation-export"
+      {...COMMANDS_AND_AI_ACTIONS.submitConversationExport.attrs}
     >
       <header class="conversation-export-dialog__header">
         <span>Step 1 of 2</span>
@@ -95,7 +96,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
   const bundleScreen = (
     <form
       class="conversation-export-dialog__form conversation-export-dialog__screen"
-      data-action="submit-conversation-export"
+      {...COMMANDS_AND_AI_ACTIONS.submitConversationExport.attrs}
     >
       {hasScopeChoice && (
         <FlowBackButton action="previous-conversation-export-step" label="Message scope" disabled={busy} />
@@ -230,7 +231,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
   return (
     <wa-dialog
       class="conversation-export-dialog"
-      data-component="conversation-export-dialog"
+      {...COMMANDS_AND_AI_TARGETS.conversationExportDialog.attrs}
       data-step={step}
       data-navigation={navigation}
       label="Save conversation"

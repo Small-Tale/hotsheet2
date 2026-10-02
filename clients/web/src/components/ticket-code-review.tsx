@@ -18,6 +18,7 @@ import {
 } from 'lucide';
 
 import type { CodeReview, CodeReviewTarget, CommitRef } from '../api';
+import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { MarkdownPreview } from './markdown-preview';
 
 export interface CodeReviewComparison {
@@ -80,7 +81,7 @@ export function TicketCodeReview({
               <button
                 type="button"
                 class="ticket-code-review__evidence"
-                data-action="open-change-evidence"
+                {...REPOSITORY_ACTIONS.openChangeEvidence.attrs}
                 aria-label="Open change evidence"
               >
                 <h3>Change evidence</h3>
@@ -130,7 +131,7 @@ export function TicketCodeReview({
                       <ToolbarControlGroup label="Comparison side" size="compact">
                         <button
                           type="button"
-                          data-action="set-repository-comparison-side"
+                          {...REPOSITORY_ACTIONS.setRepositoryComparisonSide.attrs}
                           data-comparison-side="a"
                           data-selected={String(comparison.side === 'a')}
                           aria-pressed={comparison.side === 'a'}
@@ -139,7 +140,7 @@ export function TicketCodeReview({
                         </button>
                         <button
                           type="button"
-                          data-action="set-repository-comparison-side"
+                          {...REPOSITORY_ACTIONS.setRepositoryComparisonSide.attrs}
                           data-comparison-side="b"
                           data-selected={String(comparison.side === 'b')}
                           aria-pressed={comparison.side === 'b'}

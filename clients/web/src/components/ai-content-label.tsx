@@ -3,6 +3,8 @@ import './ai-content-label.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Sparkles, ThumbsDown, ThumbsUp } from 'lucide';
 
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+
 export interface AIContentLabelProps {
   tool?: string;
   mayContainErrors?: boolean;
@@ -15,7 +17,7 @@ export function AIContentFeedback({ tool = 'AI', feedbackTarget }: { tool?: stri
     <span class="ai-content-label__feedback" role="group" aria-label={`Feedback on ${attribution}`}>
       <button
         type="button"
-        data-action="rate-ai-content"
+        {...COMMANDS_AND_AI_ACTIONS.rateAiContent.attrs}
         data-ai-feedback-target={feedbackTarget}
         data-ai-feedback-rating="helpful"
         aria-label="Helpful — keep suggestions like this"
@@ -25,7 +27,7 @@ export function AIContentFeedback({ tool = 'AI', feedbackTarget }: { tool?: stri
       </button>
       <button
         type="button"
-        data-action="rate-ai-content"
+        {...COMMANDS_AND_AI_ACTIONS.rateAiContent.attrs}
         data-ai-feedback-target={feedbackTarget}
         data-ai-feedback-rating="not-helpful"
         aria-label="Not helpful — stop suggestions like this"

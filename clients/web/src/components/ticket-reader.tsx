@@ -3,6 +3,7 @@ import './ticket-reader.css';
 
 import type { SafeHtml } from 'kerfjs';
 
+import { INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
 import { TicketInspector, type TicketInspectorProps } from './ticket-inspector';
 
 export type TicketReaderProps = Omit<TicketInspectorProps, 'presentation'> & {
@@ -51,7 +52,7 @@ export function TicketReader({
   return (
     <wa-dialog
       class="ticket-reader-dialog"
-      data-component="ticket-reader"
+      {...INSPECTOR_AND_EDITOR_TARGETS.ticketReader.attrs}
       data-key={frameId}
       data-reader-frame-id={frameId}
       data-large-text={String(props.largeText ?? false)}

@@ -19,6 +19,7 @@ import { type SettingsCategory } from '../components/settings-navigation';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
+import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
 import { loadLucideCatalog } from '../lucide-catalog';
@@ -250,13 +251,13 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     reopenGitHubSignIn,
   } = dependencies;
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-command-group"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.toggleCommandGroup.selector, () => {
       commandGroupExpanded.value = !commandGroupExpanded.value;
       persistWorkspacePreferences();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-command-section"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.toggleCommandSection.selector, (_event, target) => {
       const current = project(),
         group = target.closest<HTMLElement>('[data-command-group]')?.dataset.commandGroup;
       if (!current || !group) return;
@@ -265,12 +266,12 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-drive"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.toggleDrive.selector, () => {
       void toggleSidebarDrive();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-drive-options"]', (event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.toggleDriveOptions.selector, (event, target) => {
       event.stopPropagation();
       const opening = !driveOptionsOpen.value;
       if (opening) {
@@ -289,7 +290,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   // Web Awesome closes a menu when a choice is picked; the Drive menu stays open across provider,
   // model, and effort picks, so each choice re-reveals the re-rendered menu (HS2-2EHD8R).
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-drive-default"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectDriveDefault.selector, () => {
       const current = project();
       if (!current) return;
       driveOverridesByProject.value = { ...driveOverridesByProject.value, [current.id]: {} };
@@ -297,7 +298,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-drive-tool"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectDriveTool.selector, (_event, target) => {
       const current = project(),
         tool = data(target).value;
       if (!current || !tool) return;
@@ -309,18 +310,18 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-drive-model"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectDriveModel.selector, (_event, target) => {
       selectDriveModel(data(target).value ?? '');
       revealContextPopupMenu('drive-options');
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-drive-manual-model"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openDriveManualModel.selector, () => {
       openManualModel('drive');
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-drive-effort"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectDriveEffort.selector, (_event, target) => {
       const current = project(),
         effort = data(target).value;
       if (!current || !effort) return;
@@ -342,22 +343,22 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     { capture: true, signal: lifetime.signal },
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-conversation"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openConversation.selector, () => {
       void openSidebarConversation();
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', '[data-component="ai-conversation"]', (event, target) => {
+    delegateCapture(document.body, 'wa-hide', COMMANDS_AND_AI_TARGETS.aiConversation.selector, (event, target) => {
       if (isConversationSurfaceLifecycleEvent(event, target)) conversationOpen.value = false;
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="save-conversation"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.saveConversation.selector, () => {
       openConversationExport();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="pick-conversation-message"]', (event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
       if ((event.target as Element).closest('a,button,input,select,textarea') || window.getSelection()?.toString())
         return;
       const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId,
@@ -366,7 +367,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-action="pick-conversation-message"]', (event, target) => {
+    delegate(document.body, 'keydown', COMMANDS_AND_AI_ACTIONS.pickConversationMessage.selector, (event, target) => {
       const keyboard = event as KeyboardEvent;
       if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
       keyboard.preventDefault();
@@ -374,19 +375,19 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="copy-conversation-selection"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.copyConversationSelection.selector, (_event, target) => {
       const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId;
       if (connectionId) void copyConversationSelection(connectionId);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="clear-conversation-selection"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.clearConversationSelection.selector, (_event, target) => {
       const connectionId = target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId;
       if (connectionId) clearConversationSelection(connectionId);
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'click', '[data-component="conversation-export-dialog"]', (event) => {
+    delegateCapture(document.body, 'click', COMMANDS_AND_AI_TARGETS.conversationExportDialog.selector, (event) => {
       const action = event
           .composedPath()
           .find((item): item is HTMLElement => item instanceof HTMLElement && Boolean(item.dataset.action))
@@ -453,29 +454,34 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="submit-conversation-export"]', (event) => {
+    delegate(document.body, 'submit', COMMANDS_AND_AI_ACTIONS.submitConversationExport.selector, (event) => {
       event.preventDefault();
       void finishConversationExport();
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', '[data-component="conversation-export-dialog"]', (event, target) => {
-      if (event.target !== target) return;
-      if (conversationExportDialog.value?.busy) {
-        event.preventDefault();
-        return;
-      }
-      conversationExportDialog.value = undefined;
-    }),
+    delegateCapture(
+      document.body,
+      'wa-hide',
+      COMMANDS_AND_AI_TARGETS.conversationExportDialog.selector,
+      (event, target) => {
+        if (event.target !== target) return;
+        if (conversationExportDialog.value?.busy) {
+          event.preventDefault();
+          return;
+        }
+        conversationExportDialog.value = undefined;
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="conversation-draft"]', (_event, target) => {
+    delegate(document.body, 'input', COMMANDS_AND_AI_TARGETS.conversationDraftField.selector, (_event, target) => {
       const id = conversationConnectionId.value;
       if (id) conversationDrafts.value = { ...conversationDrafts.value, [id]: (target as HTMLTextAreaElement).value };
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[name="conversation-draft"]', (event, target) => {
+    delegate(document.body, 'keydown', COMMANDS_AND_AI_TARGETS.conversationDraftField.selector, (event, target) => {
       const keyboard = event as KeyboardEvent;
       if (keyboard.key !== 'Enter' || keyboard.shiftKey || keyboard.isComposing) return;
       keyboard.preventDefault();
@@ -483,38 +489,38 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="send-conversation-turn"]', (event) => {
+    delegate(document.body, 'submit', COMMANDS_AND_AI_ACTIONS.sendConversationTurn.selector, (event) => {
       event.preventDefault();
       void sendConversationTurn();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="stop-conversation"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.stopConversation.selector, () => {
       void stopConversation();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-conversation-provider"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectConversationProvider.selector, (_event, target) => {
       void selectConversationProvider(data(target).value ?? '');
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-conversation-model"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectConversationModel.selector, (_event, target) => {
       selectConversationModel(data(target).value ?? '');
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-conversation-effort"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectConversationEffort.selector, (_event, target) => {
       selectConversationEffort(data(target).value ?? '');
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-conversation-manual-model"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openConversationManualModel.selector, () => {
       openManualModel('conversation');
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="rate-ai-content"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.rateAiContent.selector, (_event, target) => {
       const ticket = selectedTicket.value,
         rating = data(target).aiFeedbackRating,
         targetId = data(target).aiFeedbackTarget;
@@ -536,7 +542,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="run-command"]', (event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.runCommand.selector, (event, target) => {
       if (dependencies.commandLongPressFired) {
         event.preventDefault();
         dependencies.commandLongPressFired = false;
@@ -546,7 +552,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="dismiss-command-dialog"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.selector, () => {
       commandDialogId.value = undefined;
       commandStopConfirmation.value = false;
     }),
@@ -563,7 +569,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="confirm-stop-command"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.confirmStopCommand.selector, (_event, target) => {
       const current = project(),
         runId = data(target).runId;
       if (!current || !runId) return;
@@ -583,20 +589,20 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
   function openCommandEditor(id:string){commandSettingsEditingId.value=id;commandIconSearch.value='';void loadLucideCatalog();(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).showPopover?.()}
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="edit-command-setting"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.editCommandSetting.selector, (_event, target) => {
       const id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
       if (id) openCommandEditor(id);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="add-command-setting"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.addCommandSetting.selector, () => {
       const current = project();
       if (current) openCommandEditor(addCommandSetting(current.id));
     }),
   );
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click','[data-action="close-command-editor"]',()=>{(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();commandSettingsEditingId.value=undefined;commandIconSearch.value=''}));
+  lifetime.add(delegate(document.body,'click',COMMANDS_AND_AI_ACTIONS.closeCommandEditor.selector,()=>{(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();commandSettingsEditingId.value=undefined;commandIconSearch.value=''}));
   lifetime.add(
     delegateCapture(
       document.body,
@@ -612,20 +618,20 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="delete-command-setting"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.deleteCommandSetting.selector, (_event, target) => {
       const current = project(),
         id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
       if (current && id) deleteCommandSetting(current.id, id);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="add-command-group"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.addCommandGroup.selector, () => {
       const current = project();
       if (current) addCommandGroup(current.id);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="delete-command-group"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.deleteCommandGroup.selector, (_event, target) => {
       const current = project(),
         group = target.closest<HTMLElement>('[data-group]')?.dataset.group;
       if (current && group) deleteCommandGroup(current.id, group);
@@ -746,12 +752,12 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="command-icon-search"]', (_event, target) => {
+    delegate(document.body, 'input', COMMANDS_AND_AI_TARGETS.commandIconSearchField.selector, (_event, target) => {
       commandIconSearch.value = (target as HTMLInputElement).value;
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-command-icon"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandIcon.selector, (_event, target) => {
       const current = project(),
         id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
         name = (target as HTMLElement).dataset.iconName;
@@ -759,14 +765,14 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-command-ai-default"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandAiDefault.selector, (_event, target) => {
       const current = project(),
         id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
       if (current && id) updateCommandAiSelection(current.id, id, {});
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-command-ai-tool"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandAiTool.selector, (_event, target) => {
       const current = project(),
         id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
         tool = data(target).value,
@@ -777,7 +783,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-command-ai-model"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandAiModel.selector, (_event, target) => {
       const current = project(),
         id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
         model = data(target).value,
@@ -789,7 +795,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-command-ai-effort"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandAiEffort.selector, (_event, target) => {
       const current = project(),
         id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
         effort = data(target).value,
@@ -799,20 +805,20 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-command-manual-model"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openCommandManualModel.selector, (_event, target) => {
       const id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
       if (id) openManualModel('command', id);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[data-action="toggle-loading-activity"]', (_event, target) => {
+    delegate(document.body, 'change', COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.selector, (_event, target) => {
       const checked = (target as HTMLInputElement).checked;
       showLoadingActivity.value = checked;
       localStorage.setItem('hotsheet.show-loading-activity', String(checked));
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[data-action="toggle-global-shell-history"]', (_event, target) => {
+    delegate(document.body, 'change', COMMANDS_AND_AI_ACTIONS.toggleGlobalShellHistory.selector, (_event, target) => {
       const current = project(),
         checked = (target as HTMLInputElement).checked;
       if (!current) return;
@@ -833,7 +839,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="save-trash-settings"]', (event, target) => {
+    delegate(document.body, 'submit', COMMANDS_AND_AI_ACTIONS.saveTrashSettings.selector, (event, target) => {
       event.preventDefault();
       const current = project(),
         raw = target.querySelector<Control>('[name="trash-cleanup-days"]')?.value ?? '',
@@ -871,7 +877,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="set-view-mode"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.setViewMode.selector, (_event, target) => {
       const mode = (data(target).segmentValue ?? data(target).viewMode) as WorkspaceViewMode,
         finishTiming = beginInteractionTiming('workspace-mode-change', { mode });
       resetProgressiveTicketRendering();
@@ -882,7 +888,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-settings-category"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectSettingsCategory.selector, (_event, target) => {
       const current = project(),
         category = (data(target).itemId ?? 'sources') as SettingsCategory;
       if (!current) return;
@@ -908,21 +914,21 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     saveShortcutOverrides(next, localStorage);
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="edit-shortcut"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.editShortcut.selector, (_event, target) => {
       const id = data(target).shortcutId;
       if (id && shortcutDef(id)?.editable) setCapturingShortcut(id);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-shortcut-capture"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.cancelShortcutCapture.selector, () => {
       setCapturingShortcut(undefined);
     }),
   );
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click','[data-action="reset-shortcut"]',(_event,target)=>{const id=data(target).shortcutId;if(!id||!keyboardShortcutOverrides.value[id])return;persistShortcutOverrides(Object.fromEntries(Object.entries(keyboardShortcutOverrides.value).filter(([entryId])=>entryId!==id)));if(capturingShortcutId.value===id)setCapturingShortcut(undefined)}));
+  lifetime.add(delegate(document.body,'click',COMMANDS_AND_AI_ACTIONS.resetShortcut.selector,(_event,target)=>{const id=data(target).shortcutId;if(!id||!keyboardShortcutOverrides.value[id])return;persistShortcutOverrides(Object.fromEntries(Object.entries(keyboardShortcutOverrides.value).filter(([entryId])=>entryId!==id)));if(capturingShortcutId.value===id)setCapturingShortcut(undefined)}));
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="reset-all-shortcuts"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.resetAllShortcuts.selector, () => {
       persistShortcutOverrides({});
       setCapturingShortcut(undefined);
     }),
@@ -968,14 +974,14 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-manual-model"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.cancelManualModel.selector, () => {
       const state = manualModelDialog.value;
       manualModelDialog.value = undefined;
       restoreCommandEditorAfterManualModel(state);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="submit-manual-model"]', (event, target) => {
+    delegate(document.body, 'submit', COMMANDS_AND_AI_ACTIONS.submitManualModel.selector, (event, target) => {
       event.preventDefault();
       const state = manualModelDialog.value,
         model = target.querySelector<Control>('[name="manual-model"]')?.value.trim();
@@ -998,12 +1004,12 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-after-show', '[data-component="manual-model-dialog"]', () => {
+    delegateCapture(document.body, 'wa-after-show', COMMANDS_AND_AI_TARGETS.manualModelDialog.selector, () => {
       dependencies.manualModelDialogShown = true;
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', '[data-component="manual-model-dialog"]', () => {
+    delegateCapture(document.body, 'wa-hide', COMMANDS_AND_AI_TARGETS.manualModelDialog.selector, () => {
       if (dependencies.manualModelDialogShown) {
         const state = manualModelDialog.value;
         manualModelDialog.value = undefined;
@@ -1012,7 +1018,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-provider-dialog"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openProviderDialog.selector, () => {
       const current = project();
       if (!current) return;
       ticketSourceSetupProject.value = current;
@@ -1026,7 +1032,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="edit-provider-connection"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.editProviderConnection.selector, (_event, target) => {
       const current = project(),
         connection = providerConnections.value.find((item) => item.id === data(target).itemId);
       if (!current || !connection) return;
@@ -1042,13 +1048,13 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="detach-project-source"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.detachProjectSource.selector, (_event, target) => {
       const id = data(target).sourceId;
       if (id) void detachProjectSource(id);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="attach-project-source"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.attachProjectSource.selector, (_event, target) => {
       const id = data(target).itemId;
       if (id) void attachProjectSource(id);
     }),
@@ -1060,52 +1066,52 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="request-provider-removal"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.requestProviderRemoval.selector, () => {
       requestProviderRemoval();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-provider-removal"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.cancelProviderRemoval.selector, () => {
       cancelProviderRemoval();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="confirm-provider-removal"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.confirmProviderRemoval.selector, () => {
       void removeExternalProvider();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-provider-disabled"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.toggleProviderDisabled.selector, () => {
       void toggleProviderDisabled();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="refresh-github-repositories"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.refreshGithubRepositories.selector, () => {
       void refreshGitHubRepositories();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="choose-github-enterprise"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.chooseGithubEnterprise.selector, () => {
       chooseGitHubEnterprise(true);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="choose-github-dotcom"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.chooseGithubDotcom.selector, () => {
       chooseGitHubEnterprise(false);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="copy-github-code"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.copyGithubCode.selector, () => {
       void copyGitHubCode();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="reopen-github-sign-in"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.reopenGithubSignIn.selector, () => {
       reopenGitHubSignIn();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-provider-kind"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectProviderKind.selector, (_event, target) => {
       ticketSourceSetupNavigation.value = 'push';
       providerSetupKind.value = (data(target).itemId ?? data(target).providerKind) as ExternalProviderKind;
       providerEditingId.value = undefined;
@@ -1114,7 +1120,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="back-provider-kind"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.backProviderKind.selector, () => {
       cancelGitHubSignIn();
       ticketSourceSetupNavigation.value = 'pop';
       providerSetupKind.value = undefined;
@@ -1124,23 +1130,23 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="start-github-sign-in"]', (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.startGithubSignIn.selector, (_event, target) => {
       const form = target.closest<HTMLFormElement>('form');
       if (form) void startGitHubSignIn(form);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-github-sign-in"]', () => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.cancelGithubSignIn.selector, () => {
       cancelGitHubSignIn();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="submit-provider-setup"]', () =>
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.submitProviderSetup.selector, () =>
       document.querySelector<HTMLFormElement>('#provider-setup-form')?.requestSubmit(),
     ),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="save-provider-connection"]', (event, target) => {
+    delegate(document.body, 'submit', COMMANDS_AND_AI_ACTIONS.saveProviderConnection.selector, (event, target) => {
       event.preventDefault();
       void saveExternalProvider(target as HTMLFormElement);
     }),

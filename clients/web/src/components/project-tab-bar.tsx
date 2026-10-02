@@ -7,6 +7,8 @@ import { TabBar } from '@kerfjs/ui/tab-bar';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { ArchiveRestore, ChartNoAxesCombined, Grid3X3, Plus } from 'lucide';
 
+import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
+import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 import { ProjectTab, type ProjectTabProps } from './project-tab';
 
 export interface ProjectTabBarProps {
@@ -37,7 +39,7 @@ export function ProjectTabBar({
       <button
         type="button"
         tabindex="0"
-        data-action="set-shell-mode"
+        {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
         data-shell-mode="terminals"
         aria-label="Workspace grid"
         title="Workspace grid"
@@ -48,7 +50,7 @@ export function ProjectTabBar({
       <button
         type="button"
         tabindex="0"
-        data-action="set-shell-mode"
+        {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
         data-shell-mode="stats"
         aria-label="Cross-project stats"
         title="Cross-project stats"
@@ -65,7 +67,7 @@ export function ProjectTabBar({
       <button
         type="button"
         class="project-tab-bar__action"
-        data-action="choose-project"
+        {...PROJECT_LIFECYCLE_ACTIONS.chooseProject.attrs}
         aria-label="Add project"
         title="Add project"
       >

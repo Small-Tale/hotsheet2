@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 
+import type { AttrSpec } from 'kerfjs';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -24,6 +25,23 @@ const main = read('./main.tsx');
 const runtime = read('./app/runtime.tsx');
 const interactionBindings = read('./app/interaction-bindings.ts');
 const applicationWiring = read('./app/wire-interactions.ts');
+/**
+ * Every shared attr-spec table, so a `TABLE.key.selector` argument resolves to the literal
+ * selector string it registers and the inventory keeps proving byte-identical selectors.
+ */
+const attrTables = Object.assign(
+  {},
+  ...Object.values(
+    import.meta.glob<Record<string, Record<string, AttrSpec>>>('./interaction-attrs/*.ts', { eager: true }),
+  ),
+) as Partial<Record<string, Partial<Record<string, AttrSpec>>>>;
+const registrationArgument = (text: string) => {
+  const spec = /^(\w+)\.(\w+)\.selector$/.exec(text);
+  if (!spec) return text;
+  const selector = attrTables[spec[1]]?.[spec[2]]?.selector;
+  expect(selector, text).toBeDefined();
+  return `'${selector!}'`;
+};
 const registrations = new Set([
   'delegate',
   'delegateCapture',
@@ -84,7 +102,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
                 call,
                 ...node.arguments
                   .slice(0, call.startsWith('delegate') ? 3 : 1)
-                  .map((argument) => sourceTokens(argument.getText(tree))),
+                  .map((argument) => sourceTokens(registrationArgument(argument.getText(tree)))),
               ].join('\t'),
             );
         }
@@ -110,6 +128,14 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
     ).toBe(true);
     expect(main).not.toMatch(/delegate(?:Capture)?\(document\.body/);
     expect(runtime).not.toMatch(/delegate(?:Capture)?\(document\.body/);
+  });
+
+  it('resolves every interaction-attrs table key through its spec rather than a literal selector', () => {
+    expect(Object.keys(attrTables).length).toBeGreaterThanOrEqual(12);
+    for (const [file] of groups)
+      expect(read(`./interactions/${file}.ts`), file).not.toMatch(
+        /delegate(?:Capture)?\(\s*document\.body,\s*'[^']+',\s*'\[[\w-]+="[^"]*"\]'/,
+      );
   });
 
   it('retains shared Kerf tab and token-search adapters in their owning modules', () => {

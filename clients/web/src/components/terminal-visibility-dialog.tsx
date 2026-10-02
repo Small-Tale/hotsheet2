@@ -11,6 +11,7 @@ import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2 } from 'lucide';
 
 import { contextPopupMenuAnchor } from '../context-menu-position';
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
   TERMINAL_VISIBILITY_TYPES,
@@ -59,7 +60,7 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
       open={Boolean(prompt)}
       data-controlled-open={String(Boolean(prompt))}
     >
-      <form class="terminal-visibility-name-dialog" data-action="submit-terminal-visibility-name">
+      <form class="terminal-visibility-name-dialog" {...TERMINALS_ACTIONS.submitTerminalVisibilityName.attrs}>
         <wa-input
           name="terminal-visibility-group-name"
           label="Group name"
@@ -68,7 +69,7 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
           autofocus
         ></wa-input>
         <footer>
-          <wa-button appearance="plain" type="button" data-action="cancel-terminal-visibility-name">
+          <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalVisibilityName.attrs}>
             Cancel
           </wa-button>
           <wa-button appearance="accent" type="submit">
@@ -118,7 +119,7 @@ export function TerminalVisibilityDialog({
             <button
               type="button"
               class="terminal-visibility-dialog__add"
-              data-action="add-terminal-visibility-group"
+              {...TERMINALS_ACTIONS.addTerminalVisibilityGroup.attrs}
               aria-label="Add visibility group"
               title="Add visibility group"
             >

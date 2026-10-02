@@ -20,6 +20,7 @@ import {
 } from 'lucide';
 
 import { contextPopupMenuAnchor } from '../context-menu-position';
+import { VIEWS_AND_SAVED_VIEWS_ACTIONS } from '../interaction-attrs/views-and-saved-views';
 
 export interface ViewNavigationItem {
   id: string;
@@ -118,7 +119,7 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                     <button
                       type="button"
                       class="view-navigation__more"
-                      data-action="open-saved-view-menu"
+                      {...VIEWS_AND_SAVED_VIEWS_ACTIONS.openSavedViewMenu.attrs}
                       data-item-id={item.id}
                       data-item-label={item.label}
                       aria-label={`More actions for ${item.label}`}

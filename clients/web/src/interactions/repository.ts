@@ -11,6 +11,7 @@ import {
 import { type CodeReviewComparison, codeReviewTarget } from '../components/ticket-code-review';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
+import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { updateRepositoryFileSelection } from '../repository-file-selection';
 import { data } from './dom';
 import { createInteractionLifetime } from './lifetime';
@@ -80,30 +81,30 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
   } = dependencies;
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click','[data-action="open-repository-status"]',()=>{const status=repository.value,view=status?.conflicted?'conflicted':status?.unstaged?'unstaged':status?.staged?'staged':status?.untracked?'untracked':'commits';repositoryView.value=view;repositorySetupStep.value=status?.initialized===false?'initialize':undefined;repositorySetupError.value='';repositoryFileMenu.value=undefined;repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;repositoryComparison.value={active:false,side:'a'};expandedCodeReviewCommits.value=[];(document.querySelector('#repository-status-popover') as Control).showPopover?.();if(status?.initialized!==false)void loadRepositoryDetail(view,true)}));
+  lifetime.add(delegate(document.body,'click',REPOSITORY_ACTIONS.openRepositoryStatus.selector,()=>{const status=repository.value,view=status?.conflicted?'conflicted':status?.unstaged?'unstaged':status?.staged?'staged':status?.untracked?'untracked':'commits';repositoryView.value=view;repositorySetupStep.value=status?.initialized===false?'initialize':undefined;repositorySetupError.value='';repositoryFileMenu.value=undefined;repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;repositoryComparison.value={active:false,side:'a'};expandedCodeReviewCommits.value=[];(document.querySelector('#repository-status-popover') as Control).showPopover?.();if(status?.initialized!==false)void loadRepositoryDetail(view,true)}));
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="refresh-repository-status"]', () => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.refreshRepositoryStatus.selector, () => {
       void refreshRepositoryStatus();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="initialize-repository"]', () => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.initializeRepository.selector, () => {
       void initializeRepository();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="connect-repository-remote"]', (event, target) => {
+    delegate(document.body, 'submit', REPOSITORY_ACTIONS.connectRepositoryRemote.selector, (event, target) => {
       event.preventDefault();
       void connectRepositoryRemote(target as HTMLFormElement);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="skip-repository-remote"]', () => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.skipRepositoryRemote.selector, () => {
       skipRepositoryRemote();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-repository-view"]', (_event, target) => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.selectRepositoryView.selector, (_event, target) => {
       const view = data(target).itemId as RepositoryStatusView;
       repositoryView.value = view;
       repositoryFileMenu.value = undefined;
@@ -122,7 +123,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
       : [...expandedCodeReviewCommits.value, sha];
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-repository-comparison"]', () => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.toggleRepositoryComparison.selector, () => {
       if (repositoryComparison.value.active) {
         repositoryComparison.value = { active: false, side: 'a' };
         return;
@@ -133,17 +134,17 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="set-repository-comparison-side"]', (_event, target) => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.setRepositoryComparisonSide.selector, (_event, target) => {
       repositoryComparison.value = { ...repositoryComparison.value, side: data(target).comparisonSide as 'a' | 'b' };
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-repository-comparison-commit"]', (_event, target) => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.selectRepositoryComparisonCommit.selector, (_event, target) => {
       selectRepositoryComparisonCommit(data(target).commitSha!);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-code-review-commit"]', (_event, target) => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.toggleCodeReviewCommit.selector, (_event, target) => {
       toggleExpandedCodeReviewCommit(data(target).commitSha!);
     }),
   );
@@ -257,7 +258,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     };
   }
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-repository-file-menu-trigger"]', (event, target) => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.openRepositoryFileMenuTrigger.selector, (event, target) => {
       event.preventDefault();
       event.stopImmediatePropagation();
       const box = target.getBoundingClientRect();
@@ -265,7 +266,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', '[data-action="open-repository-file-menu-trigger"]', (event, target) => {
+    delegate(document.body, 'keydown', REPOSITORY_ACTIONS.openRepositoryFileMenuTrigger.selector, (event, target) => {
       const key = (event as KeyboardEvent).key;
       if (key !== 'Enter' && key !== ' ') return;
       event.preventDefault();
@@ -330,7 +331,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-repository-review"]', (_event, target) => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.openRepositoryReview.selector, (_event, target) => {
       const current = project(),
         reviewTarget = codeReviewTarget(data(target));
       if (!current || !reviewTarget) return;
@@ -346,9 +347,9 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
   );
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click','[data-action="open-change-evidence"]',(_event,target)=>{const review=codeReview.value;if(!review)return;changeEvidenceView.value=(['docs','tests','source','other'] as const).find(category=>review.files?.some(file=>file.category===category))??'docs';repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;changeEvidenceReader.value=target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId;requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector<Control>('#change-evidence-dialog')?.showPopover?.()))}));
+  lifetime.add(delegate(document.body,'click',REPOSITORY_ACTIONS.openChangeEvidence.selector,(_event,target)=>{const review=codeReview.value;if(!review)return;changeEvidenceView.value=(['docs','tests','source','other'] as const).find(category=>review.files?.some(file=>file.category===category))??'docs';repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;changeEvidenceReader.value=target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId;requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector<Control>('#change-evidence-dialog')?.showPopover?.()))}));
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-change-evidence-view"]', (_event, target) => {
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.selectChangeEvidenceView.selector, (_event, target) => {
       changeEvidenceView.value = data(target).itemId as ChangeEvidenceView;
       repositorySelectedFiles.value = [];
       dependencies.repositoryFileSelectionAnchor = undefined;
@@ -375,7 +376,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
       });
   }
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="open-project-form"]', (event, target) => {
+    delegate(document.body, 'submit', REPOSITORY_ACTIONS.openProjectForm.selector, (event, target) => {
       event.preventDefault();
       const root = (target.querySelector('[name="project-root"]') as Control).value,
         store = (target.querySelector('[name="ticket-store"]') as Control).value;

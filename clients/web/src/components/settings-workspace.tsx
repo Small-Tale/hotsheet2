@@ -3,6 +3,8 @@ import './settings-workspace.css';
 import { Select } from '@kerfjs/ui/select';
 
 import type { AiToolDefaults, AiToolDescriptor } from '../api';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { formatPermissionDelay, type PermissionAutomation, permissionDelaysFor } from '../permission-notifications';
 import { AiToolSettings } from './ai-tool-settings';
 import type { CommandSettingsEditorProps } from './command-settings-editor';
@@ -63,7 +65,7 @@ export function SettingsWorkspace({
           <label class="project-settings__option">
             <input
               type="checkbox"
-              data-action="toggle-global-shell-history"
+              {...COMMANDS_AND_AI_ACTIONS.toggleGlobalShellHistory.attrs}
               checked={terminals.inheritGlobalShellHistory}
             />{' '}
             Use my global shell history{' '}
@@ -105,14 +107,22 @@ export function SettingsWorkspace({
       )}
       {category === 'columns' && (
         <label class="project-settings__option">
-          <input type="checkbox" data-action="toggle-verified-column" checked={columns.hideVerified} /> Hide Verified
-          column <span>Verified tickets appear in Completed.</span>
+          <input
+            type="checkbox"
+            {...NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.attrs}
+            checked={columns.hideVerified}
+          />{' '}
+          Hide Verified column <span>Verified tickets appear in Completed.</span>
         </label>
       )}
       {category === 'general' && (
         <label class="project-settings__option">
-          <input type="checkbox" data-action="toggle-loading-activity" checked={general.showLoadingActivity} /> Show
-          loading activity{' '}
+          <input
+            type="checkbox"
+            {...COMMANDS_AND_AI_ACTIONS.toggleLoadingActivity.attrs}
+            checked={general.showLoadingActivity}
+          />{' '}
+          Show loading activity{' '}
           <span>
             Shows a small label at the top of the app describing what the server is doing (for example “Loading
             tickets”). This applies only on this machine.

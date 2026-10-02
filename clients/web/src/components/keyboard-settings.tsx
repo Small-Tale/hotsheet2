@@ -5,6 +5,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { Pencil, RotateCcw, TriangleAlert, X } from 'lucide';
 
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import {
   findChordConflict,
   formatChord,
@@ -44,7 +45,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
               <button
                 type="button"
                 class="keyboard-settings__reset-all"
-                data-action="reset-all-shortcuts"
+                {...COMMANDS_AND_AI_ACTIONS.resetAllShortcuts.attrs}
                 disabled={!hasOverrides}
               >
                 <LucideIcon icon={RotateCcw} name="rotate-ccw" />
@@ -108,7 +109,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                                     <button
                                       type="button"
                                       class="keyboard-settings__action"
-                                      data-action="cancel-shortcut-capture"
+                                      {...COMMANDS_AND_AI_ACTIONS.cancelShortcutCapture.attrs}
                                       aria-label={`Cancel editing ${shortcut.label}`}
                                       title="Cancel"
                                     >
@@ -119,7 +120,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                                       <button
                                         type="button"
                                         class="keyboard-settings__action"
-                                        data-action="edit-shortcut"
+                                        {...COMMANDS_AND_AI_ACTIONS.editShortcut.attrs}
                                         data-shortcut-id={shortcut.id}
                                         aria-label={`Change shortcut for ${shortcut.label}`}
                                         title="Change shortcut"
@@ -129,7 +130,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                                       <button
                                         type="button"
                                         class="keyboard-settings__action"
-                                        data-action="reset-shortcut"
+                                        {...COMMANDS_AND_AI_ACTIONS.resetShortcut.attrs}
                                         data-shortcut-id={shortcut.id}
                                         disabled={!overridden}
                                         aria-label={`Reset ${shortcut.label} to its default`}

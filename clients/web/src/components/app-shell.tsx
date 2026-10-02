@@ -10,6 +10,7 @@ import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { PanelBottomOpen } from 'lucide';
 
 import { APP_REGION_BOUNDS, TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resize';
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { ProjectTabProps } from './project-tab';
 import type { ProjectTabBarMode } from './project-tab-bar';
 import { ProjectTabBar } from './project-tab-bar';
@@ -158,7 +159,7 @@ export function AppShell({
               <ToolbarControlGroup single>
                 <button
                   type="button"
-                  data-action="toggle-terminal-drawer"
+                  {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
                   aria-label="Show terminal drawer"
                   title="Show terminal drawer"
                 >

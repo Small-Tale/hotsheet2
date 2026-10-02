@@ -8,6 +8,7 @@ import { Select } from '@kerfjs/ui/select';
 import { Cable, ChevronRight, Database, Plus, Unlink } from 'lucide';
 
 import type { ProviderConnection } from '../api';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { type ExternalProviderKind, providerName } from './provider-setup-form';
 
 /** One ticket source this project's checkout links (HS2-3SCH1K). */
@@ -77,7 +78,7 @@ export function TicketSourcesSettings({
       <section>
         <header class="ticket-provider-settings__header">
           <h2>Ticket sources</h2>
-          <wa-button appearance="outlined" data-action="open-provider-dialog">
+          <wa-button appearance="outlined" {...COMMANDS_AND_AI_ACTIONS.openProviderDialog.attrs}>
             Add data source
           </wa-button>
         </header>
@@ -178,7 +179,7 @@ export function TicketSourcesSettings({
         <button
           type="button"
           class="ticket-provider-settings__link"
-          data-action="select-settings-category"
+          {...COMMANDS_AND_AI_ACTIONS.selectSettingsCategory.attrs}
           data-item-id="connections"
         >
           App Settings → Connections

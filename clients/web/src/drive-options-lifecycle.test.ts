@@ -8,8 +8,8 @@ describe('Drive options lifecycle (HS2-S010QF)', () => {
     .join('\n');
 
   it('keeps the owning menu open across provider, model, effort, default, and manual-model selections', () => {
-    for (const action of ['select-drive-default', 'select-drive-tool', 'select-drive-model', 'select-drive-effort']) {
-      const start = source.indexOf(`'[data-action="${action}"]'`),
+    for (const action of ['selectDriveDefault', 'selectDriveTool', 'selectDriveModel', 'selectDriveEffort']) {
+      const start = source.indexOf(`COMMANDS_AND_AI_ACTIONS.${action}.selector`),
         end = source.indexOf('\n', start);
       expect(start, action).toBeGreaterThan(0);
       expect(source.slice(start, end)).not.toContain('driveOptionsOpen.value=false');

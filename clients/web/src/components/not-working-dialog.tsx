@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './not-working-dialog.css';
 
+import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { type PendingAttachment, PendingAttachmentPicker } from './pending-attachment-picker';
 
 export interface NotWorkingDialogProps {
@@ -34,14 +35,14 @@ export function NotWorkingDialog({
   return (
     <wa-dialog
       class="not-working-dialog"
-      data-component="not-working-dialog"
+      {...TICKET_SELECTION_TARGETS.notWorkingDialog.attrs}
       role="dialog"
       label={title}
       aria-label={title}
       open={open}
       data-controlled-open={String(Boolean(open))}
     >
-      <form data-action="submit-not-working" class="not-working-dialog__form">
+      <form {...TICKET_SELECTION_ACTIONS.submitNotWorking.attrs} class="not-working-dialog__form">
         {notesEnabled ? (
           <label class="not-working-dialog__note">
             <span>{prompt}</span>
@@ -68,7 +69,7 @@ export function NotWorkingDialog({
           {error}
         </p>
         <footer>
-          <button type="button" data-action="cancel-not-working" disabled={submitting}>
+          <button type="button" {...TICKET_SELECTION_ACTIONS.cancelNotWorking.attrs} disabled={submitting}>
             Cancel
           </button>
           <button type="submit" class="not-working-dialog__submit" disabled={submitting || empty}>

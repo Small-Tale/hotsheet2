@@ -25,6 +25,10 @@ import {
 
 import type { MediaAnnotation } from '../api';
 import { isVideoAttachment } from '../attachment-references';
+import {
+  ATTACHMENTS_AND_GALLERY_ACTIONS,
+  ATTACHMENTS_AND_GALLERY_TARGETS,
+} from '../interaction-attrs/attachments-and-gallery';
 
 export interface AttachmentGalleryImage {
   id: string;
@@ -317,7 +321,7 @@ export function AttachmentGallery({
   return (
     <dialog
       class="attachment-gallery"
-      data-component="attachment-gallery"
+      {...ATTACHMENTS_AND_GALLERY_TARGETS.attachmentGallery.attrs}
       aria-label={`${video ? 'Video' : 'Image'} ${index + 1} of ${images.length}: ${image.name}`}
     >
       <div class="attachment-gallery__toolbar">
@@ -381,7 +385,7 @@ export function AttachmentGallery({
         <div class="attachment-gallery__canvas">
           <div
             class="attachment-gallery__media-wrap"
-            data-gallery-annotation-surface="true"
+            {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryAnnotationSurface.attrs}
             data-draw-mode={String(drawMode)}
             style={
               validDimension(geometry.naturalWidth) && validDimension(geometry.naturalHeight)
@@ -392,7 +396,7 @@ export function AttachmentGallery({
             {video ? (
               <video
                 {...imageData}
-                data-gallery-media="true"
+                {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryMedia.attrs}
                 src={image.url}
                 aria-label={image.name}
                 playsInline
@@ -401,8 +405,8 @@ export function AttachmentGallery({
             ) : (
               <img
                 {...imageData}
-                data-gallery-media="true"
-                data-gallery-image="true"
+                {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryMedia.attrs}
+                {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryImage.attrs}
                 src={image.url}
                 alt={image.name}
               />
@@ -413,7 +417,7 @@ export function AttachmentGallery({
                   <button
                     type="button"
                     class="attachment-gallery__annotation"
-                    data-action="select-gallery-annotation"
+                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.attrs}
                     data-annotation-id={annotation.id}
                     data-annotation-start={annotation.start_ms}
                     data-annotation-end={annotation.end_ms}
@@ -424,7 +428,7 @@ export function AttachmentGallery({
                   >
                     <span
                       class="attachment-gallery__annotation-label"
-                      data-action="edit-gallery-annotation"
+                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryAnnotation.attrs}
                       data-annotation-id={annotation.id}
                     >
                       {annotation.text || String(annotationIndex + 1)}
@@ -446,7 +450,7 @@ export function AttachmentGallery({
             <button
               class="attachment-gallery__playback"
               type="button"
-              data-action="toggle-gallery-playback"
+              {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryPlayback.attrs}
               aria-label={playing ? 'Pause' : 'Play'}
             >
               <LucideIcon icon={playing ? Pause : Play} name={playing ? 'pause' : 'play'} />
@@ -463,7 +467,7 @@ export function AttachmentGallery({
                     <button
                       type="button"
                       class="attachment-gallery__timeline-annotation"
-                      data-action="seek-gallery-annotation"
+                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.seekGalleryAnnotation.attrs}
                       data-annotation-id={annotation.id}
                       data-annotation-time={annotation.start_ms}
                       data-selected={String(annotation.id === selectedAnnotation)}
@@ -511,7 +515,7 @@ export function AttachmentGallery({
               <div class="attachment-gallery__volume">
                 <button
                   type="button"
-                  data-action="toggle-gallery-volume"
+                  {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryVolume.attrs}
                   aria-label="Volume controls"
                   aria-expanded={String(volumeOpen)}
                 >
@@ -538,7 +542,7 @@ export function AttachmentGallery({
                   />
                   <button
                     type="button"
-                    data-action="toggle-gallery-muted"
+                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMuted.attrs}
                     aria-label={muted || volume === 0 ? 'Unmute video' : 'Mute video'}
                   >
                     <LucideIcon
@@ -575,7 +579,7 @@ export function AttachmentGallery({
             <ToolbarControlGroup label="Media zoom">
               <button
                 type="button"
-                data-action="zoom-gallery-image"
+                {...ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.attrs}
                 data-zoom-direction="out"
                 aria-label="Zoom out"
                 title="Zoom out"
@@ -585,7 +589,7 @@ export function AttachmentGallery({
               </button>
               <button
                 type="button"
-                data-action="zoom-gallery-image"
+                {...ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.attrs}
                 data-zoom-direction="in"
                 aria-label="Zoom in"
                 title="Zoom in"

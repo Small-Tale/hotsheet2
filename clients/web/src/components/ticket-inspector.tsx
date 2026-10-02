@@ -23,6 +23,7 @@ import {
 import type { CodeReview, DuplicateBacklink, TicketCloseReason } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { ticketCloseReasonLabel } from '../ticket-close';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
 import { LiveClaimNotice, type LiveClaimNoticeProps } from './active-claim';
@@ -180,7 +181,7 @@ export function ticketInspectorPanel({
         <button
           type="button"
           class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`}
-          data-action="toggle-inspector-up-next"
+          {...INSPECTOR_AND_EDITOR_ACTIONS.toggleInspectorUpNext.attrs}
           aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
         >
           <LucideIcon icon={Star} name="star" />
@@ -205,7 +206,7 @@ export function ticketInspectorPanel({
         <ToolbarControlGroup appearance="borderless" buttonAppearance="push" label="Reader text size" single>
           <button
             type="button"
-            data-action="toggle-reader-text-size"
+            {...INSPECTOR_AND_EDITOR_ACTIONS.toggleReaderTextSize.attrs}
             aria-label={largeText ? 'Use standard reader text size' : 'Use large reader text size'}
             aria-pressed={String(largeText)}
             title={largeText ? 'Standard text size' : 'Large text size'}
@@ -222,7 +223,7 @@ export function ticketInspectorPanel({
         {star}
         <button
           type="button"
-          data-action="open-ticket-reader"
+          {...INSPECTOR_AND_EDITOR_ACTIONS.openTicketReader.attrs}
           aria-label="Open ticket reader"
           title="Open ticket reader"
         >
@@ -237,7 +238,7 @@ export function ticketInspectorPanel({
     <button
       type="button"
       class="ticket-inspector__slug"
-      data-action="copy-ticket-slug"
+      {...INSPECTOR_AND_EDITOR_ACTIONS.copyTicketSlug.attrs}
       // The Workbench composes this toolbar outside the app-owned wrappers, so the button names its
       // own ticket (HS2-QQW6CT).
       data-ticket-slug={slug}

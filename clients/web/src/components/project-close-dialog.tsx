@@ -8,6 +8,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CircleAlert, MessageSquare, SquareTerminal } from 'lucide';
 
 import { type ConversationActivity, type ConversationMessage, type ConversationUsage } from '../ai-conversation';
+import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { AIConversation } from './ai-conversation';
 
 interface ProjectCloseResourceBase {
@@ -133,7 +134,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
   return (
     <wa-dialog
       class="project-close-dialog"
-      data-component="project-close-dialog"
+      {...TERMINALS_TARGETS.projectCloseDialog.attrs}
       data-project-id={state.projectId}
       data-has-resources={String(hasResources)}
       label={`Close ${state.projectName}?`}
@@ -205,14 +206,20 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
         {state.error}
       </p>
       <div slot="footer" class="project-close-dialog__actions">
-        <wa-button type="button" size="small" appearance="outlined" data-action="cancel-project-close" disabled={busy}>
+        <wa-button
+          type="button"
+          size="small"
+          appearance="outlined"
+          {...TERMINALS_ACTIONS.cancelProjectClose.attrs}
+          disabled={busy}
+        >
           Cancel
         </wa-button>
         <wa-button
           type="button"
           size="small"
           appearance="outlined"
-          data-action="confirm-close-project"
+          {...TERMINALS_ACTIONS.confirmCloseProject.attrs}
           data-project-id={state.projectId}
           disabled={busy}
         >
@@ -223,7 +230,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
             type="button"
             size="small"
             variant="danger"
-            data-action="close-all-project-resources"
+            {...TERMINALS_ACTIONS.closeAllProjectResources.attrs}
             data-project-id={state.projectId}
             disabled={busy}
           >

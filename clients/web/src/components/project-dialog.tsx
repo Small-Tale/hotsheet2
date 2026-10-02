@@ -8,6 +8,8 @@ import { Text } from '@kerfjs/ui/text';
 import { Ellipsis } from 'lucide';
 
 import type { Checkout } from '../api';
+import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
+import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 
 export interface UnhealthyServerRecoveryView {
   expected: { pid: number };
@@ -32,7 +34,7 @@ export function ProjectDialog({
 }) {
   return (
     <wa-dialog data-project-dialog label="Open project" open={open} data-controlled-open={String(open)}>
-      <form data-action="open-project-form">
+      <form {...REPOSITORY_ACTIONS.openProjectForm.attrs}>
         <div class="project-dialog">
           <List gap="m">
             <Text tone="quiet">
@@ -44,7 +46,7 @@ export function ProjectDialog({
               <wa-button
                 appearance="outlined"
                 type="button"
-                data-action="browse-project-path"
+                {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
                 aria-label="Browse for project folder"
                 title="Browse for project folder"
               >
@@ -60,7 +62,7 @@ export function ProjectDialog({
               <wa-button
                 appearance="outlined"
                 type="button"
-                data-action="browse-project-path"
+                {...PROJECT_LIFECYCLE_ACTIONS.browseProjectPath.attrs}
                 aria-label="Browse for ticket store"
                 title="Browse for ticket store"
               >
@@ -81,7 +83,7 @@ export function ProjectDialog({
                   <wa-button
                     appearance="outlined"
                     type="button"
-                    data-action="recover-unhealthy-server"
+                    {...PROJECT_LIFECYCLE_ACTIONS.recoverUnhealthyServer.attrs}
                     disabled={recoveryBusy}
                   >
                     {recoveryBusy ? 'Recovering…' : 'Stop server and retry'}
@@ -91,7 +93,7 @@ export function ProjectDialog({
             )}
             <footer>
               <Row hAlign="right" vAlign="middle" gap="xs">
-                <wa-button appearance="plain" type="button" data-action="cancel-open-project">
+                <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.cancelOpenProject.attrs}>
                   Cancel
                 </wa-button>
                 <wa-button appearance="accent" type="submit">
@@ -161,7 +163,7 @@ export function RemoteProjectDialog({
           )}
           <footer>
             <Row hAlign="right" vAlign="middle" gap="xs">
-              <wa-button appearance="plain" type="button" data-action="cancel-remote-project">
+              <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.cancelRemoteProject.attrs}>
                 Cancel
               </wa-button>
             </Row>

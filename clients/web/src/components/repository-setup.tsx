@@ -3,6 +3,8 @@ import './repository-setup.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CircleCheck } from 'lucide';
 
+import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
+
 export type RepositorySetupStep = 'initialize' | 'remote';
 
 export function RepositorySetup({
@@ -20,7 +22,7 @@ export function RepositorySetup({
         class="repository-setup"
         data-component="repository-setup"
         data-step="remote"
-        data-action="connect-repository-remote"
+        {...REPOSITORY_ACTIONS.connectRepositoryRemote.attrs}
       >
         <div class="repository-setup__message">
           <span class="repository-setup__icon">
@@ -48,7 +50,12 @@ export function RepositorySetup({
           </p>
         )}
         <footer>
-          <wa-button appearance="plain" type="button" data-action="skip-repository-remote" disabled={busy}>
+          <wa-button
+            appearance="plain"
+            type="button"
+            {...REPOSITORY_ACTIONS.skipRepositoryRemote.attrs}
+            disabled={busy}
+          >
             Skip for now
           </wa-button>
           <wa-button appearance="accent" type="submit" disabled={busy}>
@@ -72,7 +79,7 @@ export function RepositorySetup({
         </p>
       )}
       <footer>
-        <wa-button appearance="accent" type="button" data-action="initialize-repository" disabled={busy}>
+        <wa-button appearance="accent" type="button" {...REPOSITORY_ACTIONS.initializeRepository.attrs} disabled={busy}>
           {busy ? 'Initializing…' : 'Initialize Git repository'}
         </wa-button>
       </footer>

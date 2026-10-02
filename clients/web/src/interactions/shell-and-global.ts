@@ -13,6 +13,8 @@ import { type RepositoryFileMenu } from '../components/repository-status-popover
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
+import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
+import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { cycleTabId } from '../tab-cycle';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
@@ -163,12 +165,12 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   // Every right-rail surface shares the Workbench's standard toggle, in the open rail's toolbar or
   // relocated to the workspace toolbar while the rail is collapsed (HS2-QQW6CT).
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-ticket-inspector"]', () => {
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.toggleTicketInspector.selector, () => {
       setInspectorVisible(inspectorCollapsed.value);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-project-sidebar"]', () => {
+    delegate(document.body, 'click', SHELL_AND_GLOBAL_ACTIONS.toggleProjectSidebar.selector, () => {
       setSidebarVisible(sidebarCollapsed.value);
     }),
   );
@@ -284,7 +286,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     });
   }
   lifetime.add(
-    delegate(document.body, 'dragstart', '[data-action="select-ticket-row"]', (event, target) => {
+    delegate(document.body, 'dragstart', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
       const source = project(),
         slug = data(target).ticketSlug;
       if (!source || !slug) return;
@@ -348,7 +350,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     }),
   );
   lifetime.add(
-    delegate(document.body, 'drop', '[data-ticket-drop-action="duplicate"]', (event) => {
+    delegate(document.body, 'drop', SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.selector, (event) => {
       const drag = dependencies.draggedTickets,
         destination = project();
       if (!drag || !destination) return;
@@ -370,7 +372,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dragend', '[data-action="select-ticket-row"]', () => {
+    delegate(document.body, 'dragend', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, () => {
       clearTicketDrag();
     }),
   );

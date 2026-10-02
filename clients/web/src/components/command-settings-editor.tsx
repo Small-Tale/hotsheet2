@@ -11,6 +11,7 @@ import { Bot, FolderPlus, GripVertical, MoreHorizontal, Pencil, Plus, RotateCcw,
 
 import type { AiToolDefaults, AiToolDescriptor, CommandDefinition } from '../api';
 import { commandGroupSections } from '../command-order';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { lucideCatalogVersion } from '../lucide-catalog';
 import { resolveCommandIcon } from './command-icon';
 import {
@@ -329,7 +330,7 @@ function CommandGroup({
             <button
               type="button"
               class="command-settings-editor__button command-settings-editor__group-delete"
-              data-action="delete-command-group"
+              {...COMMANDS_AND_AI_ACTIONS.deleteCommandGroup.attrs}
               data-group={group}
               aria-label={`Delete empty group ${group}`}
             >
@@ -381,13 +382,17 @@ export function CommandSettingsEditor({
           </p>
         </div>
         <div class="command-settings-editor__heading-actions">
-          <button type="button" class="command-settings-editor__button" data-action="add-command-group">
+          <button
+            type="button"
+            class="command-settings-editor__button"
+            {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}
+          >
             <LucideIcon icon={FolderPlus} name="folder-plus" /> Add group
           </button>
           <button
             type="button"
             class="command-settings-editor__button command-settings-editor__add-command"
-            data-action="add-command-setting"
+            {...COMMANDS_AND_AI_ACTIONS.addCommandSetting.attrs}
           >
             <LucideIcon icon={Plus} name="plus" /> Add command
           </button>
@@ -444,7 +449,7 @@ export function CommandSettingsEditor({
                 }
                 trailing={
                   <ToolbarControlGroup label="Command actions" appearance="borderless" single>
-                    <button type="button" data-action="close-command-editor">
+                    <button type="button" {...COMMANDS_AND_AI_ACTIONS.closeCommandEditor.attrs}>
                       Done
                     </button>
                   </ToolbarControlGroup>

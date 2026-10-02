@@ -7,6 +7,8 @@ import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { ChevronLeft, ChevronRight, GitBranch, Power, PowerOff, Trash2 } from 'lucide';
 
 import type { ProviderConnection } from '../api';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 import { ContentTransition } from './content-transition';
 import { ProviderIcon } from './provider-icon';
 import {
@@ -194,13 +196,13 @@ export function TicketSourceSetupDialog({
     <form
       id="ticket-source-remote-form"
       class="ticket-source-setup ticket-source-setup__screen ticket-source-setup__complete ticket-source-setup__remote-form"
-      data-action="connect-ticket-store-remote"
+      {...PROJECT_LIFECYCLE_ACTIONS.connectTicketStoreRemote.attrs}
     >
       <wa-button
         class="provider-setup-form__back"
         appearance="plain"
         type="button"
-        data-action="back-ticket-store-remote"
+        {...PROJECT_LIFECYCLE_ACTIONS.backTicketStoreRemote.attrs}
       >
         <LucideIcon slot="start" icon={ChevronLeft} name="chevron-left" /> Ticket source types
       </wa-button>
@@ -263,16 +265,21 @@ export function TicketSourceSetupDialog({
     <></>
   );
   const rootActions = (
-      <wa-button appearance="plain" data-action="dismiss-ticket-source-setup">
+      <wa-button appearance="plain" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
         Cancel
       </wa-button>
     ),
     detailActions = created ? (
       <>
-        <wa-button appearance="plain" type="button" data-action="dismiss-ticket-source-setup">
+        <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
           Skip for now
         </wa-button>
-        <wa-button appearance="accent" type="button" data-action="submit-ticket-store-remote" disabled={remoteBusy}>
+        <wa-button
+          appearance="accent"
+          type="button"
+          {...PROJECT_LIFECYCLE_ACTIONS.submitTicketStoreRemote.attrs}
+          disabled={remoteBusy}
+        >
           {remoteBusy ? 'Connecting…' : 'Connect & push'}
         </wa-button>
       </>
@@ -284,14 +291,19 @@ export function TicketSourceSetupDialog({
           <strong>Remove {editing.name ?? editing.id}?</strong> It is unlinked from every project, and a sign-in Hot
           Sheet saved for it is deleted. Tickets stay in {providerName(editing.provider as ExternalProviderKind)}.
         </p>
-        <wa-button appearance="plain" type="button" data-action="cancel-provider-removal" disabled={providerBusy}>
+        <wa-button
+          appearance="plain"
+          type="button"
+          {...COMMANDS_AND_AI_ACTIONS.cancelProviderRemoval.attrs}
+          disabled={providerBusy}
+        >
           Keep
         </wa-button>
         <wa-button
           variant="danger"
           appearance="accent"
           type="button"
-          data-action="confirm-provider-removal"
+          {...COMMANDS_AND_AI_ACTIONS.confirmProviderRemoval.attrs}
           disabled={providerBusy}
         >
           {providerBusy ? 'Removing…' : 'Remove'}
@@ -305,7 +317,7 @@ export function TicketSourceSetupDialog({
             variant="danger"
             appearance="plain"
             type="button"
-            data-action="request-provider-removal"
+            {...COMMANDS_AND_AI_ACTIONS.requestProviderRemoval.attrs}
             disabled={providerBusy}
           >
             <LucideIcon slot="start" icon={Trash2} name="trash-2" />
@@ -317,7 +329,7 @@ export function TicketSourceSetupDialog({
             class="ticket-source-setup__toggle"
             appearance="plain"
             type="button"
-            data-action="toggle-provider-disabled"
+            {...COMMANDS_AND_AI_ACTIONS.toggleProviderDisabled.attrs}
             disabled={providerBusy}
           >
             <LucideIcon
@@ -328,13 +340,13 @@ export function TicketSourceSetupDialog({
             {editing.disabled ? 'Enable' : 'Disable'}
           </wa-button>
         )}
-        <wa-button appearance="plain" type="button" data-action="dismiss-ticket-source-setup">
+        <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
           Cancel
         </wa-button>
         <wa-button
           appearance="accent"
           type="button"
-          data-action="submit-provider-setup"
+          {...COMMANDS_AND_AI_ACTIONS.submitProviderSetup.attrs}
           disabled={providerBusy || (kind === 'github' && !editing && githubAuth?.state !== 'authorized')}
         >
           {providerBusy ? 'Saving…' : editing ? 'Save changes' : 'Connect provider'}

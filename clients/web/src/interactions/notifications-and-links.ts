@@ -2,6 +2,10 @@ import { delegate, delegateCapture, type Signal } from 'kerfjs';
 
 import { type NotificationView } from '../components/notification-navigation';
 import {
+  NOTIFICATIONS_AND_LINKS_ACTIONS,
+  NOTIFICATIONS_AND_LINKS_TARGETS,
+} from '../interaction-attrs/notifications-and-links';
+import {
   parsePermissionAutomation,
   type PermissionAutomation,
   type PermissionDecision,
@@ -66,9 +70,14 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     cancelTicketLinkChoice,
   } = dependencies;
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-notification-view"]', (_event, target) => {
-      notificationView.value = (data(target).itemId ?? 'pending') as NotificationView;
-    }),
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.selectNotificationView.selector,
+      (_event, target) => {
+        notificationView.value = (data(target).itemId ?? 'pending') as NotificationView;
+      },
+    ),
   );
   lifetime.add(
     delegate(
@@ -92,7 +101,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="ignore-permission"]', (_event, target) => {
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.selector, (_event, target) => {
       const key = data(target).requestKey;
       if (!key) return;
       permissionTimer.hide();
@@ -102,17 +111,22 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-permission-automation"]', (event, target) => {
-      event.stopImmediatePropagation();
-      const key = data(target).requestKey;
-      if (!key) return;
-      permissionTimer.cancel(key);
-      dependencies.permissionCountdown = undefined;
-      permissionRevision.value += 1;
-    }),
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.cancelPermissionAutomation.selector,
+      (event, target) => {
+        event.stopImmediatePropagation();
+        const key = data(target).requestKey;
+        if (!key) return;
+        permissionTimer.cancel(key);
+        dependencies.permissionCountdown = undefined;
+        permissionRevision.value += 1;
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="resolve-permission"]', (_event, target) => {
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.selector, (_event, target) => {
       const key = data(target).requestKey,
         item = pendingPermissions().find((value) => value.key === key);
       if (item)
@@ -124,21 +138,26 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="dismiss-app-error"]', () => {
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.dismissAppError.selector, () => {
       error.value = '';
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[data-action="toggle-verified-column"]', (_event, target) => {
-      const id = selectedProjectId.value;
-      if (!id) return;
-      const checked = (target as HTMLInputElement).checked;
-      hideVerifiedByProject.value = { ...hideVerifiedByProject.value, [id]: checked };
-      localStorage.setItem(`hotsheet.project.${id}.hide-verified-column`, String(checked));
-    }),
+    delegate(
+      document.body,
+      'change',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.toggleVerifiedColumn.selector,
+      (_event, target) => {
+        const id = selectedProjectId.value;
+        if (!id) return;
+        const checked = (target as HTMLInputElement).checked;
+        hideVerifiedByProject.value = { ...hideVerifiedByProject.value, [id]: checked };
+        localStorage.setItem(`hotsheet.project.${id}.hide-verified-column`, String(checked));
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-linked-ticket"]', (event, target) => {
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.openLinkedTicket.selector, (event, target) => {
       event.preventDefault();
       const slug = data(target).ticketSlug;
       if (slug) {
@@ -148,20 +167,25 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-ticket-link-match"]', (_event, target) => {
-      const choice = ticketLinkChoice.value,
-        key = data(target).matchKey,
-        match = choice?.matches.find((item) => ticketLinkMatchKey(item) === key);
-      if (match) void openTicketLinkMatch(match);
-    }),
+    delegate(
+      document.body,
+      'click',
+      NOTIFICATIONS_AND_LINKS_ACTIONS.selectTicketLinkMatch.selector,
+      (_event, target) => {
+        const choice = ticketLinkChoice.value,
+          key = data(target).matchKey,
+          match = choice?.matches.find((item) => ticketLinkMatchKey(item) === key);
+        if (match) void openTicketLinkMatch(match);
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-ticket-link-choice"]', () => {
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.cancelTicketLinkChoice.selector, () => {
       cancelTicketLinkChoice();
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', '[data-component="ticket-link-choice-dialog"]', () => {
+    delegateCapture(document.body, 'wa-hide', NOTIFICATIONS_AND_LINKS_TARGETS.ticketLinkChoiceDialog.selector, () => {
       if (ticketLinkChoice.value) cancelTicketLinkChoice();
     }),
   );

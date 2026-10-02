@@ -27,7 +27,7 @@ describe('dialog lifecycle event contracts', () => {
       expect(source).not.toMatch(new RegExp(`wa-request-close[^\\n]*${selector}`));
     }
     expect(source).toMatchSource(
-      /'wa-hide','\[data-component="not-working-dialog"\]'.*activeLabel.*!notWorkingSubmitting\.value.*dialog\.getAttribute\('aria-label'\)===activeLabel.*closeNotWorking\(\)/,
+      /'wa-hide',TICKET_SELECTION_TARGETS\.notWorkingDialog\.selector.*activeLabel.*!notWorkingSubmitting\.value.*dialog\.getAttribute\('aria-label'\)===activeLabel.*closeNotWorking\(\)/,
     );
   });
 
@@ -40,20 +40,24 @@ describe('dialog lifecycle event contracts', () => {
   });
 
   it('lets Web Awesome own TicketReader dismissal and completes state changes after hide', () => {
-    expect(source).toMatchSource(/delegateCapture\(document\.body,'wa-hide','\[data-component="ticket-reader"\]'/);
     expect(source).toMatchSource(
-      /delegateCapture\(document\.body,'wa-after-hide','\[data-component="ticket-reader"\]'/,
+      /delegateCapture\(document\.body,'wa-hide',INSPECTOR_AND_EDITOR_TARGETS\.ticketReader\.selector/,
     );
-    expect(source).not.toMatch(/delegate(?:Capture)?\(document\.body,'keydown','\[data-component="ticket-reader"\]'/);
+    expect(source).toMatchSource(
+      /delegateCapture\(document\.body,'wa-after-hide',INSPECTOR_AND_EDITOR_TARGETS\.ticketReader\.selector/,
+    );
+    expect(source).not.toMatch(
+      /delegate(?:Capture)?\(document\.body,'keydown',INSPECTOR_AND_EDITOR_TARGETS\.ticketReader\.selector/,
+    );
   });
 
   it('lets the persistent quick-ticket dialog own modality and Escape ordering', () => {
-    expect(source).toMatchSource(/expand-ticket-composer[^\n]*openTicketComposer/);
+    expect(source).toMatchSource(/expandTicketComposer[^\n]*openTicketComposer/);
     expect(source).toMatchSource(
-      /delegateCapture\(document\.body,'wa-hide','\[data-component="quick-ticket-composer"\]'[^\n]*composerSubmitting\.value[^\n]*event\.preventDefault\(\)/,
+      /delegateCapture\(document\.body,'wa-hide',SEARCH_AND_COMPOSER_TARGETS\.quickTicketComposer\.selector[^\n]*composerSubmitting\.value[^\n]*event\.preventDefault\(\)/,
     );
     expect(source).toMatchSource(
-      /delegateCapture\(document\.body,'wa-after-hide','\[data-component="quick-ticket-composer"\]'[^\n]*resetTicketComposer\(\)/,
+      /delegateCapture\(document\.body,'wa-after-hide',SEARCH_AND_COMPOSER_TARGETS\.quickTicketComposer\.selector[^\n]*resetTicketComposer\(\)/,
     );
     expect(source).not.toMatch(/if\(composerExpanded\.value\)resetTicketComposer\(\).*ticketContextMenu/);
     expect(source).toMatch(/function closeProjectIds\([^\n]*resetTicketComposer\(\)/);

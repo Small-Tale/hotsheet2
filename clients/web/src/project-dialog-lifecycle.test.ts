@@ -29,7 +29,7 @@ describe('project dialog lifecycle', () => {
       .join('\n');
 
     expect(source).toMatchSource(
-      /delegate\(document\.body,'click','\[data-action="choose-project"\]',\(\)=>\{if\(isRemoteClient\(\)\)void openRemoteProjectDialog\(\);else void chooseAndOpenProject\(\)\}\)/,
+      /delegate\(document\.body,'click',PROJECT_LIFECYCLE_ACTIONS\.chooseProject\.selector,\(\)=>\{if\(isRemoteClient\(\)\)void openRemoteProjectDialog\(\);else void chooseAndOpenProject\(\)\}\)/,
     );
     expect(source).toMatchSource(/if\(result\.path\)await openProject\(result\.path\)/);
   });

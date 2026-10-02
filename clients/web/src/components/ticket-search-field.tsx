@@ -5,23 +5,25 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { TokenSearchField } from '@kerfjs/ui/token-search-field';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { action } from 'kerfjs/actions';
 import { CircleHelp } from 'lucide';
 
 import { activeDatePrefix } from '../inline-search';
 
 /**
- * Delegated action names every TicketSearchField renders. Each action element sits inside
+ * Delegated action specs every TicketSearchField renders (markup spreads `.attrs`; handlers
+ * register `.selector`; Kerf's TokenSearchField takes the `.value` names). Each action element sits inside
  * the field's `.ticket-search-field` group, so a handler resolves the owning field through
  * `ticketSearchFieldId` instead of a per-consumer action name (HS2-N5G6JS). Chip edit, chip
  * removal, and clear are Kerf's managed model actions (HS2-5JXBQY); the app's handlers for
  * those names only restore focus and close its own helper surfaces.
  */
 export const TICKET_SEARCH_ACTIONS = {
-  editToken: 'edit-ticket-search-token',
-  removeToken: 'remove-ticket-search-token',
-  clear: 'clear-ticket-search',
-  toggleHelp: 'toggle-ticket-search-help',
-  applyDate: 'apply-ticket-search-date',
+  editToken: action('edit-ticket-search-token'),
+  removeToken: action('remove-ticket-search-token'),
+  clear: action('clear-ticket-search'),
+  toggleHelp: action('toggle-ticket-search-help'),
+  applyDate: action('apply-ticket-search-date'),
 } as const;
 
 /** Native input names inside a field's date helper, resolved relative to that field. */
@@ -170,7 +172,7 @@ export function TicketSearchSurfaces({ id, model, helpOpen = false, help = true 
             Time (optional)
             <input name={TICKET_SEARCH_TIME_INPUT} type="time" />
           </label>
-          <button type="button" data-action={TICKET_SEARCH_ACTIONS.applyDate} data-date-prefix={datePrefix}>
+          <button type="button" {...TICKET_SEARCH_ACTIONS.applyDate.attrs} data-date-prefix={datePrefix}>
             Apply
           </button>
         </div>
@@ -187,7 +189,7 @@ function TicketSearchHelpButton({ open }: { open: boolean }) {
     <button
       type="button"
       class="ticket-search-field__help-button"
-      data-action={TICKET_SEARCH_ACTIONS.toggleHelp}
+      {...TICKET_SEARCH_ACTIONS.toggleHelp.attrs}
       aria-label="Search syntax help"
       aria-expanded={String(open)}
       title="Search syntax help"
@@ -246,9 +248,9 @@ export function TicketSearchFormField({
         disabled={disabled}
         hint={hint}
         required={required}
-        editAction={TICKET_SEARCH_ACTIONS.editToken}
-        removeAction={TICKET_SEARCH_ACTIONS.removeToken}
-        clearAction={TICKET_SEARCH_ACTIONS.clear}
+        editAction={TICKET_SEARCH_ACTIONS.editToken.value}
+        removeAction={TICKET_SEARCH_ACTIONS.removeToken.value}
+        clearAction={TICKET_SEARCH_ACTIONS.clear.value}
         clearLabel={clearLabel}
         trailing={help ? <TicketSearchHelpButton open={helpOpen} /> : undefined}
       />
@@ -291,9 +293,9 @@ export function TicketSearchField({
       placeholder,
       disabled,
       autofocus,
-      editAction: TICKET_SEARCH_ACTIONS.editToken,
-      removeAction: TICKET_SEARCH_ACTIONS.removeToken,
-      clearAction: TICKET_SEARCH_ACTIONS.clear,
+      editAction: TICKET_SEARCH_ACTIONS.editToken.value,
+      removeAction: TICKET_SEARCH_ACTIONS.removeToken.value,
+      clearAction: TICKET_SEARCH_ACTIONS.clear.value,
       clearLabel,
       trailing: help ? <TicketSearchHelpButton open={helpOpen} /> : undefined,
     };

@@ -6,6 +6,10 @@ import { Text } from '@kerfjs/ui/text';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 
 import { orderedSearchText } from '../inline-search';
+import {
+  VIEWS_AND_SAVED_VIEWS_ACTIONS,
+  VIEWS_AND_SAVED_VIEWS_TARGETS,
+} from '../interaction-attrs/views-and-saved-views';
 import { inlineSearchTokens } from '../ticket-search-model';
 import { TicketSearchFormField } from './ticket-search-field';
 
@@ -43,14 +47,14 @@ export function SavedViewDialog({
   return (
     <wa-dialog
       class="saved-view-dialog"
-      data-component="saved-view-dialog"
+      {...VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDialog.attrs}
       data-mode={mode}
       label={title}
       aria-label={title}
       open={open || undefined}
       data-controlled-open={String(open)}
     >
-      <form data-action="save-saved-view">
+      <form {...VIEWS_AND_SAVED_VIEWS_ACTIONS.saveSavedView.attrs}>
         <List className="saved-view-dialog__form" gap="l">
           <Text tone="quiet">
             {rename
@@ -85,7 +89,12 @@ export function SavedViewDialog({
           ) : undefined}
           <footer>
             <Row hAlign="right" vAlign="middle" gap="xs">
-              <wa-button appearance="plain" type="button" data-action="cancel-saved-view" disabled={busy || undefined}>
+              <wa-button
+                appearance="plain"
+                type="button"
+                {...VIEWS_AND_SAVED_VIEWS_ACTIONS.cancelSavedView.attrs}
+                disabled={busy || undefined}
+              >
                 Cancel
               </wa-button>
               <wa-button appearance="accent" type="submit" disabled={busy || undefined}>
@@ -113,7 +122,7 @@ export function SavedViewDeleteDialog({
   return (
     <wa-dialog
       class="saved-view-dialog"
-      data-component="saved-view-delete-dialog"
+      {...VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDeleteDialog.attrs}
       label="Delete View?"
       aria-label="Delete View?"
       open={open || undefined}
@@ -133,7 +142,7 @@ export function SavedViewDeleteDialog({
             <wa-button
               appearance="plain"
               type="button"
-              data-action="cancel-delete-saved-view"
+              {...VIEWS_AND_SAVED_VIEWS_ACTIONS.cancelDeleteSavedView.attrs}
               disabled={busy || undefined}
             >
               Cancel
@@ -141,7 +150,7 @@ export function SavedViewDeleteDialog({
             <wa-button
               variant="danger"
               type="button"
-              data-action="confirm-delete-saved-view"
+              {...VIEWS_AND_SAVED_VIEWS_ACTIONS.confirmDeleteSavedView.attrs}
               disabled={busy || undefined}
             >
               {busy ? 'Deleting…' : 'Delete View'}

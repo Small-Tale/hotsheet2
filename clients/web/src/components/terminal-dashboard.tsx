@@ -11,6 +11,7 @@ import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ALargeSmall, Ellipsis, ExternalLink, Eye, EyeOff, MessageSquare, Minus, Plus, X } from 'lucide';
 
 import { contextPopupMenuAnchor } from '../context-menu-position';
+import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import {
   TERMINAL_TILE_HORIZONTAL_CHROME,
@@ -116,7 +117,7 @@ export function TerminalVisibilityControls({
               <button
                 type="button"
                 class="terminal-dashboard-controls__visibility"
-                data-action="open-terminal-visibility"
+                {...TERMINALS_ACTIONS.openTerminalVisibility.attrs}
                 aria-label="Manage workspace visibility"
                 title="Manage Workspace Visibility"
               >
@@ -214,7 +215,7 @@ function TerminalCard({
     <article
       class="terminal-tile"
       data-key={key}
-      data-component="terminal-tile"
+      {...TERMINALS_TARGETS.terminalTile.attrs}
       data-fixed-aspect-terminal-card={mode}
       data-terminal-key={key}
       data-busy={String(session.busy)}
@@ -238,7 +239,7 @@ function TerminalCard({
           <button
             type="button"
             class="terminal-tile__close"
-            data-action="close-magnified-terminal"
+            {...TERMINALS_ACTIONS.closeMagnifiedTerminal.attrs}
             aria-label={`Close ${session.title ?? session.id}`}
             title="Close"
           >
@@ -253,7 +254,7 @@ function TerminalCard({
         <button
           type="button"
           class="terminal-tile__identity"
-          data-action="open-terminal-project"
+          {...TERMINALS_ACTIONS.openTerminalProject.attrs}
           data-item-id={key}
           aria-label={`Open ${session.title ?? session.id} in ${session.projectName}`}
         >
@@ -268,7 +269,7 @@ function TerminalCard({
           <button
             type="button"
             class="terminal-tile__text-size"
-            data-action="cycle-mobile-terminal-columns"
+            {...TERMINALS_ACTIONS.cycleMobileTerminalColumns.attrs}
             data-columns={String(mobile.columns)}
             aria-label={`Text size: ${mobile.columns} columns. Change text size`}
             title="Change text size"
@@ -279,7 +280,7 @@ function TerminalCard({
         <button
           type="button"
           class="terminal-tile__menu"
-          data-action="open-terminal-context-menu"
+          {...TERMINALS_ACTIONS.openTerminalContextMenu.attrs}
           data-item-id={key}
           aria-label={`More actions for ${session.title ?? session.id}`}
           title="More actions"
@@ -290,7 +291,7 @@ function TerminalCard({
           <button
             type="button"
             class="terminal-tile__open"
-            data-action="open-terminal-project"
+            {...TERMINALS_ACTIONS.openTerminalProject.attrs}
             data-terminal-key={key}
             aria-label={`Open ${session.title ?? session.id} in project terminal drawer`}
             title="Open in project terminal drawer"
@@ -348,13 +349,13 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
     <article
       class="terminal-tile workspace-chat-tile"
       data-key={key}
-      data-component="workspace-chat-tile"
+      {...TERMINALS_TARGETS.workspaceChatTile.attrs}
       data-chat-key={key}
       data-project-id={chat.projectId}
       data-chat-id={chat.id}
       data-busy={String(Boolean(chat.busy))}
       data-preview-only="true"
-      data-action="open-grid-ai-chat"
+      {...TERMINALS_ACTIONS.openGridAiChat.attrs}
       data-item-id={key}
       tabindex="0"
       aria-label={`Open ${chat.name} in ${chat.projectName}`}
@@ -377,7 +378,7 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
         <button
           type="button"
           class="terminal-tile__identity"
-          data-action="open-grid-ai-chat"
+          {...TERMINALS_ACTIONS.openGridAiChat.attrs}
           data-item-id={key}
           data-project-id={chat.projectId}
           data-chat-id={chat.id}
@@ -540,7 +541,7 @@ export function TerminalDashboard({
           <ToolbarControlGroup>
             <button
               type="button"
-              data-action="zoom-terminal-grid"
+              {...TERMINALS_ACTIONS.zoomTerminalGrid.attrs}
               data-zoom-direction="out"
               disabled={layout.fit >= layout.max}
               aria-label={`Zoom out, fit more items ${layout.basis}`}
@@ -550,7 +551,7 @@ export function TerminalDashboard({
             </button>
             <button
               type="button"
-              data-action="zoom-terminal-grid"
+              {...TERMINALS_ACTIONS.zoomTerminalGrid.attrs}
               data-zoom-direction="in"
               disabled={layout.fit <= 1}
               aria-label={`Zoom in, fit fewer items ${layout.basis}`}
@@ -571,7 +572,7 @@ export function TerminalDashboard({
           role="dialog"
           aria-modal="true"
           aria-label={`Magnified ${magnified.title ?? magnified.id}`}
-          data-action="dismiss-magnified-terminal"
+          {...TERMINALS_ACTIONS.dismissMagnifiedTerminal.attrs}
           data-mobile={String(Boolean(mobileMagnified))}
           data-keyboard-visible={mobileMagnified ? String(mobileMagnified.keyboardVisible) : undefined}
           style={

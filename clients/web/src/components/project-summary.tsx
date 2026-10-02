@@ -1,5 +1,7 @@
 import './project-summary.css';
 
+import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
+
 export interface ProjectSummaryProps {
   completedToday: number;
   inProgress: number;
@@ -42,7 +44,7 @@ export function ProjectSummary({
       data-chart-tone={chartTone}
       data-chart-maximum={maximum}
       data-chart-background={String(Boolean(backgroundTrend))}
-      data-action="open-project-stats"
+      {...NAVIGATION_AND_TABS_ACTIONS.openProjectStats.attrs}
       data-project-id={projectId}
       aria-label={`Open project statistics: ${completedToday} completed today, ${inProgress} in progress`}
     >

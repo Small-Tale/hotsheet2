@@ -4,6 +4,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Bot, FileWarning, FolderOpen, RefreshCw } from 'lucide';
 
 import type { CorruptTicket } from '../api';
+import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 const filename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1);
@@ -30,7 +31,7 @@ function RecoveryActions({ ticket, recovery }: { ticket: CorruptTicket; recovery
     <>
       <button
         type="button"
-        data-action="reveal-corrupt-ticket"
+        {...NAVIGATION_AND_TABS_ACTIONS.revealCorruptTicket.attrs}
         data-corrupt-key={key}
         disabled={Boolean(recovery?.pending)}
       >
@@ -40,7 +41,7 @@ function RecoveryActions({ ticket, recovery }: { ticket: CorruptTicket; recovery
       {ticket.error_code !== 'upgrade_required' && (
         <button
           type="button"
-          data-action="repair-corrupt-ticket"
+          {...NAVIGATION_AND_TABS_ACTIONS.repairCorruptTicket.attrs}
           data-corrupt-key={key}
           disabled={Boolean(recovery?.pending)}
         >
@@ -83,7 +84,7 @@ export function CorruptTicketRow({
         <button
           type="button"
           class="corrupt-ticket-row__select"
-          data-action="select-corrupt-ticket"
+          {...NAVIGATION_AND_TABS_ACTIONS.selectCorruptTicket.attrs}
           data-corrupt-key={key}
           aria-label={`Open recovery for ${identity}`}
         >

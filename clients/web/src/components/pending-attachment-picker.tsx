@@ -3,6 +3,8 @@ import './pending-attachment-picker.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Paperclip, Plus, Trash2, Upload } from 'lucide';
 
+import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
+
 export interface PendingAttachment {
   id: string;
   name: string;
@@ -20,7 +22,7 @@ export function PendingAttachmentPicker({
     <section
       class="pending-attachment-picker"
       data-component="pending-attachment-picker"
-      data-not-working-dropzone="true"
+      {...TICKET_SELECTION_TARGETS.notWorkingDropzone.attrs}
     >
       <header>
         <h3>Attachments</h3>
@@ -38,7 +40,7 @@ export function PendingAttachmentPicker({
               <span title={item.name}>{item.name}</span>
               <button
                 type="button"
-                data-action="remove-not-working-attachment"
+                {...TICKET_SELECTION_ACTIONS.removeNotWorkingAttachment.attrs}
                 data-pending-attachment-id={item.id}
                 aria-label={`Remove ${item.name}`}
               >

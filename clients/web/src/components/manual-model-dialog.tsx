@@ -8,6 +8,8 @@ import { Row } from '@kerfjs/ui/row';
 import { Spacer } from '@kerfjs/ui/spacer';
 import { Text } from '@kerfjs/ui/text';
 
+import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
+
 export interface ManualModelDialogState {
   target: 'settings' | 'drive' | 'conversation' | 'command';
   providerName: string;
@@ -22,20 +24,20 @@ export function ManualModelDialog({ state }: { state?: ManualModelDialogState })
   return (
     <wa-dialog
       class="manual-model-dialog"
-      data-component="manual-model-dialog"
+      {...COMMANDS_AND_AI_TARGETS.manualModelDialog.attrs}
       label="Other model"
       aria-label="Other model"
       open={Boolean(state) || undefined}
       data-controlled-open={String(Boolean(state))}
     >
-      <form data-action="submit-manual-model">
+      <form {...COMMANDS_AND_AI_ACTIONS.submitManualModel.attrs}>
         <List className="manual-model-dialog__form" gap="l">
           <Text tone="quiet">Enter the exact model identifier accepted by {state.providerName}.</Text>
           <wa-input name="manual-model" label="Model identifier" value={state.value} required autofocus></wa-input>
           <footer>
             <Row vAlign="middle" gap="xs">
               <Spacer flex />
-              <wa-button appearance="plain" type="button" data-action="cancel-manual-model">
+              <wa-button appearance="plain" type="button" {...COMMANDS_AND_AI_ACTIONS.cancelManualModel.attrs}>
                 Cancel
               </wa-button>
               <wa-button appearance="accent" type="submit">

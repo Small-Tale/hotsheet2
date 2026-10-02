@@ -2,6 +2,8 @@ import { EmptyState } from '@kerfjs/ui/empty-state';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CircleAlert } from 'lucide';
 
+import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
+
 export interface ProjectRestoreFailure {
   root: string;
   name: string;
@@ -28,7 +30,12 @@ export function ProjectRestoreError({ root, name, error, recoveryPid, busy = fal
       detail={`${error}${recovery} The project remains remembered. Retry after the local server is available; if the problem continues, verify the project folder and relaunch the Hot Sheet server and client. Project: ${root}`}
       icon={<LucideIcon icon={CircleAlert} name="circle-alert" />}
       action={
-        <wa-button appearance="accent" data-action="retry-project-restore" data-project-root={root} disabled={busy}>
+        <wa-button
+          appearance="accent"
+          {...NAVIGATION_AND_TABS_ACTIONS.retryProjectRestore.attrs}
+          data-project-root={root}
+          disabled={busy}
+        >
           {busy ? 'Retrying…' : 'Retry project'}
         </wa-button>
       }

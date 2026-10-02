@@ -4,6 +4,8 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { TriangleAlert } from 'lucide';
 
+import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
+
 /**
  * A project opened, but its setup refresh was skipped (HS2-0TXM8S): for example a stale
  * development CLI refused to rewrite newer AI-tool guidance. The project stays usable; the banner
@@ -21,7 +23,7 @@ export function ProjectSetupWarningBanner({ detail }: { detail: string }) {
         actionPlacement="below"
         icon={<LucideIcon icon={TriangleAlert} name="triangle-alert" />}
         action={
-          <button type="button" data-action="dismiss-project-setup-warning">
+          <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissProjectSetupWarning.attrs}>
             Dismiss
           </button>
         }

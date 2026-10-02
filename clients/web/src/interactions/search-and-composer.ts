@@ -12,6 +12,7 @@ import {
 } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type InlineSearchToken } from '../inline-search';
+import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
@@ -236,41 +237,51 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="expand-ticket-composer"]', (_event, target) => {
+    delegate(document.body, 'click', SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.selector, (_event, target) => {
       openTicketComposer(target as HTMLElement);
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-hide', '[data-component="quick-ticket-composer"]', (event, target) => {
-      if (event.target === target && composerSubmitting.value) event.preventDefault();
-    }),
+    delegateCapture(
+      document.body,
+      'wa-hide',
+      SEARCH_AND_COMPOSER_TARGETS.quickTicketComposer.selector,
+      (event, target) => {
+        if (event.target === target && composerSubmitting.value) event.preventDefault();
+      },
+    ),
   );
   lifetime.add(
-    delegateCapture(document.body, 'wa-after-hide', '[data-component="quick-ticket-composer"]', (event, target) => {
-      if (event.target === target && composerExpanded.value) resetTicketComposer();
-    }),
+    delegateCapture(
+      document.body,
+      'wa-after-hide',
+      SEARCH_AND_COMPOSER_TARGETS.quickTicketComposer.selector,
+      (event, target) => {
+        if (event.target === target && composerExpanded.value) resetTicketComposer();
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="new-ticket-title"]', (_event, target) => {
+    delegate(document.body, 'input', SEARCH_AND_COMPOSER_TARGETS.newTicketTitleField.selector, (_event, target) => {
       composerTitle.value = (target as Control).value;
       scheduleProjectSessionPersistence();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="new-ticket-details"]', (_event, target) => {
+    delegate(document.body, 'input', SEARCH_AND_COMPOSER_TARGETS.newTicketDetailsField.selector, (_event, target) => {
       composerDetails.value = (target as HTMLTextAreaElement).value;
       scheduleProjectSessionPersistence();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[name="new-ticket-category"]', (_event, target) => {
+    delegate(document.body, 'change', SEARCH_AND_COMPOSER_TARGETS.newTicketCategoryField.selector, (_event, target) => {
       composerCategory.value = (target as Control).value;
       saveLastTicketCategory(localStorage, composerCategory.value);
       scheduleProjectSessionPersistence();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', '[name="new-ticket-source"]', (_event, target) => {
+    delegate(document.body, 'change', SEARCH_AND_COMPOSER_TARGETS.newTicketSourceField.selector, (_event, target) => {
       // In-memory only: the pick lasts while the composer is open; creating remembers it (HS2-NZMJBJ).
       composerSource.value = (target as Control).value || undefined;
       // A blocked-submit explanation is about the previous source; the new one shows its own state.
@@ -281,7 +292,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-new-ticket-up-next"]', () => {
+    delegate(document.body, 'click', SEARCH_AND_COMPOSER_ACTIONS.toggleNewTicketUpNext.selector, () => {
       composerUpNext.value = !composerUpNext.value;
       scheduleProjectSessionPersistence();
     }),
@@ -294,17 +305,22 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="remove-new-ticket-attachment"]', (_event, target) => {
-      const id = data(target).pendingAttachmentId;
-      if (id) void deleteDraftFiles(draftScope('composer'), [id]);
-      composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
-      composerAttachmentMessage.value = '';
-      composerAttachmentError.value = false;
-      scheduleProjectSessionPersistence();
-    }),
+    delegate(
+      document.body,
+      'click',
+      SEARCH_AND_COMPOSER_ACTIONS.removeNewTicketAttachment.selector,
+      (_event, target) => {
+        const id = data(target).pendingAttachmentId;
+        if (id) void deleteDraftFiles(draftScope('composer'), [id]);
+        composerAttachments.value = composerAttachments.value.filter((item) => item.id !== id);
+        composerAttachmentMessage.value = '';
+        composerAttachmentError.value = false;
+        scheduleProjectSessionPersistence();
+      },
+    ),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="clear-new-ticket-attachments"]', () => {
+    delegate(document.body, 'click', SEARCH_AND_COMPOSER_ACTIONS.clearNewTicketAttachments.selector, () => {
       // Drops every file staged for a source that cannot take attachments (HS2-8HHHK3).
       const ids = composerAttachments.value.map((item) => item.id);
       if (ids.length) void deleteDraftFiles(draftScope('composer'), ids);
@@ -315,19 +331,19 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dragover', '[data-new-ticket-drop-target="true"]', (event, target) => {
+    delegate(document.body, 'dragover', SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.selector, (event, target) => {
       if (dependencies.draggedTickets) return;
       event.preventDefault();
       (target as HTMLElement).dataset.dragging = 'true';
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dragleave', '[data-new-ticket-drop-target="true"]', (_event, target) => {
+    delegate(document.body, 'dragleave', SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.selector, (_event, target) => {
       delete (target as HTMLElement).dataset.dragging;
     }),
   );
   lifetime.add(
-    delegate(document.body, 'drop', '[data-new-ticket-drop-target="true"]', (event, target) => {
+    delegate(document.body, 'drop', SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.selector, (event, target) => {
       if (dependencies.draggedTickets) return;
       event.preventDefault();
       event.stopPropagation();
@@ -340,13 +356,13 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="create-ticket-form"]', (event) => {
+    delegate(document.body, 'submit', SEARCH_AND_COMPOSER_ACTIONS.createTicketForm.selector, (event) => {
       event.preventDefault();
       void submitNewTicket();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="toggle-row-up-next"]', (event, target) => {
+    delegate(document.body, 'click', SEARCH_AND_COMPOSER_ACTIONS.toggleRowUpNext.selector, (event, target) => {
       event.stopPropagation();
       const article = target.closest('[data-ticket-slug]') as HTMLElement,
         ticket = tickets.value.find((item) => item.slug === article.dataset.ticketSlug);

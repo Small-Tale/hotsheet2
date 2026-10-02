@@ -1,5 +1,7 @@
 import './ticket-board-column.css';
 
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
+import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { TicketRow, type TicketRowProps } from './ticket-row';
 
 export interface TicketBoardColumnProps {
@@ -34,7 +36,7 @@ export function TicketBoardColumn({
           <button
             type="button"
             class="ticket-board-column__header"
-            data-action="select-ticket-column"
+            {...TICKET_SELECTION_ACTIONS.selectTicketColumn.attrs}
             aria-label={`Select all ${title} tickets`}
           >
             <span class="ticket-board-column__title">{title}</span>
@@ -58,7 +60,7 @@ export function TicketBoardColumn({
           <button
             type="button"
             class="ticket-page-more ticket-board-column__more"
-            data-action="load-next-ticket-page"
+            {...INSPECTOR_AND_EDITOR_ACTIONS.loadNextTicketPage.attrs}
             disabled={continuation.loading}
           >
             {continuation.loading ? 'Loading…' : 'Load more tickets'}

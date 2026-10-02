@@ -33,6 +33,7 @@ import {
   formatConversationCost,
   formatConversationTokens,
 } from '../ai-conversation';
+import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import type { PermissionItem } from '../permission-notifications';
 import { AIContentFeedback, AIContentLabel } from './ai-content-label';
 import { MarkdownPreview } from './markdown-preview';
@@ -227,7 +228,7 @@ export function AIConversation({
     <button
       type="button"
       class="ai-conversation__header-action"
-      data-action="save-conversation"
+      {...COMMANDS_AND_AI_ACTIONS.saveConversation.attrs}
       disabled={busy || messages.length === 0}
       aria-label="Save conversation"
       title={busy ? 'Wait for the active response before saving' : 'Save conversation'}
@@ -240,7 +241,7 @@ export function AIConversation({
       <button
         type="button"
         class="ai-conversation__header-action"
-        data-action="stop-conversation"
+        {...COMMANDS_AND_AI_ACTIONS.stopConversation.attrs}
         aria-label={`Stop ${tool}`}
         title={`Stop ${tool}`}
       >
@@ -274,7 +275,7 @@ export function AIConversation({
           <wa-button
             appearance="plain"
             size="small"
-            data-action="copy-conversation-selection"
+            {...COMMANDS_AND_AI_ACTIONS.copyConversationSelection.attrs}
             aria-label="Copy selected messages"
             title="Copy selected messages"
           >
@@ -283,7 +284,7 @@ export function AIConversation({
           <wa-button
             appearance="plain"
             size="small"
-            data-action="clear-conversation-selection"
+            {...COMMANDS_AND_AI_ACTIONS.clearConversationSelection.attrs}
             aria-label="Clear message selection"
             title="Clear message selection"
           >
@@ -412,7 +413,7 @@ export function AIConversation({
     <form
       slot={presentation === 'dialog' ? 'footer' : undefined}
       class="ai-conversation__composer"
-      data-action="send-conversation-turn"
+      {...COMMANDS_AND_AI_ACTIONS.sendConversationTurn.attrs}
     >
       <label>
         <span class="ai-conversation__composer-label">Message {tool}</span>
@@ -444,7 +445,7 @@ export function AIConversation({
     return (
       <section
         class="ai-conversation ai-conversation--embedded"
-        data-component="ai-conversation"
+        {...COMMANDS_AND_AI_TARGETS.aiConversation.attrs}
         data-presentation="embedded"
         data-read-only={String(readOnly)}
         data-selection-id={selectionId}
@@ -473,7 +474,7 @@ export function AIConversation({
   return (
     <wa-dialog
       class="ai-conversation"
-      data-component="ai-conversation"
+      {...COMMANDS_AND_AI_TARGETS.aiConversation.attrs}
       data-presentation="dialog"
       data-read-only={String(readOnly)}
       data-selection-id={selectionId}

@@ -4,6 +4,7 @@ import './project-sidebar.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MessageSquare } from 'lucide';
 
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { CommandNavigation, type CommandNavigationItem } from './command-navigation';
 import { DriveControl } from './drive-control';
 import { type AiToolDescriptor, type AiToolSelection, DriveOptionsMenu } from './drive-options-menu';
@@ -87,7 +88,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
         <button
           type="button"
           class="project-sidebar__conversation"
-          data-action="open-conversation"
+          {...COMMANDS_AND_AI_ACTIONS.openConversation.attrs}
           aria-label={`Open ${driveToolLabel} conversation`}
           title="Open chat without starting the Hot Sheet workflow"
           aria-pressed={props.conversationOpen ? 'true' : 'false'}

@@ -8,6 +8,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { CheckCircle2, CopyX, Search } from 'lucide';
 
+import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import {
   type DuplicateTarget,
   duplicateTargetKey,
@@ -38,10 +39,10 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
     <wa-dialog
       class="ticket-close-dialog"
       open
-      data-component="ticket-close-dialog"
+      {...TICKET_SELECTION_TARGETS.ticketCloseDialog.attrs}
       label={`Close ${state.source.slug}`}
     >
-      <form data-action="submit-ticket-close" class="ticket-close-dialog__form">
+      <form {...TICKET_SELECTION_ACTIONS.submitTicketClose.attrs} class="ticket-close-dialog__form">
         <p>Record why this ticket is being closed so the outcome remains searchable and unambiguous.</p>
         <Select
           name="ticket-close-reason"
@@ -71,7 +72,12 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
                   </strong>
                   <span class="ticket-close-dialog__title">{state.selected.title}</span>
                 </span>
-                <wa-button type="button" appearance="plain" size="small" data-action="clear-ticket-close-target">
+                <wa-button
+                  type="button"
+                  appearance="plain"
+                  size="small"
+                  {...TICKET_SELECTION_ACTIONS.clearTicketCloseTarget.attrs}
+                >
                   Change
                 </wa-button>
               </div>
@@ -112,7 +118,12 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
           {state.error || validation}
         </p>
         <div slot="footer" class="ticket-close-dialog__actions">
-          <wa-button type="button" data-action="cancel-ticket-close" appearance="outlined" disabled={state.submitting}>
+          <wa-button
+            type="button"
+            {...TICKET_SELECTION_ACTIONS.cancelTicketClose.attrs}
+            appearance="outlined"
+            disabled={state.submitting}
+          >
             Cancel
           </wa-button>
           <wa-button type="submit" variant="brand" disabled={Boolean(validation) || state.submitting}>

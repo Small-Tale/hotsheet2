@@ -8,6 +8,7 @@ import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import { ChevronLeft, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
 import type { ProviderConnection } from '../api';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 
 export type ExternalProviderKind = 'github' | 'gitlab' | 'jira';
 
@@ -78,9 +79,14 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
       id="provider-setup-form"
       class="provider-setup-form"
       data-component="provider-setup-form"
-      data-action="save-provider-connection"
+      {...COMMANDS_AND_AI_ACTIONS.saveProviderConnection.attrs}
     >
-      <wa-button class="provider-setup-form__back" appearance="plain" type="button" data-action="back-provider-kind">
+      <wa-button
+        class="provider-setup-form__back"
+        appearance="plain"
+        type="button"
+        {...COMMANDS_AND_AI_ACTIONS.backProviderKind.attrs}
+      >
         <LucideIcon slot="start" icon={ChevronLeft} name="chevron-left" /> Ticket source types
       </wa-button>
       {/* Buttons carry `data-key` so a re-render never recycles the clicked control into a different
@@ -97,13 +103,18 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
                 {auth.userCode}
               </output>
               <div class="provider-setup-form__auth-actions">
-                <wa-button appearance="accent" type="button" data-action="copy-github-code" data-key="copy-github-code">
+                <wa-button
+                  appearance="accent"
+                  type="button"
+                  {...COMMANDS_AND_AI_ACTIONS.copyGithubCode.attrs}
+                  data-key="copy-github-code"
+                >
                   <LucideIcon slot="start" icon={Copy} name="copy" /> {auth.copied ? 'Copy again' : 'Copy code'}
                 </wa-button>
                 <wa-button
                   appearance="plain"
                   type="button"
-                  data-action="reopen-github-sign-in"
+                  {...COMMANDS_AND_AI_ACTIONS.reopenGithubSignIn.attrs}
                   data-key="reopen-github-sign-in"
                 >
                   <LucideIcon slot="start" icon={ExternalLink} name="external-link" /> Reopen GitHub
@@ -111,7 +122,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
                 <wa-button
                   appearance="plain"
                   type="button"
-                  data-action="cancel-github-sign-in"
+                  {...COMMANDS_AND_AI_ACTIONS.cancelGithubSignIn.attrs}
                   data-key="cancel-github-sign-in"
                 >
                   Cancel
@@ -142,7 +153,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
                 <wa-button
                   appearance="accent"
                   type="button"
-                  data-action="start-github-sign-in"
+                  {...COMMANDS_AND_AI_ACTIONS.startGithubSignIn.attrs}
                   data-key="start-github-sign-in"
                 >
                   <LucideIcon slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub Enterprise
@@ -150,7 +161,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
                 <wa-button
                   appearance="plain"
                   type="button"
-                  data-action="choose-github-dotcom"
+                  {...COMMANDS_AND_AI_ACTIONS.chooseGithubDotcom.attrs}
                   data-key="choose-github-dotcom"
                 >
                   Use GitHub.com instead
@@ -167,7 +178,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
                 <wa-button
                   appearance="accent"
                   type="button"
-                  data-action="start-github-sign-in"
+                  {...COMMANDS_AND_AI_ACTIONS.startGithubSignIn.attrs}
                   data-key="start-github-sign-in"
                 >
                   <LucideIcon slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub
@@ -175,7 +186,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
                 <wa-button
                   appearance="plain"
                   type="button"
-                  data-action="choose-github-enterprise"
+                  {...COMMANDS_AND_AI_ACTIONS.chooseGithubEnterprise.attrs}
                   data-key="choose-github-enterprise"
                 >
                   Use GitHub Enterprise…
@@ -281,7 +292,7 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
                 )}
                 <button
                   type="button"
-                  data-action="refresh-github-repositories"
+                  {...COMMANDS_AND_AI_ACTIONS.refreshGithubRepositories.attrs}
                   data-key="refresh-github-repositories"
                   disabled={auth.refreshing}
                 >

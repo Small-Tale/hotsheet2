@@ -26,6 +26,7 @@ import {
   Star,
 } from 'lucide';
 
+import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { createTicketSearchModel } from '../ticket-search-model';
 import { TicketSearchField } from './ticket-search-field';
 
@@ -412,7 +413,7 @@ export function WorkspaceControls({
           type="button"
           class="workspace-header__up-next-button"
           disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
-          data-action="toggle-selected-up-next"
+          {...TICKET_SELECTION_ACTIONS.toggleSelectedUpNext.attrs}
           aria-label="Toggle Up Next for selected tickets"
           aria-pressed={selectedTicketsUpNext === 'mixed' ? 'mixed' : String(selectedTicketsUpNext === 'all')}
           title="Toggle Up Next for selected tickets"
@@ -422,7 +423,7 @@ export function WorkspaceControls({
         <button
           type="button"
           disabled={ticketActionsDisabled}
-          data-action="open-selected-ticket-actions"
+          {...TICKET_SELECTION_ACTIONS.openSelectedTicketActions.attrs}
           aria-label="More actions for selected tickets"
           title="More actions for selected tickets"
         >

@@ -1,6 +1,7 @@
 import './ticket-list.css';
 
 import type { CorruptTicket } from '../api';
+import { VIEWS_AND_SAVED_VIEWS_TARGETS } from '../interaction-attrs/views-and-saved-views';
 import { corruptTicketKey, type CorruptTicketRecoveryState, CorruptTicketRow } from './corrupt-ticket-row';
 import { TicketEmptyState, type TicketEmptyStateProps } from './ticket-empty-state';
 import { TicketRow, type TicketRowProps } from './ticket-row';
@@ -48,7 +49,7 @@ export function TicketList({
       )}
       <div
         class="ticket-list__tickets"
-        data-ticket-selection-root="true"
+        {...VIEWS_AND_SAVED_VIEWS_TARGETS.ticketSelectionRoot.attrs}
         role="listbox"
         aria-label={label}
         aria-multiselectable="true"

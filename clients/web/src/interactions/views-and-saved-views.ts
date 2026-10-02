@@ -3,6 +3,10 @@ import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { type FullTicket } from '../api';
 import { type SavedViewContextMenuState } from '../components/view-navigation';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
+import {
+  VIEWS_AND_SAVED_VIEWS_ACTIONS,
+  VIEWS_AND_SAVED_VIEWS_TARGETS,
+} from '../interaction-attrs/views-and-saved-views';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
 import { createInteractionLifetime } from './lifetime';
@@ -53,7 +57,7 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     savedViewDeleteBusy,
   } = dependencies;
   lifetime.add(
-    delegate(document.body, 'click', '[data-ticket-selection-root="true"]', (event) => {
+    delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_TARGETS.ticketSelectionRoot.selector, (event) => {
       const pointer = event as MouseEvent;
       if (
         (event.target as Element).closest('[data-action="select-ticket-row"]') ||
@@ -69,18 +73,18 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="select-view"]', (_event, target) => {
+    delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_ACTIONS.selectView.selector, (_event, target) => {
       selectTicketView((data(target).itemId ?? 'all') as TicketView);
     }),
   );
   lifetime.add(
-    delegateCapture(document.body, 'click', '[data-action="add-view"]', (event) => {
+    delegateCapture(document.body, 'click', VIEWS_AND_SAVED_VIEWS_ACTIONS.addView.selector, (event) => {
       if (isEditableEvent(event)) return;
       openSavedViewDialog();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="open-saved-view-menu"]', (event, target) => {
+    delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_ACTIONS.openSavedViewMenu.selector, (event, target) => {
       event.stopPropagation();
       const rect = target.getBoundingClientRect(),
         id = data(target).itemId,
@@ -119,38 +123,38 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="edit-saved-view"]', (event, target) => {
+    delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_ACTIONS.editSavedView.selector, (event, target) => {
       event.stopPropagation();
       savedViewMenu.value = undefined;
       openSavedViewRename(data(target).itemId!);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="delete-saved-view"]', (event, target) => {
+    delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_ACTIONS.deleteSavedView.selector, (event, target) => {
       event.stopPropagation();
       savedViewMenu.value = undefined;
       openSavedViewDelete(data(target).itemId!);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'input', '[name="saved-view-name"]', (_event, target) => {
+    delegate(document.body, 'input', VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewNameField.selector, (_event, target) => {
       savedViewName.value = (target as Control).value;
       savedViewError.value = '';
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', '[data-action="save-saved-view"]', (event, target) => {
+    delegate(document.body, 'submit', VIEWS_AND_SAVED_VIEWS_ACTIONS.saveSavedView.selector, (event, target) => {
       event.preventDefault();
       void saveSavedView(target as HTMLFormElement);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-saved-view"]', () => {
+    delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_ACTIONS.cancelSavedView.selector, () => {
       closeSavedViewDialog();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', '[data-component="saved-view-dialog"]', (event) => {
+    delegate(document.body, 'wa-hide', VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDialog.selector, (event) => {
       if (savedViewBusy.value) {
         event.preventDefault();
         return;
@@ -159,17 +163,17 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="confirm-delete-saved-view"]', () => {
+    delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_ACTIONS.confirmDeleteSavedView.selector, () => {
       void deleteSavedView();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', '[data-action="cancel-delete-saved-view"]', () => {
+    delegate(document.body, 'click', VIEWS_AND_SAVED_VIEWS_ACTIONS.cancelDeleteSavedView.selector, () => {
       closeSavedViewDelete();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'wa-hide', '[data-component="saved-view-delete-dialog"]', (event) => {
+    delegate(document.body, 'wa-hide', VIEWS_AND_SAVED_VIEWS_TARGETS.savedViewDeleteDialog.selector, (event) => {
       if (savedViewDeleteBusy.value) {
         event.preventDefault();
         return;

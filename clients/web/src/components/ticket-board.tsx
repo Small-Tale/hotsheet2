@@ -1,5 +1,6 @@
 import './ticket-board.css';
 
+import { VIEWS_AND_SAVED_VIEWS_TARGETS } from '../interaction-attrs/views-and-saved-views';
 import { TicketBoardColumn, type TicketBoardColumnProps } from './ticket-board-column';
 import { TicketEmptyState, type TicketEmptyStateProps } from './ticket-empty-state';
 
@@ -28,7 +29,7 @@ export function TicketBoard({ columns, label = 'Ticket board', emptyState, layou
       data-key={layout === 'grid' ? 'ticket-board' : `ticket-board:${layout}`}
       data-component="ticket-board"
       data-layout={layout}
-      data-ticket-selection-root="true"
+      {...VIEWS_AND_SAVED_VIEWS_TARGETS.ticketSelectionRoot.attrs}
       role="listbox"
       aria-multiselectable="true"
       aria-label={label}
