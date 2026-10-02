@@ -2201,7 +2201,7 @@ Default tab names follow what each terminal runs (HS2-HZK0NK): an AI shell is na
 provider and numbered among that provider's terminals in the project ("Claude 1", "Claude 2",
 "Codex 1", from the server-reported `tool`), and a plain shell is numbered among the project's
 shells ("Terminal 1"). Readable terminal ids keep their title-cased words, and a user's rename
-always wins.
+always wins; renames are shared through the server (HS2-89FPV1, below).
 The menu has no redundant heading, and only the AI shell submenu carries a disclosure chevron. Its popup keeps the commands within the
 viewport as the drawer and window resize, and supplies native menu keyboard navigation
 (HS2-ZKKRZS, HS2-R8SMK2). Rapid Escape/reopen keeps arrow navigation and Enter selection
@@ -2226,8 +2226,16 @@ project, terminal, and AI-chat tabs offer Close Tab, Close Other Tabs, direction
 and Close All Tabs. Drawer close ranges use the complete remembered mixed order, so each
 action closes both terminal and AI-chat targets; terminal tabs additionally offer Rename.
 Human-readable defaults replace generated
-ids, and device-local rename overrides survive refresh/reopen without renaming the PTY
-identity. Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
+ids. A rename is server state (HS2-89FPV1): `PUT /terminals/{id}/name` stores it in the
+project's machine-local settings (`terminal.names`, `Scope::Local`), `GET /terminals` reports it
+as the optional `name`, and a `terminal_renamed` change event (terminal id, new name) retitles
+the tab live in every other client and device without a refetch. The name therefore survives a
+reload, a project restore, and a server restart, and never renames the PTY identity; killing a
+terminal forgets its name so a reused id starts fresh. The browser keeps a rename locally only
+while its write is in flight (or after a failed write, retried by the next terminal refresh),
+and uploads renames saved locally before names moved to the server once, then drops them. The
+Rename dialog always opens on the current name of the terminal being renamed, never on a
+previous rename's or an abandoned edit's text: each open is a new field session (HS2-MEW525). Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
 one mixed drawer strip by dragging across either kind. Both strips use Kerf's controlled
 `TabBar`/`AppTab` composition and one `wireTabBars` delegation. Both use manual activation:
 Left/Right/Home/End move focus without replacing the focused controlled tab node, and

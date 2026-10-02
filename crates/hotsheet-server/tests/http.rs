@@ -917,6 +917,110 @@ async fn terminal_history_opt_out_is_machine_local_and_round_trips() {
 }
 
 #[tokio::test]
+async fn terminal_rename_persists_announces_and_is_forgotten_on_kill() {
+    let (dir, state) = state();
+    let router = app(state);
+    let send = |method: &'static str, path: &'static str, body: Option<&'static str>| {
+        let router = router.clone();
+        async move { router.oneshot(authed(method, path, body)).await.unwrap() }
+    };
+    let missing = send("PUT", "/terminals/nope/name", Some(r#"{"name":"Logs"}"#)).await;
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    let opened = send(
+        "POST",
+        "/terminals",
+        Some(r#"{"command":"cat","id":"rename-me"}"#),
+    )
+    .await;
+    assert_eq!(opened.status(), StatusCode::OK);
+    let listed = body_json(send("GET", "/terminals", None).await).await;
+    assert!(listed[0].get("name").is_none(), "never renamed: {listed}");
+    let cursor = body_json(send("GET", "/ws/poll?timeout_ms=0", None).await).await["cursor"]
+        .as_u64()
+        .unwrap();
+
+    let too_long = format!(r#"{{"name":"{}"}}"#, "x".repeat(121));
+    let rejected = router
+        .clone()
+        .oneshot(authed("PUT", "/terminals/rename-me/name", Some(&too_long)))
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+    let renamed = send(
+        "PUT",
+        "/terminals/rename-me/name",
+        Some(r#"{"name":"  Build logs  "}"#),
+    )
+    .await;
+    assert_eq!(
+        body_json(renamed).await,
+        serde_json::json!({"id":"rename-me","name":"Build logs"})
+    );
+    assert_eq!(
+        body_json(send("GET", "/terminals", None).await).await[0]["name"],
+        "Build logs"
+    );
+    assert_eq!(
+        body_json(send("GET", "/terminals/rename-me", None).await).await["name"],
+        "Build logs"
+    );
+    assert_eq!(
+        Settings::new(dir.path())
+            .get("terminal.names", Scope::Local)
+            .unwrap(),
+        Some(serde_json::json!({"rename-me":"Build logs"})),
+        "names are machine-local settings, so they survive a reload or restart"
+    );
+    let events = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let renames: Vec<_> = events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["kind"] == "terminal_renamed")
+        .collect();
+    assert_eq!(renames.len(), 1, "{events}");
+    assert_eq!(renames[0]["id"], "rename-me");
+    assert_eq!(renames[0]["message"], "Build logs");
+
+    let cleared = send("PUT", "/terminals/rename-me/name", Some(r#"{"name":null}"#)).await;
+    assert_eq!(
+        body_json(cleared).await,
+        serde_json::json!({"id":"rename-me"})
+    );
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("name")
+            .is_none()
+    );
+    send(
+        "PUT",
+        "/terminals/rename-me/name",
+        Some(r#"{"name":"Again"}"#),
+    )
+    .await;
+    let killed = send("DELETE", "/terminals/rename-me", None).await;
+    assert_eq!(killed.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        Settings::new(dir.path())
+            .get("terminal.names", Scope::Local)
+            .unwrap(),
+        None,
+        "a killed terminal's reusable id must not keep its old name"
+    );
+}
+
+#[tokio::test]
 async fn create_extracts_leading_title_tags_over_http() {
     let (_dir, state) = state();
     let response = app(state)

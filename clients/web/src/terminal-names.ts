@@ -53,3 +53,63 @@ export function parseTerminalNames(raw: string | null): Record<string, string> {
     return {};
   }
 }
+
+/**
+ * A terminal tab's title (HS2-89FPV1). A browser-local name is only ever a rename that has not
+ * reached the server yet (in flight, or saved before names moved to the server), so it wins; then
+ * the server-saved name every client shares; then the derived default.
+ */
+export function terminalTitle(localName: string | undefined, serverName: string | undefined, fallback: string): string {
+  return localName?.trim() || serverName?.trim() || fallback;
+}
+
+/** Drop one terminal's browser-local name, returning the same object when nothing changed. */
+export function withoutTerminalName(names: Record<string, string>, key: string): Record<string, string> {
+  if (!Object.hasOwn(names, key)) return names;
+  return Object.fromEntries(Object.entries(names).filter(([candidate]) => candidate !== key));
+}
+
+/**
+ * Reconcile settled browser-local names with what the server reports for one project's
+ * terminals. A local name for a terminal the server has not named is uploaded once; a local name
+ * for a terminal the server already names is stale (the server is authoritative) and is dropped.
+ * Renames still in flight (`pending` keys) are left alone.
+ */
+export function reconcileLocalTerminalNames(
+  projectId: string,
+  sessions: readonly { id: string; name?: string }[],
+  local: Readonly<Record<string, string>>,
+  pending: ReadonlySet<string>,
+): { upload: { terminalId: string; name: string }[]; drop: string[] } {
+  const upload: { terminalId: string; name: string }[] = [],
+    drop: string[] = [];
+  for (const session of sessions) {
+    const key = terminalNameKey(projectId, session.id),
+      name = local[key];
+    if (!name || pending.has(key)) continue;
+    if (session.name) drop.push(key);
+    else upload.push({ terminalId: session.id, name });
+  }
+  return { upload, drop };
+}
+
+/** Retitle one project's terminal in place (an optimistic rename or a `terminal_renamed` event). */
+export function retitleTerminal<G extends { projectId: string; sessions: readonly { id: string; title?: string }[] }>(
+  groups: readonly G[],
+  projectId: string,
+  terminalId: string,
+  title: string,
+): G[] {
+  const stale = (group: G) =>
+    group.projectId === projectId &&
+    group.sessions.some((session) => session.id === terminalId && session.title !== title);
+  if (!groups.some(stale)) return groups as G[];
+  return groups.map((group) =>
+    stale(group)
+      ? {
+          ...group,
+          sessions: group.sessions.map((session) => (session.id === terminalId ? { ...session, title } : session)),
+        }
+      : group,
+  );
+}

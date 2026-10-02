@@ -5,6 +5,7 @@ import { browserRandomId } from '../browser-id';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../components/terminal-dashboard';
+import { type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
@@ -113,7 +114,7 @@ export interface TerminalInteractionsDependencies {
   readonly currentDrawerTabIds: (projectId: string) => string[];
   readonly project: () => Project | undefined;
   readonly terminalGroups: Signal<TerminalDashboardGroup[]>;
-  readonly terminalRename: Signal<{ projectId: string; terminalId: string; value: string } | undefined>;
+  readonly terminalRename: Signal<TerminalRenameTarget | undefined>;
   readonly closeDrawerTabIds: (ids: readonly string[]) => Promise<void>;
   readonly saveTerminalName: (projectId: string, terminalId: string, name: string) => void;
 }
@@ -121,6 +122,7 @@ export interface TerminalInteractionsDependencies {
 /** Register this group only when the application wiring owner invokes it. */
 export function wireTerminalInteractions(dependencies: TerminalInteractionsDependencies) {
   const lifetime = createInteractionLifetime();
+  let terminalRenameSession = 0;
   const {
     terminalDrawerBounds,
     terminalDashboardSize,
@@ -649,10 +651,12 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
             session = group?.sessions.find((item) => item.id === menu.id);
           appTabContextMenu.value = undefined;
           if (session) {
+            terminalRenameSession += 1;
             terminalRename.value = {
               projectId: session.projectId,
               terminalId: session.id,
               value: session.title ?? session.id,
+              session: terminalRenameSession,
             };
             queueMicrotask(() => document.querySelector<Control>('[name="terminal-name"]')?.focus());
           }

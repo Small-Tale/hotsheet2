@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
-import { expect, type Locator, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import type { ConversationMessage } from '../src/ai-conversation';
 import type { FullTicket, MediaAnnotation, TicketRow } from '../src/api';
@@ -385,6 +385,8 @@ async function mockProject(
   };
   let createdTerminal = false;
   const closedTerminals = new Set<string>();
+  // Mirrors the server's machine-local `terminal.names` settings (HS2-89FPV1).
+  const terminalNames = new Map<string, string>();
   let folderChoice = 0;
   let repositoryListings = 0;
   let githubAuthWaits = 0;
@@ -850,12 +852,28 @@ async function mockProject(
         json: [
           ...terminals,
           ...(createdTerminal ? [{ id: 'terminal-new', alive: true, busy: false, cwd: '/work/demo' }] : []),
-        ].filter((item) => !closedTerminals.has(item.id)),
+        ]
+          .filter((item) => !closedTerminals.has(item.id))
+          .map((item) => {
+            const name = terminalNames.get(item.id);
+            return name ? { ...item, name } : item;
+          }),
       });
+    }
+    // PUT /terminals/{id}/name: trims, clears on a blank/null name, and answers `{id, name?}`.
+    const terminalRename = path.match(/\/terminals\/([^/]+)\/name$/);
+    if (terminalRename && request.method() === 'PUT') {
+      const id = decodeURIComponent(terminalRename[1]),
+        name = ((request.postDataJSON() as { name?: string | null }).name ?? '').trim();
+      if (name) terminalNames.set(id, name);
+      else terminalNames.delete(id);
+      return route.fulfill({ json: name ? { id, name } : { id } });
     }
     const terminalDelete = path.match(/\/terminals\/([^/]+)$/);
     if (terminalDelete && request.method() === 'DELETE') {
-      closedTerminals.add(decodeURIComponent(terminalDelete[1]));
+      const id = decodeURIComponent(terminalDelete[1]);
+      closedTerminals.add(id);
+      terminalNames.delete(id);
       return route.fulfill({ status: 204 });
     }
     if (path.endsWith('/terminals/codex-main') && request.method() === 'GET')
@@ -5399,9 +5417,16 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   await page.screenshot({ path: '/private/tmp/hs2-h2m7sp-new-terminal-focus.png', fullPage: true });
 });
 
-test('renames a terminal from its tab menu and keeps the device-local name after reload', async ({ page }) => {
+test('renames a terminal from its tab menu, saves it on the server, and keeps it after reload (HS2-89FPV1)', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
+  const renames: Array<{ path: string; body: unknown }> = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/name'))
+      renames.push({ path: new URL(request.url()).pathname, body: request.postDataJSON() });
+  });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
@@ -5420,14 +5445,179 @@ test('renames a terminal from its tab menu and keeps the device-local name after
   await dialog.getByRole('button', { name: 'Rename' }).click();
   await expect(dialog).toHaveJSProperty('open', false);
   await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toBeVisible();
-  await expect(
-    page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.terminals.names') ?? '{}')['demo-checkout:tests']),
-  ).resolves.toBe('Quality shell');
-  await page.screenshot({ path: '/private/tmp/hs2-terminal-renamed.png', fullPage: true });
+  await expect
+    .poll(() => renames)
+    .toEqual([{ path: '/__hotsheet/project-api/demo-checkout/terminals/tests/name', body: { name: 'Quality shell' } }]);
+  // Once the server has the name, no browser-local copy remains to shadow other devices' renames.
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.terminals.names') ?? '{}')['demo-checkout:tests']),
+    )
+    .toBeUndefined();
   await page.reload();
   await expect(
     page.locator('[data-component="terminal-drawer"]').getByRole('tab', { name: /Quality shell/ }),
   ).toBeVisible();
+});
+
+test('uploads a rename saved only in this browser before names were shared (HS2-89FPV1)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('legacy-seeded')) {
+      localStorage.setItem('hotsheet.terminals.names', JSON.stringify({ 'demo-checkout:tests': 'Legacy shell' }));
+      sessionStorage.setItem('legacy-seeded', '1');
+    }
+  });
+  await mockProject(page);
+  const renames: unknown[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/terminals/tests/name'))
+      renames.push(request.postDataJSON());
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await expect(drawer.getByRole('tab', { name: /Legacy shell/ })).toBeVisible();
+  await expect.poll(() => renames).toEqual([{ name: 'Legacy shell' }]);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('hotsheet.terminals.names'))).toBe('{}');
+  await page.reload();
+  await expect(
+    page.locator('[data-component="terminal-drawer"]').getByRole('tab', { name: /Legacy shell/ }),
+  ).toBeVisible();
+  expect(renames).toHaveLength(1);
+});
+
+for (const width of [1280, 390])
+  test(`prefills the rename dialog with the current name of the terminal being renamed at ${width}px (HS2-MEW525)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]'),
+      dialog = page.locator('[data-terminal-rename-dialog]'),
+      field = dialog.locator('wa-input[name="terminal-name"]'),
+      openRename = async (tabName: RegExp) => {
+        await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
+        await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+        await expect(dialog).toHaveJSProperty('open', true);
+      };
+    await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
+    // Rename one terminal…
+    await openRename(/Tests/);
+    await expect(field).toHaveJSProperty('value', 'Tests');
+    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Quality shell');
+    await dialog.getByRole('button', { name: 'Rename' }).click();
+    await expect(dialog).toHaveJSProperty('open', false);
+    await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toBeVisible();
+    // …then another: the field shows that terminal's own current name, not the previous rename.
+    await openRename(/Codex Main/);
+    await expect(field).toHaveJSProperty('value', 'Codex Main');
+    await expect(dialog.getByRole('textbox', { name: /Terminal name/ })).toBeFocused();
+    // Typing then cancelling never leaks the abandoned text into the next open.
+    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Abandoned');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveJSProperty('open', false);
+    await openRename(/Codex Main/);
+    await expect(field).toHaveJSProperty('value', 'Codex Main');
+    // Reopening the renamed terminal shows its new name.
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await openRename(/Quality shell/);
+    await expect(field).toHaveJSProperty('value', 'Quality shell');
+    await page.waitForTimeout(400); // let the dialog's open animation settle for the evidence capture
+    await page.screenshot({ path: `/private/tmp/claude/hs2-mew525-rename-prefill-${width}.png` });
+  });
+
+test('shares a terminal rename with other devices and restores it through the real server (HS2-89FPV1)', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer(),
+    contexts = await Promise.all([browser.newContext(), browser.newContext(), browser.newContext()]);
+  // Only project discovery is a fixture; the terminal list, the rename write, its persistence, and
+  // the `terminal_renamed` change event that reaches the other device are the real server's.
+  const openOnRealServer = async (page: Page) => {
+    await mockProject(page);
+    for (const pattern of [
+      '**/__hotsheet/project-api/demo-checkout/terminals**',
+      '**/__hotsheet/project-api/demo-checkout/ws/poll*',
+    ])
+      await page.route(pattern, async (route) => {
+        const incoming = new URL(route.request().url()),
+          path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
+        try {
+          const response = await route.fetch({
+            url: `${server.url}${path}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          await route.fulfill({ response });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    return page.locator('[data-component="terminal-drawer"]');
+  };
+  try {
+    // The shell reports the fixture project's root over OSC 7, which is how the client scopes a
+    // terminal to its project.
+    await server.request('/terminals', 'POST', {
+      id: 'shared-shell',
+      command: '/bin/sh',
+      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      cwd: server.root,
+    });
+    await expect
+      .poll(async () => (await server.request<Array<{ id: string; cwd?: string }>>('/terminals'))[0]?.cwd)
+      .toBe('/work/demo');
+    const [laptop, phone] = await Promise.all([contexts[0].newPage(), contexts[1].newPage()]),
+      laptopDrawer = await openOnRealServer(laptop),
+      phoneDrawer = await openOnRealServer(phone);
+    await expect(laptopDrawer.getByRole('tab', { name: /Shared Shell/ })).toBeVisible();
+    await expect(phoneDrawer.getByRole('tab', { name: /Shared Shell/ })).toBeVisible();
+    let phoneListReads = 0;
+    phone.on('request', (request) => {
+      if (request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/demo-checkout/terminals'))
+        phoneListReads += 1;
+    });
+
+    await laptopDrawer.getByRole('tab', { name: /Shared Shell/ }).click({ button: 'right' });
+    await laptop.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+    const dialog = laptop.locator('[data-terminal-rename-dialog]');
+    await expect(dialog.locator('wa-input[name="terminal-name"]')).toHaveJSProperty('value', 'Shared Shell');
+    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Release shell');
+    await dialog.getByRole('button', { name: 'Rename' }).click();
+    await expect(laptopDrawer.getByRole('tab', { name: /Release shell/ })).toBeVisible();
+    await expect
+      .poll(async () => (await server.request<Array<{ id: string; name?: string }>>('/terminals'))[0]?.name)
+      .toBe('Release shell');
+    // The other device retitles live from the change stream, without a reload.
+    await expect(phoneDrawer.getByRole('tab', { name: /Release shell/ })).toBeVisible({ timeout: 30_000 });
+    expect(phoneListReads, 'the event itself retitles the tab; no terminal list refetch').toBe(0);
+
+    // A reload, and a fresh device with no browser-local state, both restore the shared name.
+    await laptop.reload();
+    await expect(
+      laptop.locator('[data-component="terminal-drawer"]').getByRole('tab', { name: /Release shell/ }),
+    ).toBeVisible();
+    const fresh = await contexts[2].newPage(),
+      freshDrawer = await openOnRealServer(fresh);
+    await expect(freshDrawer.getByRole('tab', { name: /Release shell/ })).toBeVisible();
+    expect(await fresh.evaluate(() => localStorage.getItem('hotsheet.terminals.names'))).toBeNull();
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+    await server.stop();
+  }
 });
 
 test('resizes the terminal drawer to the page-header boundary', async ({ page }) => {

@@ -6,7 +6,14 @@ import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 export interface TerminalRenameTarget {
   projectId: string;
   terminalId: string;
+  /** The terminal's current tab name, which seeds the field. */
   value: string;
+  /**
+   * Increments on every open (HS2-MEW525). A Web Awesome input keeps its typed live `value` when
+   * only its `value` attribute changes, so a new session replaces the field and it always shows
+   * the current name of the terminal being renamed, never a previous rename's text.
+   */
+  session: number;
 }
 
 export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget }) {
@@ -20,6 +27,7 @@ export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget
       <form class="terminal-rename" {...TERMINALS_ACTIONS.renameTerminalForm.attrs}>
         <List gap="l">
           <wa-input
+            data-key={`terminal-rename-${target?.session ?? 0}`}
             name="terminal-name"
             label="Terminal name"
             value={target?.value ?? ''}

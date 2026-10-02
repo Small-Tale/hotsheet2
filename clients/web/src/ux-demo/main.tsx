@@ -1045,7 +1045,9 @@ function demoContent(item: DemoDefinition) {
   }
   if (item.id === 'terminal-visibility-dialog') return <TerminalVisibilityDialogDemo />;
   if (item.id === 'terminal-rename-dialog')
-    return <TerminalRenameDialog target={{ projectId: 'demo', terminalId: 'shell', value: 'Development' }} />;
+    return (
+      <TerminalRenameDialog target={{ projectId: 'demo', terminalId: 'shell', value: 'Development', session: 1 }} />
+    );
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner') return <ConnectionStateBannerDemo />;
   if (item.id === 'app-shell') return <AppShellDemo />;

@@ -22,6 +22,7 @@ pub mod repository_browser;
 pub mod source_revision;
 pub mod sync_loop;
 pub mod terminal_broker;
+mod terminal_names;
 pub mod tls;
 pub mod tts;
 pub mod turn_stream;
@@ -1888,6 +1889,7 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/terminals/{id}", get(read_terminal).delete(kill_terminal))
         .route("/terminals/{id}/input", post(write_terminal))
+        .route("/terminals/{id}/name", put(rename_terminal))
         // Activity timeline (HS2-KP31ZE): ingest a tool's activity event, and read the
         // per-ticket/session "what happened" window (docs/15). The Announcer/timeline consumer.
         .route("/activity", get(list_activity).post(ingest_activity))
@@ -8000,6 +8002,10 @@ struct TerminalInfo {
     /// `<tool>-<id>` worker id; clients name AI tabs after it (HS2-HZK0NK).
     #[serde(skip_serializing_if = "Option::is_none")]
     tool: Option<String>,
+    /// The user's saved tab name (HS2-89FPV1), absent when the terminal was never renamed;
+    /// clients then derive a default name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
 }
 
 /// The AI tool of an `ai` terminal, recovered from its `<tool>-<id>` worker id. Shell terminals,
@@ -8035,6 +8041,7 @@ fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
         link: osc.link,
         progress: osc.progress,
         tool: ai_terminal_tool(term.kind(), term.worker_id(), id),
+        name: None,
     }
 }
 
@@ -8050,6 +8057,7 @@ fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInfo {
         link: bi.link,
         progress: bi.progress,
         tool,
+        name: None,
     }
 }
 
@@ -8911,21 +8919,101 @@ pub async fn resume_broker_terminal_sessions(state: &AppState) {
 
 /// `GET /terminals` — the live terminals (id, alive, busy).
 async fn list_terminals(State(state): State<AppState>) -> Json<Vec<TerminalInfo>> {
+    Json(with_terminal_names(
+        &state,
+        live_terminal_infos(&state).await,
+    ))
+}
+
+/// Every live terminal this server reports, before saved names are applied.
+async fn live_terminal_infos(state: &AppState) -> Vec<TerminalInfo> {
     if let Some(tb) = &state.terminal_broker {
         if let Ok(hotsheet_terminals::BrokerResponse::List { terminals }) =
             tb.call(hotsheet_terminals::BrokerRequest::List).await
         {
-            return Json(terminals.into_iter().map(broker_info).collect());
+            return terminals.into_iter().map(broker_info).collect();
         }
-        return Json(Vec::new());
+        return Vec::new();
     }
-    let infos = state
+    state
         .terminals
         .list()
         .into_iter()
         .filter_map(|key| state.terminals.get(&key).map(|t| term_info(&t, &key.1)))
-        .collect();
-    Json(infos)
+        .collect()
+}
+
+/// Apply the project's saved terminal names (HS2-89FPV1). An unreadable settings file leaves
+/// every terminal unnamed rather than failing the terminal list.
+fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<TerminalInfo> {
+    let names = terminal_names::all(&Settings::new(state.store.root())).unwrap_or_default();
+    for info in &mut infos {
+        info.name = names.get(&info.id).cloned();
+    }
+    infos
+}
+
+/// Body for `PUT /terminals/{id}/name`; an absent, null, or blank name clears the rename.
+#[derive(Deserialize)]
+struct TerminalNameReq {
+    #[serde(default)]
+    name: Option<String>,
+}
+
+/// Response for `PUT /terminals/{id}/name`.
+#[derive(Serialize)]
+struct TerminalNameResp {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+}
+
+/// `PUT /terminals/{id}/name` `{name}` — save (or clear) a live terminal's tab name in the
+/// project's machine-local settings and announce it with a `terminal_renamed` change event
+/// (`id` = terminal id, `message` = the new name, absent when cleared) so every connected
+/// client retitles the tab without a reload (HS2-89FPV1).
+async fn rename_terminal(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<TerminalNameReq>,
+) -> Result<Json<TerminalNameResp>, ApiError> {
+    let name = terminal_names::normalize(body.name.as_deref())
+        .map_err(|message| ApiError::new(StatusCode::BAD_REQUEST, message))?;
+    if !live_terminal_infos(&state)
+        .await
+        .iter()
+        .any(|info| info.id == id)
+    {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "no such terminal"));
+    }
+    let changed = terminal_names::set(&Settings::new(state.store.root()), &id, name.as_deref())
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    if changed {
+        emit_terminal_renamed(&state, &id, name.clone());
+    }
+    Ok(Json(TerminalNameResp { id, name }))
+}
+
+fn emit_terminal_renamed(state: &AppState, id: &str, name: Option<String>) {
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: String::new(),
+        kind: "terminal_renamed".into(),
+        id: id.to_owned(),
+        slug: String::new(),
+        message: name,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
+}
+
+/// A killed terminal's id can be reused by a later terminal, which must not inherit the old
+/// tab name.
+fn forget_terminal_name(state: &AppState, id: &str) {
+    if let Err(error) = terminal_names::set(&Settings::new(state.store.root()), id, None) {
+        eprintln!("forgetting terminal {id}'s name failed: {error}");
+    }
 }
 
 /// A terminal's current scrollback + state (`GET /terminals/{id}`). The scrollback is what a
@@ -8935,6 +9023,12 @@ struct TerminalRead {
     #[serde(flatten)]
     info: TerminalInfo,
     scrollback: String,
+}
+
+fn named_terminal_info(state: &AppState, info: TerminalInfo) -> TerminalInfo {
+    with_terminal_names(state, vec![info])
+        .pop()
+        .expect("one terminal in, one out")
 }
 
 async fn read_terminal(
@@ -8951,7 +9045,7 @@ async fn read_terminal(
         return match resp {
             hotsheet_terminals::BrokerResponse::Read { info, scrollback } => {
                 Ok(Json(TerminalRead {
-                    info: broker_info(info),
+                    info: named_terminal_info(&state, broker_info(info)),
                     scrollback: String::from_utf8_lossy(&scrollback).into_owned(),
                 }))
             }
@@ -8963,7 +9057,7 @@ async fn read_terminal(
         .get(&term_key(&state, &id))
         .ok_or_else(|| ApiError::not_found(&id))?;
     Ok(Json(TerminalRead {
-        info: term_info(&term, &id),
+        info: named_terminal_info(&state, term_info(&term, &id)),
         scrollback: String::from_utf8_lossy(&term.scrollback()).into_owned(),
     }))
 }
@@ -9017,7 +9111,10 @@ async fn kill_terminal(
             })?;
         return match resp {
             hotsheet_terminals::BrokerResponse::Ok
-            | hotsheet_terminals::BrokerResponse::NotFound => Ok(StatusCode::NO_CONTENT),
+            | hotsheet_terminals::BrokerResponse::NotFound => {
+                forget_terminal_name(&state, &id);
+                Ok(StatusCode::NO_CONTENT)
+            }
             other => Err(broker_err(other)),
         };
     }
@@ -9025,6 +9122,7 @@ async fn kill_terminal(
         .terminals
         .kill(&term_key(&state, &id))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    forget_terminal_name(&state, &id);
     Ok(StatusCode::NO_CONTENT)
 }
 

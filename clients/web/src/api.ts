@@ -477,6 +477,13 @@ export interface TerminalInfo {
   cwd?: string;
   link?: string;
   progress?: number;
+  /** The saved tab name shared by every client of this server (HS2-89FPV1); absent until renamed. */
+  name?: string;
+}
+/** `PUT /terminals/{id}/name` response; `name` is absent after a clear. */
+export interface TerminalName {
+  id: string;
+  name?: string;
 }
 export interface TerminalSettings {
   inherit_global_shell_history: boolean;
@@ -1022,6 +1029,12 @@ export class Api {
     } = {},
   ) => this.request<TerminalInfo>('/terminals', { method: 'POST', body: JSON.stringify(value) });
   deleteTerminal = (id: string) => this.request<void>(`/terminals/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  /** Save (or, with `null`, clear) a terminal's shared tab name (HS2-89FPV1). */
+  renameTerminal = (id: string, name: string | null) =>
+    this.request<TerminalName>(`/terminals/${encodeURIComponent(id)}/name`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    });
   commands = () => this.request<CommandDefinition[]>('/commands');
   saveCommands = (definitions: CommandDefinition[], options: { keepalive?: boolean } = {}) =>
     this.request<CommandDefinition[]>('/commands', {

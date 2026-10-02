@@ -47,6 +47,7 @@ import {
   type PollResponse,
   type RepositoryStatus,
   revealCorruptTicketFile,
+  type TerminalInfo,
   type TicketRow as WireTicketRow,
   type ToolConnection,
   TurnStreamReplayGuard,
@@ -120,7 +121,7 @@ import { type SettingsCategory, settingsCategoryTitle } from '../components/sett
 import { SettingsWorkspace } from '../components/settings-workspace';
 import type { TicketStatus } from '../components/status-badge';
 import { TerminalDashboardControls, type TerminalDashboardGroup } from '../components/terminal-dashboard';
-import { TerminalRenameDialog } from '../components/terminal-rename-dialog';
+import { TerminalRenameDialog, type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import {
   TerminalVisibilityDialog,
   TerminalVisibilityNameDialog,
@@ -259,7 +260,15 @@ import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../ser
 import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
-import { defaultTerminalNames, parseTerminalNames, terminalNameKey } from '../terminal-names';
+import {
+  defaultTerminalNames,
+  parseTerminalNames,
+  reconcileLocalTerminalNames,
+  retitleTerminal,
+  terminalNameKey,
+  terminalTitle,
+  withoutTerminalName,
+} from '../terminal-names';
 import { terminalDrawerActivation, terminalProjectOwner } from '../terminal-project-scope';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT, type TerminalFocusRequest } from '../terminal-viewport';
 import {
@@ -497,7 +506,9 @@ export async function startHotSheetWebClient() {
     terminalVisibilityNamePrompt = signal<TerminalVisibilityNamePrompt | undefined>(undefined);
   const terminalNames = signal(parseTerminalNames(localStorage.getItem('hotsheet.terminals.names'))),
     terminalContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined),
-    terminalRename = signal<{ projectId: string; terminalId: string; value: string } | undefined>(undefined);
+    terminalRename = signal<TerminalRenameTarget | undefined>(undefined);
+  /** Project-scoped keys of renames whose server write is still in flight (HS2-89FPV1). */
+  const pendingTerminalRenames = new Set<string>();
   let terminalDashboardGeneration = 0,
     terminalCreateChain: Promise<unknown> = Promise.resolve();
   let terminalDrawerTransitionTimer: number | undefined, terminalPreviewClickTimer: number | undefined;
@@ -1333,8 +1344,13 @@ export async function startHotSheetWebClient() {
               scrollback: '',
               projectId: current.id,
               projectName: current.name,
-              title: terminalNames.value[terminalNameKey(current.id, session.id)] ?? defaultNames[index],
+              title: terminalTitle(
+                terminalNames.value[terminalNameKey(current.id, session.id)],
+                session.name,
+                defaultNames[index],
+              ),
             }));
+          reconcileTerminalNames(current, owned);
           return {
             projectId: current.id,
             projectName: current.name,
@@ -1415,21 +1431,66 @@ export async function startHotSheetWebClient() {
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
   function openGridAIChat(projectId:string,chatId:string){const target=projects.value.find(item=>item.id===projectId),chat=terminalDrawerChatsByProject.value[projectId]?.find(item=>item.id===chatId);if(!target||!chat)return;const activated=projectId===selectedProjectId.value?undefined:activateOpenProject(projectId);setShellMode('project');selectDrawerItem(chat.id);setTerminalDrawerVisible(true);if(activated)void refreshActivatedProject(activated,false);else void Promise.all([refreshProject({showLoading:false}),refreshCommands()])}
+  function persistLocalTerminalNames(names: Record<string, string>) {
+    terminalNames.value = names;
+    localStorage.setItem('hotsheet.terminals.names', JSON.stringify(names));
+  }
+  /**
+   * Save a terminal's tab name on the project's server so it survives reloads and restores and
+   * reaches every other client (HS2-89FPV1). The browser-local copy covers the request in flight
+   * (and a reload during it) and is dropped once the server has the name; a failed write stays
+   * local and is retried by the next terminal refresh.
+   */
   function saveTerminalName(projectId: string, terminalId: string, name: string) {
-    const trimmed = name.trim();
+    const trimmed = name.trim(),
+      key = terminalNameKey(projectId, terminalId);
     if (!trimmed) return;
-    terminalNames.value = { ...terminalNames.value, [terminalNameKey(projectId, terminalId)]: trimmed };
-    localStorage.setItem('hotsheet.terminals.names', JSON.stringify(terminalNames.value));
-    terminalGroups.value = terminalGroups.value.map((group) =>
-      group.projectId === projectId
-        ? {
-            ...group,
-            sessions: group.sessions.map((session) =>
-              session.id === terminalId ? { ...session, title: trimmed } : session,
-            ),
-          }
-        : group,
+    persistLocalTerminalNames({ ...terminalNames.value, [key]: trimmed });
+    terminalGroups.value = retitleTerminal(terminalGroups.value, projectId, terminalId, trimmed);
+    uploadTerminalName(projectId, terminalId, trimmed);
+  }
+  function uploadTerminalName(projectId: string, terminalId: string, name: string) {
+    const target = projects.value.find((item) => item.id === projectId),
+      key = terminalNameKey(projectId, terminalId);
+    if (!target) return;
+    pendingTerminalRenames.add(key);
+    void new Api(target.apiPath)
+      .renameTerminal(terminalId, name)
+      .then(
+        () => {
+          if (terminalNames.value[key] === name)
+            persistLocalTerminalNames(withoutTerminalName(terminalNames.value, key));
+        },
+        (reason: unknown) => {
+          showToast(
+            `The terminal name could not be saved: ${reason instanceof Error ? reason.message : String(reason)}`,
+          );
+        },
+      )
+      .finally(() => {
+        pendingTerminalRenames.delete(key);
+      });
+  }
+  /** Upload settled browser-local names the server lacks and drop ones it supersedes. */
+  function reconcileTerminalNames(current: Project, sessions: readonly TerminalInfo[]) {
+    const { upload, drop } = reconcileLocalTerminalNames(
+      current.id,
+      sessions,
+      terminalNames.value,
+      pendingTerminalRenames,
     );
+    if (drop.length)
+      persistLocalTerminalNames(drop.reduce((names, key) => withoutTerminalName(names, key), terminalNames.value));
+    for (const item of upload) uploadTerminalName(current.id, item.terminalId, item.name);
+  }
+  /** Another client (or this one) renamed a terminal on the server: retitle the tab live. */
+  function applyTerminalRenamed(current: Project, terminalId: string, name: string | undefined) {
+    const key = terminalNameKey(current.id, terminalId);
+    if (pendingTerminalRenames.has(key)) return;
+    if (Object.hasOwn(terminalNames.value, key))
+      persistLocalTerminalNames(withoutTerminalName(terminalNames.value, key));
+    if (name) terminalGroups.value = retitleTerminal(terminalGroups.value, current.id, terminalId, name);
+    else if (terminalGroupLoaded(current.id)) void refreshTerminalDashboard();
   }
   // Serialize terminal creation so a create in flight (including its dashboard refresh) never *drops* a
   // later request — each click still opens its own terminal instead of being silently swallowed, which
@@ -3539,6 +3600,8 @@ export async function startHotSheetWebClient() {
             if (response.events.some((event) => event.kind === 'command_updated') && project()?.id === current.id)
               await refreshCommands(current);
             if (response.events.some((event) => event.kind === 'views_updated')) await refreshCustomViews(current);
+            for (const event of response.events)
+              if (event.kind === 'terminal_renamed') applyTerminalRenamed(current, event.id, event.message);
             if (containsRepositoryChange(response, current.id)) scheduleRepositoryRefresh(current);
           },
         });
