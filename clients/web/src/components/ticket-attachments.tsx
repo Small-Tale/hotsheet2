@@ -146,7 +146,8 @@ export function TicketAttachments({
             return (
               <section
                 class="ticket-attachments__batch"
-                data-attachment-group-drop-target="true"
+                // Regroup targets exist only where attachments are editable (HS2-0RTH3J).
+                data-attachment-group-drop-target={manageable ? 'true' : undefined}
                 data-attachment-batch={group.id ?? ''}
                 data-attachment-ids={group.items.map((item) => item.id).join(',')}
                 data-attachment-purpose={group.purpose ?? ''}
@@ -281,7 +282,7 @@ export function TicketAttachments({
             );
           })}
         </div>
-        {enabled && attachments.length > 0 && (
+        {manageable && attachments.length > 0 && (
           <div class="ticket-attachments__new-group" data-attachment-new-group-drop-target="true">
             <LucideIcon icon={Plus} name="plus" />
             <span>New group</span>

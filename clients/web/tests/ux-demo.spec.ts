@@ -3880,6 +3880,10 @@ test('shows append-only and unsupported attachment variants in the TicketAttachm
   await expect(appendOnly.getByLabel('Drop or browse attachments')).toHaveCount(1);
   await expect(appendOnly.getByRole('button', { name: /More actions for/ })).toHaveCount(0);
   await expect(appendOnly.locator('[draggable="true"]')).toHaveCount(0);
+  // No regroup targets render where attachments cannot be edited (HS2-0RTH3J).
+  await expect(appendOnly.locator('[data-attachment-group-drop-target]')).toHaveCount(0);
+  await expect(appendOnly.locator('[data-attachment-new-group-drop-target]')).toHaveCount(0);
+  await expect(appendOnly.getByText('New group', { exact: true })).toHaveCount(0);
   await expect(appendOnly.locator('select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
   const link = appendOnly.getByRole('link', { name: 'trace.log' });
   await expect(link).toHaveAttribute('target', '_blank');

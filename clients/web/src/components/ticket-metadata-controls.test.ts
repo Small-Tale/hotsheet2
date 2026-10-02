@@ -227,6 +227,9 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(appendOnly).not.toContain('data-action="open-attachment-row"');
     expect(appendOnly).not.toContain('data-drag-attachment-id');
     expect(appendOnly).not.toContain('data-action="edit-attachment-batch-label"');
+    // No regroup targets: neither group drop targets nor the New group zone (HS2-0RTH3J).
+    expect(appendOnly).not.toContain('data-attachment-group-drop-target');
+    expect(appendOnly).not.toContain('data-attachment-new-group-drop-target');
     expect(appendOnly).toContain(
       'name="attachment-batch-purpose" aria-label="Purpose for Legacy / Uncategorized" disabled',
     );
