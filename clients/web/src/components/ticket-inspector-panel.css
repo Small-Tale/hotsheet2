@@ -186,7 +186,9 @@
   width: 100%;
   min-height: remify(64px);
   padding: 0;
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
   border: 0;
   background: transparent;
   outline: 0;

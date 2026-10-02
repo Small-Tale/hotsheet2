@@ -98,7 +98,9 @@
   max-width: 100%;
   min-height: remify(80px);
   padding: var(--kui-space-xs);
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
   border: 1px solid var(--wa-color-neutral-border-loud);
   border-radius: remify(7.2px);
   color: inherit;
@@ -172,7 +174,9 @@
   min-width: 0;
   min-height: remify(64px);
   padding: var(--kui-space-xs);
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
   border: 1px solid var(--wa-color-brand-border-normal);
   border-radius: var(--wa-border-radius-s);
   color: inherit;

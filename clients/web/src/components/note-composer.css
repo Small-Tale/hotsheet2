@@ -11,7 +11,9 @@
   width: 100%;
   min-height: remify(96px);
   padding: remify(8.8px) remify(10.4px);
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
   border: 1px solid var(--wa-color-neutral-border-loud);
   border-radius: remify(7.2px);
   color: inherit;

@@ -1634,6 +1634,12 @@ and identity-less legacy entries remain conservatively blocking.
   category and an immediately trailing star toggle; the star creates directly in Up Next
   (and therefore overrides a Backlog-view default to active Not Started). A full-width
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
+  On touch screens (a coarse primary pointer), which draw no resize grip, it and every other
+  app textarea (details editor, notes, note replies, blocked reason, conflict merges, command
+  settings, the not-working note, and dev review) instead grows with its content from its
+  minimum height and shrinks when cleared; its dialog or panel scrolls to keep the actions
+  reachable, and stored desktop editor heights do not apply. Browsers without
+  `field-sizing` keep the grip (HS2-6PC150).
   The form uses 16 px between sibling regions, 8 px within metadata/evidence/action groups,
   and 4 px for connected labels and icon details (HS2-4Y6SM9).
   The footer names the ticket source the new ticket is created in. When the project has two

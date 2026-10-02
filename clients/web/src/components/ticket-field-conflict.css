@@ -65,7 +65,9 @@
 .ticket-field-conflict__merge textarea {
   min-height: remify(72px);
   padding: remify(7.2px) remify(8px);
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: remify(6.4px);
   color: var(--wa-color-neutral-on-normal);

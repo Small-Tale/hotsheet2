@@ -1,4 +1,5 @@
 @import './components/cursor-semantics.css';
+@import './components/textarea-sizing.css';
 
 :root {
   --hotsheet-safe-area-top: env(safe-area-inset-top, 0px);

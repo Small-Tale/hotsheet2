@@ -116,13 +116,13 @@ describe('QuickTicketComposer', () => {
     expect(calls).toEqual(['role:presentation', 'show', 'role:presentation']);
   });
 
-  it('keeps one-line details vertically resizable and places Up Next after category', () => {
+  it('keeps one-line details vertically resizable (auto-growing on touch) and places Up Next after category', () => {
     const css = readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8'),
       markup = String(QuickTicketComposer({ expanded: true }));
     expect(markup).toMatch(/new-ticket-category[\s\S]*toggle-new-ticket-up-next[\s\S]*new-ticket-details/);
     expect(markup).toMatch(/name="new-ticket-details"[^>]*data-morph-skip/);
     expect(css).toMatch(
-      /__details textarea \{[^}]*min-height: var\(--hs-new-ticket-details-sidebar-height, remify\(40px\)\);[^}]*resize: vertical/,
+      /__details textarea \{[^}]*min-height: var\(--hs-new-ticket-details-sidebar-height, remify\(40px\)\);[^}]*resize: var\(--hotsheet-textarea-resize, vertical\)/,
     );
   });
 

@@ -57,6 +57,15 @@
 .ticket-inspector__body[data-presentation='reader'] textarea[name='note-body'] {
   height: var(--hs-note-reader-height, auto);
 }
+/* Touch screens size these editors to their content instead of a stored resize height
+   (textarea-sizing.css, HS2-6PC150). */
+@supports (field-sizing: content) {
+  @media (pointer: coarse) {
+    .ticket-inspector__body textarea:is([name='markdown-source'], [name='blocked-reason'], [name='note-body']) {
+      height: auto;
+    }
+  }
+}
 .ticket-inspector__header h1 {
   margin: var(--kui-space-2xs) var(--kui-space-m) var(--kui-space-m);
   font-size: var(--wa-font-size-m);

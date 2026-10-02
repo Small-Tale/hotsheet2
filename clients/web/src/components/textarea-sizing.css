@@ -1,0 +1,14 @@
+/* Touch screens draw no textarea resize grip (iOS Safari and WKWebView ignore `resize`), so on a
+   coarse primary pointer every app textarea sizes to its content instead: it starts at its
+   component's minimum height and grows as the user types, inside its scrolling dialog or panel.
+   Components opt in by reading these tokens; fine pointers keep the vertical resize grip and the
+   persisted editor heights, and browsers without `field-sizing` keep that behavior too
+   (HS2-6PC150). */
+@supports (field-sizing: content) {
+  @media (pointer: coarse) {
+    :root {
+      --hotsheet-textarea-field-sizing: content;
+      --hotsheet-textarea-resize: none;
+    }
+  }
+}

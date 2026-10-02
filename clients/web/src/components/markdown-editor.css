@@ -53,7 +53,9 @@
   box-sizing: border-box;
   height: auto;
   padding: remify(12px);
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
 }
 .ticket-inspector__body .markdown-editor--embedded .markdown-editor__preview,
 .ticket-inspector__body .markdown-editor--embedded .markdown-editor__surface textarea {

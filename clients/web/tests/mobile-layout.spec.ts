@@ -1304,3 +1304,102 @@ test('Kerf drives the phone overlays: Escape closes, Tab stays inside, focus ret
     ),
   ).not.toBe(false);
 });
+
+/** Height and sizing styles of a textarea, read from the live element. */
+const textareaSizing = (textarea: import('@playwright/test').Locator) =>
+  textarea.evaluate((node: HTMLTextAreaElement) => {
+    const style = getComputedStyle(node);
+    return {
+      // Layout height, unaffected by a dialog's opening scale animation.
+      height: node.offsetHeight,
+      minHeight: Number.parseFloat(style.minHeight),
+      resize: style.resize,
+      fieldSizing: style.getPropertyValue('field-sizing'),
+      overflows: node.scrollHeight > node.clientHeight + 1,
+    };
+  });
+const textLines = (count: number) => Array.from({ length: count }, (_, index) => `Line ${index + 1}`).join('\n');
+
+test('touch textareas grow with their content instead of offering a resize grip (HS2-6PC150)', async ({
+  browser,
+}, testInfo) => {
+  const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+      colorScheme: 'dark',
+    }),
+    page = await context.newPage();
+  expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+  await openDemoProject(page);
+  await expect(page.locator('[data-ticket-slug="HS2-M1"]')).toBeVisible();
+
+  // New ticket details start at one comfortable line and grow line by line as the user types.
+  await page.getByRole('button', { name: /New ticket/ }).tap();
+  const dialog = page.locator('[data-component="quick-ticket-composer"]');
+  await expect(dialog).toHaveJSProperty('open', true);
+  const details = dialog.locator('[name="new-ticket-details"]');
+  const empty = await textareaSizing(details);
+  expect(empty).toMatchObject({ resize: 'none', fieldSizing: 'content', overflows: false });
+  expect(empty.height).toBeGreaterThanOrEqual(empty.minHeight - 0.5);
+  await details.tap();
+  await details.fill(textLines(3));
+  const three = await textareaSizing(details);
+  expect(three.height).toBeGreaterThan(empty.height + 30);
+  expect(three.overflows).toBe(false);
+  await details.fill(textLines(8));
+  const eight = await textareaSizing(details);
+  expect(eight.height).toBeGreaterThan(three.height + 60);
+  expect(eight.overflows).toBe(false);
+  // Clearing shrinks it back, and typing again grows it again.
+  await details.fill('');
+  expect((await textareaSizing(details)).height).toBeCloseTo(empty.height, 0);
+  await details.fill(textLines(4));
+  expect((await textareaSizing(details)).height).toBeGreaterThan(three.height);
+  await page.screenshot({ path: testInfo.outputPath('touch-new-ticket-details-grown.png') });
+  // A long entry grows past the screen; the dialog scrolls so its actions stay reachable.
+  await details.fill(textLines(30));
+  const cancel = dialog.getByRole('button', { name: 'Cancel' });
+  await cancel.scrollIntoViewIfNeeded();
+  await expect(cancel).toBeInViewport();
+  await cancel.tap();
+  await expect(dialog).toHaveJSProperty('open', false);
+
+  // The inspector's details editor and the note composer grow the same way.
+  await page.locator('[data-ticket-slug="HS2-M1"]').tap();
+  const inspector = page.locator('#app-right-rail');
+  await inspector.locator('[data-action="edit-markdown"]').first().dblclick();
+  const source = inspector.locator('[name="markdown-source"]');
+  await expect(source).toBeFocused();
+  const sourceEmpty = await textareaSizing(source);
+  expect(sourceEmpty).toMatchObject({ resize: 'none', fieldSizing: 'content' });
+  await source.fill(textLines(10));
+  const sourceGrown = await textareaSizing(source);
+  expect(sourceGrown.height).toBeGreaterThan(sourceEmpty.height + 60);
+  expect(sourceGrown.overflows).toBe(false);
+  await inspector.getByRole('button', { name: 'Add note', exact: true }).first().tap();
+  const note = inspector.getByRole('textbox', { name: 'New note' });
+  await expect(note).toBeVisible();
+  const noteEmpty = await textareaSizing(note);
+  expect(noteEmpty).toMatchObject({ resize: 'none', fieldSizing: 'content' });
+  await note.fill(textLines(9));
+  const noteGrown = await textareaSizing(note);
+  expect(noteGrown.height).toBeGreaterThan(noteEmpty.height + 40);
+  expect(noteGrown.overflows).toBe(false);
+  await context.close();
+});
+
+test('fine-pointer textareas keep the vertical resize grip and fixed sizing (HS2-6PC150)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(false);
+  await openDemoProject(page);
+  await page.getByRole('button', { name: /New ticket/ }).click();
+  const details = page.locator('[data-component="quick-ticket-composer"] [name="new-ticket-details"]');
+  const before = await textareaSizing(details);
+  expect(before).toMatchObject({ resize: 'vertical', fieldSizing: 'fixed' });
+  await details.fill(textLines(8));
+  const after = await textareaSizing(details);
+  // A fixed-size field scrolls its text instead of growing line by line; the grip resizes it.
+  expect(after.height).toBeLessThan(before.height + 8);
+  expect(after.overflows).toBe(true);
+});

@@ -481,7 +481,9 @@ html.hs-dev-review--delete body *:not(.hs-dev-review__rect):not(.hs-dev-review__
 .hs-dev-review__dialog textarea {
   min-height: remify(112px);
   padding: var(--kui-space-m);
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-m);
   color: var(--wa-color-text-normal);

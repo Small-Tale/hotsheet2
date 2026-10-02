@@ -114,13 +114,25 @@
   height: var(--hs-new-ticket-details-sidebar-height, auto);
   min-height: var(--hs-new-ticket-details-sidebar-height, remify(40px));
   padding: var(--kui-space-xs) var(--kui-space-m);
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-m);
   color: inherit;
   background: var(--wa-color-surface-default);
   font: inherit;
   line-height: 1.4;
+}
+/* Touch screens grow New ticket details with its content from one comfortable line instead of a
+   stored resize height (textarea-sizing.css, HS2-6PC150). */
+@supports (field-sizing: content) {
+  @media (pointer: coarse) {
+    .quick-ticket-composer__details textarea {
+      height: auto;
+      min-height: remify(40px);
+    }
+  }
 }
 .quick-ticket-composer:is([data-dragging='true'], [data-dragging-ticket='true']) {
   border-color: var(--wa-color-focus);

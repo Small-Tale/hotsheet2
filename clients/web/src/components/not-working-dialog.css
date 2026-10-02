@@ -17,7 +17,9 @@
   padding: remify(11.2px) remify(12px);
   border: 1px solid var(--wa-color-neutral-border-loud);
   border-radius: remify(8.8px);
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
   color: var(--wa-color-text-normal);
   background: var(--wa-color-surface-default);
   font: inherit;

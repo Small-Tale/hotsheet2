@@ -294,7 +294,9 @@
 }
 .command-settings-editor__grid textarea {
   min-height: remify(80px);
-  resize: vertical;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
 }
 .command-settings-editor__grid small {
   color: var(--wa-color-text-quiet);
