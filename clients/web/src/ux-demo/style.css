@@ -730,7 +730,6 @@ body[data-resizing-project-sidebar='true'] {
 }
 .resizable-region-demo__controls wa-button::part(base) {
   cursor: pointer;
-  gap: remify(6.4px);
 }
 .resizable-region-demo__controls svg {
   width: remify(16px);

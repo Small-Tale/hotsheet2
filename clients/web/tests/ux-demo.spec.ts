@@ -5088,8 +5088,29 @@ test('operates resizable-region keyboard and collapse transitions', async ({ pag
   await expect(vertical).toHaveAttribute('aria-valuenow', '196');
   await expect(horizontal).toHaveCSS('cursor', 'col-resize');
   await expect(vertical).toHaveCSS('cursor', 'row-resize');
+  // HS2-NADSB8: the Lucide icon sits in the wa-button start slot, on the label's line.
+  const collapseHost = page.locator('wa-button[data-action="toggle-resizable-collapse"]');
+  const iconPlacement = () =>
+    collapseHost.evaluate((button) => {
+      const icon = button.querySelector(':scope > svg[slot="start"]');
+      const label = button.shadowRoot?.querySelector('[part~="label"]');
+      if (!icon || !label) return null;
+      const iconBox = icon.getBoundingClientRect();
+      const labelBox = label.getBoundingClientRect();
+      return {
+        icon: icon.getAttribute('data-lucide'),
+        label: button.textContent.trim(),
+        sameLine: iconBox.right <= labelBox.left && iconBox.top < labelBox.bottom && iconBox.bottom > labelBox.top,
+      };
+    });
+  await expect
+    .poll(iconPlacement)
+    .toEqual({ icon: 'panel-left-close', label: 'Collapse horizontal region', sameLine: true });
   await page.getByRole('button', { name: 'Collapse horizontal region' }).click();
   await expect(horizontal).toHaveCount(0);
+  await expect
+    .poll(iconPlacement)
+    .toEqual({ icon: 'panel-left-open', label: 'Restore horizontal region', sameLine: true });
   await expect(horizontalHandle).toHaveAttribute('aria-valuenow', '0');
   await expect(horizontalHandle).toHaveAttribute('aria-valuemin', '0');
   await expect(horizontalHandle).toHaveAttribute('aria-hidden', 'true');
