@@ -61,7 +61,7 @@ export type PermissionDemoVariant = PermissionRequestCardState | 'allowed' | 'de
 export type PermissionDemoRequest = 'command' | 'edit' | 'read' | 'tool-without-details';
 
 export const permissionRequestSettings = {
-  presentation: signal<'popup' | 'top-layer' | 'list'>('popup'),
+  presentation: signal<'popup' | 'flow' | 'top-layer' | 'list'>('popup'),
   variant: signal<PermissionDemoVariant>('pending'),
   request: signal<PermissionDemoRequest>('edit'),
   automation: signal<'none' | 'allow' | 'deny'>('allow'),
@@ -178,7 +178,13 @@ export function PermissionRequestDemo() {
   };
   return (
     <section class="permission-request-demo" aria-label="PermissionRequestCard demo">
-      {permissionRequestSettings.presentation.value !== 'list' ? (
+      {permissionRequestSettings.presentation.value === 'flow' ? (
+        // The in-flow popup is laid out by its host; this centered column stands in for the AI
+        // conversation's foreground (HS2-M2W2DP).
+        <div class="permission-request-demo__list">
+          <PermissionRequestPopup {...props} layer="flow" />
+        </div>
+      ) : permissionRequestSettings.presentation.value !== 'list' ? (
         <PermissionRequestPopup
           {...props}
           layer={permissionRequestSettings.presentation.value === 'top-layer' ? 'top' : 'inline'}
@@ -201,6 +207,7 @@ export function PermissionRequestSettings() {
         value={permissionRequestSettings.presentation.value}
         choices={[
           { value: 'popup', label: 'Popup' },
+          { value: 'flow', label: 'In-flow popup (conversation foreground)' },
           { value: 'top-layer', label: 'Shell popup (top layer)' },
           { value: 'list', label: 'Notification list' },
         ]}

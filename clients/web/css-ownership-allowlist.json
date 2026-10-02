@@ -8,54 +8,6 @@
       "reason": "foreign-element: <svg> below .active-claim-spinner is not authored by src/components/active-claim.tsx; it can only be the root of <LoadingSpinner>. Kept until a published @kerfjs/ui ships a LoadingSpinner size prop (KF-PA81HY); a pixel wrapper font-size would break the typography-scale rule"
     },
     {
-      "file": "src/components/ai-conversation.css",
-      "selector": ".ai-conversation__embedded-header svg",
-      "ticket": "HS2-M2W2DP",
-      "reason": "foreign-element: the descendant selector below .ai-conversation__embedded-header also reaches inside <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/ai-conversation.css",
-      "selector": ".ai-conversation__foreground .permission-request-popup",
-      "ticket": "HS2-M2W2DP",
-      "reason": "foreign-class: .permission-request-popup belongs to src/components/permission-request-card.tsx"
-    },
-    {
-      "file": "src/components/ai-conversation.css",
-      "selector": ".ai-conversation__activity svg",
-      "ticket": "HS2-M2W2DP",
-      "reason": "foreign-element: the descendant selector below .ai-conversation__activity also reaches inside <AIContentFeedback>, <AIContentLabel>, <MarkdownPreview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/ai-conversation.css",
-      "selector": ".ai-conversation__activity ol",
-      "ticket": "HS2-M2W2DP",
-      "reason": "foreign-element: the descendant selector below .ai-conversation__activity also reaches inside <AIContentFeedback>, <AIContentLabel>, <MarkdownPreview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/ai-conversation.css",
-      "selector": ".ai-conversation__activity li",
-      "ticket": "HS2-M2W2DP",
-      "reason": "foreign-element: the descendant selector below .ai-conversation__activity also reaches inside <AIContentFeedback>, <AIContentLabel>, <MarkdownPreview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/attachment-gallery.css",
-      "selector": ".attachment-gallery button:disabled",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .attachment-gallery also reaches inside <FloatingToolbar>, <Toolbar>, <ToolbarControlGroup>, <ToolbarText>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/attachment-gallery.css",
-      "selector": ".attachment-gallery svg",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .attachment-gallery also reaches inside <FloatingToolbar>, <Toolbar>, <ToolbarControlGroup>, <ToolbarText>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/attachment-gallery.css",
-      "selector": ".attachment-gallery video::-webkit-media-controls",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .attachment-gallery also reaches inside <FloatingToolbar>, <Toolbar>, <ToolbarControlGroup>, <ToolbarText>; use a child combinator, an own class, or the child's props"
-    },
-    {
       "file": "src/components/bulk-ticket-dialog.css",
       "selector": ".bulk-ticket-dialog__choices button",
       "ticket": "HS2-4V4CV2",
@@ -105,24 +57,6 @@
       "reason": "foreign-element: the descendant selector below .command-settings-editor__icons also reaches inside <LucideIconPicker>; use a child combinator, an own class, or the child's props"
     },
     {
-      "file": "src/components/confidence-calibration.css",
-      "selector": ".confidence-calibration__recent h3",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .confidence-calibration__recent also reaches inside <ConfidenceBadge>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/confidence-calibration.css",
-      "selector": ".confidence-calibration__recent ul",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .confidence-calibration__recent also reaches inside <ConfidenceBadge>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/confidence-calibration.css",
-      "selector": ".confidence-calibration__recent li",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .confidence-calibration__recent also reaches inside <ConfidenceBadge>; use a child combinator, an own class, or the child's props"
-    },
-    {
       "file": "src/components/connection-details-dialog.css",
       "selector": ".connection-details-dialog__metadata code",
       "ticket": "HS2-4V4CV2",
@@ -145,25 +79,6 @@
       "selector": ".hs1-migration-dialog footer",
       "ticket": "HS2-4V4CV2",
       "reason": "foreign-element: the descendant selector below .hs1-migration-dialog also reaches inside <ValueTable>, <ValueTableRow>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/markdown-editor.css",
-      "selector": ".markdown-editor--embedded .markdown-editor__surface textarea",
-      "count": 2,
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .markdown-editor__surface also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/markdown-editor.css",
-      "selector": ".markdown-editor--flush .markdown-editor__surface textarea",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .markdown-editor__surface also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/markdown-editor.css",
-      "selector": ".markdown-editor__surface textarea",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .markdown-editor__surface also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
     },
     {
       "file": "src/components/not-working-dialog.css",
@@ -196,29 +111,10 @@
       "reason": "foreign-element: the descendant selector below .not-working-dialog also reaches inside <PendingAttachmentPicker>; use a child combinator, an own class, or the child's props"
     },
     {
-      "file": "src/components/note-card.css",
-      "selector": ".note-card footer",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .note-card also reaches inside <AIContentLabel>, <ConfidenceBadge>, <MarkdownPreview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/note-card.css",
-      "selector": ".note-card__header time",
-      "count": 2,
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .note-card__header also reaches inside <ConfidenceBadge>; use a child combinator, an own class, or the child's props"
-    },
-    {
       "file": "src/components/project-close-dialog.css",
       "selector": ".project-close-dialog__resources nav",
       "ticket": "HS2-4V4CV2",
       "reason": "foreign-element: the descendant selector below .project-close-dialog__resources also reaches inside <ListHeader>, <ListItem>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/project-statistics.css",
-      "selector": ".project-statistics h1",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .project-statistics also reaches inside <ConfidenceCalibration>; use a child combinator, an own class, or the child's props"
     },
     {
       "file": "src/components/project-tab.css",
@@ -309,36 +205,6 @@
       "selector": ".ticket-close-dialog__duplicate wa-input svg",
       "ticket": "HS2-4V4CV2",
       "reason": "foreign-element: the descendant selector below .ticket-close-dialog__duplicate also reaches inside <ListItem>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/ticket-code-review.css",
-      "selector": ".ticket-code-review__compare-banner > div:first-child svg",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .ticket-code-review__compare-banner also reaches inside <Toolbar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/ticket-code-review.css",
-      "selector": ".ticket-code-review__commits button:disabled",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .ticket-code-review__commits also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/ticket-code-review.css",
-      "selector": ".ticket-code-review__commits strong",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .ticket-code-review__commits also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/ticket-code-review.css",
-      "selector": ".ticket-code-review__commits li[data-compared]",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .ticket-code-review__commits also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/ticket-code-review.css",
-      "selector": ".ticket-code-review__commits code",
-      "ticket": "HS2-PK1C1X",
-      "reason": "foreign-element: the descendant selector below .ticket-code-review__commits also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
     },
     {
       "file": "src/components/ticket-sources-settings.css",

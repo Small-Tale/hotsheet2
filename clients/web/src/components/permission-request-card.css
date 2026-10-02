@@ -214,6 +214,17 @@
   right: remify(16px);
   width: min(remify(704px), calc(100% - remify(32px)));
 }
+/* `layer="flow"`: the popup takes its place in its host's layout instead of anchoring to the host's
+   corner, so a host such as the AI conversation's foreground lays it out (HS2-M2W2DP). It stays
+   interactive inside a pointer-transparent host. */
+.permission-request-popup[data-layer='flow'] {
+  position: relative;
+  top: auto;
+  right: auto;
+  width: min(remify(704px), calc(100vw - remify(32px)));
+  height: fit-content;
+  pointer-events: auto;
+}
 /* The shell's popup is a manual popover in the browser top layer (HS2-ZESCM2), so the Workbench's
    main-pane clip and the terminal drawer can no longer cover it. Undo the user-agent popover box and
    keep the in-column placement: anchored to the main column where CSS anchor positioning exists, and

@@ -105,7 +105,14 @@ describe('permission presentation components', () => {
     // Both attributes the shared watcher (`openTopLayerOverlays`) selects on, so it calls showPopover().
     expect(top).toContain(TOP_LAYER_OVERLAY_ATTRIBUTE);
     expect(top).toContain('Allow Once');
+    // The in-flow layer is how the AI conversation's foreground places its copy without restyling it (HS2-M2W2DP).
+    const flow = String(PermissionRequestPopup({ item: pending, layer: 'flow' }));
+    expect(flow).toContain('data-layer="flow"');
+    expect(flow).not.toContain('popover=');
     const css = readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8');
+    expect(css).toMatchSource(
+      /\.permission-request-popup\[data-layer='flow'\] \{[^}]*position:relative;[^}]*width:min\(remify\(704px\), calc\(100vw - remify\(32px\)\)\);[^}]*pointer-events:auto/,
+    );
     expect(css).toContain('@supports (position-anchor: --app-shell-main)');
     expect(css).toContain('position-anchor: --app-shell-main;');
     expect(readFileSync(resolve(import.meta.dirname, 'app-shell.css'), 'utf8')).toContain(

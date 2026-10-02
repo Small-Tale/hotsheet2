@@ -29,12 +29,12 @@
   height: remify(15.2px);
   flex: none;
 }
-.note-card__header time,
-.note-card footer {
+.note-card__time,
+.note-card__footer {
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-2xs);
 }
-.note-card__header time {
+.note-card__time {
   flex: none;
 }
 .note-card__header-end {

@@ -173,16 +173,16 @@ function ConversationActivityGroup({
     <section class="ai-conversation__activity" aria-label="AI-generated activity summaries; may contain errors">
       <header>
         <span>
-          <LucideIcon icon={Activity} name="activity" />
+          <LucideIcon icon={Activity} name="activity" size={14.4} />
           <strong>Activity</strong>
         </span>
         <span class="ai-conversation__activity-disclosure">
           <AIContentLabel mayContainErrors />
         </span>
       </header>
-      <ol>
+      <ol class="ai-conversation__activity-list">
         {activity.map((item) => (
-          <li data-activity-id={item.id} data-importance={item.importance}>
+          <li class="ai-conversation__activity-item" data-activity-id={item.id} data-importance={item.importance}>
             <MarkdownPreview source={item.summary} density="flush" />
             {feedbackAvailable && (
               <span class="ai-conversation__activity-feedback">
@@ -466,7 +466,7 @@ export function AIConversation({
       >
         <header class="ai-conversation__embedded-header">
           <span>
-            <LucideIcon icon={Bot} name="bot" />
+            <LucideIcon icon={Bot} name="bot" size={16} />
             <strong>{tool} conversation</strong>
           </span>
           {(saveAction || stopAction) && (

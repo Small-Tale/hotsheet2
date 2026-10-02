@@ -135,10 +135,16 @@ export function ConfidenceCalibration({ state }: { state: ConfidenceCalibrationS
         </table>
       </div>
       <section class="confidence-calibration__recent" aria-labelledby="confidence-calibration-recent">
-        <h3 id="confidence-calibration-recent">Recent completions</h3>
-        <ul>
+        <h3 class="confidence-calibration__recent-title" id="confidence-calibration-recent">
+          Recent completions
+        </h3>
+        <ul class="confidence-calibration__recent-list">
           {recent.map((event) => (
-            <li data-key={`calibration-event:${event.slug}:${event.completed_at}`} data-outcome={event.outcome}>
+            <li
+              class="confidence-calibration__recent-item"
+              data-key={`calibration-event:${event.slug}:${event.completed_at}`}
+              data-outcome={event.outcome}
+            >
               <span class="confidence-calibration__slug">{event.slug}</span>
               {event.confidence === undefined ? (
                 <span class="confidence-calibration__unscored">Unscored</span>

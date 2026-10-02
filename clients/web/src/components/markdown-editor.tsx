@@ -64,7 +64,7 @@ export function MarkdownEditor({
       )}
       <div class="markdown-editor__surface">
         {mode === 'write' ? (
-          <textarea name="markdown-source" aria-label={label} spellcheck="true">
+          <textarea class="markdown-editor__source" name="markdown-source" aria-label={label} spellcheck="true">
             {value}
           </textarea>
         ) : (

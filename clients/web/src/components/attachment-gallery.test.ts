@@ -54,7 +54,15 @@ describe('AttachmentGallery', () => {
     );
     expect(css).toMatchSource(/__timeline \{[^}]*gap:var\(--kui-space-xs\)/);
     expect(css).toMatchSource(/__volume-popup \{[^}]*padding:var\(--kui-space-m\)[^}]*gap:var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(/\.attachment-gallery svg \{ width: remify\(24px\); height: remify\(24px\)/);
+    // Media-control icons take their size from LucideIcon, not a gallery-wide svg rule that would reach
+    // into Kerf's toolbars (HS2-PK1C1X).
+    expect(css).not.toMatch(/\.attachment-gallery svg|\.attachment-gallery button|\.attachment-gallery video/);
+    const video = String(
+      AttachmentGallery({ images: [{ id: 'clip', name: 'clip.mp4', url: '/clip.mp4' }], activeUrl: '/clip.mp4' }),
+    );
+    expect(video).toContain('class="attachment-gallery__video"');
+    expect(video).toContain('data-lucide="play" data-size="24"');
+    expect(video).toContain('data-lucide="volume-2" data-size="16"');
     expect(css).toMatchSource(/__annotation i \{[^}]*width:remify\(12px\); height:remify\(12px\)/);
     expect(css).toMatchSource(/__range-handle \{[^}]*width:remify\(16px\); height:remify\(32px\)/);
   });

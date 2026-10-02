@@ -334,12 +334,12 @@ describe('the clients/web workspace', () => {
     expect(formatReport(report).ok).toBe(false);
   });
 
-  // HS2-148B5C's borrowed terminal-preview classes are fixed; the fixture test above keeps that case.
-  it('covers the reported missed cases (HS2-M2W2DP, HS2-7ZGYJY)', () => {
+  // HS2-148B5C's borrowed terminal-preview classes and HS2-M2W2DP's `.ai-conversation__activity svg` are
+  // fixed; the fixture tests above keep both shapes covered.
+  it('covers the reported missed cases (HS2-7ZGYJY)', () => {
     const found = checkWorkspace(workspace).violations.map(({ file, selector }) => `${file} ${selector}`);
     expect(found).toEqual(
       expect.arrayContaining([
-        'src/components/ai-conversation.css .ai-conversation__activity svg',
         'src/components/terminal-drawer.css .terminal-drawer__rail svg',
         'src/components/terminal-drawer.css .terminal-drawer__rail .terminal-tab i',
       ]),

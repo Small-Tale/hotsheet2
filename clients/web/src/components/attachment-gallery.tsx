@@ -172,7 +172,7 @@ function GalleryButton({
   return (
     <button
       type="button"
-      class={className}
+      class={className ? `attachment-gallery__control ${className}` : 'attachment-gallery__control'}
       data-action={action}
       aria-label={accessibleLabel}
       title={accessibleLabel}
@@ -395,6 +395,7 @@ export function AttachmentGallery({
           >
             {video ? (
               <video
+                class="attachment-gallery__video"
                 {...imageData}
                 {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryMedia.attrs}
                 src={image.url}
@@ -453,7 +454,7 @@ export function AttachmentGallery({
               {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryPlayback.attrs}
               aria-label={playing ? 'Pause' : 'Play'}
             >
-              <LucideIcon icon={playing ? Pause : Play} name={playing ? 'pause' : 'play'} />
+              <LucideIcon icon={playing ? Pause : Play} name={playing ? 'pause' : 'play'} size={24} />
             </button>
             <span data-gallery-current-time="true">{formatTime(playheadMs)}</span>
             <div class="attachment-gallery__timeline-track">
@@ -522,6 +523,7 @@ export function AttachmentGallery({
                   <LucideIcon
                     icon={muted || volume === 0 ? VolumeX : Volume2}
                     name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
+                    size={24}
                   />
                 </button>
                 <div
@@ -548,6 +550,7 @@ export function AttachmentGallery({
                     <LucideIcon
                       icon={muted || volume === 0 ? VolumeX : Volume2}
                       name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
+                      size={16}
                     />
                     <span>{muted || volume === 0 ? 'Unmute' : 'Mute'}</span>
                   </button>
@@ -579,6 +582,7 @@ export function AttachmentGallery({
             <ToolbarControlGroup label="Media zoom">
               <button
                 type="button"
+                class="attachment-gallery__control"
                 {...ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.attrs}
                 data-zoom-direction="out"
                 aria-label="Zoom out"
@@ -589,6 +593,7 @@ export function AttachmentGallery({
               </button>
               <button
                 type="button"
+                class="attachment-gallery__control"
                 {...ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.attrs}
                 data-zoom-direction="in"
                 aria-label="Zoom in"

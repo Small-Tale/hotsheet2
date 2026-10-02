@@ -249,8 +249,11 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     if (remaining === 0) void resolvePermission(item, setting.action, 'once', true);
   }
 
-  /** The visible request's popup; the shell passes `top` so the popup paints in the top layer (HS2-ZESCM2). */
-  function permissionPopupSurface(layer: 'inline' | 'top' = 'inline') {
+  /**
+   * The visible request's popup. The AI conversation's foreground lays out the default `flow` copy
+   * (HS2-M2W2DP); the shell passes `top` so its popup paints in the top layer (HS2-ZESCM2).
+   */
+  function permissionPopupSurface(layer: 'flow' | 'top' = 'flow') {
     const permission = visiblePermission();
     if (!permission) return undefined;
     const automation = permissionAutomation(permission.projectId),

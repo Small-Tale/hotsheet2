@@ -1477,7 +1477,10 @@ capability-aware sections when their underlying features and data contracts land
   detail-free tool requests; allow/deny/no countdown; optional explanation; and the
   Always Allow capability, with a live 13-second countdown that reaches zero and resets
   for continued review, plus a complete settings reset round trip.
-- `PermissionRequestPopup` — non-modal fixed presentation of the shared request card
+- `PermissionRequestPopup` — non-modal presentation of the shared request card. Its `layer`
+  variant anchors it to its host's top-right corner (`inline`), places it in its host's layout so
+  the host positions it (`flow`, the AI conversation's foreground), or lifts it into the browser
+  top layer (`top`, the shell popup). The UX demo previews all three.
 - `PermissionSummary`
 - `PermissionDetailDisclosure`
 - allow/deny/session-scope actions
@@ -2296,6 +2299,28 @@ Three entries remain, waiting on Kerf releases:
 A pixel `font-size` on the spinner wrappers would size the 1em spinner without reaching into it,
 but it breaks the typography-scale rule in `theme.test.ts`. `KF-V2Y51V` is done in Kerf but not
 yet in a published `@kerfjs/ui`.
+
+HS2-PK1C1X and HS2-M2W2DP cleared the content components' 22 entries. Each fix gives the element
+an own class or configures the child through its props:
+
+- `NoteCard`: `note-card__time` and `note-card__footer`.
+- `MarkdownEditor`: `markdown-editor__source` on the source textarea, so the editor no longer
+  reaches into `MarkdownPreview`.
+- `TicketCodeReview`: an own `compare-prompt` and an icon wrapper that tints the icon. The icon is
+  sized by LucideIcon `size`. Commit-summary rules use child combinators, so a commit body's
+  Markdown bold and code keep `MarkdownPreview`'s own inherited tone.
+- `ConfidenceCalibration`: `recent-title`, `recent-list`, and `recent-item`.
+- The project statistics page: `project-statistics__title`.
+- `AttachmentGallery`:
+  - Its own buttons carry `attachment-gallery__control` for their disabled tone.
+  - The video carries `attachment-gallery__video`.
+  - Media-control icons use LucideIcon `size` instead of a gallery-wide `svg` rule that also
+    reached Kerf's toolbars.
+- `AIConversation`:
+  - Its header and activity icons use LucideIcon `size`.
+  - The activity list and items have own classes, so a summary's Markdown lists keep their own
+    presentation.
+  - The foreground passes `PermissionRequestPopup layer="flow"` instead of repositioning the popup.
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
 rail's controls Toolbar now sizes the expanded search itself. HS2-402AXQ replaced the project

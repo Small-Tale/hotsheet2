@@ -95,16 +95,16 @@
   gap: var(--kui-space-xs);
   font-size: var(--wa-font-size-xs);
 }
-.ticket-code-review__compare-banner > div:first-child {
+.ticket-code-review__compare-prompt {
   display: flex;
   min-width: 0;
   grid-column: 1 / -1;
   align-items: center;
   gap: var(--kui-space-2xs);
 }
-.ticket-code-review__compare-banner > div:first-child svg {
-  width: remify(16px);
-  height: remify(16px);
+/* An own wrapper tints the icon: LucideIcon draws with currentColor and is configured, not restyled. */
+.ticket-code-review__compare-icon {
+  display: inline-flex;
   flex: none;
   color: var(--hs-ticket-state-needs-review);
 }
@@ -182,7 +182,7 @@
   flex: none;
 }
 .ticket-code-review__range:disabled,
-.ticket-code-review__commits button:disabled {
+.ticket-code-review__commit > button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -227,7 +227,7 @@
   outline: var(--wa-focus-ring);
   outline-offset: 3px;
 }
-.ticket-code-review__commits strong {
+.ticket-code-review__commit-summary > strong {
   color: var(--wa-color-text-normal);
   font-size: var(--wa-font-size-xs);
   line-height: 1.35;
@@ -257,10 +257,10 @@
   font-size: var(--wa-font-size-2xs);
   place-items: center;
 }
-.ticket-code-review__commits li[data-compared] {
+.ticket-code-review__commit[data-compared] {
   background: color-mix(in srgb, var(--hs-ticket-state-needs-review) 5%, transparent);
 }
-.ticket-code-review__commits code {
+.ticket-code-review__commit-summary > span > code {
   padding: remify(1.28px) remify(4px);
   border-radius: remify(4px);
   background: var(--wa-color-neutral-fill-normal);

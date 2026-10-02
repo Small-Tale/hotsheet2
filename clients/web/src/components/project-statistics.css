@@ -9,7 +9,7 @@
   padding: var(--kui-space-l);
   overflow: auto;
 }
-.project-statistics h1 {
+.project-statistics__title {
   margin: 0;
   font-size: var(--wa-font-size-xl);
 }

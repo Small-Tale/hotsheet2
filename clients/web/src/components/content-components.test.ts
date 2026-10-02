@@ -85,13 +85,13 @@ describe('content components', () => {
     );
     expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__preview \{[^}]*padding: remify\(12px\);/);
     expect(css).toMatch(
-      /markdown-editor--embedded \.markdown-editor__surface textarea \{[^}]*display: block;[^}]*box-sizing: border-box;[^}]*height: var\(--markdown-editor-source-height, auto\);[^}]*padding: remify\(12px\);[^}]*field-sizing: var\(--hotsheet-textarea-field-sizing, fixed\);[^}]*resize: var\(--hotsheet-textarea-resize, vertical\)/,
+      /markdown-editor--embedded \.markdown-editor__source \{[^}]*display: block;[^}]*box-sizing: border-box;[^}]*height: var\(--markdown-editor-source-height, auto\);[^}]*padding: remify\(12px\);[^}]*field-sizing: var\(--hotsheet-textarea-field-sizing, fixed\);[^}]*resize: var\(--hotsheet-textarea-resize, vertical\)/,
     );
     // The preview fills the editor's overflow:hidden bounds, so its focus ring must be inset or it is clipped (HS2-0WD3YK).
     expect(css).toMatch(/markdown-editor__preview:focus-visible \{[^}]*outline-offset: -\d/);
     // `inset="flush"` lets a host surface own the inset instead of restyling the editor (HS2-MGVE50).
     expect(css).toMatchSource(
-      /\.markdown-editor--flush \.markdown-editor__preview,\s*\.markdown-editor--flush \.markdown-editor__surface textarea \{ padding: 0; \}/,
+      /\.markdown-editor--flush \.markdown-editor__preview,\s*\.markdown-editor--flush \.markdown-editor__source \{ padding: 0; \}/,
     );
     expect(css).not.toContain('.ticket-inspector__body');
     expect(String(MarkdownEditor({ value: 'x', mode: 'preview', appearance: 'embedded', inset: 'flush' }))).toContain(

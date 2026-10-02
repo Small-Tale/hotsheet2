@@ -168,7 +168,7 @@ describe('AIConversation', () => {
       /\.ai-conversation__activity \{[^}]*width: 100%[^}]*min-width: 0[^}]*max-width: 100%[^}]*box-sizing: border-box/,
     );
     expect(css).toMatchSource(
-      /\.ai-conversation__activity li \{[^}]*min-width: 0[^}]*max-width: 100%[^}]*grid-template-columns:minmax\(0,1fr\) auto/,
+      /\.ai-conversation__activity-item \{[^}]*min-width: 0[^}]*max-width: 100%[^}]*grid-template-columns:minmax\(0,1fr\) auto/,
     );
     // Activity summaries choose the flush MarkdownPreview density; long commands wrap through the
     // preview's own inherited overflow-wrap rather than a conversation-owned override (HS2-7RY5GK).
@@ -399,10 +399,13 @@ describe('AIConversation', () => {
         busy: true,
         interruptible: true,
         permissions: [permission],
-        foreground: PermissionRequestPopup({ item: permission }),
+        foreground: PermissionRequestPopup({ item: permission, layer: 'flow' }),
       }),
     );
     expect(markup).toContain('ai-conversation__foreground');
+    // The foreground lays out an in-flow popup through the popup's own layer variant (HS2-M2W2DP).
+    expect(markup).toContain('data-layer="flow"');
+    expect(css).not.toContain('.permission-request-popup');
     expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1);
   });
   it('shows the current model/effort with a popup to change them, including custom and Other, only when the plugin declares support', () => {

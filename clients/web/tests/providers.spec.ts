@@ -12172,9 +12172,14 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(conversationHost).toContainText('Edited the conversation projection');
   await expect(conversationHost).toContainText('AI-generated · may contain errors');
   await expect(conversationHost.locator('[data-component="permission-request-card"]')).toBeVisible();
-  await expect(
-    conversationHost.locator('.ai-conversation__foreground [data-component="permission-request-popup"]'),
-  ).toBeVisible();
+  const foregroundPopup = conversationHost.locator(
+    '.ai-conversation__foreground [data-component="permission-request-popup"]',
+  );
+  await expect(foregroundPopup).toBeVisible();
+  // The foreground lays out the popup's own in-flow layer instead of restyling it (HS2-M2W2DP).
+  await expect(foregroundPopup).toHaveAttribute('data-layer', 'flow');
+  await expect(foregroundPopup).toHaveCSS('position', 'relative');
+  await expect(foregroundPopup).toHaveCSS('pointer-events', 'auto');
   await expect(conversationHost.getByRole('button', { name: 'Save conversation' })).toHaveJSProperty(
     'tagName',
     'BUTTON',

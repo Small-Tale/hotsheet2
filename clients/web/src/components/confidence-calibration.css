@@ -90,11 +90,11 @@
   display: grid;
   gap: var(--kui-space-s);
 }
-.confidence-calibration__recent h3 {
+.confidence-calibration__recent-title {
   margin: 0;
   font-size: var(--wa-font-size-m);
 }
-.confidence-calibration__recent ul {
+.confidence-calibration__recent-list {
   display: grid;
   gap: var(--kui-space-xs);
   margin: 0;
@@ -102,7 +102,7 @@
   padding-inline-start: 0;
   list-style: none;
 }
-.confidence-calibration__recent li {
+.confidence-calibration__recent-item {
   margin: 0;
   padding: 0;
   display: flex;

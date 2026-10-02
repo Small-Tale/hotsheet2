@@ -259,7 +259,7 @@ export function NoteCard({
             </span>
           )}
           {confidence !== undefined && <ConfidenceBadge value={confidence} />}
-          <time>{time}</time>
+          <time class="note-card__time">{time}</time>
         </span>
       </header>
       {feedbackResponse && (
@@ -328,7 +328,7 @@ export function NoteCard({
           Respond to Feedback
         </wa-button>
       )}
-      <footer>
+      <footer class="note-card__footer">
         {aiAuthored ? (
           <AIContentLabel tool={aiTool ?? author} mayContainErrors={aiMayContainErrors} feedbackTarget={`note:${id}`} />
         ) : (

@@ -66,13 +66,11 @@
   transform: translate(28%, -28%);
   place-items: center;
 }
-.attachment-gallery button:disabled {
+/* The gallery's own toolbar buttons dim while unavailable; Kerf's ToolbarControlGroup defines no
+   disabled tone for native buttons (its disabled cursor and hover are KF-FTADQT). */
+.attachment-gallery__control:disabled {
   opacity: 0.35;
   cursor: default;
-}
-.attachment-gallery svg {
-  width: remify(24px);
-  height: remify(24px);
 }
 .attachment-gallery__stage {
   width: 100%;
@@ -110,7 +108,7 @@
   border-radius: 0;
   object-fit: contain;
 }
-.attachment-gallery video::-webkit-media-controls {
+.attachment-gallery__video::-webkit-media-controls {
   display: none !important;
 }
 .attachment-gallery__media-wrap[data-draw-mode='true'] {
@@ -345,10 +343,6 @@
 }
 .attachment-gallery__volume-popup > button:hover {
   background: color-mix(in srgb, var(--wa-color-neutral-on-loud) 12%, transparent);
-}
-.attachment-gallery__volume-popup > button svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 .attachment-gallery__volume input {
   display: block;

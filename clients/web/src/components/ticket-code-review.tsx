@@ -120,8 +120,10 @@ export function TicketCodeReview({
           )}
           {comparison?.active && (
             <div class="ticket-code-review__compare-banner" role="status">
-              <div>
-                <LucideIcon icon={GitCompare} name="git-compare" />
+              <div class="ticket-code-review__compare-prompt">
+                <span class="ticket-code-review__compare-icon">
+                  <LucideIcon icon={GitCompare} name="git-compare" size={16} />
+                </span>
                 <span>
                   Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.
                 </span>

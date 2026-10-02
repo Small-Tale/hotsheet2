@@ -5930,6 +5930,19 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   expect(Math.round(topLayerBox!.y - stageBox!.y)).toBe(56);
   expect(Math.round(stageBox!.x + stageBox!.width - (topLayerBox!.x + topLayerBox!.width))).toBe(16);
   await page.screenshot({ path: '/private/tmp/hs2-zescm2-permission-demo-top-layer.png', fullPage: true });
+  // The in-flow variant is laid out by its host (the AI conversation's foreground), not anchored to a
+  // corner, and stays interactive inside a pointer-transparent host (HS2-M2W2DP).
+  await choose(presentation, 'flow');
+  const flowPopup = page.locator('[data-component="permission-request-popup"][data-layer="flow"]');
+  await expect(flowPopup).toBeVisible();
+  await expect(flowPopup).toHaveCSS('position', 'relative');
+  await expect(flowPopup).toHaveCSS('pointer-events', 'auto');
+  const [flowColumn, flowBox] = await Promise.all([
+    page.locator('.permission-request-demo__list').boundingBox(),
+    flowPopup.boundingBox(),
+  ]);
+  expect(Math.round(flowBox!.x)).toBe(Math.round(flowColumn!.x));
+  expect(Math.round(flowBox!.width)).toBe(Math.round(flowColumn!.width));
   await choose(presentation, 'popup');
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveAttribute('data-layer', 'inline');
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();

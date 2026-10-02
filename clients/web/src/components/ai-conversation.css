@@ -55,10 +55,6 @@
 .ai-conversation__embedded-header > span {
   flex: 1 1 auto;
 }
-.ai-conversation__embedded-header svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .ai-conversation__saved-notice {
   display: grid;
   padding: var(--wa-space-xs) var(--wa-space-s);
@@ -123,14 +119,6 @@
   pointer-events: none;
   inset: 0;
   justify-content: center;
-}
-.ai-conversation__foreground .permission-request-popup {
-  position: relative;
-  top: auto;
-  right: auto;
-  width: min(remify(704px), calc(100vw - remify(32px)));
-  height: fit-content;
-  pointer-events: auto;
 }
 .ai-conversation__transcript {
   display: flex;
@@ -322,11 +310,7 @@
 .ai-conversation__activity > header > span {
   gap: remify(4.8px);
 }
-.ai-conversation__activity svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-}
-.ai-conversation__activity ol {
+.ai-conversation__activity-list {
   display: grid;
   min-width: 0;
   max-width: 100%;
@@ -335,7 +319,7 @@
   list-style: none;
   gap: remify(7.2px);
 }
-.ai-conversation__activity li {
+.ai-conversation__activity-item {
   display: grid;
   min-width: 0;
   max-width: 100%;

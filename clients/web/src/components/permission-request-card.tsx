@@ -208,12 +208,13 @@ export function PermissionRequestCard({
 
 export interface PermissionRequestPopupProps extends Omit<PermissionRequestCardProps, 'presentation'> {
   /**
-   * Where the popup paints. `inline` (default) positions it inside its host, as the AI conversation's
-   * foreground does. `top` renders a manual popover that `wireTopLayerOverlays` lifts into the browser
-   * top layer, so the shell's popup sits above the Workbench's main-pane clip, the terminal drawer, and
-   * the rails instead of being covered by them (HS2-ZESCM2).
+   * Where the popup paints. `inline` (default) anchors it to its positioned host's top-right corner.
+   * `flow` places it in its host's layout, so the host positions it, as the AI conversation's
+   * foreground does (HS2-M2W2DP). `top` renders a manual popover that `wireTopLayerOverlays` lifts
+   * into the browser top layer, so the shell's popup sits above the Workbench's main-pane clip, the
+   * terminal drawer, and the rails instead of being covered by them (HS2-ZESCM2).
    */
-  layer?: 'inline' | 'top';
+  layer?: 'inline' | 'flow' | 'top';
 }
 
 export function PermissionRequestPopup({ layer = 'inline', ...props }: PermissionRequestPopupProps) {

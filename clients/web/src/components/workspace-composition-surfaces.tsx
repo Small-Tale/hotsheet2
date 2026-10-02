@@ -88,7 +88,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
         data-component="project-statistics"
         aria-label={`${props.projectName} project statistics`}
       >
-        <h1>{props.projectName} project statistics</h1>
+        <h1 class="project-statistics__title">{props.projectName} project statistics</h1>
         <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
       </section>
     );

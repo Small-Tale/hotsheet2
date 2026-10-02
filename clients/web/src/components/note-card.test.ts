@@ -45,7 +45,7 @@ describe('NoteCard', () => {
       expect(markup).toContain('data-lucide="gauge"');
       expect(markup).toContain(`${value}%`);
       // The badge sits in the header beside the timestamp, not in the body.
-      expect(markup).toMatch(/note-card__header-end">[\s\S]*confidence-badge[\s\S]*<time>/u);
+      expect(markup).toMatch(/note-card__header-end">[\s\S]*confidence-badge[\s\S]*<time class="note-card__time">/u);
     }
     const css = readFileSync(resolve(import.meta.dirname, 'confidence-badge.css'), 'utf8');
     for (const band of ['verified', 'assumed', 'partial', 'unverified']) {
