@@ -93,11 +93,12 @@ describe('ServerBusyBars', () => {
     expect(String(ServerBusyBars({ count: 0, busy: false }))).not.toContain('server-busy-bars__bar');
   });
 
-  it('uses the star yellow token, pins to the top, allocates no space, and respects reduced motion', () => {
+  it('uses the star yellow token, pins below the top safe-area inset, allocates no space, and respects reduced motion', () => {
     const css = readFileSync(new URL('./components/server-busy-bars.css', import.meta.url), 'utf8');
     expect(css).toContain('background: var(--hs-ticket-state-up-next)');
     expect(css).toContain('position: fixed');
-    expect(css).toContain('inset: 0 0 auto 0');
+    expect(css).toContain('inset: var(--hotsheet-safe-area-top) 0 auto 0');
+    expect(css).toContain('inset: var(--hotsheet-safe-area-top) auto auto 50%');
     expect(css).toContain('height: 4px');
     expect(css).toContain('pointer-events: none');
     expect(css).toMatch(/\.server-busy-bars__bar \{[^}]*flex: 0 0 3px/);
