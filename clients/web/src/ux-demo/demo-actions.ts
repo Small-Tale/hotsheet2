@@ -38,6 +38,7 @@ export const DEMO_ACTIONS = {
   openAiConversationDemo: attr('data-action', 'open-ai-conversation-demo'),
   openAttachmentMenu: attr('data-action', 'open-attachment-menu'),
   openCodeReview: attr('data-action', 'open-code-review'),
+  openCommandRunDialogDemo: attr('data-action', 'open-command-run-dialog-demo'),
   openGalleryDemo: attr('data-action', 'open-gallery-demo'),
   openHs1MigrationDemo: attr('data-action', 'open-hs1-migration-demo'),
   openNotWorkingDemo: attr('data-action', 'open-not-working-demo'),

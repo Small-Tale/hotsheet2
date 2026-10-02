@@ -1502,7 +1502,10 @@ capability-aware sections when their underlying features and data contracts land
   existing long poll; the client never interval-polls. Both native dialogs style only their
   own `command-run-dialog` classes (root, `__title`, `__output`, `__actions`) and size their
   action icons through the `LucideIcon` `size` prop, never through `[data-component]` roots or
-  descendant `svg` selectors (HS2-29Q3XG).
+  descendant `svg` selectors (HS2-29Q3XG). The `/ux-demo` entry exposes both presentations
+  through a Presentation setting (Run output, Stop confirmation). Each swap reopens the native
+  `<dialog>` with `showModal`, and an Open dialog stage action reopens it after Close, Keep running,
+  or Stop command, which the demo reports as fixture events (HS2-CWWX7S).
 - `CommandSettingsEditor` (Project Settings → Commands) is an HS1-style WYSIWYG editor:
   a sidebar-aligned grouped list of command rows (drag handle, colored icon, name, type)
   whose group headers come from each command's `group`, with ungrouped commands at the top.

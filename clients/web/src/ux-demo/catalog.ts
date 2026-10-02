@@ -464,7 +464,7 @@ export const demoCatalog: DemoCategory[] = [
           demo(
             'command-run-dialog',
             'CommandRunDialog',
-            'Native modal dialog presenting the latest run state and output for a configured command, with a Close action.',
+            'Native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one.',
             'feature-floor',
             true,
           ),

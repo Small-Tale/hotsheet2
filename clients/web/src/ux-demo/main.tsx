@@ -39,12 +39,11 @@ import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from 'lucide';
 
-import type { CommandDefinition, CommandRun, ProviderAccount } from '../api';
+import type { ProviderAccount } from '../api';
 import type { CommandDropTarget } from '../command-order';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
 import { BulkTicketDialog } from '../components/bulk-ticket-dialog';
-import { CommandRunDialog } from '../components/command-run-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { KeyboardSettings } from '../components/keyboard-settings';
@@ -85,6 +84,7 @@ import { devReviewRequested } from '../dev-review/request';
 import { createDisposerScope } from '../disposer-scope';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
 import { terminalCopyMessage, terminalCopySelection } from '../terminal-clipboard';
@@ -135,6 +135,16 @@ import {
 } from './app-shell-demo';
 import { demoCatalog, type DemoDefinition, findDemo, kerfCatalogSections, usesCatalogGeometryOverlay } from './catalog';
 import { applyAfterCatalogPopupsClose } from './catalog-update';
+import {
+  CommandRunDialogDemo,
+  type CommandRunDialogPresentation,
+  CommandRunDialogSettings,
+  confirmStopCommandRunDemo,
+  dismissCommandRunDialogDemo,
+  resetCommandRunDialogDemo,
+  setCommandRunDialogPresentation,
+  showCommandRunDialogDemo,
+} from './command-run-dialog-demo';
 import {
   ConfidenceBadgeDemo,
   ConfidenceBadgeSettings,
@@ -543,28 +553,6 @@ const usesCollectionState = () =>
     'app-shell',
   ].includes(selectedId.value);
 
-const commandRunDialogDemoCommand: CommandDefinition = {
-  id: 'run-checks',
-  title: 'Run checks',
-  kind: 'program',
-  program: 'npm',
-  args: ['run', 'check'],
-  group: 'Quality',
-};
-const commandRunDialogDemoRun: CommandRun = {
-  id: 'run-42',
-  command_id: 'run-checks',
-  state: 'completed',
-  exit_code: 0,
-  output: [
-    { seq: 1, stream: 'stdout', text: '$ npm run check' },
-    { seq: 2, stream: 'stdout', text: 'Typecheck: 0 errors' },
-    { seq: 3, stream: 'stdout', text: 'Lint: 0 warnings' },
-    { seq: 4, stream: 'stderr', text: 'note: 2 files skipped (no changes)' },
-    { seq: 5, stream: 'stdout', text: 'All checks passed in 4.2s' },
-  ],
-};
-
 function demoContent(item: DemoDefinition) {
   if (item.id === 'status-badge') return <StatusBadgeDemo />;
   if (item.id === 'confidence-badge') return <ConfidenceBadgeDemo />;
@@ -749,8 +737,7 @@ function demoContent(item: DemoDefinition) {
         }}
       />
     );
-  if (item.id === 'command-run-dialog')
-    return <CommandRunDialog command={commandRunDialogDemoCommand} run={commandRunDialogDemoRun} />;
+  if (item.id === 'command-run-dialog') return <CommandRunDialogDemo />;
   if (item.id === 'bulk-ticket-dialog')
     return (
       <BulkTicketDialog state={{ kind: 'tag', mode: 'add', count: 5, choices: ['bug', 'ui', 'backend', 'docs'] }} />
@@ -1208,7 +1195,8 @@ function DemoApp() {
     selected.id === 'permission-request' ||
     selected.id === 'ai-conversation' ||
     selected.id === 'quick-ticket-composer' ||
-    selected.id === 'ticket-inspector';
+    selected.id === 'ticket-inspector' ||
+    selected.id === 'command-run-dialog';
   const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : ''].filter(Boolean).join(' '),
     modified = demoModified.value[selected.id];
   return (
@@ -1295,6 +1283,8 @@ function DemoApp() {
             <TicketInspectorSettings />
           ) : selected.id === 'markdown-editor' ? (
             <MarkdownEditorSettings />
+          ) : selected.id === 'command-run-dialog' ? (
+            <CommandRunDialogSettings />
           ) : (
             <p>This demo has no adjustable settings.</p>
           )}
@@ -1449,16 +1439,8 @@ wireCatalog(root, {
 });
 wireCatalogGeometryOverlay(root);
 revealCatalogEntry(root, selectedId.value, { block: 'center' });
-// CommandRunDialog is a standalone native <dialog> (hidden until showModal), so open it after the
-// demo mounts/selects the same way the app does — unlike the wa-dialog demos that render inline (HS2-Z0CTHN).
-function showCommandRunDialogDemo(): void {
-  requestAnimationFrame(() => {
-    const dialog = root.querySelector<HTMLDialogElement>('[data-component="command-run-dialog"]');
-    if (dialog && !dialog.open) dialog.showModal();
-  });
-}
 if (selectedId.value === 'ticket-reader') queueMicrotask(() => showTicketReaderDialog(root, 'ux-demo-ticket-reader'));
-if (selectedId.value === 'command-run-dialog') showCommandRunDialogDemo();
+if (selectedId.value === 'command-run-dialog') showCommandRunDialogDemo(root);
 const terminalDemoMounts = new Map<HTMLElement, () => void>();
 const syncDemoTerminals = () => {
   syncTerminalDemoViewports(root, terminalDemoMounts);
@@ -1531,7 +1513,7 @@ function selectDemo(id: string, push = true): void {
   settingsOpen.value = false;
   contextMenu.value = undefined;
   terminalDashboardContextMenu.value = undefined;
-  if (id === 'command-run-dialog') showCommandRunDialogDemo();
+  if (id === 'command-run-dialog') showCommandRunDialogDemo(root);
   if (id !== 'ticket-search-field') resetTicketSearchDemo();
   if (push) {
     const url = new URL(location.href);
@@ -2277,6 +2259,7 @@ demoListeners.add(
     if (selectedId.value === 'repository-status-popover') resetRepositoryStatusDemo(root);
     if (selectedId.value === 'connection-details-dialog') resetConnectionDetailsDemo(root);
     if (selectedId.value === 'permission-request') resetPermissionRequestDemo(root);
+    if (selectedId.value === 'command-run-dialog') resetCommandRunDialogDemo(root);
   }),
 );
 const openAIConversationDemo = () => {
@@ -3340,6 +3323,33 @@ demoListeners.add(
   delegate(root, 'wa-request-close', DEMO_COMPONENTS.notWorkingDialog.selector, (event) => {
     event.preventDefault();
   }),
+);
+// CommandRunDialog demo: swap between its run-output and stop-confirmation presentations and stand in
+// for the app's dismiss/stop side effects (HS2-CWWX7S).
+demoListeners.add(
+  delegate(root, 'change', '[data-settings="command-run-dialog"] [name="presentation"]', (_event, target) => {
+    setCommandRunDialogPresentation(root, (target as FormControl).value as CommandRunDialogPresentation);
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', DEMO_ACTIONS.openCommandRunDialogDemo.selector, () => {
+    showCommandRunDialogDemo(root);
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', `dialog.command-run-dialog ${COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.selector}`, () => {
+    dismissCommandRunDialogDemo(root);
+  }),
+);
+demoListeners.add(
+  delegate(
+    root,
+    'click',
+    `dialog.command-run-dialog ${COMMANDS_AND_AI_ACTIONS.confirmStopCommand.selector}`,
+    (_event, target) => {
+      confirmStopCommandRunDemo(root, (target as HTMLElement).dataset.runId);
+    },
+  ),
 );
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.openGalleryDemo.selector, () => {

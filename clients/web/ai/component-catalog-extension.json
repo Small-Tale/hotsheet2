@@ -1092,9 +1092,9 @@
       "id": "command-run-dialog",
       "name": "CommandRunDialog",
       "kind": "component",
-      "purpose": "Native modal dialog presenting the latest run state and output for a configured command, with a Close action.",
+      "purpose": "Native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one.",
       "useWhen": [
-        "Hot Sheet needs native modal dialog presenting the latest run state and output for a configured command, with a Close action."
+        "Hot Sheet needs native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific CommandRunDialog behavior."

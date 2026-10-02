@@ -6492,6 +6492,65 @@ test('renders the CommandRunDialog demo as an opened native modal (HS2-Z0CTHN)',
   await page.screenshot({ path: '/private/tmp/claude/hs2-z0cthn-command-run-dialog.png', fullPage: true });
 });
 
+test('swaps the CommandRunDialog demo between run output and stop confirmation (HS2-CWWX7S)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=command-run-dialog&dev-review=false');
+    const output = page.locator('[data-component="command-run-dialog"]'),
+      stop = page.locator('[data-component="command-cancellation-dialog"]'),
+      event = page.locator('.component-stage__event'),
+      presentation = page.locator('[data-settings="command-run-dialog"] [name="presentation"]');
+    await expect(output).toHaveJSProperty('open', true);
+    await expect(stop).toHaveCount(0);
+
+    // Close is wired to the demo's dismiss stand-in; the modal must close before the settings are reachable.
+    await output.getByRole('button', { name: 'Close' }).click();
+    await expect(output).toHaveJSProperty('open', false);
+    await expect(event).toHaveText('Closed Run checks output');
+    await page.locator('[data-action="toggle-settings"]').click();
+    await expect(presentation).toHaveJSProperty('value', 'output');
+
+    // Swapping the presentation re-opens the native dialog modally with the stop confirmation.
+    await presentation.evaluate((control: HTMLElement & { value: string }) => {
+      control.value = 'stop';
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(stop).toHaveJSProperty('open', true);
+    await expect(stop.evaluate((dialog) => dialog.matches(':modal'))).resolves.toBe(true);
+    await expect(output).toHaveCount(0);
+    await expect(stop.getByRole('heading', { name: 'Stop Run checks?' })).toBeVisible();
+    await expect(stop.getByRole('button', { name: 'Keep running' })).toBeVisible();
+    await expect(stop.getByRole('button', { name: 'Stop command' })).toHaveAttribute('data-run-id', 'run-43');
+    const box = await stop.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `/private/tmp/claude/hs2-cwwx7s-stop-confirmation-${width}.png` });
+
+    await stop.getByRole('button', { name: 'Keep running' }).click();
+    await expect(stop).toHaveJSProperty('open', false);
+    await expect(event).toHaveText('Kept Run checks running');
+    await page.locator('[data-action="open-command-run-dialog-demo"]').click();
+    await expect(stop).toHaveJSProperty('open', true);
+    await stop.getByRole('button', { name: 'Stop command' }).click();
+    await expect(stop).toHaveJSProperty('open', false);
+    await expect(event).toHaveText('Stop requested for run-43');
+    await expect(presentation).toHaveJSProperty('value', 'stop');
+
+    // Reset restores the run-output presentation in both the dialog and the live control, then edits again.
+    await page.locator('[data-settings="command-run-dialog"] [data-action="reset-settings"]').click();
+    await expect(output).toHaveJSProperty('open', true);
+    await expect(output).toContainText('All checks passed in 4.2s');
+    await expect(presentation).toHaveJSProperty('value', 'output');
+    await page.keyboard.press('Escape');
+    await expect(output).toHaveJSProperty('open', false);
+    await presentation.evaluate((control: HTMLElement & { value: string }) => {
+      control.value = 'stop';
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(stop).toHaveJSProperty('open', true);
+  }
+});
+
 for (const theme of ['light', 'dark'] as const) {
   test(`uses native AI toolbar actions in dialog and embedded views in ${theme} (HS2-WXVAF3)`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme });
