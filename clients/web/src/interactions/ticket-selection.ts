@@ -6,6 +6,7 @@ import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { adjacentTicketSlug, isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
 import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from '../context-menu-position';
+import { createDisposerScope } from '../disposer-scope';
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { shouldAutoOpenInspectorOnTap } from '../mobile-layout';
@@ -15,7 +16,6 @@ import { duplicateTargetKey } from '../ticket-close';
 import { type TicketView } from '../ticket-views';
 import { deleteDraftFiles } from '../workspace-session';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type Control, type NotWorkingTarget, type PendingEvidence } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -77,7 +77,7 @@ export interface TicketSelectionInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireTicketSelectionInteractions(dependencies: TicketSelectionInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     viewportMobile,
     revealInspectorOverlay,

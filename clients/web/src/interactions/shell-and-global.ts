@@ -13,6 +13,7 @@ import { type RepositoryFileMenu } from '../components/repository-status-popover
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
+import { createDisposerScope } from '../disposer-scope';
 import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
@@ -22,7 +23,6 @@ import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { ticketClipboardAction } from '../ticket-clipboard-shortcuts';
 import { type ClipboardTicket, type TicketHistory } from '../ticket-operations';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type AttachmentMenu, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -107,7 +107,7 @@ export interface ShellAndGlobalInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     sidebarCollapsed,
     inspectorCollapsed,

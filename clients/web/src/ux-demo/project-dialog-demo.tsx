@@ -3,7 +3,7 @@ import './project-dialog-demo.css';
 import { delegate, signal } from 'kerfjs';
 
 import { ProjectDialog, RemoteProjectDialog } from '../components/project-dialog';
-import { createDisposerScope } from './disposer-scope';
+import { createDisposerScope } from '../disposer-scope';
 
 const variants = {
   projects: 'Remote projects',

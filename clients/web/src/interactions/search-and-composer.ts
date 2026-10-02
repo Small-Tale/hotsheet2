@@ -11,6 +11,7 @@ import {
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
+import { createDisposerScope } from '../disposer-scope';
 import { type InlineSearchToken } from '../inline-search';
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
@@ -18,7 +19,6 @@ import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
 import { deleteDraftFiles } from '../workspace-session';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { wireTicketSearchFields } from './ticket-search-field';
 import { type Control, type PendingEvidence, type Project } from './types';
 
@@ -70,7 +70,7 @@ export interface SearchAndComposerInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireSearchAndComposerInteractions(dependencies: SearchAndComposerInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     searchOpen,
     workspaceSearchModel,

@@ -1,6 +1,7 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 
 import { type NotificationView } from '../components/notification-navigation';
+import { createDisposerScope } from '../disposer-scope';
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
   NOTIFICATIONS_AND_LINKS_TARGETS,
@@ -16,7 +17,6 @@ import {
 } from '../permission-notifications';
 import { type TicketLinkMatch, ticketLinkMatchKey, type TicketLinkReference } from '../ticket-link-resolution';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type Control, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -50,7 +50,7 @@ export interface NotificationAndLinkInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireNotificationAndLinkInteractions(dependencies: NotificationAndLinkInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     notificationView,
     project,

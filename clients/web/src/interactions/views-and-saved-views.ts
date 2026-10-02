@@ -3,13 +3,13 @@ import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
 import { type FullTicket } from '../api';
 import { type SavedViewContextMenuState } from '../components/view-navigation';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
+import { createDisposerScope } from '../disposer-scope';
 import {
   VIEWS_AND_SAVED_VIEWS_ACTIONS,
   VIEWS_AND_SAVED_VIEWS_TARGETS,
 } from '../interaction-attrs/views-and-saved-views';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type Control } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -36,7 +36,7 @@ export interface ViewAndSavedViewInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     selectedCorruptKey,
     selectedTicketSlugs,

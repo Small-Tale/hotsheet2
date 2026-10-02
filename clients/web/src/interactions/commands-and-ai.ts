@@ -19,13 +19,13 @@ import { type SettingsCategory } from '../components/settings-navigation';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
+import { createDisposerScope } from '../disposer-scope';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
 import { loadLucideCatalog } from '../lucide-catalog';
 import { toggleCollapsedCommandGroup } from '../workspace-preferences';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type Control, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -147,7 +147,7 @@ export interface CommandAndAiInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     commandGroupExpanded,
     persistWorkspacePreferences,

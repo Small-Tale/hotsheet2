@@ -5,12 +5,12 @@ import { type CorruptTicket, type FullTicket } from '../api';
 import { corruptTicketKey } from '../components/corrupt-ticket-row';
 import { PROJECT_TAB_BAR_ID, type ProjectTabBarMode } from '../components/project-tab-bar';
 import { TERMINAL_DRAWER_TAB_BAR_ID } from '../components/terminal-drawer';
+import { createDisposerScope } from '../disposer-scope';
 import { reorderDrawerTabIds } from '../drawer-tab-order';
 import { NAVIGATION_AND_TABS_ACTIONS, NAVIGATION_AND_TABS_TARGETS } from '../interaction-attrs/navigation-and-tabs';
 import { reorderTabs } from '../tab-order';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type Control, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -40,7 +40,7 @@ export interface NavigationAndTabInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     projects,
     currentRememberedProjectRoots,

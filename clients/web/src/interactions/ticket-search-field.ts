@@ -7,9 +7,10 @@ import {
   TICKET_SEARCH_TIME_INPUT,
   ticketSearchFieldId,
 } from '../components/ticket-search-field';
+import { createDisposerScope } from '../disposer-scope';
 import { dateTokenFromInput, type SearchDatePrefix } from '../inline-search';
 import { data } from './dom';
-import { createInteractionLifetime, type InteractionTeardown } from './lifetime';
+import { type InteractionTeardown } from './lifetime';
 
 /**
  * Per-field callbacks for the actions every TicketSearchField renders. Each receives the owning
@@ -61,7 +62,7 @@ function applyDate(root: HTMLElement, target: Element, handlers: TicketSearchFie
  * focus handlers can read a chip's position before Kerf removes or expands it.
  */
 export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearchFieldHandlers): InteractionTeardown {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   lifetime.add(
     delegate(
       root,

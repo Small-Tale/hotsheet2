@@ -11,10 +11,10 @@ import {
 import { type CodeReviewComparison, codeReviewTarget } from '../components/ticket-code-review';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
+import { createDisposerScope } from '../disposer-scope';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { updateRepositoryFileSelection } from '../repository-file-selection';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type Control, type Project, type RepositoryDetailState } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -53,7 +53,7 @@ export interface RepositoryInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireRepositoryInteractions(dependencies: RepositoryInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     repository,
     repositoryView,

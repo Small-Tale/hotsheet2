@@ -75,6 +75,7 @@ import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { withControlledOpen } from '../controlled-open';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
+import { createDisposerScope } from '../disposer-scope';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { wireTicketSearchFields } from '../interactions/ticket-search-field';
@@ -184,7 +185,6 @@ import {
   openHs1MigrationDialogDemo,
   ValueTableDemo,
 } from './dialog-layout-demo';
-import { createDisposerScope } from './disposer-scope';
 import { ListDemo } from './list-demo';
 import { ListHeaderDemo } from './list-header-demo';
 import { ListItemDemo } from './list-item-demo';

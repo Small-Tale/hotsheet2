@@ -2,12 +2,12 @@ import { delegate, type Signal } from 'kerfjs';
 
 import { isRemoteClient } from '../client-origin';
 import { type ExternalProviderKind } from '../components/provider-setup-form';
+import { createDisposerScope } from '../disposer-scope';
 import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
 import { type MigrationJobClient } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
 import { dismissHs1CleanupPrompt, dismissHs1MigrationPrompt } from '../workspace-session';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type Control, type Project, type UnhealthyServerRecovery } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -46,7 +46,7 @@ export interface ProjectLifecycleInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     openProjectPicker,
     openRemoteProjectDialog,

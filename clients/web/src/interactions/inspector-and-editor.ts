@@ -10,6 +10,7 @@ import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { copyText } from '../copy-text';
 import { type DebouncedAutosave } from '../debounced-autosave';
+import { createDisposerScope } from '../disposer-scope';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
@@ -20,7 +21,6 @@ import { type TicketPatch } from '../ticket-operations';
 import { type TicketReaderFrame } from '../ticket-reader-stack';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type Control, type DetailsFinishTask, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -118,7 +118,7 @@ export interface InspectorAndEditorInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEditorInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     selectedTicket,
     updateSelectedTracked,

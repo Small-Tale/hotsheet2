@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MediaAnnotation } from '../api';
 import { wireHotSheetInteractions } from '../app/wire-interactions';
 import type { TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
+import { createDisposerScope } from '../disposer-scope';
 import { KEYBOARD_SHORTCUT_STORAGE_KEY, type ShortcutChord } from '../keyboard-shortcuts';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
 import {
@@ -11,7 +12,6 @@ import {
   wireAttachmentAndGalleryInteractions,
 } from './attachments-and-gallery';
 import { type CommandAndAiInteractionsDependencies, wireCommandAndAiInteractions } from './commands-and-ai';
-import { createInteractionLifetime } from './lifetime';
 import { type ProjectLifecycleInteractionsDependencies, wireProjectLifecycleInteractions } from './project-lifecycle';
 import { type RepositoryInteractionsDependencies, wireRepositoryInteractions } from './repository';
 import { type TerminalInteractionsDependencies, wireTerminalInteractions } from './terminals';
@@ -441,20 +441,23 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
   });
 
   it('aborts native listeners so events dispatched after disposal no longer reach them', () => {
-    const lifetime = createInteractionLifetime(),
+    const lifetime = createDisposerScope(),
       root = new EventTarget(),
       handle = vi.fn(),
       dispose = vi.fn();
-    root.addEventListener('pointerup', handle, { signal: lifetime.signal });
+    const signal = lifetime.signal;
+    root.addEventListener('pointerup', handle, { signal });
     expect(lifetime.add(dispose)).toBe(dispose);
     root.dispatchEvent(new Event('pointerup'));
     expect(handle).toHaveBeenCalledTimes(1);
-    lifetime.dispose();
+    // Groups return the bound `dispose` itself as their teardown.
+    const teardown = lifetime.dispose;
+    teardown();
     root.dispatchEvent(new Event('pointerup'));
     expect(handle).toHaveBeenCalledTimes(1);
     expect(dispose).toHaveBeenCalledTimes(1);
-    expect(lifetime.signal.aborted).toBe(true);
-    lifetime.dispose();
+    expect(signal.aborted).toBe(true);
+    teardown();
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 });

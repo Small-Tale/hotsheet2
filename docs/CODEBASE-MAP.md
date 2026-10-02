@@ -54,11 +54,12 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
       controllers.test.ts     # Project replacement, delayed response, rollback, reset/refill transition matrix
       terminal-viewports.test.ts # Viewport focus, mount/disposal, cancellation, refill, and park/restore/evict transitions
+    src/disposer-scope.ts     # createDisposerScope(): shared registration lifetime (retained disposers newest-first + per-generation native-listener AbortSignal, idempotent bound dispose) for interaction groups and the UX demo (HS2-J26QXQ)
     src/interaction-attrs/    # Per-domain Kerf attr()/action() spec tables (`<DOMAIN>_ACTIONS`, `<DOMAIN>_TARGETS`): handlers use `.selector`, components spread `.attrs`
     src/interactions/         # Twelve feature wiring modules: project-lifecycle, repository, navigation-and-tabs, terminals, ticket-selection, views-and-saved-views, commands-and-ai, notifications-and-links, search-and-composer, attachments-and-gallery, inspector-and-editor, shell-and-global
       types.ts                # Shared DOM/application contracts; no state ownership or import of main
       dom.ts                  # Shared delegated-host dataset helper
-      lifetime.ts             # InteractionLifetime: retained delegate disposers + native-listener AbortSignal; combined group teardown
+      lifetime.ts             # InteractionTeardown type + combineInteractionTeardowns(); each group registers through src/disposer-scope.ts
       handler-transitions.test.ts # Callback-level live binding, range-selection, long-press and captured native-close regressions
       registration-inventory.txt # Ordered pre-extraction delegate/native/adapter contract, checked by interaction-wiring.test.ts
     src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
@@ -152,7 +153,6 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
       demo-actions.ts      # Kerf attr() specs (DEMO_ACTIONS/COMPONENTS/FIELDS/MARKERS) for every simple selector the catalog delegates on (HS2-G838PZ)
-      disposer-scope.ts    # createDisposerScope(): collects delegate() disposers (main.tsx demoListeners, project-dialog-demo) behind one teardown
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review
     tests/insecure-origin.ts # Streaming HTTP proxy preserving actual non-loopback browser security rules
     tests/browser-ids-lan.spec.ts # LAN WebKit draft/attachment persistence, visibility and chat identity transitions

@@ -8,6 +8,7 @@ import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../c
 import { type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
+import { createDisposerScope } from '../disposer-scope';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { type DrawerAIChat } from '../project-drive';
@@ -36,7 +37,6 @@ import {
 import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
 import { wireTopLayerOverlays } from '../top-layer-overlay';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type Control, type Project } from './types';
 
 export function allowInterruptedDrawerPopupShow(menu: { open: boolean; popup?: { active: boolean } }) {
@@ -121,7 +121,7 @@ export interface TerminalInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireTerminalInteractions(dependencies: TerminalInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   let terminalRenameSession = 0;
   const {
     terminalDrawerBounds,

@@ -24,12 +24,12 @@ import {
 } from '../components/attachment-gallery';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
+import { createDisposerScope } from '../disposer-scope';
 import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
 } from '../interaction-attrs/attachments-and-gallery';
 import { data } from './dom';
-import { createInteractionLifetime } from './lifetime';
 import { type AttachmentMenu, type GallerySource, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -104,7 +104,7 @@ export interface AttachmentAndGalleryInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAndGalleryInteractionsDependencies) {
-  const lifetime = createInteractionLifetime();
+  const lifetime = createDisposerScope();
   const {
     selectedTicket,
     tickets,
