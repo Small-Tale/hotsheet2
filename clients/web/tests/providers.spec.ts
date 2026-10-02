@@ -8333,8 +8333,17 @@ test('uploads staged files to a GitHub source with an assets repository and show
   expect(posters).toEqual([]);
   await page.locator('#app-right-rail').screenshot({ path: '/private/tmp/hs2-hsa64d-inspector-readonly-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(panel.getByRole('link', { name: 'trace.log' })).toBeVisible();
-  await panel.screenshot({ path: '/private/tmp/hs2-hsa64d-inspector-readonly-narrow.png' });
+  // Crossing to the phone layout closes the inspector (HS2-ZK51WP); capturing while that close
+  // still slides out showed it offset and clipped (HS2-D2GC8Q). Reopen it and let it settle.
+  const rail = page.locator('#app-right-rail');
+  await expect(rail).toHaveAttribute('data-collapsed', 'true');
+  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await expect(rail).toHaveAttribute('data-collapsed', 'false');
+  await rail.locator('> .kui-workbench__panel-content').evaluate(async (node) => {
+    await Promise.all(node.getAnimations().map((animation) => animation.finished));
+  });
+  await expect(panel.getByRole('link', { name: 'trace.log' })).toBeInViewport();
+  await rail.screenshot({ path: '/private/tmp/hs2-hsa64d-inspector-readonly-narrow.png' });
 });
 
 test('keeps the plain source label and default routing for a single writable source (HS2-NZMJBJ)', async ({ page }) => {

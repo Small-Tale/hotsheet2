@@ -1403,3 +1403,74 @@ test('fine-pointer textareas keep the vertical resize grip and fixed sizing (HS2
   expect(after.height).toBeLessThan(before.height + 8);
   expect(after.overflows).toBe(true);
 });
+
+test('side panels settle cleanly across a 1280 -> 390 -> 1280 resize with the sidebar and inspector open (HS2-D2GC8Q)', async ({
+  page,
+}) => {
+  // Crossing to the phone layout closes both side panels by design (HS2-ZK51WP); the inspector
+  // that looked "offset and clipped on the right" right after the resize was that close still
+  // sliding out. Pin that each panel settles fully closed, reopens fully inside the viewport,
+  // and returns to its inline desktop geometry.
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await openDemoProject(page);
+  await page.locator('[data-ticket-slug="HS2-M1"]').click();
+  const sidebar = page.locator('#app-left-rail'),
+    inspector = page.locator('#app-right-rail');
+  const settled = async () => {
+    for (const rail of [sidebar, inspector])
+      await rail.locator('> .kui-workbench__panel-content').evaluate(async (node) => {
+        await Promise.all(node.getAnimations().map((animation) => animation.finished));
+      });
+  };
+  // How much of each rail's panel content is on screen (0 when fully slid out).
+  const onScreen = (rail: typeof sidebar) =>
+    rail.locator('> .kui-workbench__panel-content').evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return Math.max(0, Math.min(rect.right, innerWidth) - Math.max(rect.left, 0));
+    });
+  const geometry = (rail: typeof sidebar) =>
+    rail.locator('> .kui-workbench__panel-content').evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return { left: Math.round(rect.left), right: Math.round(rect.right), width: Math.round(rect.width) };
+    });
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+  await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+  await settled();
+  const desktop = { sidebar: await geometry(sidebar), inspector: await geometry(inspector) };
+  expect(desktop.inspector.right).toBe(1280);
+  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-1280-before.png' });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+  await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+  await settled();
+  expect(await onScreen(sidebar)).toBe(0);
+  expect(await onScreen(inspector)).toBe(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-390-settled.png' });
+
+  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+  await settled();
+  const phone = await geometry(inspector);
+  expect(phone.right).toBe(390);
+  expect(phone.left).toBeGreaterThan(0);
+  await expect(inspector.getByRole('button', { name: 'Hide ticket inspector' })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-390-inspector.png' });
+  await inspector.getByRole('button', { name: 'Hide ticket inspector' }).click();
+  await expect(inspector).toHaveAttribute('data-collapsed', 'true');
+  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+  await settled();
+  const phoneSidebar = await geometry(sidebar);
+  expect(phoneSidebar.left).toBe(0);
+  expect(phoneSidebar.right).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-390-sidebar.png' });
+
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+  await expect(inspector).toHaveAttribute('data-collapsed', 'false');
+  await settled();
+  expect({ sidebar: await geometry(sidebar), inspector: await geometry(inspector) }).toEqual(desktop);
+  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-1280-after.png' });
+});
