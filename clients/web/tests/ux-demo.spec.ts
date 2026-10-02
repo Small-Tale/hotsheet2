@@ -5734,7 +5734,21 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   ).toHaveText(/^Feature floor · \S+/);
   await choose(presentation, 'list');
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
+  // The shell popup variant is a manual popover lifted into the top layer, anchored to the stage that
+  // stands in for the main column (HS2-ZESCM2).
+  await choose(presentation, 'top-layer');
+  const topLayerPopup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
+  await expect(topLayerPopup).toBeVisible();
+  expect(await topLayerPopup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
+  const [stageBox, topLayerBox] = await Promise.all([
+    page.locator('.permission-request-demo').boundingBox(),
+    topLayerPopup.boundingBox(),
+  ]);
+  expect(Math.round(topLayerBox!.y - stageBox!.y)).toBe(56);
+  expect(Math.round(stageBox!.x + stageBox!.width - (topLayerBox!.x + topLayerBox!.width))).toBe(16);
+  await page.screenshot({ path: '/private/tmp/hs2-zescm2-permission-demo-top-layer.png', fullPage: true });
   await choose(presentation, 'popup');
+  await expect(page.locator('[data-component="permission-request-popup"]')).toHaveAttribute('data-layer', 'inline');
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   const stopAutomation = card.getByRole('button', { name: 'Stop auto-allow countdown' });
   await expect(stopAutomation).toHaveAttribute('title', 'Stop auto-allow countdown for this request');

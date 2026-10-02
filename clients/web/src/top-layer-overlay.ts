@@ -1,5 +1,6 @@
 /**
- * Full-viewport overlays that must paint above every app surface (the magnified terminal, HS2-Z9PQSC)
+ * Overlays that must paint above every app surface (the magnified terminal, HS2-Z9PQSC, and the shell's
+ * permission popup, HS2-ZESCM2)
  * render as manual popovers so the browser lifts them into the top layer. A `position: fixed` overlay
  * inside the shell is trapped by Kerf's Workbench (its root isolates a stacking context and its regions
  * clip), so it ended up clipped to the terminal drawer or painted under the side rails.

@@ -1908,7 +1908,12 @@ the popup scrolls within the viewport if vertical space is short (HS2-Y1HN0D). W
 desktop workspace narrows to phone width, the Notifications navigation becomes an overlay;
 after its slide completes, both the pending card and any live popup keep their decision
 controls inside the viewport, and the navigation remains reachable through the sidebar
-button (HS2-M8GNT7). When a standalone AI conversation is open, the active permission popup is
+button (HS2-M8GNT7). The shell's permission popup is a manual popover that the shared top-layer
+watcher opens, so it paints in the browser top layer above the Workbench's main-pane clip, an open
+or maximized terminal drawer, and the rails; its decision controls stay hit-testable over the
+drawer. It keeps its placement at the top-right of the main column through CSS anchor positioning
+(`anchor-name: --app-shell-main`), falling back to the viewport corner where anchors are
+unavailable, and uses the full-width phone placement below 672px (HS2-ZESCM2). When a standalone AI conversation is open, the active permission popup is
 promoted into that dialog's top layer so it remains visible and interactive instead of
 being trapped beneath the modal; resolving it uses the same authoritative permission
 path. Standalone conversation dialogs use native light-dismiss and Escape behavior and

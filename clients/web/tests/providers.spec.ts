@@ -10089,6 +10089,71 @@ test('renders exactly once when the long poll announces a permission request', a
   await page.screenshot({ path: '/private/tmp/hs2-y1hn0d-permission-popup-390.png', fullPage: true });
 });
 
+for (const viewport of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 844 },
+]) {
+  test(`keeps the permission popup topmost and interactable over the expanded terminal drawer at ${viewport.width}px (HS2-ZESCM2)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await mockProject(page);
+    let pending = [
+      {
+        id: 61,
+        connection: 'codex-session',
+        tool: 'Bash',
+        action: 'cargo test --workspace',
+        agent: 'codex',
+        always_allow_supported: true,
+      },
+    ];
+    await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+    let resolved: unknown;
+    await page.route('**/permissions/61', async (route) => {
+      resolved = route.request().postDataJSON();
+      pending = [];
+      await route.fulfill({ json: { connection: 'codex-session', decision: 'allow', persisted: false } });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const popup = page.locator('[data-component="permission-request-popup"]');
+    await expect(popup).toContainText('cargo test --workspace');
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await expect(drawer).toBeVisible();
+    await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dispatchEvent('dblclick');
+    await expect(drawer).toHaveAttribute('data-maximized', 'true');
+    await expect(popup).toBeVisible();
+    const drawerBounds = (await drawer.boundingBox())!,
+      popupBounds = (await popup.boundingBox())!;
+    expect(popupBounds.x).toBeGreaterThanOrEqual(0);
+    expect(popupBounds.x + popupBounds.width).toBeLessThanOrEqual(viewport.width);
+    expect(popupBounds.y + popupBounds.height).toBeLessThanOrEqual(viewport.height);
+    // The expanded drawer really does sit under the popup, so the hit tests below prove the layering.
+    expect(popupBounds.y + popupBounds.height).toBeGreaterThan(drawerBounds.y);
+    await page.screenshot({ path: `/private/tmp/hs2-zescm2-permission-over-drawer-${viewport.width}.png` });
+    for (const name of ['Ignore', 'Deny', 'Always Allow', 'Allow Once']) {
+      const button = popup.getByRole('button', { name, exact: true });
+      await expect(button).toBeVisible();
+      expect(
+        await button.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return element === document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        }),
+      ).toBe(true);
+    }
+    // The popup is a manual popover in the browser's top layer, so neither the Workbench's main-pane
+    // clip nor the drawer's stacking can cover it.
+    expect(await popup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
+    await popup.getByRole('button', { name: 'Allow Once', exact: true }).click();
+    await expect(popup).toHaveCount(0);
+    expect(resolved).toMatchObject({ decision: 'allow', scope: 'once' });
+    await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  });
+}
+
 test('hides a permission popup when its server disconnects and restores only live requests', async ({ page }) => {
   await mockProject(page);
   let offline = false;

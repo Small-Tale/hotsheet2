@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
+import { TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation } from './notification-navigation';
 import {
@@ -91,6 +92,25 @@ describe('permission presentation components', () => {
     expect(markup).toContain('aria-label="Permission request"');
     expect(markup).toContain('>Allow</button>');
     expect(markup).not.toContain('Always Allow');
+  });
+
+  it('lifts only the shell popup into the top layer as a manual popover (HS2-ZESCM2)', () => {
+    const inline = String(PermissionRequestPopup({ item: pending })),
+      top = String(PermissionRequestPopup({ item: pending, layer: 'top' }));
+    expect(inline).toContain('data-layer="inline"');
+    expect(inline).not.toContain('popover=');
+    expect(inline).not.toContain(TOP_LAYER_OVERLAY_ATTRIBUTE);
+    expect(top).toContain('data-layer="top"');
+    expect(top).toContain('popover="manual"');
+    // Both attributes the shared watcher (`openTopLayerOverlays`) selects on, so it calls showPopover().
+    expect(top).toContain(TOP_LAYER_OVERLAY_ATTRIBUTE);
+    expect(top).toContain('Allow Once');
+    const css = readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8');
+    expect(css).toContain('@supports (position-anchor: --app-shell-main)');
+    expect(css).toContain('position-anchor: --app-shell-main;');
+    expect(readFileSync(resolve(import.meta.dirname, 'app-shell.css'), 'utf8')).toContain(
+      'anchor-name: --app-shell-main;',
+    );
   });
 
   it('restores a failed decision as an actionable popup with its communication error', () => {

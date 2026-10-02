@@ -61,7 +61,7 @@ export type PermissionDemoVariant = PermissionRequestCardState | 'allowed' | 'de
 export type PermissionDemoRequest = 'command' | 'edit' | 'read' | 'tool-without-details';
 
 export const permissionRequestSettings = {
-  presentation: signal<'popup' | 'list'>('popup'),
+  presentation: signal<'popup' | 'top-layer' | 'list'>('popup'),
   variant: signal<PermissionDemoVariant>('pending'),
   request: signal<PermissionDemoRequest>('edit'),
   automation: signal<'none' | 'allow' | 'deny'>('allow'),
@@ -178,8 +178,11 @@ export function PermissionRequestDemo() {
   };
   return (
     <section class="permission-request-demo" aria-label="PermissionRequestCard demo">
-      {permissionRequestSettings.presentation.value === 'popup' ? (
-        <PermissionRequestPopup {...props} />
+      {permissionRequestSettings.presentation.value !== 'list' ? (
+        <PermissionRequestPopup
+          {...props}
+          layer={permissionRequestSettings.presentation.value === 'top-layer' ? 'top' : 'inline'}
+        />
       ) : (
         <PermissionRequestCard {...props} presentation="list" />
       )}
@@ -196,6 +199,7 @@ export function PermissionRequestSettings() {
         value={permissionRequestSettings.presentation.value}
         choices={[
           { value: 'popup', label: 'Popup' },
+          { value: 'top-layer', label: 'Shell popup (top layer)' },
           { value: 'list', label: 'Notification list' },
         ]}
       />

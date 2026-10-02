@@ -13,8 +13,10 @@
 }
 /* The main column fills the Workbench work area, which is a plain scroll box; the column owns its
    own scrolling (the ticket workspace), so it never lets the work area scroll. */
+/* The main column anchors the top-layer permission popup (HS2-ZESCM2). */
 .app-shell__main {
   position: relative;
+  anchor-name: --app-shell-main;
   display: flex;
   min-width: 0;
   height: 100%;

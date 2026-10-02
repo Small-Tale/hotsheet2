@@ -4468,7 +4468,9 @@ export async function startHotSheetWebClient() {
     const current = project(),
       restoreFailure = projectRestoreFailures.value.find((item) => item.root === selectedProjectRestoreRoot.value);
     if (!current && !restoreFailure) return <AppEmptyState />;
-    const popup = conversationOpen.value ? undefined : permissionPopupSurface(),
+    // The shell popup is a top-layer popover so the terminal drawer and the Workbench's main-pane clip
+    // can never cover it (HS2-ZESCM2); the conversation's foreground keeps its own inline copy.
+    const popup = conversationOpen.value ? undefined : permissionPopupSurface('top'),
       currentJob = current && migrationJobsByRoot.value[current.root],
       currentBackupUnverified = Boolean(
         currentJob?.kind === 'backup' &&

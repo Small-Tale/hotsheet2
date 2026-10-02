@@ -5,6 +5,7 @@ import { Bot, Check, CircleAlert, Clock3, ExternalLink, Pause, ShieldCheck, X } 
 
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
+import { TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
 
 export type PermissionRequestCardState = 'pending' | 'resolving' | 'failed' | 'disconnected';
 
@@ -205,9 +206,27 @@ export function PermissionRequestCard({
   );
 }
 
-export function PermissionRequestPopup(props: Omit<PermissionRequestCardProps, 'presentation'>) {
+export interface PermissionRequestPopupProps extends Omit<PermissionRequestCardProps, 'presentation'> {
+  /**
+   * Where the popup paints. `inline` (default) positions it inside its host, as the AI conversation's
+   * foreground does. `top` renders a manual popover that `wireTopLayerOverlays` lifts into the browser
+   * top layer, so the shell's popup sits above the Workbench's main-pane clip, the terminal drawer, and
+   * the rails instead of being covered by them (HS2-ZESCM2).
+   */
+  layer?: 'inline' | 'top';
+}
+
+export function PermissionRequestPopup({ layer = 'inline', ...props }: PermissionRequestPopupProps) {
+  const topLayer = layer === 'top';
   return (
-    <aside class="permission-request-popup" data-component="permission-request-popup" aria-label="Permission request">
+    <aside
+      class="permission-request-popup"
+      data-component="permission-request-popup"
+      data-layer={layer}
+      popover={topLayer ? 'manual' : undefined}
+      {...(topLayer ? { [TOP_LAYER_OVERLAY_ATTRIBUTE]: '' } : {})}
+      aria-label="Permission request"
+    >
       <PermissionRequestCard {...props} presentation="popup" />
     </aside>
   );

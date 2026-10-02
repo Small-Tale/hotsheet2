@@ -214,6 +214,33 @@
   right: remify(16px);
   width: min(remify(704px), calc(100% - remify(32px)));
 }
+/* The shell's popup is a manual popover in the browser top layer (HS2-ZESCM2), so the Workbench's
+   main-pane clip and the terminal drawer can no longer cover it. Undo the user-agent popover box and
+   keep the in-column placement: anchored to the main column where CSS anchor positioning exists, and
+   to the viewport's top-right corner otherwise. */
+.permission-request-popup[data-layer='top'] {
+  position: fixed;
+  inset: auto;
+  top: remify(56px);
+  right: remify(16px);
+  width: min(remify(704px), calc(100vw - remify(32px)));
+  height: auto;
+  max-height: calc(100dvh - remify(72px));
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 0;
+  color: inherit;
+  background: transparent;
+}
+@supports (position-anchor: --app-shell-main) {
+  .permission-request-popup[data-layer='top'] {
+    position-anchor: --app-shell-main;
+    top: calc(anchor(top, 0px) + remify(56px));
+    right: calc(anchor(right, 0px) + remify(16px));
+    width: min(remify(704px), calc(anchor-size(width, 100vw) - remify(32px)));
+  }
+}
 .permission-request-popup .permission-request-card {
   border-color: var(--wa-color-neutral-border-loud);
   box-shadow: var(--wa-shadow-l);
@@ -255,7 +282,8 @@
   }
 }
 @media (max-width: remify(672px)) {
-  .permission-request-popup {
+  .permission-request-popup,
+  .permission-request-popup[data-layer='top'] {
     position: fixed;
     z-index: 100;
     top: calc(env(safe-area-inset-top) + remify(56px));

@@ -302,8 +302,10 @@ body[data-resizing-project-sidebar='true'] {
   place-items: center;
   gap: remify(16px);
 }
+/* The demo stage stands in for the shell's main column, which anchors the top-layer popup. */
 .permission-request-demo {
   position: relative;
+  anchor-name: --app-shell-main;
   width: 100%;
   max-width: remify(1120px);
   min-height: remify(640px);

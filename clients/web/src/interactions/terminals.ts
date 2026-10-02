@@ -173,7 +173,8 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     closeDrawerTabIds,
     saveTerminalName,
   } = dependencies;
-  // The magnified terminal is a manual popover; keep it in the top layer as Kerf renders it (HS2-Z9PQSC).
+  // The magnified terminal (HS2-Z9PQSC) and the shell's permission popup (HS2-ZESCM2) are manual
+  // popovers; keep them in the top layer as Kerf renders them.
   wireTopLayerOverlays(document.body);
   lifetime.add(
     delegate(document.body, 'focusin', '.terminal-session:not([hidden]) .xterm-helper-textarea', (_event, target) => {

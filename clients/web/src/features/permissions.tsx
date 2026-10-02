@@ -249,7 +249,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     if (remaining === 0) void resolvePermission(item, setting.action, 'once', true);
   }
 
-  function permissionPopupSurface() {
+  /** The visible request's popup; the shell passes `top` so the popup paints in the top layer (HS2-ZESCM2). */
+  function permissionPopupSurface(layer: 'inline' | 'top' = 'inline') {
     const permission = visiblePermission();
     if (!permission) return undefined;
     const automation = permissionAutomation(permission.projectId),
@@ -261,6 +262,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     return (
       <PermissionPopupSurface
         popup={{
+          layer,
           item: permission,
           state: error ? 'failed' : 'pending',
           error,
