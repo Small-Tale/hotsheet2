@@ -637,6 +637,51 @@ describe('gallery source for stacked readers (HS2-97E0QR)', () => {
     owner.resetAttachmentGallery(owner.galleryImages()[0].url);
     expect(owner.galleryImages().map((image) => image.name)).toEqual(['sel.png']);
   });
+
+  it('offers no annotations or video posters for an append-only provider (HS2-HSA64D)', async () => {
+    const ticket = {
+        id: '7',
+        slug: 'acme/widgets#7',
+        title: 'GitHub evidence',
+        native_id: '7',
+        qualified_id: 'github-acme:7',
+        connection_id: 'github-acme',
+        up_next: false,
+        feedback_needed: false,
+        tags: [],
+        blocked_by: [],
+        claim_count: 0,
+        details: '',
+        notes: [],
+        attachments: [
+          { id: 'img', filename: 'shot.png', created_at: '' },
+          { id: 'vid', filename: 'clip.mp4', created_at: '' },
+        ],
+      } as unknown as FullTicket,
+      api = new Api('/api/a'),
+      saved: string[] = [];
+    vi.spyOn(api, 'updateCheckoutAttachmentAnnotations').mockImplementation(async (_checkout, _id, attachmentId) => {
+      saved.push(attachmentId);
+      return { store: 'github-acme', ticket: { ...ticket, store: 'github-acme' } };
+    });
+    const owner = createGalleryController({
+      selectedTicket: signal<FullTicket | null>(ticket),
+      project: () => project('a'),
+      api: () => api,
+      attachmentContext: () => ({ checkout: 'a', ticket: ticket.slug, baseUrl: '/api/a' }),
+      showToast: vi.fn(),
+      error: signal(''),
+      attachmentsEditable: (owning) => owning.connection_id !== 'github-acme',
+    });
+    const images = owner.galleryImages();
+    expect(images.map((image) => image.thumbnailUrl)).toEqual([undefined, undefined]);
+    owner.resetAttachmentGallery(images[0].url);
+    owner.beginGalleryAnnotationSession();
+    owner.attachmentGalleryAnnotations.value = [{ id: 'blocked', x: 0, y: 0, width: 1, height: 1, text: 'no' }];
+    owner.finishGalleryAnnotationSession();
+    for (let flush = 0; flush < 5; flush += 1) await Promise.resolve();
+    expect(saved).toEqual([]);
+  });
 });
 
 function chatOwners() {

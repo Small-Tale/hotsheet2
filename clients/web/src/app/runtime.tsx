@@ -709,6 +709,7 @@ export async function startHotSheetWebClient() {
     attachmentContext,
     showToast,
     error,
+    attachmentsEditable: (ticket) => attachmentsEditableFor(ticket.connection_id),
   });
   const {
     attachmentGalleryUrl,
@@ -1062,6 +1063,14 @@ export async function startHotSheetWebClient() {
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
   const canUseAttachments = () => selectedTicket.value ? (providerCapabilities.value[selectedTicket.value.connection_id]?.attachments ?? true) : false;
+  // An append-only provider (GitHub's assets repository) adds and serves files but cannot edit
+  // existing ones; servers that predate the capability edit whatever they can attach (HS2-HSA64D).
+  const attachmentsEditableFor = (connectionId: string) => {
+    const capabilities = providerCapabilities.value[connectionId] as Capabilities | undefined;
+    return capabilities?.attachment_edit ?? capabilities?.attachments ?? true;
+  };
+  const canEditAttachments = () =>
+    canUseAttachments() && Boolean(selectedTicket.value && attachmentsEditableFor(selectedTicket.value.connection_id));
   const capabilitiesFor = (connectionId: string) => providerCapabilities.value[connectionId];
   const defaultProvider = () => defaultProviders.value[selectedProjectId.value];
   const newTicketSource = () =>
@@ -3778,13 +3787,18 @@ export async function startHotSheetWebClient() {
     };
   }
   function attachmentItems(ticket: FullTicket, current: Project) {
-    const rounds = attachmentRoundNumbers(ticket.attachments, ticket.notes);
+    const rounds = attachmentRoundNumbers(ticket.attachments, ticket.notes),
+      // Generated video posters are stored beside git attachments; a provider that cannot
+      // edit attachments has no poster to fetch or upload (HS2-HSA64D).
+      posters = attachmentsEditableFor(ticket.connection_id);
     return ticket.attachments.map((item) => ({
       id: item.id,
       name: item.filename,
       url: api().checkoutAttachmentUrl(current.id, ticket.qualified_id, item.id),
-      thumbnailUrl: api().checkoutAttachmentThumbnailUrl(current.id, ticket.qualified_id, item.id),
-      manageVideoPoster: true,
+      thumbnailUrl: posters
+        ? api().checkoutAttachmentThumbnailUrl(current.id, ticket.qualified_id, item.id)
+        : undefined,
+      manageVideoPoster: posters,
       annotationCount: item.annotations?.length ?? 0,
       round: rounds.get(item.id),
       batch_id: item.batch_id,
@@ -3847,6 +3861,7 @@ export async function startHotSheetWebClient() {
       codeReviewMessage: codeReviewMessage.value,
       expandedCodeReviewCommits: expandedCodeReviewCommits.value,
       attachmentsEnabled: canUseAttachments(),
+      attachmentsEditable: canEditAttachments(),
       attachmentMessage: attachmentMessage.value,
       fieldConflict: readerOpen.value ? undefined : fieldConflict.value,
       fieldConflictResolution: fieldConflictResolution.value,
@@ -3935,6 +3950,7 @@ export async function startHotSheetWebClient() {
         codeReviewMessage={editable ? codeReviewMessage.value : ''}
         expandedCodeReviewCommits={editable ? expandedCodeReviewCommits.value : []}
         attachmentsEnabled={editable && canUseAttachments()}
+        attachmentsEditable={editable && canEditAttachments()}
         attachmentMessage={editable ? attachmentMessage.value : ''}
         largeText={readerLargeText.value}
         fieldConflict={editable ? fieldConflict.value : undefined}
@@ -5107,7 +5123,7 @@ export async function startHotSheetWebClient() {
     galleryImages, resetAttachmentGallery, gallerySourceFor, shiftGallery, attachmentGalleryGeometry, attachmentGalleryScale, attachmentGalleryUrl, attachmentMenu, syncAttachmentGalleryMeasurement,
     activeAttachmentGalleryVideo, attachmentGalleryDuration, attachmentGalleryMarkup, finishGalleryAnnotationSession, beginGalleryAnnotationSession, attachmentGalleryDrawMode, attachmentGallerySelectedAnnotation, attachmentGalleryAnnotations,
     updateGalleryPlaybackPresentation, attachmentGalleryPlayhead, attachmentGalleryPlaying, gallerySvgClock, stopGallerySvgClock, attachmentGalleryVolumeOpen, attachmentGalleryMuted, attachmentGalleryVolume,
-    canUseAttachments, updateSelectedTracked, readerOpen, readerDetailsDraft, detailsDraft, titleDraft, readerBlockedReasonDraft, blockedReasonDraft,
+    canUseAttachments, canEditAttachments, updateSelectedTracked, readerOpen, readerDetailsDraft, detailsDraft, titleDraft, readerBlockedReasonDraft, blockedReasonDraft,
     readerNoteDraft, noteDraft, fieldConflictResolution, fieldConflict, canUpdateSelected, titleEditing, activeTicketSurface, titleAutosave,
     tagsAutosave, beginDetailsEdit, linkedReaderFrame, replaceLinkedReaderFrame, linkedReaderSaves, readerDetailsAutosave, detailsAutosave, beginDetailsFinish,
     finishDetailsEdit, readerEditingNoteId, editingNoteId, composingNote, newNoteDraft, readerNoteAutosave, noteAutosave, readerInlineFeedbackReplies,

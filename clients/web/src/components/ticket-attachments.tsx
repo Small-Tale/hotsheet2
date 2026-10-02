@@ -96,12 +96,21 @@ export function groupAttachments(attachments: readonly TicketAttachmentItem[]): 
 export function TicketAttachments({
   attachments = DEFAULT_ATTACHMENTS,
   enabled = true,
+  editable = enabled,
   message = '',
 }: {
   attachments?: readonly TicketAttachmentItem[];
+  /** New files can be added (the provider reports `attachments`). */
   enabled?: boolean;
+  /**
+   * Existing attachments can be regrouped, re-labelled, renamed, deleted, and opened locally
+   * (the provider reports `attachment_edit`). An append-only provider such as GitHub's assets
+   * repository (HS2-HSA64D) adds files but shows existing ones read-only, opened by link.
+   */
+  editable?: boolean;
   message?: string;
 }) {
+  const manageable = enabled && editable;
   const groups = groupAttachments(attachments);
   return (
     <div
@@ -146,7 +155,7 @@ export function TicketAttachments({
                 data-attachment-actor-name={group.actor?.display_name ?? ''}
               >
                 <header>
-                  {enabled ? (
+                  {manageable ? (
                     <button
                       class="ticket-attachments__batch-title"
                       type="button"
@@ -165,9 +174,13 @@ export function TicketAttachments({
                     placeholder={group.label}
                     aria-label={`Batch label for ${group.label}`}
                     name="attachment-batch-label"
-                    disabled={!enabled}
+                    disabled={!manageable}
                   />
-                  <select name="attachment-batch-purpose" aria-label={`Purpose for ${group.label}`} disabled={!enabled}>
+                  <select
+                    name="attachment-batch-purpose"
+                    aria-label={`Purpose for ${group.label}`}
+                    disabled={!manageable}
+                  >
                     <option value="" selected={!group.purpose}>
                       Uncategorized
                     </option>
@@ -188,19 +201,25 @@ export function TicketAttachments({
                 {group.items.map((attachment) => (
                   <div
                     class="ticket-inspector__attachment"
-                    draggable={enabled ? 'true' : undefined}
-                    data-drag-attachment-id={enabled ? attachment.id : undefined}
+                    draggable={manageable ? 'true' : undefined}
+                    data-drag-attachment-id={manageable ? attachment.id : undefined}
                     data-component="ticket-attachment-item"
-                    data-action={enabled ? 'open-attachment-row' : undefined}
+                    data-action={manageable ? 'open-attachment-row' : undefined}
                     data-attachment-id={attachment.id}
-                    data-attachment-action-id={enabled ? attachment.id : undefined}
-                    data-attachment-name={enabled ? attachment.name : undefined}
-                    data-attachment-url={enabled ? attachment.url : undefined}
-                    data-attachment-menu-kind={enabled ? 'item' : undefined}
+                    data-attachment-action-id={manageable ? attachment.id : undefined}
+                    data-attachment-name={manageable ? attachment.name : undefined}
+                    data-attachment-url={manageable ? attachment.url : undefined}
+                    data-attachment-menu-kind={manageable ? 'item' : undefined}
                   >
                     <LucideIcon icon={Paperclip} name="paperclip" />
-                    <span title={`${attachment.name} — double-click to open`}>{attachment.name}</span>
-                    {enabled && (
+                    {manageable || !attachment.url ? (
+                      <span title={`${attachment.name} — double-click to open`}>{attachment.name}</span>
+                    ) : (
+                      <a href={attachment.url} target="_blank" rel="noopener" title={`Open ${attachment.name}`}>
+                        {attachment.name}
+                      </a>
+                    )}
+                    {manageable && (
                       <button
                         class="ticket-inspector__attachment-menu"
                         type="button"
@@ -222,8 +241,8 @@ export function TicketAttachments({
                     {media.map((item) => (
                       <button
                         type="button"
-                        draggable={enabled ? 'true' : undefined}
-                        data-drag-attachment-id={enabled ? item.id : undefined}
+                        draggable={manageable ? 'true' : undefined}
+                        data-drag-attachment-id={manageable ? item.id : undefined}
                         data-action="open-attachment-gallery"
                         data-gallery-attachment-id={item.id}
                         data-attachment-url={item.url}

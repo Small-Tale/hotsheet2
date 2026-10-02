@@ -2923,11 +2923,16 @@ delegate(root, 'click', '[data-action="open-attachment-menu"]', (event, target) 
   const rect = target.getBoundingClientRect();
   showAttachmentDemoMenu(rect.right, rect.bottom);
 });
-delegate(root, 'contextmenu', '[data-component="ticket-attachment-item"]', (event) => {
-  event.preventDefault();
-  const pointer = event as MouseEvent;
-  showAttachmentDemoMenu(pointer.clientX, pointer.clientY);
-});
+delegate(
+  root,
+  'contextmenu',
+  '[data-component="ticket-attachment-item"][data-attachment-menu-kind="item"]',
+  (event) => {
+    event.preventDefault();
+    const pointer = event as MouseEvent;
+    showAttachmentDemoMenu(pointer.clientX, pointer.clientY);
+  },
+);
 delegate(root, 'dblclick', '[data-action="edit-attachment-batch-label"]', (_event, target) => {
   const batch = target.closest<HTMLElement>('[data-attachment-ids]');
   const input = batch?.querySelector<HTMLInputElement>('[name="attachment-batch-label"]');

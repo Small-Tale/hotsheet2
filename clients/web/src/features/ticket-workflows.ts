@@ -1400,7 +1400,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     const previousIds = new Set(ticket.attachments.map((item) => item.id)),
       result = await client.addCheckoutAttachment(current.id, ticket.qualified_id, file, metadata),
       added = result.ticket.attachments.find((item) => !previousIds.has(item.id));
-    if (added && isVideoAttachment(file.name)) {
+    // Posters are stored beside editable (git) attachments only (HS2-HSA64D).
+    if (added && isVideoAttachment(file.name) && (capabilitiesFor(ticket.connection_id)?.attachment_edit ?? true)) {
       const posterUrl = client.checkoutAttachmentThumbnailUrl(current.id, ticket.qualified_id, added.id);
       void ensureVideoPoster(posterUrl, file);
     }

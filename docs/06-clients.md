@@ -1500,6 +1500,13 @@ and identity-less legacy entries remain conservatively blocking.
   Double-clicking the attachment row remains a direct Open shortcut, while
   activating the ellipsis never opens the file. Upload/removal progress and failures remain visible in the
   attachment panel.
+  A provider that can add attachments but not edit them (`attachments: true`,
+  `attachment_edit: false`, such as GitHub with an assets repository) keeps **Add** and the
+  drop zone, while existing attachments are read-only: each name is a link that opens the file
+  through the server's attachment route in a new tab, media still opens in the gallery, and the
+  row menu, right-click menu, dragging between groups, batch relabelling and purpose, gallery
+  annotations, and generated video posters are not offered (HS2-HSA64D). Editing a GitHub
+  connection in the dialog keeps its headlessly configured assets-repository settings.
 
   The inspector includes a Code Review segment for ticket-associated code history. It
   begins with a server-derived change-evidence summary: unique documentation, test,
@@ -1659,7 +1666,9 @@ and identity-less legacy entries remain conservatively blocking.
   or **Remove all** in the attachments header) or chooses a source that supports them.
   Switching back restores the drop zone and the same staged files, and the create action
   re-checks the rule so an Enter or programmatic submit is refused with the same
-  explanation, which the next source switch clears (HS2-8HHHK3).
+  explanation, which the next source switch clears (HS2-8HHHK3). A GitHub source with an
+  assets repository reports `attachments: true`, so staged files upload to it after creation
+  with no composer change (HS2-HSA64D).
   Its chosen height is a device-local preference. The live textarea is morph-protected so a
   controlled-value rerender cannot replace the browser-resized element, while
   cancellation/reopening and later new-ticket sessions restore the persisted height.

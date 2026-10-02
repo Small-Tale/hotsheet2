@@ -1076,7 +1076,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     Open, download, copy-reference, and remove icon buttons have explicit accessible
     names, hover titles, and visible hover/focus states. Double-clicking the row uses
     the same Open action; action-button double-clicks do not bubble into the row action.
-    The inspector and TicketRow are also attachment drop targets.
+    The inspector and TicketRow are also attachment drop targets. `editable={false}` is the
+    append-only variant for providers without `attachment_edit` (HS2-HSA64D): browse/drop stay,
+    names become links, and the menus, dragging, and batch label/purpose editing are omitted;
+    `enabled={false}` shows the unsupported notice. The demo shows all three variants.
 - `TicketMetadataEditor`
   - `Select` — **demo built**: compact, icon-bearing Web Awesome select foundation
     shared by ticket category and priority controls, including selected-value and

@@ -213,13 +213,31 @@ export function renameAttachmentDemoBatch(batchId: string, label: string) {
       : item,
   );
 }
+const appendOnlyAttachmentDemoItems: TicketAttachmentItem[] = [
+  { id: 'gh-trace', name: 'trace.log', url: 'data:text/plain,trace', batch_id: 'gh', batch_label: 'Repro' },
+  // An append-only provider projects no annotations (HS2-HSA64D).
+  { ...demoImages[0], id: 'gh-shot', annotationCount: 0, batch_id: 'gh', batch_label: 'Repro' },
+];
 export function TicketAttachmentsDemo() {
   const menu = attachmentDemoMenu.value;
   return (
-    <section class="inspector-panel-demo" aria-label="TicketAttachments demo">
-      <TicketAttachments attachments={attachmentDemoItems.value} />
-      {menu && <AttachmentContextMenu x={menu.x} y={menu.y} />}
-    </section>
+    <div class="ticket-attachments-demo">
+      <section class="inspector-panel-demo" aria-label="TicketAttachments demo">
+        <TicketAttachments attachments={attachmentDemoItems.value} />
+        {menu && <AttachmentContextMenu x={menu.x} y={menu.y} />}
+      </section>
+      <h2>Append-only provider (GitHub assets repository)</h2>
+      <p class="component-stage__hint">
+        Files can be added; existing ones open by link and cannot be regrouped, relabelled, renamed, or deleted.
+      </p>
+      <section class="inspector-panel-demo" aria-label="Append-only TicketAttachments demo">
+        <TicketAttachments attachments={appendOnlyAttachmentDemoItems} editable={false} />
+      </section>
+      <h2>Provider without attachments</h2>
+      <section class="inspector-panel-demo" aria-label="Unsupported TicketAttachments demo">
+        <TicketAttachments attachments={appendOnlyAttachmentDemoItems} enabled={false} />
+      </section>
+    </div>
   );
 }
 export function AttachmentGalleryDemo() {

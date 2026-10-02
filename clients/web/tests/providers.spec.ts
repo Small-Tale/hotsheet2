@@ -8178,6 +8178,165 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
   expect(uploads).toEqual(['proof.txt', 'trace.log']);
 });
 
+test('uploads staged files to a GitHub source with an assets repository and shows them read-only (HS2-HSA64D)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockProject(page);
+  const capabilities = (attachments: boolean, attachment_edit: boolean) => ({
+    create: true,
+    update: true,
+    close: true,
+    notes: true,
+    note_edit: false,
+    note_delete: false,
+    attachments,
+    attachment_edit,
+    assignment: true,
+    review_requests: false,
+    dependencies: false,
+    up_next: false,
+    close_reasons: true,
+    claims: false,
+    atomic_batch: false,
+    not_working_report: false,
+    note_confidence: true,
+    offline_mutation: false,
+    history: true,
+    watch: true,
+    provider_idempotency: false,
+    query_fields: [],
+  });
+  await page.route('**/providers', (route) =>
+    route.fulfill({
+      json: [
+        {
+          connection_id: 'git-local',
+          provider: 'git',
+          display_name: 'HS2 git tickets',
+          locator: '/tickets',
+          default: true,
+          capabilities: capabilities(true, true),
+        },
+        {
+          connection_id: 'github-acme',
+          provider: 'github',
+          display_name: 'GitHub issues',
+          locator: 'acme/widgets',
+          default: false,
+          capabilities: capabilities(true, false),
+        },
+      ],
+    }),
+  );
+  // The server's wire shape for a GitHub ticket and its projected attachments (crates/hotsheet-extsync).
+  const issue = {
+    ...row,
+    connection_id: 'github-acme',
+    native_id: '7',
+    qualified_id: 'github-acme:7',
+    id: '7',
+    slug: 'acme/widgets#7',
+    native_url: 'https://github.com/acme/widgets/issues/7',
+    title: 'Evidence on GitHub',
+    category: 'issue',
+    status: 'not_started',
+    up_next: false,
+    tags: [],
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: '2026-10-01T00:00:00Z',
+  };
+  const attached: { id: string; filename: string; created_at: string; batch_id?: string }[] = [],
+    uploads: { path: string; filename: string }[] = [],
+    posters: string[] = [];
+  await page.route('**/checkouts/demo-checkout/tickets**', async (route) => {
+    const request = route.request(),
+      url = new URL(request.url()),
+      path = decodeURIComponent(url.pathname);
+    if (request.method() === 'POST' && path.endsWith('/checkouts/demo-checkout/tickets')) {
+      if (url.searchParams.get('source') !== 'github-acme') return route.fallback();
+      return route.fulfill({ status: 201, json: { ...issue, details: '', notes: [], attachments: [] } });
+    }
+    if (request.method() === 'POST' && path.endsWith('/tickets/github-acme:7/attachments')) {
+      const filename = decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? '');
+      uploads.push({ path, filename });
+      attached.push({
+        id: `01K6GH${attached.length}`,
+        filename,
+        created_at: '2026-10-01T00:00:05Z',
+        batch_id: decodeURIComponent(request.headers()['x-hotsheet-attachment-batch'] ?? ''),
+      });
+      return route.fulfill({
+        status: 201,
+        json: { store: 'github-acme', ...issue, details: '', notes: [], attachments: [...attached] },
+      });
+    }
+    if (request.method() === 'GET' && path.endsWith('/tickets/github-acme:7'))
+      return route.fulfill({
+        json: { store: 'github-acme', ...issue, details: '', notes: [], attachments: [...attached] },
+      });
+    if (path.includes('/tickets/github-acme:7/attachments/') && path.endsWith('/thumbnail')) {
+      posters.push(request.method());
+      return route.fulfill({ status: 409, json: { error: 'unsupported' } });
+    }
+    if (request.method() === 'GET' && path.includes('/tickets/github-acme:7/attachments/'))
+      return route.fulfill({ status: 200, contentType: 'text/plain', body: 'trace contents' });
+    return route.fallback();
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const dialog = page.getByRole('dialog', { name: 'Create ticket' }),
+    form = dialog.locator('[data-action="create-ticket-form"]'),
+    source = dialog.locator('wa-select[name="new-ticket-source"]'),
+    create = dialog.locator('wa-button[type="submit"]');
+  await page.getByRole('button', { name: 'New ticket…' }).click();
+  await form.getByLabel('Browse attachments for new ticket', { exact: true }).setInputFiles([
+    { name: 'trace.log', mimeType: 'text/plain', buffer: Buffer.from('trace') },
+    { name: 'clip.mp4', mimeType: 'video/mp4', buffer: Buffer.from('not really a video') },
+  ]);
+  await source.click();
+  await source.locator('wa-option[value="github-acme"]').click();
+  await expect(source).toHaveJSProperty('value', 'github-acme');
+  // An attachment-capable GitHub source keeps the drop zone and allows Create (HS2-8HHHK3 rule).
+  await expect(form.locator('[data-new-ticket-attachments-stranded="true"]')).toHaveCount(0);
+  await expect(form.getByLabel('Drop or browse attachments for new ticket')).toHaveCount(1);
+  await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Evidence on GitHub');
+  await expect(create).toHaveJSProperty('disabled', false);
+  await form.screenshot({ path: '/private/tmp/hs2-hsa64d-composer-github-wide.png' });
+  await create.click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => uploads.map((item) => item.filename)).toEqual(['trace.log', 'clip.mp4']);
+  expect(uploads.every((item) => item.path.endsWith('/tickets/github-acme:7/attachments'))).toBe(true);
+  expect(new Set(attached.map((item) => item.batch_id)).size).toBe(1);
+  // The inspector shows them read-only: Add stays, but no menus, dragging, relabelling, or posters.
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  const panel = page.locator('[data-component="ticket-attachments"]');
+  await expect(panel.locator('[data-component="ticket-attachment-item"]')).toHaveCount(2);
+  await expect(panel.getByLabel('Browse and add attachments')).toHaveCount(1);
+  await expect(panel.getByRole('button', { name: /More actions for/ })).toHaveCount(0);
+  await expect(panel.locator('[draggable="true"]')).toHaveCount(0);
+  await expect(panel.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
+  await expect(panel.locator('select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
+  const link = panel.getByRole('link', { name: 'trace.log' });
+  await expect(link).toHaveAttribute(
+    'href',
+    /\/checkouts\/demo-checkout\/tickets\/github-acme%3A7\/attachments\/01K6GH0$/,
+  );
+  await expect(link).toHaveCSS('cursor', 'pointer');
+  await panel.locator('[data-component="ticket-attachment-item"]').first().click({ button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Attachment actions' })).toHaveCount(0);
+  // Media keeps its gallery link, but store-only menu actions (open, reveal, remove) are not offered.
+  await panel.locator('[data-action="open-attachment-gallery"]').click({ button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Attachment actions' })).toHaveCount(0);
+  await expect(panel.locator('video')).not.toHaveAttribute('poster', /.+/);
+  expect(posters).toEqual([]);
+  await page.locator('#app-right-rail').screenshot({ path: '/private/tmp/hs2-hsa64d-inspector-readonly-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(panel.getByRole('link', { name: 'trace.log' })).toBeVisible();
+  await panel.screenshot({ path: '/private/tmp/hs2-hsa64d-inspector-readonly-narrow.png' });
+});
+
 test('keeps the plain source label and default routing for a single writable source (HS2-NZMJBJ)', async ({ page }) => {
   await mockProject(page);
   const creates: string[] = [];

@@ -28,10 +28,23 @@ export interface GalleryDependencies {
   attachmentContext: (ticket: FullTicket, project?: Project) => AttachmentReferenceContext | undefined;
   showToast: (message: string) => void;
   error: Signal<string>;
+  /**
+   * Whether the ticket's provider can edit existing attachments (`attachment_edit`); an
+   * append-only provider has no annotations or generated video posters (HS2-HSA64D).
+   */
+  attachmentsEditable?: (ticket: FullTicket) => boolean;
 }
 
 export function createGalleryController(dependencies: GalleryDependencies) {
-  const { project, selectedTicket, api, attachmentContext, showToast, error } = dependencies;
+  const {
+    project,
+    selectedTicket,
+    api,
+    attachmentContext,
+    showToast,
+    error,
+    attachmentsEditable = () => true,
+  } = dependencies;
   const attachmentGalleryUrl = signal<string | undefined>(undefined),
     gallerySource = signal<GallerySource | undefined>(undefined);
   // Without an explicit source the gallery belongs to the workspace selection.
@@ -83,15 +96,17 @@ export function createGalleryController(dependencies: GalleryDependencies) {
   function galleryImages(ticket = sourceTicket(), current = sourceProject()): AttachmentGalleryImage[] {
     if (!ticket || !current) return [];
     const context = attachmentContext(ticket, current)!,
+      posters = attachmentsEditable(ticket),
       images: AttachmentGalleryImage[] = ticket.attachments
         .filter((item) => isGalleryMediaAttachment(item.filename))
         .map((item) => ({
           id: item.id,
           name: item.filename,
           url: api().checkoutAttachmentUrl(current.id, ticket.qualified_id, item.id),
-          thumbnailUrl: isVideoAttachment(item.filename)
-            ? api().checkoutAttachmentThumbnailUrl(current.id, ticket.qualified_id, item.id)
-            : undefined,
+          thumbnailUrl:
+            posters && isVideoAttachment(item.filename)
+              ? api().checkoutAttachmentThumbnailUrl(current.id, ticket.qualified_id, item.id)
+              : undefined,
           aliases: [attachmentReferenceUrl(context, { filename: item.filename })],
           ticket: ticket.slug,
           attachmentId: item.id,
@@ -139,7 +154,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
                 volume: attachmentGalleryVolume.value,
                 muted: attachmentGalleryMuted.value,
                 volumeOpen: attachmentGalleryVolumeOpen.value,
-                annotationEnabled: Boolean(image?.attachmentId) && !gallerySource.value?.readOnly,
+                annotationEnabled: Boolean(image?.attachmentId) && annotationsWritable(),
               }
             : undefined
         }
@@ -320,8 +335,13 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     return sourceTicket()?.attachments.find((item) => item.id === image?.attachmentId);
   }
 
+  function annotationsWritable() {
+    const ticket = sourceTicket();
+    return !gallerySource.value?.readOnly && Boolean(ticket && attachmentsEditable(ticket));
+  }
+
   function beginGalleryAnnotationSession() {
-    if (gallerySource.value?.readOnly) return;
+    if (!annotationsWritable()) return;
     const current = sourceProject(),
       ticket = sourceTicket(),
       attachment = activeGalleryAttachment();

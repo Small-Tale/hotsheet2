@@ -3813,7 +3813,9 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
 test('styles and edits attachment group labels while preserving drag regrouping', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-attachments');
-  const surface = page.locator('[data-component="ticket-attachments"]'),
+  const surface = page
+      .getByRole('region', { name: 'TicketAttachments demo', exact: true })
+      .locator('[data-component="ticket-attachments"]'),
     groups = surface.locator('[data-attachment-group-drop-target]'),
     first = groups.first();
   await expect(first).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
@@ -3865,6 +3867,35 @@ test('styles and edits attachment group labels while preserving drag regrouping'
   await expect(first.getByRole('button', { name: 'Edit batch label Human review evidence' })).toBeVisible();
   expect((await purpose.boundingBox())!.width).toBeLessThan((await first.locator('header').boundingBox())!.width);
   await surface.screenshot({ path: '/private/tmp/hs2-c0r4mx-feedback-narrow.png' });
+});
+
+test('shows append-only and unsupported attachment variants in the TicketAttachments demo (HS2-HSA64D)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-attachments');
+  const appendOnly = page.getByRole('region', { name: 'Append-only TicketAttachments demo' }),
+    unsupported = page.getByRole('region', { name: 'Unsupported TicketAttachments demo' });
+  await expect(appendOnly.getByLabel('Browse and add attachments')).toHaveCount(1);
+  await expect(appendOnly.getByLabel('Drop or browse attachments')).toHaveCount(1);
+  await expect(appendOnly.getByRole('button', { name: /More actions for/ })).toHaveCount(0);
+  await expect(appendOnly.locator('[draggable="true"]')).toHaveCount(0);
+  await expect(appendOnly.locator('select[name="attachment-batch-purpose"]')).toHaveJSProperty('disabled', true);
+  const link = appendOnly.getByRole('link', { name: 'trace.log' });
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveCSS('cursor', 'pointer');
+  await appendOnly.locator('[data-component="ticket-attachment-item"]').first().click({ button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Attachment actions' })).toHaveCount(0);
+  // Media stays viewable in the gallery.
+  await expect(appendOnly.locator('[data-action="open-attachment-gallery"]')).toHaveCount(1);
+  await expect(unsupported.getByText('This provider does not support attachment actions.')).toBeVisible();
+  await expect(unsupported.getByLabel('Browse and add attachments')).toHaveCount(0);
+  await appendOnly.scrollIntoViewIfNeeded();
+  await appendOnly.screenshot({ path: '/private/tmp/hs2-hsa64d-demo-append-only-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await appendOnly.scrollIntoViewIfNeeded();
+  await expect(link).toBeVisible();
+  await appendOnly.screenshot({ path: '/private/tmp/hs2-hsa64d-demo-append-only-narrow.png' });
 });
 
 test('navigates and zooms the standalone attachment gallery demo', async ({ page }) => {

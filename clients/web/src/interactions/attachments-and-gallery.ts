@@ -35,6 +35,12 @@ export const INSPECTOR_RAIL_DROP_TARGET =
 
 export interface AttachmentAndGalleryInteractionsDependencies {
   readonly selectedTicket: Signal<FullTicket | null>;
+  /**
+   * Whether the selected ticket's provider can act on existing attachments (`attachment_edit`).
+   * The attachment menu's open/reveal/rename/remove actions are store operations, so an
+   * append-only provider keeps the browser's own context menu instead (HS2-HSA64D).
+   */
+  readonly canEditAttachments?: () => boolean;
   readonly tickets: Signal<TicketRow[]>;
   readonly addAttachments: (slug: string, files: FileList | File[]) => Promise<void>;
   readonly project: () => Project | undefined;
@@ -413,6 +419,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         });
   });
   delegate(document.body, 'contextmenu', '[data-attachment-url]', (event, target) => {
+    if (!(dependencies.canEditAttachments?.() ?? true)) return;
     event.preventDefault();
     const ticket = data(target).attachmentTicket ?? selectedTicket.value?.slug,
       name = data(target).attachmentName,

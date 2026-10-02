@@ -207,6 +207,33 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(unsupported).not.toContain('data-drag-attachment-id');
     expect(unsupported).not.toContain('data-action="edit-attachment-batch-label"');
     expect(unsupported).toContain('<h3 class="ticket-attachments__batch-title">Legacy / Uncategorized</h3>');
+    // An append-only provider (GitHub assets repository, HS2-HSA64D) adds files and opens existing
+    // ones by link, but offers no regrouping, relabelling, renaming, deletion, or local open.
+    const appendOnly = String(
+      TicketAttachments({
+        attachments: [
+          { id: 'one', name: 'one.png', url: '/attachment/one' },
+          { id: 'two', name: 'log.txt', url: '/attachment/two' },
+        ],
+        enabled: true,
+        editable: false,
+      }),
+    );
+    expect(appendOnly).toContain('aria-label="Browse and add attachments"');
+    expect(appendOnly).toContain('aria-label="Drop or browse attachments"');
+    expect(appendOnly).toContain('data-attachment-drop-target="true"');
+    expect(appendOnly).not.toContain('does not support attachment actions');
+    expect(appendOnly).not.toContain('data-action="open-attachment-menu"');
+    expect(appendOnly).not.toContain('data-action="open-attachment-row"');
+    expect(appendOnly).not.toContain('data-drag-attachment-id');
+    expect(appendOnly).not.toContain('data-action="edit-attachment-batch-label"');
+    expect(appendOnly).toContain(
+      'name="attachment-batch-purpose" aria-label="Purpose for Legacy / Uncategorized" disabled',
+    );
+    expect(appendOnly).toContain(
+      '<a href="/attachment/two" target="_blank" rel="noopener" title="Open log.txt">log.txt</a>',
+    );
+    expect(appendOnly).toContain('data-action="open-attachment-gallery"');
   });
 
   it('shows videos in the media grid without starting playback', () => {

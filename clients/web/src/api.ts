@@ -26,7 +26,11 @@ export type Capabilities = Record<
   | 'watch'
   | 'provider_idempotency',
   boolean
-> & { query_fields: string[] };
+> & {
+  query_fields: string[];
+  /** Existing attachments can be renamed, deleted, regrouped, and annotated (HS2-HSA64D). Older servers omit it. */
+  attachment_edit?: boolean;
+};
 export interface ProviderDescriptor {
   connection_id: string;
   provider: string;

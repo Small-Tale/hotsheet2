@@ -85,6 +85,8 @@ export interface TicketInspectorProps {
   codeReviewMessage?: string;
   expandedCodeReviewCommits?: readonly string[];
   attachmentsEnabled?: boolean;
+  /** Existing attachments can be edited (the provider reports `attachment_edit`, HS2-HSA64D). */
+  attachmentsEditable?: boolean;
   attachmentMessage?: string;
   attachmentContext?: AttachmentReferenceContext;
   notes?: readonly NoteCardProps[];
@@ -158,6 +160,7 @@ export function ticketInspectorPanel({
   codeReviewMessage = '',
   expandedCodeReviewCommits,
   attachmentsEnabled = true,
+  attachmentsEditable = attachmentsEnabled,
   attachmentMessage = '',
   attachmentContext,
   notes,
@@ -390,7 +393,12 @@ export function ticketInspectorPanel({
         />
       )}
       {activeTab === 'attachments' && (
-        <TicketAttachments attachments={attachments} enabled={attachmentsEnabled} message={attachmentMessage} />
+        <TicketAttachments
+          attachments={attachments}
+          enabled={attachmentsEnabled}
+          editable={attachmentsEditable}
+          message={attachmentMessage}
+        />
       )}
     </div>
   );
