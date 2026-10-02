@@ -98,6 +98,10 @@ async function installWorkspace(page: Page) {
   const requests: LoggedRequest[] = [];
   const holds = new Set<string>();
   const held = new Map<string, Route>();
+  // Gated reads keyed by `${project}${suffix}` (for example `p1/permissions`): the route is parked
+  // until the test releases it, pinning an in-flight request across a project switch.
+  const gates = new Set<string>();
+  const gated = new Map<string, Route>();
   const sockets = new Map<string, WebSocketRoute[]>(),
     cursor = new Map<string, number>();
 
@@ -153,6 +157,12 @@ async function installWorkspace(page: Page) {
     }
     const [, id, rest] = api;
     if (!rest.endsWith('/ws/poll')) requests.push({ project: id, rest });
+    const gate = [...gates].find((key) => key.startsWith(`${id}/`) && rest.endsWith(key.slice(id.length)));
+    if (gate && request.method() === 'GET') {
+      gates.delete(gate);
+      gated.set(gate, route);
+      return;
+    }
     if (rest.endsWith('/ws/poll')) {
       cursor.set(id, cursor.get(id) ?? 1);
       return route.fulfill({ json: { cursor: cursor.get(id), events: [], overflow: false } });
@@ -210,6 +220,20 @@ async function installWorkspace(page: Page) {
       const route = held.get(id)!;
       held.delete(id);
       await route.fulfill({ json: ticketPage(rows[id]) });
+    },
+    gate: (index: number, suffix: string) => {
+      gates.add(`${projectId(index)}${suffix}`);
+    },
+    /** Wait until a gated read is parked, so the request is provably in flight. */
+    gateReached: async (index: number, suffix: string) => {
+      await expect.poll(() => gated.has(`${projectId(index)}${suffix}`)).toBe(true);
+    },
+    openGate: async (index: number, suffix: string) => {
+      const key = `${projectId(index)}${suffix}`;
+      await expect.poll(() => gated.has(key)).toBe(true);
+      const route = gated.get(key)!;
+      gated.delete(key);
+      await route.fulfill({ json: [] });
     },
     busyLog: () => page.evaluate(() => [...(window as unknown as { __busyLog: string[] }).__busyLog]),
     clearBusyLog: () =>
@@ -351,6 +375,8 @@ test('live change events keep a cached background project current so its switch 
   );
 
   // Hold the activation's silent revalidation: the live-updated cache alone must already show the new row.
+  // Start from an idle indicator so only work begun by the switch itself can reach the busy log.
+  await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
   workspace.hold(1);
   await workspace.clearBusyLog();
   await switchTo(workspace, 1);
@@ -359,6 +385,32 @@ test('live change events keep a cached background project current so its switch 
   await workspace.release(1);
   await expect(workspace.ticketRow('HS2-P1LIVE')).toBeVisible();
   await page.waitForTimeout(600);
+  expect(await workspace.busyLog()).toEqual([]);
+});
+
+test('a stream-triggered permission reconciliation in flight across a warm switch stays invisible (HS2-7G3C19)', async ({
+  page,
+}) => {
+  const workspace = await installWorkspace(page);
+  await bootWorkspace(page, workspace);
+  await warmUp(workspace, [1, 0]);
+  await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
+  await workspace.clearBusyLog();
+
+  // A permission event on any project's change stream reconciles permissions for every open project
+  // (the same reconciliation every stream resync runs). Park one of its reads so it is provably still
+  // in flight while the user switches to a warm project.
+  workspace.gate(1, '/permissions');
+  await workspace.emit(2, 'permission_asked');
+  await workspace.gateReached(1, '/permissions');
+  workspace.hold(1);
+  await switchTo(workspace, 1);
+  await expect(workspace.ticketRow('HS2-P1A')).toBeVisible({ timeout: 250 });
+  await expect(workspace.loading).toHaveCount(0);
+  await workspace.release(1);
+  await workspace.openGate(1, '/permissions');
+  await page.waitForTimeout(600);
+  // Background reconciliation is invisible work: no busy bars or "Loading…" label at any point.
   expect(await workspace.busyLog()).toEqual([]);
 });
 

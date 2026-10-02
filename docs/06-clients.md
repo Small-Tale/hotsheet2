@@ -425,13 +425,15 @@ and identity-less legacy entries remain conservatively blocking.
   Web Awesome select is open, including the new-ticket composer, so a background
   ticket column move cannot replace the control or dismiss its popup.
 
-- **Server-busy indicator.** A decorative full-width strip pinned to the very top of the app
+- **Server-busy indicator.** A decorative full-width strip pinned to the top of the app's safe area
   ripples a row of yellow (the Up Next star color) bars while the server is busy, so activity
   is apparent without hunting for a spinner (HS2-MW1V3M). It is a `position:fixed` overlay that
   allocates no layout space, is inert to the pointer and assistive technology, and is driven by
   the count of in-flight authenticated server requests — **idle long-poll event streams are
   excluded** so a quiet app reads as idle, as is silent background revalidation of an
-  already-painted warm project (see _Warm project tabs_, HS2-AZZ9TF), and a short linger after the last request settles
+  already-painted warm project (see _Warm project tabs_, HS2-AZZ9TF) and the permission
+  reconciliation every change-stream resync or permission event runs across all open projects
+  (HS2-7G3C19), and a short linger after the last request settles
   keeps rapid bursts from flickering. Each bar is 3px wide with a 2px gap and scales from 1px to
   4px on a staggered cycle; the bar count fills the viewport width and is recomputed only on an
   actual (debounced) window resize. Animation honors `prefers-reduced-motion`.

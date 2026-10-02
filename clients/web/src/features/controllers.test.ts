@@ -9,6 +9,7 @@ import type { ConversationExportOpenResult } from '../conversation-export';
 import type { Project } from '../interactions/types';
 import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
 import type { DrawerAIChat } from '../project-drive';
+import { serverInFlightCount } from '../server-busy';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
 import { DEFAULT_WORKSPACE_PREFERENCES } from '../workspace-preferences';
 import { createAiConfigurationController } from './ai-configuration';
@@ -309,6 +310,29 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     await owner.refreshPermissions();
     expect(owner.permissionPopupSurface()).toBeUndefined();
     expect(owner.projectPermissionHistory('b')).toHaveLength(1);
+  });
+
+  it('reconciles permissions as invisible background work that never drives the busy indicator (HS2-7G3C19)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
+    const pending: Array<() => void> = [];
+    fetchMock.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          pending.push(() => {
+            resolve(json([]));
+          });
+        }),
+    );
+    const refresh = owner.refreshPermissions();
+    // Every project's /permissions and /connections reads are in flight, untracked.
+    await vi.waitFor(() => {
+      expect(pending).toHaveLength(4);
+    });
+    expect(serverInFlightCount()).toBe(0);
+    for (const resolve of pending.splice(0)) resolve();
+    await refresh;
+    expect(serverInFlightCount()).toBe(0);
   });
 
   it('reconciles once on start and makes no permission requests while idle (HS2-NKCXW4)', async () => {

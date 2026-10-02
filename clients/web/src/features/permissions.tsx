@@ -81,7 +81,11 @@ export function createPermissionsController(dependencies: PermissionsDependencie
       const resolutionEpoch = permissionResolutionEpoch;
       const results = await Promise.all(
         projects.value.map(async (current) => {
-          const client = new Api(current.apiPath);
+          // Reconciliation runs on every change-stream resync and permission event, for every open
+          // project: invisible background work that must not drive the server-busy indicator, which
+          // otherwise flashed a generic "Loading…" over unrelated work such as a warm tab switch
+          // (HS2-7G3C19).
+          const client = new Api(current.apiPath, '', { trackBusy: false });
           try {
             const [requests, connections] = await Promise.all([
               client.permissions(),
