@@ -1645,6 +1645,20 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{reference}/default-source",
             put(set_checkout_default_source),
         )
+        // Project-owned ticket sources (HS2-SM9PM8): a project lists, creates, and edits
+        // only the connections its checkout links.
+        .route(
+            "/checkouts/{reference}/provider-connections",
+            get(list_checkout_provider_connections).post(create_checkout_provider_connection),
+        )
+        .route(
+            "/checkouts/{reference}/provider-connections/{connection_id}",
+            patch(update_checkout_provider_connection),
+        )
+        .route(
+            "/checkouts/{reference}/provider-connections/{connection_id}/disabled",
+            put(set_checkout_provider_connection_disabled),
+        )
         .route(
             "/checkouts/{reference}/providers",
             get(list_checkout_providers),
@@ -1818,6 +1832,13 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/provider-connections/{connection_id}/disabled",
             put(set_provider_connection_disabled),
+        )
+        // Machine-wide provider sign-ins and the projects using each (HS2-SM9PM8).
+        .route("/accounts", get(list_accounts_route))
+        .route("/accounts/{account}", delete(sign_out_account))
+        .route(
+            "/accounts/{account}/github-repositories",
+            get(list_account_github_repositories),
         )
         .route("/github-auth/device", post(start_github_device_auth))
         .route(
@@ -2602,11 +2623,21 @@ async fn list_github_auth_repositories(
             format!("stored GitHub authorization is invalid: {error}"),
         )
     })?;
-    let client = hotsheet_extsync::GitHubDeviceClient::live(
+    github_repository_access(
         session.client_id.clone(),
         session.web_base.clone(),
-    );
-    let access = tokio::task::spawn_blocking(move || client.repository_access(&token.access_token))
+        token.access_token,
+    )
+    .await
+}
+
+async fn github_repository_access(
+    client_id: String,
+    web_base: String,
+    access_token: String,
+) -> Result<Json<GitHubRepositoriesResponse>, ApiError> {
+    let client = hotsheet_extsync::GitHubDeviceClient::live(client_id, web_base);
+    let access = tokio::task::spawn_blocking(move || client.repository_access(&access_token))
         .await
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))?;
@@ -2615,6 +2646,124 @@ async fn list_github_auth_repositories(
         installations: access.installations,
         install_url: access.install_url,
     }))
+}
+
+fn account_listing_inputs(
+    state: &AppState,
+) -> Result<
+    (
+        Vec<ProviderConnection>,
+        Vec<hotsheet_ticketing::checkouts::Checkout>,
+    ),
+    ApiError,
+> {
+    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .load()
+        .map_err(provider_transfer_error)?;
+    let checkouts = state
+        .checkout_registry
+        .list()
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok((connections, checkouts))
+}
+
+/// `GET /accounts` (HS2-SM9PM8): machine-wide provider sign-ins, each with the ticket
+/// sources signed in through it and the projects that own those sources.
+async fn list_accounts_route(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<hotsheet_ticketing::accounts::Account>>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let (connections, checkouts) = account_listing_inputs(&state)?;
+        let names = state
+            .key_registry()
+            .list()
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+            .into_iter()
+            .map(|key| key.provider)
+            .collect::<Vec<_>>();
+        Ok(Json(hotsheet_ticketing::accounts::list_accounts(
+            &connections,
+            &checkouts,
+            &names,
+        )))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+/// `DELETE /accounts/{account}`: sign out. Refused (409) while a ticket source uses it.
+async fn sign_out_account(
+    State(state): State<AppState>,
+    Path(account): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let (connections, checkouts) = account_listing_inputs(&state)?;
+        hotsheet_ticketing::accounts::sign_out(
+            &connections,
+            &checkouts,
+            &state.key_registry(),
+            &account,
+        )
+        .map(|()| StatusCode::NO_CONTENT)
+        .map_err(|error| {
+            let status = match error {
+                hotsheet_ticketing::accounts::AccountError::InUse { .. } => StatusCode::CONFLICT,
+                hotsheet_ticketing::accounts::AccountError::NotFound(_) => StatusCode::NOT_FOUND,
+                hotsheet_ticketing::accounts::AccountError::Secret(
+                    hotsheet_ticketing::SecretError::InvalidProvider(_),
+                ) => StatusCode::BAD_REQUEST,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            };
+            ApiError::new(status, error.to_string())
+        })
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+/// `GET /accounts/{account}/github-repositories`: the repositories a signed-in GitHub
+/// account can reach, so another project can add its own repository without signing in
+/// again (HS2-SM9PM8). The token stays server-side and is refreshed when due.
+async fn list_account_github_repositories(
+    State(state): State<AppState>,
+    Path(account): Path<String>,
+) -> Result<Json<GitHubRepositoriesResponse>, ApiError> {
+    let keys = state.key_registry();
+    let raw = keys.get(&account).map_err(|error| match error {
+        hotsheet_ticketing::SecretError::NotFound(_) => ApiError::not_found(&account),
+        other => provider_transfer_error(other),
+    })?;
+    let stored: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+    if stored.get("kind").and_then(serde_json::Value::as_str) != Some("github_app") {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("'{account}' is not a Hot Sheet GitHub sign-in"),
+        ));
+    }
+    let field = |key: &str, fallback: &str| {
+        stored
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(fallback)
+            .to_owned()
+    };
+    let (client_id, web_base) = (
+        field("client_id", ""),
+        field("web_base", "https://github.com"),
+    );
+    let probe = ProviderConnection {
+        id: "account-probe".into(),
+        provider: "github".into(),
+        locator: String::new(),
+        name: None,
+        default: false,
+        settings: serde_json::json!({"credential": {"secret": account}}),
+        disabled: false,
+    };
+    let token = tokio::task::spawn_blocking(move || connection_token(&state, &probe))
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+    github_repository_access(client_id, web_base, token).await
 }
 
 /// `GET /providers` — capability-bearing ticket-provider connections. The current
@@ -2773,7 +2922,153 @@ async fn create_provider_connection(
 async fn update_provider_connection(
     State(state): State<AppState>,
     Path(connection_id): Path<String>,
-    Json(mut connection): Json<ProviderConnection>,
+    Json(connection): Json<ProviderConnection>,
+) -> Result<Json<ProviderConnection>, ApiError> {
+    update_connection_record(&state, connection_id, connection)
+}
+
+/// A connection as one project sees it (HS2-SM9PM8): its record plus every project that
+/// owns it, so a source shared through `hotsheet checkout add-source` says so.
+#[derive(Debug, Serialize)]
+struct ProjectConnection {
+    #[serde(flatten)]
+    connection: ProviderConnection,
+    projects: Vec<hotsheet_ticketing::accounts::AccountProject>,
+}
+
+fn project_connection(
+    connection: ProviderConnection,
+    checkouts: &[hotsheet_ticketing::checkouts::Checkout],
+) -> ProjectConnection {
+    let projects = hotsheet_ticketing::accounts::connection_projects(checkouts, &connection.id);
+    ProjectConnection {
+        connection,
+        projects,
+    }
+}
+
+/// The checkout `reference`, when it links `connection_id`; otherwise 404, so a project can
+/// never read or change another project's ticket source through its own routes.
+fn checkout_linking(
+    state: &AppState,
+    reference: &str,
+    connection_id: &str,
+) -> Result<hotsheet_ticketing::checkouts::Checkout, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    if checkout.source(connection_id).is_none() {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            format!("this project has no ticket source '{connection_id}'"),
+        ));
+    }
+    Ok(checkout)
+}
+
+/// `GET /checkouts/{reference}/provider-connections`: only this project's connections.
+async fn list_checkout_provider_connections(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<Vec<ProjectConnection>>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let (connections, checkouts) = account_listing_inputs(&state)?;
+    Ok(Json(
+        connections
+            .into_iter()
+            .filter(|connection| checkout.source(&connection.id).is_some())
+            .map(|connection| project_connection(connection, &checkouts))
+            .collect(),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateCheckoutConnectionBody {
+    #[serde(flatten)]
+    connection: ProviderConnection,
+    #[serde(default)]
+    make_default: bool,
+}
+
+/// `POST /checkouts/{reference}/provider-connections`: create a ticket source owned by this
+/// project — the connection record and the checkout link in one request (HS2-SM9PM8). If
+/// the link cannot be written the new record is removed again, so no ownerless catalog
+/// entry is left behind.
+async fn create_checkout_provider_connection(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(body): Json<CreateCheckoutConnectionBody>,
+) -> Result<(StatusCode, Json<ProjectConnection>), ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let mut connection = body.connection;
+    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let connections = registry.load().map_err(provider_transfer_error)?;
+    if connection.id.trim().is_empty() {
+        connection.id = hotsheet_ticketing::generate_connection_id(
+            &connections,
+            &connection.provider,
+            &connection.locator,
+        );
+    }
+    // A project's default lives on its checkout, never on the shared record.
+    connection.default = false;
+    save_provider_connections(&state, connections, connection.clone(), None)?;
+    let linked = state.checkout_registry.add_source(
+        &checkout.id,
+        hotsheet_ticketing::checkouts::TicketSource {
+            connection_id: connection.id.clone(),
+            provider: connection.provider.clone(),
+            locator: connection.locator.clone(),
+        },
+        body.make_default,
+    );
+    if let Err(error) = linked {
+        if let Ok(mut current) = registry.load() {
+            current.retain(|item| item.id != connection.id);
+            let _ = registry.save(&current);
+        }
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, error.to_string()));
+    }
+    let (_, checkouts) = account_listing_inputs(&state)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(project_connection(connection, &checkouts)),
+    ))
+}
+
+async fn update_checkout_provider_connection(
+    State(state): State<AppState>,
+    Path((reference, connection_id)): Path<(String, String)>,
+    Json(connection): Json<ProviderConnection>,
+) -> Result<Json<ProviderConnection>, ApiError> {
+    checkout_linking(&state, &reference, &connection_id)?;
+    update_connection_record(&state, connection_id, connection)
+}
+
+async fn set_checkout_provider_connection_disabled(
+    State(state): State<AppState>,
+    Path((reference, connection_id)): Path<(String, String)>,
+    Json(body): Json<ProviderConnectionDisabledBody>,
+) -> Result<Json<ProviderConnection>, ApiError> {
+    checkout_linking(&state, &reference, &connection_id)?;
+    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .set_disabled(&connection_id, body.disabled)
+        .map_err(provider_transfer_error)?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found(&connection_id))
+}
+
+fn update_connection_record(
+    state: &AppState,
+    connection_id: String,
+    mut connection: ProviderConnection,
 ) -> Result<Json<ProviderConnection>, ApiError> {
     connection.id = connection_id.clone();
     let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
@@ -2784,14 +3079,9 @@ async fn update_provider_connection(
     connection.disabled = connections
         .iter()
         .any(|existing| existing.id == connection_id && existing.disabled);
-    save_provider_connections(
-        &state,
-        connections,
-        connection.clone(),
-        Some(&connection_id),
-    )?;
-    // Checkout links copy the locator; an edit made for every project reaches each of them
-    // (HS2-RCBKA3).
+    save_provider_connections(state, connections, connection.clone(), Some(&connection_id))?;
+    // Checkout links copy the locator; an edit reaches every project that shares the
+    // connection (HS2-RCBKA3).
     state
         .checkout_registry
         .update_source_locator(&connection_id, &connection.locator)
@@ -2826,8 +3116,8 @@ fn connection_disabled(state: &AppState, connection_id: &str) -> Result<bool, Ap
         .map_err(provider_transfer_error)
 }
 
-/// Permanently remove a connection and every local reference to it: checkout links and
-/// defaults, the `providers.json` entry, and a Hot Sheet–minted credential. Idempotent —
+/// Permanently remove a connection from every project: checkout links and defaults and the
+/// `providers.json` entry. Its account credential stays signed in (HS2-SM9PM8). Idempotent —
 /// removing an already-removed id still cleans dangling checkout links (HS2-724S9N).
 async fn delete_provider_connection(
     State(state): State<AppState>,
@@ -2837,7 +3127,6 @@ async fn delete_provider_connection(
         hotsheet_ticketing::connection_removal::remove_provider_connection(
             &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
             &state.checkout_registry,
-            &state.key_registry(),
             &connection_id,
         )
         .map(Json)
@@ -3747,15 +4036,32 @@ async fn add_checkout_source(
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
 }
 
+/// Remove a ticket source from one project (HS2-SM9PM8). A connection no other project
+/// links afterwards is deleted with it; its account stays signed in.
 async fn remove_checkout_source(
     State(state): State<AppState>,
     Path((reference, connection_id)): Path<(String, String)>,
-) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
-    state
-        .checkout_registry
-        .remove_source(&reference, &connection_id)
+) -> Result<Json<hotsheet_ticketing::connection_removal::SourceDetach>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        hotsheet_ticketing::connection_removal::detach_source(
+            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &state.checkout_registry,
+            &reference,
+            &connection_id,
+        )
         .map(Json)
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+        .map_err(|error| match error {
+            hotsheet_ticketing::connection_removal::ConnectionRemovalError::Checkout(
+                hotsheet_ticketing::checkouts::CheckoutError::NotFound(_),
+            ) => ApiError::new(StatusCode::NOT_FOUND, error.to_string()),
+            hotsheet_ticketing::connection_removal::ConnectionRemovalError::Provider(error) => {
+                provider_transfer_error(error)
+            }
+            other => ApiError::new(StatusCode::BAD_REQUEST, other.to_string()),
+        })
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
 }
 
 #[derive(Deserialize)]

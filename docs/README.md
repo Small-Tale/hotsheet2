@@ -119,9 +119,9 @@ and don't imply reading order — read by group.
 
 **G · Integrations**
 
-| Doc                                                            | Topic                                                                             | Status                                                                       |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [16-external-sync-interface.md](16-external-sync-interface.md) | Pluggable authoritative ticket providers (git default; GitHub/GitLab/Jira direct) | Shipped (HS2-ZVZP80/A90JRH/JAXS4Z/0RK4YC/VFXFFP; GitHub live CRUD validated) |
+| Doc                                                            | Topic                                                                             | Status                                                                                                                                 |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [16-external-sync-interface.md](16-external-sync-interface.md) | Pluggable authoritative ticket providers (git default; GitHub/GitLab/Jira direct) | Shipped (HS2-ZVZP80/A90JRH/JAXS4Z/0RK4YC/VFXFFP; GitHub live CRUD validated; project-owned sources + machine-wide accounts HS2-SM9PM8) |
 
 **H · Test evidence**
 

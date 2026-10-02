@@ -517,8 +517,17 @@ hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
 hotsheet provider-close github-main 42 --reason completed
 hotsheet provider-disable github-main           # temporary: no reads/writes, tickets hidden
 hotsheet provider-enable github-main
-hotsheet provider-remove github-main [--json]  # permanent; unlinks checkouts, drops Hot Sheet-minted sign-in
+hotsheet provider-remove github-main [--json]  # permanent, every project; the account stays signed in
+hotsheet checkout remove-source web github-main [--json]  # this project only; deletes the connection if no other project uses it
+hotsheet account list [--json]            # machine-wide sign-ins, their sources, and the projects using each
+hotsheet account sign-out github-app-<id> # refused while a ticket source still uses it
 ```
+
+Ticket sources belong to projects and sign-ins are machine-wide accounts (HS2-SM9PM8, see
+[16](16-external-sync-interface.md#project-owned-sources-machine-wide-accounts-hs2-sm9pm8)).
+`checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
+Project Settings → Ticket sources and App Settings → Accounts; like the other provider
+commands they read the `-C` store's `providers.json`.
 
 `github-sign-in` works without a running server. It prints GitHub's verification URL and
 one-time code, waits for approval, and then prints a `github-app-*` credential reference;

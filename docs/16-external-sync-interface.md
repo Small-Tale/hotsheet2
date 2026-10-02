@@ -452,17 +452,27 @@ server. A GitHub App credential is unwrapped before a CLI provider read and refr
 in the keychain when near expiry. The server and CLI prepare connection registry
 updates through the same validated workflow.
 
-Removing a data source is permanent and user-initiated (HS2-724S9N). One shared,
-idempotent workflow (`hotsheet_ticketing::connection_removal`) backs
-`DELETE /provider-connections/{id}`, `hotsheet provider-remove <id>`, and the web edit
-dialog's **Remove data source…** action (confirmed inline). It unlinks the connection
-from every registered checkout (clearing a default that named it), drops its
-`providers.json` entry, and deletes its keychain credential only when Hot Sheet minted
-it during GitHub sign-in (`github-app-*`) and no other connection shares it;
-user-managed keys registered with `hotsheet key set` are kept. Ticket data stays in the
-provider — nothing is mirrored locally — so no other local state names the connection.
-Repeating a removal reports nothing left to remove and still cleans dangling checkout
-links left by older clients. The response reports what was removed or kept.
+Removing a data source is permanent and user-initiated (HS2-724S9N, HS2-SM9PM8). Two
+shared, idempotent workflows in `hotsheet_ticketing::connection_removal` back it:
+
+- **Remove from this project** — `detach_source`, behind
+  `DELETE /checkouts/{reference}/sources/{id}`, `hotsheet checkout remove-source`, and the
+  web Ticket sources row action / edit dialog's **Remove from this project…** (confirmed
+  inline). It unlinks the source from that checkout (clearing a default that named it).
+  When no other checkout links the connection afterwards, its `providers.json` record is
+  deleted too, because the source lived with the project. A source still shared with
+  another project (attached headlessly) is kept for it, and the report lists who still uses
+  it. A repeat with nothing left to do is an explicit not-found.
+- **Remove everywhere** — `remove_provider_connection`, behind
+  `DELETE /provider-connections/{id}` and `hotsheet provider-remove <id>`: it unlinks the
+  connection from every registered checkout and drops its `providers.json` entry.
+  Repeating it reports nothing left to remove and still cleans dangling checkout links
+  left by older clients.
+
+Neither deletes the credential: a sign-in is a machine-wide **account** that other projects
+may reuse, signed out separately (see below). Ticket data stays in the provider — nothing
+is mirrored locally — so no other local state names the connection. The response reports
+what was removed and which account was kept.
 
 Disabling a data source is temporary (HS2-SF6W34). A disabled connection keeps its
 `providers.json` record (with `"disabled": true`; the flag is omitted when enabled), its
@@ -477,28 +487,66 @@ dialog's **Disable / Enable** action; the settings list badges it **Disabled**. 
 connection edit preserves the flag.
 
 A checkout link (`TicketSource` in `checkouts.json`) copies its connection's locator.
-Editing a connection's repository or project with `PATCH /provider-connections/{id}`
-(App Settings → Connections, or a project's Ticket sources edit) rewrites that copy on
+Editing a connection's repository or project with `PATCH /provider-connections/{id}` or
+its checkout-scoped twin (a project's Ticket sources edit) rewrites that copy on
 every checkout that links the connection, in one locked registry write, so no linked
 project keeps the old value (HS2-RCBKA3). Git links are path-derived and never change
 through a connection edit. The headless `github-connect` refuses to retarget an existing
 connection to another repository, so the CLI cannot create a stale copy.
 
-Project versus machine scope (HS2-3SCH1K). The connection catalog (`providers.json`) is
-machine-wide, while each checkout links the sources it uses and keeps its own default source
-(`checkouts.json`). `GET /checkouts/{reference}/providers` lists only that checkout's linked
-sources, in link order, marked `default` by the checkout's own default source; the web
-client routes a project's `/providers` there, so the composer, capabilities, and the
-**Project Settings → Ticket sources** panel see only the project's sources. That panel
-offers the project's default-source choice, editing a connection's details (with "Use as
-this project's default" in place of the machine-wide flag), **Detach from this project**
-(`DELETE /checkouts/{id}/sources/{cid}`, which never deletes the connection), and attaching
-another connection already on the machine. **App Settings → Connections** manages the
-machine-wide catalog: its edit dialog says changes apply to every project and is the only
-place offering **Disable / Enable** and **Remove data source…**. Headless parity:
-`hotsheet checkout add-source|remove-source|set-default` act on one checkout;
-`providers`, `github-connect`, `provider-disable|provider-enable`, and `provider-remove` act
-on the catalog.
+### Project-owned sources, machine-wide accounts (HS2-SM9PM8)
+
+Ticket sources are never global. A provider connection is **owned by the checkouts that
+link it** in `checkouts.json`; links stay many-to-many, and each checkout keeps its own
+default source (HS2-3SCH1K). `providers.json` remains the non-secret record store for those
+connections, but it is not a catalog a project browses: no project is offered another
+project's sources.
+
+- `GET /checkouts/{reference}/providers` lists only that checkout's linked sources, in link
+  order, marked `default` by the checkout's own default source; the web client routes a
+  project's `/providers` there, so the composer, capabilities, and **Project Settings →
+  Ticket sources** see only the project's sources.
+- `GET /checkouts/{reference}/provider-connections` returns only the connections that
+  checkout links, each with `projects` (every checkout that owns it), so a source shared
+  with another project says so. `POST` to the same path creates a source **owned by that
+  project**: the connection record and the checkout link in one request (with
+  `make_default`); a failed link removes the new record again. `PATCH …/{id}` and
+  `PUT …/{id}/disabled` edit or disable it and answer 404 when the checkout does not link
+  it, so a project can never touch another project's source through its own routes. The
+  web bridge routes a project's `/provider-connections` calls here.
+- **Project Settings → Ticket sources** offers the default-source choice, editing a
+  source's details, **Disable / Enable**, and **Remove from this project**. It has no
+  "Other connections on this machine" list. Attaching an existing connection to a second
+  checkout is deliberately headless only: `hotsheet checkout add-source`.
+
+What _is_ machine-wide is the **account** — the sign-in a connection uses, its credential
+reference (`settings.credential.secret`) held in the OS keychain. `hotsheet_ticketing::accounts`
+derives accounts from the connection records, the checkout links, and `keys.json`; they are
+never stored, so there is nothing to migrate:
+
+- `GET /accounts` / `hotsheet account list [--json]` list each account (`id` = credential
+  reference, `provider`, `host`, Jira `identity`, `managed` for a Hot Sheet GitHub sign-in)
+  with its sources and the projects using each. A Hot Sheet GitHub sign-in (`github-app-*`)
+  that no source uses yet is listed too; other unused keys (AI-provider keys) are not
+  accounts.
+- `DELETE /accounts/{id}` / `hotsheet account sign-out <id>` delete the credential. Both
+  refuse (409 / non-zero exit) while any source still uses the account, naming the projects.
+- `GET /accounts/{id}/github-repositories` lists the repositories a signed-in GitHub account
+  can reach (refreshing its token server-side), so adding a source in another project
+  reuses the sign-in and picks that project's own repository. **App Settings → Accounts**
+  shows the same listing.
+
+**Existing installs.** Nothing is rewritten. Every pre-existing connection is owned by the
+checkouts already linking it, and every credential a connection references becomes an
+account. A connection left in `providers.json` with no linking checkout (a catalog-only
+entry from before HS2-SM9PM8) is kept and reported under its account as used by no
+project; remove it with `hotsheet provider-remove <id>` or keep it for a later
+`checkout add-source`.
+
+Headless parity: `hotsheet checkout add-source|remove-source|set-default` act on one
+project's sources; `github-connect --checkout` creates and links one; `account list|sign-out`
+manage accounts; `providers`, `provider-disable|provider-enable`, and `provider-remove`
+address a connection directly.
 
 ## 16.12 Cross-references
 

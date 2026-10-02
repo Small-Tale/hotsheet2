@@ -124,6 +124,7 @@ mod tests {
         );
     }
 }
+pub mod accounts;
 pub mod auto_context;
 pub mod checkouts;
 pub mod commands;

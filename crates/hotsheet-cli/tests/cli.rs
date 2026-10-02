@@ -1657,10 +1657,21 @@ fn checkout_register_list_and_resolve_are_store_independent() {
     let mut remove_source = Command::cargo_bin("hotsheet-cli").unwrap();
     remove_source
         .env("HOTSHEET_HOME", home.path())
+        .env_remove("HOTSHEET_STORE")
+        .current_dir(home.path())
         .args(["checkout", "remove-source", "web", "github-main"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("default_source").not());
+        .stdout(predicate::str::contains(
+            "Removed ticket source 'github-main'",
+        ));
+    let mut resolved = Command::cargo_bin("hotsheet-cli").unwrap();
+    resolved
+        .env("HOTSHEET_HOME", home.path())
+        .args(["checkout", "resolve", "web"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github-main").not());
 }
 
 #[cfg(unix)]
@@ -4813,7 +4824,7 @@ fn provider_remove_unlinks_checkouts_and_repeats_cleanly() {
     let report: serde_json::Value = serde_json::from_slice(&report).unwrap();
     assert_eq!(report["removed_connection"], true);
     assert_eq!(report["unlinked_checkouts"].as_array().unwrap().len(), 1);
-    // A user-registered key may serve other tools; only Hot Sheet-minted ones are deleted.
+    // Accounts are machine-wide: removing a source never signs out (HS2-SM9PM8).
     assert_eq!(report["kept_credential"], "cli-user-pat");
     let providers = std::fs::read_to_string(dir.path().join("providers.json")).unwrap();
     assert!(!providers.contains("github-main"), "{providers}");
@@ -4830,6 +4841,110 @@ fn provider_remove_unlinks_checkouts_and_repeats_cleanly() {
         .assert()
         .success()
         .stdout(predicate::str::contains("already removed"));
+}
+
+#[test]
+fn project_owned_sources_and_accounts_have_headless_parity() {
+    // HS2-SM9PM8: `checkout remove-source` and `account list|sign-out` run the same workflows
+    // as Project Settings → Ticket sources and App Settings → Accounts.
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let projects = [tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap()];
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path()).args(args);
+        cmd
+    };
+    run(&["init"]).assert().success();
+    std::fs::write(
+        dir.path().join("providers.json"),
+        r#"{"connections":[
+            {"id":"github-acme-shared","provider":"github","locator":"acme/shared","name":"Shared","settings":{"credential":{"secret":"cli-team-pat"}}},
+            {"id":"github-acme-old","provider":"github","locator":"acme/old","name":"Old","settings":{"credential":{"secret":"cli-team-pat"}}}
+        ]}"#,
+    )
+    .unwrap();
+    for (project, alias) in [(&projects[0], "procurement"), (&projects[1], "domotion")] {
+        run(&[
+            "checkout",
+            "register",
+            project.path().to_str().unwrap(),
+            "--alias",
+            alias,
+        ])
+        .assert()
+        .success();
+        // Attaching an existing connection to a second project stays a headless action.
+        run(&[
+            "checkout",
+            "add-source",
+            alias,
+            "github-acme-shared",
+            "github",
+            "acme/shared",
+        ])
+        .assert()
+        .success();
+    }
+    let list = run(&["account", "list", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let accounts: serde_json::Value = serde_json::from_slice(&list).unwrap();
+    assert_eq!(accounts.as_array().unwrap().len(), 1, "{accounts}");
+    assert_eq!(accounts[0]["id"], "cli-team-pat");
+    assert_eq!(accounts[0]["projects"].as_array().unwrap().len(), 2);
+    run(&["account", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("used by domotion, procurement"))
+        .stdout(predicate::str::contains(
+            "Old [github-acme-old] acme/old — used by no project",
+        ));
+    run(&["account", "sign-out", "cli-team-pat"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "still used by domotion, procurement",
+        ));
+
+    // Removing from one project keeps the shared connection; from the last one deletes it.
+    run(&[
+        "checkout",
+        "remove-source",
+        "procurement",
+        "github-acme-shared",
+    ])
+    .assert()
+    .success()
+    .stdout(predicate::str::contains("Still used by:"));
+    let report = run(&[
+        "checkout",
+        "remove-source",
+        "domotion",
+        "github-acme-shared",
+        "--json",
+    ])
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+    let report: serde_json::Value = serde_json::from_slice(&report).unwrap();
+    assert_eq!(report["removed_connection"], true, "{report}");
+    let providers = std::fs::read_to_string(dir.path().join("providers.json")).unwrap();
+    assert!(!providers.contains("github-acme-shared"), "{providers}");
+    assert!(providers.contains("github-acme-old"), "{providers}");
+    run(&[
+        "checkout",
+        "remove-source",
+        "domotion",
+        "github-acme-shared",
+    ])
+    .assert()
+    .failure();
 }
 
 #[test]

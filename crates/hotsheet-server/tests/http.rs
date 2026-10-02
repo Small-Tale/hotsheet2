@@ -12694,8 +12694,8 @@ async fn provider_connections_crud_keeps_only_references_and_one_default() {
     let report = body_json(removed).await;
     assert_eq!(report["removed_connection"], true);
     assert_eq!(report["unlinked_checkouts"].as_array().unwrap().len(), 1);
+    // The account outlives the connection (HS2-SM9PM8).
     assert_eq!(report["kept_credential"], "gitlab-work");
-    assert!(report["deleted_credential"].is_null());
     let linked = body_json(
         app.clone()
             .oneshot(authed("GET", "/checkouts/linked", None))
@@ -14522,7 +14522,8 @@ async fn checkout_providers_list_only_linked_sources_with_the_checkout_default()
             ("github".into(), "github-b".into(), true)
         ]
     );
-    // Detaching never deletes the machine-wide connection.
+    // Sources belong to projects (HS2-SM9PM8): github-a had no other project, so removing it
+    // from `first` deleted its connection; github-b, still used by `second`, stays.
     let catalog = body_json(
         app.clone()
             .oneshot(authed("GET", "/provider-connections", None))
@@ -14530,7 +14531,13 @@ async fn checkout_providers_list_only_linked_sources_with_the_checkout_default()
             .unwrap(),
     )
     .await;
-    assert_eq!(catalog.as_array().unwrap().len(), 2);
+    let remaining = catalog
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(remaining, ["github-b"]);
     assert_eq!(
         app.oneshot(authed("GET", "/checkouts/missing/providers", None))
             .await
@@ -14538,6 +14545,228 @@ async fn checkout_providers_list_only_linked_sources_with_the_checkout_default()
             .status(),
         StatusCode::NOT_FOUND
     );
+}
+
+/// HS2-SM9PM8: ticket sources belong to projects and sign-ins are machine-wide accounts. A
+/// project creates, lists, and edits only its own connections; removing a source from its last
+/// project deletes the connection but keeps the account; accounts list the projects using them.
+#[tokio::test]
+async fn project_owned_sources_and_machine_wide_accounts() {
+    let home = tempfile::tempdir().unwrap();
+    let (primary, st) = state();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st
+        .with_machine_home(home.path())
+        .with_checkout_registry(registry.path().join("checkouts.json")));
+    // An unused Hot Sheet GitHub sign-in (an abandoned add flow) is still an account.
+    std::fs::write(
+        home.path().join("keys.json"),
+        serde_json::json!({
+            "github-app-01unused": {"provider": "github-app-01unused", "env": "HOTSHEET_API_KEY_GITHUB_APP_01UNUSED"},
+            "anthropic": {"provider": "anthropic", "env": "HOTSHEET_API_KEY_ANTHROPIC"}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let projects = [tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap()];
+    for (root, alias) in [
+        (projects[0].path(), "procurement"),
+        (projects[1].path(), "domotion"),
+    ] {
+        let registration =
+            serde_json::json!({"root":root,"alias":alias,"stores":[primary.path()]}).to_string();
+        app.clone()
+            .oneshot(authed("POST", "/checkouts", Some(&registration)))
+            .await
+            .unwrap();
+    }
+    let call = |method: &'static str, path: String, body: Option<serde_json::Value>| {
+        let app = app.clone();
+        async move {
+            let body = body.map(|value| value.to_string());
+            let response = app
+                .oneshot(authed(method, &path, body.as_deref()))
+                .await
+                .unwrap();
+            let status = response.status();
+            let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&bytes)
+                    .unwrap_or(serde_json::Value::Null),
+            )
+        }
+    };
+    // Create in procurement: one request writes the connection and procurement's link.
+    let (status, created) = call(
+        "POST",
+        "/checkouts/procurement/provider-connections".into(),
+        Some(serde_json::json!({
+            "provider":"github","locator":"acme/procurement","name":"Procurement issues",
+            "settings":{"credential":{"secret":"github-app-01work"}},"make_default":true
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let id = created["id"].as_str().unwrap().to_owned();
+    assert_eq!(id, "github-acme-procurement");
+    assert_eq!(created["projects"][0]["alias"], "procurement");
+    let (_, procurement) = call("GET", "/checkouts/procurement".into(), None).await;
+    assert_eq!(procurement["default_source"], id.as_str());
+
+    // The other project never sees it — not even as something to attach.
+    let (_, own) = call(
+        "GET",
+        "/checkouts/procurement/provider-connections".into(),
+        None,
+    )
+    .await;
+    assert_eq!(own.as_array().unwrap().len(), 1);
+    let (_, other) = call(
+        "GET",
+        "/checkouts/domotion/provider-connections".into(),
+        None,
+    )
+    .await;
+    assert!(other.as_array().unwrap().is_empty(), "{other}");
+    // …and cannot edit or disable it through its own routes.
+    let edit = serde_json::json!({
+        "provider":"github","locator":"acme/hijacked","name":"x",
+        "settings":{"credential":{"secret":"github-app-01work"}}
+    });
+    let (status, _) = call(
+        "PATCH",
+        format!("/checkouts/domotion/provider-connections/{id}"),
+        Some(edit.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(
+        "PUT",
+        format!("/checkouts/domotion/provider-connections/{id}/disabled"),
+        Some(serde_json::json!({"disabled": true})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    // The owning project can.
+    let (status, disabled) = call(
+        "PUT",
+        format!("/checkouts/procurement/provider-connections/{id}/disabled"),
+        Some(serde_json::json!({"disabled": true})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(disabled["disabled"], true);
+    let (status, edited) = call(
+        "PATCH",
+        format!("/checkouts/procurement/provider-connections/{id}"),
+        Some(serde_json::json!({
+            "provider":"github","locator":"acme/procurement","name":"Purchasing",
+            "settings":{"credential":{"secret":"github-app-01work"}}
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(edited["name"], "Purchasing");
+    assert_eq!(edited["disabled"], true, "an edit keeps the disabled state");
+
+    // Domotion reuses the signed-in account for its own repository.
+    let (status, second) = call(
+        "POST",
+        "/checkouts/domotion/provider-connections".into(),
+        Some(serde_json::json!({
+            "provider":"github","locator":"acme/domotion",
+            "settings":{"credential":{"secret":"github-app-01work"}}
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{second}");
+    let second_id = second["id"].as_str().unwrap().to_owned();
+
+    let (_, accounts) = call("GET", "/accounts".into(), None).await;
+    let summary = accounts
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|account| {
+            (
+                account["id"].as_str().unwrap().to_owned(),
+                account["projects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|project| project["alias"].as_str().unwrap().to_owned())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        summary,
+        vec![
+            ("github-app-01unused".to_owned(), vec![]),
+            (
+                "github-app-01work".to_owned(),
+                vec!["domotion".to_owned(), "procurement".to_owned()]
+            ),
+        ],
+        "{accounts}"
+    );
+    assert_eq!(accounts[1]["host"], "github.com");
+    assert_eq!(accounts[1]["sources"].as_array().unwrap().len(), 2);
+
+    // Signing out is refused while a source uses the account; it names the projects.
+    let (status, refused) = call("DELETE", "/accounts/github-app-01work".into(), None).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(
+        refused["error"]
+            .as_str()
+            .unwrap()
+            .contains("domotion, procurement"),
+        "{refused}"
+    );
+
+    // Removing a source from its only project deletes the connection; the account stays.
+    let (status, detach) = call(
+        "DELETE",
+        format!("/checkouts/procurement/sources/{id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(detach["removed_connection"], true);
+    let (_, all) = call("GET", "/provider-connections".into(), None).await;
+    let ids = all
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(ids, [second_id]);
+    let (_, accounts) = call("GET", "/accounts".into(), None).await;
+    assert_eq!(accounts[1]["projects"][0]["alias"], "domotion");
+    // Repeating the removal is an explicit 404, not a silent success.
+    let (status, _) = call(
+        "DELETE",
+        format!("/checkouts/procurement/sources/{id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    // A create against an unknown project leaves no ownerless record behind.
+    let (status, _) = call(
+        "POST",
+        "/checkouts/missing/provider-connections".into(),
+        Some(serde_json::json!({
+            "provider":"github","locator":"acme/stray",
+            "settings":{"credential":{"secret":"github-app-01work"}}
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (_, all) = call("GET", "/provider-connections".into(), None).await;
+    assert_eq!(all.as_array().unwrap().len(), 1);
 }
 
 #[tokio::test]

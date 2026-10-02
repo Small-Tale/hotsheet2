@@ -432,6 +432,12 @@ enum Cmd {
         #[command(subcommand)]
         cmd: CheckoutCmd,
     },
+    /// Machine-wide provider sign-ins (GitHub, GitLab, Jira) and the projects using each.
+    /// Ticket sources themselves belong to projects; see `checkout` (HS2-SM9PM8).
+    Account {
+        #[command(subcommand)]
+        cmd: AccountCmd,
+    },
     /// Import an HS1 `hotsheet-export.json` into the store (creates it if needed).
     Import {
         file: PathBuf,
@@ -896,10 +902,15 @@ enum CheckoutCmd {
         #[arg(long)]
         default: bool,
     },
-    /// Remove a ticket-source association; removing the default clears it.
+    /// Remove a ticket source from this project; removing the default clears it. Sources
+    /// belong to projects: a connection no other checkout links is deleted from the -C
+    /// store's providers.json too (its account stays signed in).
     RemoveSource {
         reference: String,
         connection_id: String,
+        /// Print the removal report as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Rename a non-Git source while retaining its old id as a durable alias.
     RenameSource {
@@ -915,6 +926,18 @@ enum CheckoutCmd {
         #[arg(long, conflicts_with = "connection_id")]
         clear: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum AccountCmd {
+    /// List provider sign-ins with the ticket sources and projects using each.
+    List {
+        /// Emit the accounts as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Sign out: delete the account's credential. Refused while a ticket source uses it.
+    SignOut { account: String },
 }
 
 #[derive(Subcommand)]
@@ -1360,7 +1383,11 @@ fn main() -> Result<()> {
         Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, &cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, &cwd, cmd),
         Cmd::Key { cmd } => cmd_key(cmd),
-        Cmd::Checkout { cmd } => cmd_checkout(cmd),
+        Cmd::Checkout { cmd } => cmd_checkout(
+            cmd,
+            &hotsheet_cli::resolve_store_path(cli.path.clone(), &cwd),
+        ),
+        Cmd::Account { cmd } => cmd_account(cmd, &cli.path),
         Cmd::Import {
             file,
             prefix,
@@ -2472,7 +2499,6 @@ fn cmd_provider_remove(path: &Path, connection: &str, json: bool) -> Result<()> 
     let report = hotsheet_ticketing::connection_removal::remove_provider_connection(
         &ProviderConfigRegistry::new(store.root().join("providers.json")),
         &hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json")),
-        &KeyRegistry::new(&home, OsKeychain),
         connection,
     )?;
     if json {
@@ -2487,11 +2513,10 @@ fn cmd_provider_remove(path: &Path, connection: &str, json: bool) -> Result<()> 
     for checkout in &report.unlinked_checkouts {
         println!("Unlinked it from checkout {checkout}.");
     }
-    if let Some(credential) = &report.deleted_credential {
-        println!("Deleted its Hot Sheet credential '{credential}'.");
-    }
     if let Some(credential) = &report.kept_credential {
-        println!("Kept credential '{credential}' (user-managed or still in use).");
+        println!(
+            "Account '{credential}' stays signed in; sign out with `hotsheet account sign-out {credential}`."
+        );
     }
     Ok(())
 }
@@ -5023,6 +5048,69 @@ fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result<()> {
     Ok(())
 }
 
+/// `hotsheet account …` (HS2-SM9PM8): the same account listing and sign-out as App
+/// Settings → Accounts, over the -C store's providers.json and the machine checkout registry.
+fn cmd_account(cmd: AccountCmd, path: &Path) -> Result<()> {
+    use hotsheet_ticketing::accounts;
+    let home = hotsheet_plugins::hotsheet_home();
+    let keys = KeyRegistry::new(&home, OsKeychain);
+    let connections =
+        ProviderConfigRegistry::new(FsStore::open(path)?.root().join("providers.json")).load()?;
+    let checkouts =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json")).list()?;
+    match cmd {
+        AccountCmd::List { json } => {
+            let names = keys
+                .list()?
+                .into_iter()
+                .map(|key| key.provider)
+                .collect::<Vec<_>>();
+            let list = accounts::list_accounts(&connections, &checkouts, &names);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&list)?);
+                return Ok(());
+            }
+            if list.is_empty() {
+                println!("(no accounts)");
+            }
+            for account in list {
+                let host = if account.host.is_empty() {
+                    String::new()
+                } else {
+                    format!(" · {}", account.host)
+                };
+                println!("{} ({}{host})", account.id, account.provider);
+                if account.sources.is_empty() {
+                    println!("  not used by any ticket source");
+                }
+                for source in account.sources {
+                    let projects = source
+                        .projects
+                        .iter()
+                        .map(|project| project.alias.as_str())
+                        .collect::<Vec<_>>();
+                    println!(
+                        "  {} [{}] {} — {}",
+                        source.name,
+                        source.connection_id,
+                        source.locator,
+                        if projects.is_empty() {
+                            "used by no project".to_owned()
+                        } else {
+                            format!("used by {}", projects.join(", "))
+                        }
+                    );
+                }
+            }
+        }
+        AccountCmd::SignOut { account } => {
+            accounts::sign_out(&connections, &checkouts, &keys, &account)?;
+            println!("Signed out of {account}.");
+        }
+    }
+    Ok(())
+}
+
 fn cmd_key(cmd: KeyCmd) -> Result<()> {
     use std::io::IsTerminal;
 
@@ -5079,7 +5167,7 @@ fn read_key_secret(
     Ok(value)
 }
 
-fn cmd_checkout(cmd: CheckoutCmd) -> Result<()> {
+fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
     use hotsheet_ticketing::checkouts::CheckoutRegistry;
     let registry = CheckoutRegistry::new(hotsheet_plugins::hotsheet_home().join("checkouts.json"));
     match cmd {
@@ -5149,10 +5237,36 @@ fn cmd_checkout(cmd: CheckoutCmd) -> Result<()> {
         CheckoutCmd::RemoveSource {
             reference,
             connection_id,
-        } => println!(
-            "{}",
-            serde_json::to_string_pretty(&registry.remove_source(&reference, &connection_id)?)?
-        ),
+            json,
+        } => {
+            // The same workflow as Project Settings → Ticket sources → Remove (HS2-SM9PM8).
+            let store_root = FsStore::open(store)
+                .map(|opened| opened.root().to_path_buf())
+                .unwrap_or_else(|_| store.to_path_buf());
+            let report = hotsheet_ticketing::connection_removal::detach_source(
+                &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                &registry,
+                &reference,
+                &connection_id,
+            )?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                if report.unlinked {
+                    println!(
+                        "Removed ticket source '{connection_id}' from checkout {}.",
+                        report.checkout_id
+                    );
+                }
+                if report.removed_connection {
+                    println!(
+                        "No other project uses '{connection_id}'; its connection was deleted (the account stays signed in)."
+                    );
+                } else if !report.still_used_by.is_empty() {
+                    println!("Still used by: {}.", report.still_used_by.join(", "));
+                }
+            }
+        }
         CheckoutCmd::RenameSource {
             reference,
             connection_id,
