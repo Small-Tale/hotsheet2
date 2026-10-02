@@ -3752,19 +3752,21 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
         ),
       ),
   );
-  const surface = page.locator('[data-component="ticket-attachments"]'),
+  // The demo also renders the append-only variant (HS2-HSA64D); drive the editable one.
+  const editableDemo = page.getByRole('region', { name: 'TicketAttachments demo', exact: true }),
+    surface = editableDemo.locator('[data-component="ticket-attachments"]').first(),
     dragged = surface.locator('[data-component="ticket-attachment-item"][data-drag-attachment-id="wide"]');
   await dragged.evaluate((node) =>
     node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: new DataTransfer() })),
   );
-  const newGroup = page.locator('[data-attachment-new-group-drop-target]');
+  const newGroup = editableDemo.locator('[data-attachment-new-group-drop-target]');
   await expect(newGroup).toBeVisible();
   await expect(page.locator('input[type="checkbox"]')).toHaveCount(0);
   await surface.screenshot({ path: '/private/tmp/hs2-c0r4mx-drag-new-group.png' });
   await newGroup.evaluate((node) =>
     node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() })),
   );
-  await expect(page.locator('[data-attachment-group-drop-target]')).toHaveCount(5);
+  await expect(editableDemo.locator('[data-attachment-group-drop-target]')).toHaveCount(5);
   await expect(page.getByRole('button', { name: 'Edit batch label New group' })).toBeVisible();
   await surface.screenshot({ path: '/private/tmp/hs2-c0r4mx-regrouped-final.png' });
   const item = page.locator('[data-attachment-id="demo-video"]'),
@@ -3790,9 +3792,7 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
   expect(await gridVideo.evaluate((node) => (node as HTMLVideoElement).autoplay)).toBe(false);
   await menu.getByRole('menuitem', { name: 'Copy reference' }).click();
   await expect(menu).toHaveCount(0);
-  await page
-    .locator('[data-component="ticket-attachments"]')
-    .screenshot({ path: '/private/tmp/hs2-j978e9-annotation-grid-marker.png' });
+  await surface.screenshot({ path: '/private/tmp/hs2-j978e9-annotation-grid-marker.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   // Kerf 5.0.0-beta.56 collapses the catalog sidebar into a transient overlay on a small screen.
   await expect(page.locator('[data-component="catalog"]')).toHaveAttribute('data-sidebar-collapsed', 'true');

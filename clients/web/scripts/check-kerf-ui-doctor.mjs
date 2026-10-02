@@ -67,9 +67,10 @@ const FLOATING_TOOLBAR_GAP_VERSIONS = new Set([
   '5.0.0-beta.62',
   '5.0.0-beta.63',
   '5.0.0-beta.64',
+  '5.0.0-beta.65',
 ]);
 
-/** Kerf beta.58–64 document ToolbarControlGroup as FloatingToolbar children, but their
+/** Kerf beta.58–65 document ToolbarControlGroup as FloatingToolbar children, but their
  * composition catalog lists only Toolbar as a parent. Apply that exact missing parent
  * edge locally until the upstream catalog includes it; every other L201 remains gated. */
 export function adaptFloatingToolbarComposition(report, workspace) {

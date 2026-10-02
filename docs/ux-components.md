@@ -2092,6 +2092,11 @@ also ships the APIs several tickets wait on: the guarded post-commit caret (`KF-
 the PopupMenu submenu race fix (`KF-A388BJ`, `HS2-ZKMCVW`), phone submenus placed outside their
 parent menu (`KF-5PZ768`, `HS2-282GTZ`), ListItem tone inheritance (`KF-XD6YH1`, `HS2-C3SPM6`), and
 TokenSearchField's own deferred blur collapse through a pointer click (`KF-64W0RN`).
+HS2-DQBAC4 upgraded to 5.0.0-beta.65, which adds `TokenSearchField presentation="form-field"`
+(`KF-9QHWR1`, used by the saved-view dialog in HS2-E40KC0). The doctor baseline is unchanged and
+the FloatingToolbar parent gap persists, so beta.65 joins the adapter list. `KF-WW33YJ` (Workbench
+panel navigation stacks, HS2-FY06N4) and `KF-SCS4RH` (Toolbar zone focus rings) are committed
+upstream but not in beta.65.
 HS2-G5K1V0 reduced `KUI-L019` (application rules whose subject is a Kerf component or
 Web Awesome element) from 102 to 89 with fixes that need no new Kerf API: redundant per-menu
 `wa-dropdown-item` cursor rules were removed because `cursor-semantics.css` already covers
