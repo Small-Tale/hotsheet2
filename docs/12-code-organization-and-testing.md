@@ -125,6 +125,14 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command
   runs the repository-wide format check first, so CI rejects drift in all supported
   source and structured-content areas (HS2-F0BC6Q).
+- The web lint command ends with `npm run css:ownership`, which runs
+  `clients/web/scripts/check-css-ownership.mjs` (HS2-EWYDH7). It enforces component CSS
+  ownership between the app's own components. A stylesheet may style only the class blocks
+  its component renders, plus the native and raw Web Awesome elements it authors, and owners
+  are derived from the TSX sources. The Kerf doctor checks ownership only across packages
+  (`KF-5X1TWD`). Known residue is a ticketed, count-exact allowlist
+  (`clients/web/css-ownership-allowlist.json`) that can only shrink: a new finding or a stale
+  entry fails lint. See [ux-components.md](ux-components.md) for the rule set.
   Both commands require the tracked web, migrator, compatibility-spike, docs, and
   workflow paths. The setup-generated root `opencode.json` is optional in a clean
   checkout; when present, it receives the same formatting and syntax checks. Missing

@@ -1,0 +1,702 @@
+{
+  "$comment": "Known cross-component CSS residue for scripts/check-css-ownership.mjs (HS2-EWYDH7). Every entry names its tracking ticket and covers exactly `count` (default 1) findings of that selector in that file. Never add entries for new code; fix the selector instead. Delete or lower an entry when its ticket fixes it; a stale entry fails npm run lint.",
+  "entries": [
+    {
+      "file": "src/components/active-claim.css",
+      "selector": ".active-claim-spinner > svg",
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: <svg> below .active-claim-spinner is not authored by src/components/active-claim.tsx; it can only be the root of <LoadingSpinner>"
+    },
+    {
+      "file": "src/components/ai-conversation.css",
+      "selector": ".ai-conversation__embedded-header svg",
+      "ticket": "HS2-M2W2DP",
+      "reason": "foreign-element: the descendant selector below .ai-conversation__embedded-header also reaches inside <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ai-conversation.css",
+      "selector": ".ai-conversation__foreground .permission-request-popup",
+      "ticket": "HS2-M2W2DP",
+      "reason": "foreign-class: .permission-request-popup belongs to src/components/permission-request-card.tsx"
+    },
+    {
+      "file": "src/components/ai-conversation.css",
+      "selector": ".ai-conversation__activity svg",
+      "ticket": "HS2-M2W2DP",
+      "reason": "foreign-element: the descendant selector below .ai-conversation__activity also reaches inside <AIContentFeedback>, <AIContentLabel>, <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ai-conversation.css",
+      "selector": ".ai-conversation__activity ol",
+      "ticket": "HS2-M2W2DP",
+      "reason": "foreign-element: the descendant selector below .ai-conversation__activity also reaches inside <AIContentFeedback>, <AIContentLabel>, <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ai-conversation.css",
+      "selector": ".ai-conversation__activity li",
+      "ticket": "HS2-M2W2DP",
+      "reason": "foreign-element: the descendant selector below .ai-conversation__activity also reaches inside <AIContentFeedback>, <AIContentLabel>, <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/attachment-gallery.css",
+      "selector": ".attachment-gallery button:disabled",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .attachment-gallery also reaches inside <FloatingToolbar>, <Toolbar>, <ToolbarControlGroup>, <ToolbarText>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/attachment-gallery.css",
+      "selector": ".attachment-gallery svg",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .attachment-gallery also reaches inside <FloatingToolbar>, <Toolbar>, <ToolbarControlGroup>, <ToolbarText>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/attachment-gallery.css",
+      "selector": ".attachment-gallery video::-webkit-media-controls",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .attachment-gallery also reaches inside <FloatingToolbar>, <Toolbar>, <ToolbarControlGroup>, <ToolbarText>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/bulk-ticket-dialog.css",
+      "selector": ".bulk-ticket-dialog__choices button",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .bulk-ticket-dialog__choices also reaches inside <Row>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/bulk-ticket-dialog.css",
+      "selector": ".bulk-ticket-dialog__choices button:hover",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .bulk-ticket-dialog__choices also reaches inside <Row>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/command-navigation.css",
+      "selector": ".command-navigation__command i",
+      "count": 2,
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: the descendant selector below .command-navigation__command also reaches inside <ListItem>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/command-settings-editor.css",
+      "selector": ".command-settings-editor__grid label",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .command-settings-editor__grid also reaches inside <LucideIconPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/command-settings-editor.css",
+      "selector": ".command-settings-editor__grid input",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .command-settings-editor__grid also reaches inside <LucideIconPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/command-settings-editor.css",
+      "selector": ".command-settings-editor__grid select",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .command-settings-editor__grid also reaches inside <LucideIconPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/command-settings-editor.css",
+      "selector": ".command-settings-editor__grid textarea",
+      "count": 2,
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .command-settings-editor__grid also reaches inside <LucideIconPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/command-settings-editor.css",
+      "selector": ".command-settings-editor__grid small",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .command-settings-editor__grid also reaches inside <LucideIconPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/command-settings-editor.css",
+      "selector": ".command-settings-editor__icons legend",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .command-settings-editor__icons also reaches inside <LucideIconPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/confidence-calibration.css",
+      "selector": ".confidence-calibration__recent h3",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .confidence-calibration__recent also reaches inside <ConfidenceBadge>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/confidence-calibration.css",
+      "selector": ".confidence-calibration__recent ul",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .confidence-calibration__recent also reaches inside <ConfidenceBadge>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/confidence-calibration.css",
+      "selector": ".confidence-calibration__recent li",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .confidence-calibration__recent also reaches inside <ConfidenceBadge>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/connection-details-dialog.css",
+      "selector": ".connection-details-dialog__metadata code",
+      "ticket": "HS2-4V4CV2",
+      "reason": "hook-descendant: .connection-details-dialog__metadata is a hook class on <ValueTable>'s root; <code> sits inside that component"
+    },
+    {
+      "file": "src/components/connection-details-dialog.css",
+      "selector": ".connection-details-dialog h3",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .connection-details-dialog also reaches inside <Toolbar>, <ToolbarControlGroup>, <ToolbarText>, <ValueTable>, <ValueTableRow>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/connection-details-dialog.css",
+      "selector": ".connection-details-dialog .connection-details-dialog__metadata dd",
+      "ticket": "HS2-4V4CV2",
+      "reason": "hook-descendant: .connection-details-dialog__metadata is a hook class on <ValueTable>'s root; <dd> sits inside that component"
+    },
+    {
+      "file": "src/components/corrupt-ticket-row.css",
+      "selector": ".corrupt-ticket-row.ticket-list-row--selected",
+      "count": 2,
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-class: .ticket-list-row belongs to src/components/ticket-row.tsx"
+    },
+    {
+      "file": "src/components/hs1-migration.css",
+      "selector": ".hs1-migration-dialog footer",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .hs1-migration-dialog also reaches inside <ValueTable>, <ValueTableRow>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/markdown-editor.css",
+      "selector": ".markdown-editor--embedded .markdown-editor__surface textarea",
+      "count": 2,
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .markdown-editor__surface also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/markdown-editor.css",
+      "selector": ".markdown-editor--flush .markdown-editor__surface textarea",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .markdown-editor__surface also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/markdown-editor.css",
+      "selector": ".markdown-editor__surface textarea",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .markdown-editor__surface also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/not-working-dialog.css",
+      "selector": ".not-working-dialog footer",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .not-working-dialog also reaches inside <PendingAttachmentPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/not-working-dialog.css",
+      "selector": ".not-working-dialog footer button",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .not-working-dialog also reaches inside <PendingAttachmentPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/not-working-dialog.css",
+      "selector": ".not-working-dialog footer button:disabled",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .not-working-dialog also reaches inside <PendingAttachmentPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/not-working-dialog.css",
+      "selector": ".not-working-dialog footer button:not(.not-working-dialog__submit)",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .not-working-dialog also reaches inside <PendingAttachmentPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/not-working-dialog.css",
+      "selector": ".not-working-dialog footer button:not(.not-working-dialog__submit):hover",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .not-working-dialog also reaches inside <PendingAttachmentPicker>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/note-card.css",
+      "selector": ".note-card footer",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .note-card also reaches inside <AIContentLabel>, <ConfidenceBadge>, <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/note-card.css",
+      "selector": ".note-card__header time",
+      "count": 2,
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .note-card__header also reaches inside <ConfidenceBadge>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/project-close-dialog.css",
+      "selector": ".project-close-dialog__resources nav",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .project-close-dialog__resources also reaches inside <ListHeader>, <ListItem>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/project-close-dialog.css",
+      "selector": ".project-close-dialog__terminal .terminal-tile__viewport-frame",
+      "count": 2,
+      "ticket": "HS2-148B5C",
+      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/project-close-dialog.css",
+      "selector": ".project-close-dialog__terminal .terminal-viewport",
+      "ticket": "HS2-148B5C",
+      "reason": "foreign-class: .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/project-close-dialog.css",
+      "selector": ".project-close-dialog__terminal .terminal-viewport--scaled-preview",
+      "ticket": "HS2-148B5C",
+      "reason": "foreign-class: .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/project-close-dialog.css",
+      "selector": ".project-close-dialog__terminal:has(.terminal-viewport[data-connection='connected'], .terminal-viewport[data-connection='reconnecting']) .project-close-dialog__preview-fallback",
+      "ticket": "HS2-148B5C",
+      "reason": "foreign-class: .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/project-statistics.css",
+      "selector": ".project-statistics h1",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .project-statistics also reaches inside <ConfidenceCalibration>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/project-tab.css",
+      "selector": ".project-tab__busy-spinner > svg",
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: <svg> below .project-tab__busy-spinner is not authored by src/components/project-tab.tsx; it can only be the root of <LoadingSpinner>"
+    },
+    {
+      "file": "src/components/provider-setup-form.css",
+      "selector": ".provider-setup-form small",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .provider-setup-form also reaches inside <Grid>, <List>, <ListItem>, <ProviderIcon>, <SunkenPanel>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/provider-setup-form.css",
+      "selector": ".provider-setup-form__github-auth p",
+      "ticket": "HS2-4V4CV2",
+      "reason": "hook-descendant: .provider-setup-form__github-auth is a hook class on <SunkenPanel>'s root; <p> sits inside that component"
+    },
+    {
+      "file": "src/components/provider-setup-form.css",
+      "selector": ".provider-setup-form label",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .provider-setup-form also reaches inside <Grid>, <List>, <ListItem>, <ProviderIcon>, <SunkenPanel>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/provider-setup-form.css",
+      "selector": ".provider-setup-form label input:not([type='checkbox'])",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .provider-setup-form also reaches inside <Grid>, <List>, <ListItem>, <ProviderIcon>, <SunkenPanel>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/provider-setup-form.css",
+      "selector": ".provider-setup-form label select",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .provider-setup-form also reaches inside <Grid>, <List>, <ListItem>, <ProviderIcon>, <SunkenPanel>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/provider-setup-form.css",
+      "selector": ".provider-setup-form label small",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .provider-setup-form also reaches inside <Grid>, <List>, <ListItem>, <ProviderIcon>, <SunkenPanel>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/quick-ticket-composer.css",
+      "selector": ".quick-ticket-composer wa-input::part(base)",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .quick-ticket-composer also reaches inside <Select>, <TicketCategorySelect>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/quick-ticket-composer.css",
+      "selector": ".quick-ticket-composer__footer wa-button svg",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .quick-ticket-composer__footer also reaches inside <Select>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/repository-status-popover.css",
+      "selector": ".repository-status-popover__values dd svg",
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: the descendant selector below .repository-status-popover__values also reaches inside <ValueTable>, <ValueTableRow>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/repository-status-popover.css",
+      "selector": ".repository-status-popover nav",
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: the descendant selector below .repository-status-popover also reaches inside <ListHeader>, <ListItem>, <RepositorySetup>, <TicketCodeReview>, <Toolbar>, <ToolbarControlGroup>, <ToolbarText>, <ValueTable>, <ValueTableRow>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/repository-status-popover.css",
+      "selector": ".repository-status-popover__navigation nav",
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: the descendant selector below .repository-status-popover__navigation also reaches inside <ListHeader>, <ListItem>, <ValueTable>, <ValueTableRow>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/repository-summary.css",
+      "selector": ".repository-summary svg",
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: the descendant selector below .repository-summary also reaches inside <ListItem>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/settings-workspace.css",
+      "selector": ".project-settings h2",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .project-settings also reaches inside <AccountsSettings>, <AiToolSettings>, <CommandSettingsEditor>, <KeyboardSettings>, <Select>, <TicketSourcesSettings>, <TrashSettings>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/settings-workspace.css",
+      "selector": ".project-settings__permission-grid p",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .project-settings__permission-grid also reaches inside <Select>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/terminal-dashboard.css",
+      "selector": ".terminal-dashboard__zoom button:disabled",
+      "ticket": "HS2-YNW0B3",
+      "reason": "foreign-element: the descendant selector below .terminal-dashboard__zoom also reaches inside <FloatingToolbar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/terminal-drawer.css",
+      "selector": ".terminal-drawer[data-focus-mode='true'] .terminal-session .terminal-viewport",
+      "ticket": "HS2-YNW0B3",
+      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx; .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/terminal-drawer.css",
+      "selector": ".terminal-drawer__rail .terminal-tab i",
+      "ticket": "HS2-7ZGYJY",
+      "reason": "hook-descendant: .terminal-tab is a hook class on <AppTab>'s root; <i> sits inside that component"
+    },
+    {
+      "file": "src/components/terminal-drawer.css",
+      "selector": ".terminal-drawer__rail svg",
+      "ticket": "HS2-7ZGYJY",
+      "reason": "foreign-element: the descendant selector below .terminal-drawer__rail also reaches inside <PopupMenu>, <TabBar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/terminal-drawer.css",
+      "selector": ".terminal-session",
+      "ticket": "HS2-YNW0B3",
+      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/terminal-drawer.css",
+      "selector": ".terminal-session[hidden]",
+      "ticket": "HS2-YNW0B3",
+      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/terminal-drawer.css",
+      "selector": ".terminal-session .terminal-viewport",
+      "ticket": "HS2-YNW0B3",
+      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx; .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/terminal-drawer.css",
+      "selector": ".terminal-session[data-mobile='true'] .terminal-viewport",
+      "ticket": "HS2-YNW0B3",
+      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx; .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/terminal-drawer.css",
+      "selector": ".terminal-session .xterm",
+      "ticket": "HS2-YNW0B3",
+      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/components/terminal-visibility-dialog.css",
+      "selector": ".terminal-visibility-dialog__tabs svg",
+      "ticket": "HS2-YNW0B3",
+      "reason": "foreign-element: the descendant selector below .terminal-visibility-dialog__tabs also reaches inside <AppTab>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-close-dialog.css",
+      "selector": ".ticket-close-dialog__duplicate wa-input svg",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .ticket-close-dialog__duplicate also reaches inside <ListItem>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-code-review.css",
+      "selector": ".ticket-code-review__compare-banner > div:first-child svg",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .ticket-code-review__compare-banner also reaches inside <Toolbar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-code-review.css",
+      "selector": ".ticket-code-review__commits button:disabled",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .ticket-code-review__commits also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-code-review.css",
+      "selector": ".ticket-code-review__commits strong",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .ticket-code-review__commits also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-code-review.css",
+      "selector": ".ticket-code-review__commits li[data-compared]",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .ticket-code-review__commits also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-code-review.css",
+      "selector": ".ticket-code-review__commits code",
+      "ticket": "HS2-PK1C1X",
+      "reason": "foreign-element: the descendant selector below .ticket-code-review__commits also reaches inside <MarkdownPreview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body textarea[name='blocked-reason']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body textarea[name='markdown-source']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body textarea[name='note-body']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body[data-presentation='sidebar'] textarea[name='markdown-source']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body[data-presentation='reader'] textarea[name='markdown-source']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body[data-presentation='sidebar'] textarea[name='blocked-reason']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body[data-presentation='reader'] textarea[name='blocked-reason']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body[data-presentation='sidebar'] textarea[name='note-body']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body[data-presentation='reader'] textarea[name='note-body']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__body textarea:is([name='markdown-source'], [name='blocked-reason'], [name='note-body'])",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__body also reaches inside <ListHeader>, <ListInsetControl>, <ListItem>, <Skeleton>, <TicketCategorySelect>, <TicketInspectorPanel>, <TicketPrioritySelect>, <TicketStatusMenu>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__header h1",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__header also reaches inside <AppTab>, <Skeleton>, <TabBar>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__header[data-presentation='reader'] h1",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__header also reaches inside <AppTab>, <Skeleton>, <TabBar>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-inspector.css",
+      "selector": ".ticket-inspector__header h1[data-editable='true']",
+      "ticket": "HS2-DYAR0S",
+      "reason": "foreign-element: the descendant selector below .ticket-inspector__header also reaches inside <AppTab>, <Skeleton>, <TabBar>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-sources-settings.css",
+      "selector": ".ticket-provider-settings section > h2",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .ticket-provider-settings also reaches inside <List>, <ListActionRow>, <Select>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-sources-settings.css",
+      "selector": ".ticket-provider-settings section > p",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: the descendant selector below .ticket-provider-settings also reaches inside <List>, <ListActionRow>, <Select>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/ticket-sources-settings.css",
+      "selector": ".ticket-provider-settings__account-header > svg",
+      "ticket": "HS2-4V4CV2",
+      "reason": "foreign-element: <svg> below .ticket-provider-settings__account-header is not authored by src/components/ticket-sources-settings.tsx; it can only be the root of <ProviderIcon>"
+    },
+    {
+      "file": "src/components/ticket-status-menu.css",
+      "selector": ".ticket-status-menu > wa-select::part(combobox)",
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: <wa-select> below .ticket-status-menu is not authored by src/components/ticket-status-menu.tsx; it can only be the root of <Select>"
+    },
+    {
+      "file": "src/components/view-navigation.css",
+      "selector": ".view-navigation ul",
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: the descendant selector below .view-navigation also reaches inside <ListHeader>, <ListItem>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/view-navigation.css",
+      "selector": ".view-navigation li",
+      "ticket": "HS2-QM0C3T",
+      "reason": "foreign-element: the descendant selector below .view-navigation also reaches inside <ListHeader>, <ListItem>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/components/workspace-header.css",
+      "selector": ".workspace-header__utility-group > button:disabled",
+      "ticket": "HS2-QM0C3T",
+      "reason": "hook-descendant: .workspace-header__utility-group is a hook class on <ToolbarControlGroup>'s root; <button> sits inside that component"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".collection-demo__empty-states article",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .collection-demo__empty-states also reaches inside <TicketList>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".collection-demo__empty-board h3",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .collection-demo__empty-board also reaches inside <TicketBoard>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".collection-demo__empty-states h3",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .collection-demo__empty-states also reaches inside <TicketList>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".collection-demo__paged-board h3",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .collection-demo__paged-board also reaches inside <TicketBoard>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".workspace-settings-preview h2",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .workspace-settings-preview also reaches inside <Select>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".workspace-settings-preview p",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .workspace-settings-preview also reaches inside <Select>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".toolbar-text-demo h2",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .toolbar-text-demo also reaches inside <ToolbarText>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".ticket-search-field-demo h2",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .ticket-search-field-demo also reaches inside <TicketSearchField>, <TicketSearchFormField>, <TicketSearchSurfaces>, <Toolbar>, <ToolbarText>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".toolbar-control-group-demo h2",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .toolbar-control-group-demo also reaches inside <PopupMenu>, <SegmentedControl>, <Toolbar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".code-review-demo article",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .code-review-demo also reaches inside <TicketCodeReview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".code-review-demo h3",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .code-review-demo also reaches inside <TicketCodeReview>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".list-item-demo h2",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .list-item-demo also reaches inside <ListHeader>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".list-item-demo small",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .list-item-demo also reaches inside <ListHeader>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".terminal-drawer-provider-demo h2",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .terminal-drawer-provider-demo also reaches inside <TerminalDrawer>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".fixed-aspect-terminal-card-demo.terminal-dashboard",
+      "count": 2,
+      "ticket": "HS2-0X36TX",
+      "reason": "foreign-class: .terminal-dashboard belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".fixed-aspect-terminal-card-demo h2",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .fixed-aspect-terminal-card-demo also reaches inside <FixedAspectTerminalCard>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".fixed-aspect-terminal-card-demo .terminal-tile",
+      "ticket": "HS2-0X36TX",
+      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".fixed-aspect-terminal-card-demo .terminal-tile__preview",
+      "ticket": "HS2-0X36TX",
+      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".fixed-aspect-terminal-card-demo .terminal-tile__preview > pre",
+      "ticket": "HS2-0X36TX",
+      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".fixed-aspect-terminal-card-demo .terminal-tile__viewport-frame",
+      "ticket": "HS2-0X36TX",
+      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".floating-toolbar-demo p",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .floating-toolbar-demo also reaches inside <FloatingToolbar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
+    },
+    {
+      "file": "src/ux-demo/style.css",
+      "selector": ".terminal-key-bar-demo h2",
+      "ticket": "HS2-TV78E1",
+      "reason": "foreign-element: the descendant selector below .terminal-key-bar-demo also reaches inside <TerminalKeyBar>; use a child combinator, an own class, or the child's props"
+    }
+  ]
+}

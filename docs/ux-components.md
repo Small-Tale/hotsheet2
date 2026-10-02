@@ -2174,6 +2174,64 @@ the two entry modules, `KF-KWMJMS` and `KF-XKMC7W`). The doctor report keeps cou
 releases carried an exact per-id error/review budget that only ever decreased; HS2-9ME409 and
 HS2-TF76Z2 drove it to zero.
 
+#### Component CSS ownership guard (HS2-EWYDH7)
+
+The doctor's ownership rules (`KUI-L019`–`KUI-L022`) treat a component as foreign only when it
+comes from another package. Its analyzer decides `isForeign` by comparing `entry.package`, so
+nothing in the Hot Sheet catalog is ever foreign to a Hot Sheet stylesheet, and narrowing
+`publicClasses` cannot change that. `KF-5X1TWD` asks Kerf for per-component ownership.
+
+Until it ships, `npm run css:ownership` runs as the last step of `npm run lint`. It is
+`clients/web/scripts/check-css-ownership.mjs`, unit-tested in `check-css-ownership.test.mjs`, and
+enforces this rule: **a component stylesheet styles only the class blocks its own component
+renders, plus the native HTML and raw Web Awesome elements that component authors itself.**
+
+Ownership comes from the TSX sources, not from file names:
+
+- A stylesheet's owners are the modules that import it, directly or through CSS `@import`.
+- Three shell stylesheets also own every style-less module in their scope: `src/style.css` owns
+  `main.tsx` and `src/app/`, `src/ux-demo/style.css` owns the demo modules, and
+  `dev-review.css` owns `src/dev-review/`.
+- A class block's owners are the modules whose literals render it, including raw HTML
+  `class="…"` attributes. When several modules render the same block, ownership goes to the
+  stylesheet named after the block, and otherwise to the stylesheet that uses the block as a
+  selector root.
+
+The check reports four kinds of finding:
+
+| Kind              | Example                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `kerf`            | `.kui-*` classes or `[data-component]` anywhere in a selector.                                                                                                                                                                                                                                                                                                                             |
+| `foreign-class`   | Another component's block anywhere in the selector, including inside `:has()`. This covers blocks whose name differs from their file (`.ticket-list-row*`) and blocks of components without a stylesheet.                                                                                                                                                                                  |
+| `hook-descendant` | An element below a class the component places on another component's root, for example `.terminal-drawer__rail .terminal-tab i` on Kerf `AppTab`. It counts even when that element is content this component projected into the child's slots.                                                                                                                                             |
+| `foreign-element` | A classless element subject that also reaches markup another component renders. The JSX tree below the nearest own classed element decides. A descendant combinator over a subtree containing another component (`.ai-conversation__activity svg` over `AIContentLabel`) is a finding. So is a child-combinator element the component never authors, such as the root of `LoadingSpinner`. |
+
+The check allows a few things:
+
+- A component's own local components (functions declared in the same module) count as its own
+  markup.
+- A `LucideIcon` the component renders itself counts as its own `svg`. `HS2-4AQJEX` tracks moving
+  those sizing rules to the icon's `size` prop.
+- `*`, `html`, `body`, sibling chains, and `@keyframes` steps are ignored.
+
+Known residue is listed in `clients/web/css-ownership-allowlist.json`. Each entry has `file`,
+`selector` (with whitespace normalized), an exact `count` when the selector occurs more than once,
+a `ticket` (`HS2-*` or `KF-*`) and a `reason`.
+
+The allowlist can only shrink. An uncovered finding fails lint, and so does an extra occurrence of
+an allowlisted selector. An entry that now matches fewer findings than it claims is stale and also
+fails lint until it is lowered or deleted.
+
+At introduction the check found 122 findings in 115 entries, grouped by area under `HS2-DYAR0S`,
+`HS2-PK1C1X`, `HS2-M2W2DP`, `HS2-YNW0B3`, `HS2-7ZGYJY`, `HS2-148B5C`, `HS2-4V4CV2`, `HS2-QM0C3T`,
+`HS2-TV78E1`, and `HS2-0X36TX`. Never add an entry for new code; fix the selector, give the
+element an own class, or configure the child through its props.
+
+The first fix moved `.app-empty` out of `style.css` into `AppEmptyState`'s own
+`app-empty-state.css`. That also made the UX demo render the production presentation, which it
+previously lacked. The cross-project stats placeholder now composes the new `AppMessageState`
+instead of borrowing the class.
+
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
 rail's controls Toolbar now sizes the expanded search itself. HS2-402AXQ replaced the project
 tab strip's Add-project `wa-button` (and a stale `wa-dropdown` rule) with an app-styled native

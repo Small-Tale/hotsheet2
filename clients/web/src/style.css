@@ -44,22 +44,6 @@ textarea,
 select {
   font: inherit;
 }
-.app-empty {
-  min-height: 100%;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: var(--wa-space-s);
-  text-align: center;
-  padding: remify(32px);
-}
-.app-empty h1,
-.app-empty p {
-  margin: 0;
-}
-.app-empty p {
-  color: var(--wa-color-neutral-on-quiet);
-}
 /* Neutral floating chrome; the danger .app-error variant lives in components/app-error.css. */
 .app-loading,
 .app-toast {

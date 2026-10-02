@@ -18,6 +18,8 @@ describe('global stylesheet ownership', () => {
       ['ticket-source settings', 'ticket-sources-settings.css', ['.ticket-provider-settings']],
       ['settings workspace', 'settings-workspace.css', ['.project-settings']],
       ['notification inspector', 'notification-inspector.css', ['.notification-inspector-empty']],
+      // AppEmptyState owns its full-surface message presentation (HS2-EWYDH7).
+      ['app empty state', 'app-empty-state.css', ['.app-empty']],
     ] as const;
     for (const [name, file, selectors] of ownership) {
       const owned = read(`./components/${file}`);
@@ -30,7 +32,7 @@ describe('global stylesheet ownership', () => {
 
   it('keeps the intentionally global app-shell rules in style.css', () => {
     const global = read('./style.css');
-    for (const selector of [':root', 'html, body, #app', '.app-empty', '.app-loading, .app-toast', '.ticket-page-more'])
+    for (const selector of [':root', 'html, body, #app', '.app-loading, .app-toast', '.ticket-page-more'])
       expect(global).toContainSource(selector);
     // The application root's edge-to-edge shell is AppShell's own `viewport` presentation (HS2-DR549A).
     expect(global).not.toContain('.app-shell');

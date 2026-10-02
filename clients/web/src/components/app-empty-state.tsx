@@ -1,3 +1,5 @@
+import './app-empty-state.css';
+
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 
 export function AppEmptyState() {
@@ -17,6 +19,21 @@ export function ProjectRestoreState() {
     <section class="app-empty" data-component="project-restore-state" role="status" aria-busy="true">
       <h1>Opening Hot Sheet</h1>
       <p>Restoring projects, tickets, and terminals…</p>
+    </section>
+  );
+}
+
+export interface AppMessageStateProps {
+  title: string;
+  message: string;
+}
+
+/** A centered, action-free full-surface message in the empty-state presentation. */
+export function AppMessageState({ title, message }: AppMessageStateProps) {
+  return (
+    <section class="app-empty">
+      <h1>{title}</h1>
+      <p>{message}</p>
     </section>
   );
 }

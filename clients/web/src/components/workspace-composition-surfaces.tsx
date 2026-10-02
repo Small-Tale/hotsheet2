@@ -2,6 +2,7 @@ import './project-statistics.css';
 
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
+import { AppMessageState } from './app-empty-state';
 import { ConfidenceCalibration, type ConfidenceCalibrationState } from './confidence-calibration';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
@@ -91,12 +92,7 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
         <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
       </section>
     );
-  return (
-    <section class="app-empty">
-      <h1>Cross-project stats</h1>
-      <p>This dashboard is still being designed.</p>
-    </section>
-  );
+  return <AppMessageState title="Cross-project stats" message="This dashboard is still being designed." />;
 }
 
 export interface ProjectTerminalDrawerSurfaceProps {
