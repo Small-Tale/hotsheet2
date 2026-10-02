@@ -262,6 +262,11 @@ export function ticketInspectorPanel({
         <input class="ticket-inspector__title-input" name="ticket-title" aria-label="Ticket title" value={titleDraft} />
       ) : (
         <h1
+          class={
+            presentation === 'reader'
+              ? 'ticket-inspector__title ticket-inspector__title--reader'
+              : 'ticket-inspector__title'
+          }
           data-action={canUpdate ? 'edit-ticket-title' : undefined}
           data-editable={String(canUpdate)}
           tabIndex={canUpdate ? 0 : undefined}

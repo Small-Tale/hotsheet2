@@ -50,7 +50,7 @@ describe('touch textarea sizing (HS2-6PC150)', () => {
     const inspector = readFileSync(new URL('./ticket-inspector.css', import.meta.url), 'utf8'),
       composer = readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8');
     expect(inspector).toMatch(
-      /@media \(pointer: coarse\) \{\s*\.ticket-inspector__body textarea:is\(\[name='markdown-source'\], \[name='blocked-reason'\], \[name='note-body'\]\) \{\s*height: auto;/,
+      /@media \(pointer: coarse\) \{\s*\.ticket-inspector__body\[data-presentation\] \{\s*--markdown-editor-source-height: auto;\s*--ticket-info-panel-blocked-reason-height: auto;\s*--note-card-editor-height: auto;/,
     );
     expect(composer).toMatch(
       /@media \(pointer: coarse\) \{\s*\.quick-ticket-composer__details textarea \{\s*height: auto;\s*min-height: remify\(40px\);/,

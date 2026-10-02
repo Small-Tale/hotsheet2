@@ -3552,7 +3552,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   expect(
     await inspector.evaluate((node) => {
       const header = getComputedStyle(node.querySelector('.ticket-inspector__header')!),
-        title = getComputedStyle(node.querySelector('.ticket-inspector__header h1')!),
+        title = getComputedStyle(node.querySelector('.ticket-inspector__title')!),
         tabs = getComputedStyle(node.querySelector('.ticket-inspector__tabs')!),
         tabsFrame = getComputedStyle(node.querySelector('.ticket-inspector__tabs-frame')!),
         tabRail = getComputedStyle(node.querySelector('.ticket-inspector__tabs .kui-tab-bar__tabs')!),
@@ -6169,6 +6169,68 @@ test('lets inspector Markdown keep its own typography in sidebar and reader (HS2
       await expect(
         page.locator(`${root} .ticket-info-panel__details-surface .markdown-editor__preview`).first(),
       ).toHaveCSS('padding-left', '0px');
+    }
+  }
+});
+
+test('sizes inspector editors and titles through child tokens and own classes (HS2-DYAR0S)', async ({ browser }) => {
+  const heights = {
+    '--hs-details-sidebar-height': '131px',
+    '--hs-details-reader-height': '221px',
+    '--hs-blocked-reason-sidebar-height': '77px',
+    '--hs-blocked-reason-reader-height': '143px',
+    '--hs-note-sidebar-height': '99px',
+    '--hs-note-reader-height': '187px',
+  };
+  const editorHeights = async (root: import('@playwright/test').Locator) => {
+    await root.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+    const details = root.getByRole('textbox', { name: 'Ticket details' });
+    const detailsHeight = await details.evaluate((node) => getComputedStyle(node).height);
+    await details.blur();
+    const note = root.locator('[data-component="note-card"] .note-card__body[aria-label="Edit note"]').first();
+    await note.dblclick();
+    const noteHeight = await root
+      .getByRole('textbox', { name: 'Note body' })
+      .first()
+      .evaluate((node) => getComputedStyle(node).height);
+    await root.getByRole('button', { name: 'Block ticket' }).click();
+    const blockedHeight = await root
+      .getByRole('textbox', { name: 'Blocked reason' })
+      .evaluate((node) => getComputedStyle(node).height);
+    return { details: detailsHeight, note: noteHeight, blocked: blockedHeight };
+  };
+  for (const coarse of [false, true]) {
+    for (const [component, presentation] of [
+      ['ticket-inspector', 'sidebar'],
+      ['ticket-reader', 'reader'],
+    ] as const) {
+      // Touch is emulated the way the mobile layout specs do: a phone context reports a coarse pointer.
+      const context = await browser.newContext({
+          viewport: coarse ? { width: 390, height: 844 } : { width: 1280, height: 900 },
+          hasTouch: coarse,
+          isMobile: coarse,
+        }),
+        page = await context.newPage();
+      await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+      expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(coarse);
+      const root = page.locator(`[data-component="${component}"]`).first();
+      await expect(root).toBeVisible();
+      await page.evaluate((values) => {
+        for (const [name, value] of Object.entries(values)) document.documentElement.style.setProperty(name, value);
+      }, heights);
+      // The title is the inspector's own element: its class carries the presentation variant.
+      const title = root.locator('.ticket-inspector__title');
+      await expect(title).toHaveCSS('font-size', presentation === 'reader' ? '20px' : '16px');
+      await expect(title).toHaveCSS('cursor', 'text');
+      // Stored desktop heights reach each child through its public height token; touch screens drop them.
+      expect(await editorHeights(root)).toEqual(
+        coarse
+          ? { details: '48px', note: '80px', blocked: '64px' }
+          : presentation === 'reader'
+            ? { details: '221px', note: '187px', blocked: '143px' }
+            : { details: '131px', note: '99px', blocked: '77px' },
+      );
+      await context.close();
     }
   }
 });

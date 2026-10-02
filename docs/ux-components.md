@@ -1128,7 +1128,14 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   headings, paragraphs, quotations, and activity-note text inside the inspector use their own
   component typography; the Details editor aligns to its surface through `MarkdownEditor`
   `inset="flush"` instead of a padding override, and the reader's card-free chrome and title size are
-  `TicketInspector` reader-presentation variants. It reuses the same `ListHeader`/`ListItem`
+  `TicketInspector` reader-presentation variants. The title is the inspector's own
+  `.ticket-inspector__title` element (with a `--reader` modifier) rather than a header `h1`
+  descendant selector. Persisted editor heights (`ticket-editor-size.ts`) differ per presentation,
+  so the inspector body maps them onto its children's public height tokens instead of sizing
+  their textareas: `MarkdownEditor` reads `--markdown-editor-source-height` (embedded source),
+  `TicketInfoPanel` reads `--ticket-info-panel-blocked-reason-height`, and `NoteCard` reads
+  `--note-card-editor-height`. Each token defaults to `auto`, and a coarse pointer resets all three
+  to `auto` so touch editors grow with their content (HS2-DYAR0S). It reuses the same `ListHeader`/`ListItem`
   primitives as the left project sidebar for Details, Tags, Notes, Block ticket,
   and Add note. Headers and content align by their text/icon inset while bordered
   surfaces remain flush below their headers without a second indentation level.

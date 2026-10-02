@@ -21,7 +21,7 @@ describe('TicketInspector', () => {
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.ticket-inspector__header \{[^}]*padding: 0;/);
     expect(css).toMatch(
-      /\.ticket-inspector__header h1 \{[^}]*margin: var\(--kui-space-2xs\) var\(--kui-space-m\) var\(--kui-space-m\)/,
+      /\.ticket-inspector__title \{[^}]*margin: var\(--kui-space-2xs\) var\(--kui-space-m\) var\(--kui-space-m\)/,
     );
     expect(css).toMatch(
       /\.ticket-inspector__feedback \{[^}]*gap: var\(--kui-space-xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/,
@@ -29,9 +29,37 @@ describe('TicketInspector', () => {
     expect(css).toMatch(
       /\.ticket-inspector__close-outcome \{[^}]*gap: var\(--kui-space-2xs\)[^}]*margin: 0 var\(--kui-space-xs\) var\(--kui-space-m\)[^}]*padding: var\(--kui-space-xs\)/,
     );
-    const titleRule = css.match(/\.ticket-inspector__header h1 \{([^}]*)\}/)?.[1] ?? '';
+    const titleRule = css.match(/\.ticket-inspector__title \{([^}]*)\}/)?.[1] ?? '';
     expect(titleRule).toContain('overflow-wrap: anywhere');
     expect(titleRule).not.toContain('line-clamp');
+  });
+
+  it('styles only its own title and maps persisted editor heights onto child tokens (HS2-DYAR0S)', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
+    // No descendant selector reaches a child's textarea or a bare h1.
+    const selectors = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+(?=\{)/g) ?? [];
+    expect(selectors.filter((selector) => /\b(?:textarea|h1)\b/.test(selector))).toEqual([]);
+    for (const presentation of ['sidebar', 'reader'] as const) {
+      const rule =
+        css.match(
+          new RegExp(`\\.ticket-inspector__body\\[data-presentation='${presentation}'\\] \\{([^}]*)\\}`),
+        )?.[1] ?? '';
+      expect(rule).toContain(`--markdown-editor-source-height: var(--hs-details-${presentation}-height, auto);`);
+      expect(rule).toContain(
+        `--ticket-info-panel-blocked-reason-height: var(--hs-blocked-reason-${presentation}-height, auto);`,
+      );
+      expect(rule).toContain(`--note-card-editor-height: var(--hs-note-${presentation}-height, auto);`);
+    }
+    for (const [file, token] of [
+      ['markdown-editor.css', '--markdown-editor-source-height'],
+      ['note-card.css', '--note-card-editor-height'],
+      ['ticket-info-panel.css', '--ticket-info-panel-blocked-reason-height'],
+    ] as const)
+      expect(readFileSync(resolve(import.meta.dirname, file), 'utf8')).toContain(`height: var(${token}, auto);`);
+    const sidebar = String(TicketInspector({ ...base, canUpdate: true }));
+    expect(sidebar).toMatch(/<h1 class="ticket-inspector__title" data-action="edit-ticket-title" data-editable="true"/);
+    const reader = String(TicketInspector({ ...base, presentation: 'reader' }));
+    expect(reader).toContain('<h1 class="ticket-inspector__title ticket-inspector__title--reader"');
   });
 
   it('renders each public tab without changing ticket identity', () => {

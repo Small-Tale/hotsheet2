@@ -94,6 +94,8 @@
 }
 .note-card__editor textarea {
   width: 100%;
+  /* A host that persists the editor height sets it through this public token (HS2-DYAR0S). */
+  height: var(--note-card-editor-height, auto);
   min-width: 0;
   max-width: 100%;
   min-height: remify(80px);

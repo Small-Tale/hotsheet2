@@ -44,49 +44,41 @@
   background: transparent;
   cursor: pointer;
 }
-.ticket-inspector__body textarea[name='markdown-source'],
-.ticket-inspector__body textarea[name='blocked-reason'],
-.ticket-inspector__body textarea[name='note-body'] {
-  box-sizing: border-box;
+/* Persisted editor heights (ticket-editor-size.ts) differ per presentation. The inspector maps them
+   onto its children's public height tokens instead of reaching into the textareas they render
+   (HS2-DYAR0S): MarkdownEditor's source, TicketInfoPanel's blocked reason, and NoteCard's editor. */
+.ticket-inspector__body[data-presentation='sidebar'] {
+  --markdown-editor-source-height: var(--hs-details-sidebar-height, auto);
+  --ticket-info-panel-blocked-reason-height: var(--hs-blocked-reason-sidebar-height, auto);
+  --note-card-editor-height: var(--hs-note-sidebar-height, auto);
 }
-.ticket-inspector__body[data-presentation='sidebar'] textarea[name='markdown-source'] {
-  height: var(--hs-details-sidebar-height, auto);
-}
-.ticket-inspector__body[data-presentation='reader'] textarea[name='markdown-source'] {
-  height: var(--hs-details-reader-height, auto);
-}
-.ticket-inspector__body[data-presentation='sidebar'] textarea[name='blocked-reason'] {
-  height: var(--hs-blocked-reason-sidebar-height, auto);
-}
-.ticket-inspector__body[data-presentation='reader'] textarea[name='blocked-reason'] {
-  height: var(--hs-blocked-reason-reader-height, auto);
-}
-.ticket-inspector__body[data-presentation='sidebar'] textarea[name='note-body'] {
-  height: var(--hs-note-sidebar-height, auto);
-}
-.ticket-inspector__body[data-presentation='reader'] textarea[name='note-body'] {
-  height: var(--hs-note-reader-height, auto);
+.ticket-inspector__body[data-presentation='reader'] {
+  --markdown-editor-source-height: var(--hs-details-reader-height, auto);
+  --ticket-info-panel-blocked-reason-height: var(--hs-blocked-reason-reader-height, auto);
+  --note-card-editor-height: var(--hs-note-reader-height, auto);
 }
 /* Touch screens size these editors to their content instead of a stored resize height
-   (textarea-sizing.css, HS2-6PC150). */
+   (textarea-sizing.css, HS2-6PC150). Same specificity as the presentation rules, so it wins by order. */
 @supports (field-sizing: content) {
   @media (pointer: coarse) {
-    .ticket-inspector__body textarea:is([name='markdown-source'], [name='blocked-reason'], [name='note-body']) {
-      height: auto;
+    .ticket-inspector__body[data-presentation] {
+      --markdown-editor-source-height: auto;
+      --ticket-info-panel-blocked-reason-height: auto;
+      --note-card-editor-height: auto;
     }
   }
 }
-.ticket-inspector__header h1 {
+.ticket-inspector__title {
   margin: var(--kui-space-2xs) var(--kui-space-m) var(--kui-space-m);
   font-size: var(--wa-font-size-m);
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
-.ticket-inspector__header[data-presentation='reader'] h1 {
+.ticket-inspector__title--reader {
   max-width: remify(864px);
   font-size: var(--wa-font-size-l);
 }
-.ticket-inspector__header h1[data-editable='true'] {
+.ticket-inspector__title[data-editable='true'] {
   cursor: text;
 }
 .ticket-inspector__title-input {

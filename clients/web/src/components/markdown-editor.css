@@ -51,7 +51,8 @@
 .markdown-editor--embedded .markdown-editor__surface textarea {
   display: block;
   box-sizing: border-box;
-  height: auto;
+  /* A host that persists the editor height sets it through this public token (HS2-DYAR0S). */
+  height: var(--markdown-editor-source-height, auto);
   padding: remify(12px);
   /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
   field-sizing: var(--hotsheet-textarea-field-sizing, fixed);

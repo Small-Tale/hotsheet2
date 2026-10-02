@@ -89,6 +89,8 @@
 }
 .ticket-info-panel__blocked-editor textarea {
   width: 100%;
+  /* The inspector maps the persisted blocked-reason height onto this public token (HS2-DYAR0S). */
+  height: var(--ticket-info-panel-blocked-reason-height, auto);
   min-height: remify(64px);
   padding: 0;
   /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
