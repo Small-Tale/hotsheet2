@@ -91,13 +91,18 @@ describe('TerminalTicketRail', () => {
     );
     expect(css).not.toMatch(/__controls \{/);
     expect(css).not.toMatch(/__controls[^{]*\{[^}]*grid-(?:column|row)/);
-    expect(css).toMatchSource(/__controls \.view-mode-switcher \{[^}]*width:100%/);
-    expect(css).toMatchSource(
-      /__controls \.ticket-search-field \{[^}]*width:remify\([\d.]+px\)[^}]*margin-inline-start:auto[^}]*transition:width \.25s ease/,
-    );
-    expect(css).toMatchSource(
-      /__controls \.ticket-search-field\[data-content="search"\]\[data-expanded="true"\] \{[^}]*width:100%[^}]*animation:terminal-ticket-rail-search-enter \.25s ease/,
-    );
+    // The composed groups take their rail presentation through their own props and stylesheets:
+    // the view switcher's `--rail` full-row width and the search field's `layout="row"` placement
+    // and entrance (HS2-8FS5BJ). This stylesheet styles no other component.
+    expect(css).not.toContain('view-mode-switcher');
+    expect(css).not.toContain('ticket-search-field');
+    expect(css).not.toContain('quick-ticket-composer');
+    expect(css).not.toContain('notification-center');
+    expect(css).not.toContain('.kui-');
+    const headerCss = readFileSync(new URL('./workspace-header.css', import.meta.url), 'utf8'),
+      searchCss = readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8');
+    expect(headerCss).toContainSource('.view-mode-switcher.view-mode-switcher--rail { width: 100%; }');
+    expect(searchCss).toContainSource('.ticket-search-field.ticket-search-field--row { margin-inline-start: auto; }');
     expect(css).not.toMatch(/ticket-inspector__header > \.kui-toolbar \{[^}]*padding-left/);
     // Kerf beta.62 balances the toolbar tracks itself (`centerAlign="balanced"`).
     expect(css).not.toContain('ticket-inspector__header > .kui-toolbar');
@@ -120,17 +125,29 @@ describe('TerminalTicketRail', () => {
     // The heading wrapper only draws the rule; the Toolbar inside keeps Kerf's inset and height.
     expect(css).toMatchSource(/__heading \{ display:grid;border-bottom:/);
     expect(css).not.toContain('--kui-sunken-panel-radius');
-    expect(css).toMatch(/translateY\(calc\(-100% - var\(--kui-space-xs\)\)\)/);
+    expect(readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8')).toMatch(
+      /translateY\(calc\(-100% - var\(--kui-space-xs\)\)\)/,
+    );
+    // The view-title Select keeps its 36px geometry and inset focus ring through the className hook
+    // this module passes to it, until Kerf ships a title presentation (KF-PZ23ZP).
+    expect(css).toContainSource(
+      '.terminal-ticket-rail__view .terminal-ticket-rail__view-select::part(combobox) { min-height: remify(36px); padding: 0 remify(21.6px) 0 0; outline-offset: -3px; }',
+    );
+    expect(css).toContain('KF-PZ23ZP');
     expect(css).not.toMatch(/__heading \{[^}]*min-height/);
   });
   it('separates the heading from the ticket scroller and preserves the shared compact launcher', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8'),
-      markup = String(TerminalTicketRail({ ...props, action: QuickTicketLauncher({ label: 'Ticket…' }) })),
+      markup = String(
+        TerminalTicketRail({ ...props, action: QuickTicketLauncher({ label: 'Ticket…', size: 'compact' }) }),
+      ),
       heading = markup.match(
         /<div class="terminal-ticket-rail__heading"><header class="kui-toolbar"[\s\S]*?<\/header>/,
       )![0];
     expect(css).toMatchSource(/__heading \{[^}]*border-bottom:1px solid var\(--wa-color-surface-border\)/);
-    expect(heading).toContain('class="quick-ticket-composer__launcher"');
+    // The rail asks the launcher for its compact size instead of restyling it (HS2-8FS5BJ).
+    expect(heading).toContain('class="quick-ticket-composer__launcher" data-size="compact"');
+    expect(css).not.toContain('quick-ticket-composer');
     expect(heading).toContain('Ticket…');
     expect(heading).not.toContain('kui-toolbar-control-group');
   });

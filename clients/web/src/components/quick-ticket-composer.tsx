@@ -73,14 +73,21 @@ export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
   return true;
 }
 
+/**
+ * The pill that opens the quick ticket composer and accepts dropped tickets or files. `size`
+ * `compact` is the shorter trigger a narrow heading toolbar uses, such as the ticket rail's
+ * (HS2-8FS5BJ); `default` is the workspace tab bar's.
+ */
 export function QuickTicketLauncher({
   attachmentsEnabled = true,
   label = 'New ticket…',
-}: { attachmentsEnabled?: boolean; label?: string } = {}) {
+  size = 'default',
+}: { attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact' } = {}) {
   return (
     <button
       type="button"
       class="quick-ticket-composer__launcher"
+      data-size={size}
       data-component="quick-ticket-composer-launcher"
       {...SEARCH_AND_COMPOSER_ACTIONS.expandTicketComposer.attrs}
       {...SEARCH_AND_COMPOSER_TARGETS.newTicketDropTarget.attrs}

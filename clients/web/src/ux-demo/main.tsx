@@ -330,8 +330,10 @@ import {
   resetTicketSearchDemo,
   savedViewDemoSearchModel,
   ticketSearchDemoCollapsibleOpen,
+  ticketSearchDemoGrowOpen,
   ticketSearchDemoModel,
   ticketSearchDemoModels,
+  ticketSearchDemoRowOpen,
   TicketSearchFieldDemo,
   toggleDemoHelp,
 } from './ticket-search-field-demo';
@@ -1403,6 +1405,8 @@ demoListeners.add(
       signals: {
         'workspace-search': workspaceSearchOpen,
         'ticket-search-demo-collapsible': ticketSearchDemoCollapsibleOpen,
+        'ticket-search-demo-grow': ticketSearchDemoGrowOpen,
+        'ticket-search-demo-row': ticketSearchDemoRowOpen,
       },
     },
   }),

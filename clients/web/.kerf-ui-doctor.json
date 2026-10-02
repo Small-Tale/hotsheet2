@@ -22,6 +22,24 @@
       "rules": ["KUI-L401"],
       "target": "src/ux-demo/main.tsx",
       "rationale": "wireCatalog already installs wireScrollDividers on the demo root (a second instance loops forever, HS2-E6AG7W, KF-XKMC7W), and the demo calls the app-owned wireTicketSearchFields/wireWorkspaceOverflowKeyboard helpers that Kerf cannot resolve yet (KF-KWMJMS). Remove when both ship."
+    },
+    {
+      "id": "hs2-8fs5bj-search-layout-hooks",
+      "rules": ["KUI-L022"],
+      "target": "src/components/ticket-search-field.tsx",
+      "rationale": "Only the ticket-search-field--grow, --row, and --open root modifiers styled in ticket-search-field.css: the header's grow-with-floor sizing (KF-GM376R, KF-6WX6VK) and the rail's trailing-edge placement and row entrance (KF-XFPJSY) have no Kerf prop yet. They replaced cross-component selectors in workspace-header.css and terminal-ticket-rail.css (HS2-8FS5BJ). Remove with HS2-DAMHD1."
+    },
+    {
+      "id": "hs2-8fs5bj-workspace-yield-hooks",
+      "rules": ["KUI-L022"],
+      "target": "src/components/workspace-controls.tsx",
+      "rationale": "Only the view-mode-switcher--rail full-row width (KF-GM376R) and the --yield modifiers that hide the header's groups while its search takes a compact row (KF-6WX6VK, HS2-0SARDD). They replaced :has() selectors keyed on the search field's Kerf state (HS2-8FS5BJ). Remove with HS2-DAMHD1."
+    },
+    {
+      "id": "hs2-8fs5bj-rail-view-select",
+      "rules": ["KUI-L022"],
+      "target": "src/components/terminal-ticket-rail.tsx",
+      "rationale": "Only the terminal-ticket-rail__view-select hook: the rail's view-title Select geometry and inset focus ring (HS2-HEYASQ) have no Kerf presentation yet (KF-PZ23ZP). It replaced .kui-select::part selectors (HS2-8FS5BJ). Remove with HS2-DAMHD1."
     }
   ]
 }

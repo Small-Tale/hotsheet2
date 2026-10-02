@@ -4295,7 +4295,7 @@ export async function startHotSheetWebClient() {
     // it shows every filtered ticket, so columns carry no continuation.
     const content =
       mode === 'notifications' ? (
-        <NotificationCenter title="Notifications" pending={pending} history={history} />
+        <NotificationCenter title="Notifications" pending={pending} history={history} inset="flush" />
       ) : mode === 'board' ? (
         <TicketBoard
           columns={ticketBoardGroups(shown, railView, hideVerifiedColumn()).map((group) => ({
@@ -4354,7 +4354,7 @@ export async function startHotSheetWebClient() {
           ? { key: `ticket:${railInspectorProps.slug}`, parts: ticketInspectorPanel(railInspectorProps) }
           : undefined,
         title: mode === 'notifications' ? 'Notifications' : ticketViewTitle(railView),
-        action: mode === 'notifications' ? undefined : ticketViewAction(railView, canCreate, 'Ticket…'),
+        action: mode === 'notifications' ? undefined : ticketViewAction(railView, canCreate, 'Ticket…', 'compact'),
       },
     };
   }
@@ -4408,7 +4408,7 @@ export async function startHotSheetWebClient() {
             ? 'Ticket errors'
             : (customViewFor(view)?.name ?? 'Queue');
   }
-  function ticketViewAction(view: TicketView, canCreate: boolean, label?: string) {
+  function ticketViewAction(view: TicketView, canCreate: boolean, label?: string, size?: 'default' | 'compact') {
     return view === 'trash' ? (
       <wa-button
         class="workspace-header__text-action"
@@ -4422,7 +4422,7 @@ export async function startHotSheetWebClient() {
         </span>
       </wa-button>
     ) : canCreate ? (
-      <QuickTicketLauncher attachmentsEnabled={canStageNewTicketAttachments()} label={label} />
+      <QuickTicketLauncher attachmentsEnabled={canStageNewTicketAttachments()} label={label} size={size} />
     ) : undefined;
   }
   function ticketContextMenuSurface() {

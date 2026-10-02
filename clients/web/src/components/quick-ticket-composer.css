@@ -14,6 +14,11 @@
   gap: var(--kui-space-xs);
   white-space: nowrap;
 }
+/* `size="compact"`: the shorter trigger of a narrow heading toolbar such as the ticket rail's. */
+.quick-ticket-composer__launcher[data-size='compact'] {
+  min-height: remify(36px);
+  padding-inline: remify(12.8px);
+}
 .quick-ticket-composer__launcher:hover {
   filter: brightness(0.96);
   box-shadow: var(--wa-shadow-s);

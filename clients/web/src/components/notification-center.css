@@ -27,3 +27,8 @@
     padding-left: remify(8.8px);
   }
 }
+/* `inset="flush"`: the host surface (the ticket rail's sunken list) already insets its content,
+   at every width (HS2-8FS5BJ). */
+.notification-center[data-inset='flush'] {
+  padding: 0;
+}

@@ -59,7 +59,19 @@ export interface TicketSearchFieldProps {
    * flow inside the field itself.
    */
   surfaces?: 'floating' | 'external';
+  /**
+   * How the toolbar group sizes itself in its Toolbar zone (HS2-8FS5BJ). `inline` (default) keeps
+   * Kerf's own collapsed and expanded widths. `grow` is the workspace header policy: the expanded
+   * field grows into its row's free room from a 19rem floor and takes the whole row on a compact
+   * toolbar, where its collapsed icon also leaves the tiniest toolbars. `row` is the narrow-rail
+   * policy: the collapsed icon sits at the zone's trailing edge and the expanded field fills
+   * (Kerf `fill`) and so takes a full row of its own.
+   */
+  layout?: TicketSearchFieldLayout;
 }
+
+/** The toolbar sizing policies a TicketSearchField offers (see `TicketSearchFieldProps.layout`). */
+export type TicketSearchFieldLayout = 'inline' | 'grow' | 'row';
 
 /** Props for the helper surfaces a consumer places itself when the field uses `surfaces="external"`. */
 export interface TicketSearchSurfacesProps {
@@ -223,7 +235,9 @@ export interface TicketSearchFormFieldProps {
  * Kerf's `TokenSearchField presentation="form-field"` (visible label, hint, required marker,
  * full width, no Toolbar) driven by the same managed model, with the syntax-help button and
  * the date/help surfaces stacked below it in flow. The app-owned wrapper carries the field id
- * for the shared delegated wiring and the field's token colors by inheritance.
+ * for the shared delegated wiring. Its chips keep Kerf's default token colors: the form-field
+ * presentation renders no `className` hook and Kerf declares the token defaults on its own root,
+ * so neither a hook nor inheritance can match the grouped field's quieter chips yet (KF-5G8WJ0).
  */
 export function TicketSearchFormField({
   id,
@@ -264,9 +278,8 @@ export function TicketSearchFormField({
  * `TokenSearchModel` (grammar, chips, in-place tag completion), plus Hot Sheet's lifecycle date
  * helper and syntax help. Every ticket-search surface (workspace header, workspace-grid rail,
  * saved-view dialog) composes this one component so the helpers cannot drift apart or be
- * forgotten (HS2-N5G6JS, HS2-5JXBQY). The group's root class is the static `ticket-search-field`;
- * a consumer sizes and places it through its own context selector (for example
- * `.workspace-header__actions > .ticket-search-field`), never by adding a class.
+ * forgotten (HS2-N5G6JS, HS2-5JXBQY). A consumer chooses how the group sizes in its toolbar through
+ * `layout`, never by styling the `ticket-search-field` root from its own stylesheet (HS2-8FS5BJ).
  */
 export function TicketSearchField({
   id,
@@ -281,6 +294,7 @@ export function TicketSearchField({
   help = true,
   clearLabel = 'Clear search',
   surfaces = 'floating',
+  layout = 'inline',
 }: TicketSearchFieldProps) {
   const open = collapsible ? expanded : true,
     // Inferred, not annotated: `Omit` over Kerf's union props (beta.64 `trailing` XOR `trailingAction`)
@@ -298,15 +312,85 @@ export function TicketSearchField({
       clearAction: TICKET_SEARCH_ACTIONS.clear.value,
       clearLabel,
       trailing: help ? <TicketSearchHelpButton open={helpOpen} /> : undefined,
-    };
-  return (
-    <ToolbarControlGroup className="ticket-search-field" expanded={open} single content="search" focusRing="halo">
-      {collapsible ? <TokenSearchField {...field} collapsible expanded={expanded} /> : <TokenSearchField {...field} />}
-      {open && surfaces === 'floating' ? (
-        <TicketSearchSurfaces id={id} model={model} helpOpen={helpOpen} help={help} />
-      ) : (
-        <></>
-      )}
+      // The field's token colors are set on this app-owned hook (HS2-8FS5BJ), never by reaching
+      // into Kerf's `.kui-token-search`.
+      className: 'ticket-search-field__query',
+      fill: layout === 'row',
+    },
+    content = (
+      <>
+        {collapsible ? (
+          <TokenSearchField {...field} collapsible expanded={expanded} />
+        ) : (
+          <TokenSearchField {...field} />
+        )}
+        {open && surfaces === 'floating' ? (
+          <TicketSearchSurfaces id={id} model={model} helpOpen={helpOpen} help={help} />
+        ) : (
+          <></>
+        )}
+      </>
+    );
+  // The root's classes name the app's own layout and open state (HS2-8FS5BJ), so this module's CSS
+  // never keys off Kerf's rendered attributes. Kerf's analyzer classifies only literal class names
+  // on its components, so each combination is spelled out.
+  if (layout === 'grow')
+    return open ? (
+      <ToolbarControlGroup
+        className="ticket-search-field ticket-search-field--grow ticket-search-field--open"
+        expanded
+        single
+        content="search"
+        focusRing="halo"
+      >
+        {content}
+      </ToolbarControlGroup>
+    ) : (
+      <ToolbarControlGroup
+        className="ticket-search-field ticket-search-field--grow"
+        expanded={false}
+        single
+        content="search"
+        focusRing="halo"
+      >
+        {content}
+      </ToolbarControlGroup>
+    );
+  if (layout === 'row')
+    return open ? (
+      <ToolbarControlGroup
+        className="ticket-search-field ticket-search-field--row ticket-search-field--open"
+        expanded
+        single
+        content="search"
+        focusRing="halo"
+      >
+        {content}
+      </ToolbarControlGroup>
+    ) : (
+      <ToolbarControlGroup
+        className="ticket-search-field ticket-search-field--row"
+        expanded={false}
+        single
+        content="search"
+        focusRing="halo"
+      >
+        {content}
+      </ToolbarControlGroup>
+    );
+  return open ? (
+    <ToolbarControlGroup
+      className="ticket-search-field ticket-search-field--open"
+      expanded
+      single
+      content="search"
+      focusRing="halo"
+    >
+      {content}
+    </ToolbarControlGroup>
+  ) : (
+    <ToolbarControlGroup className="ticket-search-field" expanded={false} single content="search" focusRing="halo">
+      {content}
     </ToolbarControlGroup>
   );
 }

@@ -378,9 +378,9 @@ body[data-resizing-project-sidebar='true'] {
 .ticket-search-field-demo__external > .component-stage__hint {
   margin-bottom: 0;
 }
-.ticket-search-field-demo__collapsible-toolbar .ticket-search-field[data-expanded='true'] {
-  --kui-token-search-expanded-width: 32rem;
-  flex: 1 1 19rem;
+/* Stage width for the narrow-rail specimen; the field's own layout prop does the rest. */
+.ticket-search-field-demo__narrow {
+  max-width: remify(320px);
 }
 .toolbar-control-group-demo h2 {
   margin: 0 0 remify(10.4px);

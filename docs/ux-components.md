@@ -403,9 +403,14 @@ element: it is Toolbar zone content — the view-mode, sort, and selection
 own borderless nested-dropdown group — so the application shell's header Toolbar and the
 demo's `WorkspaceHeader` Toolbar host them as cataloged children, and the workspace-grid
 rail's own grid places the same groups (HS2-EZ1N7Z). `WorkspaceIdentity` is a real
-`ToolbarText` for the leading zone. Responsive rules key off the search field's own
-`data-expanded` state through `:has()` on whichever zone holds it, not a wrapper attribute;
-both wrappers are declared to Kerf's composition rule (`rendersAs`) in
+`ToolbarText` for the leading zone. Responsive rules key off the component's own
+`searchOpen` state: while it is open, the non-rail groups (view switcher, sort, selection
+actions, overflow menu) render a literal `--yield` modifier, and a compact (480px or less)
+toolbar hides them so the field takes the row. The header asks `TicketSearchField` for
+`layout="grow"` and the rail for `layout="row"`, so no stylesheet reads the field's rendered
+state or styles it from outside (HS2-8FS5BJ). The yield modifiers and the rail switcher's
+full-row width wait on Kerf `KF-6WX6VK` and `KF-GM376R`, and are documented `KUI-L022`
+suppressions until then (`HS2-DAMHD1`). Both wrappers are declared to Kerf's composition rule (`rendersAs`) in
 `clients/web/ai/component-composition-extension.json`. The mode selector composes Kerf
 `SegmentedControl` inside `ToolbarControlGroup`, with
 one accessible View mode group and native sequentially focusable buttons. Kerf owns
@@ -828,10 +833,28 @@ edit/remove, clear, Enter, and the keyboard; the app projects `model.state` into
 `model.replace` (`replaceTicketSearch` for a restored session or a seeded saved-view query). The
 workspace toolbar, the workspace-grid ticket rail, and the saved-view dialog's non-collapsible
 query field all render this one component with their own model, so the helpers cannot drift
-apart or be forgotten on a new surface. Its rendered group carries the static root class
-`ticket-search-field`; consumers size and place it through their own context selectors (for
-example `.workspace-header__actions > .ticket-search-field`) rather than by passing a class,
-because only literal classes are classifiable by the Kerf analyzer. Every action it renders uses
+apart or be forgotten on a new surface. Its rendered group carries the root class
+`ticket-search-field` plus literal modifiers for the app's own state (`--open`) and the
+toolbar sizing policy a consumer picks with the `layout` prop (HS2-8FS5BJ). A consumer never
+styles the field from its own stylesheet; only literal classes are classifiable by the Kerf
+analyzer, so each combination is spelled out.
+
+- `layout="inline"` (default) keeps Kerf's own collapsed and expanded widths.
+- `layout="grow"` is the workspace header policy. The open field grows into the free room on
+  its row from a 19rem floor, which keeps the view, sort, and utility groups beside it in a
+  640px toolbar. It takes the whole row on a compact toolbar, and its collapsed icon leaves
+  toolbars of 224px or less.
+- `layout="row"` is the narrow-rail policy. The collapsed icon sits at the zone's trailing
+  edge, and the open field fills a row of its own through Kerf `fill`, sliding in from the row
+  above.
+
+The grow sizing, row placement, and row entrance wait on Kerf `KF-GM376R`, `KF-6WX6VK`, and
+`KF-XFPJSY`. Until then they are narrow rules in `ticket-search-field.css` with documented
+`KUI-L022` suppressions (`HS2-DAMHD1`).
+
+The grouped field's quieter chip tint is set on the `ticket-search-field__query` hook Kerf
+renders on its field root. The form-field presentation renders no such hook, so its chips keep
+Kerf's default tint (`KF-5G8WJ0`, `HS2-RXHZVR`). Every action it renders uses
 one generic name (`edit-ticket-search-token`, `remove-ticket-search-token`,
 `clear-ticket-search`, `toggle-ticket-search-help`, `apply-ticket-search-date`); the shared
 `wireTicketSearchFields` helper (`clients/web/src/interactions/ticket-search-field.ts`) resolves
@@ -855,7 +878,7 @@ In a form, the sibling `TicketSearchFormField` (same module) renders Kerf's
 `TokenSearchField presentation="form-field"`: a visible label, hint, and required marker with the
 same inset, typography, and edges as a neighboring `wa-input`, no Toolbar, and the helper surfaces
 stacked below it in an app-owned `.ticket-search-form-field` wrapper that carries the field id for
-the shared wiring and the token colors by inheritance. The saved-view dialog uses it
+the shared wiring. Its chips keep Kerf's default tint (see above). The saved-view dialog uses it
 (HS2-E40KC0); the TicketSearchField demo's "Form field" example exposes it. The remaining field
 radius and required-marker color differences from `wa-input` are Kerf's (`KF-6P4NAV`). The wrapper is declared to Kerf's composition rule through
 `clients/web/ai/component-composition-extension.json` (`rendersAs`
@@ -939,7 +962,8 @@ with search disabled in Notifications and no Columns choice (HS2-TNSD4K).
 - `TicketSearchField` — **built, demo built**: the shared query editor described above. Its
   catalog demo shows the standalone (dialog-style) field with tag completion, the date
   helper, syntax help, chip commit/edit/remove, and clear; the external-surfaces dialog
-  layout; a collapsible toolbar field; and the disabled state (HS2-N5G6JS).
+  layout; the form field; a collapsible toolbar field in each `layout` (`inline`, `grow`,
+  `row`, HS2-8FS5BJ); and the disabled state (HS2-N5G6JS).
 - Search suggestions — **built**: typing `tag:` offers readable matching project tags in
   place through Kerf's model-managed suggestion rows (Arrow Down reaches them, Enter picks,
   Escape returns to the editor), while lifecycle prefixes expose a native date and
@@ -1463,7 +1487,9 @@ capability-aware sections when their underlying features and data contracts land
 - `NotificationCenter` — pending requests followed by newest-first resolution history;
   externally resolved requests remain visible with a neutral outcome message. The canonical
   12px card gap applies within each group and between pending requests and history
-  (HS2-D38KZF)
+  (HS2-D38KZF). `inset="page"` (default) pads it as a centered workspace page; `inset="flush"`
+  drops that padding where the host already insets content, as the ticket rail's sunken list
+  does (HS2-8FS5BJ)
 - `AttentionBadge`
 - `NativeNotificationRouter`
 - `NotificationPreferences`
@@ -1630,7 +1656,12 @@ same chip-based advanced search control used by the main workspace (placed last 
 ticket list, quick-ticket launcher, and ticket inspector inside a Kerf NavStack navigation panel
 (HS2-FY06N4).
 The header/scroller boundary has a quiet one-pixel separator. Its launcher is the same blue pill
-component used by list and column views, with the compact rail label `Ticket…` to prevent wrapping.
+component used by list and column views, with the compact rail label `Ticket…` to prevent wrapping
+and the launcher's own `size="compact"` (a 36px trigger) rather than a rail override. Its
+notifications view asks `NotificationCenter` for `inset="flush"`. The view title is a Kerf `Select`
+whose 36px, flush-start geometry and inset focus ring use the rail's own className hook until Kerf
+ships a title presentation (`KF-PZ23ZP`). The rail stylesheet styles no other component
+(HS2-8FS5BJ).
 Its inspector route is one toolbar row: Kerf's back control, the ticket number, the ticket actions,
 and the rail toggle; the catalog demo pushes a ticket on a plain row click and pops on Back.
 The rail remains independently resizable and hideable beside the terminal grid and is represented
@@ -1640,8 +1671,8 @@ trailing zone of a cataloged `Toolbar` (`responsive="stack"`, `responsiveAt="nar
 is always narrower than that breakpoint, so the zone stacks and wraps at group granularity, giving
 the full-width view switcher its own row, sort plus selection actions plus the trailing-aligned
 collapsible search the next, and an expanded search a full row of its own with the same enter
-animation; the toolbar's own 8px inset and gap replace the earlier app-owned grid (HS2-K9KWJJ,
-superseding the 4px connected top inset from HS2-4Y6SM9).
+animation (the search field's `layout="row"`); the toolbar's own 8px inset and gap replace the
+earlier app-owned grid (HS2-K9KWJJ, superseding the 4px connected top inset from HS2-4Y6SM9).
 
 ## 7. Overlays and shared interaction components
 

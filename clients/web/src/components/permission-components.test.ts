@@ -178,6 +178,21 @@ describe('permission presentation components', () => {
     );
   });
 
+  it('pads as a page by default and drops its inset where a host already insets it (HS2-8FS5BJ)', () => {
+    expect(String(NotificationCenter({ pending: [], history: [] }))).toContain(
+      'class="notification-center" data-component="notification-center" data-inset="page"',
+    );
+    expect(String(NotificationCenter({ pending: [], history: [], inset: 'flush' }))).toContain(
+      'class="notification-center" data-component="notification-center" data-inset="flush"',
+    );
+    const css = readFileSync(resolve(import.meta.dirname, 'notification-center.css'), 'utf8');
+    expect(css).toContainSource(".notification-center[data-inset='flush'] { padding: 0; }");
+    // The ticket rail asks for the flush inset instead of restyling the center from its stylesheet.
+    expect(readFileSync(resolve(import.meta.dirname, 'terminal-ticket-rail.css'), 'utf8')).not.toContain(
+      'notification-center',
+    );
+  });
+
   it('offers the three notification views with counts and current state', () => {
     const markup = String(
       NotificationNavigation({ selected: 'day', counts: { pending: 2, day: 3, week: 5 }, collapseControl: true }),

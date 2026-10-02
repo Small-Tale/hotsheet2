@@ -60,38 +60,27 @@ wa-button.workspace-header__text-action::part(base) {
 .workspace-header__sort-group {
   --kui-select-selected-color: var(--kui-toolbar-control-color);
 }
-/* The single sort group already paints the pill container/background; keep the Select's own
-   combobox transparent so it fills the group instead of drawing a second, shorter pill that pokes
-   out of the group's rounding (HS2-W3VD53). Matches the transparent-item pattern of the other
-   control groups. */
-/* One focus ring on the visible pill group instead of Web Awesome's ring on the smaller inner
-   combobox (HS2-M1DF1D): the group owns the ring (`focusRing="outline"`) and the Select hands its
-   focus to it (`focusRingOwner="group"`). The explicit pill radius keeps the ring pill-shaped. */
-/* Kerf's search group owns the collapsed size and the width transition. Expanded, the header field
-   takes the room its zone offers (HS2-W843B4); the group's chrome stays Kerf-owned. The 19rem floor
-   keeps the view, sort (a caret-free 44px trigger since HS2-4ZA33S), and utility groups on one row
-   beside the field in a 640px-wide toolbar. */
-.ticket-search-field[data-content='search'][data-expanded='true'] {
-  --kui-token-search-expanded-width: 48rem;
-  max-width: 100%;
-  min-width: 19rem;
-  flex: 1 1 19rem;
-}
-/* The overflow menu only appears where the container queries below yield controls to it. */
+/* The search field sizes itself through its own `layout="grow"` policy (TicketSearchField,
+   HS2-8FS5BJ); this module styles only its own groups. The overflow menu only appears where the
+   container queries below yield controls to it. */
 .workspace-header__overflow-group {
-  display: none;
-}
-.ticket-search-field[data-expanded='true'] ~ .workspace-header__overflow-group {
   display: none;
 }
 /* The terminal rail composes the same groups (marked `--rail`) in a toolbar that is always narrower
    than these breakpoints and wraps them onto rows instead of yielding them to the menu, so the
-   overflow queries skip rail groups (HS2-K9KWJJ). */
+   overflow queries skip rail groups (HS2-K9KWJJ). The rail's view switcher fills its first row:
+   TEMPORARY until ToolbarControlGroup offers a full-row size (KF-GM376R). */
+.view-mode-switcher.view-mode-switcher--rail {
+  width: 100%;
+}
 @container kui-toolbar (max-width: remify(480px)) {
   .workspace-header__utility-group:not(.workspace-header__utility-group--rail) {
     display: none;
   }
-  .workspace-header__overflow-group:not(.workspace-header__overflow-group--rail) {
+  .workspace-header__overflow-group:not(
+    .workspace-header__overflow-group--rail,
+    .workspace-header__overflow-group--yield
+  ) {
     display: inline-flex;
   }
 }
@@ -100,34 +89,17 @@ wa-button.workspace-header__text-action::part(base) {
     display: none;
   }
 }
-/* On a narrow (mobile) toolbar, hide the view-mode segmented control while search is open so the
-   search field gets the full row (sort/utility are already hidden at these widths) — HS2-0SARDD.
-   The zone that holds the expanded field is the condition; there is no wrapper element. */
+/* On a narrow (mobile) toolbar, the groups WorkspaceControls marks `--yield` while its search is
+   open leave the row so the search field gets all of it (HS2-0SARDD). TEMPORARY until Kerf's
+   Toolbar can let an expanded trailing control take a compact row from its siblings (KF-6WX6VK). */
 @container kui-toolbar (max-width: remify(480px)) {
-  :has(> .ticket-search-field[data-expanded='true']) > .view-mode-switcher:not(.view-mode-switcher--rail),
-  :has(> .ticket-search-field[data-expanded='true'])
-    > .workspace-header__sort-group:not(.workspace-header__sort-group--rail),
-  :has(> .ticket-search-field[data-expanded='true'])
-    > .workspace-header__utility-group:not(.workspace-header__utility-group--rail) {
+  .view-mode-switcher--yield,
+  .workspace-header__sort-group--yield,
+  .workspace-header__utility-group--yield {
     display: none;
-  }
-  .ticket-search-field[data-content='search'][data-expanded='true'] {
-    width: 100%;
-    min-width: 0;
   }
 }
 @container kui-toolbar (max-width: remify(224px)) {
-  .ticket-search-field[data-content='search']:not([data-expanded='true']) {
-    display: none;
-  }
-  :has(> .ticket-search-field[data-expanded='true']) > .view-mode-switcher.view-mode-switcher {
-    display: none;
-  }
-  .ticket-search-field[data-content='search'][data-expanded='true'] {
-    display: flex;
-    width: 100%;
-    min-width: 0;
-  }
   .workspace-header__identity {
     display: none;
   }

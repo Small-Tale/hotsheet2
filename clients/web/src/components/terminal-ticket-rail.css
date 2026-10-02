@@ -1,5 +1,8 @@
 /* The standalone rail (the UX catalog) hosts the same NavStack the Workbench navigation panel does
-   (HS2-FY06N4); the stack fills it and owns the toolbar row, pinned header, and scrolling view. */
+   (HS2-FY06N4); the stack fills it and owns the toolbar row, pinned header, and scrolling view.
+   The composed WorkspaceControls, TicketSearchField, QuickTicketLauncher, and NotificationCenter
+   take their rail presentation through their own props (HS2-8FS5BJ); this module styles only its
+   own wrappers and the className hooks it passes to its Kerf Selects. */
 .terminal-ticket-rail {
   display: grid;
   width: 100%;
@@ -14,27 +17,6 @@
   --kui-select-selected-color: var(--wa-color-neutral-on-normal);
   --kui-select-selected-font-size: var(--wa-font-size-m);
 }
-/* The rail chrome clips overflow on several ancestors; inset the select focus ring so an
-   overflow:hidden ancestor can never crop it (HS2-HEYASQ). */
-.terminal-ticket-rail__header .kui-select::part(combobox) {
-  outline-offset: -3px;
-}
-/* The rail's controls Toolbar stacks its trailing zone (the rail is always narrower than Kerf's
-   `narrow` breakpoint) and wraps at group granularity: the view switcher fills the first row; sort,
-   selection actions, and the collapsible search share the next, the search pushed to the trailing
-   edge; an expanded search grows to the full width and so wraps onto its own row (HS2-K9KWJJ). */
-.terminal-ticket-rail__controls .view-mode-switcher {
-  width: 100%;
-}
-.terminal-ticket-rail__controls .ticket-search-field {
-  width: remify(40.4px);
-  margin-inline-start: auto;
-  transition: width 0.25s ease;
-}
-.terminal-ticket-rail__controls .ticket-search-field[data-content='search'][data-expanded='true'] {
-  width: 100%;
-  animation: terminal-ticket-rail-search-enter 0.25s ease;
-}
 /* App-owned wrappers around the root view's Kerf Toolbar and Select (HS2-VABS08). */
 .terminal-ticket-rail__heading {
   display: grid;
@@ -48,34 +30,16 @@
   width: max-content;
   max-width: remify(192px);
 }
-.terminal-ticket-rail__view .kui-select::part(combobox) {
+/* TEMPORARY until Kerf Select offers a view-title presentation (KF-PZ23ZP): the view title
+   is a 36px trigger whose label starts flush with the list below, with the caret tucked against
+   it, and its focus ring is inset so the rail's clipping ancestors never crop it (HS2-HEYASQ). The
+   rules target only the className hook this module passes to its own Select. */
+.terminal-ticket-rail__view .terminal-ticket-rail__view-select::part(combobox) {
   min-height: remify(36px);
   padding: 0 remify(21.6px) 0 0;
+  outline-offset: -3px;
 }
-.terminal-ticket-rail__view .kui-select::part(expand-icon) {
+.terminal-ticket-rail__view .terminal-ticket-rail__view-select::part(expand-icon) {
   position: absolute;
   inset-inline-end: remify(2.4px);
-}
-.terminal-ticket-rail__header .quick-ticket-composer__launcher {
-  min-height: remify(36px);
-  padding-inline: remify(12.8px);
-}
-.terminal-ticket-rail__list .notification-center {
-  padding: 0;
-}
-@keyframes terminal-ticket-rail-search-enter {
-  from {
-    transform: translateY(calc(-100% - var(--kui-space-xs)));
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .terminal-ticket-rail__controls .ticket-search-field {
-    transition: none;
-  }
-  .terminal-ticket-rail__controls .ticket-search-field[data-content='search'][data-expanded='true'] {
-    animation: none;
-  }
 }

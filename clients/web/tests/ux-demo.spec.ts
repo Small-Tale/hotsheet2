@@ -6518,7 +6518,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await page.goto('/ux-demo?component=ticket-search-field');
   const demo = page.getByRole('region', { name: 'TicketSearchField demo' });
   const fields = demo.locator('.ticket-search-field');
-  await expect(fields).toHaveCount(4);
+  await expect(fields).toHaveCount(6);
   expect(await fields.evaluateAll((nodes) => nodes.every((node) => node.closest('[data-component="toolbar"]')))).toBe(
     true,
   );
@@ -6641,12 +6641,40 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await expect(collapsibleQuery).toHaveText('');
   await collapsibleQuery.press('Escape');
   await expect(collapsible).toHaveAttribute('data-expanded', 'false');
+  // Each `layout` sizes the open field through TicketSearchField's own policy, open -> closed ->
+  // open again, with no consumer stylesheet involved (HS2-8FS5BJ).
+  const grow = fields.nth(3),
+    row = fields.nth(4);
+  for (let pass = 0; pass < 2; pass += 1) {
+    await demo.getByRole('button', { name: 'Search grow layout' }).click();
+    await expect(grow).toHaveClass(/ticket-search-field--grow ticket-search-field--open/);
+    // The 19rem floor holds beside the leading title on a wide toolbar.
+    await expect.poll(async () => Math.round((await grow.boundingBox())?.width ?? 0)).toBeGreaterThanOrEqual(304);
+    await demo.getByRole('searchbox', { name: 'Search grow layout' }).press('Escape');
+    await expect(grow).toHaveAttribute('data-expanded', 'false');
+    await expect(grow).not.toHaveClass(/ticket-search-field--open/);
+    await expect.poll(async () => Math.round((await grow.boundingBox())?.width ?? 0)).toBe(44);
+  }
+  const rowZone = row.locator('xpath=..');
+  // Collapsed, the row layout's icon sits at its zone's trailing edge.
+  const rowZoneBox = (await rowZone.boundingBox())!,
+    rowBox = (await row.boundingBox())!;
+  expect(Math.abs(rowZoneBox.x + rowZoneBox.width - (rowBox.x + rowBox.width))).toBeLessThanOrEqual(1);
+  await demo.getByRole('button', { name: 'Search row layout' }).click();
+  await expect(row).toHaveClass(/ticket-search-field--row ticket-search-field--open/);
+  await expect(row.locator('[data-component="token-search-field"]')).toHaveAttribute('data-fill', 'true');
+  // Open, it fills a row of its own (Kerf `fill`).
+  await expect
+    .poll(async () => Math.round((await row.boundingBox())?.width ?? 0))
+    .toBe(Math.round((await rowZone.boundingBox())!.width));
+  await demo.getByRole('searchbox', { name: 'Search row layout' }).press('Escape');
+  await expect(row).toHaveAttribute('data-expanded', 'false');
   // The disabled variant keeps its chrome but refuses input.
   await expect(demo.getByRole('searchbox', { name: 'Search query', exact: true }).nth(1)).toHaveAttribute(
     'aria-disabled',
     'true',
   );
-  await expect(fields.nth(3)).toHaveAttribute('data-expanded', 'true');
+  await expect(fields.nth(5)).toHaveAttribute('data-expanded', 'true');
 });
 
 test('pushes and pops ticket detail on the TerminalTicketRail NavStack with one toolbar row (HS2-FY06N4)', async ({

@@ -127,7 +127,7 @@ describe('WorkspaceHeader', () => {
       'class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><svg data-lucide="arrow-down-wide-narrow"',
     );
     expect(markup).not.toContain('<input type="checkbox"');
-    expect(markup).toMatch(/ticket-search-field"[^>]*data-expanded="true"/);
+    expect(markup).toMatch(/ticket-search-field--grow ticket-search-field--open"[^>]*data-expanded="true"/);
     expect(markup).toContain('data-collapsible="true" data-expanded="true"');
     expect(markup).not.toContain('workspace-header__search-tokens');
     expect(markup).toContain('aria-label="Search syntax help"');
@@ -173,16 +173,18 @@ describe('WorkspaceHeader', () => {
     // No wrapper element: the search field sizes itself inside whichever Toolbar zone holds it (HS2-EZ1N7Z).
     expect(headerCss).not.toContain('workspace-header__actions');
     expect(headerCss).not.toContain('.kui-toolbar-control-group');
-    expect(headerCss).toContainSource(
-      ".ticket-search-field[data-content='search'][data-expanded='true'] { --kui-token-search-expanded-width: 48rem; max-width: 100%; min-width: 19rem; flex: 1 1 19rem; }",
-    );
+    // The header chooses the search field's `layout="grow"` policy; the sizing lives in
+    // TicketSearchField's own stylesheet, never this one (HS2-8FS5BJ).
+    expect(headerCss).not.toContain('ticket-search-field');
+    expect(markup).toContain('ticket-search-field ticket-search-field--grow');
     // Token colors and the helper popovers belong to TicketSearchField, not the header (HS2-N5G6JS).
     expect(headerCss).not.toContain('.kui-token-search {');
     expect(headerCss).not.toContain('search-suggestions');
     expect(headerCss).not.toContain('search-help');
     expect(headerCss).toContainSource('.workspace-header__overflow-group { display: none; }');
-    expect(headerCss).toContainSource(
-      ".ticket-search-field[data-expanded='true'] ~ .workspace-header__overflow-group { display: none; }",
+    // While its search is open the overflow menu yields too; no sibling combinator reads the field.
+    expect(String(WorkspaceControls({ mode: 'list', searchOpen: true }))).toContain(
+      'workspace-header__overflow-group workspace-header__overflow-group--yield',
     );
     expect(headerCss).toContainSource('wa-button.workspace-header__text-action::part(base) { width: auto;');
     expect(headerCss).toContainSource(
@@ -271,7 +273,7 @@ describe('WorkspaceHeader', () => {
         searchHelpOpen: true,
       }),
     );
-    expect(markup).toMatch(/ticket-search-field"[^>]*data-expanded="false"/);
+    expect(markup).toMatch(/ticket-search-field ticket-search-field--grow"[^>]*data-expanded="false"/);
     expect(markup).toContain('data-component="token-search-field" data-token-search-id="workspace-search"');
     expect(markup).toContain('data-collapsible="true" data-expanded="false"');
     expect(markup).toContain(
@@ -418,7 +420,7 @@ describe('WorkspaceHeader', () => {
       '.workspace-header__utility-group:not(.workspace-header__utility-group--rail) { display: none; }',
     );
     expect(headerCss).toContainSource(
-      '.workspace-header__overflow-group:not(.workspace-header__overflow-group--rail) { display: inline-flex; }',
+      '.workspace-header__overflow-group:not( .workspace-header__overflow-group--rail, .workspace-header__overflow-group--yield ) { display: inline-flex; }',
     );
     expect(headerCss).toContainSource(
       '.workspace-header__sort-group:not(.workspace-header__sort-group--rail) { display: none; }',
@@ -434,16 +436,38 @@ describe('WorkspaceHeader', () => {
     ])
       expect(railMarkup).toContain(`${group} ${group}--rail`);
     expect(markup).not.toContain('--rail');
+    // The rail sizes its search as its own row; the header grows its search on the header's row.
+    expect(railMarkup).toContain('ticket-search-field ticket-search-field--row');
+    expect(markup).toContain('ticket-search-field ticket-search-field--grow');
+    // Transition matrix for the yield state: closed -> open -> closed again, toolbar and rail.
+    const groups = [
+      'view-mode-switcher',
+      'workspace-header__sort-group',
+      'workspace-header__utility-group',
+      'workspace-header__overflow-group',
+    ];
+    const closedMarkup = String(WorkspaceControls({ mode: 'list', searchOpen: false }));
+    const openMarkup = String(WorkspaceControls({ mode: 'list', searchOpen: true }));
+    for (const group of groups) {
+      expect(closedMarkup).not.toContain(`${group}--yield`);
+      expect(openMarkup).toContain(`${group} ${group}--yield`);
+    }
+    expect(String(WorkspaceControls({ mode: 'list', searchOpen: false }))).toBe(closedMarkup);
+    // The rail never yields; it wraps its groups onto rows instead (HS2-K9KWJJ).
+    const railOpen = String(WorkspaceControls({ mode: 'list', presentation: 'rail', searchOpen: true }));
+    expect(railOpen).not.toContain('--yield');
+    expect(railOpen).toContain('ticket-search-field--row ticket-search-field--open');
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(416px))');
     expect(headerCss).not.toContainSource('.workspace-header__sort-group { display: none; }');
-    // An expanded search hides its sibling groups through the zone that holds it, not a wrapper.
+    // An open search hides its sibling groups through the `--yield` modifiers WorkspaceControls
+    // derives from its own `searchOpen` state, never by reading the search field's rendered state
+    // or styling it from this stylesheet (HS2-0SARDD, HS2-8FS5BJ).
     expect(headerCss).toContainSource(
-      ":has(> .ticket-search-field[data-expanded='true']) > .view-mode-switcher:not(.view-mode-switcher--rail), :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__sort-group:not(.workspace-header__sort-group--rail), :has(> .ticket-search-field[data-expanded='true']) > .workspace-header__utility-group:not(.workspace-header__utility-group--rail) { display: none; }",
+      '@container kui-toolbar (max-width: remify(480px)) { .view-mode-switcher--yield, .workspace-header__sort-group--yield, .workspace-header__utility-group--yield { display: none; } }',
     );
+    expect(headerCss).not.toContain('ticket-search-field');
+    expect(headerCss).not.toContain(':has(');
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(224px))');
-    expect(headerCss).toContainSource(
-      ".ticket-search-field[data-content='search']:not([data-expanded='true']) { display: none; }",
-    );
     expect(headerCss).toContainSource(
       '@container kui-toolbar (max-width: remify(176px)) { .view-mode-switcher { display: none; } }',
     );

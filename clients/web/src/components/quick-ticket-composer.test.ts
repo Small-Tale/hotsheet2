@@ -45,6 +45,14 @@ describe('QuickTicketComposer', () => {
     expect(collapsed).toContain('New ticket…');
     expect(String(QuickTicketLauncher({ label: 'Ticket…' }))).toContain('Ticket…');
     expect(String(QuickTicketLauncher({ label: 'Ticket…' }))).not.toContain('New ticket…');
+    // Size is a launcher prop a narrow heading picks, never a consumer override (HS2-8FS5BJ).
+    expect(collapsed).toContain('class="quick-ticket-composer__launcher" data-size="default"');
+    expect(String(QuickTicketLauncher({ size: 'compact' }))).toContain(
+      'class="quick-ticket-composer__launcher" data-size="compact"',
+    );
+    expect(readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8')).toContainSource(
+      ".quick-ticket-composer__launcher[data-size='compact'] { min-height: remify(36px); padding-inline: remify(12.8px); }",
+    );
     const collapsedComposer = String(QuickTicketComposer({ expanded: false }));
     expect(collapsedComposer).toContain('data-component="quick-ticket-composer"');
     expect(collapsedComposer).toContain('aria-hidden="true"');

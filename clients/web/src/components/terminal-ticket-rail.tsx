@@ -70,6 +70,7 @@ export function terminalTicketRailPanel({
   const heading = views.length ? (
     <div class="terminal-ticket-rail__view">
       <Select
+        className="terminal-ticket-rail__view-select"
         presentation="toolbar-borderless"
         name="terminal-rail-view"
         value={selectedViewId}

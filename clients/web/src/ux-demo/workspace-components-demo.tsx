@@ -243,7 +243,7 @@ export function TerminalTicketRailDemo() {
         }
         content={
           mode === 'notifications' ? (
-            <NotificationCenter title="Notifications" pending={[]} history={[]} />
+            <NotificationCenter title="Notifications" pending={[]} history={[]} inset="flush" />
           ) : mode === 'board' ? (
             <TicketBoard
               columns={railDemoColumns(filteredWorkspaceTickets())}
@@ -263,7 +263,7 @@ export function TerminalTicketRailDemo() {
               }
             : undefined
         }
-        action={<QuickTicketLauncher label="Ticket…" />}
+        action={<QuickTicketLauncher label="Ticket…" size="compact" />}
       />
     </section>
   );

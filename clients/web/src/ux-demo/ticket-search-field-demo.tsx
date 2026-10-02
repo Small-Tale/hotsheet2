@@ -1,5 +1,6 @@
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { batch, signal } from 'kerfjs';
 
 import { TicketSearchField, TicketSearchFormField, TicketSearchSurfaces } from '../components/ticket-search-field';
@@ -9,6 +10,9 @@ import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-m
 export const TICKET_SEARCH_DEMO_TAGS = ['client', 'docs', 'needs design', 'parser', 'server', 'ui'] as const;
 
 export const ticketSearchDemoCollapsibleOpen = signal(false);
+/** Open state of the `layout="grow"` and `layout="row"` collapsible specimens (HS2-8FS5BJ). */
+export const ticketSearchDemoGrowOpen = signal(false);
+export const ticketSearchDemoRowOpen = signal(false);
 export const ticketSearchDemoEvent = signal('');
 const ticketSearchDemoHelpOpen: Record<string, ReturnType<typeof signal<boolean>>> = {
   'ticket-search-demo': signal(false),
@@ -65,6 +69,8 @@ export const ticketSearchDemoModels: Readonly<Record<string, TokenSearchModel>> 
   'ticket-search-demo': demoModel(),
   'ticket-search-demo-external': demoModel(),
   'ticket-search-demo-collapsible': demoModel(),
+  'ticket-search-demo-grow': demoModel(),
+  'ticket-search-demo-row': demoModel(),
   'ticket-search-demo-form': demoModel(),
   // The disabled specimen shows an uncommitted filter as plain text, not a chip.
   'ticket-search-demo-disabled': demoModel('is:open', { commit: false }),
@@ -83,6 +89,8 @@ export function resetTicketSearchDemo(): void {
       else model.replace({ query: '', tokens: [] });
     for (const open of Object.values(ticketSearchDemoHelpOpen)) open.value = false;
     ticketSearchDemoCollapsibleOpen.value = false;
+    ticketSearchDemoGrowOpen.value = false;
+    ticketSearchDemoRowOpen.value = false;
     ticketSearchDemoEvent.value = '';
   });
 }
@@ -163,9 +171,15 @@ export function TicketSearchFieldDemo() {
         />
       </div>
       <div>
-        <h2>Collapsible toolbar field</h2>
+        <h2>Collapsible toolbar field, inline layout</h2>
+        <p class="component-stage__hint">
+          <code>layout="inline"</code> (the default) keeps Kerf's own collapsed and expanded widths; a{' '}
+          <code>trailing-priority</code> Toolbar reserves the expanded field's track.
+        </p>
         <Toolbar
-          className="ticket-search-field-demo__toolbar ticket-search-field-demo__collapsible-toolbar"
+          className="ticket-search-field-demo__toolbar"
+          responsive="trailing-priority"
+          responsiveAt="narrow"
           trailing={
             <TicketSearchField
               id="ticket-search-demo-collapsible"
@@ -173,6 +187,52 @@ export function TicketSearchFieldDemo() {
               model={ticketSearchDemoModels['ticket-search-demo-collapsible']}
               collapsible
               expanded={ticketSearchDemoCollapsibleOpen.value}
+            />
+          }
+        />
+      </div>
+      <div>
+        <h2>Grow layout (workspace header)</h2>
+        <p class="component-stage__hint">
+          <code>layout="grow"</code>: the open field grows into the free room on its row from a 19rem floor, takes the
+          whole row on a compact toolbar, and its collapsed icon leaves the tiniest toolbars (HS2-8FS5BJ).
+        </p>
+        <Toolbar
+          className="ticket-search-field-demo__toolbar"
+          responsive="stack"
+          responsiveAt="compact"
+          leading={<ToolbarText text="Queue" size="large" />}
+          trailing={
+            <TicketSearchField
+              id="ticket-search-demo-grow"
+              label="Search grow layout"
+              model={ticketSearchDemoModels['ticket-search-demo-grow']}
+              collapsible
+              expanded={ticketSearchDemoGrowOpen.value}
+              layout="grow"
+            />
+          }
+        />
+      </div>
+      <div class="ticket-search-field-demo__narrow">
+        <h2>Row layout (narrow rail)</h2>
+        <p class="component-stage__hint">
+          <code>layout="row"</code>: the collapsed icon sits at its zone's trailing edge and the open field fills a row
+          of its own (Kerf <code>fill</code>), sliding in from the row above.
+        </p>
+        <Toolbar
+          className="ticket-search-field-demo__toolbar"
+          responsive="stack"
+          responsiveAt="narrow"
+          leading={<ToolbarText text="Queue" size="large" />}
+          trailing={
+            <TicketSearchField
+              id="ticket-search-demo-row"
+              label="Search row layout"
+              model={ticketSearchDemoModels['ticket-search-demo-row']}
+              collapsible
+              expanded={ticketSearchDemoRowOpen.value}
+              layout="row"
             />
           }
         />

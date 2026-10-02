@@ -335,6 +335,16 @@ function WorkspaceOverflowControls({
     >
       {menu}
     </ToolbarControlGroup>
+  ) : searchOpen ? (
+    // The open search takes the compact row the menu would otherwise appear in (HS2-8FS5BJ).
+    <ToolbarControlGroup
+      className="workspace-header__overflow-group workspace-header__overflow-group--yield"
+      single
+      appearance="borderless"
+      nestedDropdown
+    >
+      {menu}
+    </ToolbarControlGroup>
   ) : (
     <ToolbarControlGroup className="workspace-header__overflow-group" single appearance="borderless" nestedDropdown>
       {menu}
@@ -347,7 +357,8 @@ function WorkspaceOverflowControls({
  * actions, the collapsible ticket search, and the narrow-width overflow menu, each a
  * cataloged ToolbarControlGroup (or the TicketSearchField that renders one). There is no
  * wrapper element; the enclosing Toolbar zone (or the workspace-grid rail's own grid) owns
- * layout, and responsive rules key off the search field's own expanded state (HS2-EZ1N7Z).
+ * layout (HS2-EZ1N7Z). Responsive rules key off this component's own `searchOpen` state through
+ * `--yield` modifiers, and the search field sizes itself through its `layout` prop (HS2-8FS5BJ).
  */
 export function WorkspaceControls({
   mode,
@@ -431,10 +442,19 @@ export function WorkspaceControls({
         </button>
       </>
     );
+  // While the header's search is open its other groups carry a `--yield` modifier: on a compact
+  // toolbar they leave the row to the search field (HS2-0SARDD). The state is the app's own
+  // `searchOpen`, so no stylesheet reads the search field's rendered state (HS2-8FS5BJ). The rail
+  // never yields; it wraps its groups onto rows instead.
+  const yieldToSearch = !rail && searchOpen;
   return (
     <>
       {rail ? (
         <ToolbarControlGroup className="view-mode-switcher view-mode-switcher--rail" shape="rounded">
+          {viewSwitcher}
+        </ToolbarControlGroup>
+      ) : yieldToSearch ? (
+        <ToolbarControlGroup className="view-mode-switcher view-mode-switcher--yield" shape="pill">
           {viewSwitcher}
         </ToolbarControlGroup>
       ) : (
@@ -450,6 +470,15 @@ export function WorkspaceControls({
         >
           {sortSelect}
         </ToolbarControlGroup>
+      ) : yieldToSearch ? (
+        <ToolbarControlGroup
+          className="workspace-header__sort-group workspace-header__sort-group--yield"
+          single
+          shape="pill"
+          focusRing="outline"
+        >
+          {sortSelect}
+        </ToolbarControlGroup>
       ) : (
         <ToolbarControlGroup className="workspace-header__sort-group" single shape="pill" focusRing="outline">
           {sortSelect}
@@ -458,6 +487,15 @@ export function WorkspaceControls({
       {rail ? (
         <ToolbarControlGroup
           className="workspace-header__utility-group workspace-header__utility-group--rail"
+          label="View actions"
+          selectedChrome="outline"
+          selectedTone="pop"
+        >
+          {utilityButtons}
+        </ToolbarControlGroup>
+      ) : yieldToSearch ? (
+        <ToolbarControlGroup
+          className="workspace-header__utility-group workspace-header__utility-group--yield"
           label="View actions"
           selectedChrome="outline"
           selectedTone="pop"
@@ -483,6 +521,7 @@ export function WorkspaceControls({
         collapsible
         expanded={searchOpen}
         helpOpen={searchHelpOpen}
+        layout={rail ? 'row' : 'grow'}
       />
       <WorkspaceOverflowControls
         mode={mode}

@@ -1,7 +1,7 @@
 /* TicketSearchField: Kerf's grouped TokenSearchField owns the border, padding, and focus ring.
    This module owns only the Hot Sheet helper surfaces (tag suggestions, date helper, syntax
-   help) that hang below the field, and the field's token colors. Consumers place and size the
-   group through the class they pass in (HS2-N5G6JS). */
+   help) that hang below the field, the field's token colors, and the toolbar sizing policy a
+   consumer picks with the `layout` prop (HS2-N5G6JS, HS2-8FS5BJ). */
 .ticket-search-field {
   position: relative;
 }
@@ -12,22 +12,62 @@
   height: auto;
   overflow: visible;
 }
-/* The form-field presentation stacks Kerf's labeled field over the helper surfaces; its token
-   colors match the grouped field's and reach Kerf's field by inheritance (HS2-E40KC0). */
-.ticket-search-form-field {
-  --kui-token-search-background: var(--wa-color-surface-default);
-  --kui-token-search-border: var(--wa-color-neutral-border-normal);
+/* The grouped field's quieter chips: its token color is set on the app-owned `className` hook
+   Kerf's TokenSearchField renders on its root (HS2-8FS5BJ). Kerf declares its defaults on that same
+   root, so the hook is qualified by this component's own root to outrank them (KF-5G8WJ0); the
+   surface and border tokens match Kerf's defaults and are not restated. */
+.ticket-search-field .ticket-search-field__query {
   --kui-token-search-token-background: var(--wa-color-brand-fill-quiet);
-  --kui-token-search-token-foreground: var(--wa-color-brand-on-quiet);
+}
+.ticket-search-form-field {
   display: grid;
   gap: var(--kui-space-2xs);
   min-width: 0;
 }
-.ticket-search-field .kui-token-search {
-  --kui-token-search-background: var(--wa-color-surface-default);
-  --kui-token-search-border: var(--wa-color-neutral-border-normal);
-  --kui-token-search-token-background: var(--wa-color-brand-fill-quiet);
-  --kui-token-search-token-foreground: var(--wa-color-brand-on-quiet);
+/* `layout="grow"` (the workspace header). TEMPORARY until Kerf ships an expanded-search
+   grow policy (KF-GM376R, KF-6WX6VK): the open field grows into the free room on its row from a
+   19rem floor (which keeps the view, sort, and utility groups beside it in a 640px toolbar,
+   HS2-W843B4) instead of Kerf's `fill`, which always wraps it onto its own row. On a compact
+   toolbar it takes the whole row (its sibling groups yield, HS2-0SARDD), and in the tiniest
+   toolbars the collapsed icon leaves. Root classes are the app's own layout and open state. */
+.ticket-search-field.ticket-search-field--grow.ticket-search-field--open {
+  --kui-token-search-expanded-width: 48rem;
+  min-width: 19rem;
+  flex: 1 1 19rem;
+}
+@container kui-toolbar (max-width: remify(480px)) {
+  .ticket-search-field.ticket-search-field--grow.ticket-search-field--open {
+    width: 100%;
+    min-width: 0;
+  }
+}
+@container kui-toolbar (max-width: remify(224px)) {
+  .ticket-search-field.ticket-search-field--grow:not(.ticket-search-field--open) {
+    display: none;
+  }
+}
+/* `layout="row"` (the narrow ticket rail). Kerf's `fill` gives the open field a full row of its
+   own. TEMPORARY until Kerf can place a group at a wrapping zone's trailing edge and animate a
+   group onto its new row (KF-XFPJSY): the collapsed icon is pushed to the trailing edge, and
+   the open field slides in from the row above (HS2-K9KWJJ). */
+.ticket-search-field.ticket-search-field--row {
+  margin-inline-start: auto;
+}
+.ticket-search-field.ticket-search-field--row.ticket-search-field--open {
+  animation: ticket-search-field-row-enter 0.25s ease;
+}
+@keyframes ticket-search-field-row-enter {
+  from {
+    transform: translateY(calc(-100% - var(--kui-space-xs)));
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticket-search-field.ticket-search-field--row.ticket-search-field--open {
+    animation: none;
+  }
 }
 .ticket-search-field__help-button {
   display: grid;
