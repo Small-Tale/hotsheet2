@@ -148,7 +148,14 @@ export function QuickTicketComposer({
           {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
           data-submitting={String(submitting)}
         >
-          <wa-input name="new-ticket-title" label="Ticket title" value={title} autofocus required></wa-input>
+          <wa-input
+            class="quick-ticket-composer__title"
+            name="new-ticket-title"
+            label="Ticket title"
+            value={title}
+            autofocus
+            required
+          ></wa-input>
           <div class="quick-ticket-composer__metadata">
             <TicketCategorySelect name="new-ticket-category" label="Category" value={category} />
             <button

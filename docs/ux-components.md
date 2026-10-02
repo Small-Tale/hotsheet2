@@ -2322,6 +2322,26 @@ an own class or configures the child through its props:
     presentation.
   - The foreground passes `PermissionRequestPopup layer="flow"` instead of repositioning the popup.
 
+HS2-4V4CV2 cleared the dialogs, settings, and forms group (32 entries). Each element those
+components author now carries an own class, so the styled subject cannot reach a child component.
+Examples are the command editor's `__field`, `__control`, `__hint`, and `__legend`, the provider
+form's `__field*`, `__auth-copy`, and `__account-usage`, the not-working and HS1 dialogs'
+`__footer`/`__button`/`__cancel`, and the bulk tag dialog's `__choice`. The closing ticket's search
+icon uses LucideIcon `size={16}`.
+
+Children are configured instead of restyled:
+
+- The Accounts card header uses the new `ProviderIcon` `size="l"` variant, a fixed 24px mark. The
+  icon owns `flex: none`.
+- The connection details values wrap their text in an own `__value` span. That span fills the
+  stacked row at phone width, rather than overriding the ValueTable `dd` alignment.
+- The composer's `__footer wa-button svg` rule was dead and is deleted.
+
+Before/after captures at 1280 and 390 are pixel-identical, with one deliberate exception. The
+command editor's `.command-settings-editor__grid label` and `input` rules had leaked into
+`LucideIconPicker`, forcing its search field to a grid layout with semibold text. The picker now
+lays out as its own stylesheet declares, at the editor's 14px regular field text.
+
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
 rail's controls Toolbar now sizes the expanded search itself. HS2-402AXQ replaced the project
 tab strip's Add-project `wa-button` (and a stale `wa-dropdown` rule) with an app-styled native

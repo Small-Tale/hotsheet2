@@ -17,10 +17,6 @@
   display: inline-flex;
   color: var(--wa-color-neutral-on-quiet);
 }
-.ticket-close-dialog__duplicate wa-input svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .ticket-close-dialog__results {
   min-height: remify(68px);
   max-height: remify(224px);

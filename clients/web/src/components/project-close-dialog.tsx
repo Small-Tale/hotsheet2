@@ -142,7 +142,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
           <aside class="project-close-dialog__resources" aria-label="Running terminals and AI chats">
             <ListHeader label="Running items" />
             {state.resources.length ? (
-              <nav>
+              <nav class="project-close-dialog__resource-list">
                 {state.resources.map((resource) => {
                   const key = projectCloseResourceKey(resource),
                     terminal = resource.kind === 'terminal';

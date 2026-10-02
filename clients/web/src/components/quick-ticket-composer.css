@@ -62,7 +62,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(remify(192px), remify(240px));
   gap: var(--kui-space-m);
 }
-.quick-ticket-composer wa-input::part(base) {
+.quick-ticket-composer__title::part(base) {
   height: remify(44px);
   min-height: remify(44px);
 }
@@ -298,11 +298,6 @@
   display: flex;
   margin-left: auto;
   gap: var(--kui-space-xs);
-}
-.quick-ticket-composer__footer wa-button svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-  margin-right: var(--kui-space-2xs);
 }
 .quick-ticket-composer__notice {
   grid-column: 1 / -1;

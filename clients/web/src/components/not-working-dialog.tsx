@@ -68,11 +68,20 @@ export function NotWorkingDialog({
         <p class="not-working-dialog__error" role="alert">
           {error}
         </p>
-        <footer>
-          <button type="button" {...TICKET_SELECTION_ACTIONS.cancelNotWorking.attrs} disabled={submitting}>
+        <footer class="not-working-dialog__footer">
+          <button
+            type="button"
+            class="not-working-dialog__button not-working-dialog__cancel"
+            {...TICKET_SELECTION_ACTIONS.cancelNotWorking.attrs}
+            disabled={submitting}
+          >
             Cancel
           </button>
-          <button type="submit" class="not-working-dialog__submit" disabled={submitting || empty}>
+          <button
+            type="submit"
+            class="not-working-dialog__button not-working-dialog__submit"
+            disabled={submitting || empty}
+          >
             {submitting ? 'Submitting…' : submitLabel}
           </button>
         </footer>

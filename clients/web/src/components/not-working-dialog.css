@@ -42,12 +42,12 @@
 .not-working-dialog__error:empty {
   visibility: hidden;
 }
-.not-working-dialog footer {
+.not-working-dialog__footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--kui-space-xs);
 }
-.not-working-dialog footer button {
+.not-working-dialog__button {
   min-height: remify(37.6px);
   padding: 0 remify(13.6px);
   border: 0;
@@ -55,15 +55,15 @@
   cursor: pointer;
   font-weight: 650;
 }
-.not-working-dialog footer button:disabled {
+.not-working-dialog__button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
-.not-working-dialog footer button:not(.not-working-dialog__submit) {
+.not-working-dialog__cancel {
   background: transparent;
   color: var(--wa-color-neutral-on-quiet);
 }
-.not-working-dialog footer button:not(.not-working-dialog__submit):hover {
+.not-working-dialog__cancel:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
 .not-working-dialog__submit {

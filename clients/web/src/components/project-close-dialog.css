@@ -43,7 +43,7 @@
   border-right: 1px solid var(--wa-color-surface-border);
   background: var(--wa-color-surface-default);
 }
-.project-close-dialog__resources nav {
+.project-close-dialog__resource-list {
   display: grid;
   gap: var(--kui-space-none);
 }

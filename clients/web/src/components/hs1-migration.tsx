@@ -84,7 +84,7 @@ export function Hs1MigrationDialog({
             {error}
           </p>
         )}
-        <footer>
+        <footer class="hs1-migration-dialog__footer">
           <wa-button
             appearance="plain"
             type="button"

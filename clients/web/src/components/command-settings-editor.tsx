@@ -189,7 +189,9 @@ function AiCommandSelection({
           </ToolbarControlGroup>
         }
       />
-      <small>Project Default follows this project's AI settings; choose an override only for this command.</small>
+      <small class="command-settings-editor__hint">
+        Project Default follows this project's AI settings; choose an override only for this command.
+      </small>
     </div>
   );
 }
@@ -208,13 +210,19 @@ function CommandDetailFields({
   const type = kind(command);
   return (
     <div class="command-settings-editor__grid" data-command-id={command.id}>
-      <label>
+      <label class="command-settings-editor__field">
         Button label
-        <input name="title" data-command-field required value={command.title} />
+        <input
+          class="command-settings-editor__control"
+          name="title"
+          data-command-field
+          required
+          value={command.title}
+        />
       </label>
-      <label>
+      <label class="command-settings-editor__field">
         Type
-        <select name="kind" data-command-field>
+        <select class="command-settings-editor__control" name="kind" data-command-field>
           <option value="program" selected={type === 'program'}>
             Program
           </option>
@@ -228,42 +236,71 @@ function CommandDetailFields({
       </label>
       {type === 'program' && (
         <>
-          <label class="command-settings-editor__wide">
+          <label class="command-settings-editor__field command-settings-editor__wide">
             Program
-            <input name="program" data-command-field required value={command.program ?? ''} placeholder="npm" />
+            <input
+              class="command-settings-editor__control"
+              name="program"
+              data-command-field
+              required
+              value={command.program ?? ''}
+              placeholder="npm"
+            />
           </label>
-          <label class="command-settings-editor__wide">
+          <label class="command-settings-editor__field command-settings-editor__wide">
             Arguments
-            <textarea name="args" data-command-field spellcheck="false" placeholder={'run\ntest'}>
+            <textarea
+              class="command-settings-editor__control"
+              name="args"
+              data-command-field
+              spellcheck="false"
+              placeholder={'run\ntest'}
+            >
               {command.args?.join('\n') ?? ''}
             </textarea>
-            <small>One exact argument per line.</small>
+            <small class="command-settings-editor__hint">One exact argument per line.</small>
           </label>
         </>
       )}
       {type === 'shell' && (
-        <label class="command-settings-editor__wide">
+        <label class="command-settings-editor__field command-settings-editor__wide">
           Shell command
-          <textarea name="command" data-command-field required spellcheck="false" placeholder="npm run test">
+          <textarea
+            class="command-settings-editor__control"
+            name="command"
+            data-command-field
+            required
+            spellcheck="false"
+            placeholder="npm run test"
+          >
             {command.command ?? ''}
           </textarea>
-          <small>Runs in the project root; use cd within the command if needed.</small>
+          <small class="command-settings-editor__hint">
+            Runs in the project root; use cd within the command if needed.
+          </small>
         </label>
       )}
       {type === 'ai' && (
         <>
-          <label class="command-settings-editor__wide">
+          <label class="command-settings-editor__field command-settings-editor__wide">
             Prompt
-            <textarea name="prompt" data-command-field required placeholder="Review the current changes">
+            <textarea
+              class="command-settings-editor__control"
+              name="prompt"
+              data-command-field
+              required
+              placeholder="Review the current changes"
+            >
               {command.prompt ?? ''}
             </textarea>
           </label>
           <AiCommandSelection command={command} tools={aiTools} defaults={aiDefaults} />
         </>
       )}
-      <label class="command-settings-editor__wide">
+      <label class="command-settings-editor__field command-settings-editor__wide">
         Confirmation message
         <input
+          class="command-settings-editor__control"
           name="confirmation"
           data-command-field
           value={command.confirmation ?? ''}
@@ -271,7 +308,7 @@ function CommandDetailFields({
         />
       </label>
       <fieldset class="command-settings-editor__wide command-settings-editor__swatches">
-        <legend>Button color</legend>
+        <legend class="command-settings-editor__legend">Button color</legend>
         {COMMAND_CUSTOMIZATION_COLORS.map((option) => (
           <label
             class="command-settings-editor__swatch"
@@ -292,7 +329,7 @@ function CommandDetailFields({
         ))}
       </fieldset>
       <fieldset class="command-settings-editor__wide command-settings-editor__icons">
-        <legend>Button icon</legend>
+        <legend class="command-settings-editor__legend">Button icon</legend>
         <LucideIconPicker
           value={command.icon}
           query={iconSearch}

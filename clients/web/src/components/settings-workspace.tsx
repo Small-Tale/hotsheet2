@@ -98,7 +98,7 @@ export function SettingsWorkspace({
               .filter((value) => permissionDelaysFor(permissions.automation.action).includes(value))
               .map((value) => ({ value: String(value), label: formatPermissionDelay(value) }))}
           />
-          <p>
+          <p class="project-settings__permission-note">
             Runs only while this project's floating permission popup is visible. Ignore pauses the timer; Stop
             auto-allow or Stop auto-deny disables that automatic decision for this request. Auto-allow after 0 seconds
             allows each request without showing the popup; it is still recorded in Notifications.

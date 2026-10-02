@@ -4,9 +4,6 @@
   margin: 0 auto;
   padding: remify(24px);
 }
-.project-settings h2 {
-  margin-top: 0;
-}
 .project-settings__option {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -27,7 +24,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: remify(12.8px);
 }
-.project-settings__permission-grid p {
+.project-settings__permission-note {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--wa-color-neutral-on-quiet);

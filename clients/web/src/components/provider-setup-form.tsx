@@ -117,7 +117,7 @@ export function ProviderSetupForm({
         <SunkenPanel className="provider-setup-form__github-auth" ariaLabel="GitHub sign in">
           {auth?.state === 'waiting' ? (
             <>
-              <p>
+              <p class="provider-setup-form__auth-copy">
                 Paste this one-time code in the GitHub window
                 {auth.copied ? ' — it is already on your clipboard' : ''}, then approve Hot Sheet and close that window.
               </p>
@@ -150,12 +150,12 @@ export function ProviderSetupForm({
                   Cancel
                 </wa-button>
               </div>
-              <p class="provider-setup-form__auth-waiting" role="status">
+              <p class="provider-setup-form__auth-copy provider-setup-form__auth-waiting" role="status">
                 Waiting for GitHub…
               </p>
             </>
           ) : signedIn ? (
-            <p role="status">
+            <p class="provider-setup-form__auth-copy" role="status">
               {auth.account ? 'Using your GitHub account on ' : 'Signed in to '}
               {auth.enterpriseUrl ? new URL(auth.enterpriseUrl).host : 'GitHub'}.{' '}
               {auth.repositories ? 'Choose a repository for this project below.' : 'Loading your repositories…'}
@@ -195,7 +195,9 @@ export function ProviderSetupForm({
             <>
               {githubAccounts.length > 0 && (
                 <>
-                  <p>Use a GitHub account already signed in on this computer, then choose this project's repository.</p>
+                  <p class="provider-setup-form__auth-copy">
+                    Use a GitHub account already signed in on this computer, then choose this project's repository.
+                  </p>
                   <div class="provider-setup-form__accounts">
                     <List>
                       {githubAccounts.map((account, index) => (
@@ -210,7 +212,7 @@ export function ProviderSetupForm({
                           label={
                             <span class="provider-setup-form__account-copy">
                               <strong>{account.host || 'Earlier GitHub sign-in'}</strong>
-                              <small>{accountUsage(account)}</small>
+                              <small class="provider-setup-form__account-usage">{accountUsage(account)}</small>
                             </span>
                           }
                         />
@@ -219,7 +221,7 @@ export function ProviderSetupForm({
                   </div>
                 </>
               )}
-              <p>
+              <p class="provider-setup-form__auth-copy">
                 {githubAccounts.length ? 'Or sign in with another account. ' : 'Sign in to choose a repository. '}Hot
                 Sheet opens GitHub in a small window and copies your one-time code for you.
               </p>
@@ -244,10 +246,14 @@ export function ProviderSetupForm({
             </>
           )}
           {auth && ['denied', 'expired', 'cancelled', 'error'].includes(auth.state) && (
-            <p role="alert">{auth.message ?? `GitHub sign in was ${auth.state}. Try again.`}</p>
+            <p class="provider-setup-form__auth-copy" role="alert">
+              {auth.message ?? `GitHub sign in was ${auth.state}. Try again.`}
+            </p>
           )}
           {auth?.message && !['denied', 'expired', 'cancelled', 'error'].includes(auth.state) ? (
-            <p role="alert">{auth.message}</p>
+            <p class="provider-setup-form__auth-copy" role="alert">
+              {auth.message}
+            </p>
           ) : (
             <></>
           )}
@@ -267,10 +273,11 @@ export function ProviderSetupForm({
             <span slot="hint">Leave blank to use “{labels[0]}”.</span>
           </wa-input>
           {choosing ? (
-            <label class="provider-setup-form__wide">
+            <label class="provider-setup-form__wide provider-setup-form__field">
               Repository
               {/* Native datalist keeps browser search over every reachable repository (HS2-27T5WT). */}
               <input
+                class="provider-setup-form__field-control"
                 name="connection-locator"
                 required
                 list="provider-setup-github-repositories"
@@ -282,7 +289,7 @@ export function ProviderSetupForm({
                   <option value={repository}></option>
                 ))}
               </datalist>
-              <small>
+              <small class="provider-setup-form__field-hint">
                 {repositories.length === 1 ? '1 repository' : `${repositories.length} repositories`} available. Type to
                 filter.
               </small>

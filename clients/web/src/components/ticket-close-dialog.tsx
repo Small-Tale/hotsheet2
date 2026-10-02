@@ -59,7 +59,7 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
               value={state.query}
             >
               <span slot="start">
-                <LucideIcon icon={Search} name="search" />
+                <LucideIcon icon={Search} name="search" size={16} />
               </span>
             </wa-input>
             {state.selected && (

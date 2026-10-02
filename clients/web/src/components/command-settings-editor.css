@@ -270,7 +270,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--kui-space-m);
 }
-.command-settings-editor__grid label {
+.command-settings-editor__field {
   display: grid;
   min-width: 0;
   color: var(--wa-color-text-normal);
@@ -278,9 +278,7 @@
   font-weight: 600;
   gap: var(--kui-space-2xs);
 }
-.command-settings-editor__grid input,
-.command-settings-editor__grid select,
-.command-settings-editor__grid textarea {
+.command-settings-editor__control {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -292,13 +290,13 @@
   font: inherit;
   font-weight: 400;
 }
-.command-settings-editor__grid textarea {
+textarea.command-settings-editor__control {
   min-height: remify(80px);
   /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
   field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
   resize: var(--hotsheet-textarea-resize, vertical);
 }
-.command-settings-editor__grid small {
+.command-settings-editor__hint {
   color: var(--wa-color-text-quiet);
   font-weight: 400;
 }
@@ -348,8 +346,7 @@
   padding: 0;
   border: 0;
 }
-.command-settings-editor__swatches legend,
-.command-settings-editor__icons legend {
+.command-settings-editor__legend {
   width: 100%;
   margin-bottom: var(--kui-space-2xs);
   padding: 0;
@@ -359,6 +356,9 @@
 }
 .command-settings-editor__swatches .command-settings-editor__swatch {
   display: inline-flex;
+  min-width: 0;
+  color: var(--wa-color-text-normal);
+  font-weight: 600;
   align-items: center;
   gap: var(--kui-space-2xs);
   padding: var(--kui-space-2xs) var(--kui-space-xs);

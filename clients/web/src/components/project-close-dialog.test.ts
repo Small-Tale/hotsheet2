@@ -165,7 +165,7 @@ describe('ProjectCloseDialog', () => {
       /__intro \{[^}]*padding:var\(--kui-space-m\) var\(--kui-space-l\)[^}]*gap:var\(--kui-space-m\)/,
     );
     expect(css).toMatchSource(/__resources \{[^}]*padding:var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(/__resources nav \{ display:grid; gap:var\(--kui-space-none\)/);
+    expect(css).toMatchSource(/__resource-list \{ display:grid; gap:var\(--kui-space-none\)/);
     expect(css).not.toContain('.kui-list-item__count');
     expect(css).toMatchSource(/__terminal \{[^}]*--terminal-preview-inset:var\(--kui-space-l\)/);
     expect(css).toMatchSource(/__consequences \{ padding:var\(--kui-space-m\) var\(--kui-space-l\) 0/);

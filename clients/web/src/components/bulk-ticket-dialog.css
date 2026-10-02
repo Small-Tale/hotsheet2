@@ -1,7 +1,7 @@
 .bulk-ticket-dialog__choices {
   margin-block: var(--kui-space-m);
 }
-.bulk-ticket-dialog__choices button {
+.bulk-ticket-dialog__choice {
   cursor: pointer;
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: 999px;
@@ -9,7 +9,7 @@
   padding: remify(4px) remify(10.4px);
   color: inherit;
 }
-.bulk-ticket-dialog__choices button:hover {
+.bulk-ticket-dialog__choice:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
 .bulk-ticket-dialog__error {

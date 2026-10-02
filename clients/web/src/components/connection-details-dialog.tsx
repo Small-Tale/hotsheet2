@@ -82,24 +82,51 @@ export function ConnectionDetailsDialog({
       </div>
       <div class="connection-details-dialog__body">
         <ValueTable className="connection-details-dialog__metadata" label="Client and server build metadata">
-          <ValueTableRow label="Running server version" value={valueOrUnavailable(server?.application_version)} />
+          <ValueTableRow
+            label="Running server version"
+            value={
+              <span class="connection-details-dialog__value">{valueOrUnavailable(server?.application_version)}</span>
+            }
+          />
           <ValueTableRow
             label="Running server build"
-            value={<code>{valueOrUnavailable(server?.build_revision)}</code>}
+            value={
+              <span class="connection-details-dialog__value">
+                <code class="connection-details-dialog__revision">{valueOrUnavailable(server?.build_revision)}</code>
+              </span>
+            }
           />
           <ValueTableRow
             label="Current server source"
-            value={<code>{valueOrUnavailable(server?.source_revision)}</code>}
+            value={
+              <span class="connection-details-dialog__value">
+                <code class="connection-details-dialog__revision">{valueOrUnavailable(server?.source_revision)}</code>
+              </span>
+            }
           />
-          <ValueTableRow label="Client build" value={<code>{valueOrUnavailable(assessment.clientRevision)}</code>} />
+          <ValueTableRow
+            label="Client build"
+            value={
+              <span class="connection-details-dialog__value">
+                <code class="connection-details-dialog__revision">{valueOrUnavailable(assessment.clientRevision)}</code>
+              </span>
+            }
+          />
           <ValueTableRow
             label="Protocol ranges"
-            value={`Client ${range(assessment.clientProtocol)} · Server ${range(server?.protocol)}`}
+            value={
+              <span class="connection-details-dialog__value">
+                {`Client ${range(assessment.clientProtocol)} · Server ${range(server?.protocol)}`}
+              </span>
+            }
           />
-          <ValueTableRow label="Server started" value={startedLabel} />
+          <ValueTableRow
+            label="Server started"
+            value={<span class="connection-details-dialog__value">{startedLabel}</span>}
+          />
         </ValueTable>
         <section>
-          <h3>What to do</h3>
+          <h3 class="connection-details-dialog__section-title">What to do</h3>
           <p class="connection-details-dialog__guidance">{connectionRecoveryGuidance(assessment)}</p>
         </section>
       </div>

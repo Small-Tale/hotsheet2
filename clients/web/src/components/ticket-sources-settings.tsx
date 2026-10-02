@@ -75,12 +75,12 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
     <div class="ticket-provider-settings" data-component="ticket-sources-settings">
       <section>
         <header class="ticket-provider-settings__header">
-          <h2>Ticket sources</h2>
+          <h2 class="ticket-provider-settings__title">Ticket sources</h2>
           <wa-button appearance="outlined" {...COMMANDS_AND_AI_ACTIONS.openProviderDialog.attrs}>
             Add data source
           </wa-button>
         </header>
-        <p>
+        <p class="ticket-provider-settings__intro">
           This project uses {sources.length} ticket source{sources.length === 1 ? '' : 's'}. New tickets go to the
           default source unless you choose another when creating one.
         </p>
@@ -185,9 +185,9 @@ export function AccountsSettings({ accounts, error = '', signingOut }: AccountsS
     <div class="ticket-provider-settings" data-component="accounts-settings">
       <section>
         <header class="ticket-provider-settings__header">
-          <h2>Accounts</h2>
+          <h2 class="ticket-provider-settings__title">Accounts</h2>
         </header>
-        <p>
+        <p class="ticket-provider-settings__intro">
           Sign-ins Hot Sheet uses to reach GitHub, GitLab, and Jira. Every project on this computer can reuse them when
           adding a ticket source; each project still chooses its own repository or Jira project.
         </p>
@@ -207,7 +207,7 @@ export function AccountsSettings({ accounts, error = '', signingOut }: AccountsS
                   aria-label={`${name} account ${account.identity ?? (account.host || account.id)}`}
                 >
                   <header class="ticket-provider-settings__account-header">
-                    <ProviderIcon kind={kind} />
+                    <ProviderIcon kind={kind} size="l" />
                     <span class="ticket-provider-settings__connection-copy">
                       <strong>
                         {name}

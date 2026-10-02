@@ -7,14 +7,15 @@
 .provider-setup-form__back {
   width: fit-content;
 }
-.provider-setup-form small {
+.provider-setup-form__account-usage,
+.provider-setup-form__field-hint {
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
 }
 .provider-setup-form__github-auth {
   --kui-sunken-panel-gap: var(--wa-space-s);
 }
-.provider-setup-form__github-auth p {
+.provider-setup-form__auth-copy {
   margin: 0;
   font-size: var(--wa-font-size-s);
 }
@@ -43,7 +44,7 @@
 .provider-setup-form__auth-waiting {
   color: var(--wa-color-neutral-on-quiet);
 }
-.provider-setup-form label {
+.provider-setup-form__field {
   display: grid;
   min-width: 0;
   gap: var(--wa-space-2xs);
@@ -53,8 +54,7 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.provider-setup-form label input:not([type='checkbox']),
-.provider-setup-form label select {
+.provider-setup-form__field-control {
   width: 100%;
   min-height: remify(40px);
   padding: 0 var(--wa-space-s);
@@ -65,7 +65,7 @@
   letter-spacing: normal;
   text-transform: none;
 }
-.provider-setup-form label small {
+.provider-setup-form__field-hint {
   font-weight: var(--wa-font-weight-normal);
   letter-spacing: normal;
   text-transform: none;

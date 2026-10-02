@@ -2,11 +2,11 @@
   display: grid;
   gap: var(--wa-space-xl);
 }
-.ticket-provider-settings section > h2 {
-  margin: 0 0 var(--wa-space-xs);
-  font-size: var(--wa-font-size-m);
+.ticket-provider-settings__title {
+  margin-top: 0;
 }
-.ticket-provider-settings section > p,
+.ticket-provider-settings__intro,
+.ticket-provider-settings__empty,
 .ticket-provider-settings > p {
   color: var(--wa-color-neutral-on-quiet);
 }
@@ -120,11 +120,6 @@
   gap: var(--wa-space-s);
   border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
   background: var(--wa-color-neutral-fill-quiet);
-}
-.ticket-provider-settings__account-header > svg {
-  width: remify(24px);
-  height: remify(24px);
-  flex: none;
 }
 .ticket-provider-settings__account-header > .ticket-provider-settings__connection-copy {
   flex: 1;

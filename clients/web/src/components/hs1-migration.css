@@ -42,7 +42,7 @@
 .hs1-migration-dialog__error {
   color: var(--wa-color-danger-on-quiet);
 }
-.hs1-migration-dialog footer {
+.hs1-migration-dialog__footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--kui-space-xs);

@@ -77,7 +77,12 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
           <div class="bulk-ticket-dialog__choices" aria-label="Tags in selection">
             <Row gap="xs" wrap>
               {state.choices.map((tag) => (
-                <button type="button" {...TICKET_SELECTION_ACTIONS.chooseBulkTag.attrs} data-tag={tag}>
+                <button
+                  type="button"
+                  class="bulk-ticket-dialog__choice"
+                  {...TICKET_SELECTION_ACTIONS.chooseBulkTag.attrs}
+                  data-tag={tag}
+                >
                   {tag}
                 </button>
               ))}

@@ -15,10 +15,15 @@
 .connection-details-dialog__metadata {
   --kui-value-table-row-columns: minmax(remify(160px), auto) minmax(0, 1fr);
 }
-.connection-details-dialog__metadata code {
+/* Block, as when the code element was the value's own flex item, so the row keeps the code's line
+   height rather than the surrounding text's. */
+.connection-details-dialog__revision {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
   font-size: var(--wa-font-size-xs);
 }
-.connection-details-dialog h3 {
+.connection-details-dialog__section-title {
   margin: 0 0 var(--kui-space-xs);
   font-size: var(--wa-font-size-m);
 }
@@ -34,8 +39,9 @@
     --kui-value-table-row-gap: var(--kui-space-2xs);
     --kui-value-table-row-padding-block: var(--kui-space-xs);
   }
-  .connection-details-dialog .connection-details-dialog__metadata dd {
-    justify-content: flex-start;
+  /* The value span fills the stacked row so its text starts at the label's edge. */
+  .connection-details-dialog__value {
+    flex: 1 1 auto;
     text-align: left;
   }
 }
