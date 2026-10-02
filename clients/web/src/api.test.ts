@@ -350,28 +350,35 @@ describe('client-owned AI drive transport', () => {
 });
 
 describe('provider onboarding transport', () => {
-  it('creates a non-secret connection and links it as the checkout default', async () => {
+  it('creates a project-owned connection in one request and can link a git source', async () => {
     const connection = {
-      id: 'github-main',
+      id: '',
       provider: 'github',
       locator: 'small-tale/hotsheet2',
       name: 'GitHub Issues',
-      default: true,
+      default: false,
       settings: { credential: { secret: 'github-small-tale' } },
     };
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify(connection), { status: 201 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ ...connection, id: 'github-main', projects: [{ id: 'checkout', alias: 'work' }] }),
+          { status: 201 },
+        ),
+      )
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ id: 'checkout', root: '/work', alias: 'work', stores: [] }), { status: 200 }),
       );
     const api = new Api('/api');
-    await api.createConnection(connection);
-    await api.addCheckoutSource('folder with spaces', connection, true);
+    // The server writes the record and this project's link together (HS2-SM9PM8).
+    const created = await api.createConnection(connection, true);
+    expect(created.projects).toEqual([{ id: 'checkout', alias: 'work' }]);
+    await api.addCheckoutSource('folder with spaces', { ...connection, id: 'github-main' }, true);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       '/api/provider-connections',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify(connection) }),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ ...connection, make_default: true }) }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,

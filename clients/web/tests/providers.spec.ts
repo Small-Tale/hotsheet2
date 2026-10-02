@@ -404,6 +404,42 @@ async function mockProject(
   // source; `/providers` lists only linked sources (HS2-3SCH1K).
   let linkedConnectionIds: string[] = [],
     checkoutDefaultSource: string | undefined;
+  // Machine-wide sign-ins no source uses yet (HS2-SM9PM8): an abandoned earlier sign-in.
+  let unusedAccounts = ['github-app-abandoned'];
+  const credentialOf = (connection: { settings: Record<string, unknown> }) =>
+    (connection.settings as { credential?: { secret?: string } }).credential?.secret;
+  const projectOwners = (id: string) => (linkedConnectionIds.includes(id) ? [{ id: project.id, alias: 'demo' }] : []);
+  // The real server's `GET /accounts` shape, derived from the records and checkout links.
+  const accountRecords = () => {
+    const accounts = new Map<string, Record<string, unknown> & { sources: unknown[]; projects: unknown[] }>();
+    for (const connection of providerConnectionRecords) {
+      const credential = credentialOf(connection);
+      if (!credential) continue;
+      const apiBase = (connection.settings as { api_base?: string }).api_base,
+        account = accounts.get(credential) ?? {
+          id: credential,
+          provider: connection.provider,
+          host: apiBase ? new URL(apiBase).host : 'github.com',
+          managed: credential.startsWith('github-app-'),
+          sources: [],
+          projects: [],
+        };
+      account.sources.push({
+        connection_id: connection.id,
+        name: connection.name ?? connection.id,
+        locator: connection.locator,
+        disabled: Boolean((connection as { disabled?: boolean }).disabled),
+        projects: projectOwners(connection.id),
+      });
+      if (projectOwners(connection.id).length && !account.projects.length)
+        account.projects.push(...projectOwners(connection.id));
+      accounts.set(credential, account);
+    }
+    for (const id of unusedAccounts)
+      if (!accounts.has(id))
+        accounts.set(id, { id, provider: 'github', host: '', managed: true, sources: [], projects: [] });
+    return [...accounts.values()];
+  };
   // The first linked store is the one the fixture rows name.
   const gitSourceId = (index: number) => (index === 0 ? 'git-local' : `git-${index + 1}`);
   const checkoutRecord = () => ({
@@ -455,10 +491,15 @@ async function mockProject(
       return route.fulfill({ json: { connected: true } });
     if (path === '/__hotsheet/folders/choose' && request.method() === 'POST')
       return route.fulfill({ json: { path: ['/picked/project', '/picked/tickets.hs2'][folderChoice++] } });
+    // A project sees and creates only its own sources (HS2-SM9PM8): the server's checkout-scoped shape.
     if (path.endsWith('/provider-connections') && request.method() === 'GET')
-      return route.fulfill({ json: providerConnectionRecords });
+      return route.fulfill({
+        json: providerConnectionRecords
+          .filter((connection) => linkedConnectionIds.includes(connection.id))
+          .map((connection) => ({ ...connection, projects: projectOwners(connection.id) })),
+      });
     if (path.endsWith('/provider-connections') && request.method() === 'POST') {
-      const created = request.postDataJSON();
+      const { make_default: makeDefault, ...created } = request.postDataJSON();
       // Like the server, generate a readable unique id when the client sends none (HS2-48GA17).
       if (!created.id) {
         const base = `${created.provider}-${created.locator}`
@@ -469,8 +510,32 @@ async function mockProject(
         for (let n = 2; providerConnectionRecords.some((item) => item.id === id); n += 1) id = `${base}-${n}`;
         created.id = id;
       }
-      providerConnectionRecords = [...providerConnectionRecords, created];
-      return route.fulfill({ status: 201, json: created });
+      providerConnectionRecords = [...providerConnectionRecords, { ...created, default: false }];
+      // The record and this project's link are written together.
+      linkedConnectionIds = [...linkedConnectionIds, created.id];
+      ticketSourceConfigured = true;
+      if (makeDefault) checkoutDefaultSource = created.id;
+      return route.fulfill({
+        status: 201,
+        json: { ...created, default: false, projects: projectOwners(created.id) },
+      });
+    }
+    if (path.endsWith('/accounts') && request.method() === 'GET') return route.fulfill({ json: accountRecords() });
+    const accountPath = path.match(/\/accounts\/([^/]+)(\/github-repositories)?$/);
+    if (accountPath?.[2] && request.method() === 'GET')
+      return route.fulfill({
+        json: {
+          repositories: ['small-tale/hotsheet2', 'small-tale/secondary', 'small-tale/reused'],
+          installations: [{ account: 'small-tale', selection: 'all', settings_url: null }],
+          install_url: 'https://github.test/apps/hot-sheet/installations/new',
+        },
+      });
+    if (accountPath && !accountPath[2] && request.method() === 'DELETE') {
+      const id = decodeURIComponent(accountPath[1]);
+      if (providerConnectionRecords.some((connection) => credentialOf(connection) === id))
+        return route.fulfill({ status: 409, json: { error: `account '${id}' is still used by demo` } });
+      unusedAccounts = unusedAccounts.filter((item) => item !== id);
+      return route.fulfill({ status: 204 });
     }
     if (path.endsWith('/github-auth/device') && request.method() === 'POST')
       return route.fulfill({
@@ -528,24 +593,6 @@ async function mockProject(
       const updated = providerConnectionRecords.find((item) => item.id === id);
       return updated ? route.fulfill({ json: updated }) : route.fulfill({ status: 404, json: { error: id } });
     }
-    if (providerConnection && request.method() === 'DELETE') {
-      // The real server's idempotent removal report (HS2-724S9N).
-      const id = decodeURIComponent(providerConnection[1]),
-        removed = providerConnectionRecords.find((item) => item.id === id);
-      providerConnectionRecords = providerConnectionRecords.filter((item) => item.id !== id);
-      linkedConnectionIds = linkedConnectionIds.filter((item) => item !== id);
-      if (checkoutDefaultSource === id) checkoutDefaultSource = undefined;
-      const credential = (removed?.settings as { credential?: { secret?: string } } | undefined)?.credential?.secret;
-      return route.fulfill({
-        json: {
-          connection_id: id,
-          removed_connection: Boolean(removed),
-          unlinked_checkouts: removed ? ['demo-checkout'] : [],
-          deleted_credential: credential?.startsWith('github-app-') ? credential : null,
-          kept_credential: credential && !credential.startsWith('github-app-') ? credential : null,
-        },
-      });
-    }
     if (providerConnection && request.method() === 'PATCH') {
       const id = decodeURIComponent(providerConnection[1]),
         updated = { ...request.postDataJSON(), id };
@@ -563,10 +610,23 @@ async function mockProject(
       return route.fulfill({ json: checkoutRecord() });
     }
     if (path.includes('/sources/') && request.method() === 'DELETE') {
-      const id = decodeURIComponent(path.split('/').pop()!);
+      // The real server's detach report: the connection goes too once no project uses it (HS2-SM9PM8).
+      const id = decodeURIComponent(path.split('/').pop()!),
+        unlinked = linkedConnectionIds.includes(id);
       linkedConnectionIds = linkedConnectionIds.filter((item) => item !== id);
       if (checkoutDefaultSource === id) checkoutDefaultSource = undefined;
-      return route.fulfill({ json: checkoutRecord() });
+      const removed = providerConnectionRecords.some((connection) => connection.id === id);
+      providerConnectionRecords = providerConnectionRecords.filter((connection) => connection.id !== id);
+      if (!unlinked && !removed) return route.fulfill({ status: 404, json: { error: `no checkout matches ${id}` } });
+      return route.fulfill({
+        json: {
+          checkout_id: 'demo-checkout',
+          connection_id: id,
+          unlinked,
+          removed_connection: removed,
+          still_used_by: [],
+        },
+      });
     }
     if (path.endsWith('/default-source') && request.method() === 'PUT') {
       checkoutDefaultSource = request.postDataJSON().connection_id ?? undefined;
@@ -2024,7 +2084,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.getByLabel('Connection ID')).toHaveCount(0);
   await expect(providerForm.getByText('Use a credential reference instead')).toHaveCount(0);
   await expect(providerForm.getByLabel(/Credential reference/)).toHaveCount(0);
-  const creates: Array<{ id: string; name: string; default: boolean }> = [];
+  const creates: Array<Record<string, unknown>> = [];
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'))
       creates.push(request.postDataJSON());
@@ -2051,7 +2111,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await repository.fill('small-tale/hotsheet2');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect.poll(() => creates.length).toBe(1);
-  expect(creates[0]).toMatchObject({ id: '', name: 'GitHub Issues', default: true });
+  expect(creates[0]).toMatchObject({ id: '', name: 'GitHub Issues', make_default: true });
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.locator('.app-toast')).toContainText('GitHub Issues connected.');
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
@@ -2064,7 +2124,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   const primaryConnection = sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' });
   await expect(primaryConnection).toContainText('small-tale/hotsheet2');
   await expect(primaryConnection).toContainText('Default');
-  await expect(sourcesPanel.getByRole('button', { name: 'Detach GitHub Issues from this project' })).toBeVisible();
+  await expect(sourcesPanel.getByRole('button', { name: 'Remove GitHub Issues from this project' })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-y4zpqq-provider-settings-list-after.png', fullPage: true });
   await page.getByRole('button', { name: 'Add data source' }).click();
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
@@ -2076,11 +2136,12 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', false);
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect.poll(() => creates.length).toBe(2);
-  expect(creates[1]).toMatchObject({ name: 'GitHub Secondary', default: false });
+  expect(creates[1]).toMatchObject({ name: 'GitHub Secondary', make_default: false });
   await expect(setup).toHaveJSProperty('open', false);
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' })).toBeVisible();
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toBeVisible();
-  // Editing from the project changes this project's use; Disable and Remove live under Connections (HS2-3SCH1K).
+  // Editing a source from its project offers its details, this project's default, Disable, and
+  // Remove from this project; there is no machine-wide catalog (HS2-3SCH1K, HS2-SM9PM8).
   await sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' }).click();
   await expect(providerForm.locator('wa-input[name="connection-locator"]')).toHaveJSProperty(
     'value',
@@ -2088,9 +2149,10 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   );
   await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
   const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');
-  await expect(footer.getByRole('button', { name: 'Remove data source…' })).toHaveCount(0);
-  await expect(footer.getByRole('button', { name: 'Disable' })).toHaveCount(0);
-  await expect(setup.locator('.ticket-source-setup__scope-hint')).toContainText('App Settings → Connections');
+  await expect(footer.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
+  await expect(footer.getByRole('button', { name: 'Disable' })).toBeVisible();
+  // Owned by this project alone, so there is no "shared with" note.
+  await expect(setup.locator('.ticket-source-setup__scope-hint')).toHaveCount(0);
   await providerForm.getByLabel('Display name').fill('GitHub Primary');
   await setup.getByRole('button', { name: 'Save changes' }).click();
   await expect(setup).toHaveJSProperty('open', false);
@@ -2114,76 +2176,46 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toContainText('Default');
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Primary' })).not.toContainText('Default');
   await expect(defaultSelect).toHaveJSProperty('value', 'github-small-tale-secondary');
+  // Another project's sources are never offered here (HS2-SM9PM8).
+  await expect(sourcesPanel).not.toContainText('Other connections on this machine');
+  await expect(sourcesPanel.locator('[data-action="attach-project-source"]')).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath('project-sources-wide.png'), fullPage: true });
-  // Detaching leaves the connection on the machine, ready to attach again without signing in.
-  await sourcesPanel.getByRole('button', { name: 'Detach GitHub Secondary from this project' }).click();
-  await expect.poll(() => detaches).toEqual(['github-small-tale-secondary']);
-  await expect(page.locator('.app-toast')).toContainText('GitHub Secondary detached from this project.');
-  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toHaveCount(0);
-  const attach = sourcesPanel.getByRole('button', { name: 'Use GitHub Secondary in this project' });
-  await expect(attach).toBeVisible();
-  await expect(defaultSelect).toHaveCount(0);
-  await page.screenshot({ path: test.info().outputPath('project-sources-detached-wide.png'), fullPage: true });
-  await attach.click();
-  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toBeVisible();
-  await expect(attach).toHaveCount(0);
-  await expect(page.locator('.app-error')).toHaveCount(0);
 
-  // App Settings → Connections manages the machine-wide catalog: Remove and Disable affect every project.
-  await sourcesPanel.getByRole('button', { name: 'App Settings → Connections' }).click();
-  const catalog = page.locator('[data-component="connections-settings"]');
-  await expect(catalog).toContainText('shared by every project that uses them');
-  await expect(page.locator('[data-component="settings-workspace"]')).toHaveAttribute(
-    'data-settings-category',
-    'connections',
-  );
-  await page.screenshot({ path: test.info().outputPath('connections-settings-wide.png'), fullPage: true });
-  const deletes: string[] = [];
-  page.on('request', (request) => {
-    if (request.method() === 'DELETE' && request.url().includes('/provider-connections/'))
-      deletes.push(new URL(request.url()).pathname.split('/').pop()!);
-  });
-  await catalog.getByRole('button', { name: 'Edit GitHub Secondary for every project' }).click();
+  // A row's remove action opens that source's editor at an inline confirmation; Keep backs out.
+  await sourcesPanel.getByRole('button', { name: 'Remove GitHub Secondary from this project' }).click();
   await expect(setup).toHaveJSProperty('open', true);
-  await expect(footer.getByRole('button', { name: 'Remove data source…' })).toBeVisible();
-  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveCount(0);
-  await expect(setup.locator('.ticket-source-setup__scope-hint')).toContainText(
-    'Changes apply to every project that uses this connection.',
-  );
+  const prompt = footer.getByRole('alert');
+  await expect(prompt).toContainText('Remove GitHub Secondary from demo?');
+  await expect(prompt).toContainText('No other project uses it, so its connection is deleted.');
+  await expect(footer.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
   await setup.evaluate(async (node) => {
     const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
     await Promise.all(animations.map((animation) => animation.finished));
   });
-  await expect.poll(() => setup.evaluate((node) => getComputedStyle(node).opacity)).toBe('1');
-  await page.screenshot({ path: '/private/tmp/hs2-724s9n-edit-with-remove-wide.png', fullPage: true });
-  await footer.getByRole('button', { name: 'Remove data source…' }).click();
-  const prompt = footer.getByRole('alert');
-  await expect(prompt).toContainText('Remove GitHub Secondary?');
-  await expect(footer.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-724s9n-remove-confirm-wide.png', fullPage: true });
-  // Keep backs out without removing anything; the confirmation re-arms cleanly.
+  await page.screenshot({ path: test.info().outputPath('remove-from-project-confirm-wide.png'), fullPage: true });
   await footer.getByRole('button', { name: 'Keep' }).click();
   await expect(footer.getByRole('button', { name: 'Save changes' })).toBeVisible();
-  expect(deletes).toEqual([]);
-  await footer.getByRole('button', { name: 'Remove data source…' }).click();
-  await page.setViewportSize({ width: 620, height: 760 });
+  expect(detaches).toEqual([]);
+  await footer.getByRole('button', { name: 'Remove from this project…' }).click();
+  await page.setViewportSize({ width: 390, height: 760 });
   await expect(prompt).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-724s9n-remove-confirm-narrow.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('remove-from-project-confirm-narrow.png'), fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await footer.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(setup).toHaveJSProperty('open', false);
-  expect(deletes).toEqual(['github-small-tale-secondary']);
-  await expect(page.locator('.app-toast')).toContainText('GitHub Secondary removed.');
-  await expect(catalog.getByRole('button', { name: 'Edit GitHub Secondary for every project' })).toHaveCount(0);
-  const primaryRow = catalog.getByRole('button', { name: 'Edit GitHub Primary for every project' });
+  expect(detaches).toEqual(['github-small-tale-secondary']);
+  await expect(page.locator('.app-toast')).toContainText('GitHub Secondary removed from this project.');
+  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Secondary' })).toHaveCount(0);
+  await expect(defaultSelect).toHaveCount(0);
+  const primaryRow = sourcesPanel.getByRole('button', { name: 'Edit GitHub Primary' });
   await expect(primaryRow).toBeVisible();
-  // Reopening another connection starts without a stale confirmation.
+  // Reopening another source starts without a stale confirmation.
   await primaryRow.click();
   await expect(footer.getByRole('button', { name: 'Save changes' })).toBeVisible();
   await expect(footer.getByRole('alert')).toHaveCount(0);
   await expect(page.locator('.app-error')).toHaveCount(0);
 
-  // Disabling is temporary and reversible from the same dialog (HS2-SF6W34).
+  // Disabling is temporary and reversible from the project's own editor (HS2-SF6W34).
   const toggles: unknown[] = [];
   page.on('request', (request) => {
     if (request.method() === 'PUT' && request.url().endsWith('/disabled')) toggles.push(request.postDataJSON());
@@ -2192,7 +2224,6 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.locator('.app-toast')).toContainText('GitHub Primary disabled.');
   await expect(primaryRow.locator('[data-state="disabled"]')).toHaveText('Disabled');
-  await page.screenshot({ path: '/private/tmp/hs2-sf6w34-disabled-row-wide.png', fullPage: true });
   await primaryRow.click();
   await expect(footer.getByRole('button', { name: 'Enable' })).toBeVisible();
   await expect(footer.getByRole('button', { name: 'Disable' })).toHaveCount(0);
@@ -2200,7 +2231,6 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
     await Promise.all(animations.map((animation) => animation.finished));
   });
-  await page.screenshot({ path: '/private/tmp/hs2-sf6w34-enable-action-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
   // At phone width the footer actions wrap inside the dialog instead of overflowing it.
   const footerBox = (await footer.boundingBox())!;
@@ -2209,15 +2239,140 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     expect(box.x).toBeGreaterThanOrEqual(footerBox.x - 1);
     expect(box.x + box.width).toBeLessThanOrEqual(footerBox.x + footerBox.width + 1);
   }
-  await page.screenshot({ path: '/private/tmp/hs2-sf6w34-enable-action-narrow.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('edit-source-actions-narrow.png'), fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await footer.getByRole('button', { name: 'Enable' }).click();
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.locator('.app-toast')).toContainText('GitHub Primary enabled.');
   await expect(primaryRow.locator('[data-state="disabled"]')).toHaveCount(0);
   expect(toggles).toEqual([{ disabled: true }, { disabled: false }]);
+
+  // A new source reuses a signed-in account and picks this project's own repository (HS2-SM9PM8).
+  const signIns: unknown[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/github-auth/device'))
+      signIns.push(request.postDataJSON());
+  });
+  await page.getByRole('button', { name: 'Add data source' }).click();
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  const reuse = providerForm.getByRole('button', { name: 'Use the GitHub account on github.com, used by demo' });
+  await expect(reuse).toBeVisible();
+  await expect(reuse).toContainText('Used by demo');
+  await expect(providerForm).toContainText('Or sign in with another account.');
+  await setup.evaluate(async (node) => {
+    const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
+    await Promise.all(animations.map((animation) => animation.finished));
+  });
+  await page.screenshot({ path: test.info().outputPath('reuse-account-wide.png'), fullPage: true });
+  await reuse.click();
+  await expect(providerForm.getByText('Using your GitHub account on GitHub.')).toBeVisible();
+  await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
+  await providerForm.locator('input[name="connection-locator"]').fill('small-tale/reused');
+  await providerForm.getByLabel('Display name').fill('GitHub Reused');
+  await setup.getByRole('button', { name: 'Connect provider' }).click();
+  await expect.poll(() => creates.length).toBe(3);
+  expect(creates[2]).toMatchObject({
+    locator: 'small-tale/reused',
+    settings: { credential: { secret: 'github-app-auth-1' } },
+  });
+  expect(signIns).toEqual([]);
+  await expect(setup).toHaveJSProperty('open', false);
+  await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Reused' })).toBeVisible();
+
+  // App Settings → Accounts lists sign-ins with the projects using each; only an unused one signs out.
+  await sourcesPanel.getByRole('button', { name: 'App Settings → Accounts' }).click();
+  const accounts = page.locator('[data-component="accounts-settings"]');
+  await expect(page.locator('[data-component="settings-workspace"]')).toHaveAttribute(
+    'data-settings-category',
+    'accounts',
+  );
+  const used = accounts.locator('[data-account-id="github-app-auth-1"]');
+  await expect(used).toContainText('small-tale/hotsheet2 · Used by demo');
+  await expect(used).toContainText('small-tale/reused · Used by demo');
+  await expect(used.locator('[data-action="sign-out-account"]')).toHaveCount(0);
+  const unused = accounts.locator('[data-account-id="github-app-abandoned"]');
+  await expect(unused).toContainText('No ticket source uses this sign-in.');
+  await page.screenshot({ path: test.info().outputPath('accounts-settings-wide.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.screenshot({ path: test.info().outputPath('accounts-settings-narrow.png'), fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 760 });
+  const signOuts: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'DELETE' && request.url().includes('/accounts/'))
+      signOuts.push(new URL(request.url()).pathname.split('/').pop()!);
+  });
+  await unused.getByRole('button', { name: 'Sign out' }).click();
+  await expect.poll(() => signOuts).toEqual(['github-app-abandoned']);
+  await expect(page.locator('.app-toast')).toContainText('Signed out.');
+  await expect(unused).toHaveCount(0);
+  await expect(used).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
 });
+
+for (const width of [1280, 390])
+  test(`reuses a signed-in account and shows project sources and accounts at ${width}px (HS2-SM9PM8)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 860 });
+    await mockProject(page, true, false, 0, 0, 0, true);
+    await page.route('**/__hotsheet/projects/open', (route) =>
+      route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
+    );
+    const signIns: unknown[] = [],
+      creates: Array<Record<string, unknown>> = [];
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (request.method() === 'POST' && path.endsWith('/github-auth/device')) signIns.push(request.postDataJSON());
+      if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const setup = page.locator('[data-ticket-source-setup-dialog]'),
+      form = setup.locator('[data-action="save-provider-connection"]');
+    await expect(setup).toHaveJSProperty('open', true);
+    await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+    // The only account on this machine is an earlier sign-in no project uses yet.
+    const reuse = form.getByRole('button', { name: 'Use an earlier GitHub sign-in, not used by any project yet' });
+    await expect(reuse).toBeVisible();
+    await setup.evaluate(async (node) => {
+      const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
+      await Promise.all(animations.map((animation) => animation.finished));
+    });
+    await page.screenshot({ path: test.info().outputPath(`reuse-account-${width}.png`) });
+    await reuse.click();
+    await expect(form.getByText('Using your GitHub account on GitHub.')).toBeVisible();
+    await form.locator('input[name="connection-locator"]').fill('small-tale/reused');
+    await setup.getByRole('button', { name: 'Connect provider' }).click();
+    await expect(setup).toHaveJSProperty('open', false);
+    expect(signIns).toEqual([]);
+    expect(creates).toEqual([
+      expect.objectContaining({
+        locator: 'small-tale/reused',
+        make_default: true,
+        settings: { credential: { secret: 'github-app-abandoned' } },
+      }),
+    ]);
+    await page.getByLabel('Settings view').click();
+    const sources = page.locator('[data-component="ticket-sources-settings"]');
+    await expect(sources.getByRole('button', { name: 'Edit GitHub Issues' })).toContainText('Default');
+    await expect(sources.getByRole('button', { name: 'Remove GitHub Issues from this project' })).toBeVisible();
+    const noHorizontalScroll = () =>
+      page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+    expect(await noHorizontalScroll()).toBe(true);
+    await page.screenshot({ path: test.info().outputPath(`ticket-sources-${width}.png`) });
+    await sources.getByRole('button', { name: 'App Settings → Accounts' }).click();
+    const account = page.locator('[data-component="accounts-settings"] [data-account-id="github-app-abandoned"]');
+    // The reused sign-in now lists this project's source, so it can no longer be signed out.
+    await expect(account).toContainText('small-tale/reused · Used by demo');
+    await expect(account.locator('[data-action="sign-out-account"]')).toHaveCount(0);
+    const card = (await account.boundingBox())!;
+    expect(card.x).toBeGreaterThanOrEqual(0);
+    expect(card.x + card.width).toBeLessThanOrEqual(width);
+    expect(await noHorizontalScroll()).toBe(true);
+    await page.screenshot({ path: test.info().outputPath(`accounts-${width}.png`) });
+    await expect(page.locator('.app-error')).toHaveCount(0);
+  });
 
 test('signs in to GitHub Enterprise from its server address before connecting (HS2-1JT25R)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });

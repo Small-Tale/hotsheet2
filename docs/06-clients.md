@@ -567,27 +567,35 @@ and identity-less legacy entries remain conservatively blocking.
   heading and the device-local categories under an **App Settings** heading (HS2-QT6PGR).
   Ticket sources, Commands, Lifecycle, Permissions, and Column view each render as a
   separate workspace so unrelated controls do not become one long settings page.
-  Ticket sources shows only this checkout's linked sources and its own default; the
-  machine-wide connection catalog (edit for every project, Disable/Enable, Remove) is the
-  **App Settings → Connections** page (HS2-3SCH1K, see
-  [16-external-sync-interface.md](16-external-sync-interface.md)).
+  Ticket sources are never global (HS2-SM9PM8, see
+  [16-external-sync-interface.md](16-external-sync-interface.md#project-owned-sources-machine-wide-accounts-hs2-sm9pm8)).
+  **Project Settings → Ticket sources** shows only the sources this project owns, with its
+  own default (HS2-3SCH1K). Each row edits its source (details, this project's default,
+  **Disable / Enable**) and its trailing **Remove from this project** action opens that
+  editor at an inline confirmation; a source shared with another project (attached
+  headlessly) says "Also used by …". There is no list of other projects' connections.
+  **App Settings → Accounts** lists the machine-wide sign-ins with each one's sources and
+  the projects using them, and offers **Sign out** only for a sign-in no source uses. When
+  adding a GitHub source, the setup form first offers the GitHub accounts already signed in
+  on this computer; choosing one lists that account's repositories so the project picks its
+  own repository without signing in again.
   A category's group states what its controls affect (HS2-S1184P). `SETTINGS_STORAGE` in
   `components/settings-navigation.tsx` declares each control's storage, and
   `settings-storage-scope.test.ts` resolves it through the project bridge, so a setting
   filed under the wrong group fails the build:
 
-  | Group   | Category       | Stored in                                                                    | Scope                   |
-  | ------- | -------------- | ---------------------------------------------------------------------------- | ----------------------- |
-  | Project | Ticket sources | `/checkouts/{id}/providers`, `/sources/{connection}`, `/default-source`      | this project, machine   |
-  | Project | AI tools       | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`) | this project, machine   |
-  | Project | Commands       | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)               | this project, machine   |
-  | Project | Lifecycle      | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                           | this project, committed |
-  | Project | Terminals      | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                         | this project, machine   |
-  | Project | Permissions    | `localStorage hotsheet.project.{id}.permission-automation`                   | this project, browser   |
-  | Project | Column view    | `localStorage hotsheet.project.{id}.hide-verified-column`                    | this project, browser   |
-  | App     | General        | `localStorage hotsheet.show-loading-activity`                                | every project, browser  |
-  | App     | Connections    | `/provider-connections` (`providers.json`)                                   | every project, machine  |
-  | App     | Keyboard       | `localStorage hotsheet.keyboard-shortcuts`                                   | every project, browser  |
+  | Group   | Category       | Stored in                                                                                        | Scope                   |
+  | ------- | -------------- | ------------------------------------------------------------------------------------------------ | ----------------------- |
+  | Project | Ticket sources | `/checkouts/{id}/providers`, `/provider-connections`, `/sources/{connection}`, `/default-source` | this project, machine   |
+  | Project | AI tools       | `/checkouts/{id}/ai-settings` (`ai.defaults`, project `settings.local.json`)                     | this project, machine   |
+  | Project | Commands       | `/checkouts/{id}/commands`, `/command-groups` (`Scope::Local`)                                   | this project, machine   |
+  | Project | Lifecycle      | `/checkouts/{id}/trash-settings` (`Scope::Shared`)                                               | this project, committed |
+  | Project | Terminals      | `/checkouts/{id}/terminal-settings` (`Scope::Local`)                                             | this project, machine   |
+  | Project | Permissions    | `localStorage hotsheet.project.{id}.permission-automation`                                       | this project, browser   |
+  | Project | Column view    | `localStorage hotsheet.project.{id}.hide-verified-column`                                        | this project, browser   |
+  | App     | General        | `localStorage hotsheet.show-loading-activity`                                                    | every project, browser  |
+  | App     | Accounts       | `/accounts` (credential names from `providers.json` + `keys.json`)                               | every project, machine  |
+  | App     | Keyboard       | `localStorage hotsheet.keyboard-shortcuts`                                                       | every project, browser  |
 
   The settings workspace and ticket-source setup flow are component-owned surfaces:
   `components/settings-workspace.tsx`, `ticket-sources-settings.tsx`,

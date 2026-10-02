@@ -3,12 +3,15 @@ import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 
 import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
+import { List } from '@kerfjs/ui/list';
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
-import { ChevronLeft, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
+import { ChevronLeft, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
-import type { ProviderConnection } from '../api';
+import type { ProviderAccount, ProviderConnection } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { ProviderIcon } from './provider-icon';
 
 export type ExternalProviderKind = 'github' | 'gitlab' | 'jira';
 
@@ -24,6 +27,8 @@ export interface GithubAuthState {
   /** Whether the one-time code reached the clipboard automatically. */
   copied?: boolean;
   credential?: string;
+  /** Reusing this machine-wide account instead of a new sign-in (HS2-SM9PM8). */
+  account?: string;
   repositories?: string[];
   /** What each GitHub App installation grants, to explain a missing repository (HS2-27T5WT). */
   installations?: Array<{ account: string; selection: string; settingsUrl?: string }>;
@@ -54,13 +59,29 @@ export interface ProviderSetupFormProps {
   auth?: GithubAuthState;
   error?: string;
   /**
-   * The "this project's default ticket source" checkbox state, or `undefined` to omit it, as when
-   * editing a connection for every project from App Settings → Connections (HS2-3SCH1K).
+   * The "this project's default ticket source" checkbox state, or `undefined` to omit it (as the UX
+   * demo does for a bare form).
    */
   defaultChoice?: boolean;
+  /** Machine-wide sign-ins a new GitHub source can reuse instead of signing in again (HS2-SM9PM8). */
+  accounts?: readonly ProviderAccount[];
 }
 
-export function ProviderSetupForm({ kind, connection, auth, error = '', defaultChoice }: ProviderSetupFormProps) {
+function accountUsage(account: ProviderAccount, capitalized = true) {
+  const usage = account.projects.length
+    ? `used by ${account.projects.map((project) => project.alias).join(', ')}`
+    : 'not used by any project yet';
+  return capitalized ? usage.charAt(0).toUpperCase() + usage.slice(1) : usage;
+}
+
+export function ProviderSetupForm({
+  kind,
+  connection,
+  auth,
+  error = '',
+  defaultChoice,
+  accounts = [],
+}: ProviderSetupFormProps) {
   const labels = {
       github: ['GitHub Issues', 'owner/repository', 'GitHub credential reference'],
       gitlab: ['GitLab Issues', 'namespace/project', 'GitLab credential reference'],
@@ -73,7 +94,8 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
     // A new GitHub connection starts from sign-in; its settings appear once GitHub has authorized it.
     showFields = kind !== 'github' || editing || signedIn,
     choosing = kind === 'github' && !editing && signedIn && auth.repositories !== undefined,
-    limited = (auth?.installations ?? []).filter((installation) => installation.selection !== 'all');
+    limited = (auth?.installations ?? []).filter((installation) => installation.selection !== 'all'),
+    githubAccounts = accounts.filter((account) => account.provider === 'github');
   return (
     <form
       id="provider-setup-form"
@@ -134,8 +156,9 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
             </>
           ) : signedIn ? (
             <p role="status">
-              Signed in to {auth.enterpriseUrl ? new URL(auth.enterpriseUrl).host : 'GitHub'}.{' '}
-              {auth.repositories ? 'Choose a repository below.' : 'Loading your repositories…'}
+              {auth.account ? 'Using your GitHub account on ' : 'Signed in to '}
+              {auth.enterpriseUrl ? new URL(auth.enterpriseUrl).host : 'GitHub'}.{' '}
+              {auth.repositories ? 'Choose a repository for this project below.' : 'Loading your repositories…'}
             </p>
           ) : auth?.enterprise ? (
             <>
@@ -170,9 +193,35 @@ export function ProviderSetupForm({ kind, connection, auth, error = '', defaultC
             </>
           ) : (
             <>
+              {githubAccounts.length > 0 && (
+                <>
+                  <p>Use a GitHub account already signed in on this computer, then choose this project's repository.</p>
+                  <div class="provider-setup-form__accounts">
+                    <List>
+                      {githubAccounts.map((account, index) => (
+                        <ListItem
+                          action="use-github-account"
+                          itemId={account.id}
+                          multiline
+                          divider={index > 0 ? 'before' : 'none'}
+                          accessibleLabel={`Use ${account.host ? `the GitHub account on ${account.host}` : 'an earlier GitHub sign-in'}, ${accountUsage(account, false)}`}
+                          icon={<ProviderIcon kind="github" />}
+                          trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
+                          label={
+                            <span class="provider-setup-form__account-copy">
+                              <strong>{account.host || 'Earlier GitHub sign-in'}</strong>
+                              <small>{accountUsage(account)}</small>
+                            </span>
+                          }
+                        />
+                      ))}
+                    </List>
+                  </div>
+                </>
+              )}
               <p>
-                Sign in to choose a repository. Hot Sheet opens GitHub in a small window and copies your one-time code
-                for you.
+                {githubAccounts.length ? 'Or sign in with another account. ' : 'Sign in to choose a repository. '}Hot
+                Sheet opens GitHub in a small window and copies your one-time code for you.
               </p>
               <div class="provider-setup-form__auth-actions">
                 <wa-button

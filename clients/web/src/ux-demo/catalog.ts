@@ -771,18 +771,17 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'ticket-sources-settings',
         'TicketSourcesSettings',
-        "One project's linked ticket sources: default-source choice, editable and detachable connection rows, and the machine's other connections to attach.",
+        "One project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares.",
         'feature-floor',
         true,
         ['list', 'list-item'],
       ),
       demo(
-        'connections-settings',
-        'ConnectionsSettings',
-        'The machine-wide ticket-provider connection catalog shared by every project (App Settings → Connections).',
+        'accounts-settings',
+        'AccountsSettings',
+        'Machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts).',
         'feature-floor',
         true,
-        ['list', 'list-item'],
       ),
       demo(
         'settings-workspace',

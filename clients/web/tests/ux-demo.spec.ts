@@ -11,10 +11,12 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
     for (const [value, expected] of [
       ['root', 'Set up ticket support'],
       ['signed-out', 'Sign in with GitHub'],
+      ['accounts', 'Use a GitHub account already signed in on this computer'],
       ['waiting', 'ABCD-EFGH'],
       ['authorized', 'Signed in to GitHub.'],
       ['editing', 'Save changes'],
-      ['removing', 'Remove Product issues?'],
+      ['editing-shared', 'Also used by marketing-site.'],
+      ['removing', 'Remove Product issues from Demo project?'],
       ['busy', 'Saving…'],
       ['remote', 'Back up this ticket repository'],
     ] as const) {
@@ -6334,7 +6336,7 @@ test('catalogs the terminal Copy and Paste sheets with every variant (HS2-FRB545
   }
 });
 
-test('renders project ticket sources and the machine connection catalog at wide and phone widths (HS2-3SCH1K)', async ({
+test('renders project-owned ticket sources and machine-wide accounts at wide and phone widths (HS2-SM9PM8)', async ({
   page,
 }) => {
   for (const width of [1280, 390]) {
@@ -6342,42 +6344,60 @@ test('renders project ticket sources and the machine connection catalog at wide 
     await page.goto('/ux-demo?component=ticket-sources-settings');
     const sources = page.locator('[data-component="ticket-sources-settings"]');
     await expect(sources.locator('wa-select[name="project-default-source"]')).toHaveJSProperty('value', 'github-main');
-    await expect(sources.getByRole('button', { name: 'Detach Product issues from this project' })).toBeVisible();
-    await expect(sources.getByRole('button', { name: 'Use Operations in this project' })).toBeVisible();
+    await expect(sources.getByRole('button', { name: 'Remove Product issues from this project' })).toBeVisible();
+    await expect(sources).toContainText('Also used by marketing-site');
+    // Never another project's sources to attach.
+    await expect(sources.locator('[data-action="attach-project-source"]')).toHaveCount(0);
     await expect(sources.locator('[data-state="disabled"]')).toHaveText('Disabled');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.screenshot({ path: test.info().outputPath(`project-sources-${width}.png`), fullPage: true });
-    await page.goto('/ux-demo?component=connections-settings');
-    const catalog = page.locator('[data-component="connections-settings"]');
-    await expect(catalog.getByRole('button', { name: 'Edit Operations for every project' })).toBeVisible();
+    await page.goto('/ux-demo?component=accounts-settings');
+    const accounts = page.locator('[data-component="accounts-settings"]').first();
+    await expect(accounts.locator('[data-account-id="github-app-01demo"]')).toContainText(
+      'small-tale/hotsheet-docs · Used by hotsheet2, marketing-site',
+    );
+    await expect(accounts.locator('[data-account-id="jira-token"]')).toContainText('dev@acme.test');
+    // Only the unused sign-in can be signed out, and its control fits the card.
+    const signOut = accounts.locator('[data-account-id="github-app-01unused"] [data-action="sign-out-account"]');
+    await expect(signOut).toBeVisible();
+    await expect(accounts.locator('[data-action="sign-out-account"]')).toHaveCount(1);
+    const card = (await accounts.locator('[data-account-id="github-app-01unused"]').boundingBox())!,
+      button = (await signOut.boundingBox())!;
+    expect(button.x + button.width).toBeLessThanOrEqual(card.x + card.width);
+    expect(
+      await signOut.evaluate(
+        (node) => getComputedStyle(node.shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!).cursor,
+      ),
+    ).toBe('pointer');
+    await expect(page.locator('[data-component="accounts-settings"]').nth(1)).toContainText('No accounts yet.');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-    await page.screenshot({ path: test.info().outputPath(`connections-${width}.png`), fullPage: true });
+    await page.screenshot({ path: test.info().outputPath(`accounts-${width}.png`), fullPage: true });
   }
 });
 
 test('ticket source connection rows hover flush with their card edge (HS2-KZP94T)', async ({ page }) => {
   for (const width of [1100, 390]) {
     await page.setViewportSize({ width, height: 1000 });
-    // The machine-wide catalog keeps the flush ListItem card (HS2-3SCH1K moved it to App Settings → Connections).
-    await page.goto('/ux-demo?component=connections-settings');
+    await page.goto('/ux-demo?component=ticket-sources-settings');
     const card = page.locator('.ticket-provider-settings__connections'),
-      rows = card.locator('.kui-list-item');
-    await expect(rows).toHaveCount(3);
+      rows = card.locator('.kui-list-action-row__primary');
+    await expect(rows).toHaveCount(2);
     await rows.first().hover();
     const cardBox = (await card.boundingBox())!,
       rowBox = (await rows.first().boundingBox())!;
     // Only the card's 1px border separates the row from the card edge: no inline inset.
     expect(rowBox.x - cardBox.x).toBeCloseTo(1, 0);
-    expect(cardBox.x + cardBox.width - (rowBox.x + rowBox.width)).toBeCloseTo(1, 0);
     const hovered = await rows.first().evaluate((node) => {
-      const style = getComputedStyle(node);
-      return { left: style.borderLeftColor, right: style.borderRightColor, background: style.backgroundColor };
+      const row = node.closest<HTMLElement>('.kui-list-action-row')!,
+        fills = [getComputedStyle(node).backgroundColor, getComputedStyle(row).backgroundColor];
+      return {
+        left: getComputedStyle(row).borderLeftWidth,
+        background: fills.find((fill) => fill !== 'rgba(0, 0, 0, 0)') ?? 'rgba(0, 0, 0, 0)',
+      };
     });
     // No visible per-row hover outline doubling the card border; the hover fill still shows.
-    expect(hovered.left).toBe('rgba(0, 0, 0, 0)');
-    expect(hovered.right).toBe('rgba(0, 0, 0, 0)');
+    expect(hovered.left).toBe('0px');
     expect(hovered.background).not.toBe('rgba(0, 0, 0, 0)');
-    await expect(rows.nth(1)).toHaveCSS('border-top-width', '1px');
   }
 });
 

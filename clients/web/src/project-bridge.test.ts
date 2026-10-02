@@ -195,9 +195,22 @@ describe('projectScopedServerPath', () => {
     expect(projectScopedServerPath('project one', '/command-groups')).toBe('/checkouts/project%20one/command-groups');
     // AI tool defaults belong to the project (HS2-SW5S13); the tool inventory stays machine-wide.
     expect(projectScopedServerPath('project one', '/ai-settings')).toBe('/checkouts/project%20one/ai-settings');
-    // A project lists only its checkout's linked sources (HS2-3SCH1K); the machine catalog stays host-wide.
+    // A project lists only its checkout's linked sources (HS2-3SCH1K) and reads, creates, edits, and
+    // disables only the connections it owns (HS2-SM9PM8); accounts stay machine-wide.
     expect(projectScopedServerPath('project one', '/providers')).toBe('/checkouts/project%20one/providers');
-    expect(projectScopedServerPath('project one', '/provider-connections')).toBe('/provider-connections');
+    expect(projectScopedServerPath('project one', '/provider-connections')).toBe(
+      '/checkouts/project%20one/provider-connections',
+    );
+    expect(projectScopedServerPath('project one', '/provider-connections/github-a')).toBe(
+      '/checkouts/project%20one/provider-connections/github-a',
+    );
+    expect(projectScopedServerPath('project one', '/provider-connections/github-a/disabled')).toBe(
+      '/checkouts/project%20one/provider-connections/github-a/disabled',
+    );
+    expect(projectScopedServerPath('project one', '/accounts')).toBe('/accounts');
+    expect(projectScopedServerPath('project one', '/accounts/github-app-1/github-repositories')).toBe(
+      '/accounts/github-app-1/github-repositories',
+    );
     expect(projectScopedServerPath('project one', '/ai-tools?refresh=true')).toBe('/ai-tools?refresh=true');
     expect(projectScopedServerPath('project one', '/commands/review/run?confirm=true')).toBe(
       '/checkouts/project%20one/commands/review/run?confirm=true',

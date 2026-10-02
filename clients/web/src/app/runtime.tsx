@@ -996,9 +996,13 @@ export async function startHotSheetWebClient() {
     providerConnections,
     providerSetupKind,
     providerEditingId,
-    providerEditScope,
-    attachProjectSource,
-    detachProjectSource,
+    providerAccounts,
+    providerAccountsError,
+    signingOutAccount,
+    refreshProviderAccounts,
+    signOutProviderAccount,
+    useGithubAccount,
+    requestProjectSourceRemoval,
     setProjectDefaultSource,
     providerSettingsBusy,
     providerSettingsError,
@@ -4098,20 +4102,24 @@ export async function startHotSheetWebClient() {
       }),
     };
   }
-  /** This checkout's own ticket sources, plus the machine's other connections it could use (HS2-3SCH1K). */
+  /** This project's own ticket sources — never another project's (HS2-3SCH1K, HS2-SM9PM8). */
   function projectSourcesSettings(current: Project) {
-    const sources = defaultProviders.value[current.id]?.sources ?? [],
-      linked = new Set(sources.map((source) => source.connectionId));
+    const sources = defaultProviders.value[current.id]?.sources ?? [];
     return {
-      sources: sources.map((source) => ({
-        connectionId: source.connectionId,
-        name: source.name,
-        provider: source.provider,
-        locator: source.locator,
-        default: source.default,
-        disabled: providerConnections.value.some((item) => item.id === source.connectionId && item.disabled),
-      })),
-      available: providerConnections.value.filter((item) => !linked.has(item.id)),
+      sources: sources.map((source) => {
+        const connection = providerConnections.value.find((item) => item.id === source.connectionId);
+        return {
+          connectionId: source.connectionId,
+          name: source.name,
+          provider: source.provider,
+          locator: source.locator,
+          default: source.default,
+          disabled: Boolean(connection?.disabled),
+          sharedWith: (connection?.projects ?? [])
+            .filter((project) => project.id !== current.id)
+            .map((project) => project.alias),
+        };
+      }),
       error: providerSettingsError.value,
       setupOpen: Boolean(ticketSourceSetupProject.value),
     };
@@ -4121,10 +4129,10 @@ export async function startHotSheetWebClient() {
       <SettingsWorkspace
         category={settingsCategory()}
         sources={projectSourcesSettings(current)}
-        connections={{
-          connections: providerConnections.value,
-          error: providerSettingsError.value,
-          setupOpen: Boolean(ticketSourceSetupProject.value),
+        accounts={{
+          accounts: providerAccounts.value,
+          error: providerAccountsError.value,
+          signingOut: signingOutAccount.value,
         }}
         ai={{
           tools: aiTools.value,
@@ -4926,7 +4934,7 @@ export async function startHotSheetWebClient() {
           providerKind={providerSetupKind.value}
           providerConnections={providerConnections.value}
           editingProviderId={providerEditingId.value}
-          editScope={providerEditScope.value}
+          accounts={providerAccounts.value}
           projectDefault={Boolean(
             defaultProviders.value[project()?.id ?? '']?.sources.some(
               (source) => source.connectionId === providerEditingId.value && source.default,
@@ -5158,7 +5166,7 @@ export async function startHotSheetWebClient() {
   const interactionBindingsPort: InteractionBindingsPort = {
     openProjectPicker, openRemoteProjectDialog, chooseAndOpenProject, unhealthyServerRecovery, projectDialogOpen, openRemoteCheckout, remoteProjectDialogOpen, importHs1Project,
     chooseHs1TicketStore, hs1MigrationProject, hs1MigrationBusy, hs1SourceIdentity, project, migrationJobDetails, migrationJobs, migrationConnectionErrors,
-    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, providerEditScope, attachProjectSource, detachProjectSource, setProjectDefaultSource,
+    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, signOutProviderAccount, useGithubAccount, setProjectDefaultSource,
     providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView,
     repositorySetupStep, repositorySetupError, repositoryFileMenu, repositorySelectedFiles, repositoryComparison, expandedCodeReviewCommits, loadRepositoryDetail, refreshRepositoryStatus,
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,

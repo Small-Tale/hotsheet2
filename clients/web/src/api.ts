@@ -48,14 +48,44 @@ export interface ProviderConnection {
   settings: Record<string, unknown>;
   /** Temporarily switched off; absent when enabled (HS2-SF6W34). */
   disabled?: boolean;
+  /**
+   * Every project that owns this source, as `GET /checkouts/{id}/provider-connections` reports it
+   * (HS2-SM9PM8). Absent on a create/update response.
+   */
+  projects?: AccountProject[];
 }
-/** What a permanent provider-connection removal cleaned up (HS2-724S9N). */
-export interface ConnectionRemoval {
+/** A project (checkout) that uses a ticket source (HS2-SM9PM8). */
+export interface AccountProject {
+  id: string;
+  alias: string;
+}
+/** What removing a source from one project did (HS2-SM9PM8). */
+export interface SourceDetach {
+  checkout_id: string;
   connection_id: string;
+  unlinked: boolean;
+  /** No other project used it, so the connection itself was deleted. */
   removed_connection: boolean;
-  unlinked_checkouts: string[];
-  deleted_credential: string | null;
-  kept_credential: string | null;
+  still_used_by: string[];
+}
+/** A machine-wide provider sign-in and the ticket sources and projects using it (HS2-SM9PM8). */
+export interface ProviderAccount {
+  /** The credential reference (OS-keychain entry name); never the secret. */
+  id: string;
+  provider: string;
+  /** The host signed in to; empty when unknown (an unused Hot Sheet GitHub sign-in). */
+  host: string;
+  identity?: string;
+  /** Minted by Hot Sheet's GitHub sign-in rather than registered with `hotsheet key set`. */
+  managed: boolean;
+  sources: Array<{
+    connection_id: string;
+    name: string;
+    locator: string;
+    disabled: boolean;
+    projects: AccountProject[];
+  }>;
+  projects: AccountProject[];
 }
 /** Repositories the signed-in user can pick, and what each app installation grants (HS2-27T5WT). */
 export interface GitHubRepositoryAccess {
@@ -683,10 +713,20 @@ export class Api {
   }
   compatibility = () => this.request<ServerCompatibility>('/compatibility');
   providers = () => this.request<ProviderDescriptor[]>('/providers');
+  /** This project's own ticket-source connections; the bridge scopes the path to the checkout (HS2-SM9PM8). */
   connections = () => this.request<ProviderConnection[]>('/provider-connections');
   tickets = (id: string) => this.request<Ticket[]>(`/providers/${encodeURIComponent(id)}/tickets`);
-  createConnection = (value: ProviderConnection) =>
-    this.request<ProviderConnection>('/provider-connections', { method: 'POST', body: JSON.stringify(value) });
+  /** Create a ticket source owned by this project: the record and its checkout link in one request. */
+  createConnection = (value: ProviderConnection, makeDefault = false) =>
+    this.request<ProviderConnection>('/provider-connections', {
+      method: 'POST',
+      body: JSON.stringify({ ...value, make_default: makeDefault }),
+    });
+  /** Machine-wide sign-ins with the sources and projects using each (HS2-SM9PM8). */
+  accounts = () => this.request<ProviderAccount[]>('/accounts');
+  signOutAccount = (id: string) => this.request<void>(`/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  accountGithubRepositories = (id: string) =>
+    this.request<GitHubRepositoryAccess>(`/accounts/${encodeURIComponent(id)}/github-repositories`);
   updateConnection = (id: string, value: ProviderConnection) =>
     this.request<ProviderConnection>(`/provider-connections/${encodeURIComponent(id)}`, {
       method: 'PATCH',
@@ -697,8 +737,6 @@ export class Api {
       method: 'PUT',
       body: JSON.stringify({ disabled }),
     });
-  deleteConnection = (id: string) =>
-    this.request<ConnectionRemoval>(`/provider-connections/${encodeURIComponent(id)}`, { method: 'DELETE' });
   startGitHubAuth = (web_base = 'https://github.com') =>
     this.request<GitHubAuthStart>('/github-auth/device', { method: 'POST', body: JSON.stringify({ web_base }) });
   waitGitHubAuth = (session: string) =>
@@ -712,11 +750,15 @@ export class Api {
       method: 'PUT',
       body: JSON.stringify({ provider: connection.provider, locator: connection.locator, make_default: makeDefault }),
     });
-  /** Detach a ticket source from one checkout; the machine-wide connection stays (HS2-3SCH1K). */
+  /**
+   * Remove a ticket source from one project. A connection no other project uses is deleted with it;
+   * its account stays signed in (HS2-SM9PM8).
+   */
   removeCheckoutSource = (checkout: string, connectionId: string) =>
-    this.request<Checkout>(`/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}`, {
-      method: 'DELETE',
-    });
+    this.request<SourceDetach>(
+      `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}`,
+      { method: 'DELETE' },
+    );
   setCheckoutDefaultSource = (checkout: string, connectionId: string | null) =>
     this.request<Checkout>(`/checkouts/${encodeURIComponent(checkout)}/default-source`, {
       method: 'PUT',

@@ -2,30 +2,30 @@ import './ticket-sources-settings.css';
 
 import { List } from '@kerfjs/ui/list';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
-import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
-import { Cable, ChevronRight, Database, Plus, Unlink } from 'lucide';
+import { Cable, Database, LogOut, Unlink } from 'lucide';
 
-import type { ProviderConnection } from '../api';
+import type { ProviderAccount } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { ProviderIcon, type ProviderIconKind } from './provider-icon';
 import { type ExternalProviderKind, providerName } from './provider-setup-form';
 
-/** One ticket source this project's checkout links (HS2-3SCH1K). */
+/** One ticket source this project's checkout owns (HS2-3SCH1K, HS2-SM9PM8). */
 export interface ProjectTicketSource {
   connectionId: string;
   name: string;
   provider: string;
   locator: string;
-  /** This checkout's default source, not the machine-wide registry's. */
+  /** This checkout's default source. */
   default: boolean;
   disabled?: boolean;
+  /** Other projects that share this source (attached headlessly with `checkout add-source`). */
+  sharedWith?: readonly string[];
 }
 
 export interface TicketSourcesSettingsProps {
   sources: readonly ProjectTicketSource[];
-  /** Machine-wide connections this project does not use yet. */
-  available?: readonly ProviderConnection[];
   error?: string;
   setupOpen?: boolean;
 }
@@ -40,12 +40,14 @@ function ConnectionCopy({
   locator,
   isDefault = false,
   disabled = false,
+  sharedWith = [],
 }: {
   name: string;
   provider: string;
   locator: string;
   isDefault?: boolean;
   disabled?: boolean;
+  sharedWith?: readonly string[];
 }) {
   return (
     <span class="ticket-provider-settings__connection-copy">
@@ -57,21 +59,17 @@ function ConnectionCopy({
       <small>
         {sourceKind(provider)} · {locator}
       </small>
+      {sharedWith.length > 0 && <small>Also used by {sharedWith.join(', ')}</small>}
     </span>
   );
 }
 
 /**
- * Project Settings → Ticket sources (HS2-3SCH1K): only the sources this checkout links. The
- * default-source choice and Detach act on this checkout alone; editing a connection's details,
- * disabling it, or removing it for every project lives under App Settings → Connections.
+ * Project Settings → Ticket sources (HS2-3SCH1K, HS2-SM9PM8): only the sources this project owns —
+ * never another project's. The default-source choice, editing, Disable, and Remove act on this
+ * project's sources; sign-ins are machine-wide and live under App Settings → Accounts.
  */
-export function TicketSourcesSettings({
-  sources,
-  available = [],
-  error = '',
-  setupOpen = false,
-}: TicketSourcesSettingsProps) {
+export function TicketSourcesSettings({ sources, error = '', setupOpen = false }: TicketSourcesSettingsProps) {
   const defaultSource = sources.find((source) => source.default) ?? sources.at(0);
   return (
     <div class="ticket-provider-settings" data-component="ticket-sources-settings">
@@ -112,6 +110,7 @@ export function TicketSourcesSettings({
                     locator={source.locator}
                     isDefault={source.connectionId === defaultSource?.connectionId}
                     disabled={source.disabled}
+                    sharedWith={source.sharedWith}
                   />
                 );
                 return source.provider === 'git' ? (
@@ -128,9 +127,9 @@ export function TicketSourcesSettings({
                     accessibleLabel={`Edit ${source.name}`}
                     icon={<LucideIcon icon={Cable} name="cable" />}
                     label={copy}
-                    trailingAction="detach-project-source"
-                    trailingActionLabel={`Detach ${source.name} from this project`}
-                    trailingActionTitle="Detach from this project"
+                    trailingAction="remove-project-source"
+                    trailingActionLabel={`Remove ${source.name} from this project`}
+                    trailingActionTitle="Remove from this project"
                     trailingActionIcon={<LucideIcon icon={Unlink} name="unlink" />}
                     trailingActionAttributes={{ 'data-source-id': source.connectionId }}
                   />
@@ -140,49 +139,21 @@ export function TicketSourcesSettings({
           </div>
         )}
       </section>
-      {available.length > 0 && (
-        <section>
-          <h2>Other connections on this machine</h2>
-          <p>Connected for other projects. Use one here without signing in again.</p>
-          <div class="ticket-provider-settings__connections">
-            <List>
-              {available.map((connection, index) => (
-                <ListItem
-                  action="attach-project-source"
-                  itemId={connection.id}
-                  multiline
-                  divider={index > 0 ? 'before' : 'none'}
-                  accessibleLabel={`Use ${connection.name ?? connection.id} in this project`}
-                  icon={<LucideIcon icon={Cable} name="cable" />}
-                  trailing={<LucideIcon icon={Plus} name="plus" size={16} />}
-                  label={
-                    <ConnectionCopy
-                      name={connection.name ?? connection.id}
-                      provider={connection.provider}
-                      locator={connection.locator}
-                      disabled={connection.disabled}
-                    />
-                  }
-                />
-              ))}
-            </List>
-          </div>
-        </section>
-      )}
       {error && !setupOpen && (
         <p class="ticket-provider-settings__error" role="alert">
           {error}
         </p>
       )}
       <p>
-        To change sign-in details, disable, or remove a connection for every project, use{' '}
+        Sources belong to this project; other projects never see them. GitHub, GitLab, and Jira sign-ins are shared by
+        every project on this computer under{' '}
         <button
           type="button"
           class="ticket-provider-settings__link"
           {...COMMANDS_AND_AI_ACTIONS.selectSettingsCategory.attrs}
-          data-item-id="connections"
+          data-item-id="accounts"
         >
-          App Settings → Connections
+          App Settings → Accounts
         </button>
         .
       </p>
@@ -190,66 +161,113 @@ export function TicketSourcesSettings({
   );
 }
 
-export interface ConnectionsSettingsProps {
-  connections: readonly ProviderConnection[];
+export interface AccountsSettingsProps {
+  accounts: readonly ProviderAccount[];
   error?: string;
-  setupOpen?: boolean;
+  /** The account whose sign-out is in flight. */
+  signingOut?: string;
+}
+
+const accountProviderName = (provider: string) =>
+  ({ github: 'GitHub', gitlab: 'GitLab', jira: 'Jira Cloud' })[provider] ?? provider;
+
+function projectList(projects: readonly { alias: string }[]) {
+  return projects.length ? `Used by ${projects.map((project) => project.alias).join(', ')}` : 'Not used by any project';
 }
 
 /**
- * App Settings → Connections (HS2-3SCH1K): the machine-wide ticket-provider connection catalog.
- * Edits, Disable, and Remove here affect every project that uses the connection.
+ * App Settings → Accounts (HS2-SM9PM8): the machine-wide sign-ins ticket sources use, each with the
+ * sources signed in through it and the projects that own them. Sources themselves belong to projects;
+ * an account can be signed out only once no source uses it.
  */
-export function ConnectionsSettings({ connections, error = '', setupOpen = false }: ConnectionsSettingsProps) {
+export function AccountsSettings({ accounts, error = '', signingOut }: AccountsSettingsProps) {
   return (
-    <div class="ticket-provider-settings" data-component="connections-settings">
+    <div class="ticket-provider-settings" data-component="accounts-settings">
       <section>
         <header class="ticket-provider-settings__header">
-          <h2>Connections</h2>
+          <h2>Accounts</h2>
         </header>
         <p>
-          Ticket-provider connections on this machine, shared by every project that uses them. Changing, disabling, or
-          removing one affects all of those projects.
+          Sign-ins Hot Sheet uses to reach GitHub, GitLab, and Jira. Every project on this computer can reuse them when
+          adding a ticket source; each project still chooses its own repository or Jira project.
         </p>
-        {connections.length ? (
-          <div class="ticket-provider-settings__connections">
-            <List>
-              {connections.map((connection, index) => (
-                <ListItem
-                  action="edit-provider-connection"
-                  itemId={connection.id}
-                  rootAttributes={{ 'data-edit-scope': 'machine' }}
-                  multiline
-                  divider={index > 0 ? 'before' : 'none'}
-                  accessibleLabel={`Edit ${connection.name ?? connection.id} for every project`}
-                  icon={<LucideIcon icon={Cable} name="cable" />}
-                  trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
-                  label={
-                    <ConnectionCopy
-                      name={connection.name ?? connection.id}
-                      provider={connection.provider}
-                      locator={connection.locator}
-                      disabled={connection.disabled}
-                    />
-                  }
-                />
-              ))}
-            </List>
+        {accounts.length ? (
+          <div class="ticket-provider-settings__accounts">
+            {accounts.map((account) => {
+              const name = accountProviderName(account.provider),
+                host = account.host,
+                kind = (
+                  ['github', 'gitlab', 'jira'].includes(account.provider) ? account.provider : 'github'
+                ) as ProviderIconKind,
+                busy = signingOut === account.id;
+              return (
+                <article
+                  class="ticket-provider-settings__connections ticket-provider-settings__account"
+                  data-account-id={account.id}
+                  aria-label={`${name} account ${account.identity ?? (account.host || account.id)}`}
+                >
+                  <header class="ticket-provider-settings__account-header">
+                    <ProviderIcon kind={kind} />
+                    <span class="ticket-provider-settings__connection-copy">
+                      <strong>
+                        {name}
+                        {host && <span class="ticket-provider-settings__account-host">{host}</span>}
+                      </strong>
+                      <small>
+                        {account.identity ? `${account.identity} · ` : ''}
+                        {account.managed ? 'Signed in with Hot Sheet' : `Keychain credential ${account.id}`}
+                      </small>
+                    </span>
+                    {account.sources.length === 0 && (
+                      <wa-button
+                        size="small"
+                        appearance="outlined"
+                        type="button"
+                        {...COMMANDS_AND_AI_ACTIONS.signOutAccount.attrs}
+                        data-item-id={account.id}
+                        disabled={busy}
+                      >
+                        <LucideIcon slot="start" icon={LogOut} name="log-out" />
+                        {busy ? 'Signing out…' : 'Sign out'}
+                      </wa-button>
+                    )}
+                  </header>
+                  {account.sources.length ? (
+                    account.sources.map((source) => (
+                      <div class="ticket-provider-settings__store" data-source-id={source.connection_id}>
+                        <LucideIcon icon={Cable} name="cable" />
+                        <span class="ticket-provider-settings__connection-copy">
+                          <strong>
+                            {source.name}
+                            {source.disabled && <small data-state="disabled">Disabled</small>}
+                          </strong>
+                          <small>
+                            {source.locator} · {projectList(source.projects)}
+                          </small>
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p class="ticket-provider-settings__account-empty">
+                      No ticket source uses this sign-in. Reuse it when adding a source to a project, or sign out.
+                    </p>
+                  )}
+                </article>
+              );
+            })}
           </div>
         ) : (
           <p class="ticket-provider-settings__empty">
-            No external connections yet. Add one from a project's Ticket sources settings.
+            No accounts yet. Signing in while adding a GitHub, GitLab, or Jira ticket source to a project adds one.
           </p>
         )}
       </section>
-      {error && !setupOpen && (
+      {error && (
         <p class="ticket-provider-settings__error" role="alert">
           {error}
         </p>
       )}
-      <p>
-        Connection metadata is stored in <code>providers.json</code>; credentials remain in the OS keychain.
-      </p>
+      <p>Credentials stay in the operating system keychain; Hot Sheet stores only their names.</p>
     </div>
   );
 }

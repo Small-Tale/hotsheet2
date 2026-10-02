@@ -1105,8 +1105,10 @@ export function projectScopedServerPath(projectId: string, path: string): string
       pathname === '/terminal-settings' ||
       // AI tool defaults are per project (HS2-SW5S13).
       pathname === '/ai-settings' ||
-      // A project addresses only the ticket sources its checkout links (HS2-3SCH1K).
+      // A project addresses only the ticket sources its checkout links (HS2-3SCH1K) and owns
+      // (HS2-SM9PM8); there is no machine-wide catalog of sources to browse.
       pathname === '/providers' ||
+      /^\/provider-connections(?:\/[^/]+(?:\/disabled)?)?$/.test(pathname) ||
       /^\/commands\/[^/]+\/run$/.test(pathname) ||
       /^\/command-runs\/[^/]+(?:\/cancel)?$/.test(pathname);
   // The server learns which projects are open from which checkout each change stream serves

@@ -1676,9 +1676,9 @@
       "id": "ticket-sources-settings",
       "name": "TicketSourcesSettings",
       "kind": "component",
-      "purpose": "One project's linked ticket sources: default-source choice, editable and detachable connection rows, and the machine's other connections to attach.",
+      "purpose": "One project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares.",
       "useWhen": [
-        "Hot Sheet needs one project's linked ticket sources: default-source choice, editable and detachable connection rows, and the machine's other connections to attach."
+        "Hot Sheet needs one project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketSourcesSettings behavior."
@@ -1695,18 +1695,18 @@
       "documentation": "docs/ux-components.md"
     },
     {
-      "id": "connections-settings",
-      "name": "ConnectionsSettings",
+      "id": "accounts-settings",
+      "name": "AccountsSettings",
       "kind": "component",
-      "purpose": "The machine-wide ticket-provider connection catalog shared by every project (App Settings → Connections).",
+      "purpose": "Machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts).",
       "useWhen": [
-        "Hot Sheet needs the machine-wide ticket-provider connection catalog shared by every project (App Settings → Connections)."
+        "Hot Sheet needs machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts)."
       ],
       "avoidWhen": [
-        "The interaction does not need Hot Sheet's domain-specific ConnectionsSettings behavior."
+        "The interaction does not need Hot Sheet's domain-specific AccountsSettings behavior."
       ],
       "publicClasses": [
-        "connections-settings"
+        "accounts-settings"
       ],
       "publicTokens": [],
       "geometry": {

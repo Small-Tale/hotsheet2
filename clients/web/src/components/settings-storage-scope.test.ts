@@ -59,8 +59,10 @@ describe('settings category grouping matches storage scope (HS2-S1184P)', () => 
   });
 
   it('detects a misfiled setting', () => {
-    // A machine-wide connection catalog would be a mismatch under Project Settings.
-    expect(storedPerProject({ control: 'catalog', server: '/provider-connections' })).toBe(false);
+    // Machine-wide accounts would be a mismatch under Project Settings, while a project's own
+    // ticket-source connections are checkout-scoped (HS2-SM9PM8).
+    expect(storedPerProject({ control: 'accounts', server: '/accounts' })).toBe(false);
+    expect(storedPerProject({ control: 'sources', server: '/provider-connections' })).toBe(true);
     expect(isAppSettingsCategory('sources')).toBe(false);
     // A project-keyed browser value would be a mismatch under App Settings.
     expect(storedPerProject({ control: 'columns', browser: 'hotsheet.project.{project}.hide-verified-column' })).toBe(

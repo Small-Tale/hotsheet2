@@ -5,6 +5,7 @@ import {
   type Capabilities,
   type Checkout,
   type CustomView,
+  type ProviderAccount,
   type ProviderConnection,
   type ProviderDescriptor,
 } from '../api';
@@ -96,12 +97,11 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerConnections = signal<ProviderConnection[]>([]),
     providerSetupKind = signal<ExternalProviderKind | undefined>(undefined),
     providerEditingId = signal<string | undefined>(undefined),
-    /**
-     * Where the open connection editor was opened (HS2-3SCH1K): a project's Ticket sources edits the
-     * connection and this project's default choice; App Settings → Connections edits it for every
-     * project and offers Disable and Remove.
-     */
-    providerEditScope = signal<'project' | 'machine'>('project'),
+    /** Machine-wide provider sign-ins and the projects using each (HS2-SM9PM8). */
+    providerAccounts = signal<ProviderAccount[]>([]),
+    providerAccountsError = signal(''),
+    /** The account whose sign-out is in flight. */
+    signingOutAccount = signal<string | undefined>(undefined),
     providerSettingsBusy = signal(false),
     providerSettingsError = signal(''),
     providerRemovingId = signal<string | undefined>(undefined),
@@ -572,8 +572,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       }
       settings.email = email;
     }
-    const scope = providerEditScope.value,
-      wasProjectDefault = Boolean(
+    const wasProjectDefault = Boolean(
         editingId &&
         defaultProviders.value[current.id]?.sources.some((item) => item.connectionId === editingId && item.default),
       ),
@@ -582,21 +581,20 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         provider: kind,
         locator,
         name,
-        // The registry flag is machine-wide; an edit keeps it, and a project's default is its checkout's.
-        default: editingId ? (existing?.default ?? false) : makeDefault,
+        // A project's default is its checkout's, never a flag on the record (HS2-3SCH1K).
+        default: existing?.default ?? false,
         settings,
       };
     providerSettingsBusy.value = true;
     providerSettingsError.value = '';
     try {
       const client = new Api(current.apiPath),
+        // A new source is created owned by this project: record and link in one request (HS2-SM9PM8).
         saved = editingId
           ? await client.updateConnection(editingId, connection)
-          : await client.createConnection(connection);
-      // An edit from App Settings → Connections leaves every project's links alone.
-      if (!editingId || scope === 'project') await client.addCheckoutSource(current.id, saved, makeDefault);
-      if (editingId && scope === 'project' && !makeDefault && wasProjectDefault)
-        await client.setCheckoutDefaultSource(current.id, null);
+          : await client.createConnection(connection, makeDefault);
+      if (editingId && makeDefault !== wasProjectDefault)
+        await client.setCheckoutDefaultSource(current.id, makeDefault ? editingId : null);
       await reloadProviderDescriptors(client, current);
       projects.value = projects.value.map((item) =>
         item.id === current.id ? { ...item, needsTicketSetup: false } : item,
@@ -648,25 +646,20 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
   }
 
-  /** Use a machine-wide connection in this project too, without signing in again. */
-  function attachProjectSource(id: string) {
-    const connection = providerConnections.value.find((item) => item.id === id);
-    if (!connection) return Promise.resolve();
-    return changeProjectSources(
-      (client, current) => client.addCheckoutSource(current.id, connection, false),
-      `${connection.name ?? id} added to this project.`,
-    );
-  }
-
-  /** Stop using a source in this project; the connection stays for every other project. */
-  function detachProjectSource(id: string) {
-    const name = defaultProviders.value[dependencies.project()?.id ?? '']?.sources.find(
-      (item) => item.connectionId === id,
-    )?.name;
-    return changeProjectSources(
-      (client, current) => client.removeCheckoutSource(current.id, id),
-      `${name ?? id} detached from this project.`,
-    );
+  /**
+   * Open the source's editor straight at its inline removal confirmation (HS2-SM9PM8): removing a source
+   * deletes its connection when no other project uses it, so it is never a one-click row action.
+   */
+  function requestProjectSourceRemoval(id: string) {
+    const current = dependencies.project(),
+      connection = providerConnections.value.find((item) => item.id === id);
+    if (!current || !connection) return;
+    ticketSourceSetupNavigation.value = 'none';
+    ticketSourceSetupProject.value = current;
+    providerSetupKind.value = connection.provider as ExternalProviderKind;
+    providerEditingId.value = id;
+    providerRemovingId.value = id;
+    providerSettingsError.value = '';
   }
 
   /** Make one of this project's sources the default for new tickets. */
@@ -726,15 +719,21 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerSettingsBusy.value = true;
     providerSettingsError.value = '';
     try {
-      const client = new Api(current.apiPath);
-      await client.deleteConnection(id);
+      const client = new Api(current.apiPath),
+        // Removes it from this project only; the connection goes too once no project uses it (HS2-SM9PM8).
+        result = await client.removeCheckoutSource(current.id, id),
+        others = (connection?.projects ?? []).filter((project) => project.id !== current.id);
       await reloadProviderDescriptors(client, current);
       ticketSourceSetupProject.value = undefined;
       providerSetupKind.value = undefined;
       providerEditingId.value = undefined;
       providerRemovingId.value = undefined;
       await dependencies.refreshProject();
-      dependencies.showToast(`${connection?.name ?? id} removed.`);
+      dependencies.showToast(
+        result.removed_connection || !others.length
+          ? `${connection?.name ?? id} removed from this project.`
+          : `${connection?.name ?? id} removed from this project; ${others.map((item) => item.alias).join(', ')} still use it.`,
+      );
     } catch (reason) {
       providerSettingsError.value = reason instanceof Error ? reason.message : String(reason);
     } finally {
@@ -856,10 +855,15 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     githubPopup = window.open(current.verificationUri, GITHUB_POPUP, GITHUB_POPUP_FEATURES);
   }
 
-  /** List (or re-list) the repositories the signed-in session can reach, with installation grants. */
-  async function loadGitHubRepositories(client: Api, session: string) {
+  /**
+   * List (or re-list) the repositories the signed-in session — or a reused account (HS2-SM9PM8) — can
+   * reach, with installation grants.
+   */
+  async function loadGitHubRepositories(client: Api, session: string, account?: string) {
     try {
-      const listed = await client.githubAuthRepositories(session);
+      const listed = account
+        ? await client.accountGithubRepositories(account)
+        : await client.githubAuthRepositories(session);
       if (githubAuth.value?.session !== session) return;
       githubAuth.value = {
         ...githubAuth.value,
@@ -889,7 +893,59 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       current = githubAuth.value;
     if (!target || current?.state !== 'authorized' || current.refreshing) return;
     githubAuth.value = { ...current, refreshing: true };
-    await loadGitHubRepositories(new Api(target.apiPath), current.session);
+    await loadGitHubRepositories(new Api(target.apiPath), current.session, current.account);
+  }
+
+  /**
+   * Add a source in this project with a GitHub account already signed in on this machine (HS2-SM9PM8):
+   * no new sign-in, just this project's own repository choice.
+   */
+  async function useGithubAccount(id: string) {
+    const target = ticketSourceSetupProject.value,
+      account = providerAccounts.value.find((item) => item.id === id && item.provider === 'github');
+    if (!target || !account || githubAuth.value?.state === 'waiting') return;
+    const session = `account:${id}`,
+      enterpriseUrl = account.host && account.host !== 'github.com' ? `https://${account.host}` : undefined;
+    providerSettingsError.value = '';
+    githubAuth.value = {
+      session,
+      userCode: '',
+      verificationUri: '',
+      state: 'authorized',
+      credential: id,
+      account: id,
+      enterprise: Boolean(enterpriseUrl),
+      enterpriseUrl,
+    };
+    await loadGitHubRepositories(new Api(target.apiPath), session, id);
+  }
+
+  /** Machine-wide sign-ins and the projects using each (HS2-SM9PM8). */
+  async function refreshProviderAccounts(current = dependencies.project()) {
+    if (!current) return;
+    try {
+      providerAccounts.value = await new Api(current.apiPath, '', { trackBusy: false }).accounts();
+      providerAccountsError.value = '';
+    } catch (reason) {
+      providerAccountsError.value = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
+
+  /** Sign out of an account no ticket source uses; the server refuses one still in use. */
+  async function signOutProviderAccount(id: string) {
+    const current = dependencies.project();
+    if (!current || signingOutAccount.value) return;
+    signingOutAccount.value = id;
+    providerAccountsError.value = '';
+    try {
+      await new Api(current.apiPath).signOutAccount(id);
+      await refreshProviderAccounts(current);
+      dependencies.showToast('Signed out.');
+    } catch (reason) {
+      providerAccountsError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      signingOutAccount.value = undefined;
+    }
   }
 
   function cancelGitHubSignIn() {
@@ -994,11 +1050,15 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerConnections,
     providerSetupKind,
     providerEditingId,
-    providerEditScope,
+    providerAccounts,
+    providerAccountsError,
+    signingOutAccount,
+    refreshProviderAccounts,
+    signOutProviderAccount,
+    useGithubAccount,
     providerSettingsBusy,
     providerRemovingId,
-    attachProjectSource,
-    detachProjectSource,
+    requestProjectSourceRemoval,
     setProjectDefaultSource,
     requestProviderRemoval,
     cancelProviderRemoval,

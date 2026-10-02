@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { Checkout } from './api';
+import type { Checkout, ProviderAccount, ProviderConnection, SourceDetach } from './api';
 import { createDevApp } from './dev-server';
 import { createLocalGitTicketStore, listServerCheckouts, openLocalProject } from './project-bridge';
 
@@ -51,7 +51,9 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
       const dir = join(home, 'instances');
       for (const name of await readdir(dir).catch(() => [] as string[])) {
         if (!name.endsWith('.json')) continue;
-        const info = JSON.parse(await readFile(join(dir, name), 'utf8')) as { pid?: number };
+        // A stopping server may remove its record while this loop runs.
+        const text = await readFile(join(dir, name), 'utf8').catch(() => '{}'),
+          info = JSON.parse(text) as { pid?: number };
         if (typeof info.pid === 'number') {
           try {
             process.kill(info.pid, 'SIGTERM');
@@ -92,5 +94,60 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     expect(payload.some((checkout) => checkout.id === session.id)).toBe(true);
     // The route must forward the server's real wire shape, not a reshaped convenience body.
     expect(payload).toEqual(listed);
+  }, 120_000);
+
+  it('keeps ticket sources with their project and lists machine-wide accounts (HS2-SM9PM8)', async () => {
+    const app = createDevApp(),
+      roots = [await mkdtemp(join(workspace, 'owner-')), await mkdtemp(join(workspace, 'other-'))],
+      [owner, other] = await Promise.all(
+        roots.map(async (root) => openLocalProject(root, await createLocalGitTicketStore(root))),
+      ),
+      api = (project: string, path: string, init?: RequestInit) =>
+        app.request(`/__hotsheet/project-api/${encodeURIComponent(project)}${path}`, init);
+    // The bridge scopes the project's create to its checkout: record and link in one request.
+    const created = await api(owner.id, '/provider-connections', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: '',
+        provider: 'github',
+        locator: 'acme/procurement',
+        name: 'Procurement issues',
+        default: false,
+        settings: { credential: { secret: 'github-app-01live' } },
+        make_default: true,
+      }),
+    });
+    expect(created.status).toBe(201);
+    const connection = (await created.json()) as ProviderConnection;
+    expect(connection.id).toBe('github-acme-procurement');
+    expect(connection.projects?.map((project) => project.id)).toEqual([owner.id]);
+    // Only the owner sees it; the other project gets neither the record nor a catalog to attach from.
+    const own = (await (await api(owner.id, '/provider-connections')).json()) as ProviderConnection[];
+    expect(own.map((item) => item.id)).toEqual([connection.id]);
+    expect(await (await api(other.id, '/provider-connections')).json()).toEqual([]);
+    const hijack = await api(other.id, `/provider-connections/${connection.id}/disabled`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ disabled: true }),
+    });
+    expect(hijack.status).toBe(404);
+    // Accounts are machine-wide and name the owning project.
+    const accounts = (await (await api(other.id, '/accounts')).json()) as ProviderAccount[];
+    expect(accounts).toEqual([
+      expect.objectContaining({
+        id: 'github-app-01live',
+        host: 'github.com',
+        projects: [expect.objectContaining({ id: owner.id })],
+      }),
+    ]);
+    const refused = await api(other.id, '/accounts/github-app-01live', { method: 'DELETE' });
+    expect(refused.status).toBe(409);
+    // Removing it from its only project deletes the connection; the account outlives it.
+    const removed = await api(owner.id, `/checkouts/${owner.id}/sources/${connection.id}`, { method: 'DELETE' });
+    expect(removed.status).toBe(200);
+    expect(((await removed.json()) as SourceDetach).removed_connection).toBe(true);
+    expect(await (await api(owner.id, '/provider-connections')).json()).toEqual([]);
+    expect(await (await api(owner.id, '/accounts')).json()).toEqual([]);
   }, 120_000);
 });

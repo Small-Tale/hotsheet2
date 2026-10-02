@@ -8,7 +8,7 @@ import { SettingsWorkspace } from './settings-workspace';
 const props: SettingsWorkspaceProps = {
   category: 'general',
   sources: { sources: [] },
-  connections: { connections: [] },
+  accounts: { accounts: [] },
   ai: { tools: [], selection: { tool: 'codex' }, loading: false, message: '' },
   commands: { commands: [] },
   lifecycle: { days: 30, message: '' },

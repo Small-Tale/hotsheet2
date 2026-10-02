@@ -105,3 +105,39 @@
 .ticket-provider-settings__error {
   color: var(--wa-color-danger-on-quiet);
 }
+/* App Settings → Accounts (HS2-SM9PM8): one bordered card per sign-in, its header row, then one
+   row per ticket source signed in through it (app-owned markup, same row geometry as sources). */
+.ticket-provider-settings__accounts {
+  display: grid;
+  gap: var(--wa-space-m);
+}
+.ticket-provider-settings__account-header {
+  display: flex;
+  min-height: remify(64px);
+  box-sizing: border-box;
+  align-items: center;
+  padding: var(--wa-space-s);
+  gap: var(--wa-space-s);
+  border-bottom: 1px solid var(--wa-color-neutral-border-quiet);
+  background: var(--wa-color-neutral-fill-quiet);
+}
+.ticket-provider-settings__account-header > svg {
+  width: remify(24px);
+  height: remify(24px);
+  flex: none;
+}
+.ticket-provider-settings__account-header > .ticket-provider-settings__connection-copy {
+  flex: 1;
+}
+.ticket-provider-settings__account-host {
+  min-width: 0;
+  color: var(--wa-color-neutral-on-quiet);
+  font-weight: var(--wa-font-weight-normal);
+  overflow-wrap: anywhere;
+}
+.ticket-provider-settings__account-empty {
+  margin: 0;
+  padding: var(--wa-space-s);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-s);
+}

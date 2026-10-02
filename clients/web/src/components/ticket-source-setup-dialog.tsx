@@ -6,7 +6,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { ChevronLeft, ChevronRight, GitBranch, Power, PowerOff, Trash2 } from 'lucide';
 
-import type { ProviderConnection } from '../api';
+import type { ProviderAccount, ProviderConnection } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
 import { ContentTransition } from './content-transition';
@@ -23,15 +23,18 @@ const previewScenarioChoices: readonly SelectChoice[] = [
   { value: 'root', label: 'Choose source' },
   { value: 'signed-out', label: 'GitHub signed out' },
   { value: 'waiting', label: 'Waiting for GitHub' },
+  { value: 'accounts', label: 'Reuse a signed-in account' },
   { value: 'authorized', label: 'GitHub authorized' },
   { value: 'editing', label: "Editing this project's source" },
-  { value: 'editing-machine', label: 'Editing for every project' },
+  { value: 'editing-shared', label: 'Editing a shared source' },
   { value: 'removing', label: 'Confirm removal' },
   { value: 'busy', label: 'Saving connection' },
   { value: 'remote', label: 'Back up repository' },
 ];
 
 export interface TicketSourceSetupProject {
+  /** The project's checkout id, to tell this project apart from others sharing a source. */
+  id?: string;
   root: string;
   name: string;
   stores: readonly string[];
@@ -51,16 +54,12 @@ export interface TicketSourceSetupDialogProps {
   remoteBusy?: boolean;
   providerBusy?: boolean;
   providerError?: string;
-  /** The edited connection awaiting confirmation of its permanent removal (HS2-724S9N). */
+  /** The edited source awaiting confirmation of its removal from this project (HS2-724S9N, HS2-SM9PM8). */
   removingProviderId?: string;
-  /**
-   * Where an edit was opened (HS2-3SCH1K): `project` edits the connection and this project's default
-   * choice; `machine` (App Settings → Connections) edits it for every project and offers Disable and
-   * Remove. Defaults to `project`.
-   */
-  editScope?: 'project' | 'machine';
-  /** Whether the edited connection is this project's default source (project edits only). */
+  /** Whether the edited connection is this project's default source. */
   projectDefault?: boolean;
+  /** Machine-wide sign-ins a new source can reuse (HS2-SM9PM8). */
+  accounts?: readonly ProviderAccount[];
   /** Demo-only state picker, rendered within the modal so its controls remain reachable. */
   previewScenario?: string;
 }
@@ -79,12 +78,15 @@ export function TicketSourceSetupDialog({
   providerBusy = false,
   providerError = '',
   removingProviderId,
-  editScope = 'project',
   projectDefault = false,
+  accounts = [],
   previewScenario,
 }: TicketSourceSetupDialogProps) {
   const editing = providerConnections.find((item) => item.id === editingProviderId),
-    machineEdit = Boolean(editing) && editScope === 'machine',
+    // Other projects that own the edited source too (attached headlessly; HS2-SM9PM8).
+    sharedWith = (editing?.projects ?? [])
+      .filter((project) => project.id !== target?.id)
+      .map((project) => project.alias),
     disclosure = <LucideIcon icon={ChevronRight} name="chevron-right" size={16} />,
     created = createdGitTicketStore,
     defaultStore = `${target?.root}.hs2`,
@@ -251,13 +253,13 @@ export function TicketSourceSetupDialog({
         connection={editing}
         auth={githubAuth}
         error={providerError}
-        defaultChoice={!editing ? true : machineEdit ? undefined : projectDefault}
+        defaultChoice={editing ? projectDefault : true}
+        accounts={accounts}
       />
-      {editing && (
-        <p class="ticket-source-setup__scope-hint" data-edit-scope={editScope}>
-          {machineEdit
-            ? 'Changes apply to every project that uses this connection.'
-            : 'Connection details are shared by every project that uses them. Disable or remove the connection under App Settings → Connections.'}
+      {editing && sharedWith.length > 0 && (
+        <p class="ticket-source-setup__scope-hint" data-shared-with={sharedWith.join(',')}>
+          Also used by {sharedWith.join(', ')}. Changes to its details and Disable apply there too; removing it here
+          leaves it in {sharedWith.length === 1 ? 'that project' : 'those projects'}.
         </p>
       )}
     </>
@@ -283,13 +285,19 @@ export function TicketSourceSetupDialog({
           {remoteBusy ? 'Connecting…' : 'Connect & push'}
         </wa-button>
       </>
-    ) : machineEdit && editing && removingProviderId === editing.id ? (
+    ) : editing && removingProviderId === editing.id ? (
       // One wrapping group, so the morph replaces the edit actions instead of recycling the clicked
-      // "Remove data source…" button into "Keep" while that same click is still dispatching.
+      // "Remove from this project…" button into "Keep" while that same click is still dispatching.
       <div class="ticket-source-setup__removal" role="group" aria-label="Confirm removal">
         <p class="ticket-source-setup__removal-prompt" role="alert">
-          <strong>Remove {editing.name ?? editing.id}?</strong> It is unlinked from every project, and a sign-in Hot
-          Sheet saved for it is deleted. Tickets stay in {providerName(editing.provider as ExternalProviderKind)}.
+          <strong>
+            Remove {editing.name ?? editing.id} from {target?.name ?? 'this project'}?
+          </strong>{' '}
+          {sharedWith.length
+            ? `It stays in ${sharedWith.join(', ')}.`
+            : 'No other project uses it, so its connection is deleted.'}{' '}
+          Tickets stay in {providerName(editing.provider as ExternalProviderKind)}, and your sign-in stays under App
+          Settings → Accounts.
         </p>
         <wa-button
           appearance="plain"
@@ -311,7 +319,7 @@ export function TicketSourceSetupDialog({
       </div>
     ) : (
       <>
-        {machineEdit && editing && (
+        {editing && (
           <wa-button
             class="ticket-source-setup__remove"
             variant="danger"
@@ -321,10 +329,10 @@ export function TicketSourceSetupDialog({
             disabled={providerBusy}
           >
             <LucideIcon slot="start" icon={Trash2} name="trash-2" />
-            Remove data source…
+            Remove from this project…
           </wa-button>
         )}
-        {machineEdit && editing && (
+        {editing && (
           <wa-button
             class="ticket-source-setup__toggle"
             appearance="plain"

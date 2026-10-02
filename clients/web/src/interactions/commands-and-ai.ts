@@ -122,9 +122,10 @@ export interface CommandAndAiInteractionsDependencies {
   readonly ticketSourceSetupProject: Signal<Project | undefined>;
   readonly providerSetupKind: Signal<ExternalProviderKind | undefined>;
   readonly providerEditingId: Signal<string | undefined>;
-  readonly providerEditScope: Signal<'project' | 'machine'>;
-  readonly attachProjectSource: (id: string) => Promise<void>;
-  readonly detachProjectSource: (id: string) => Promise<void>;
+  readonly requestProjectSourceRemoval: (id: string) => void;
+  readonly refreshProviderAccounts: (current?: Project) => Promise<void>;
+  readonly signOutProviderAccount: (id: string) => Promise<void>;
+  readonly useGithubAccount: (id: string) => Promise<void>;
   readonly setProjectDefaultSource: (id: string) => Promise<void>;
   readonly providerSettingsError: Signal<string>;
   readonly createdGitTicketStore: Signal<string>;
@@ -228,9 +229,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     ticketSourceSetupProject,
     providerSetupKind,
     providerEditingId,
-    providerEditScope,
-    attachProjectSource,
-    detachProjectSource,
+    requestProjectSourceRemoval,
+    refreshProviderAccounts,
+    signOutProviderAccount,
+    useGithubAccount,
     setProjectDefaultSource,
     providerSettingsError,
     createdGitTicketStore,
@@ -894,7 +896,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (!current) return;
       if (category !== 'keyboard') setCapturingShortcut(undefined);
       setSettingsCategory(current.id, category);
-      if (category === 'sources' || category === 'connections') void refreshProviderConnections();
+      if (category === 'sources') void refreshProviderConnections();
+      if (category === 'accounts') void refreshProviderAccounts();
       if (category === 'terminals') void refreshTerminalSettings();
       if (category === 'lifecycle') void refreshTrashSettings();
       if (category === 'ai' || category === 'commands') void refreshAiConfiguration(undefined, true);
@@ -1024,11 +1027,12 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       ticketSourceSetupProject.value = current;
       providerSetupKind.value = undefined;
       providerEditingId.value = undefined;
-      providerEditScope.value = 'project';
       providerSettingsError.value = '';
       createdGitTicketStore.value = '';
       ticketSourceSetupNavigation.value = 'none';
       void refreshProviderConnections(current);
+      // Signed-in accounts a new source can reuse (HS2-SM9PM8).
+      void refreshProviderAccounts(current);
     }),
   );
   lifetime.add(
@@ -1040,23 +1044,26 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       ticketSourceSetupProject.value = current;
       providerSetupKind.value = connection.provider as ExternalProviderKind;
       providerEditingId.value = connection.id;
-      // App Settings → Connections edits for every project; a project's Ticket sources edits its own use.
-      providerEditScope.value =
-        target.closest<HTMLElement>('[data-edit-scope]')?.dataset.editScope === 'machine' ? 'machine' : 'project';
       providerRemovingId.value = undefined;
       providerSettingsError.value = '';
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.detachProjectSource.selector, (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.removeProjectSource.selector, (_event, target) => {
       const id = data(target).sourceId;
-      if (id) void detachProjectSource(id);
+      if (id) requestProjectSourceRemoval(id);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.attachProjectSource.selector, (_event, target) => {
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.useGithubAccount.selector, (_event, target) => {
       const id = data(target).itemId;
-      if (id) void attachProjectSource(id);
+      if (id) void useGithubAccount(id);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.signOutAccount.selector, (_event, target) => {
+      const id = data(target).itemId;
+      if (id) void signOutProviderAccount(id);
     }),
   );
   lifetime.add(
@@ -1117,6 +1124,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       providerEditingId.value = undefined;
       providerSettingsError.value = '';
       githubAuth.value = undefined;
+      // Signed-in accounts a new source can reuse, also when onboarding opened this dialog (HS2-SM9PM8).
+      if (providerSetupKind.value === 'github') void refreshProviderAccounts(ticketSourceSetupProject.value);
     }),
   );
   lifetime.add(

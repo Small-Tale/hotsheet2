@@ -9,7 +9,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import {
   ArchiveRestore,
   Bot,
-  Cable,
+  CircleUserRound,
   Columns3,
   Database,
   Keyboard,
@@ -29,7 +29,7 @@ export type SettingsCategory =
   | 'permissions'
   | 'columns'
   | 'general'
-  | 'connections'
+  | 'accounts'
   | 'keyboard';
 
 /** Project-scoped settings, followed by app-scoped (device-local) settings. */
@@ -45,8 +45,8 @@ const projectCategories = [
 
 const appCategories = [
   { id: 'general', label: 'General', icon: SlidersHorizontal, iconName: 'sliders-horizontal' },
-  // The machine-wide ticket-provider connection catalog, shared by every project (HS2-3SCH1K).
-  { id: 'connections', label: 'Connections', icon: Cable, iconName: 'cable' },
+  // Machine-wide provider sign-ins; ticket sources themselves belong to projects (HS2-SM9PM8).
+  { id: 'accounts', label: 'Accounts', icon: CircleUserRound, iconName: 'circle-user-round' },
   { id: 'keyboard', label: 'Keyboard', icon: Keyboard, iconName: 'keyboard' },
 ] as const;
 
@@ -70,7 +70,8 @@ export type SettingsStorage =
 export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage[]> = {
   sources: [
     { control: 'Linked sources list', server: '/providers' },
-    { control: 'Attach and detach a source', server: '/checkouts/{project}/sources' },
+    { control: 'Own, edit, disable, and remove a source', server: '/provider-connections' },
+    { control: 'Remove a source from this project', server: '/checkouts/{project}/sources' },
     { control: 'Default source', server: '/checkouts/{project}/default-source' },
   ],
   ai: [{ control: 'Default tool, model, and effort', server: '/ai-settings' }],
@@ -85,7 +86,7 @@ export const SETTINGS_STORAGE: Record<SettingsCategory, readonly SettingsStorage
   ],
   columns: [{ control: 'Hide Verified column', browser: 'hotsheet.project.{project}.hide-verified-column' }],
   general: [{ control: 'Show loading activity', browser: 'hotsheet.show-loading-activity' }],
-  connections: [{ control: 'Connection catalog, Disable/Enable, Remove', server: '/provider-connections' }],
+  accounts: [{ control: 'Sign-ins and sign out', server: '/accounts' }],
   keyboard: [{ control: 'Keyboard shortcut overrides', browser: 'hotsheet.keyboard-shortcuts' }],
 };
 
