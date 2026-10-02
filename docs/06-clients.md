@@ -2288,6 +2288,9 @@ ticket work area on taller windows instead of stopping at the former 520px cap. 
 continued shrink resists for a 48px overshoot; releasing within that range keeps the 228px
 drawer, while persisting beyond it is treated as an intentional collapse. Grid zoom is not
 shown for a dedicated full-size terminal.
+The drawer rail keeps the New drawer item (+) action beside the last tab and the Hide terminal
+drawer action at the rail's trailing edge (the TabBar's `end` slot; its wrapper fills the rail,
+HS2-RGF5NE).
 Double-clicking non-interactive space in the drawer rail toggles that measured maximum
 and the last manually resized height (or 320px before the first resize); tab and action
 buttons do not trigger the toggle. Maximizing is temporary and does not overwrite the

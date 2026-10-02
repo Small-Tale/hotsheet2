@@ -38,3 +38,25 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth);
   expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth, 0);
 });
+
+test('keeps the hide-drawer action at the trailing edge of the drawer toolbar (HS2-RGF5NE)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto('/ux-demo?component=terminal-drawer');
+    const drawer = page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]'),
+      rail = drawer.locator('.terminal-drawer__rail'),
+      hide = drawer.getByRole('button', { name: 'Hide terminal drawer' }),
+      create = drawer.locator('[data-terminal-drawer-create]');
+    await expect(hide).toBeVisible();
+    const [railBox, hideBox, createBox] = await Promise.all([
+      rail.boundingBox(),
+      hide.boundingBox(),
+      create.boundingBox(),
+    ]);
+    // The hide action ends at the rail's trailing edge (within its inset), not beside the tabs.
+    expect(railBox!.x + railBox!.width - (hideBox!.x + hideBox!.width)).toBeLessThanOrEqual(16);
+    // The create action stays adjacent to the tabs, ahead of the hide action.
+    expect(createBox!.x + createBox!.width).toBeLessThan(hideBox!.x);
+    await rail.screenshot({ path: test.info().outputPath(`terminal-drawer-hide-trailing-${width}.png`) });
+  }
+});

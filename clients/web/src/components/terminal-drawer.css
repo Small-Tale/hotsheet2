@@ -119,6 +119,9 @@
   --kui-tab-bar-strip-flex: 0 1 auto;
   --kui-tab-bar-strip-gap: var(--kui-space-xs);
   display: grid;
+  /* Fill the rail so the TabBar's `end` action (hide drawer) reaches the trailing edge (HS2-RGF5NE). */
+  flex: 1 1 auto;
+  min-width: 0;
   /* 2xs here plus the strip's 2xs padding keeps the tabs at the xs inline inset. */
   padding-inline: var(--kui-space-2xs);
 }
