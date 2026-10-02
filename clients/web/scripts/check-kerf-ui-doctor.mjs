@@ -1,100 +1,43 @@
-import { readFileSync, rmSync, mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const KERF_UI_DOCTOR_BUDGET = {
-  error: {
-    'KUI-L001': 0,
-    'KUI-L011': 0,
-    'KUI-L017': 0,
-    'KUI-L019': 0,
-    'KUI-L020': 0,
-    'KUI-L022': 0,
-    'KUI-L101': 0,
-    'KUI-L102': 0,
-    'KUI-L103': 0,
-    'KUI-L201': 0,
-    'KUI-L202': 0,
-    'KUI-L203': 0,
-  },
-  review: {
-    'KUI-L004': 0,
-    'KUI-L006': 0,
-    'KUI-L008': 0,
-    'KUI-L017': 0,
-  },
-  // Warnings are budgeted too, so cleared ids (for example eslint:kerfjs/require-delegate-disposer
-  // and eslint:kerfjs/prefer-attr-selector, HS2-9ME409) stay at zero. The profile's wiring entries
-  // (beta.68, KF-VXWMM9) check KUI-L401 once per entry; the residual waits on Kerf crediting calls
-  // reachable from the entry and app-owned helpers (KF-KWMJMS, HS2-Y2QG3G) and on wireCatalog satisfying
-  // wireScrollDividers in the UX demo (KF-XKMC7W).
-  warning: {
-    'KUI-L401': 13,
-  },
-};
-
-function countsFor(diagnostics, severity) {
-  const counts = {};
-  for (const diagnostic of diagnostics) {
-    if (diagnostic.severity !== severity) continue;
-    counts[diagnostic.id] = (counts[diagnostic.id] ?? 0) + 1;
-  }
-  return counts;
-}
-
-export function assertKerfUiDoctorBaseline(report, budget = KERF_UI_DOCTOR_BUDGET) {
+// kerf-ui-doctor exits non-zero only for errors; review findings and warnings always exit 0. Until
+// Kerf ships a failure threshold (KF-6S5EKX), this gate fails on any active diagnostic. Known,
+// tracked gaps are declared as documented `suppressions` in .kerf-ui-doctor.json, never here.
+export function assertKerfUiDoctorClean(report) {
   if (report.schemaVersion !== 1) throw new Error(`Unsupported Kerf UI doctor report schema ${report.schemaVersion}.`);
-  if (report.exitCode === 2 || report.exitCode === 130)
+  if (report.exitCode !== 0 && report.exitCode !== 1)
     throw new Error(`Kerf UI doctor did not complete successfully (exit ${report.exitCode}).`);
-
-  const stages = new Map(report.stages.map((stage) => [stage.id, stage]));
-  for (const id of ['catalog', 'typescript', 'eslint', 'analyzer']) {
-    const status = stages.get(id)?.status;
-    if (status !== 'ran' && status !== 'cached')
-      throw new Error(`Kerf UI doctor stage ${id} was ${status ?? 'missing'}.`);
-  }
-  if (stages.get('browser')?.status !== 'skipped')
-    throw new Error('The CI doctor gate must keep browser evaluation opt-in.');
-
-  const failures = [];
-  for (const severity of ['error', 'review', 'warning']) {
-    const actual = countsFor(report.diagnostics, severity);
-    for (const [id, count] of Object.entries(actual)) {
-      const limit = budget[severity]?.[id] ?? 0;
-      if (count > limit) failures.push(`${severity} ${id}: ${count} found, budget ${limit}`);
-    }
-  }
-  if (failures.length) throw new Error(`Kerf UI doctor baseline regressed:\n${failures.join('\n')}`);
-
-  return {
-    errors: report.summary.errors,
-    review: report.summary.review,
-    warnings: report.summary.warnings,
-    suppressed: report.summary.suppressed,
-  };
+  const active = report.diagnostics.filter((diagnostic) =>
+    ['error', 'review', 'warning'].includes(diagnostic.severity),
+  );
+  if (active.length)
+    throw new Error(
+      `Kerf UI doctor found ${active.length} active diagnostic(s):\n${active
+        .map((diagnostic) => `${diagnostic.severity} ${diagnostic.id}: ${diagnostic.message}`)
+        .join('\n')}`,
+    );
+  return report.summary;
 }
 
 function run() {
-  const directory = dirname(fileURLToPath(import.meta.url));
-  const workspace = resolve(directory, '..');
-  const cli = resolve(workspace, 'node_modules/@kerfjs/ui/doctor/cli.mjs');
+  const workspace = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const temporary = mkdtempSync(join(tmpdir(), 'hotsheet-kerf-doctor-'));
   const output = join(temporary, 'report.json');
   try {
+    const cli = resolve(workspace, 'node_modules/@kerfjs/ui/doctor/cli.mjs');
     const result = spawnSync(process.execPath, [cli, '--full', '--format', 'json', '--output', output], {
       cwd: workspace,
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
     });
     if (result.error) throw result.error;
-    if (result.status !== 0 && result.status !== 1)
-      throw new Error(result.stderr.trim() || `Kerf UI doctor exited ${result.status}.`);
-    const report = JSON.parse(readFileSync(output, 'utf8'));
-    const summary = assertKerfUiDoctorBaseline(report);
+    const summary = assertKerfUiDoctorClean(JSON.parse(readFileSync(output, 'utf8')));
     console.log(
-      `Kerf UI doctor baseline accepted: ${summary.errors} errors, ${summary.review} review findings, ${summary.warnings} warnings, ${summary.suppressed} suppressed; browser evaluation skipped.`,
+      `Kerf UI doctor clean: ${summary.errors} errors, ${summary.review} review findings, ${summary.warnings} warnings, ${summary.suppressed} documented suppressions.`,
     );
   } finally {
     rmSync(temporary, { recursive: true, force: true });

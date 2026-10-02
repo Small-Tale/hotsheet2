@@ -68,8 +68,6 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/strict-boolean-expressions': 'off',
-      'kerfjs/prefer-attr-selector': 'off',
-      'kerfjs/require-delegate-disposer': 'off',
     },
   },
   {

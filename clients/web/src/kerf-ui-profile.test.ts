@@ -11,7 +11,7 @@ interface KerfDoctorConfig {
   mode: string;
   stages: Record<string, boolean>;
   cache: boolean;
-  suppressions: unknown[];
+  suppressions: { id: string; rules: string[]; target: string; rationale: string }[];
 }
 
 describe('Kerf application UI profile', () => {
@@ -67,7 +67,6 @@ describe('Kerf application UI profile', () => {
       expect.objectContaining({
         mode: 'full',
         cache: true,
-        suppressions: [],
         stages: {
           catalog: true,
           typescript: true,
@@ -77,5 +76,12 @@ describe('Kerf application UI profile', () => {
         },
       }),
     );
+    // Known Kerf gaps are documented suppressions, never budgets: only the entry modules' KUI-L401
+    // wiring findings, each naming the Kerf ticket whose release removes it (HS2-6PD4FS).
+    expect(config.suppressions.map(({ rules, target }) => `${rules.join(',')} ${target}`)).toEqual([
+      'KUI-L401 src/main.tsx',
+      'KUI-L401 src/ux-demo/main.tsx',
+    ]);
+    for (const suppression of config.suppressions) expect(suppression.rationale).toMatch(/KF-[0-9A-Z]{6}/);
   });
 });

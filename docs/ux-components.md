@@ -2033,16 +2033,17 @@ TypeScript, isolated Kerf ESLint, and analyzer stages in full mode with a conten
 Browser evaluation remains disabled unless a developer explicitly supplies a trusted
 URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
 
-`npm run ui:doctor` is the repeatable local and CI gate. Its checked-in beta.58 budget
-accepts debt reduction but fails for a new diagnostic id or any increase in an existing
-error or review class. The budget after HS2-VY74FW, HS2-FEDDPX, HS2-90B8WH,
-HS2-GX51F7, HS2-NBMT1Q, HS2-8D3QSE, HS2-KB5YY6, HS2-2TN51D, HS2-M78D5A, HS2-N5G6JS,
-HS2-EZ1N7Z, HS2-M6B8AD, HS2-MYVVK3, HS2-G5K1V0, HS2-57MAAH, HS2-K9KWJJ, HS2-402AXQ, HS2-2EHD8R, HS2-AT4AAA, HS2-PKPGGZ, and HS2-S6JQX1 is:
-
-| Severity | Exact diagnostic budgets                                             |
-| -------- | -------------------------------------------------------------------- |
-| error    | `KUI-L001` 2; `KUI-L011` 0; `KUI-L019` 1; `KUI-L022` 0; `KUI-L201` 0 |
-| review   | `KUI-L004` 0; `KUI-L006` 0; `KUI-L008` 0                             |
+`npm run ui:doctor` is the repeatable local and CI gate. Since HS2-6PD4FS it keeps no per-id budget
+table: it runs `kerf-ui-doctor --full` and fails on any active error, review finding, or warning.
+`kerf-ui-doctor` itself exits non-zero only for errors, so this thin wrapper stays until Kerf ships
+a failure threshold (`KF-6S5EKX`), after which `ui:doctor` becomes the plain doctor command. Known,
+tracked gaps are not budgeted; they are documented `suppressions` in `.kerf-ui-doctor.json`, each
+with a rationale naming the Kerf ticket that removes it (today the 13 `KUI-L401` wiring findings on
+the two entry modules, `KF-KWMJMS` and `KF-XKMC7W`). The doctor report keeps counting them as
+`suppressed`. The Kerf ESLint rules the gate cleared (`kerfjs/require-delegate-disposer`,
+`kerfjs/prefer-attr-selector`) are also enforced by `npm run lint` with `--max-warnings 0`. Earlier
+releases carried an exact per-id error/review budget that only ever decreased; HS2-9ME409 and
+HS2-TF76Z2 drove it to zero.
 
 HS2-K9KWJJ then dropped the terminal rail's `.kui-token-search` width override (88), since the
 rail's controls Toolbar now sizes the expanded search itself. HS2-402AXQ replaced the project

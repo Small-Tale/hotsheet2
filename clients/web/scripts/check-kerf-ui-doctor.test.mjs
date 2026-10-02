@@ -1,75 +1,31 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertKerfUiDoctorBaseline, KERF_UI_DOCTOR_BUDGET } from './check-kerf-ui-doctor.mjs';
+import { assertKerfUiDoctorClean } from './check-kerf-ui-doctor.mjs';
 
-function report(overrides = {}) {
-  const diagnostics = Object.entries(KERF_UI_DOCTOR_BUDGET).flatMap(([severity, limits]) =>
-    Object.entries(limits).flatMap(([id, count]) => Array.from({ length: count }, () => ({ id, severity }))),
-  );
-  return {
-    schemaVersion: 1,
-    exitCode: 1,
-    stages: [
-      { id: 'catalog', status: 'ran' },
-      { id: 'typescript', status: 'ran' },
-      { id: 'eslint', status: 'ran' },
-      { id: 'analyzer', status: 'ran' },
-      { id: 'browser', status: 'skipped' },
-    ],
-    diagnostics,
-    summary: { errors: 199, review: 123, warnings: 1280, suppressed: 0 },
-    ...overrides,
-  };
-}
+const report = (overrides = {}) => ({
+  schemaVersion: 1,
+  exitCode: 0,
+  diagnostics: [],
+  // Matching the real report: documented suppressions move out of `diagnostics` into `suppressions`.
+  suppressions: [{ id: 'KUI-L401', severity: 'warning', stage: 'eslint', message: 'wiring' }],
+  summary: { errors: 0, review: 0, warnings: 0, suppressed: 1 },
+  ...overrides,
+});
 
-describe('Kerf UI doctor baseline', () => {
-  it('accepts the classified error and review budget with browser evaluation disabled', () => {
-    expect(assertKerfUiDoctorBaseline(report())).toEqual({
-      errors: 199,
-      review: 123,
-      warnings: 1280,
-      suppressed: 0,
-    });
+describe('Kerf UI doctor gate', () => {
+  it('accepts a report whose only diagnostics are documented suppressions', () => {
+    expect(assertKerfUiDoctorClean(report())).toEqual({ errors: 0, review: 0, warnings: 0, suppressed: 1 });
   });
 
-  it('accepts debt reduction but rejects a new diagnostic or a budget increase', () => {
-    const reduced = report({ diagnostics: report().diagnostics.slice(1) });
-    expect(() => assertKerfUiDoctorBaseline(reduced)).not.toThrow();
-    const newDiagnostic = report({
-      diagnostics: [...report().diagnostics, { id: 'KUI-L999', severity: 'error' }],
-    });
-    expect(() => assertKerfUiDoctorBaseline(newDiagnostic)).toThrow('error KUI-L999: 1 found, budget 0');
-    const increased = report({
-      diagnostics: [...report().diagnostics, { id: 'KUI-L004', severity: 'review' }],
-    });
-    expect(() => assertKerfUiDoctorBaseline(increased)).toThrow('review KUI-L004: 1 found, budget 0');
-    const clearedWarning = report({
-      diagnostics: [...report().diagnostics, { id: 'eslint:kerfjs/require-delegate-disposer', severity: 'warning' }],
-    });
-    expect(() => assertKerfUiDoctorBaseline(clearedWarning)).toThrow(
-      'warning eslint:kerfjs/require-delegate-disposer: 1 found, budget 0',
-    );
-    const moreWiring = report({
-      diagnostics: [...report().diagnostics, { id: 'KUI-L401', severity: 'warning' }],
-    });
-    expect(() => assertKerfUiDoctorBaseline(moreWiring)).toThrow('warning KUI-L401: 14 found, budget 13');
+  it('fails on any active error, review finding, or warning', () => {
+    for (const severity of ['error', 'review', 'warning'])
+      expect(() =>
+        assertKerfUiDoctorClean(report({ diagnostics: [{ id: 'KUI-L999', severity, message: 'new finding' }] })),
+      ).toThrow(`${severity} KUI-L999: new finding`);
   });
 
-  it('rejects failed stages, configuration failures, and an enabled browser stage', () => {
-    expect(() => assertKerfUiDoctorBaseline(report({ exitCode: 2 }))).toThrow('did not complete successfully');
-    expect(() =>
-      assertKerfUiDoctorBaseline(
-        report({
-          stages: report().stages.map((stage) => (stage.id === 'eslint' ? { ...stage, status: 'failed' } : stage)),
-        }),
-      ),
-    ).toThrow('stage eslint was failed');
-    expect(() =>
-      assertKerfUiDoctorBaseline(
-        report({
-          stages: report().stages.map((stage) => (stage.id === 'browser' ? { ...stage, status: 'ran' } : stage)),
-        }),
-      ),
-    ).toThrow('browser evaluation opt-in');
+  it('fails when the doctor could not complete', () => {
+    expect(() => assertKerfUiDoctorClean(report({ exitCode: 2 }))).toThrow('did not complete successfully');
+    expect(() => assertKerfUiDoctorClean(report({ schemaVersion: 2 }))).toThrow('Unsupported');
   });
 });
