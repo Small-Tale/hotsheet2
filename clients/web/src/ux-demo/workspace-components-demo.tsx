@@ -363,8 +363,10 @@ function WorkspaceContent() {
   if (workspaceMode.value === 'settings')
     return (
       <section class="workspace-settings-preview" aria-label="Project settings">
-        <h2>Project settings</h2>
-        <p>Configure ticket providers, project defaults, commands, and local checkout behavior for Hot Sheet 2.</p>
+        <h2 class="workspace-settings-preview__title">Project settings</h2>
+        <p class="workspace-settings-preview__description">
+          Configure ticket providers, project defaults, commands, and local checkout behavior for Hot Sheet 2.
+        </p>
         <Select
           name="default-ticket-provider"
           label="Default ticket provider"

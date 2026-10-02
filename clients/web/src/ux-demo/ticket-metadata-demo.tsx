@@ -270,8 +270,8 @@ export function AttachmentGalleryDemo() {
 export function TicketCodeReviewDemo() {
   return (
     <section class="code-review-demo" aria-label="TicketCodeReview demo">
-      <article>
-        <h3>Configured — disjoint bundles</h3>
+      <article class="code-review-demo__case">
+        <h3 class="code-review-demo__caption">Configured — disjoint bundles</h3>
         <div class="inspector-panel-demo">
           <TicketCodeReview
             review={{
@@ -316,8 +316,8 @@ export function TicketCodeReviewDemo() {
           />
         </div>
       </article>
-      <article>
-        <h3>Not configured</h3>
+      <article class="code-review-demo__case">
+        <h3 class="code-review-demo__caption">Not configured</h3>
         <div class="inspector-panel-demo">
           <TicketCodeReview
             review={{
@@ -335,14 +335,14 @@ export function TicketCodeReviewDemo() {
           />
         </div>
       </article>
-      <article>
-        <h3>Empty</h3>
+      <article class="code-review-demo__case">
+        <h3 class="code-review-demo__caption">Empty</h3>
         <div class="inspector-panel-demo">
           <TicketCodeReview review={{ difftool: 'Meld', truncated: false, ranges: [], commits: [] }} />
         </div>
       </article>
-      <article>
-        <h3>Loading / error</h3>
+      <article class="code-review-demo__case">
+        <h3 class="code-review-demo__caption">Loading / error</h3>
         <div class="inspector-panel-demo">
           <TicketCodeReview loading message="The repository is temporarily unavailable." />
         </div>

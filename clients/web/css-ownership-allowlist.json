@@ -542,100 +542,10 @@
     },
     {
       "file": "src/ux-demo/style.css",
-      "selector": ".collection-demo__empty-states article",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .collection-demo__empty-states also reaches inside <TicketList>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".collection-demo__empty-board h3",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .collection-demo__empty-board also reaches inside <TicketBoard>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".collection-demo__empty-states h3",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .collection-demo__empty-states also reaches inside <TicketList>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".collection-demo__paged-board h3",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .collection-demo__paged-board also reaches inside <TicketBoard>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".workspace-settings-preview h2",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .workspace-settings-preview also reaches inside <Select>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".workspace-settings-preview p",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .workspace-settings-preview also reaches inside <Select>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".toolbar-text-demo h2",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .toolbar-text-demo also reaches inside <ToolbarText>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".ticket-search-field-demo h2",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .ticket-search-field-demo also reaches inside <TicketSearchField>, <TicketSearchFormField>, <TicketSearchSurfaces>, <Toolbar>, <ToolbarText>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".toolbar-control-group-demo h2",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .toolbar-control-group-demo also reaches inside <PopupMenu>, <SegmentedControl>, <Toolbar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".code-review-demo article",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .code-review-demo also reaches inside <TicketCodeReview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".code-review-demo h3",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .code-review-demo also reaches inside <TicketCodeReview>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".list-item-demo h2",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .list-item-demo also reaches inside <ListHeader>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".list-item-demo small",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .list-item-demo also reaches inside <ListHeader>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".terminal-drawer-provider-demo h2",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .terminal-drawer-provider-demo also reaches inside <TerminalDrawer>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
       "selector": ".fixed-aspect-terminal-card-demo.terminal-dashboard",
       "count": 2,
       "ticket": "HS2-0X36TX",
       "reason": "foreign-class: .terminal-dashboard belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".fixed-aspect-terminal-card-demo h2",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .fixed-aspect-terminal-card-demo also reaches inside <FixedAspectTerminalCard>; use a child combinator, an own class, or the child's props"
     },
     {
       "file": "src/ux-demo/style.css",
@@ -660,18 +570,6 @@
       "selector": ".fixed-aspect-terminal-card-demo .terminal-tile__viewport-frame",
       "ticket": "HS2-0X36TX",
       "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".floating-toolbar-demo p",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .floating-toolbar-demo also reaches inside <FloatingToolbar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/ux-demo/style.css",
-      "selector": ".terminal-key-bar-demo h2",
-      "ticket": "HS2-TV78E1",
-      "reason": "foreign-element: the descendant selector below .terminal-key-bar-demo also reaches inside <TerminalKeyBar>; use a child combinator, an own class, or the child's props"
     }
   ]
 }

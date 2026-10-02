@@ -586,7 +586,9 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'floating-toolbar')
     return (
       <section class="floating-toolbar-demo">
-        <p>Floating controls remain available over scrolling content without joining the page toolbar.</p>
+        <p class="floating-toolbar-demo__copy">
+          Floating controls remain available over scrolling content without joining the page toolbar.
+        </p>
         <FloatingToolbar label="Preview zoom controls" position="bottom-end">
           <ToolbarControlGroup>
             <button type="button" aria-label="Zoom out">
@@ -981,7 +983,7 @@ function demoContent(item: DemoDefinition) {
         </section>
         {/* With one installed AI provider the AI shell entry is named for it instead of a submenu (HS2-3HT4PA). */}
         <section class="terminal-drawer-provider-demo" aria-label="One AI provider">
-          <h2>One AI provider</h2>
+          <h2 class="terminal-drawer-provider-demo__caption">One AI provider</h2>
           <div class="terminal-drawer-provider-demo__stage">
             <TerminalDrawer
               projectId="demo-single"
@@ -1062,13 +1064,13 @@ function demoContent(item: DemoDefinition) {
     return (
       <section class="terminal-key-bar-demo" aria-label="Terminal key bar variants">
         <div>
-          <h2>Keys</h2>
+          <h2 class="terminal-key-bar-demo__caption">Keys</h2>
           <div class="terminal-key-bar-demo__frame">
             <TerminalKeyBar modifiers={keyBarDemoModifiers.value} functionRow={keyBarDemoFunctionRow.value} />
           </div>
         </div>
         <div>
-          <h2>Function row</h2>
+          <h2 class="terminal-key-bar-demo__caption">Function row</h2>
           <div class="terminal-key-bar-demo__frame">
             <TerminalKeyBar modifiers={{ ctrl: 'once', alt: 'locked', shift: 'off' }} functionRow />
           </div>
@@ -1096,15 +1098,15 @@ function demoContent(item: DemoDefinition) {
         aria-label="Fixed aspect terminal card variants"
       >
         <div>
-          <h2>Grid preview</h2>
+          <h2 class="fixed-aspect-terminal-card-demo__caption">Grid preview</h2>
           <FixedAspectTerminalCard session={session} />
         </div>
         <div class="fixed-aspect-terminal-card-demo__magnified">
-          <h2>Magnified interactive</h2>
+          <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified interactive</h2>
           <FixedAspectTerminalCard session={session} mode="magnified" />
         </div>
         <div class="fixed-aspect-terminal-card-demo__magnified fixed-aspect-terminal-card-demo__phone">
-          <h2>Magnified phone toolbar</h2>
+          <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified phone toolbar</h2>
           <FixedAspectTerminalCard
             session={session}
             mode="magnified"
@@ -1112,7 +1114,7 @@ function demoContent(item: DemoDefinition) {
           />
         </div>
         <div class="fixed-aspect-terminal-card-demo__magnified fixed-aspect-terminal-card-demo__phone">
-          <h2>Magnified phone, keyboard presented</h2>
+          <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified phone, keyboard presented</h2>
           <FixedAspectTerminalCard
             session={session}
             mode="magnified"

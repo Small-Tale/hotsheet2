@@ -347,6 +347,13 @@ describe('the clients/web workspace', () => {
     );
   });
 
+  it('keeps UX demo stage styles out of the demoed components (HS2-TV78E1)', () => {
+    const demo = checkWorkspace(workspace).violations.filter(({ file }) => file === 'src/ux-demo/style.css');
+    expect(demo.filter(({ kind }) => kind === 'foreign-element')).toEqual([]);
+    const allowlist = JSON.parse(readFileSync(join(workspace, 'css-ownership-allowlist.json'), 'utf8'));
+    expect(allowlist.entries.filter(({ ticket }) => ticket === 'HS2-TV78E1')).toEqual([]);
+  });
+
   it('keeps every shell scope pointing at a real stylesheet', () => {
     for (const path of Object.keys(SHELL_SCOPES)) expect(() => readFileSync(join(workspace, path))).not.toThrow();
   });

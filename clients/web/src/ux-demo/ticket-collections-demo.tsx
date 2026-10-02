@@ -293,16 +293,16 @@ export function TicketListDemo() {
     <section class="collection-demo" aria-label="TicketList demo">
       <TicketList tickets={collectionTickets.value} label="Example ticket list" />
       <div class="collection-demo__empty-states" aria-label="TicketList empty states">
-        <article>
-          <h3>New project</h3>
+        <article class="collection-demo__empty-state">
+          <h3 class="collection-demo__caption">New project</h3>
           <TicketList tickets={[]} emptyState={{ kind: 'project' }} label="Empty new project" />
         </article>
-        <article>
-          <h3>Empty view</h3>
+        <article class="collection-demo__empty-state">
+          <h3 class="collection-demo__caption">Empty view</h3>
           <TicketList tickets={[]} emptyState={{ kind: 'view', viewLabel: 'Backlog' }} label="Empty Backlog" />
         </article>
-        <article>
-          <h3>No search results</h3>
+        <article class="collection-demo__empty-state">
+          <h3 class="collection-demo__caption">No search results</h3>
           <TicketList tickets={[]} emptyState={{ kind: 'search', query: 'parser' }} label="Empty search" />
         </article>
       </div>
@@ -338,14 +338,14 @@ export function TicketBoardDemo() {
         <TicketBoard columns={columns} label="Example status board" />
       </div>
       <article class="collection-demo__paged-board">
-        <h3>Paged layout</h3>
+        <h3 class="collection-demo__caption">Paged layout</h3>
         <p>Phone widths show one column at a time and snap to the nearest column when a swipe is released.</p>
         <div class="collection-demo__board-stage">
           <TicketBoard columns={columns} layout="paged" label="Paged status board" />
         </div>
       </article>
       <article class="collection-demo__empty-board">
-        <h3>Empty search</h3>
+        <h3 class="collection-demo__caption">Empty search</h3>
         <div class="collection-demo__board-stage">
           <TicketBoard
             columns={columns.map((column) => ({ ...column, tickets: [] }))}

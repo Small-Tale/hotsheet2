@@ -28,7 +28,7 @@ export function ToolbarControlGroupDemo() {
   return (
     <section class="toolbar-control-group-demo" aria-label="ToolbarControlGroup demo">
       <div>
-        <h2>Segmented choices</h2>
+        <h2 class="toolbar-control-group-demo__caption">Segmented choices</h2>
         <Toolbar
           leading={
             <ToolbarControlGroup>
@@ -54,7 +54,7 @@ export function ToolbarControlGroupDemo() {
         />
       </div>
       <div>
-        <h2>Popup menu</h2>
+        <h2 class="toolbar-control-group-demo__caption">Popup menu</h2>
         <Toolbar
           leading={
             <ToolbarControlGroup single nestedDropdown>
@@ -68,7 +68,7 @@ export function ToolbarControlGroupDemo() {
         />
       </div>
       <div>
-        <h2>Button group</h2>
+        <h2 class="toolbar-control-group-demo__caption">Button group</h2>
         <Toolbar
           leading={
             <ToolbarControlGroup label="View actions">
@@ -83,7 +83,7 @@ export function ToolbarControlGroupDemo() {
         />
       </div>
       <div>
-        <h2>Single button</h2>
+        <h2 class="toolbar-control-group-demo__caption">Single button</h2>
         <Toolbar
           leading={
             <ToolbarControlGroup single>
@@ -95,7 +95,7 @@ export function ToolbarControlGroupDemo() {
         />
       </div>
       <div>
-        <h2>Borderless group</h2>
+        <h2 class="toolbar-control-group-demo__caption">Borderless group</h2>
         <Toolbar
           leading={
             <ToolbarControlGroup appearance="borderless" single>
@@ -107,7 +107,7 @@ export function ToolbarControlGroupDemo() {
         />
       </div>
       <div>
-        <h2>Push button, resting</h2>
+        <h2 class="toolbar-control-group-demo__caption">Push button, resting</h2>
         <Toolbar
           leading={
             <ToolbarControlGroup buttonAppearance="push" single>
@@ -119,7 +119,7 @@ export function ToolbarControlGroupDemo() {
         />
       </div>
       <div>
-        <h2>Push button, pressed</h2>
+        <h2 class="toolbar-control-group-demo__caption">Push button, pressed</h2>
         <Toolbar
           leading={
             <ToolbarControlGroup buttonAppearance="push" single>
@@ -131,7 +131,7 @@ export function ToolbarControlGroupDemo() {
         />
       </div>
       <div>
-        <h2>Dark group</h2>
+        <h2 class="toolbar-control-group-demo__caption">Dark group</h2>
         <Toolbar
           leading={
             <ToolbarControlGroup label="Dark navigation" tone="dark">

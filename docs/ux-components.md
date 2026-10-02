@@ -2234,6 +2234,15 @@ At introduction the check found 122 findings in 115 entries, grouped by area und
 `HS2-TV78E1`, and `HS2-0X36TX`. Never add an entry for new code; fix the selector, give the
 element an own class, or configure the child through its props.
 
+UX demo stage styles in `src/ux-demo/style.css` style only demo-authored markup (HS2-TV78E1).
+Demo captions, case frames, and copy carry their own demo classes (`__caption`, `__case`,
+`__empty-state`, `__copy`, `__detail`, `workspace-settings-preview__title`/`__description`)
+instead of element descendant selectors such as `.list-item-demo h2` that also matched headings
+and text inside the demoed `ListHeader`, `TicketList`, `TicketCodeReview`, or `Select`. Content a
+demo projects into a component slot (the `ListItem` trailing counts) is styled through its own
+class too. The guard now reports no `foreign-element` finding in the demo stylesheet; only the
+fixed-aspect terminal card rules tracked by `HS2-0X36TX` remain.
+
 The first fix moved `.app-empty` out of `style.css` into `AppEmptyState`'s own
 `app-empty-state.css`. That also made the UX demo render the production presentation, which it
 previously lacked. The cross-project stats placeholder now composes the new `AppMessageState`

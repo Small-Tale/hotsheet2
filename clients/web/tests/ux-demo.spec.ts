@@ -283,6 +283,41 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
   await page.screenshot({ path: '/private/tmp/hs2-ygwny7-list-item-narrow.png', fullPage: true });
 });
 
+test('styles demo captions through demo-owned classes, not the demoed components (HS2-TV78E1)', async ({ page }) => {
+  const captions: [string, string, number][] = [
+    ['ticket-list', '.collection-demo__caption', 3],
+    ['ticket-board', '.collection-demo__caption', 2],
+    ['toolbar-text', '.toolbar-text-demo__caption', 3],
+    ['ticket-search-field', '.ticket-search-field-demo__caption', 7],
+    ['toolbar-control-group', '.toolbar-control-group-demo__caption', 8],
+    ['ticket-code-review', '.code-review-demo__caption', 4],
+    ['list-item', '.list-item-demo__caption', 5],
+    ['terminal-key-bar', '.terminal-key-bar-demo__caption', 2],
+    ['fixed-aspect-terminal-card', '.fixed-aspect-terminal-card-demo__caption', 4],
+  ];
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const [component, selector, count] of captions) {
+      await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+      const caption = page.locator(selector);
+      await expect(caption).toHaveCount(count);
+      await expect(caption.first()).toBeVisible();
+      await expect(caption.first()).toHaveCSS('margin-top', '0px');
+    }
+    await page.goto('/ux-demo?component=list-item&dev-review=false');
+    await expect(page.locator('.list-item-demo__caption').first()).toHaveCSS('text-transform', 'uppercase');
+    await expect(page.locator('.list-item-demo__detail')).toHaveCount(3);
+    await expect(page.locator('.list-item-demo__detail').first()).toHaveCSS('font-variant-numeric', 'tabular-nums');
+    await page.goto('/ux-demo?component=ticket-list&dev-review=false');
+    await expect(page.locator('.collection-demo__empty-state')).toHaveCount(3);
+    await expect(page.locator('.collection-demo__empty-state').first()).toHaveCSS('border-top-style', 'solid');
+    await page.goto('/ux-demo?component=ticket-code-review&dev-review=false');
+    await expect(page.locator('.code-review-demo__case')).toHaveCount(4);
+    await page.goto('/ux-demo?component=floating-toolbar&dev-review=false');
+    await expect(page.locator('.floating-toolbar-demo__copy')).toHaveCSS('margin-top', '0px');
+  }
+});
+
 test('represents the application states extracted from main.tsx in the UX catalog', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=project-dialog');

@@ -239,7 +239,7 @@ body[data-resizing-project-sidebar='true'] {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--wa-space-m);
 }
-.collection-demo__empty-states article,
+.collection-demo__empty-state,
 .collection-demo__empty-board {
   display: grid;
   min-width: 0;
@@ -249,9 +249,7 @@ body[data-resizing-project-sidebar='true'] {
   background: var(--wa-color-surface-default);
   gap: var(--wa-space-xs);
 }
-.collection-demo__empty-states h3,
-.collection-demo__empty-board h3,
-.collection-demo__paged-board h3 {
+.collection-demo__caption {
   margin: 0;
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
@@ -292,8 +290,8 @@ body[data-resizing-project-sidebar='true'] {
   box-shadow: var(--wa-shadow-l);
   gap: remify(16px);
 }
-.workspace-settings-preview h2,
-.workspace-settings-preview p {
+.workspace-settings-preview__title,
+.workspace-settings-preview__description {
   margin: 0;
 }
 .inspector-demo {
@@ -333,7 +331,7 @@ body[data-resizing-project-sidebar='true'] {
   gap: remify(32px);
   padding: clamp(remify(24px), 4vw, remify(48px));
 }
-.toolbar-text-demo h2 {
+.toolbar-text-demo__caption {
   margin: 0 0 remify(10.4px);
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
@@ -354,7 +352,7 @@ body[data-resizing-project-sidebar='true'] {
   padding: clamp(remify(24px), 4vw, remify(48px));
   gap: remify(32px);
 }
-.ticket-search-field-demo h2 {
+.ticket-search-field-demo__caption {
   margin: 0 0 remify(10.4px);
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
@@ -370,7 +368,7 @@ body[data-resizing-project-sidebar='true'] {
   display: grid;
   gap: var(--wa-space-2xs);
 }
-.ticket-search-field-demo__external > h2,
+.ticket-search-field-demo__external > .ticket-search-field-demo__caption,
 .ticket-search-field-demo__external > .component-stage__hint {
   margin-bottom: 0;
 }
@@ -378,7 +376,7 @@ body[data-resizing-project-sidebar='true'] {
 .ticket-search-field-demo__narrow {
   max-width: remify(320px);
 }
-.toolbar-control-group-demo h2 {
+.toolbar-control-group-demo__caption {
   margin: 0 0 remify(10.4px);
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
@@ -406,12 +404,12 @@ body[data-resizing-project-sidebar='true'] {
   align-items: start;
   gap: remify(24px);
 }
-.code-review-demo article {
+.code-review-demo__case {
   display: grid;
   min-width: 0;
   gap: remify(8px);
 }
-.code-review-demo h3 {
+.code-review-demo__caption {
   margin: 0;
   font-size: var(--wa-font-size-xs);
 }
@@ -447,14 +445,14 @@ body[data-resizing-project-sidebar='true'] {
   background: var(--wa-color-surface-lowered);
   gap: remify(20px);
 }
-.list-item-demo h2 {
+.list-item-demo__caption {
   margin: 0 0 remify(5.6px);
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.list-item-demo small {
+.list-item-demo__detail {
   color: var(--wa-color-neutral-on-quiet);
   font-variant-numeric: tabular-nums;
 }
@@ -596,7 +594,7 @@ body[data-resizing-project-sidebar='true'] {
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: remify(12.8px);
 }
-.terminal-drawer-provider-demo h2 {
+.terminal-drawer-provider-demo__caption {
   margin: 0 0 var(--wa-space-s);
   font-size: var(--wa-font-size-s);
 }
@@ -665,7 +663,7 @@ body[data-resizing-project-sidebar='true'] {
 .fixed-aspect-terminal-card-demo > div {
   min-width: 0;
 }
-.fixed-aspect-terminal-card-demo h2 {
+.fixed-aspect-terminal-card-demo__caption {
   margin: 0 0 var(--wa-space-s);
   font-size: var(--wa-font-size-s);
 }
@@ -836,7 +834,7 @@ body[data-resizing-project-sidebar='true'] {
   border-radius: var(--wa-border-radius-m);
   background: var(--wa-color-surface-lowered);
 }
-.floating-toolbar-demo p {
+.floating-toolbar-demo__copy {
   max-width: remify(480px);
   margin: 0;
   color: var(--wa-color-neutral-on-quiet);
@@ -866,7 +864,7 @@ body[data-resizing-project-sidebar='true'] {
 .terminal-key-bar-demo > div {
   min-width: 0;
 }
-.terminal-key-bar-demo h2 {
+.terminal-key-bar-demo__caption {
   margin: 0 0 var(--wa-space-s);
   font-size: var(--wa-font-size-s);
 }

@@ -332,8 +332,10 @@ export function AppShellDemo() {
   const projectSettings = workspaceMode.value === 'settings';
   const projectWorkspace = projectSettings ? (
     <section class="workspace-settings-preview" aria-label="Project settings">
-      <h2>Project settings</h2>
-      <p>Configure ticket providers, project defaults, commands, and checkout behavior.</p>
+      <h2 class="workspace-settings-preview__title">Project settings</h2>
+      <p class="workspace-settings-preview__description">
+        Configure ticket providers, project defaults, commands, and checkout behavior.
+      </p>
     </section>
   ) : workspaceMode.value === 'board' ? (
     <TicketBoard columns={workspaceColumns()} label="Project board" />

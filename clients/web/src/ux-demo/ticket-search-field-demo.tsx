@@ -106,7 +106,7 @@ export function TicketSearchFieldDemo() {
   return (
     <section class="ticket-search-field-demo" aria-label="TicketSearchField demo">
       <div>
-        <h2>Standalone query field, floating surfaces</h2>
+        <h2 class="ticket-search-field-demo__caption">Standalone query field, floating surfaces</h2>
         <p class="component-stage__hint">
           Type <code>tag:</code> for Kerf's in-place tag completion, a lifecycle filter such as{' '}
           <code>updated-after:</code> for the date helper, or open the syntax help. Whitespace commits a filter as a
@@ -127,7 +127,7 @@ export function TicketSearchFieldDemo() {
         />
       </div>
       <div class="ticket-search-field-demo__external">
-        <h2>External surfaces, dialog layout</h2>
+        <h2 class="ticket-search-field-demo__caption">External surfaces, dialog layout</h2>
         <p class="component-stage__hint">
           Inside a dialog or other clipping container the field renders no popovers; the consumer places
           <code>TicketSearchSurfaces</code> for the same id in its own stacked layout. Kerf's tag suggestions stay in
@@ -154,7 +154,7 @@ export function TicketSearchFieldDemo() {
         />
       </div>
       <div class="ticket-search-field-demo__form">
-        <h2>Form field beside Web Awesome inputs</h2>
+        <h2 class="ticket-search-field-demo__caption">Form field beside Web Awesome inputs</h2>
         <p class="component-stage__hint">
           <code>TicketSearchFormField</code> uses Kerf's form-field presentation: a visible label, hint, and required
           marker that line up with a <code>wa-input</code>, with the helper surfaces stacked below (HS2-E40KC0).
@@ -171,7 +171,7 @@ export function TicketSearchFieldDemo() {
         />
       </div>
       <div>
-        <h2>Collapsible toolbar field, inline layout</h2>
+        <h2 class="ticket-search-field-demo__caption">Collapsible toolbar field, inline layout</h2>
         <p class="component-stage__hint">
           <code>layout="inline"</code> (the default) keeps Kerf's own collapsed and expanded widths; a{' '}
           <code>trailing-priority</code> Toolbar reserves the expanded field's track.
@@ -192,7 +192,7 @@ export function TicketSearchFieldDemo() {
         />
       </div>
       <div>
-        <h2>Grow layout (workspace header)</h2>
+        <h2 class="ticket-search-field-demo__caption">Grow layout (workspace header)</h2>
         <p class="component-stage__hint">
           <code>layout="grow"</code>: the open field grows into the free room on its row from a 19rem floor, takes the
           whole row on a compact toolbar, and its collapsed icon leaves the tiniest toolbars (HS2-8FS5BJ).
@@ -215,7 +215,7 @@ export function TicketSearchFieldDemo() {
         />
       </div>
       <div class="ticket-search-field-demo__narrow">
-        <h2>Row layout (narrow rail)</h2>
+        <h2 class="ticket-search-field-demo__caption">Row layout (narrow rail)</h2>
         <p class="component-stage__hint">
           <code>layout="row"</code>: the collapsed icon sits at its zone's trailing edge and the open field fills a row
           of its own (Kerf <code>fill</code>), sliding in from the row above.
@@ -238,7 +238,7 @@ export function TicketSearchFieldDemo() {
         />
       </div>
       <div>
-        <h2>Disabled</h2>
+        <h2 class="ticket-search-field-demo__caption">Disabled</h2>
         <Toolbar
           className="ticket-search-field-demo__toolbar"
           centerAlign="stretch"

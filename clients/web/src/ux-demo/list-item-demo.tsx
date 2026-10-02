@@ -8,26 +8,26 @@ export function ListItemDemo() {
   return (
     <section class="list-item-demo" aria-label="ListItem demo">
       <div>
-        <h2>Standard</h2>
+        <h2 class="list-item-demo__caption">Standard</h2>
         <ListItem
           action="demo-menu-item"
           icon={<LucideIcon icon={Archive} name="archive" />}
           label="Archive"
-          trailing={<small>241</small>}
+          trailing={<small class="list-item-demo__detail">241</small>}
         />
       </div>
       <div>
-        <h2>Selected</h2>
+        <h2 class="list-item-demo__caption">Selected</h2>
         <ListItem
           action="demo-menu-item"
           selected
           icon={<LucideIcon icon={Layers3} name="layers-3" />}
           label="Queue"
-          trailing={<small>12</small>}
+          trailing={<small class="list-item-demo__detail">12</small>}
         />
       </div>
       <div>
-        <h2>Multiline</h2>
+        <h2 class="list-item-demo__caption">Multiline</h2>
         <ListItem
           action="demo-menu-item"
           multiline
@@ -35,13 +35,13 @@ export function ListItemDemo() {
           icon={<span aria-hidden="true">M</span>}
           label={
             <span class="list-item-demo__copy">
-              src/components/example.ts<small>Secondary detail</small>
+              src/components/example.ts<small class="list-item-demo__detail">Secondary detail</small>
             </span>
           }
         />
       </div>
       <div>
-        <h2>Provider identities</h2>
+        <h2 class="list-item-demo__caption">Provider identities</h2>
         {(['github', 'gitlab', 'jira'] as const).map((kind) => (
           <ListItem
             action="demo-menu-item"
@@ -51,7 +51,7 @@ export function ListItemDemo() {
         ))}
       </div>
       <div>
-        <h2>Disabled</h2>
+        <h2 class="list-item-demo__caption">Disabled</h2>
         <ListItem
           action="demo-menu-item"
           disabled
