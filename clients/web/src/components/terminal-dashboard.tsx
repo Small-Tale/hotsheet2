@@ -354,6 +354,45 @@ export function FixedAspectTerminalCard({
   return <TerminalCard session={session} mode={mode} mobile={mobile} />;
 }
 
+/**
+ * A live, non-interactive terminal preview that fills its positioned container (HS2-148B5C): a
+ * framed 1280×768 scaled viewport over the terminal background, with `fallback` text shown until the
+ * live terminal connects. Containers tune it through `--terminal-preview-inset` (frame inset,
+ * default `--kui-space-l`) and `--terminal-preview-radius` (frame radius, default
+ * `--wa-border-radius-m`); the preview owns the frame, canvas, and fallback toggle.
+ */
+export function TerminalPreview({
+  projectId,
+  terminalId,
+  viewportKey,
+  fallback = 'Connecting to the live terminal…',
+}: {
+  projectId: string;
+  terminalId: string;
+  /** Stable morph key of the live viewport, so a re-render keeps the mounted terminal. */
+  viewportKey: string;
+  fallback?: string;
+}) {
+  return (
+    <div class="terminal-preview" data-component="terminal-preview">
+      <div class="terminal-preview__frame">
+        <div
+          class="terminal-viewport terminal-viewport--scaled-preview"
+          data-key={viewportKey}
+          data-morph-skip
+          data-component="terminal-viewport"
+          data-project-id={projectId}
+          data-terminal-id={terminalId}
+          data-display-mode="scaled-preview"
+          data-geometry-ready="false"
+          aria-hidden="true"
+        ></div>
+      </div>
+      <p class="terminal-preview__fallback">{fallback}</p>
+    </div>
+  );
+}
+
 export function TerminalSession({
   session,
   active = true,

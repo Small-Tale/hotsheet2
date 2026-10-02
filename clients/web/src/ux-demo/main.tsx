@@ -494,6 +494,9 @@ function updateDemoModifiedWhenPopupsClose(value: Record<string, string>): void 
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
 const tabContextMenu = signal<{ x: number; y: number; projectId: string } | undefined>(undefined);
 const drawerFocusDemoColumns = signal(60);
+// The close dialog's selected running item, so the catalog shows both the chat and the live terminal
+// preview (HS2-148B5C).
+const projectCloseDemoSelection = signal('ai-chat:codex-main');
 const keyBarDemoModifiers = signal<TerminalModifiers>(NO_TERMINAL_MODIFIERS),
   keyBarDemoFunctionRow = signal(false),
   keyBarDemoOutput = signal('');
@@ -694,7 +697,7 @@ function demoContent(item: DemoDefinition) {
             },
             { kind: 'terminal', id: 'tests', name: 'Tests', cwd: '~/code/kerf', progress: 0.6 },
           ],
-          selectedKey: 'ai-chat:codex-main',
+          selectedKey: projectCloseDemoSelection.value,
         }}
       />
     );
@@ -1823,6 +1826,17 @@ demoListeners.add(
   ),
 );
 demoListeners.add(delegate(root, 'wa-hide', '.terminal-clipboard-demo wa-dialog', closeClipboardDemo));
+demoListeners.add(
+  delegate(
+    root,
+    'click',
+    '[data-component="project-close-dialog"] [data-action="select-project-close-resource"]',
+    (_event, target) => {
+      const key = target.getAttribute('data-item-id');
+      if (key) projectCloseDemoSelection.value = key;
+    },
+  ),
+);
 // The drawer focus-mode text-size control cycles the demo's column fixture like production (HS2-01D4JP).
 demoListeners.add(
   delegate(root, 'click', '.terminal-drawer-focus-demo [data-action="cycle-mobile-terminal-columns"]', () => {

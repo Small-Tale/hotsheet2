@@ -252,13 +252,48 @@
 .terminal-tile__viewport-frame .terminal-viewport {
   inset: 0;
 }
+/* TerminalPreview (HS2-148B5C): a framed scaled preview that fills its positioned container, with a
+   connecting fallback until the live terminal attaches. Containers tune only its public tokens. */
+.terminal-preview {
+  position: absolute;
+  inset: 0;
+  background: var(--hs-terminal-background);
+}
+.terminal-preview__frame {
+  position: absolute;
+  inset: var(--terminal-preview-inset, var(--kui-space-l));
+  overflow: hidden;
+  border-radius: var(--terminal-preview-radius, var(--wa-border-radius-m));
+  background: var(--hs-terminal-background);
+  pointer-events: none;
+}
+.terminal-preview__frame .terminal-viewport {
+  inset: 0;
+}
+.terminal-preview__fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  margin: 0;
+  color: var(--wa-color-neutral-on-loud);
+  background: var(--hs-terminal-background);
+  place-items: center;
+}
+.terminal-preview:has(
+    .terminal-viewport[data-connection='connected'],
+    .terminal-viewport[data-connection='reconnecting']
+  )
+  .terminal-preview__fallback {
+  display: none;
+}
 .terminal-viewport {
   position: absolute;
   inset: var(--wa-space-s);
   display: none;
   overflow: auto;
 }
-.terminal-tile__viewport-frame .terminal-viewport--scaled-preview {
+/* Both the tile frame and TerminalPreview host the scaled preview at its fixed 1280×768 canvas. */
+.terminal-viewport.terminal-viewport--scaled-preview {
   inset: 0 auto auto 0;
   width: 1280px;
   height: 768px;

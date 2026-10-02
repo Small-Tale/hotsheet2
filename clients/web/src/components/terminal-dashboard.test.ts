@@ -7,6 +7,7 @@ import {
   TerminalDashboard,
   TerminalDashboardControls,
   type TerminalDashboardGroup,
+  TerminalPreview,
   TerminalSession,
   TerminalVisibilityControls,
 } from './terminal-dashboard';
@@ -311,5 +312,27 @@ describe('TerminalDashboard', () => {
     expect(String(TerminalSession({ session, mobile: true }))).toContain('data-mobile="true"');
     const drawerCss = readFileSync(new URL('./terminal-drawer.css', import.meta.url), 'utf8');
     expect(drawerCss).toContainSource(".terminal-session[data-mobile='true'] .terminal-viewport { overflow: clip; }");
+  });
+  it('owns the shared scaled preview frame, canvas, and connecting fallback (HS2-148B5C)', () => {
+    const markup = String(TerminalPreview({ projectId: 'p', terminalId: 't1', viewportKey: 'close:t1' }));
+    expect(markup).toContain('class="terminal-preview" data-component="terminal-preview"');
+    // The scaled viewport is the frame's direct child: the runtime scales it to its parent box.
+    expect(markup).toMatch(
+      /<div class="terminal-preview__frame"><div class="terminal-viewport terminal-viewport--scaled-preview" data-key="close:t1"/,
+    );
+    expect(markup).toContain('data-display-mode="scaled-preview"');
+    expect(markup).toContain('<p class="terminal-preview__fallback">Connecting to the live terminal…</p>');
+    expect(
+      String(TerminalPreview({ projectId: 'p', terminalId: 't1', viewportKey: 'k', fallback: 'Waiting' })),
+    ).toContain('Waiting');
+    expect(css).toMatchSource(
+      /\.terminal-preview__frame \{[^}]*inset: var\(--terminal-preview-inset, var\(--kui-space-l\)\);[^}]*border-radius: var\(--terminal-preview-radius, var\(--wa-border-radius-m\)\)/,
+    );
+    expect(css).toMatchSource(
+      /\.terminal-preview:has\( \.terminal-viewport\[data-connection='connected'\], \.terminal-viewport\[data-connection='reconnecting'\] \) \.terminal-preview__fallback \{ display: none; \}/,
+    );
+    expect(css).toMatchSource(
+      /\.terminal-viewport\.terminal-viewport--scaled-preview \{[^}]*width: 1280px;[^}]*height: 768px;/,
+    );
   });
 });

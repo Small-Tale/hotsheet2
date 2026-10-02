@@ -1630,6 +1630,13 @@ Styling ownership (HS2-DR549A):
   group-owned focus ring.
 - **`TerminalSession`.** It takes `mobile` from `TerminalDrawer` (the app's phone layout) and
   clips its scaled xterm there.
+- **`TerminalPreview`.** The live, non-interactive scaled terminal preview fills its positioned
+  container and owns its frame, 1280×768 scaled canvas, and connecting fallback, which hides once
+  the viewport connects or reconnects (HS2-148B5C). Containers tune only its public tokens:
+  `--terminal-preview-inset` (frame inset, default `--kui-space-l`) and
+  `--terminal-preview-radius` (frame radius, default `--wa-border-radius-m`). `ProjectCloseDialog`
+  composes it and narrows the inset to `--kui-space-m` on phones; its UX demo now switches between
+  the chat and terminal previews.
 
 Grid scale is a discrete fit count controlled by icon-only minus/plus buttons with visible
 tooltip and accessible names. Plus zooms in (fewer terminals on the controlling axis);

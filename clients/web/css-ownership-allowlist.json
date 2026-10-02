@@ -229,31 +229,6 @@
       "reason": "foreign-element: the descendant selector below .project-close-dialog__resources also reaches inside <ListHeader>, <ListItem>; use a child combinator, an own class, or the child's props"
     },
     {
-      "file": "src/components/project-close-dialog.css",
-      "selector": ".project-close-dialog__terminal .terminal-tile__viewport-frame",
-      "count": 2,
-      "ticket": "HS2-148B5C",
-      "reason": "foreign-class: .terminal-tile belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/components/project-close-dialog.css",
-      "selector": ".project-close-dialog__terminal .terminal-viewport",
-      "ticket": "HS2-148B5C",
-      "reason": "foreign-class: .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/components/project-close-dialog.css",
-      "selector": ".project-close-dialog__terminal .terminal-viewport--scaled-preview",
-      "ticket": "HS2-148B5C",
-      "reason": "foreign-class: .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/components/project-close-dialog.css",
-      "selector": ".project-close-dialog__terminal:has(.terminal-viewport[data-connection='connected'], .terminal-viewport[data-connection='reconnecting']) .project-close-dialog__preview-fallback",
-      "ticket": "HS2-148B5C",
-      "reason": "foreign-class: .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
       "file": "src/components/project-statistics.css",
       "selector": ".project-statistics h1",
       "ticket": "HS2-PK1C1X",

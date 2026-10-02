@@ -6237,6 +6237,53 @@ test('keeps the Markdown preview focus ring inset so an overflow-hidden editor c
   });
 });
 
+test('previews a running terminal through the shared TerminalPreview in the ProjectCloseDialog demo (HS2-148B5C)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');
+  const dialog = page.locator('[data-component="project-close-dialog"]');
+  await expect(dialog).toHaveJSProperty('open', true);
+  await dialog.getByRole('button', { name: /Tests/ }).click();
+  await expect(dialog.getByRole('button', { name: /Tests/ })).toHaveAttribute('aria-current', 'page');
+  const region = dialog.getByRole('region', { name: 'Tests terminal preview' }),
+    preview = region.locator('[data-component="terminal-preview"]'),
+    viewport = preview.locator('[data-component="terminal-viewport"]'),
+    fallback = preview.getByText('Connecting to the live terminal…');
+  await expect(viewport).toHaveAttribute('data-connection', 'connected');
+  await expect(fallback).toBeHidden();
+  const geometry = () =>
+    region.evaluate((section) => {
+      const box = section.getBoundingClientRect(),
+        frame = section.querySelector<HTMLElement>('[data-component="terminal-viewport"]')!.parentElement!,
+        frameBox = frame.getBoundingClientRect();
+      return {
+        inset: Math.round(frameBox.left - box.left),
+        bottom: Math.round(box.bottom - frameBox.bottom),
+        radius: getComputedStyle(frame).borderTopLeftRadius,
+        overflow: getComputedStyle(frame).overflow,
+        canvas: getComputedStyle(frame.firstElementChild!).width,
+      };
+    });
+  // The dialog tunes the preview's public inset token; the preview owns the frame and 1280px canvas.
+  expect(await geometry()).toEqual({ inset: 24, bottom: 24, radius: '6px', overflow: 'hidden', canvas: '1280px' });
+  // Until the live terminal attaches, the preview shows its own connecting fallback.
+  await viewport.evaluate((node) => {
+    node.removeAttribute('data-connection');
+  });
+  await expect(fallback).toBeVisible();
+  await viewport.evaluate((node) => {
+    node.setAttribute('data-connection', 'reconnecting');
+  });
+  await expect(fallback).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await geometry()).inset).toBe(16);
+  // Selecting the chat again swaps the preview back to the embedded conversation.
+  await dialog.getByRole('button', { name: /Codex/ }).click();
+  await expect(dialog.locator('[data-component="ai-conversation"]')).toBeVisible();
+  await expect(preview).toHaveCount(0);
+});
+
 test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKKS05)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');

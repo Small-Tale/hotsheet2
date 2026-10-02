@@ -59,43 +59,14 @@
   overflow: auto;
 }
 .project-close-dialog__terminal {
+  /* The composed TerminalPreview owns its frame, scaled canvas, and connecting fallback; the dialog
+     only tunes the frame through the preview's public tokens (HS2-148B5C). */
+  --terminal-preview-inset: var(--kui-space-l);
+  --terminal-preview-radius: var(--wa-border-radius-m);
   position: relative;
   min-height: remify(288px);
   padding: var(--kui-space-l);
   background: var(--hs-terminal-background);
-}
-.project-close-dialog__terminal .terminal-tile__viewport-frame {
-  position: absolute;
-  inset: var(--kui-space-l);
-  border-radius: var(--wa-border-radius-m);
-}
-.project-close-dialog__terminal .terminal-viewport {
-  inset: 0;
-}
-.project-close-dialog__terminal .terminal-viewport--scaled-preview {
-  inset: 0 auto auto 0;
-  width: 1280px;
-  height: 768px;
-  overflow: hidden;
-  transform-origin: top left;
-  pointer-events: none;
-  user-select: none;
-}
-.project-close-dialog__preview-fallback {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  margin: 0;
-  color: var(--wa-color-neutral-on-loud);
-  background: var(--hs-terminal-background);
-  place-items: center;
-}
-.project-close-dialog__terminal:has(
-    .terminal-viewport[data-connection='connected'],
-    .terminal-viewport[data-connection='reconnecting']
-  )
-  .project-close-dialog__preview-fallback {
-  display: none;
 }
 .project-close-dialog__chat {
   padding: 0;
@@ -160,10 +131,8 @@
     border-bottom: 1px solid var(--wa-color-surface-border);
   }
   .project-close-dialog__terminal {
+    --terminal-preview-inset: var(--kui-space-m);
     min-height: remify(192px);
-  }
-  .project-close-dialog__terminal .terminal-tile__viewport-frame {
-    inset: var(--kui-space-m);
   }
   .project-close-dialog__detail {
     padding: var(--kui-space-m);

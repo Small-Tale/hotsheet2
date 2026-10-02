@@ -91,6 +91,11 @@ describe('ProjectCloseDialog', () => {
     expect(markup).toContain('data-project-id="demo"');
     expect(markup).toContain('data-terminal-id="term-one"');
     expect(markup).toContain('data-display-mode="scaled-preview"');
+    // Composed through the shared TerminalPreview, which owns the frame and connecting fallback (HS2-148B5C).
+    expect(markup).toContain('data-component="terminal-preview"');
+    expect(markup).toContain('data-key="project-close:term-one"');
+    expect(markup).toContain('Connecting to the live terminal…');
+    expect(markup).not.toContain('terminal-tile__viewport-frame');
     expect(markup).not.toContain('/work/demo');
     expect(markup).not.toContain('68%');
     expect(markup).not.toContain('Test Files 42 passed');
@@ -146,7 +151,9 @@ describe('ProjectCloseDialog', () => {
     expect(css).toMatchSource(/grid-template-columns:minmax\(remify\(224px\),remify\(288px\)\) minmax\(0,1fr\)/);
     expect(css).toMatchSource(/@media \(max-width:remify\(672px\)\)[\s\S]*grid-template-columns:1fr/);
     expect(css).toContainSource('background:var(--wa-color-surface-default)');
-    expect(css).toContain('.project-close-dialog__terminal .terminal-viewport--scaled-preview');
+    // The live preview is the shared TerminalPreview; the dialog tunes only its public tokens (HS2-148B5C).
+    expect(css).not.toContain('.terminal-viewport');
+    expect(css).not.toContain('.terminal-tile');
     // The embedded AIConversation presentation fills the preview itself (HS2-29Q3XG).
     expect(css).not.toContain('.ai-conversation');
   });
@@ -160,10 +167,10 @@ describe('ProjectCloseDialog', () => {
     expect(css).toMatchSource(/__resources \{[^}]*padding:var\(--kui-space-xs\)/);
     expect(css).toMatchSource(/__resources nav \{ display:grid; gap:var\(--kui-space-none\)/);
     expect(css).not.toContain('.kui-list-item__count');
-    expect(css).toMatchSource(/__terminal \.terminal-tile__viewport-frame \{[^}]*inset:var\(--kui-space-l\)/);
+    expect(css).toMatchSource(/__terminal \{[^}]*--terminal-preview-inset:var\(--kui-space-l\)/);
     expect(css).toMatchSource(/__consequences \{ padding:var\(--kui-space-m\) var\(--kui-space-l\) 0/);
     expect(css).toMatchSource(/__actions \{[^}]*gap:var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(/@media[\s\S]*viewport-frame \{ inset:var\(--kui-space-m\)/);
+    expect(css).toMatchSource(/@media[\s\S]*__terminal \{ --terminal-preview-inset:var\(--kui-space-m\)/);
     expect(css).toMatchSource(/__layout \{[^}]*min-height:remify\(352px\)/);
   });
 });

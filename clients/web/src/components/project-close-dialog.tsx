@@ -10,6 +10,7 @@ import { CircleAlert, MessageSquare, SquareTerminal } from 'lucide';
 import { type ConversationActivity, type ConversationMessage, type ConversationUsage } from '../ai-conversation';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { AIConversation } from './ai-conversation';
+import { TerminalPreview } from './terminal-dashboard';
 
 interface ProjectCloseResourceBase {
   id: string;
@@ -80,20 +81,7 @@ function ResourceDetail({ resource, projectId }: { resource: ProjectCloseResourc
         data-key={`project-close-preview:${key}`}
         aria-label={`${resource.name} terminal preview`}
       >
-        <div class="terminal-tile__viewport-frame">
-          <div
-            class="terminal-viewport terminal-viewport--scaled-preview"
-            data-key={`project-close:${resource.id}`}
-            data-morph-skip
-            data-component="terminal-viewport"
-            data-project-id={projectId}
-            data-terminal-id={resource.id}
-            data-display-mode="scaled-preview"
-            data-geometry-ready="false"
-            aria-hidden="true"
-          ></div>
-        </div>
-        <p class="project-close-dialog__preview-fallback">Connecting to the live terminal…</p>
+        <TerminalPreview projectId={projectId} terminalId={resource.id} viewportKey={`project-close:${resource.id}`} />
       </section>
     );
   return (
