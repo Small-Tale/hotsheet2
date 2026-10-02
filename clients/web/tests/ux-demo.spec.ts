@@ -6185,6 +6185,54 @@ test('ticket source connection rows hover flush with their card edge (HS2-KZP94T
   }
 });
 
+test('aligns the TicketSearchFormField with a Web Awesome input and keeps its search actions (HS2-E40KC0)', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/ux-demo?component=ticket-search-field');
+    const section = page.locator('.ticket-search-field-demo__form');
+    await section.scrollIntoViewIfNeeded();
+    const query = section.getByRole('searchbox', { name: 'View query' });
+    await expect(query).toHaveAttribute('aria-required', 'true');
+    await expect(
+      section.getByText('Use the same words, fields, operators, and filter chips as ticket search.'),
+    ).toBeVisible();
+    await expect
+      .poll(async () =>
+        section.evaluate((node) => {
+          const input = node.querySelector<HTMLElement>('wa-input')!,
+            inputLabel = input.shadowRoot!.querySelector<HTMLElement>('[part~="form-control-label"]')!,
+            inputBox = input.shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!.getBoundingClientRect(),
+            queryLabel = node.querySelector<HTMLElement>('[data-token-search-form-label]')!,
+            queryBox = node
+              .querySelector<HTMLElement>('[data-component="token-search-field"]')!
+              .getBoundingClientRect(),
+            style = (element: HTMLElement) => {
+              const computed = getComputedStyle(element);
+              return [computed.fontSize, computed.fontWeight, computed.textTransform].join(' ');
+            };
+          return {
+            typography: style(inputLabel) === style(queryLabel),
+            edges: Math.abs(inputBox.left - queryBox.left) < 1 && Math.abs(inputBox.right - queryBox.right) < 1,
+          };
+        }),
+      )
+      .toEqual({ typography: true, edges: true });
+    // The shared delegated wiring reaches the form field: a chip, syntax help, and clear.
+    await query.click();
+    await page.keyboard.type('tag:docs ');
+    await expect(section.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
+    await section.getByRole('button', { name: 'Search syntax help' }).click();
+    await expect(section.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
+    await section.screenshot({ path: test.info().outputPath(`ticket-search-form-field-${width}.png`) });
+    await section.getByRole('button', { name: 'Search syntax help' }).click();
+    await expect(section.getByRole('dialog', { name: 'Search syntax' })).toHaveCount(0);
+    await section.getByRole('button', { name: 'Clear form search query' }).click();
+    await expect(section.locator('[data-component="token-search-token"]')).toHaveCount(0);
+  }
+});
+
 test('completes tags, applies dates, and explains syntax in the TicketSearchField demo (HS2-N5G6JS)', async ({
   page,
 }) => {

@@ -2,7 +2,7 @@ import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { batch, signal } from 'kerfjs';
 
-import { TicketSearchField, TicketSearchSurfaces } from '../components/ticket-search-field';
+import { TicketSearchField, TicketSearchFormField, TicketSearchSurfaces } from '../components/ticket-search-field';
 import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
 
 /** Deterministic project tags for the TicketSearchField catalog entry. */
@@ -13,6 +13,7 @@ export const ticketSearchDemoEvent = signal('');
 const ticketSearchDemoHelpOpen: Record<string, ReturnType<typeof signal<boolean>>> = {
   'ticket-search-demo': signal(false),
   'ticket-search-demo-external': signal(false),
+  'ticket-search-demo-form': signal(false),
 };
 
 /**
@@ -64,6 +65,7 @@ export const ticketSearchDemoModels: Readonly<Record<string, TokenSearchModel>> 
   'ticket-search-demo': demoModel(),
   'ticket-search-demo-external': demoModel(),
   'ticket-search-demo-collapsible': demoModel(),
+  'ticket-search-demo-form': demoModel(),
   // The disabled specimen shows an uncommitted filter as plain text, not a chip.
   'ticket-search-demo-disabled': demoModel('is:open', { commit: false }),
 };
@@ -141,6 +143,23 @@ export function TicketSearchFieldDemo() {
           id="ticket-search-demo-external"
           model={external}
           helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo-external'].value}
+        />
+      </div>
+      <div class="ticket-search-field-demo__form">
+        <h2>Form field beside Web Awesome inputs</h2>
+        <p class="component-stage__hint">
+          <code>TicketSearchFormField</code> uses Kerf's form-field presentation: a visible label, hint, and required
+          marker that line up with a <code>wa-input</code>, with the helper surfaces stacked below (HS2-E40KC0).
+        </p>
+        <wa-input name="ticket-search-demo-form-name" label="View name" required></wa-input>
+        <TicketSearchFormField
+          id="ticket-search-demo-form"
+          label="View query"
+          model={ticketSearchDemoModels['ticket-search-demo-form']}
+          required
+          hint="Use the same words, fields, operators, and filter chips as ticket search."
+          helpOpen={ticketSearchDemoHelpOpen['ticket-search-demo-form'].value}
+          clearLabel="Clear form search query"
         />
       </div>
       <div>

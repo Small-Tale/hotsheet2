@@ -843,8 +843,14 @@ field's clear, so the app no longer snapshots chip offsets or refocuses a cleare
 `surfaces="floating"` (default) hangs them below the group as popovers, with the component
 overriding Kerf's search-group clipping while expanded; `surfaces="external"` renders none inside
 the group, and the consumer places the exported `TicketSearchSurfaces` for the same `id` in its
-own stacked layout — the saved-view dialog does this so the help sits inside the
-dialog body in flow instead of being clipped by it or spilling past its panel. The wrapper is declared to Kerf's composition rule through
+own stacked layout, for a clipping container that still wants a toolbar field.
+In a form, the sibling `TicketSearchFormField` (same module) renders Kerf's
+`TokenSearchField presentation="form-field"`: a visible label, hint, and required marker with the
+same inset, typography, and edges as a neighboring `wa-input`, no Toolbar, and the helper surfaces
+stacked below it in an app-owned `.ticket-search-form-field` wrapper that carries the field id for
+the shared wiring and the token colors by inheritance. The saved-view dialog uses it
+(HS2-E40KC0); the TicketSearchField demo's "Form field" example exposes it. The remaining field
+radius and required-marker color differences from `wa-input` are Kerf's (`KF-6P4NAV`). The wrapper is declared to Kerf's composition rule through
 `clients/web/ai/component-composition-extension.json` (`rendersAs`
 `@kerfjs/ui:toolbar-control-group`), loaded via `.kerf-ui-profile.json` `catalogs`, so a
 Toolbar zone accepts it as the group it renders.

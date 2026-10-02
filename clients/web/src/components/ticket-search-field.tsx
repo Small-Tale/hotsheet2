@@ -182,6 +182,81 @@ export function TicketSearchSurfaces({ id, model, helpOpen = false, help = true 
   );
 }
 
+function TicketSearchHelpButton({ open }: { open: boolean }) {
+  return (
+    <button
+      type="button"
+      class="ticket-search-field__help-button"
+      data-action={TICKET_SEARCH_ACTIONS.toggleHelp}
+      aria-label="Search syntax help"
+      aria-expanded={String(open)}
+      title="Search syntax help"
+      data-token-search-keep-open
+    >
+      <LucideIcon icon={CircleHelp} name="circle-help" />
+    </button>
+  );
+}
+
+export interface TicketSearchFormFieldProps {
+  /** Kerf token-search editor id; also the identity delegated handlers receive. */
+  id: string;
+  /** Visible form label (Kerf renders it with the same inset and typography as `wa-input`). */
+  label: string;
+  /** The Kerf-managed search model, registered under `id` in `wireTokenSearchFields({ models })`. */
+  model: TokenSearchModel;
+  placeholder?: string;
+  disabled?: boolean;
+  /** Supporting text below the field, referenced by `aria-describedby`. */
+  hint?: string;
+  /** Marks the field required (`aria-required` plus Kerf's marker); the app validates the value. */
+  required?: boolean;
+  helpOpen?: boolean;
+  help?: boolean;
+  clearLabel?: string;
+}
+
+/**
+ * The ticket search query editor as a form field beside Web Awesome controls (HS2-E40KC0):
+ * Kerf's `TokenSearchField presentation="form-field"` (visible label, hint, required marker,
+ * full width, no Toolbar) driven by the same managed model, with the syntax-help button and
+ * the date/help surfaces stacked below it in flow. The app-owned wrapper carries the field id
+ * for the shared delegated wiring and the field's token colors by inheritance.
+ */
+export function TicketSearchFormField({
+  id,
+  label,
+  model,
+  placeholder = 'Search tickets',
+  disabled = false,
+  hint,
+  required = false,
+  helpOpen = false,
+  help = true,
+  clearLabel = 'Clear search',
+}: TicketSearchFormFieldProps) {
+  return (
+    <div class="ticket-search-form-field" data-ticket-search-for={id}>
+      <TokenSearchField
+        presentation="form-field"
+        id={id}
+        label={label}
+        model={model}
+        placeholder={placeholder}
+        disabled={disabled}
+        hint={hint}
+        required={required}
+        editAction={TICKET_SEARCH_ACTIONS.editToken}
+        removeAction={TICKET_SEARCH_ACTIONS.removeToken}
+        clearAction={TICKET_SEARCH_ACTIONS.clear}
+        clearLabel={clearLabel}
+        trailing={help ? <TicketSearchHelpButton open={helpOpen} /> : undefined}
+      />
+      <TicketSearchSurfaces id={id} model={model} helpOpen={helpOpen} help={help} />
+    </div>
+  );
+}
+
 /**
  * The ticket search query editor: Kerf's grouped TokenSearchField driven by a managed
  * `TokenSearchModel` (grammar, chips, in-place tag completion), plus Hot Sheet's lifecycle date
@@ -220,19 +295,7 @@ export function TicketSearchField({
       removeAction: TICKET_SEARCH_ACTIONS.removeToken,
       clearAction: TICKET_SEARCH_ACTIONS.clear,
       clearLabel,
-      trailing: help ? (
-        <button
-          type="button"
-          class="ticket-search-field__help-button"
-          data-action={TICKET_SEARCH_ACTIONS.toggleHelp}
-          aria-label="Search syntax help"
-          aria-expanded={String(helpOpen)}
-          title="Search syntax help"
-          data-token-search-keep-open
-        >
-          <LucideIcon icon={CircleHelp} name="circle-help" />
-        </button>
-      ) : undefined,
+      trailing: help ? <TicketSearchHelpButton open={helpOpen} /> : undefined,
     };
   return (
     <ToolbarControlGroup className="ticket-search-field" expanded={open} single content="search" focusRing="halo">

@@ -12,6 +12,17 @@
   height: auto;
   overflow: visible;
 }
+/* The form-field presentation stacks Kerf's labeled field over the helper surfaces; its token
+   colors match the grouped field's and reach Kerf's field by inheritance (HS2-E40KC0). */
+.ticket-search-form-field {
+  --kui-token-search-background: var(--wa-color-surface-default);
+  --kui-token-search-border: var(--wa-color-neutral-border-normal);
+  --kui-token-search-token-background: var(--wa-color-brand-fill-quiet);
+  --kui-token-search-token-foreground: var(--wa-color-brand-on-quiet);
+  display: grid;
+  gap: var(--kui-space-2xs);
+  min-width: 0;
+}
 .ticket-search-field .kui-token-search {
   --kui-token-search-background: var(--wa-color-surface-default);
   --kui-token-search-border: var(--wa-color-neutral-border-normal);

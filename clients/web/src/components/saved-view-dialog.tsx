@@ -4,11 +4,10 @@ import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
 import { Text } from '@kerfjs/ui/text';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
-import { Toolbar } from '@kerfjs/ui/toolbar';
 
 import { orderedSearchText } from '../inline-search';
 import { inlineSearchTokens } from '../ticket-search-model';
-import { TicketSearchField, TicketSearchSurfaces } from './ticket-search-field';
+import { TicketSearchFormField } from './ticket-search-field';
 
 export interface SavedViewDialogProps {
   open: boolean;
@@ -66,30 +65,19 @@ export function SavedViewDialog({
             autofocus
             disabled={busy || undefined}
           ></wa-input>
-          <label class="saved-view-dialog__query" data-key={`saved-view-query-session-${session}`}>
-            <span>
-              Search query <sup aria-hidden="true">*</sup>
-            </span>
-            <div class="saved-view-dialog__query-toolbar">
-              <Toolbar
-                centerAlign="stretch"
-                center={
-                  <TicketSearchField
-                    id="saved-view-query"
-                    label="Search query"
-                    model={searchModel}
-                    disabled={busy}
-                    helpOpen={helpOpen}
-                    clearLabel="Clear search query"
-                    surfaces="external"
-                  />
-                }
-              />
-            </div>
-            <TicketSearchSurfaces id="saved-view-query" model={searchModel} helpOpen={helpOpen} />
+          <div class="saved-view-dialog__query" data-key={`saved-view-query-session-${session}`}>
+            <TicketSearchFormField
+              id="saved-view-query"
+              label="Search query"
+              model={searchModel}
+              disabled={busy}
+              required
+              hint="Use the same words, fields, operators, and filter chips as ticket search."
+              helpOpen={helpOpen}
+              clearLabel="Clear search query"
+            />
             <input type="hidden" name="saved-view-query" value={queryValue} />
-            <small>Use the same words, fields, operators, and filter chips as ticket search.</small>
-          </label>
+          </div>
           {error ? (
             <p class="saved-view-dialog__error" role="alert">
               {error}

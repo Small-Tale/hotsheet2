@@ -35,7 +35,7 @@ export interface TicketSearchFieldHandlers {
 /** The element whose descendants belong to one field: its surfaces block or its group. */
 function withField(root: HTMLElement, target: Element, run: (id: string, scope: HTMLElement) => void) {
   const id = ticketSearchFieldId(target),
-    scope = target.closest<HTMLElement>('.ticket-search-surfaces, .ticket-search-field');
+    scope = target.closest<HTMLElement>('.ticket-search-surfaces, .ticket-search-field, .ticket-search-form-field');
   if (id && scope && root.contains(scope)) run(id, scope);
 }
 
@@ -61,13 +61,18 @@ function applyDate(root: HTMLElement, target: Element, handlers: TicketSearchFie
  */
 export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearchFieldHandlers): void {
   const action = (name: string) => `[data-action="${name}"]`;
-  delegate(root, 'keydown', '.ticket-search-field [data-token-search-editor]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (keyboard.key === 'Home' || (keyboard.key === 'ArrowLeft' && (keyboard.metaKey || keyboard.ctrlKey))) {
-      event.preventDefault();
-      placeTokenSearchCaret(target as HTMLElement, 0);
-    }
-  });
+  delegate(
+    root,
+    'keydown',
+    '.ticket-search-field [data-token-search-editor], .ticket-search-form-field [data-token-search-editor]',
+    (event, target) => {
+      const keyboard = event as KeyboardEvent;
+      if (keyboard.key === 'Home' || (keyboard.key === 'ArrowLeft' && (keyboard.metaKey || keyboard.ctrlKey))) {
+        event.preventDefault();
+        placeTokenSearchCaret(target as HTMLElement, 0);
+      }
+    },
+  );
   delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.removeToken), (_event, target) => {
     const raw = data(target).tokenValue;
     if (raw)

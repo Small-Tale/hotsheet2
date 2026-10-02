@@ -14,11 +14,22 @@ function queryModel(text = '', typing = '', tags: readonly string[] = ['design',
 }
 
 describe('SavedViewDialog', () => {
-  it('owns the full query width independently of the collapsed workspace toolbar', () => {
+  it('lays the query out as a Kerf form field beside the name input, not a toolbar (HS2-E40KC0)', () => {
     const css = readFileSync(new URL('./saved-view-dialog.css', import.meta.url), 'utf8');
-    expect(css).toMatch(
-      /\.saved-view-dialog__query > \.saved-view-dialog__query-toolbar\s*\{[^}]*width: 100%;[^}]*min-width: 0;/,
+    // Kerf's form-field presentation owns the label, inset, and full width; the dialog adds no query layout CSS.
+    expect(css).not.toContain('saved-view-dialog__query');
+    const markup = String(SavedViewDialog({ open: true, name: 'Needs docs', searchModel: queryModel('tag:docs') }));
+    expect(markup).not.toContain('kui-toolbar');
+    expect(markup).not.toContain('saved-view-dialog__query-toolbar');
+    expect(markup).toContain('<div class="ticket-search-form-field" data-ticket-search-for="saved-view-query">');
+    expect(markup).toContain('data-presentation="form-field"');
+    expect(markup).toMatch(
+      /<div class="kui-token-search__field-label" id="saved-view-query-label"[^>]*>Search query<span class="kui-token-search__field-required" aria-hidden="true">\*<\/span>/,
     );
+    expect(markup).toContain('aria-labelledby="saved-view-query-label"');
+    expect(markup).toContain('aria-describedby="saved-view-query-hint"');
+    expect(markup).toContain('aria-required="true"');
+    expect(markup).toContain('Use the same words, fields, operators, and filter chips as ticket search.');
   });
   it('collects a shared view name in the standard tokenized query editor', () => {
     const markup = String(
@@ -30,24 +41,19 @@ describe('SavedViewDialog', () => {
       }),
     );
     expect(markup).toContain('data-component="saved-view-dialog"');
-    // The shared TicketSearchField brings tag completion and syntax help into the dialog (HS2-N5G6JS).
-    expect(markup).toContain('class="kui-toolbar-control-group ticket-search-field"');
+    // The shared ticket search brings tag completion and syntax help into the dialog (HS2-N5G6JS).
     expect(markup).not.toContain('workspace-header__search-group');
-    expect(markup).not.toContain('saved-view-dialog__query-field');
     expect(markup).toContain('aria-label="Search syntax help"');
     expect(markup).toContain('aria-label="Search syntax"');
-    // The dialog places the surfaces itself, below the query toolbar, so nothing floats inside the clipped body.
-    const groupStart = markup.indexOf('class="kui-toolbar-control-group ticket-search-field"'),
-      centerEnd = markup.indexOf('class="kui-toolbar__trailing"', groupStart),
+    // The surfaces stack in flow below the field, inside the same wrapper, so nothing floats in the clipped body.
+    const fieldStart = markup.indexOf('data-presentation="form-field"'),
       surfacesStart = markup.indexOf('class="ticket-search-surfaces"');
-    expect(groupStart).toBeGreaterThan(0);
-    expect(markup.slice(groupStart, centerEnd)).not.toContain('ticket-search-surfaces');
-    expect(markup.slice(groupStart, centerEnd)).not.toContain('aria-label="Search syntax"');
-    expect(surfacesStart).toBeGreaterThan(centerEnd);
+    expect(fieldStart).toBeGreaterThan(0);
+    expect(surfacesStart).toBeGreaterThan(fieldStart);
     expect(markup).toMatch(
-      /<\/header><\/div><div class="ticket-search-surfaces" data-ticket-search-for="saved-view-query" data-token-search-keep-open>[\s\S]*aria-label="Search syntax"[\s\S]*<input type="hidden" name="saved-view-query"/,
+      /<div class="ticket-search-surfaces" data-ticket-search-for="saved-view-query" data-token-search-keep-open>[\s\S]*aria-label="Search syntax"[\s\S]*<input type="hidden" name="saved-view-query"/,
     );
-    // Kerf's in-flow tag completion excludes the committed chip (HS2-5JXBQY).
+    // Kerf's tag completion excludes the committed chip (HS2-5JXBQY).
     expect(markup).toContain('data-token-search-suggestion="tag:design"');
     expect(markup).not.toContain('data-token-search-suggestion="tag:docs"');
     expect(markup).not.toContain('data-token-search-suggestion="tag:server"');
@@ -55,12 +61,9 @@ describe('SavedViewDialog', () => {
     expect(markup).toContain('aria-label="Clear search query"');
     expect(markup).toContain('name="saved-view-name"');
     expect(markup).toContain('name="saved-view-query"');
-    expect(markup).toContain('<div class="saved-view-dialog__query-toolbar"><header class="kui-toolbar"');
-    expect(markup).toContain('data-center-align="stretch"');
     expect(markup).toContain('data-token-search-editor="saved-view-query"');
     expect(markup).toContain('data-component="token-search-token"');
     expect(markup).toContain('data-token-value="tag:docs"');
-    expect(markup).toContain('tag:docs');
     expect(markup).toContain('Everyone using this ticket store will see it.');
     expect(markup).toContain('data-action="save-saved-view"');
     expect(markup).toContain('data-component="list"');

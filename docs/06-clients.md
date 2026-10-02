@@ -2023,8 +2023,9 @@ connected control cluster, and an 8px search-row transition offset; its toolbar,
 button, and transition dimensions remain explicit geometry (HS2-4Y6SM9). This is the same
 advanced search surface and state as the main workspace, including chips,
 tag completion, attachment/presence filters, relative or local dates, and syntax help: the
-rail, the workspace header, and the saved-view dialog's query field all render the one
-shared `TicketSearchField` component over a Kerf-managed `TokenSearchModel` (HS2-5JXBQY), so
+rail, the workspace header, and the saved-view dialog's query field (as the form-field
+variant `TicketSearchFormField`, aligned with the View name input, HS2-E40KC0) all render the one
+shared `TicketSearchField` module over a Kerf-managed `TokenSearchModel` (HS2-5JXBQY), so
 tag completion (Kerf's anchored suggestion popover), the date helper, and syntax help are
 available wherever tickets are searched (HS2-N5G6JS). A
 well-formed structured value becomes a chip only after an explicit impossible continuation

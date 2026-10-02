@@ -366,6 +366,10 @@ body[data-resizing-project-sidebar='true'] {
 .ticket-search-field-demo__toolbar {
   overflow: visible;
 }
+.ticket-search-field-demo__form {
+  display: grid;
+  gap: var(--kui-space-m);
+}
 .ticket-search-field-demo__external {
   display: grid;
   gap: var(--wa-space-2xs);
