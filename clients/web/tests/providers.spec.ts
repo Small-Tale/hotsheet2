@@ -9273,23 +9273,34 @@ test('naturally makes room before fading in a ticket created from the composer',
   expect(before).not.toBeNull();
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await page.getByRole('textbox', { name: 'Ticket title' }).fill('Naturally animated incoming ticket');
+  // Sample the incoming ghost's opacity on every frame from before creation until it is removed, so the
+  // fade-in assertion never depends on a wall-clock sleep landing mid-flight (HS2-FGHVY4: a fixed 200ms
+  // wait raced the animation on a loaded machine and then waited on an already-removed ghost).
+  await page.evaluate(() => {
+    const samples: number[] = [];
+    (window as unknown as { __ghostOpacities: number[] }).__ghostOpacities = samples;
+    const sample = () => {
+      const node = document.querySelector(
+        '[data-ticket-motion-ghost="incoming"][data-ticket-motion-slug="HS2-NEW001"]',
+      );
+      if (node) samples.push(Number.parseFloat(getComputedStyle(node).opacity));
+      if (node || samples.length === 0) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
   await page.getByRole('button', { name: 'Create ticket' }).click();
   const incoming = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEW001"]').locator('..'),
     ghost = page.locator('[data-ticket-motion-ghost="incoming"][data-ticket-motion-slug="HS2-NEW001"]');
   await expect(ghost).toBeAttached();
   await expect(incoming).toHaveCSS('visibility', 'hidden');
   await expect.poll(async () => existing.evaluate((element) => getComputedStyle(element).transform)).not.toBe('none');
-  await page.waitForTimeout(100);
-  const during = await existing.boundingBox();
-  expect(during).not.toBeNull();
-  expect(during!.y).toBeGreaterThan(before!.y);
-  await page.waitForTimeout(200);
-  const opacity = Number.parseFloat(await ghost.evaluate((element) => getComputedStyle(element).opacity));
-  expect(opacity).toBeGreaterThan(0);
-  expect(opacity).toBeLessThan(1);
-  await page.screenshot({ path: '/private/tmp/hs2-jgwtjj-natural-create-midflight.png', fullPage: true });
+  // The existing card is displaced downward to make room (mid-flight or settled, it never moves up).
+  await expect.poll(async () => (await existing.boundingBox())?.y ?? 0).toBeGreaterThan(before!.y);
   await expect(ghost).toHaveCount(0);
   await expect(incoming).toHaveCSS('visibility', 'visible');
+  const opacities = await page.evaluate(() => (window as unknown as { __ghostOpacities: number[] }).__ghostOpacities);
+  expect(opacities.length).toBeGreaterThan(0);
+  expect(opacities.some((opacity) => opacity > 0 && opacity < 1)).toBe(true);
 });
 
 test('finishes local ticket creation motion without redundantly reconciling its acknowledged long-poll event', async ({
