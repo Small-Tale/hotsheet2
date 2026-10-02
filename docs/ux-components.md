@@ -2098,6 +2098,11 @@ also ships the APIs several tickets wait on: the guarded post-commit caret (`KF-
 the PopupMenu submenu race fix (`KF-A388BJ`, `HS2-ZKMCVW`), phone submenus placed outside their
 parent menu (`KF-5PZ768`, `HS2-282GTZ`), ListItem tone inheritance (`KF-XD6YH1`, `HS2-C3SPM6`), and
 TokenSearchField's own deferred blur collapse through a pointer click (`KF-64W0RN`).
+HS2-8R25B6 upgraded to 5.0.0-beta.66: `WorkbenchPanel` is now a union of a static panel and a
+`navStack` navigation panel (`KF-WW33YJ`), so the shell's rails are typed `WorkbenchStaticPanel`. It
+also ships `KF-SCS4RH` (Toolbar zone focus rings stay unclipped) and `KF-6P4NAV` (the form-field
+TokenSearchField matches Web Awesome's control radius and required marker). The FloatingToolbar
+parent gap persists, so beta.66 joins the adapter list.
 HS2-DQBAC4 upgraded to 5.0.0-beta.65, which adds `TokenSearchField presentation="form-field"`
 (`KF-9QHWR1`, used by the saved-view dialog in HS2-E40KC0). The doctor baseline is unchanged and
 the FloatingToolbar parent gap persists, so beta.65 joins the adapter list. `KF-WW33YJ` (Workbench

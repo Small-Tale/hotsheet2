@@ -3,7 +3,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Pane, type PaneConfig, type PaneElement } from '@kerfjs/ui/pane';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import type { WorkbenchPanel, WorkbenchPanelToggle, WorkbenchPanelToolbar } from '@kerfjs/ui/workbench';
+import type { WorkbenchPanelToggle, WorkbenchPanelToolbar, WorkbenchStaticPanel } from '@kerfjs/ui/workbench';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 /**
@@ -44,7 +44,7 @@ export const inspectorToggle = (name = 'ticket inspector'): WorkbenchPanelToggle
 /** The Workbench panel fields a {@link SidebarPanelParts} provides; the shell adds state and sizing. */
 export function workbenchSidebarPanel(
   parts: SidebarPanelParts,
-): Pick<WorkbenchPanel, 'content' | 'toolbar' | 'header' | 'footer' | 'pane'> {
+): Pick<WorkbenchStaticPanel, 'content' | 'toolbar' | 'header' | 'footer' | 'pane'> {
   return {
     content: parts.content,
     toolbar: { ...parts.toolbar, toggle: parts.toggle },

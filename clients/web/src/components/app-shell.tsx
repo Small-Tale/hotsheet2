@@ -5,7 +5,7 @@ import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import type { ResizableRegionContentOverflow, ResizableRegionSeparator } from '@kerfjs/ui/resizable-region';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { Workbench, type WorkbenchPanel } from '@kerfjs/ui/workbench';
+import { Workbench, type WorkbenchStaticPanel } from '@kerfjs/ui/workbench';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { PanelBottomOpen } from 'lucide';
 
@@ -99,7 +99,7 @@ export function AppShell({
   terminalDrawerContentOverflow = 'clip',
 }: AppShellProps) {
   const sidePanelPresentation = mobile ? 'overlay' : 'inline';
-  const leftRail: WorkbenchPanel | undefined =
+  const leftRail: WorkbenchStaticPanel | undefined =
     mode !== 'stats' && sidebar
       ? {
           ...workbenchSidebarPanel(sidebar),
@@ -114,7 +114,7 @@ export function AppShell({
           responsiveOverlayAt: 'never',
         }
       : undefined;
-  const rightRail: WorkbenchPanel | undefined =
+  const rightRail: WorkbenchStaticPanel | undefined =
     mode !== 'stats' && inspector
       ? {
           // Every right-rail surface exposes panel parts (HS2-QQW6CT): the Workbench composes the
@@ -131,7 +131,7 @@ export function AppShell({
           responsiveOverlayAt: 'never',
         }
       : undefined;
-  const bottomDrawer: WorkbenchPanel | undefined =
+  const bottomDrawer: WorkbenchStaticPanel | undefined =
     mode === 'project' && terminalDrawer
       ? {
           content: terminalDrawer,
