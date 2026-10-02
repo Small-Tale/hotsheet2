@@ -8,6 +8,8 @@ import { NoteCard, type NoteCardProps, type NoteKind } from '../components/note-
 import { NoteComposer } from '../components/note-composer';
 import type { InspectorTab } from '../components/ticket-inspector';
 import { TicketReader } from '../components/ticket-reader';
+import { DEMO_ACTIONS } from './demo-actions';
+import { syncSettingsControls } from './settings-controls';
 
 export const NOTE_DEMO_KINDS: readonly NoteKind[] = [
   'regular',
@@ -263,6 +265,15 @@ export type MarkdownEditorInsetDemo = 'padded' | 'flush';
 export const markdownAppearance = signal<MarkdownEditorAppearanceDemo>('standalone');
 export const markdownInset = signal<MarkdownEditorInsetDemo>('padded');
 
+/** Restore the MarkdownEditor demo's default variants in both state and the live settings controls (HS2-QBR5HC). */
+export function resetMarkdownEditorDemo(root: ParentNode): void {
+  markdownAppearance.value = 'standalone';
+  markdownInset.value = 'padded';
+  syncSettingsControls(root, 'markdown-editor', {
+    values: { 'markdown-appearance': 'standalone', 'markdown-inset': 'padded' },
+  });
+}
+
 /** The MarkdownEditor's public appearance and inset variants (HS2-MGVE50). */
 export function MarkdownEditorSettings() {
   return (
@@ -285,6 +296,9 @@ export function MarkdownEditorSettings() {
           { value: 'flush', label: 'Flush (host owns the inset)' },
         ]}
       />
+      <wa-button type="button" {...DEMO_ACTIONS.resetSettings.attrs}>
+        Reset
+      </wa-button>
     </form>
   );
 }

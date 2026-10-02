@@ -192,6 +192,7 @@ import {
   readerLargeText,
   readerNotes,
   readerTab,
+  resetMarkdownEditorDemo,
   TicketReaderDemo,
 } from './content-components-demo';
 import {
@@ -1195,6 +1196,7 @@ function DemoApp() {
     selected.id === 'ai-conversation' ||
     selected.id === 'quick-ticket-composer' ||
     selected.id === 'ticket-inspector' ||
+    selected.id === 'markdown-editor' ||
     selected.id === 'command-run-dialog';
   const shellClass = ['demo-shell', settingsOpen.value ? 'demo-shell--settings-open' : ''].filter(Boolean).join(' '),
     modified = demoModified.value[selected.id];
@@ -2259,6 +2261,7 @@ demoListeners.add(
     if (selectedId.value === 'connection-details-dialog') resetConnectionDetailsDemo(root);
     if (selectedId.value === 'permission-request') resetPermissionRequestDemo(root);
     if (selectedId.value === 'command-run-dialog') resetCommandRunDialogDemo(root);
+    if (selectedId.value === 'markdown-editor') resetMarkdownEditorDemo(root);
   }),
 );
 const openAIConversationDemo = () => {

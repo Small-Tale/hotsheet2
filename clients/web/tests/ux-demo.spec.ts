@@ -2309,6 +2309,68 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(editor).toHaveAttribute('data-expanded', 'false');
 });
 
+test('switches the MarkdownEditor demo appearance and inset, then resets them (HS2-QBR5HC)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=markdown-editor&dev-review=false');
+    const editor = page.locator('[data-component="markdown-editor"]'),
+      settings = page.locator('[data-settings="markdown-editor"]'),
+      appearance = settings.locator('[name="markdown-appearance"]'),
+      inset = settings.locator('[name="markdown-inset"]'),
+      preview = editor.locator('.markdown-editor__preview'),
+      choose = (control: typeof appearance, value: string) =>
+        control.evaluate((node: HTMLElement & { value: string }, next) => {
+          node.value = next;
+          node.dispatchEvent(new Event('change', { bubbles: true }));
+        }, value);
+    await expect(editor).toHaveAttribute('data-appearance', 'standalone');
+    await expect(editor).toHaveAttribute('data-inset', 'padded');
+    await expect(editor.locator('.markdown-editor__toolbar')).toBeVisible();
+
+    // The Settings button is reachable, and the live controls start at the defaults.
+    await page.locator('[data-action="toggle-settings"]').click();
+    await expect(appearance).toHaveJSProperty('value', 'standalone');
+    await expect(inset).toHaveJSProperty('value', 'padded');
+
+    // Control -> render: embedded drops the frame and the toolbar label; flush drops the preview inset.
+    await choose(appearance, 'embedded');
+    await expect(editor).toHaveAttribute('data-appearance', 'embedded');
+    await expect(editor).toHaveClass(/markdown-editor--embedded/);
+    await expect(editor).toHaveCSS('border-top-width', '0px');
+    await expect(editor.locator('.markdown-editor__surface')).toHaveCSS('padding-top', '0px');
+    await expect(preview).toHaveCSS('padding-top', '12px');
+    await choose(inset, 'flush');
+    await expect(editor).toHaveAttribute('data-inset', 'flush');
+    await expect(editor).toHaveClass(/markdown-editor--flush/);
+    await expect(preview).toHaveCSS('padding-top', '0px');
+    await expect(preview).toHaveCSS('padding-left', '0px');
+    await page.screenshot({ path: `/private/tmp/claude/hs2-qbr5hc-embedded-flush-${width}.png` });
+    // Closing and reopening the settings keeps the live controls on the chosen variants.
+    await page.locator('.settings-inspector [data-action="toggle-settings"]').click();
+    await editor.screenshot({ path: `/private/tmp/claude/hs2-qbr5hc-embedded-flush-editor-${width}.png` });
+    await page.locator('[data-action="toggle-settings"]').click();
+    await expect(appearance).toHaveJSProperty('value', 'embedded');
+    await expect(inset).toHaveJSProperty('value', 'flush');
+
+    // Reset -> state, render, and the live controls all return to the defaults.
+    await settings.locator('[data-action="reset-settings"]').click();
+    await expect(editor).toHaveAttribute('data-appearance', 'standalone');
+    await expect(editor).toHaveAttribute('data-inset', 'padded');
+    await expect(editor).not.toHaveClass(/markdown-editor--(embedded|flush)/);
+    await expect(editor.locator('.markdown-editor__surface')).toHaveCSS('padding-top', '16px');
+    await expect(editor).not.toHaveCSS('border-top-width', '0px');
+    await expect(appearance).toHaveJSProperty('value', 'standalone');
+    await expect(inset).toHaveJSProperty('value', 'padded');
+    await page.screenshot({ path: `/private/tmp/claude/hs2-qbr5hc-standalone-padded-${width}.png` });
+
+    // Another edit after reset still drives the render, with the reset padded inset kept.
+    await choose(appearance, 'embedded');
+    await expect(editor).toHaveAttribute('data-appearance', 'embedded');
+    await expect(editor).toHaveAttribute('data-inset', 'padded');
+    await expect(preview).toHaveCSS('padding-top', '12px');
+  }
+});
+
 test('lets the TicketReader native dialog complete dismissal before leaving the demo', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-H892P1' });

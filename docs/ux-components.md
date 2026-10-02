@@ -1265,7 +1265,8 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   Save/Cancel actions. Internal editor controls preserve editing; external blur flushes.
   The embedded appearance reuses the same behavior in inspector and reader without a
   redundant standalone toolbar or save-status footer; `inset="flush"` (demoed beside
-  `appearance` in the UX demo settings) drops the preview/source padding when the host surface
+  `appearance` in the UX demo settings, which open from the demo's Settings button and
+  reset to standalone/padded, HS2-QBR5HC) drops the preview/source padding when the host surface
   owns the inset, as the inspector Details surface does (HS2-MGVE50); the real inspector persists edits
   through its checkout. Live ticket refresh is field-aware: unrelated changes merge into
   the inspector while the draft remains mounted, remote-only changes to an untouched
