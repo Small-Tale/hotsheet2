@@ -144,7 +144,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
           {error}
         </p>
       )}
-      <p>
+      <p class="ticket-provider-settings__footnote">
         Sources belong to this project; other projects never see them. GitHub, GitLab, and Jira sign-ins are shared by
         every project on this computer under{' '}
         <button
@@ -267,7 +267,9 @@ export function AccountsSettings({ accounts, error = '', signingOut }: AccountsS
           {error}
         </p>
       )}
-      <p>Credentials stay in the operating system keychain; Hot Sheet stores only their names.</p>
+      <p class="ticket-provider-settings__footnote">
+        Credentials stay in the operating system keychain; Hot Sheet stores only their names.
+      </p>
     </div>
   );
 }

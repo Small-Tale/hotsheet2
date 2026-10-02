@@ -6773,6 +6773,22 @@ test('renders project-owned ticket sources and machine-wide accounts at wide and
       ),
     ).toBe('pointer');
     await expect(page.locator('[data-component="accounts-settings"]').nth(1)).toContainText('No accounts yet.');
+    // The load-error alert keeps the danger color; only footnotes are quiet (HS2-JCPM76).
+    const errored = page.locator('[data-component="accounts-settings"]').nth(1),
+      alertColor = await errored.getByRole('alert').evaluate((node) => getComputedStyle(node).color),
+      footnoteColor = await errored
+        .locator('.ticket-provider-settings__footnote')
+        .evaluate((node) => getComputedStyle(node).color),
+      dangerColor = await errored.evaluate((node) => {
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--wa-color-danger-on-quiet)';
+        node.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      });
+    expect(alertColor).toBe(dangerColor);
+    expect(alertColor).not.toBe(footnoteColor);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.screenshot({ path: test.info().outputPath(`accounts-${width}.png`), fullPage: true });
   }

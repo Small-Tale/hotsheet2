@@ -7,7 +7,7 @@
 }
 .ticket-provider-settings__intro,
 .ticket-provider-settings__empty,
-.ticket-provider-settings > p {
+.ticket-provider-settings__footnote {
   color: var(--wa-color-neutral-on-quiet);
 }
 .ticket-provider-settings__header {
