@@ -489,6 +489,56 @@ body[data-resizing-project-sidebar='true'] {
   margin: auto;
   gap: remify(12px);
 }
+.note-card-demo__caption {
+  margin: remify(8px) 0 0;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: var(--wa-font-weight-semibold);
+}
+/* Stage grid for the MarkdownPreview and AIContentLabel variant galleries. The surfaces are demo-owned
+   containers that supply the color context the inherit/inverse tones are designed for. */
+.markdown-preview-demo {
+  display: grid;
+  width: min(remify(960px), 100%);
+  margin: auto;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, remify(280px)), 1fr));
+  align-items: start;
+  gap: remify(16px);
+}
+.markdown-preview-demo__variant {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  gap: remify(8px);
+}
+.markdown-preview-demo__variant > figcaption {
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: var(--wa-font-weight-semibold);
+}
+.markdown-preview-demo__surface {
+  min-width: 0;
+  padding: remify(12px);
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: remify(12px);
+  background: var(--wa-color-surface-default);
+}
+.markdown-preview-demo__surface[data-surface='muted'] {
+  color: var(--wa-color-neutral-on-quiet);
+  background: var(--wa-color-neutral-fill-quiet);
+  font-size: var(--wa-font-size-xs);
+  line-height: 1.5;
+}
+.markdown-preview-demo__surface[data-surface='accent'] {
+  border-color: transparent;
+  color: var(--wa-color-neutral-on-loud);
+  background: var(--wa-color-brand-fill-loud);
+}
+.markdown-preview-demo__surface[data-surface='heading'] {
+  color: var(--wa-color-text-normal);
+  font-size: var(--wa-font-size-xs);
+  font-weight: 700;
+}
 .ticket-reader-demo,
 .markdown-editor-demo {
   display: grid;

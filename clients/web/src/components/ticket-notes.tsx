@@ -68,6 +68,7 @@ export function TicketNotes({
           {notes.map((note) => (
             <NoteCard
               {...note}
+              density="compact"
               editable={canEdit}
               deletable={canDelete}
               editing={note.id === editingNoteId}

@@ -142,3 +142,35 @@
   color: var(--wa-color-neutral-on-quiet);
   font-style: italic;
 }
+/* Presentation variants. Consumers select these through MarkdownPreview props instead of restyling the
+   preview from their own stylesheets (HS2-7RY5GK). */
+.markdown-preview[data-tone='inherit'],
+.markdown-preview[data-tone='inverse'] {
+  color: inherit;
+}
+.markdown-preview[data-tone='inverse'] a {
+  color: inherit;
+  text-decoration-color: currentcolor;
+}
+.markdown-preview[data-size='small'] {
+  font-size: var(--wa-font-size-xs);
+  line-height: 1.4;
+}
+.markdown-preview[data-size='inherit'] {
+  font: inherit;
+}
+.markdown-preview[data-density='compact'] :is(p, ul, ol, blockquote, pre, table) {
+  margin-block: var(--kui-space-2xs);
+}
+.markdown-preview[data-density='flush'] :is(p, ul, ol, blockquote, pre, table) {
+  margin-block: 0;
+}
+.markdown-preview[data-media='thumbnail'] .markdown-preview__attachment-image {
+  width: min(100%, remify(192px));
+  max-height: remify(112px);
+}
+.markdown-preview[data-media='thumbnail'] .markdown-preview__attachment-image img {
+  width: 100%;
+  max-height: remify(112px);
+  object-fit: cover;
+}

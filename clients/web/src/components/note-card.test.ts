@@ -264,6 +264,30 @@ describe('NoteCard', () => {
     );
   });
 
+  it('selects the compact list inset through the density prop and picks Markdown variants itself', () => {
+    const base = { id: 'n', author: 'A', time: 'now', body: 'Body' };
+    expect(String(NoteCard({ ...base, kind: 'regular' }))).not.toContain('data-density');
+    const compact = String(NoteCard({ ...base, kind: 'activity', density: 'compact' }));
+    expect(compact).toContain('data-kind="activity" data-density="compact"');
+    expect(compact).toContain('data-component="markdown-preview" data-size="inherit"');
+    const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    // The compact rule follows the activity rule so one inset covers every kind (HS2-7RY5GK).
+    expect(css.indexOf("[data-density='compact']")).toBeGreaterThan(css.indexOf(".note-card[data-kind='activity'] {"));
+    expect(css).toMatchSource(
+      /\.note-card\[data-density='compact'\] \{ padding: remify\(11\.2px\) remify\(8px\); border-radius: remify\(9\.6px\)/,
+    );
+    expect(css).not.toContain('.markdown-preview');
+    const choices = String(
+      NoteCard({
+        ...base,
+        kind: 'feedback_needed',
+        readerMode: true,
+        body: 'Pick one\n\nCHOICE:\n- First\n- Second',
+      }),
+    );
+    expect(choices).toContain('data-size="inherit" data-media="thumbnail"');
+  });
+
   it('keeps AI attribution, limitations, and feedback in the note accessible name', () => {
     const markup = String(
       NoteCard({

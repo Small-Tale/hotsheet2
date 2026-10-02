@@ -1083,6 +1083,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     configured Git diff tool. Its shared sidebar/reader/repository presentation uses 16px
     between major review regions, 8px within cards and rows, and 4px for connected
     metadata/icon clusters while retaining explicit graph/control geometry (HS2-4Y6SM9).
+    The A/B side toggle is a Kerf `ToolbarControlGroup` with `selectedChrome="filled"`
+    and real `aria-pressed` values, and commit bodies use the inherited-tone, small,
+    compact `MarkdownPreview` variants; the review stylesheet styles no other component
+    (HS2-7RY5GK).
   - `TicketAttachments` — **demo built**: attachment rows with a subtle count badge beside
     the aligned section heading, plus native browse and drop entry points; no redundant
     total line is rendered below the collection.
@@ -1163,6 +1167,13 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   relationships use 4px or 8px.
   Ticket-aware note previews additionally resolve local and cross-ticket attachment
   references, inline supported images, and expose host-native actions.
+  Consumers choose presentation through props rather than restyling `.markdown-preview`
+  (HS2-7RY5GK): `tone` (`default`; `inherit` takes the container color but keeps link
+  color; `inverse` carries the container color into links, for loud fills), `size`
+  (`default`; `small` is the 12px/1.4 secondary scale; `inherit` takes the container
+  font), `density` (`default` 16px block rhythm; `compact` 4px; `flush` 0), and `media`
+  (`full`; `thumbnail` crops attachment images into a 192 x 112px box). The
+  `MarkdownPreview` UX demo shows every variant on the surface it is designed for.
 - `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard
   to edit non-empty content, single-click to add empty content, persistent controlled
   draft, full-surface vertically resizable embedded details with padded text and an
@@ -1284,6 +1295,9 @@ icons; structural separators do not require icons.
   an optional banded AI completion `ConfidenceBadge` (all four rubric bands shown in the
   demo; HS2-DWTJ43),
   contained long-token wrapping, and note identity;
+  `density="compact"` selects the tighter 11.2px/8px inset and 9.6px radius used for every
+  kind in the TicketNotes list, while the default `comfortable` density keeps the canonical
+  card inset; the demo shows both (HS2-7RY5GK);
   double-click enters a controlled editor whose Save persists and Cancel restores.
   In reader mode, regular/status notes remain directly editable, while feedback-needed
   and feedback-draft notes always render their Respond/Submit editor style. An uppercase
@@ -1303,6 +1317,9 @@ icons; structural separators do not require icons.
   name. Its optional thumbs feedback uses consequence language and is only exposed by
   production compositions that have a selected ticket where feedback can be persisted
   as an ordinary note; it is never a browser-only rating counter.
+  `tone="inherit"` takes the surrounding heading color (the AIConversation message
+  header) instead of the default quiet secondary color; the `AIContentLabel` UX demo
+  shows both tones with and without feedback (HS2-7RY5GK).
 - `RegularNote`
 - `StatusNote`
 - `FeedbackNeededNote`

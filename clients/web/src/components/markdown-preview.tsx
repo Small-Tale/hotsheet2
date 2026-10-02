@@ -94,18 +94,49 @@ export function renderMarkdown(source: string, attachmentContext?: AttachmentRef
   return linkTicketReferences(marked.parse(expandAttachmentReferences(source, attachmentContext), { async: false }));
 }
 
+/** Text color: the reading color, the container's color, or the container's color for links too. */
+export type MarkdownPreviewTone = 'default' | 'inherit' | 'inverse';
+/** Type scale: the reading size, a small secondary size, or the container's font. */
+export type MarkdownPreviewSize = 'default' | 'small' | 'inherit';
+/** Spacing between block elements: reading rhythm, a tight rhythm, or none. */
+export type MarkdownPreviewDensity = 'default' | 'compact' | 'flush';
+/** Attachment image presentation: full width or a fixed, cropped thumbnail. */
+export type MarkdownPreviewMedia = 'full' | 'thumbnail';
+
+export interface MarkdownPreviewProps {
+  source: string;
+  emptyLabel?: string;
+  attachmentContext?: AttachmentReferenceContext;
+  /** `inverse` keeps text and links in the container's color (for example on a brand fill). */
+  tone?: MarkdownPreviewTone;
+  size?: MarkdownPreviewSize;
+  density?: MarkdownPreviewDensity;
+  media?: MarkdownPreviewMedia;
+}
+
+/**
+ * Sanitized Markdown rendering. Consumers choose presentation through `tone`, `size`, `density`,
+ * and `media` rather than restyling `.markdown-preview` from their own stylesheets.
+ */
 export function MarkdownPreview({
   source,
   emptyLabel = 'Nothing to preview.',
   attachmentContext,
-}: {
-  source: string;
-  emptyLabel?: string;
-  attachmentContext?: AttachmentReferenceContext;
-}) {
+  tone = 'default',
+  size = 'default',
+  density = 'default',
+  media = 'full',
+}: MarkdownPreviewProps) {
+  const presentation = {
+    'data-component': 'markdown-preview',
+    'data-tone': tone === 'default' ? undefined : tone,
+    'data-size': size === 'default' ? undefined : size,
+    'data-density': density === 'default' ? undefined : density,
+    'data-media': media === 'full' ? undefined : media,
+  };
   if (!source.trim())
     return (
-      <div class="markdown-preview markdown-preview--empty" data-component="markdown-preview">
+      <div class="markdown-preview markdown-preview--empty" {...presentation}>
         {emptyLabel}
       </div>
     );
@@ -113,7 +144,7 @@ export function MarkdownPreview({
   // rendering boundary, so the dynamic value is already sanitized (documented at renderMarkdown).
   const rendered = renderMarkdown(source, attachmentContext);
   return (
-    <div class="markdown-preview" data-component="markdown-preview">
+    <div class="markdown-preview" {...presentation}>
       {/* eslint-disable-next-line kerfjs/no-raw-with-dynamic-arg -- sanitized upstream by renderMarkdown */}
       {raw(rendered)}
     </div>

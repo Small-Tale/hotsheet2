@@ -76,6 +76,7 @@ describe('UX demo catalog', () => {
       'tag-chip',
       'ticket-reader',
       'markdown-editor',
+      'markdown-preview',
       'attachment-gallery',
       'ticket-close-dialog',
       'not-working-dialog',
@@ -89,6 +90,7 @@ describe('UX demo catalog', () => {
       'note-composer',
       'note-card',
       'ai-conversation',
+      'ai-content-label',
       'ai-tool-settings',
       'manual-model-dialog',
       'permission-request',
@@ -309,7 +311,6 @@ describe('UX demo catalog', () => {
     const EXEMPT: Record<string, string> = {
       'active-claim':
         'Live-claim spinner, ETA, and header notice rendered within TicketRow and TicketInspector (both demo every claim state).',
-      'ai-content-label': 'Inline AI attribution label rendered within AIConversation / NoteCard (both demoed).',
       'app-error': 'Transient top-level error banner, not a standalone catalog surface.',
       'main-shell': 'Typed application configuration boundary around the cataloged AppShell.',
       'sidebar-panel': 'Panel-parts contract and standalone Pane wrapper behind the cataloged sidebars and AppShell.',
@@ -318,7 +319,6 @@ describe('UX demo catalog', () => {
       'corrupt-ticket-row': 'Parse-error row variant rendered within TicketList (demoed).',
       'flow-back-button': 'Shared back affordance rendered inside multi-step dialogs/flows.',
       'lucide-icon-picker': 'Icon-picker sub-control of CommandSettingsEditor (demoed).',
-      'markdown-preview': 'Markdown rendering helpers used by MarkdownEditor and NoteCard (demoed).',
       'project-restore-error': 'Project-restore failure state rendered within AppShell (demoed).',
       'project-tab-context-menu': 'Context menu for ProjectTabBar (demoed via ProjectTabBar).',
       'provider-icon': 'Provider glyph helper shown within ListItem and provider rows (demoed).',

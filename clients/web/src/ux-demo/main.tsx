@@ -154,6 +154,7 @@ import {
   resetConnectionDetailsDemo,
 } from './connection-details-demo';
 import {
+  AIContentLabelDemo,
   editingNoteId,
   inspectorBlockedReason,
   inspectorBlockedReasonDraft,
@@ -162,6 +163,7 @@ import {
   markdownEvent,
   markdownExpanded,
   markdownMode,
+  MarkdownPreviewDemo,
   markdownSavedValue,
   markdownValue,
   NoteCardDemo,
@@ -1150,6 +1152,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'note-composer') return <NoteComposerDemo />;
   if (item.id === 'ticket-reader') return <TicketReaderDemo />;
   if (item.id === 'markdown-editor') return <MarkdownEditorDemo />;
+  if (item.id === 'markdown-preview') return <MarkdownPreviewDemo />;
+  if (item.id === 'ai-content-label') return <AIContentLabelDemo />;
   if (item.id === 'not-working-dialog') return <NotWorkingDialogDemo />;
   if (item.id === 'pending-attachment-picker') return <PendingAttachmentPickerDemo />;
   if (item.id === 'permission-request') return <PermissionRequestDemo />;

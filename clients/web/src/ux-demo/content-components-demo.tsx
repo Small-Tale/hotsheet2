@@ -1,6 +1,8 @@
 import { signal } from 'kerfjs';
 
+import { AIContentLabel } from '../components/ai-content-label';
 import { MarkdownEditor, type MarkdownEditorMode } from '../components/markdown-editor';
+import { MarkdownPreview, type MarkdownPreviewProps } from '../components/markdown-preview';
 import { NoteCard, type NoteCardProps, type NoteKind } from '../components/note-card';
 import { NoteComposer } from '../components/note-composer';
 import type { InspectorTab } from '../components/ticket-inspector';
@@ -95,6 +97,13 @@ export function NoteCardDemo() {
           draft={editingNoteId.value === note.id ? noteDraft.value : undefined}
         />
       ))}
+      <p class="note-card-demo__caption">density="compact" — the TicketNotes list inset</p>
+      {noteDemoNotes.value
+        .filter((note) => note.kind === 'regular' || note.kind === 'activity')
+        .slice(0, 2)
+        .map((note) => (
+          <NoteCard {...note} id={`compact-${note.id}`} density="compact" editable={false} deletable={false} />
+        ))}
     </section>
   );
 }
@@ -260,6 +269,80 @@ export function MarkdownEditorDemo() {
       <p class="component-stage__event" aria-live="polite">
         {markdownEvent.value}
       </p>
+    </section>
+  );
+}
+
+const PREVIEW_DEMO_SOURCE =
+  'The **shared row** keeps metadata readable. See the [component notes](/ux-demo?component=note-card).\n\n- Block rhythm follows the density.\n- Inline `code` keeps its chip.';
+// The fragment carries the attachment path, so the preview renders its attachment-image button while
+// the demo still loads a real public asset.
+const PREVIEW_DEMO_IMAGE =
+  '![Wide layout](/ux-gallery-preview.svg#/tickets/HS2-DEMO/attachments/by-name/wide-layout.svg)';
+
+interface PreviewVariant {
+  label: string;
+  surface?: 'muted' | 'accent';
+  source?: string;
+  props: Partial<Pick<MarkdownPreviewProps, 'tone' | 'size' | 'density' | 'media'>>;
+}
+
+/** Every public MarkdownPreview presentation variant, each on the surface it is designed for. */
+export const PREVIEW_VARIANTS: readonly PreviewVariant[] = [
+  { label: 'Default', props: {} },
+  { label: 'tone="inherit" (muted container)', surface: 'muted', props: { tone: 'inherit' } },
+  { label: 'tone="inverse" (brand fill)', surface: 'accent', props: { tone: 'inverse' } },
+  { label: 'size="small"', props: { size: 'small' } },
+  { label: 'size="inherit"', surface: 'muted', props: { size: 'inherit' } },
+  { label: 'density="compact"', props: { density: 'compact' } },
+  { label: 'density="flush"', props: { density: 'flush' } },
+  { label: 'media="full"', source: PREVIEW_DEMO_IMAGE, props: {} },
+  { label: 'media="thumbnail"', source: PREVIEW_DEMO_IMAGE, props: { media: 'thumbnail' } },
+  { label: 'Empty', source: '', props: {} },
+];
+
+export function MarkdownPreviewDemo() {
+  return (
+    <section class="markdown-preview-demo" aria-label="MarkdownPreview demo">
+      {PREVIEW_VARIANTS.map((variant) => (
+        <figure class="markdown-preview-demo__variant">
+          <figcaption>{variant.label}</figcaption>
+          <div class="markdown-preview-demo__surface" data-surface={variant.surface}>
+            <MarkdownPreview source={variant.source ?? PREVIEW_DEMO_SOURCE} {...variant.props} />
+          </div>
+        </figure>
+      ))}
+    </section>
+  );
+}
+
+export function AIContentLabelDemo() {
+  return (
+    <section class="markdown-preview-demo" aria-label="AIContentLabel demo">
+      <figure class="markdown-preview-demo__variant">
+        <figcaption>Default (quiet)</figcaption>
+        <div class="markdown-preview-demo__surface">
+          <AIContentLabel tool="Claude" />
+        </div>
+      </figure>
+      <figure class="markdown-preview-demo__variant">
+        <figcaption>mayContainErrors</figcaption>
+        <div class="markdown-preview-demo__surface">
+          <AIContentLabel mayContainErrors />
+        </div>
+      </figure>
+      <figure class="markdown-preview-demo__variant">
+        <figcaption>With feedback</figcaption>
+        <div class="markdown-preview-demo__surface">
+          <AIContentLabel tool="Codex" feedbackTarget="demo:label" />
+        </div>
+      </figure>
+      <figure class="markdown-preview-demo__variant">
+        <figcaption>tone="inherit" (heading color)</figcaption>
+        <div class="markdown-preview-demo__surface" data-surface="heading">
+          <AIContentLabel tool="Codex" tone="inherit" feedbackTarget="demo:inherit" />
+        </div>
+      </figure>
     </section>
   );
 }

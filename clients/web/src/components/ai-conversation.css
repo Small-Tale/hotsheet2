@@ -230,13 +230,6 @@
   color: var(--wa-color-neutral-on-loud);
   background: var(--wa-color-brand-fill-loud);
 }
-.ai-conversation__message--user > .markdown-preview,
-.ai-conversation__message--user > .markdown-preview :is(p, ul, ol, li, strong, em, a) {
-  color: var(--wa-color-neutral-on-loud);
-}
-.ai-conversation__message--user > .markdown-preview a {
-  text-decoration-color: currentcolor;
-}
 .ai-conversation__message--user .ai-conversation__usage {
   color: color-mix(in srgb, var(--wa-color-neutral-on-loud) 78%, transparent);
 }
@@ -244,17 +237,6 @@
   display: block;
   margin-bottom: remify(3.2px);
   font-size: var(--wa-font-size-xs);
-}
-.ai-conversation__message > strong .ai-content-label {
-  color: inherit;
-}
-.ai-conversation__message > .markdown-preview {
-  min-width: 0;
-  max-width: 100%;
-  color: inherit;
-}
-.ai-conversation__message > .markdown-preview :is(p, ul, ol, blockquote, pre, table) {
-  margin-block: var(--wa-space-2xs);
 }
 .ai-conversation__message > p {
   margin: 0;
@@ -363,18 +345,8 @@
   align-items: start;
   gap: remify(7.2px);
 }
-.ai-conversation__activity li > .markdown-preview {
-  min-width: 0;
-  max-width: 100%;
-}
-.ai-conversation__activity li > .markdown-preview :is(p, ul, ol, blockquote, pre, table) {
-  margin-block: 0;
-}
-.ai-conversation__activity li > .markdown-preview code {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-.ai-conversation__activity li > .ai-content-label__feedback {
+.ai-conversation__activity-feedback {
+  display: flex;
   margin-top: remify(-3.2px);
 }
 .ai-conversation__progress {

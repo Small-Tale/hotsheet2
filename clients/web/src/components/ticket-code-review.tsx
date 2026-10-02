@@ -128,13 +128,13 @@ export function TicketCodeReview({
                 <div class="ticket-code-review__compare-toolbar">
                   <Toolbar
                     leading={
-                      <ToolbarControlGroup label="Comparison side" size="compact">
+                      <ToolbarControlGroup label="Comparison side" size="compact" selectedChrome="filled">
                         <button
                           type="button"
                           {...REPOSITORY_ACTIONS.setRepositoryComparisonSide.attrs}
                           data-comparison-side="a"
                           data-selected={String(comparison.side === 'a')}
-                          aria-pressed={comparison.side === 'a'}
+                          aria-pressed={String(comparison.side === 'a')}
                         >
                           A
                         </button>
@@ -143,7 +143,7 @@ export function TicketCodeReview({
                           {...REPOSITORY_ACTIONS.setRepositoryComparisonSide.attrs}
                           data-comparison-side="b"
                           data-selected={String(comparison.side === 'b')}
-                          aria-pressed={comparison.side === 'b'}
+                          aria-pressed={String(comparison.side === 'b')}
                         >
                           B
                         </button>
@@ -221,7 +221,12 @@ export function TicketCodeReview({
                       {commitRefs(commit.refs)}
                       {body && (
                         <div class="ticket-code-review__commit-body">
-                          <MarkdownPreview source={expanded ? body : commitBodyPreview(body)} />
+                          <MarkdownPreview
+                            source={expanded ? body : commitBodyPreview(body)}
+                            tone="inherit"
+                            size="small"
+                            density="compact"
+                          />
                         </div>
                       )}
                       <span>

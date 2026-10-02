@@ -2065,7 +2065,14 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=note-card');
   const notes = page.locator('[data-component="note-card"]');
-  await expect(notes).toHaveCount(7);
+  // Seven comfortable cards plus the compact-density pair that TicketNotes uses (HS2-7RY5GK).
+  await expect(notes).toHaveCount(9);
+  for (const id of ['compact-regular', 'compact-activity']) {
+    const compact = page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
+    await expect(compact).toHaveAttribute('data-density', 'compact');
+    await expect(compact).toHaveCSS('padding', '11.2px 8px');
+    await expect(compact).toHaveCSS('border-radius', '9.6px');
+  }
   const noteById = (id: string) => page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
   for (const [id, kind, icon] of [
     ['regular', 'regular', 'message-square-text'],
@@ -2246,6 +2253,61 @@ test('lets the TicketReader native dialog complete dismissal before leaving the 
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-info-panel');
   await expect(reader).toHaveCount(0);
+});
+
+test('exposes every MarkdownPreview and AIContentLabel presentation variant', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=markdown-preview&dev-review=false');
+    const variant = (label: string) =>
+      page
+        .locator('.markdown-preview-demo__variant')
+        .filter({ has: page.locator('figcaption', { hasText: label }) })
+        .locator('[data-component="markdown-preview"]');
+    await expect(page.locator('.markdown-preview-demo [data-component="markdown-preview"]')).toHaveCount(10);
+    const style = (label: string, selector: string, property: string) =>
+      variant(label)
+        .locator(selector)
+        .first()
+        .evaluate((node, name) => getComputedStyle(node).getPropertyValue(name), property);
+    const surfaceColor = (label: string) =>
+      variant(label).evaluate((node) => getComputedStyle(node.parentElement!).color);
+    // Tone: inherit takes the container color but keeps links; inverse carries the container color into links.
+    expect(await style('tone="inherit"', ':scope', 'color')).toBe(await surfaceColor('tone="inherit"'));
+    expect(await style('tone="inherit"', 'a', 'color')).not.toBe(await surfaceColor('tone="inherit"'));
+    expect(await style('tone="inverse"', 'a', 'color')).toBe(await surfaceColor('tone="inverse"'));
+    expect(await style('tone="inverse"', 'a', 'text-decoration-color')).toBe(await surfaceColor('tone="inverse"'));
+    // Size: small is the 12px secondary scale; inherit takes the container font.
+    expect(await style('size="small"', ':scope', 'font-size')).toBe('12px');
+    expect(await style('size="inherit"', ':scope', 'font-size')).toBe(
+      await variant('size="inherit"').evaluate((node) => getComputedStyle(node.parentElement!).fontSize),
+    );
+    // Density: block rhythm is 16px by default, 4px compact, 0 flush.
+    expect(await style('Default', 'ul', 'margin-top')).toBe('16px');
+    expect(await style('density="compact"', 'ul', 'margin-top')).toBe('4px');
+    expect(await style('density="flush"', 'ul', 'margin-top')).toBe('0px');
+    // Media: the thumbnail crops attachment images into a bounded box.
+    const thumbnail = await variant('media="thumbnail"').locator('.markdown-preview__attachment-image').boundingBox(),
+      full = await variant('media="full"').locator('.markdown-preview__attachment-image').boundingBox();
+    expect(thumbnail!.width).toBeLessThanOrEqual(192);
+    expect(thumbnail!.height).toBeLessThanOrEqual(112);
+    expect(full!.width).toBeGreaterThan(thumbnail!.width);
+    await expect(
+      page.locator('.markdown-preview-demo [data-component="markdown-preview"].markdown-preview--empty'),
+    ).toHaveText('Nothing to preview.');
+  }
+  await page.goto('/ux-demo?component=ai-content-label&dev-review=false');
+  const labels = page.locator('[data-component="ai-content-label"]');
+  await expect(labels).toHaveCount(4);
+  const inherit = page.locator('[data-component="ai-content-label"][data-tone="inherit"]');
+  expect(await inherit.evaluate((node) => getComputedStyle(node).color)).toBe(
+    await inherit.evaluate((node) => getComputedStyle(node.parentElement!).color),
+  );
+  expect(await labels.first().evaluate((node) => getComputedStyle(node).color)).not.toBe(
+    await inherit.evaluate((node) => getComputedStyle(node).color),
+  );
+  await expect(labels.nth(1)).toHaveAccessibleName('AI-generated; may contain errors');
+  await expect(labels.nth(2).getByRole('button', { name: /Helpful/ })).toBeVisible();
 });
 
 test('keeps feedback Markdown list spacing compact', async ({ page }) => {

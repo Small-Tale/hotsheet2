@@ -385,6 +385,13 @@ export const demoCatalog: DemoCategory[] = [
           ),
           demo('markdown-editor', 'MarkdownEditor', 'Inline and expanded Markdown editing.', 'feature-floor', true),
           demo(
+            'markdown-preview',
+            'MarkdownPreview',
+            'Sanitized Markdown rendering with tone, size, density, and attachment-media presentation variants.',
+            'feature-floor',
+            true,
+          ),
+          demo(
             'attachment-gallery',
             'AttachmentGallery',
             'Always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme.',
@@ -498,6 +505,13 @@ export const demoCatalog: DemoCategory[] = [
         'feature-floor',
         true,
         ['permission-request', 'drive-control'],
+      ),
+      demo(
+        'ai-content-label',
+        'AIContentLabel',
+        'Persistent AI attribution with the limitations cue, optional feedback, and quiet or inherited tone.',
+        'feature-floor',
+        true,
       ),
       demo(
         'ai-tool-settings',

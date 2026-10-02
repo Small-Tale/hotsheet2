@@ -36,6 +36,8 @@ export interface NoteCardProps {
   aiMayContainErrors?: boolean;
   /** AI completion confidence (0-100) recorded on this note; absent for unscored notes. */
   confidence?: number;
+  /** `comfortable` (default) uses the canonical card inset; `compact` the tighter list inset. */
+  density?: 'comfortable' | 'compact';
 }
 
 const presentations = {
@@ -150,7 +152,12 @@ export function FeedbackPrompt({
                   <LucideIcon icon={Check} name="check" />
                 </span>
                 <span>
-                  <MarkdownPreview source={choice.markdown} attachmentContext={attachmentContext} />
+                  <MarkdownPreview
+                    source={choice.markdown}
+                    attachmentContext={attachmentContext}
+                    size="inherit"
+                    media="thumbnail"
+                  />
                 </span>
               </div>
             ))}
@@ -196,6 +203,7 @@ export function NoteCard({
   aiTool,
   aiMayContainErrors = kind === 'activity',
   confidence,
+  density = 'comfortable',
 }: NoteCardProps) {
   const presentation = presentations[kind];
   const feedbackEditor = readerMode && (kind === 'feedback_needed' || kind === 'feedback_draft');
@@ -220,6 +228,7 @@ export function NoteCard({
       data-component="note-card"
       data-note-id={id}
       data-kind={kind}
+      data-density={density === 'compact' ? 'compact' : undefined}
       data-confidence={confidence !== undefined ? String(confidence) : undefined}
       data-ai-authored={aiAuthored ? 'true' : undefined}
       aria-label={
@@ -306,7 +315,7 @@ export function NoteCard({
         </div>
       ) : (
         <div class="note-card__body" {...editAttributes}>
-          <MarkdownPreview source={body} attachmentContext={attachmentContext} />
+          <MarkdownPreview source={body} attachmentContext={attachmentContext} size="inherit" />
         </div>
       )}
       {respondToFeedback && !readerMode && (

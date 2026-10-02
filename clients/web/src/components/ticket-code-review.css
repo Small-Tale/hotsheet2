@@ -116,10 +116,6 @@
   min-width: remify(96px);
   justify-self: start;
 }
-.ticket-code-review__compare-banner .kui-toolbar-control-group > button[data-selected='true'] {
-  color: var(--wa-color-brand-on-normal);
-  background: var(--wa-color-brand-fill-normal);
-}
 .ticket-code-review__range {
   display: flex;
   width: 100%;
@@ -226,14 +222,6 @@
 .ticket-code-review__commit-body {
   min-width: 0;
   color: var(--wa-color-text-quiet);
-}
-.ticket-code-review__commit-body .markdown-preview {
-  color: inherit;
-  font-size: var(--wa-font-size-xs);
-  line-height: 1.4;
-}
-.ticket-code-review__commit-body .markdown-preview :is(p, ul, ol, blockquote, pre, table) {
-  margin: var(--kui-space-2xs) 0;
 }
 .ticket-code-review__compare-label {
   display: inline-grid;

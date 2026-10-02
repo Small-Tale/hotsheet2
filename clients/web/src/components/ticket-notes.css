@@ -3,10 +3,6 @@
   min-width: 0;
   gap: remify(9.6px);
 }
-.ticket-notes .note-card {
-  padding: remify(11.2px) remify(8px);
-  border-radius: remify(9.6px);
-}
 .ticket-notes .ticket-notes__empty-inset {
   margin-inline: var(--kui-layout-inline-margin, var(--kui-space-xs));
 }

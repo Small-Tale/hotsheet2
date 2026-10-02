@@ -6423,6 +6423,20 @@ test('browses repository files and commits with host-native actions', async ({ p
   ).toHaveCount(1);
   await expect(compareBanner.getByRole('button', { name: 'A', exact: true })).toBeInViewport({ ratio: 1 });
   await expect(compareBanner.getByRole('button', { name: 'B', exact: true })).toBeInViewport({ ratio: 1 });
+  // Kerf's filled selected chrome paints the pressed side (no consumer override, HS2-7RY5GK).
+  const sideA = compareBanner.getByRole('button', { name: 'A', exact: true }),
+    sideB = compareBanner.getByRole('button', { name: 'B', exact: true });
+  await expect(sideA).toHaveAttribute('aria-pressed', 'true');
+  await expect(sideB).toHaveAttribute('aria-pressed', 'false');
+  await expect(compareBanner.locator('[data-component="toolbar-control-group"]')).toHaveAttribute(
+    'data-selected-chrome',
+    'filled',
+  );
+  const sideBackgrounds = await Promise.all(
+    [sideA, sideB].map((side) => side.evaluate((node) => getComputedStyle(node).backgroundColor)),
+  );
+  expect(sideBackgrounds[0]).not.toBe('rgba(0, 0, 0, 0)');
+  expect(sideBackgrounds[0]).not.toBe(sideBackgrounds[1]);
   await compareBanner.screenshot({ path: '/private/tmp/hs2-8d3qse-compare-wide.png' });
   await popover.screenshot({ path: '/private/tmp/hs2-b2md8z-compare-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -6456,6 +6470,8 @@ test('browses repository files and commits with host-native actions', async ({ p
   await newest.locator('.ticket-code-review__commit-summary').click();
   await expect(newest.locator('.ticket-code-review__compare-label')).toHaveText('A');
   await expect(popover.locator('.ticket-code-review__compare-banner')).toContainText('Select the B side');
+  await expect(sideB).toHaveAttribute('aria-pressed', 'true');
+  await expect(sideA).toHaveAttribute('aria-pressed', 'false');
   const oldest = popover.locator('li[data-commit-sha="aaa1111"]');
   await oldest.locator('.ticket-code-review__commit-summary').click();
   await expect(oldest.locator('.ticket-code-review__compare-label')).toHaveText('B');

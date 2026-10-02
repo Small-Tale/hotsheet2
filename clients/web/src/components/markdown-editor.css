@@ -57,10 +57,6 @@
   field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
   resize: var(--hotsheet-textarea-resize, vertical);
 }
-.ticket-inspector__body .markdown-editor--embedded .markdown-editor__preview,
-.ticket-inspector__body .markdown-editor--embedded .markdown-editor__surface textarea {
-  padding-inline: remify(8.8px);
-}
 .markdown-editor__toolbar {
   display: flex;
   min-height: remify(44px);

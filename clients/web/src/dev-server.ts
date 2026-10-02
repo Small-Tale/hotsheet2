@@ -289,6 +289,8 @@ const demoEntries: Record<string, string> = {
   'ticket-status-menu': 'ux-demo/ticket-metadata-demo.tsx',
   'ticket-reader': 'ux-demo/content-components-demo.tsx',
   'markdown-editor': 'ux-demo/content-components-demo.tsx',
+  'markdown-preview': 'ux-demo/content-components-demo.tsx',
+  'ai-content-label': 'ux-demo/content-components-demo.tsx',
   'note-card': 'ux-demo/content-components-demo.tsx',
   'note-composer': 'ux-demo/content-components-demo.tsx',
   'tag-chip': 'ux-demo/tag-chip-demo.tsx',

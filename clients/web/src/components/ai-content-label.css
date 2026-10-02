@@ -10,6 +10,9 @@
   gap: var(--kui-space-xs);
   font-size: var(--wa-font-size-2xs);
 }
+.ai-content-label[data-tone='inherit'] {
+  color: inherit;
+}
 .ai-content-label__attribution {
   gap: var(--kui-space-2xs);
 }

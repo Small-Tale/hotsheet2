@@ -21,6 +21,7 @@ const permission: PermissionItem = {
   always_allow_supported: true,
 };
 const css = readFileSync(new URL('./ai-conversation.css', import.meta.url), 'utf8');
+const previewCss = readFileSync(new URL('./markdown-preview.css', import.meta.url), 'utf8');
 
 describe('AIConversation', () => {
   it.each(['dialog', 'embedded'] as const)(
@@ -169,9 +170,13 @@ describe('AIConversation', () => {
     expect(css).toMatchSource(
       /\.ai-conversation__activity li \{[^}]*min-width: 0[^}]*max-width: 100%[^}]*grid-template-columns:minmax\(0,1fr\) auto/,
     );
-    expect(css).toMatchSource(
-      /\.ai-conversation__activity li>\.markdown-preview code \{[^}]*overflow-wrap:anywhere[^}]*word-break:break-word/,
-    );
+    // Activity summaries choose the flush MarkdownPreview density; long commands wrap through the
+    // preview's own inherited overflow-wrap rather than a conversation-owned override (HS2-7RY5GK).
+    expect(markup).toMatch(/class="markdown-preview" data-component="markdown-preview" data-density="flush"/);
+    expect(markup).toContain('<span class="ai-conversation__activity-feedback">');
+    expect(previewCss).toMatchSource(/\.markdown-preview \{[^}]*overflow-wrap:anywhere/);
+    expect(css).not.toContain('.markdown-preview');
+    expect(css).not.toContain('.ai-content-label');
   });
 
   it('hides stop when interruption is unavailable and exposes terminal failures', () => {
@@ -523,8 +528,27 @@ describe('AIConversation', () => {
     expect(isConversationSurfaceLifecycleEvent({ target: surface }, surface)).toBe(true);
   });
   it('keeps nested Markdown and usage legible on the loud user bubble', () => {
-    expect(css).toMatchSource(
-      /\.ai-conversation__message--user>\.markdown-preview[^}]*color: var\(--wa-color-neutral-on-loud\)/,
+    const markup = String(
+      AIConversation({
+        open: true,
+        tool: 'Codex',
+        messages: [
+          { id: 'question', role: 'user', content: 'See [the spec](https://example.com).', sequence: 0 },
+          { id: 'answer', role: 'assistant', content: 'Read it.', status: 'completed', sequence: 1 },
+        ],
+        draft: '',
+        busy: false,
+        interruptible: false,
+      }),
+    );
+    // The user bubble selects the inverse MarkdownPreview tone (text and links take the loud bubble's
+    // color); assistant responses inherit the bubble color and keep link color (HS2-7RY5GK).
+    expect(markup).toMatch(/data-component="markdown-preview" data-tone="inverse" data-density="compact"/);
+    expect(markup).toMatch(/data-component="markdown-preview" data-tone="inherit" data-density="compact"/);
+    expect(markup).toMatch(/data-component="ai-content-label" data-tone="inherit"/);
+    expect(css).toMatch(/\.ai-conversation__message--user \{[^}]*color: var\(--wa-color-neutral-on-loud\)/);
+    expect(previewCss).toMatchSource(
+      /\.markdown-preview\[data-tone='inverse'\] a \{[^}]*color:inherit[^}]*text-decoration-color:currentcolor/,
     );
     expect(css).toMatch(/\.ai-conversation__message--user \.ai-conversation__usage[^}]*color: color-mix/);
   });

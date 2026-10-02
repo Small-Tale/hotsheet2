@@ -101,6 +101,33 @@ describe('content components', () => {
     expect(empty).toContain('Click to add Markdown.');
   });
 
+  it('selects MarkdownPreview presentation through tone, size, density, and media variants', () => {
+    const plain = String(MarkdownPreview({ source: 'Body' }));
+    expect(plain).toContain('<div class="markdown-preview" data-component="markdown-preview">');
+    const configured = String(
+      MarkdownPreview({ source: 'Body', tone: 'inverse', size: 'small', density: 'compact', media: 'thumbnail' }),
+    );
+    expect(configured).toContain(
+      'data-component="markdown-preview" data-tone="inverse" data-size="small" data-density="compact" data-media="thumbnail"',
+    );
+    expect(String(MarkdownPreview({ source: '', tone: 'inherit', density: 'flush' }))).toContain(
+      'class="markdown-preview markdown-preview--empty" data-component="markdown-preview" data-tone="inherit" data-density="flush"',
+    );
+    const css = readFileSync(resolve(import.meta.dirname, 'markdown-preview.css'), 'utf8');
+    expect(css).toMatchSource(
+      /\.markdown-preview\[data-tone='inherit'\],\s*\.markdown-preview\[data-tone='inverse'\] \{ color: inherit/,
+    );
+    expect(css).toMatchSource(/\[data-size='small'\] \{ font-size: var\(--wa-font-size-xs\); line-height: 1\.4/);
+    expect(css).toMatchSource(/\[data-size='inherit'\] \{ font: inherit/);
+    expect(css).toMatchSource(
+      /\[data-density='compact'\] :is\(p, ul, ol, blockquote, pre, table\) \{ margin-block: var\(--kui-space-2xs\)/,
+    );
+    expect(css).toMatchSource(/\[data-density='flush'\] :is\(p, ul, ol, blockquote, pre, table\) \{ margin-block: 0/);
+    expect(css).toMatchSource(
+      /\[data-media='thumbnail'\] \.markdown-preview__attachment-image img \{[^}]*object-fit: cover/,
+    );
+  });
+
   it('projects GFM Markdown with safe new-tab links while escaping raw HTML and unsafe protocols', () => {
     const markup = String(
       MarkdownPreview({

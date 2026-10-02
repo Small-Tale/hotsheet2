@@ -869,6 +869,28 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "markdown-preview",
+      "name": "MarkdownPreview",
+      "kind": "component",
+      "purpose": "Sanitized Markdown rendering with tone, size, density, and attachment-media presentation variants.",
+      "useWhen": [
+        "Hot Sheet needs sanitized Markdown rendering with tone, size, density, and attachment-media presentation variants."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific MarkdownPreview behavior."
+      ],
+      "publicClasses": [
+        "markdown-preview"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "attachment-gallery",
       "name": "AttachmentGallery",
       "kind": "component",
@@ -1145,6 +1167,28 @@
       ],
       "publicClasses": [
         "ai-conversation"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
+      "id": "ai-content-label",
+      "name": "AIContentLabel",
+      "kind": "component",
+      "purpose": "Persistent AI attribution with the limitations cue, optional feedback, and quiet or inherited tone.",
+      "useWhen": [
+        "Hot Sheet needs persistent AI attribution with the limitations cue, optional feedback, and quiet or inherited tone."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AIContentLabel behavior."
+      ],
+      "publicClasses": [
+        "ai-content-label"
       ],
       "publicTokens": [],
       "geometry": {

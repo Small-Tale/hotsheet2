@@ -124,13 +124,22 @@ export function ConversationMessages({
             ) : (
               <AIContentLabel
                 tool={tool}
+                tone="inherit"
                 feedbackTarget={
                   feedbackAvailable && message.status === 'completed' ? `conversation:${message.id}` : undefined
                 }
               />
             )}
           </strong>
-          {message.content ? <MarkdownPreview source={message.content} /> : <p aria-label="Awaiting response"> </p>}
+          {message.content ? (
+            <MarkdownPreview
+              source={message.content}
+              tone={message.role === 'user' ? 'inverse' : 'inherit'}
+              density="compact"
+            />
+          ) : (
+            <p aria-label="Awaiting response"> </p>
+          )}
           {message.files?.length && (
             <ul class="ai-conversation__files" aria-label="Referenced files">
               {message.files.map((file) => (
@@ -174,8 +183,12 @@ function ConversationActivityGroup({
       <ol>
         {activity.map((item) => (
           <li data-activity-id={item.id} data-importance={item.importance}>
-            <MarkdownPreview source={item.summary} />
-            {feedbackAvailable && <AIContentFeedback tool={item.tool} feedbackTarget={`activity:${item.id}`} />}
+            <MarkdownPreview source={item.summary} density="flush" />
+            {feedbackAvailable && (
+              <span class="ai-conversation__activity-feedback">
+                <AIContentFeedback tool={item.tool} feedbackTarget={`activity:${item.id}`} />
+              </span>
+            )}
           </li>
         ))}
       </ol>
