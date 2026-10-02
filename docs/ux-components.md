@@ -67,6 +67,22 @@ floor is **1024 × 600 CSS pixels**; native hosts must enforce the
 same minimum window content size rather than asking the shell to compress below it.
 The production browser shell inherits that floor from the shared AppShell stylesheet;
 screen-level CSS must not replace it with a smaller minimum.
+AppShell configures the components it composes through props rather than cross-component CSS
+(HS2-DR549A):
+
+- **`presentation`.** `framed` (the default, as the UX demo stages it) draws a bordered window. `viewport`
+  fills its container edge to edge; `MainShell` passes it for the application root, so no global
+  stylesheet restyles the shell.
+- **`workAreaFocusRing`** (default `true`). The runtime turns it off while a magnified terminal, a
+  top-layer overlay hosted inside the work area, owns focus, so the ring never shows through that
+  overlay's scrim.
+- **Project strip.** AppShell renders `ProjectTabBar` with `surface="default"`. It sets
+  `divider` only in terminals mode, where no page header sits between the strip and the work area.
+- **`--hotsheet-scroll-end-inset`.** The workspace sets `data-bottom-edge` from its own `mobile`
+  and drawer props. It publishes this app scroll-end token: the home-indicator inset while the
+  phone column reaches the screen's bottom edge, else `0px`. The workspace and each
+  `TicketBoardColumn` scroller add it to their own bottom padding and scroll padding (HS2-4A29RR).
+
 Sidebar and inspector splitters are keyboard/pointer adjustable, remain present until
 the user explicitly collapses them, and never auto-hide at viewport breakpoints. Sidebar
 regions never resize below 250px. Production pointer drags update splitter geometry once per animation frame and
@@ -554,6 +570,17 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
   centered wrapper never transforms, and the ring alone rotates around its center.
   This avoids both transform-composition drift and the perceptual wobble of rotating
   an incomplete Lucide arc; browser coverage samples its center across animation frames.
+- `ProjectTabBar` presentation props (HS2-DR549A):
+  - `surface`: `lowered` by default, or `default` to share the surface of a column it heads.
+  - `divider`: draws the bottom rule (default `true`).
+
+  The demo shows the standalone strip and the shell-column variant (`surface="default"`,
+  `divider={false}`). On desktop, Add project stays beside the last tab and the workspace action
+  holds the far edge of the growing trailing zone, set through Kerf's public
+  `--kui-tab-bar-trailing-flex` token. Kerf's `end` zone accepts only a ToolbarControlGroup, so the
+  action moves there only after KF-A59SC4 ships. Each `ProjectTab` sets Kerf's attention-color token
+  on its own AppTab root (`[data-tab-kind='project']`). It keeps Kerf's own drop-target treatment.
+
 - `ProjectTabContextMenu` — **built** with Lucide icons for Close Tab, Close Other
   Tabs, Close Tabs to the Right, and Close All Tabs.
 - `AddProjectButton` — **production + demo built** with controlled insertion and selection;
@@ -1590,6 +1617,19 @@ right corner. Each tile has a 4:3 preview, terminal and project identity,
 busy/idle/exited state, and pending-attention treatment. An empty project is omitted from
 the global grid unless it is the only available project, in which case the screen explains
 how to create or open a terminal.
+
+Styling ownership (HS2-DR549A):
+
+- **Drawer layout.** The dashboard styles its own `drawer` layout (`layoutMode="drawer"`) with a tighter
+  top inset. That layout anchors the zoom toolbar at the drawer's edge, which the Workbench has
+  already padded by the home-indicator inset. The drawer never reaches into the dashboard.
+- **Buttons.** Only the tile's own footer actions get app button chrome. The zoom toolbar's and
+  key bar's Kerf control groups own their buttons. One temporary rule restores the not-allowed
+  cursor on a disabled zoom button until KF-FTADQT ships.
+- **Visibility Select.** It uses Kerf's `toolbar-borderless` compact presentation, with a
+  group-owned focus ring.
+- **`TerminalSession`.** It takes `mobile` from `TerminalDrawer` (the app's phone layout) and
+  clips its scaled xterm there.
 
 Grid scale is a discrete fit count controlled by icon-only minus/plus buttons with visible
 tooltip and accessible names. Plus zooms in (fewer terminals on the controlling axis);

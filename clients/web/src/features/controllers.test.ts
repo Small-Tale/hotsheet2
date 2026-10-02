@@ -1012,7 +1012,8 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
   const dimensions = signal({ width: 1000, height: 500 });
   const permissions = createPermissionsController({ projects, selectedProjectId: state.selectedProjectId });
   const magnified = signal<string | undefined>(undefined),
-    mobileMagnified = signal<MobileMagnifiedTerminal | undefined>(undefined);
+    mobileMagnified = signal<MobileMagnifiedTerminal | undefined>(undefined),
+    viewportMobile = signal(false);
   const presentation = createTerminalPresentation({
     projects,
     project: state.project,
@@ -1040,6 +1041,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
       terminalDrawerMaximized: signal(false),
       mobileTerminalFocus: signal(INACTIVE_MOBILE_TERMINAL_FOCUS),
       mobileMagnifiedTerminal: () => mobileMagnified.value,
+      viewportMobile,
     },
     conversations: {
       conversationStates: state.conversationStates,
@@ -1089,6 +1091,12 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
   expect(presentation.projectTerminalDrawerProps()).toMatchObject({ magnifiedKey: 'a:t1', mobileMagnified: phone });
   mobileMagnified.value = undefined;
   expect(presentation.projectTerminalDrawerProps()?.mobileMagnified).toBeUndefined();
+  // HS2-DR549A: the drawer's phone presentation follows the app's mobile layout both ways.
+  expect(presentation.projectTerminalDrawerProps()?.mobile).toBe(false);
+  viewportMobile.value = true;
+  expect(presentation.projectTerminalDrawerProps()?.mobile).toBe(true);
+  viewportMobile.value = false;
+  expect(presentation.projectTerminalDrawerProps()?.mobile).toBe(false);
   expect(presentation.workspaceTerminalGroups()[0].chats?.[0].summary).toBe('Replacement');
 });
 

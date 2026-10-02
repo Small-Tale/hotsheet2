@@ -11,6 +11,13 @@
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-l);
 }
+/* The application root fills the window edge to edge; the framed default is how the UX demo stages it. */
+.app-shell[data-presentation='viewport'] {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
 /* The main column fills the Workbench work area, which is a plain scroll box; the column owns its
    own scrolling (the ticket workspace), so it never lets the work area scroll. */
 /* The main column anchors the top-layer permission popup (HS2-ZESCM2). */
@@ -29,30 +36,13 @@
 .app-shell[data-terminal-focus-mode='true'] {
   --kui-workbench-popup-z: 200;
 }
-.app-shell__main > .project-tab-bar {
-  border-bottom: 0;
-  background: var(--wa-color-surface-default);
-}
-.app-shell[data-mode='terminals'] .app-shell__main > .project-tab-bar {
-  border-bottom: 1px solid var(--wa-color-surface-border);
-}
-/* Mobile view switcher (the page-header Select that replaces the desktop view title): a borderless
-   select sized to the selected view name, shrinking/truncating rather than stretching (HS2-0SARDD). */
+/* Mobile view switcher (the page-header Select that replaces the desktop view title): Kerf's compact
+   borderless toolbar Select, placed to size to the selected view name, shrinking/truncating rather
+   than stretching (HS2-0SARDD). */
 .app-shell__mobile-view {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
-}
-.app-shell__mobile-view::part(combobox) {
-  min-height: remify(32px);
-  padding-inline: remify(8px);
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.app-shell__mobile-view::part(combobox):focus-visible {
-  outline: 2px solid var(--wa-color-focus);
-  outline-offset: 1px;
 }
 .app-shell__work-area {
   position: relative;
@@ -92,12 +82,13 @@
 .app-shell__work-area:focus-within::after {
   border-color: var(--wa-color-focus);
 }
-.app-shell__work-area:has(.terminal-dashboard__magnified) {
-  z-index: 3;
+/* A top-layer overlay hosted by the work area (the magnified terminal) owns focus; the ring would
+   otherwise show through its scrim. */
+.app-shell__work-area[data-focus-ring='false'] {
   outline-color: transparent;
   transition: none;
 }
-.app-shell__work-area:has(.terminal-dashboard__magnified)::after {
+.app-shell__work-area[data-focus-ring='false']::after {
   border-color: transparent;
   transition: none;
 }
@@ -109,6 +100,10 @@
 }
 .app-shell__workspace {
   --app-shell-workspace-padding: remify(16px);
+  /* App-wide scroll-end inset token (HS2-4A29RR): ticket scrollers inside the workspace (the list
+     workspace itself and each board column) add it to their bottom padding and scroll padding. It is
+     the home-indicator inset while the phone column reaches the screen's bottom edge, else zero. */
+  --hotsheet-scroll-end-inset: 0px;
   min-width: 0;
   min-height: 0;
   padding: var(--app-shell-workspace-padding);
@@ -139,23 +134,16 @@
   min-width: 0;
 }
 /* The mobile main column reaches the bottom screen edge whenever the terminal drawer is collapsed
-   or absent. Its ticket scrollers (the list workspace and each board column) keep reaching that edge
-   and carry the home-indicator inset as padding inside the scroller, with matching scroll padding,
-   so the last ticket can be scrolled clear of the unsafe area (HS2-4A29RR). An expanded drawer owns
-   the bottom edge instead, so the scrollers then keep their ordinary padding. */
-.app-shell[data-mobile='true']:not(
-    :has(> [data-component='workbench'] > * > [data-workbench-drawer]:not([data-collapsed='true']))
-  )
-  .app-shell__workspace:not([data-presentation='edge-to-edge']) {
-  padding-bottom: calc(var(--app-shell-workspace-padding) + var(--hotsheet-safe-area-bottom));
-  scroll-padding-bottom: var(--hotsheet-safe-area-bottom);
+   or absent (AppShell computes `data-bottom-edge`). Its ticket scrollers keep reaching that edge and
+   carry the home-indicator inset as padding inside the scroller, with matching scroll padding, so
+   the last ticket can be scrolled clear of the unsafe area (HS2-4A29RR). An expanded drawer owns the
+   bottom edge instead, so the scrollers then keep their ordinary padding. */
+.app-shell__workspace[data-bottom-edge='true'] {
+  --hotsheet-scroll-end-inset: var(--hotsheet-safe-area-bottom);
 }
-.app-shell[data-mobile='true']:not(
-    :has(> [data-component='workbench'] > * > [data-workbench-drawer]:not([data-collapsed='true']))
-  )
-  .ticket-board-column__tickets {
-  padding-bottom: calc(var(--kui-space-m) + var(--hotsheet-safe-area-bottom));
-  scroll-padding-bottom: var(--hotsheet-safe-area-bottom);
+.app-shell__workspace[data-bottom-edge='true']:not([data-presentation='edge-to-edge']) {
+  padding-bottom: calc(var(--app-shell-workspace-padding) + var(--hotsheet-scroll-end-inset));
+  scroll-padding-bottom: var(--hotsheet-scroll-end-inset);
 }
 /* Viewport-fixed so it covers the whole shell. It renders inside the Workbench's isolated stacking
    context (in the main column), so the z-index:41 overlay rails still paint above this z-index:40

@@ -75,7 +75,7 @@ describe('TicketBoard', () => {
     expect(css).toMatch(/ticket-board-column > header h2[^}]*font: inherit/);
     expect(css).toMatch(/ticket-board-column__header[^}]*height: remify\(32px\)/);
     expect(css).toMatch(
-      /ticket-board-column__tickets[^}]*padding: var\(--kui-space-none\) var\(--kui-space-xs\) var\(--kui-space-m\)/,
+      /ticket-board-column__tickets[^}]*padding: var\(--kui-space-none\) var\(--kui-space-xs\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-scroll-end-inset, 0px\)\)/,
     );
   });
 

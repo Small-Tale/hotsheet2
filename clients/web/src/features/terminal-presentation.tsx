@@ -48,6 +48,8 @@ export interface TerminalPresentationDependencies {
     mobileTerminalFocus: Signal<MobileTerminalFocusState>;
     /** Phone-only magnified-terminal chrome inputs; undefined on wider viewports (HS2-WMN626). */
     mobileMagnifiedTerminal: () => MobileMagnifiedTerminal | undefined;
+    /** The app's phone layout, which the drawer's dedicated terminals present for (HS2-DR549A). */
+    viewportMobile: Signal<boolean>;
   };
   conversations: {
     conversationStates: Signal<Record<string, ConversationState>>;
@@ -88,6 +90,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     terminalDrawerMaximized,
     mobileTerminalFocus,
     mobileMagnifiedTerminal,
+    viewportMobile,
   } = dependencies.terminals;
   const {
     conversationStates,
@@ -234,6 +237,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       contextMenu: terminalContextMenu.value,
       aiProviders: aiToolOptions().map((tool) => ({ id: tool.id, name: tool.label })),
       defaultAiProvider: effectiveDriveSelection(current.id).tool,
+      mobile: viewportMobile.value,
     };
   }
 

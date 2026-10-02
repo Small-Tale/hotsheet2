@@ -179,7 +179,8 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'false');
   await expect(page.locator('[data-action="toggle-geometry-overlay"]')).toHaveCount(0);
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  // ProjectTabBar renders two specimens; the AppTab demo composes its tabs inside a TabBar
+  // ProjectTabBar renders three specimens (standalone, with a workspace action, and the divider-free
+  // shell-column variant, HS2-DR549A); the AppTab demo composes its tabs inside a TabBar
   // (HS2-GX51F7), so the overlay treats that bar as the single specimen and shows no tab borders.
   // The demo frames each bar in its own rounded stage box, so the overlay reports the bar's real
   // bottom-only border rather than a demo-imposed outline (HS2-4APEJP).
@@ -5288,6 +5289,21 @@ test('reorders demo project tabs through Kerf wireTabBars by keyboard and drag (
   await expect
     .poll(() =>
       second
+        .locator('[data-tab-kind="project"]')
+        .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.tabId)),
+    )
+    .toEqual(['website', 'hotsheet', 'api', 'archive']);
+  // The shell-column variant shares the column surface and draws no bottom rule (HS2-DR549A).
+  const shellColumn = page.locator('.project-tab-bar-demo .project-tab-bar').filter({
+    has: page.getByRole('navigation', { name: 'Open projects in the shell column' }),
+  });
+  await expect(shellColumn).toHaveAttribute('data-surface', 'default');
+  await expect(shellColumn).toHaveAttribute('data-divider', 'false');
+  await expect(shellColumn).toHaveCSS('border-bottom-width', '0px');
+  await expect(page.locator('.project-tab-bar-demo .project-tab-bar').first()).toHaveCSS('border-bottom-width', '1px');
+  await expect
+    .poll(() =>
+      shellColumn
         .locator('[data-tab-kind="project"]')
         .evaluateAll((tabs) => tabs.map((tab) => (tab as HTMLElement).dataset.tabId)),
     )

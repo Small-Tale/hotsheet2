@@ -20,6 +20,11 @@ export interface ProjectTabBarProps {
    * replaced with a project Select while the dashboard mode switcher and Add-project action remain
    * (HS2-4C5RM7). */
   mobile?: boolean;
+  /** The strip's surface: `lowered` (default) sets it apart as its own band; `default` shares the
+   * surface of a column it heads, such as the app shell's main column. */
+  surface?: 'lowered' | 'default';
+  /** Draw the bottom rule separating the strip from the content below it (default true). */
+  divider?: boolean;
 }
 export type ProjectTabBarMode = 'project' | 'terminals' | 'stats';
 
@@ -33,6 +38,8 @@ export function ProjectTabBar({
   mode = 'project',
   workspaceAction,
   mobile = false,
+  surface = 'lowered',
+  divider = true,
 }: ProjectTabBarProps) {
   const modes = (
     <div class="project-tab-bar__modes" role="group" aria-label="Global dashboards">
@@ -76,13 +83,19 @@ export function ProjectTabBar({
       {!mobile && workspaceAction && <div class="project-tab-bar__workspace-action">{workspaceAction}</div>}
     </div>
   );
+  const rootAttributes = {
+    'data-component': 'project-tab-bar',
+    'data-mode': mode,
+    'data-surface': surface,
+    'data-divider': String(divider),
+  };
   if (mobile) {
     // Kerf's Select has no disabled choices, so still-opening projects join the list once they
     // register rather than appearing as choices that cannot be selected (HS2-2BEJXD).
     const choosable = tabs.filter((tab) => !tab.pending),
       active = choosable.find((tab) => tab.selected) ?? choosable[0];
     return (
-      <div class="project-tab-bar project-tab-bar--mobile" data-component="project-tab-bar" data-mode={mode}>
+      <div class="project-tab-bar project-tab-bar--mobile" {...rootAttributes}>
         {modes}
         {choosable.length ? (
           <div class="project-tab-bar__select">
@@ -126,7 +139,7 @@ export function ProjectTabBar({
     );
   }
   return (
-    <div class="project-tab-bar" data-component="project-tab-bar" data-mode={mode}>
+    <div class="project-tab-bar" {...rootAttributes}>
       <TabBar
         id={PROJECT_TAB_BAR_ID}
         label={label}

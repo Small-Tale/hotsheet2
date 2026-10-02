@@ -30,14 +30,9 @@ describe('global stylesheet ownership', () => {
 
   it('keeps the intentionally global app-shell rules in style.css', () => {
     const global = read('./style.css');
-    for (const selector of [
-      ':root',
-      'html, body, #app',
-      '.app-shell[data-component="app-shell"]',
-      '.app-empty',
-      '.app-loading, .app-toast',
-      '.ticket-page-more',
-    ])
+    for (const selector of [':root', 'html, body, #app', '.app-empty', '.app-loading, .app-toast', '.ticket-page-more'])
       expect(global).toContainSource(selector);
+    // The application root's edge-to-edge shell is AppShell's own `viewport` presentation (HS2-DR549A).
+    expect(global).not.toContain('.app-shell');
   });
 });

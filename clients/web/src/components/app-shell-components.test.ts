@@ -18,6 +18,7 @@ import {
 } from '../ux-demo/app-shell-demo';
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
+import { MainShell } from './main-shell';
 import { ProjectTab, projectTabActivityDash, projectTabActivitySegments } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
@@ -65,12 +66,35 @@ describe('application shell components', () => {
     expect(productionCss).toContainSource(
       'html:root { --kui-safe-area-block-start: var(--hotsheet-safe-area-top); --kui-safe-area-block-end: var(--hotsheet-safe-area-bottom); --kui-safe-area-inline-start: var(--hotsheet-safe-area-left); --kui-safe-area-inline-end: var(--hotsheet-safe-area-right); }',
     );
-    expect(css).toMatchSource(
-      /\.app-shell\[data-mobile='true'\]:not\( :has\(> \[data-component='workbench'\] > \* > \[data-workbench-drawer\]:not\(\[data-collapsed='true'\]\)\) \) \.app-shell__workspace:not\(\[data-presentation='edge-to-edge'\]\) \{ padding-bottom: calc\(var\(--app-shell-workspace-padding\) \+ var\(--hotsheet-safe-area-bottom\)\); scroll-padding-bottom: var\(--hotsheet-safe-area-bottom\); \}/,
+    // The shell publishes the scroll-end inset as a token on its own workspace; the ticket scrollers read it
+    // in their own stylesheets rather than the shell reaching into them (HS2-DR549A).
+    expect(css).toContainSource(
+      ".app-shell__workspace[data-bottom-edge='true'] { --hotsheet-scroll-end-inset: var(--hotsheet-safe-area-bottom); }",
     );
-    expect(css).toMatchSource(
-      /\.ticket-board-column__tickets \{ padding-bottom: calc\(var\(--kui-space-m\) \+ var\(--hotsheet-safe-area-bottom\)\); scroll-padding-bottom: var\(--hotsheet-safe-area-bottom\); \}/,
+    expect(css).toContainSource(
+      ".app-shell__workspace[data-bottom-edge='true']:not([data-presentation='edge-to-edge']) { padding-bottom: calc(var(--app-shell-workspace-padding) + var(--hotsheet-scroll-end-inset)); scroll-padding-bottom: var(--hotsheet-scroll-end-inset); }",
     );
+    expect(css).not.toContain('data-workbench-drawer');
+    expect(css).not.toContain('ticket-board-column');
+    const boardColumnCss = readFileSync(new URL('./ticket-board-column.css', import.meta.url), 'utf8');
+    expect(boardColumnCss).toMatchSource(
+      /\.ticket-board-column__tickets \{[^}]*padding: var\(--kui-space-none\) var\(--kui-space-xs\) calc\(var\(--kui-space-m\) \+ var\(--hotsheet-scroll-end-inset, 0px\)\);[^}]*scroll-padding-bottom: var\(--hotsheet-scroll-end-inset, 0px\);/,
+    );
+  });
+
+  it('marks the phone workspace bottom edge from the drawer state it composes (HS2-4A29RR, HS2-DR549A)', () => {
+    const edge = (props: Partial<Parameters<typeof AppShell>[0]>) =>
+      /data-bottom-edge="(true|false)"/.exec(
+        String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never, ...props })),
+      )?.[1];
+    const drawer = 'drawer' as never;
+    expect(edge({})).toBe('false');
+    expect(edge({ mobile: true })).toBe('true');
+    expect(edge({ mobile: true, terminalDrawer: drawer, terminalDrawerVisible: false })).toBe('true');
+    expect(edge({ mobile: true, terminalDrawer: drawer, terminalDrawerVisible: true })).toBe('false');
+    // Only project mode composes the drawer, so the other modes always reach the edge.
+    expect(edge({ mobile: true, mode: 'terminals', terminalDrawer: drawer, terminalDrawerVisible: true })).toBe('true');
+    expect(edge({ mobile: false, terminalDrawer: drawer, terminalDrawerVisible: false })).toBe('false');
   });
 
   it('clips the shell without making it a focus-scroll owner while preserving workspace scrolling (HS2-JBTPNR)', () => {
@@ -86,7 +110,8 @@ describe('application shell components', () => {
     expect(css).toMatch(/\.app-shell \{[^}]*min-width: remify\(1024px\)/);
     expect(css).toMatch(/\.app-shell \{[^}]*min-height: remify\(600px\)/);
     expect(productionCss).toMatch(/html,\s*body,\s*#app \{[^}]*overflow: clip/);
-    expect(productionCss).not.toMatch(/\.app-shell\[data-component="app-shell"\] \{[^}]*(?:min-width|min-height):/);
+    expect(productionCss).not.toContain('.app-shell');
+    expect(css).not.toMatch(/\.app-shell\[data-presentation='viewport'\] \{[^}]*(?:min-width|min-height):/);
     expect(css).not.toMatch(
       /@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.kui-resizable-region[^{}]*display: none/,
     );
@@ -102,10 +127,30 @@ describe('application shell components', () => {
     expect(markup).toContain('data-responsive="trailing-priority" data-responsive-at="narrow"');
   });
 
-  it('separates the terminal header from its lowered dashboard surface', () => {
+  it('separates the terminal header from its lowered dashboard surface through ProjectTabBar props', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
-    expect(css).toMatchSource(
-      /\.app-shell\[data-mode="terminals"\][^{]*\.project-tab-bar \{[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/,
+    expect(css).not.toContain('.project-tab-bar');
+    const strip = (mode: 'project' | 'terminals' | 'stats', mobile = false) =>
+      /<div class="project-tab-bar[^"]*"[^>]*>/.exec(
+        String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never, mode, mobile })),
+      )?.[0];
+    for (const mobile of [false, true]) {
+      expect(strip('project', mobile)).toContain('data-surface="default" data-divider="false"');
+      expect(strip('terminals', mobile)).toContain('data-surface="default" data-divider="true"');
+      expect(strip('stats', mobile)).toContain('data-surface="default" data-divider="false"');
+    }
+  });
+  it('fills the window only in the viewport presentation the application root uses (HS2-DR549A)', () => {
+    const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
+    expect(css).toContainSource(
+      ".app-shell[data-presentation='viewport'] { width: 100%; height: 100%; border: 0; border-radius: 0; }",
+    );
+    const shell = (props: Partial<Parameters<typeof AppShell>[0]>) =>
+      String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never, ...props }));
+    expect(shell({})).toContain('data-presentation="framed"');
+    expect(shell({ presentation: 'viewport' })).toContain('data-presentation="viewport"');
+    expect(String(MainShell({ tabs: [], header: 'head' as never, workspace: 'work' as never }))).toContain(
+      'data-component="app-shell" data-presentation="viewport"',
     );
   });
   it('draws a border between the white header chrome and the lowered work area (HS2-WH6CCR)', () => {
@@ -123,12 +168,22 @@ describe('application shell components', () => {
       /app-shell__work-area::after \{[^}]*z-index: 20[^}]*border: 2px solid transparent[^}]*pointer-events: none/,
     );
     expect(css).toMatch(/app-shell__work-area:focus-within::after \{[^}]*border-color: var\(--wa-color-focus\)/);
+    // The magnified terminal's owner turns the ring off through a prop; the shell never inspects the
+    // dashboard's markup (HS2-DR549A).
     expect(css).toContainSource(
-      '.app-shell__work-area:has(.terminal-dashboard__magnified) { z-index: 3; outline-color: transparent; transition: none; }',
+      ".app-shell__work-area[data-focus-ring='false'] { outline-color: transparent; transition: none; }",
     );
     expect(css).toContainSource(
-      '.app-shell__work-area:has(.terminal-dashboard__magnified)::after { border-color: transparent; transition: none; }',
+      ".app-shell__work-area[data-focus-ring='false']::after { border-color: transparent; transition: none; }",
     );
+    expect(css).not.toContain('terminal-dashboard');
+    const ring = (workAreaFocusRing?: boolean) =>
+      /class="app-shell__work-area"[^>]*data-focus-ring="(true|false)"/.exec(
+        String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never, workAreaFocusRing })),
+      )?.[1];
+    expect(ring()).toBe('true');
+    expect(ring(false)).toBe('false');
+    expect(ring(true)).toBe('true');
     expect(css).not.toContain('--kui-resizable-region-separator-color');
   });
   it('leaves the inspector-sidebar tab presentation to AppTab (HS2-PKPGGZ)', () => {
@@ -275,11 +330,12 @@ describe('application shell components', () => {
     expect(projectTabCss).toMatchSource(
       /\.project-tab__work\[data-active="true"\]\s+\.project-tab__work-count\s*\{[^}]*color:\s*var\(--wa-color-text-normal\)/,
     );
-    // Kerf owns the attention and drop-target treatments through public tokens the strip sets
-    // (HS2-AT4AAA, HS2-T67Z3N); the tab root carries no app class or app rule.
+    // Kerf owns the attention and drop-target treatments; the tab configures its own AppTab root through
+    // public tokens (HS2-AT4AAA, HS2-T67Z3N) and never reaches into the strip that composes it (HS2-DR549A).
     expect(projectTabCss).toContainSource(
-      '.project-tab-bar { --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet); --kui-app-tab-drop-target-background: var(--wa-color-brand-fill-normal); }',
+      "[data-tab-kind='project'] { --kui-app-tab-attention-color: var(--wa-color-danger-on-quiet); }",
     );
+    expect(projectTabCss).not.toContain('.project-tab-bar');
     expect(projectTabCss).not.toContain('[data-attention=');
     expect(projectTabCss).not.toContain('data-dragging-ticket');
     expect(projectTabCss).not.toMatch(/\.project-tab[\s[{]/);
@@ -332,7 +388,7 @@ describe('application shell components', () => {
     expect(markup).toContain('data-tab-bar-id="projects"');
     // The app strip wraps Kerf's TabBar; the TabBar root carries no app class (KUI-L022).
     expect(markup).toContain(
-      '<div class="project-tab-bar" data-component="project-tab-bar" data-mode="project"><nav class="kui-tab-bar"',
+      '<div class="project-tab-bar" data-component="project-tab-bar" data-mode="project" data-surface="lowered" data-divider="true"><nav class="kui-tab-bar"',
     );
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('aria-label="Add project"');
@@ -354,14 +410,19 @@ describe('application shell components', () => {
         workspaceAction: 'new-ticket' as never,
       }),
     );
-    // Add-project stays adjacent to the tabs; the workspace action is pushed to the far edge
-    // inside the growing trailing group (HS2-NE8JBS).
+    // Add-project stays adjacent to the tabs; the workspace action is pushed to the far edge inside the
+    // growing trailing group (HS2-NE8JBS). The strip grows the zone through Kerf's public token and its
+    // own group, never through a selector on the TabBar's markup (HS2-DR549A).
     expect(desktop).toContain('data-trailing-placement="adjacent"');
     expect(desktop).toMatch(
       /project-tab-bar__actions[^]*data-action="choose-project"[^]*project-tab-bar__workspace-action">new-ticket/,
     );
     const css = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.project-tab-bar \{[^}]*--kui-tab-bar-trailing-flex: 1 0 auto;/);
+    expect(css).toContainSource(
+      '.project-tab-bar:not(.project-tab-bar--mobile) .project-tab-bar__actions { flex: 1 0 auto; }',
+    );
+    expect(css.replace(/\/\*[^]*?\*\//g, '')).not.toContain('.kui-');
     expect(css).toMatch(/\.project-tab-bar__workspace-action \{[^}]*margin-inline-start: auto;/);
     const mobile = String(
       ProjectTabBar({
@@ -371,6 +432,25 @@ describe('application shell components', () => {
       }),
     );
     expect(mobile).not.toContain('new-ticket');
+  });
+
+  it('exposes the strip surface and bottom rule as props on desktop and mobile (HS2-DR549A)', () => {
+    const tabs = [{ id: 'one', name: 'One', location: 'local' as const, selected: true }];
+    const root = (props: Partial<Parameters<typeof ProjectTabBar>[0]>) =>
+      /<div class="project-tab-bar[^"]*"[^>]*>/.exec(String(ProjectTabBar({ tabs, ...props })))?.[0];
+    for (const mobile of [false, true]) {
+      expect(root({ mobile })).toContain('data-surface="lowered" data-divider="true"');
+      expect(root({ mobile, surface: 'default' })).toContain('data-surface="default" data-divider="true"');
+      expect(root({ mobile, divider: false })).toContain('data-surface="lowered" data-divider="false"');
+    }
+    const css = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
+    expect(css).toMatch(
+      /\.project-tab-bar \{[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\);[^}]*background: var\(--wa-color-surface-lowered\);/,
+    );
+    expect(css).toContainSource(
+      ".project-tab-bar[data-surface='default'] { background: var(--wa-color-surface-default); }",
+    );
+    expect(css).toContainSource(".project-tab-bar[data-divider='false'] { border-bottom: 0; }");
   });
 
   it('renders a project Select instead of the tab strip on mobile, keeping the mode switcher and add action (HS2-4C5RM7)', () => {
@@ -614,7 +694,7 @@ describe('application shell components', () => {
     // toggling the conditional overlay/banner siblings above it never rebuilds it (which would
     // reset the workspace scrollTop, e.g. when the ticket context menu opens).
     expect(markup).toContain(
-      'class="app-shell__work-area" data-key="app-shell-work-area" data-has-composer="true" tabindex="0" aria-label="Ticket work area"',
+      'class="app-shell__work-area" data-key="app-shell-work-area" data-has-composer="true" data-focus-ring="true" tabindex="0" aria-label="Ticket work area"',
     );
     expect(markup).toContain('data-key="app-shell-workspace"');
     expect(markup).toContain('data-ticket-scroll-owner="workspace"');

@@ -10,7 +10,7 @@
   --kui-toolbar-gap: var(--kui-space-2xs);
   /* The strip keeps a 2xs inset (cancelled by a negative block margin so the bar height is unchanged)
      so a focused/selected tab's pill focus ring and shadow are not clipped at the scrolling edges,
-     reserves the same scroll padding, and drops Kerf's track chrome; the trailing group grows so
+     reserves the same scroll padding, and drops Kerf's track chrome; the trailing zone grows so
      Add-project sits right after the last tab (HS2-HV52WR, HS2-NE8JBS). Kerf beta.60 public tokens. */
   --kui-tab-bar-strip-margin-block: calc(var(--kui-space-2xs) * -1);
   --kui-tab-bar-strip-padding: var(--kui-space-2xs);
@@ -27,6 +27,12 @@
   border-bottom: 1px solid var(--wa-color-surface-border);
   background: var(--wa-color-surface-lowered);
 }
+.project-tab-bar[data-surface='default'] {
+  background: var(--wa-color-surface-default);
+}
+.project-tab-bar[data-divider='false'] {
+  border-bottom: 0;
+}
 .project-tab-bar__modes,
 .project-tab-bar__actions {
   display: flex;
@@ -37,11 +43,13 @@
 .project-tab-bar__actions {
   gap: var(--kui-space-xs);
 }
-/* Desktop: Kerf's adjacent placement shrink-wraps the tabs, and the trailing group grows into the
-   remaining width so Add-project (+) sits right after the last tab while the workspace action
-   (New ticket…) holds the far edge. When tabs overflow, the trailing group keeps its content width
-   and the tabs shrink and scroll, bringing + beside the workspace action (HS2-NE8JBS). */
-.project-tab-bar > .kui-tab-bar .project-tab-bar__actions {
+/* Desktop: Kerf's adjacent placement shrink-wraps the tabs and its trailing zone grows (the public
+   trailing-flex token above); the strip's own actions group fills that zone so Add-project (+) sits
+   right after the last tab while the workspace action (New ticket…) holds the far edge. When tabs
+   overflow, the trailing zone keeps its content width and the tabs shrink and scroll, bringing +
+   beside the workspace action (HS2-NE8JBS). Kerf's `end` zone takes only a ToolbarControlGroup, so
+   the workspace action stays in this group until KF-A59SC4 lets it move there. */
+.project-tab-bar:not(.project-tab-bar--mobile) .project-tab-bar__actions {
   flex: 1 0 auto;
 }
 .project-tab-bar__workspace-action {

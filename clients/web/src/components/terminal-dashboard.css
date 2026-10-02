@@ -54,38 +54,35 @@
   min-width: remify(88px);
   max-width: remify(160px);
 }
-.terminal-dashboard-controls__visibility-select .kui-select::part(combobox) {
-  position: relative;
-  min-height: remify(32px);
-  padding-inline: remify(10.4px) remify(20px);
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  background: var(--wa-color-neutral-fill-normal);
-  box-shadow: none;
-}
-.terminal-dashboard-controls__visibility-select .kui-select::part(expand-icon) {
-  position: absolute;
-  inset-inline-end: remify(4px);
-}
 .terminal-dashboard-controls__visibility-select {
   --kui-select-selected-color: var(--wa-color-neutral-on-quiet);
   --kui-select-selected-font-size: var(--wa-font-size-xs);
   --kui-select-selected-font-weight: var(--wa-font-weight-semibold);
 }
-/* The terminal key bar composes Kerf control groups that own their button colors (HS2-CKS78M). */
-.terminal-dashboard button:not(:where(.terminal-key-bar button)) {
+/* The tile's own footer actions. Kerf control groups (the zoom toolbar, the terminal key bar) own
+   their buttons' chrome (HS2-CKS78M, HS2-DR549A). */
+:is(
+  .terminal-tile__identity,
+  .terminal-tile__menu,
+  .terminal-tile__open,
+  .terminal-tile__close,
+  .terminal-tile__text-size,
+  .terminal-tile__clipboard
+) {
   border: 0;
   color: var(--wa-color-neutral-on-quiet);
   background: transparent;
-  cursor: pointer;
 }
-.terminal-dashboard button:focus-visible {
+:is(
+  .terminal-tile__identity,
+  .terminal-tile__menu,
+  .terminal-tile__open,
+  .terminal-tile__close,
+  .terminal-tile__text-size,
+  .terminal-tile__clipboard
+):focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
-}
-.terminal-dashboard button:disabled {
-  cursor: not-allowed;
-  opacity: 0.38;
 }
 .terminal-dashboard__content {
   min-width: 0;
@@ -93,6 +90,10 @@
   padding: remify(12px);
   overflow: auto;
   flex: 1;
+}
+/* The drawer layout sits directly under the drawer's tab rail, so it keeps a tighter top inset. */
+.terminal-dashboard[data-layout-mode='drawer'] .terminal-dashboard__content {
+  padding-top: var(--kui-space-xs);
 }
 .terminal-dashboard__project + .terminal-dashboard__project {
   margin-top: remify(16px);
@@ -387,6 +388,17 @@
   inset-inline-end: var(--hotsheet-safe-area-right, 0px);
   inset-block-end: var(--hotsheet-safe-area-bottom, 0px);
 }
+/* The drawer layout is hosted in the Workbench drawer, which already pads its content by the
+   home-indicator inset (HS2-ZEC4QV), so the anchor sits at that padded edge rather than adding the
+   inset a second time. */
+.terminal-dashboard[data-layout-mode='drawer'] .terminal-dashboard__zoom {
+  inset-block-end: 0;
+}
+/* Temporary until KF-FTADQT: ToolbarControlGroup's native-button rule keeps a pointer cursor on a
+   disabled button, outranking the global cursor semantics; remove this when Kerf ships the fix. */
+.terminal-dashboard__zoom button:disabled {
+  cursor: not-allowed;
+}
 .terminal-dashboard__magnified {
   position: fixed;
   z-index: 1000;
@@ -488,8 +500,7 @@
 }
 /* The mobile grid scales xterm's root and gives it the inverse layout size, so the viewport must clip
    rather than scroll: otherwise the oversized layout box pans the terminal off screen. */
-.terminal-tile[data-mobile-chrome='true'] .terminal-viewport,
-.app-shell[data-mobile='true'] .terminal-viewport--dedicated {
+.terminal-tile[data-mobile-chrome='true'] .terminal-viewport {
   overflow: clip;
 }
 .terminal-tile__close,

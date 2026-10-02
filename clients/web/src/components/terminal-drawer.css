@@ -10,11 +10,8 @@
 }
 /* The Workbench pads the drawer's panel content by the home-indicator inset (Kerf's safe-area
    block-end token), so a single terminal, a one-row grid, and a scrolling grid all stop above the
-   unsafe area and the drawer's minimum grows by that inset in the app (HS2-ZEC4QV). The grid's zoom
-   anchor therefore sits at the padded edge rather than adding the inset a second time. */
-.app-shell[data-mobile='true'] .terminal-drawer:not([data-focus-mode='true']) .terminal-dashboard__zoom {
-  inset-block-end: 0;
-}
+   unsafe area and the drawer's minimum grows by that inset in the app (HS2-ZEC4QV). The drawer grid
+   (TerminalDashboard's `drawer` layout) anchors its zoom toolbar at that padded edge. */
 .terminal-drawer[data-focus-mode='true'] {
   position: fixed;
   z-index: 200;
@@ -190,9 +187,6 @@
   min-height: 0;
   flex: 1;
 }
-.terminal-drawer__content .terminal-dashboard__content {
-  padding-top: var(--kui-space-xs);
-}
 .terminal-session {
   width: 100%;
   height: 100%;
@@ -214,6 +208,11 @@
   overflow: hidden;
   background: var(--hs-terminal-background);
   box-sizing: border-box;
+}
+/* The phone scales xterm's root and gives it the inverse layout size, so the viewport must clip
+   rather than scroll: otherwise the oversized layout box pans the terminal off screen. */
+.terminal-session[data-mobile='true'] .terminal-viewport {
+  overflow: clip;
 }
 .terminal-session .xterm {
   background: var(--hs-terminal-background);

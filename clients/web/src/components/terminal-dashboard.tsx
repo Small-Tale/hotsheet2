@@ -146,6 +146,10 @@ export function TerminalVisibilityControls({
                 <Select
                   name="terminal-visibility-group"
                   ariaLabel="Terminal visibility group"
+                  // The control group paints the pill chrome and focus ring around the trigger.
+                  presentation="toolbar-borderless"
+                  size="compact"
+                  focusRingOwner="group"
                   value={activeId}
                   choices={choices}
                   renderSelected={(choice) => <span>{choice.label}</span>}
@@ -350,11 +354,21 @@ export function FixedAspectTerminalCard({
   return <TerminalCard session={session} mode={mode} mobile={mobile} />;
 }
 
-export function TerminalSession({ session, active = true }: { session: TerminalDashboardSession; active?: boolean }) {
+export function TerminalSession({
+  session,
+  active = true,
+  mobile = false,
+}: {
+  session: TerminalDashboardSession;
+  active?: boolean;
+  /** Phone presentation: the scaled xterm is clipped rather than scrolled by its viewport. */
+  mobile?: boolean;
+}) {
   return (
     <section
       class="terminal-session"
       data-key={keyFor(session)}
+      data-mobile={String(mobile)}
       data-component="terminal-session"
       data-terminal-key={keyFor(session)}
       hidden={!active}

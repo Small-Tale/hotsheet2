@@ -4384,6 +4384,7 @@ export async function startHotSheetWebClient() {
         terminalDrawerMaximized,
         mobileTerminalFocus,
         mobileMagnifiedTerminal,
+        viewportMobile,
       },
       conversations: {
         conversationStates,
@@ -4578,6 +4579,7 @@ export async function startHotSheetWebClient() {
           inspectorVisible={!inspectorCollapsed.value}
           inspectorSize={inspectorSize.value}
           sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
+          workAreaFocusRing={!magnifiedTerminalKey.value}
           overlay={viewportMobile.value ? undefined : popup}
           viewportOverlay={viewportMobile.value ? popup : undefined}
         />
@@ -4648,6 +4650,8 @@ export async function startHotSheetWebClient() {
             <ToolbarControlGroup single appearance="borderless">
               <Select
                 className="app-shell__mobile-view"
+                presentation="toolbar-borderless"
+                size="compact"
                 name="mobile-view"
                 value={railView}
                 ariaLabel="Ticket view"
@@ -4751,6 +4755,7 @@ export async function startHotSheetWebClient() {
           drawerViewAllowed
         }
         sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
+        workAreaFocusRing={!magnifiedTerminalKey.value}
         inspector={
           viewMode.value === 'notifications'
             ? notificationInspectorSurfacePanel()

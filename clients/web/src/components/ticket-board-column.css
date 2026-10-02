@@ -76,11 +76,14 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  padding: var(--kui-space-none) var(--kui-space-xs) var(--kui-space-m);
+  /* The shell's scroll-end inset (the phone home indicator while the column reaches the screen
+     edge, HS2-4A29RR) pads the end of the scroller so the last ticket scrolls clear of it. */
+  padding: var(--kui-space-none) var(--kui-space-xs) calc(var(--kui-space-m) + var(--hotsheet-scroll-end-inset, 0px));
   overflow-y: auto;
   overflow-anchor: none;
   align-content: start;
   gap: var(--kui-space-xs);
+  scroll-padding-bottom: var(--hotsheet-scroll-end-inset, 0px);
   scrollbar-color: var(--wa-color-neutral-border-loud) transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;

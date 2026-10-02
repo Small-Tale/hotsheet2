@@ -63,7 +63,8 @@ describe('TerminalDrawer', () => {
     expect(css).toMatch(
       /\.terminal-drawer__views \{[^}]*--kui-toolbar-gap: var\(--kui-space-xs\);[^}]*padding-inline: var\(--kui-space-2xs\)/,
     );
-    expect(css).toContain('padding-top: var(--kui-space-xs)');
+    // The drawer grid's tighter top inset is TerminalDashboard's own `drawer` layout (HS2-DR549A).
+    expect(css).not.toContain('.terminal-dashboard__content');
     expect(css).toMatch(/\.terminal-session \.terminal-viewport \{[^}]*padding: var\(--kui-space-xs\)/);
   });
   it('reserves a complete gutter for focus rings and selected-tab shadows inside the shared scroller', () => {

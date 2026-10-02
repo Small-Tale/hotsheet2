@@ -60,6 +60,12 @@ export interface AppShellProps {
   terminalFocusMode?: boolean;
   sidePanelSeparator?: ResizableRegionSeparator;
   terminalDrawerContentOverflow?: ResizableRegionContentOverflow;
+  /** `framed` (default) draws the shell as a bordered window at a desktop size floor, as the UX demo
+   * stages it; `viewport` fills its container edge to edge, as the application root renders it. */
+  presentation?: 'framed' | 'viewport';
+  /** Draw the work area's focus ring. Off while a top-layer overlay that the work area hosts (the
+   * magnified terminal) has focus, so the ring never shows through that overlay's scrim. */
+  workAreaFocusRing?: boolean;
 }
 
 /**
@@ -103,8 +109,11 @@ export function AppShell({
   terminalFocusMode = false,
   sidePanelSeparator = 'auto',
   terminalDrawerContentOverflow = 'clip',
+  presentation = 'framed',
+  workAreaFocusRing = true,
 }: AppShellProps) {
   const sidePanelPresentation = mobile ? 'overlay' : 'inline';
+  const terminalDrawerExpanded = mode === 'project' && Boolean(terminalDrawer) && terminalDrawerVisible;
   const leftRail: WorkbenchStaticPanel | undefined =
     mode !== 'stats' && sidebar
       ? {
@@ -174,6 +183,7 @@ export function AppShell({
     <section
       class="app-shell"
       data-component="app-shell"
+      data-presentation={presentation}
       data-mode={mode}
       data-mobile={String(mobile)}
       data-sidebar-visible={String(sidebarVisible)}
@@ -212,7 +222,16 @@ export function AppShell({
         }}
         main={
           <main class="app-shell__main" data-work-area-focus-owner tabIndex={-1}>
-            <ProjectTabBar tabs={tabs} mode={mode} workspaceAction={projectTabAction} mobile={mobile} />
+            {/* The tab strip shares the main column's surface; in terminals mode no page header sits
+                between it and the work area, so it draws the separator itself (HS2-WH6CCR). */}
+            <ProjectTabBar
+              tabs={tabs}
+              mode={mode}
+              workspaceAction={projectTabAction}
+              mobile={mobile}
+              surface="default"
+              divider={mode === 'terminals'}
+            />
             {overlay}
             {banner}
             {pageHeader}
@@ -224,6 +243,7 @@ export function AppShell({
               class="app-shell__work-area"
               data-key="app-shell-work-area"
               data-has-composer={String(Boolean(composer))}
+              data-focus-ring={String(workAreaFocusRing)}
               tabIndex={0}
               aria-label="Ticket work area"
             >
@@ -233,6 +253,9 @@ export function AppShell({
                 data-key="app-shell-workspace"
                 data-ticket-scroll-owner="workspace"
                 data-presentation={workspacePresentation}
+                // A phone column reaches the screen's bottom edge unless the expanded terminal drawer
+                // owns that edge; its ticket scrollers then inset their content (HS2-4A29RR).
+                data-bottom-edge={String(mobile && !terminalDrawerExpanded)}
                 aria-label="Ticket workspace"
               >
                 {workspace}

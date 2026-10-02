@@ -7,6 +7,8 @@ import {
   TerminalDashboard,
   TerminalDashboardControls,
   type TerminalDashboardGroup,
+  TerminalSession,
+  TerminalVisibilityControls,
 } from './terminal-dashboard';
 
 const groups: TerminalDashboardGroup[] = [
@@ -267,5 +269,47 @@ describe('TerminalDashboard', () => {
       /\.terminal-dashboard__zoom \{[^}]*position: absolute;[^}]*width: 0;[^}]*height: 0;[^}]*inset-inline-end: var\(--hotsheet-safe-area-right, 0px\);[^}]*inset-block-end: var\(--hotsheet-safe-area-bottom, 0px\)/,
     );
     expect(css).not.toContain('.terminal-dashboard__zoom.kui-floating-toolbar');
+    // The drawer layout's Workbench drawer already pads by the home-indicator inset (HS2-ZEC4QV), so the
+    // dashboard's own drawer layout drops it; no other component reaches in to do so (HS2-DR549A).
+    expect(css).toContainSource(
+      ".terminal-dashboard[data-layout-mode='drawer'] .terminal-dashboard__zoom { inset-block-end: 0; }",
+    );
+    expect(css).toContainSource(
+      ".terminal-dashboard[data-layout-mode='drawer'] .terminal-dashboard__content { padding-top: var(--kui-space-xs); }",
+    );
+    const drawerCss = readFileSync(new URL('./terminal-drawer.css', import.meta.url), 'utf8');
+    expect(drawerCss).not.toContain('terminal-dashboard');
+    expect(drawerCss).not.toContain('.app-shell');
+  });
+  it('styles only its own controls, configuring Kerf controls through props (HS2-DR549A)', () => {
+    // No blanket button rule reaches into Kerf control groups (the zoom toolbar, the key bar).
+    expect(css).not.toMatch(/\.terminal-dashboard button/);
+    expect(css).not.toContain('.terminal-key-bar');
+    expect(css).not.toContain('.app-shell');
+    expect(css).not.toContain('.kui-');
+    expect(css).not.toContain('::part(');
+    // The one temporary rule on the app's own zoom buttons is tied to its Kerf fix (KF-FTADQT).
+    expect(css).toContainSource(
+      "/* Temporary until KF-FTADQT: ToolbarControlGroup's native-button rule keeps a pointer cursor on a",
+    );
+    expect(css).toContainSource('.terminal-dashboard__zoom button:disabled { cursor: not-allowed; }');
+    expect(css).toMatchSource(
+      /:is\( \.terminal-tile__identity, \.terminal-tile__menu, \.terminal-tile__open, \.terminal-tile__close, \.terminal-tile__text-size, \.terminal-tile__clipboard \) \{ border: 0; color: var\(--wa-color-neutral-on-quiet\); background: transparent; \}/,
+    );
+    const controls = String(
+      TerminalVisibilityControls({ groups: [{ id: 'default', name: 'Default', hiddenKeys: [] }], activeId: 'default' }),
+    );
+    expect(controls).toContain('data-presentation="toolbar-borderless"');
+    expect(controls).toContain('data-size="compact"');
+    expect(controls).toContain('data-focus-ring-owner="group"');
+  });
+  it('clips a phone dedicated terminal through the session it renders (HS2-DR549A)', () => {
+    const session = { id: 't1', projectId: 'p', projectName: 'P', alive: true, busy: false, scrollback: '' };
+    expect(String(TerminalSession({ session }))).toContain(
+      'class="terminal-session" data-key="p:t1" data-mobile="false"',
+    );
+    expect(String(TerminalSession({ session, mobile: true }))).toContain('data-mobile="true"');
+    const drawerCss = readFileSync(new URL('./terminal-drawer.css', import.meta.url), 'utf8');
+    expect(drawerCss).toContainSource(".terminal-session[data-mobile='true'] .terminal-viewport { overflow: clip; }");
   });
 });

@@ -207,6 +207,17 @@ export function ProjectTabBarDemo() {
           }
         />
       </div>
+      {/* The shell-column presentation (HS2-DR549A): the strip shares the column surface and leaves the
+          separator to the content below it, as AppShell composes it in project mode. */}
+      <div class="project-tab-bar-demo__frame">
+        <ProjectTabBar
+          tabs={projectTabs.value}
+          label="Open projects in the shell column"
+          mode={shellMode.value}
+          surface="default"
+          divider={false}
+        />
+      </div>
       <p class="component-stage__event" aria-live="polite">
         {shellEvent.value}
       </p>

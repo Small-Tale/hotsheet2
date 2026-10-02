@@ -73,6 +73,8 @@ export interface TerminalDrawerProps {
   aiProviders?: readonly TerminalDrawerAiProvider[];
   /** The provider an AI shell uses when none is picked: the project default or this session's Drive choice. */
   defaultAiProvider?: string;
+  /** Phone presentation (the app's mobile layout): dedicated terminals clip their scaled xterm. */
+  mobile?: boolean;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 // Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
@@ -134,6 +136,7 @@ export function TerminalDrawer({
   contextMenu,
   aiProviders = [],
   defaultAiProvider,
+  mobile = false,
 }: TerminalDrawerProps) {
   const selected =
       sessions.some((session) => session.id === selectedId) || chatTabs.some((chat) => chat.id === selectedId)
@@ -300,7 +303,9 @@ export function TerminalDrawer({
         {selectedChat ? (
           selectedChat.content
         ) : selectedSession ? (
-          sessions.map((session) => <TerminalSession session={session} active={session.id === selectedSession.id} />)
+          sessions.map((session) => (
+            <TerminalSession session={session} active={session.id === selectedSession.id} mobile={mobile} />
+          ))
         ) : (
           <TerminalDashboard
             groups={[{ projectId, projectName, sessions, chats: gridChats, itemOrder: orderedIds }]}
