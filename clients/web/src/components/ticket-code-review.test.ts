@@ -184,7 +184,7 @@ describe('TicketCodeReview', () => {
         expandedCommits: ['ddd4444'],
       }),
     );
-    expect(markup).not.toContain('ticket-inspector__content');
+    expect(markup).not.toContain('ticket-inspector-panel');
     expect(markup).toContain('role="heading" aria-level="2"');
     expect(markup).toContain('<span class="kui-toolbar-text__text">Commits</span>');
     expect(markup).toContain('data-action="open-repository-review"');

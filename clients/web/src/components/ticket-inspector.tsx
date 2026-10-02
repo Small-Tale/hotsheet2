@@ -378,13 +378,14 @@ export function ticketInspectorPanel({
           attachmentContext={attachmentContext}
         />
       )}
-      {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} />}
+      {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} presentation={presentation} />}
       {activeTab === 'code-review' && (
         <TicketCodeReview
           review={codeReview}
           loading={codeReviewLoading}
           message={codeReviewMessage}
           expandedCommits={expandedCodeReviewCommits}
+          presentation={presentation}
         />
       )}
       {activeTab === 'attachments' && (
@@ -393,6 +394,7 @@ export function ticketInspectorPanel({
           enabled={attachmentsEnabled}
           editable={attachmentsEditable}
           message={attachmentMessage}
+          presentation={presentation}
         />
       )}
     </div>

@@ -331,6 +331,8 @@ describe('UX demo catalog', () => {
       'ticket-duplicate-backlinks': 'Duplicate-of backlink panel rendered within TicketInfoPanel (demoed).',
       'ticket-empty-state': 'Empty-collection state rendered within TicketList (demoed).',
       'ticket-field-conflict': 'Concurrent-edit conflict affordance rendered within the inspector editors (demoed).',
+      'ticket-inspector-panel':
+        'Scrolling content column composed by every inspector tab panel (TicketInfoPanel, TicketTimeline, TicketCodeReview, TicketAttachments, and the skeleton), each demoed in both presentations.',
       'ticket-inspector-placeholder': 'No-selection placeholder rendered within the AppShell inspector (demoed).',
       'ticket-inspector-surface':
         'State adapter composing the cataloged TicketInspector and its placeholder/corrupt variants.',

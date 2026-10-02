@@ -1,3 +1,4 @@
+import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import { AIContentLabel } from '../components/ai-content-label';
@@ -257,6 +258,37 @@ export function cancelMarkdown(): void {
   markdownEvent.value = 'Edits cancelled.';
 }
 
+export type MarkdownEditorAppearanceDemo = 'standalone' | 'embedded';
+export type MarkdownEditorInsetDemo = 'padded' | 'flush';
+export const markdownAppearance = signal<MarkdownEditorAppearanceDemo>('standalone');
+export const markdownInset = signal<MarkdownEditorInsetDemo>('padded');
+
+/** The MarkdownEditor's public appearance and inset variants (HS2-MGVE50). */
+export function MarkdownEditorSettings() {
+  return (
+    <form class="settings-form" data-settings="markdown-editor">
+      <Select
+        name="markdown-appearance"
+        label="Appearance"
+        value={markdownAppearance.value}
+        choices={[
+          { value: 'standalone', label: 'Standalone' },
+          { value: 'embedded', label: 'Embedded' },
+        ]}
+      />
+      <Select
+        name="markdown-inset"
+        label="Inset"
+        value={markdownInset.value}
+        choices={[
+          { value: 'padded', label: 'Padded' },
+          { value: 'flush', label: 'Flush (host owns the inset)' },
+        ]}
+      />
+    </form>
+  );
+}
+
 export function MarkdownEditorDemo() {
   return (
     <section class="markdown-editor-demo" aria-label="MarkdownEditor demo">
@@ -265,6 +297,8 @@ export function MarkdownEditorDemo() {
         mode={markdownMode.value}
         expanded={markdownExpanded.value}
         dirty={markdownValue.value !== markdownSavedValue.value}
+        appearance={markdownAppearance.value}
+        inset={markdownInset.value}
       />
       <p class="component-stage__event" aria-live="polite">
         {markdownEvent.value}

@@ -286,3 +286,8 @@
   background: var(--wa-color-brand-fill-quiet);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wa-color-brand-fill-loud) 12%, transparent);
 }
+/* An attachment dragged over a row highlights it as the drop target (attachments-and-gallery.ts). */
+[data-dragging-attachment='true'].ticket-list-row {
+  border-color: var(--wa-color-focus);
+  background: var(--wa-color-brand-fill-quiet);
+}

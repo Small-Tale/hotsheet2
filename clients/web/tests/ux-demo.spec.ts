@@ -2158,7 +2158,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.locator('[data-component="ticket-reader"]');
   await expect(reader.getByRole('heading', { name: 'Build TicketReader component and UX demo' })).toBeVisible();
-  await expect(reader.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText(
+  await expect(reader.locator('.ticket-info-panel__details-surface [data-component="markdown-preview"]')).toContainText(
     'Implementation notes',
   );
   const readerGuide = reader.getByRole('link', { name: 'Open the component guide' });
@@ -2179,9 +2179,9 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await reader.screenshot({ path: '/private/tmp/hs2-hnh0m6-markdown-links-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(reader.getByRole('heading', { name: 'Notes, 5 notes' })).toBeVisible();
-  await expect(reader.locator('.ticket-inspector__content')).toHaveCSS('overflow-y', 'auto');
+  await expect(reader.locator('.ticket-inspector-panel')).toHaveCSS('overflow-y', 'auto');
   const readerWidth = await reader.boundingBox();
-  const readerContentWidth = await reader.locator('.ticket-inspector__content').boundingBox();
+  const readerContentWidth = await reader.locator('.ticket-inspector-panel').boundingBox();
   expect(readerContentWidth!.width).toBeGreaterThan(readerWidth!.width * 0.9);
   const editableNote = reader.locator('[data-component="note-card"][data-note-id="reader-note"]');
   await expect(editableNote.locator('.note-card__body')).toHaveAttribute('aria-label', 'Edit note');
@@ -2213,12 +2213,12 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   });
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('dropped.txt');
   await reader.getByRole('tab', { name: 'Info' }).click();
-  await expect(reader.locator('.ticket-inspector__details-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(reader.locator('.ticket-inspector__details-surface')).toHaveCSS(
+  await expect(reader.locator('.ticket-info-panel__details-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(reader.locator('.ticket-info-panel__details-surface')).toHaveCSS(
     'background-color',
     'rgb(255, 255, 255)',
   );
-  await expect(reader.locator('.ticket-inspector__details-surface .markdown-editor--embedded')).toHaveCSS(
+  await expect(reader.locator('.ticket-info-panel__details-surface .markdown-editor--embedded')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',
   );
@@ -2228,7 +2228,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
   await readerSource.fill('## Reader draft\nPreserved across the shared inspector surface.');
   await readerSource.blur();
-  await expect(reader.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText(
+  await expect(reader.locator('.ticket-info-panel__details-surface [data-component="markdown-preview"]')).toContainText(
     'Reader draft',
   );
 
@@ -3134,7 +3134,7 @@ test('shows the reader text push state at exactly one and a half times normal si
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.locator('[data-component="ticket-reader"]');
-  const paragraph = reader.locator('.ticket-inspector__details-surface .markdown-preview p').first();
+  const paragraph = reader.locator('.ticket-info-panel__details-surface .markdown-preview p').first();
   const ordinarySize = parseFloat(await paragraph.evaluate((node) => getComputedStyle(node).fontSize));
   const toggle = reader.locator('[data-action="toggle-reader-text-size"]');
   await expect(toggle).toHaveAccessibleName('Use large reader text size');
@@ -3451,7 +3451,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
   await expect(inspector).toContainText('Build TicketList and TicketBoard');
-  const detailsParagraph = inspector.locator('.ticket-inspector__details-surface .markdown-preview > p').first();
+  const detailsParagraph = inspector.locator('.ticket-info-panel__details-surface .markdown-preview > p').first();
   await expect(detailsParagraph).toHaveCSS('margin-top', '16px');
   await expect(detailsParagraph).toHaveCSS('margin-bottom', '16px');
   await inspector.getByRole('heading', { name: /Build TicketList/ }).dblclick();
@@ -3638,13 +3638,13 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-up"]'),
   ).toHaveCount(0);
   await inspector
-    .locator('.ticket-inspector__metadata')
+    .locator('.ticket-info-panel__metadata')
     .screenshot({ path: '/private/tmp/hs2-trqdh2-inspector-fields-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(inspector.locator('wa-select[name="inspector-category"]')).toBeVisible();
   await expect(inspector.locator('wa-select[name="inspector-priority"]')).toBeVisible();
   await inspector
-    .locator('.ticket-inspector__metadata')
+    .locator('.ticket-info-panel__metadata')
     .screenshot({ path: '/private/tmp/hs2-trqdh2-inspector-fields-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
@@ -3693,7 +3693,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   );
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate((node) =>
-    [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map((section) => ({
+    [...node.querySelectorAll<HTMLElement>('.ticket-info-panel__section')].map((section) => ({
       gap: getComputedStyle(section).rowGap,
       headerHeight: section.querySelector('header')?.getBoundingClientRect().height,
     })),
@@ -3714,8 +3714,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await blockedReason.blur();
   await expect(inspector.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
   await expect(inspector.getByText('Waiting for API review.')).toBeVisible();
-  const blockedSection = inspector.locator('.ticket-inspector__blocked-section');
-  const detailsSection = inspector.locator('.ticket-inspector__details-section');
+  const blockedSection = inspector.locator('.ticket-info-panel__blocked-section');
+  const detailsSection = inspector.locator('.ticket-info-panel__details-section');
   expect((await blockedSection.boundingBox())!.y).toBeLessThan((await detailsSection.boundingBox())!.y);
   await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(5);
   const firstNote = inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]').first();
@@ -3732,9 +3732,9 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await inspector.getByRole('tab', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Timeline' })).toBeVisible();
-  await expect(inspector.locator('.ticket-inspector__timeline > li')).toHaveCount(4);
+  await expect(inspector.locator('.ticket-timeline__list > li')).toHaveCount(4);
   await expect(inspector.getByText('4 events total')).toBeVisible();
-  await expect(inspector.locator('.ticket-inspector__timeline > li').first()).toContainText('Claude started work');
+  await expect(inspector.locator('.ticket-timeline__list > li').first()).toContainText('Claude started work');
   await inspector.getByRole('tab', { name: 'Code Review' }).click();
   await expect(inspector.locator('[data-component="ticket-code-review"] .ticket-code-review__commit')).toHaveCount(2);
   await inspector.getByRole('button', { name: 'Open 2 commit bundle 92ed71a through c4a38be in Glassbox' }).click();
@@ -4576,7 +4576,7 @@ test('keeps workspace spacing and the new-ticket action in the project tab bar',
         tabBar = node.querySelector<HTMLElement>('.project-tab-bar')!,
         launcher = tabBar.querySelector<HTMLElement>('[data-component="quick-ticket-composer-launcher"]')!,
         tabs = node.querySelector<HTMLElement>('.ticket-inspector__tabs-frame')!,
-        content = node.querySelector<HTMLElement>('.ticket-inspector__content')!,
+        content = node.querySelector<HTMLElement>('.ticket-inspector-panel')!,
         bar = tabBar.getBoundingClientRect(),
         action = launcher.getBoundingClientRect();
       return {
@@ -6059,13 +6059,47 @@ test('renders the real inspector chrome as a value-free loading placeholder', as
   await expect(skeleton.locator('.kui-select--placeholder')).toHaveCount(3);
   await expect(skeleton.locator('.kui-skeleton')).not.toHaveCount(0);
   const [category, priority] = await skeleton
-    .locator('.ticket-inspector__metadata > .kui-select')
+    .locator('.ticket-info-panel__metadata > .kui-select')
     .evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().y)));
   expect(category).toBe(priority); // Category and Priority render side by side, not stacked (HS2-KWWSWY).
   // No stale prior-ticket values; the known slug of the loading ticket is shown as chrome.
-  await expect(skeleton.locator('.ticket-inspector__details-surface')).not.toContainText(/\w/);
+  await expect(skeleton.locator('.ticket-info-panel__details-surface')).not.toContainText(/\w/);
   await expect(skeleton).toContainText('HS2-4J50K3');
   await skeleton.screenshot({ path: '/private/tmp/hs2-reg3a2-ticket-inspector-skeleton.png' });
+  // The chrome is non-interactive through `inert` on its own wrappers, not CSS reaching into Kerf (HS2-MGVE50).
+  await expect(skeleton.locator('.ticket-inspector__header')).toHaveJSProperty('inert', true);
+  await expect(skeleton.locator('[data-component="ticket-inspector-skeleton-panel"]')).toHaveJSProperty('inert', true);
+});
+
+test('lets inspector Markdown keep its own typography in sidebar and reader (HS2-MGVE50)', async ({ page }) => {
+  for (const [component, root] of [
+    ['ticket-inspector', '[data-component="ticket-inspector"]'],
+    ['ticket-reader', '[data-component="ticket-reader"]'],
+  ] as const) {
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+      const details = page.locator(`${root} .ticket-info-panel__details-surface .markdown-preview`).first();
+      // A Markdown heading is a Markdown heading, not an uppercase inspector section label.
+      await expect(details.locator('h2').first()).toHaveCSS('text-transform', 'none');
+      const [paragraph, quote] = await Promise.all([
+        details
+          .locator('p')
+          .first()
+          .evaluate((node) => getComputedStyle(node).lineHeight),
+        details
+          .locator('blockquote p')
+          .first()
+          .evaluate((node) => getComputedStyle(node).fontSize),
+      ]);
+      expect(paragraph).toBe('22.4px');
+      expect(quote).toBe('12px');
+      // The flush editor puts Details text on the surface's own 8px inset.
+      await expect(
+        page.locator(`${root} .ticket-info-panel__details-surface .markdown-editor__preview`).first(),
+      ).toHaveCSS('padding-left', '0px');
+    }
+  }
 });
 
 test('shows the chat model/effort as a label with a popup to change them', async ({ page }) => {

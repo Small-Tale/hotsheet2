@@ -11,7 +11,7 @@ describe('TicketInspectorSkeleton', () => {
     expect(markup).toContain('class="ticket-inspector ticket-inspector--placeholder"');
     expect(markup).toContain('class="kui-tab-bar ticket-inspector__tabs"');
     expect(markup).toContain('data-component="toolbar-text" data-size="small" data-placeholder="true"');
-    expect(markup).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
+    expect(markup).toContain('class="ticket-info-panel__section ticket-info-panel__details-section"');
     // Real Kerf tab bar with four disabled placeholder tabs and Info selected.
     expect(markup.match(/data-component="app-tab"/g)).toHaveLength(4);
     expect(markup).toMatch(/data-tab-id="info"[^>]*data-selected="true"[^>]*data-placeholder="true"/);
@@ -25,7 +25,7 @@ describe('TicketInspectorSkeleton', () => {
     expect(markup).toContain('class="kui-text" data-component="text"');
     expect(markup).toContain('data-font="default" data-border="none">Status</h2>');
     expect(markup).toContain('class="kui-list-inset-control"');
-    expect(markup).toContain('<div class="ticket-inspector__status-line">');
+    expect(markup).toContain('<div class="ticket-info-panel__status-line">');
     // Unknown value slots (title, details, note bodies, provenance) use the native Skeleton block.
     expect(markup).toContain('kui-skeleton');
     // The collapse control still works while loading; nothing else is interactive.

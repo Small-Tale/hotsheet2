@@ -1,13 +1,15 @@
 .ticket-notes {
   display: grid;
   min-width: 0;
-  gap: remify(9.6px);
+  gap: var(--kui-space-xs);
 }
 .ticket-notes .ticket-notes__empty-inset {
   margin-inline: var(--kui-layout-inline-margin, var(--kui-space-xs));
 }
 .ticket-notes__empty {
   margin: 0;
+  font-size: var(--wa-font-size-s);
+  line-height: 1.5;
   color: var(--wa-color-neutral-on-quiet) !important;
   font-style: italic;
 }

@@ -13,12 +13,9 @@ import { TicketTimeline } from './ticket-timeline';
 
 describe('ticket metadata controls and inspector panels', () => {
   it('uses compact Details field-label geometry in preview and editing modes (HS2-S6S709)', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
     expect(css).toContainSource(
-      '.ticket-inspector__content .ticket-inspector__details-section { gap: calc(var(--kui-font-xs) * 0.5); }',
-    );
-    expect(css).toContainSource(
-      '.ticket-inspector__status-field, .ticket-inspector__details-section { --kui-list-header-min-height: 0; --kui-list-header-title-min-height: 0; --kui-list-header-title-padding-block: 0; --kui-list-header-border-width: 0; --kui-list-header-title-padding-inline: 1px; }',
+      '.ticket-info-panel__status-field, .ticket-info-panel__details-section { --kui-list-header-min-height: 0; --kui-list-header-title-min-height: 0; --kui-list-header-title-padding-block: 0; --kui-list-header-border-width: 0; --kui-list-header-title-padding-inline: 1px; gap: calc(var(--kui-font-xs) * 0.5); }',
     );
     expect(css).not.toMatch(/\.kui-list-header(__title)? \{/);
     for (const detailsMode of ['preview', 'write'] as const) {
@@ -32,7 +29,7 @@ describe('ticket metadata controls and inspector panels', () => {
           detailsMode,
         }),
       );
-      expect(markup).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
+      expect(markup).toContain('class="ticket-info-panel__section ticket-info-panel__details-section"');
       expect(markup).toContain('class="kui-text" data-component="text"');
       expect(markup).toContain('data-font="default" data-border="none">Details</h2>');
       expect(markup).toContain(`data-mode="${detailsMode}"`);
@@ -47,7 +44,7 @@ describe('ticket metadata controls and inspector panels', () => {
         canEditText: false,
       }),
     );
-    expect(readOnly).toContain('class="ticket-inspector__section ticket-inspector__details-section"');
+    expect(readOnly).toContain('class="ticket-info-panel__section ticket-info-panel__details-section"');
     expect(readOnly).not.toContain('aria-label="Edit Ticket details"');
   });
 
@@ -115,7 +112,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(info.match(/data-component="list-header"/g)).toHaveLength(4);
     expect(info).toContain('data-font="default" data-border="none">Status</h2>');
     expect(info).toContain('class="kui-list-inset-control"');
-    expect(info).toContain('<div class="ticket-inspector__status-line">');
+    expect(info).toContain('<div class="ticket-info-panel__status-line">');
     expect(info).toContain('name="inspector-category" label="Category"');
     expect(info).toContain('name="inspector-priority" label="Priority"');
     expect(info).toContain('data-font="default" data-border="none">Details</h2>');
@@ -136,7 +133,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(deleted).toContain('data-lucide="trash-2"');
     expect(deleted).toContain('Deleted');
     expect(deleted).toContain('class="kui-list-inset-control"');
-    expect(deleted).toContain('<div class="ticket-inspector__status-line">');
+    expect(deleted).toContain('<div class="ticket-info-panel__status-line">');
     expect(deleted).not.toContain('name="inspector-status"');
     expect(info).toContain('aria-label="Notes, 0 notes" class="kui-text" data-component="text"');
     expect(info).toMatch(/<span class="kui-badge"[^>]*aria-hidden="true">0<\/span>/);
@@ -184,7 +181,7 @@ describe('ticket metadata controls and inspector panels', () => {
     const attachments = String(
       TicketAttachments({ attachments: [{ id: 'one', name: 'one.png', url: '/attachment/one', annotationCount: 2 }] }),
     );
-    expect(attachments.match(/class="ticket-inspector__attachment"/g)).toHaveLength(1);
+    expect(attachments.match(/class="ticket-attachments__item"/g)).toHaveLength(1);
     expect(attachments).toContain('class="ticket-attachments__count" aria-label="1 attachment">1</span>');
     expect(attachments).not.toContain('attachment total');
     expect(attachments).toContain('data-attachment-drop-target="true"');
@@ -200,7 +197,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('Open one.png in media gallery, 2 annotations');
     expect(attachments).toContain('ticket-attachments__annotation-marker');
     expect(attachments).toContain('data-lucide="pencil"');
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-attachments.css'), 'utf8');
     // Media grid items cap at 220px wide so they wrap instead of stretching full width (HS2-KEZ0EY).
     expect(css).toMatch(/ticket-attachments__image-grid button \{[^}]*max-width: remify\(220px\)/);
     expect(css).toMatchSource(/ticket-attachments__image-grid :is\(img,video\) \{[^}]*object-fit: contain/);
@@ -332,16 +329,14 @@ describe('ticket metadata controls and inspector panels', () => {
   });
 
   it('gives the attachment menu trigger visible hover and keyboard-focus feedback', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(css).toContainSource('.ticket-inspector__attachment[data-action="open-attachment-row"]:hover');
-    expect(css).toContainSource(
-      '.ticket-inspector__attachment-menu:hover, .ticket-inspector__attachment-menu:focus-visible',
-    );
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-attachments.css'), 'utf8');
+    expect(css).toContainSource('.ticket-attachments__item[data-action="open-attachment-row"] { cursor: pointer; }');
+    expect(css).toContainSource('.ticket-attachments__item-menu:hover, .ticket-attachments__item-menu:focus-visible');
     expect(css).toContain('outline: var(--wa-focus-ring)');
   });
 
   it('presents attachment groups as transparent titled sections with compact purpose tags', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-attachments.css'), 'utf8');
     expect(css).toContain('.ticket-attachments__batch {');
     expect(css).toContain('background: transparent');
     expect(css).toContainSource('.ticket-attachments__batch[data-drag-over="true"] { outline: var(--wa-focus-ring)');

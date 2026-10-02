@@ -1,0 +1,112 @@
+/* TicketInfoPanel (HS2-MGVE50): metadata, blocked reason, details, tags, and provenance. Its sections
+   sit on the TicketInspectorPanel column; bordered surfaces own their 1px border + 8px padding. */
+.ticket-info-panel__metadata,
+.ticket-info-panel__section {
+  display: grid;
+  min-width: 0;
+  gap: var(--kui-space-xs);
+}
+.ticket-info-panel__metadata {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* Kerf beta 17 gives Web Awesome fields the canonical 1px + 8px inset and ListHeader-style label.
+   Category and Priority own their labels and fill their grid cells through `triggerWidth="fill"`. */
+.ticket-info-panel__status-field {
+  display: grid;
+  grid-column: 1 / -1;
+}
+/* Details and Status label fields use the same compact label-to-control gap as Category. Kerf beta.60
+   ListHeader tokens drop the navigation-row height and borders; the 1px title padding keeps the label
+   aligned where its removed inline border used to inset it. */
+.ticket-info-panel__status-field,
+.ticket-info-panel__details-section {
+  --kui-list-header-min-height: 0;
+  --kui-list-header-title-min-height: 0;
+  --kui-list-header-title-padding-block: 0;
+  --kui-list-header-border-width: 0;
+  --kui-list-header-title-padding-inline: 1px;
+  gap: calc(var(--kui-font-xs) * 0.5);
+}
+/* Inner flex row inside the Kerf ListInsetControl so the status menu and badges wrap (HS2-VABS08). */
+.ticket-info-panel__status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--kui-space-xs);
+}
+.ticket-info-panel__details-surface {
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--kui-space-xs);
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: remify(10.4px);
+  background: var(--wa-color-surface-default);
+}
+.ticket-info-panel__details-surface[data-feedback-needed='true'] {
+  display: grid;
+  border-color: var(--wa-color-warning-border-normal);
+  background: var(--wa-color-warning-fill-quiet);
+  gap: var(--kui-space-xs);
+}
+.ticket-info-panel__details-feedback {
+  display: grid;
+  min-width: 0;
+  gap: var(--kui-space-xs);
+}
+.ticket-info-panel__details-feedback-header {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+  color: var(--wa-color-warning-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: 700;
+}
+.ticket-info-panel__details-feedback-header svg {
+  width: remify(15.2px);
+  height: remify(15.2px);
+  flex: none;
+}
+.ticket-info-panel__blocked-surface {
+  min-width: 0;
+  padding: var(--kui-space-xs);
+  border-radius: remify(8.8px);
+  background: var(--wa-color-neutral-fill-normal);
+  overflow-wrap: anywhere;
+}
+.ticket-info-panel__blocked-surface p {
+  margin: 0;
+  color: var(--wa-color-neutral-on-normal);
+  font-size: var(--wa-font-size-s);
+  line-height: 1.5;
+}
+.ticket-info-panel__blocked-editor {
+  display: grid;
+  padding: var(--kui-space-xs);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(8.8px);
+  background: var(--wa-color-surface-default);
+  gap: var(--kui-space-xs);
+}
+.ticket-info-panel__blocked-editor textarea {
+  width: 100%;
+  min-height: remify(64px);
+  padding: 0;
+  /* Auto-grows instead of offering a resize grip on touch screens (HS2-6PC150). */
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
+  border: 0;
+  background: transparent;
+  outline: 0;
+  font: inherit;
+  line-height: 1.45;
+}
+/* Non-bordered text aligns to the 17px column: 1px transparent border + 8px padding. */
+.ticket-info-panel__provenance {
+  display: flex;
+  padding: var(--kui-space-2xs) var(--kui-space-xs) 0;
+  border-inline: 1px solid transparent;
+  color: var(--wa-color-neutral-on-quiet);
+  justify-content: space-between;
+  gap: var(--kui-space-2xs);
+  font-size: var(--wa-font-size-2xs);
+}

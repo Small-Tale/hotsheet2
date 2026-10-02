@@ -74,10 +74,13 @@
   width: remify(12.8px);
   height: remify(12.8px);
 }
+/* Reading scale (HS2-MGVE50): a reading surface such as the large-text reader sets the unitless
+   --hotsheet-reading-scale on its own root; each reading part multiplies its own ordinary size by it
+   (1 when unset). Inheriting parts scale their inherited size through `1em`. */
 .note-card__body {
   min-width: 0;
   margin: 0;
-  font-size: var(--wa-font-size-s);
+  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-s));
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -103,6 +106,7 @@
   color: inherit;
   background: var(--wa-color-surface-default);
   font: inherit;
+  font-size: calc(var(--hotsheet-reading-scale, 1) * 1em);
   line-height: 1.5;
 }
 .note-card__editor textarea[data-note-response='true'] {
@@ -119,6 +123,7 @@
 .note-card__feedback-prompt {
   display: grid;
   gap: var(--kui-space-2xs);
+  font-size: calc(var(--hotsheet-reading-scale, 1) * 1em);
 }
 .note-card__feedback-section {
   display: grid;
@@ -216,6 +221,9 @@
   color: inherit;
   background: var(--wa-color-surface-default);
   font: inherit;
+  /* Choice text matches note body text and scales with the reading scale. */
+  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-s));
+  line-height: 1.5;
   text-align: left;
   cursor: pointer;
   grid-template-columns: remify(24px) minmax(0, 1fr);
@@ -267,7 +275,7 @@
 }
 .note-card[data-kind='activity'] .note-card__body {
   color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
+  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-xs));
   line-height: 1.4;
 }
 .note-card[data-kind='feedback_needed'],

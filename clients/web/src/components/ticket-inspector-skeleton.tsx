@@ -2,7 +2,7 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@kerfjs/ui/list-inset-control.css';
 import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
-import './ticket-inspector-panel.css';
+import './ticket-info-panel.css';
 import './ticket-inspector-skeleton.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
@@ -19,6 +19,7 @@ import { Activity, BookOpen, Info, ListTree, MessageSquareCode, MessageSquareTex
 
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 import { TicketCategorySelect } from './ticket-category-select';
+import { TicketInspectorPanel } from './ticket-inspector-panel';
 import { TicketPrioritySelect } from './ticket-priority-select';
 import { TicketStatusMenu } from './ticket-status-menu';
 
@@ -36,15 +37,15 @@ function PlaceholderNote({ kind, card = false }: { kind: 'activity' | 'regular';
       ? { label: 'Activity', icon: Activity, iconName: 'activity' }
       : { label: 'Note', icon: MessageSquareText, iconName: 'message-square-text' };
   return (
-    <div class={`ticket-inspector__ph-note${card ? ' ticket-inspector__ph-note--card' : ''}`}>
-      <div class="ticket-inspector__ph-note-header">
-        <span class="ticket-inspector__ph-note-kind">
+    <div class={`ticket-inspector-skeleton__note${card ? ' ticket-inspector-skeleton__note--card' : ''}`}>
+      <div class="ticket-inspector-skeleton__note-header">
+        <span class="ticket-inspector-skeleton__note-kind">
           <LucideIcon icon={presentation.icon} name={presentation.iconName} />
           {presentation.label}
         </span>
         <Skeleton width={rem(2.5)} height={rem(0.6875)} />
       </div>
-      <div class="ticket-inspector__ph-note-body">
+      <div class="ticket-inspector-skeleton__note-body">
         <Skeleton />
         <Skeleton width={pct(45)} />
       </div>
@@ -79,8 +80,9 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
     },
     toggle: inspectorToggle(),
     header: (
-      <div class="ticket-inspector__header ticket-inspector--placeholder" aria-hidden="true">
-        <div class="ticket-inspector__ph-title">
+      // The chrome is shown for continuity only; `inert` keeps all of it non-interactive while loading.
+      <div class="ticket-inspector__header ticket-inspector--placeholder" aria-hidden="true" inert>
+        <div class="ticket-inspector-skeleton__title">
           <Skeleton height={rem(1.25)} />
           <Skeleton width={pct(62)} height={rem(1.25)} />
         </div>
@@ -106,20 +108,23 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
         data-component="ticket-inspector-skeleton-body"
         aria-busy="true"
       >
-        <div class="ticket-inspector__content" aria-hidden="true">
-          <section class="ticket-inspector__metadata" aria-label="Ticket metadata">
+        <TicketInspectorPanel
+          component="ticket-inspector-skeleton-panel"
+          attributes={{ 'aria-hidden': 'true', inert: '' }}
+        >
+          <section class="ticket-info-panel__metadata" aria-label="Ticket metadata">
             <TicketCategorySelect name="inspector-category" value="" placeholder />
             <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
-            <div class="ticket-inspector__status-field">
+            <div class="ticket-info-panel__status-field">
               <ListHeader label="Status" />
               <ListInsetControl>
-                <div class="ticket-inspector__status-line">
+                <div class="ticket-info-panel__status-line">
                   <TicketStatusMenu value="not_started" placeholder />
                 </div>
               </ListInsetControl>
             </div>
           </section>
-          <section class="ticket-inspector__section ticket-inspector__blocked-section">
+          <section class="ticket-info-panel__section ticket-info-panel__blocked-section">
             <ListItem
               action="block-ticket"
               icon={<LucideIcon icon={Plus} name="plus" />}
@@ -127,15 +132,15 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
               tabIndex={-1}
             />
           </section>
-          <section class="ticket-inspector__section ticket-inspector__details-section">
+          <section class="ticket-info-panel__section ticket-info-panel__details-section">
             <ListHeader label="Details" />
-            <div class="ticket-inspector__details-surface">
-              <div class="ticket-inspector__ph-lines">
+            <div class="ticket-info-panel__details-surface">
+              <div class="ticket-inspector-skeleton__lines">
                 <Skeleton lines={3} />
               </div>
             </div>
           </section>
-          <section class="ticket-inspector__section">
+          <section class="ticket-info-panel__section">
             <ListHeader
               label="Tags"
               actionDisabled
@@ -144,7 +149,7 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
               actionIcon={<LucideIcon icon={Plus} name="plus" />}
             />
           </section>
-          <section class="ticket-inspector__section">
+          <section class="ticket-info-panel__section">
             <ListHeader
               label="Notes"
               actionDisabled
@@ -152,17 +157,17 @@ export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): 
               actionLabel="Add note"
               actionIcon={<LucideIcon icon={Plus} name="plus" />}
             />
-            <div class="ticket-inspector__ph-notes">
+            <div class="ticket-inspector-skeleton__notes">
               <PlaceholderNote kind="activity" />
               <PlaceholderNote kind="activity" />
               <PlaceholderNote kind="regular" card />
             </div>
           </section>
-          <footer class="ticket-inspector__ph-provenance">
+          <footer class="ticket-inspector-skeleton__provenance">
             <Skeleton width={rem(6)} height={rem(0.6875)} />
             <Skeleton width={rem(4)} height={rem(0.6875)} />
           </footer>
-        </div>
+        </TicketInspectorPanel>
       </div>
     ),
     pane: {},

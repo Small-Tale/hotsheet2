@@ -1079,8 +1079,8 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
   The sidebar follows the kerf 8px-grid inset (HS2-EQEGGG, refined in HS2-R64ETQ):
-  `.ticket-inspector__content` owns no inline padding, and each direct child (section, notes,
-  provenance) sits 8px from the edge and owns no border/padding of its own. Bordered
+  the shared `TicketInspectorPanel` column (`ticket-inspector-panel.tsx`) that every tab panel
+  composes owns no inline padding, and each direct child (section, notes, provenance) sits 8px from the edge and owns no border/padding of its own. Bordered
   surfaces/cards/fields therefore sit their own 1px border on the 8px column and own their 8px
   padding, so their text lands at 17px; headers and other non-bordered content get a 1px
   transparent inline border + 8px padding to align their text to the same 17px column. There
@@ -1090,8 +1090,17 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   1px + 8px content inset and aligns its ListHeader-style label with its value, eliminating separate
   inset wrappers and label-suppressed controls. The Code Review and Attachments panels
   follow the same rule (heading at 17px, evidence/commit/attachment surfaces at the 8px column).
-  The wider reader modal keeps its own generous inline padding, so its sections do not add the
-  8px margin on top. It reuses the same `ListHeader`/`ListItem`
+  The wider reader modal keeps its own generous inline padding through the column's
+  `presentation="reader"` variant, so its sections do not add the 8px margin on top.
+  **Style ownership (HS2-MGVE50):** each panel styles only its own markup in its own stylesheet —
+  `TicketInfoPanel` (`ticket-info-panel__*`), `TicketTimeline` (`ticket-timeline__*`),
+  `TicketAttachments` (`ticket-attachments__*`), `TicketCodeReview` (`ticket-code-review--panel`),
+  and the skeleton (`ticket-inspector-skeleton__*`, non-interactive through `inert` rather than
+  CSS reaching into the Kerf tab bar). The column no longer restyles descendant `h2`/`p`, so Markdown
+  headings, paragraphs, quotations, and activity-note text inside the inspector use their own
+  component typography; the Details editor aligns to its surface through `MarkdownEditor`
+  `inset="flush"` instead of a padding override, and the reader's card-free chrome and title size are
+  `TicketInspector` reader-presentation variants. It reuses the same `ListHeader`/`ListItem`
   primitives as the left project sidebar for Details, Tags, Notes, Block ticket,
   and Add note. Headers and content align by their text/icon inset while bordered
   surfaces remain flush below their headers without a second indentation level.
@@ -1220,7 +1229,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   outer-corner resize handle, inline/expanded presentation, and 150 ms debounced autosave without routine
   Save/Cancel actions. Internal editor controls preserve editing; external blur flushes.
   The embedded appearance reuses the same behavior in inspector and reader without a
-  redundant standalone toolbar or save-status footer; the real inspector persists edits
+  redundant standalone toolbar or save-status footer; `inset="flush"` (demoed beside
+  `appearance` in the UX demo settings) drops the preview/source padding when the host surface
+  owns the inset, as the inspector Details surface does (HS2-MGVE50); the real inspector persists edits
   through its checkout. Live ticket refresh is field-aware: unrelated changes merge into
   the inspector while the draft remains mounted, remote-only changes to an untouched
   draft are adopted, and only a divergent edit to the same field opens the shared
@@ -1250,7 +1261,11 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   main project/ticket selection. Navigation may recurse; only the top layer is modal and
   interactive, and Close/Escape unwinds one frame before restoring focus to its originating
   link (or the work area if that opener disappeared). A compact project/depth header distinguishes stacked same-slug readers and remains
-  usable at narrow viewport widths.
+  usable at narrow viewport widths. Large reader text sets one unitless reading scale
+  (`--hotsheet-reading-scale: var(--hs-reader-text-scale)`, 1.5) on the reader's own root; Markdown
+  previews and sources, note bodies, feedback prompts, choices, and response editors multiply their
+  own ordinary sizes by it, so every element is exactly 1.5× without the reader restyling them
+  (HS2-MGVE50).
 - `UnsavedChangesGuard`
 
 ### 4.3 Tags — feature floor

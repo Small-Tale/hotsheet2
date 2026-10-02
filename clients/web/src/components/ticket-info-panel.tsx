@@ -1,6 +1,6 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@kerfjs/ui/list-inset-control.css';
-import './ticket-inspector-panel.css';
+import './ticket-info-panel.css';
 
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
@@ -16,6 +16,7 @@ import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
 import { FeedbackPrompt, type NoteCardProps } from './note-card';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TicketCategorySelect } from './ticket-category-select';
+import { TicketInspectorPanel } from './ticket-inspector-panel';
 import { TicketNotes } from './ticket-notes';
 import { TicketPrioritySelect } from './ticket-priority-select';
 import type { TicketPriority } from './ticket-row';
@@ -88,14 +89,18 @@ export function TicketInfoPanel({
     feedbackNeeded && textRequestsFeedback(details) && !notes.some((note) => note.kind === 'feedback_needed');
   const resolvedTagPopoverId = tagPopoverId ?? 'ticket-tag-popover';
   return (
-    <div class="ticket-inspector__content" data-component="ticket-info-panel">
-      <section class="ticket-inspector__metadata" aria-label="Ticket metadata">
+    <TicketInspectorPanel
+      component="ticket-info-panel"
+      className="ticket-info-panel"
+      presentation={readerPresentation ? 'reader' : 'sidebar'}
+    >
+      <section class="ticket-info-panel__metadata" aria-label="Ticket metadata">
         <TicketCategorySelect name="inspector-category" value={category} disabled={!canUpdate} />
         <TicketPrioritySelect name="inspector-priority" value={priority} disabled={!canUpdate} />
-        <div class="ticket-inspector__status-field">
+        <div class="ticket-info-panel__status-field">
           <ListHeader label="Status" />
           <ListInsetControl>
-            <div class="ticket-inspector__status-line">
+            <div class="ticket-info-panel__status-line">
               <>
                 {status === 'deleted' ? (
                   <StatusBadge status="deleted" />
@@ -108,11 +113,11 @@ export function TicketInfoPanel({
           </ListInsetControl>
         </div>
       </section>
-      <section class="ticket-inspector__section ticket-inspector__blocked-section">
+      <section class="ticket-info-panel__section ticket-info-panel__blocked-section">
         {blockedReasonEditing ? (
           <>
             <ListHeader label="Blocked reason" />
-            <div class="ticket-inspector__blocked-editor">
+            <div class="ticket-info-panel__blocked-editor">
               <textarea name="blocked-reason" aria-label="Blocked reason">
                 {blockedReasonDraft}
               </textarea>
@@ -122,7 +127,7 @@ export function TicketInfoPanel({
           <>
             <ListHeader label="Blocked reason" />
             <div
-              class="ticket-inspector__blocked-surface"
+              class="ticket-info-panel__blocked-surface"
               data-edit-blocked-reason={canEditText ? 'true' : undefined}
               role={canEditText ? 'button' : undefined}
               tabIndex={canEditText ? 0 : undefined}
@@ -136,12 +141,12 @@ export function TicketInfoPanel({
           <ListItem action="edit-blocked-reason" icon={<LucideIcon icon={Plus} name="plus" />} label="Block ticket" />
         ) : undefined}
       </section>
-      <section class="ticket-inspector__section ticket-inspector__details-section">
+      <section class="ticket-info-panel__section ticket-info-panel__details-section">
         <ListHeader label="Details" />
-        <div class="ticket-inspector__details-surface" data-feedback-needed={detailsFeedback ? 'true' : undefined}>
+        <div class="ticket-info-panel__details-surface" data-feedback-needed={detailsFeedback ? 'true' : undefined}>
           {detailsFeedback && readerPresentation && canAddNotes ? (
-            <div class="ticket-inspector__details-feedback" data-details-feedback="true">
-              <header class="ticket-inspector__details-feedback-header">
+            <div class="ticket-info-panel__details-feedback" data-details-feedback="true">
+              <header class="ticket-info-panel__details-feedback-header">
                 <LucideIcon icon={CircleAlert} name="circle-alert" />
                 Feedback needed
               </header>
@@ -191,6 +196,7 @@ export function TicketInfoPanel({
                 mode={detailsMode}
                 dirty={detailsDirty}
                 appearance="embedded"
+                inset="flush"
                 showExpand={false}
                 label="Ticket details"
                 editable={canEditText}
@@ -210,7 +216,7 @@ export function TicketInfoPanel({
           )}
         </div>
       </section>
-      <section class="ticket-inspector__section">
+      <section class="ticket-info-panel__section">
         {canUpdate ? (
           <ListHeader
             label="Tags"
@@ -247,10 +253,10 @@ export function TicketInfoPanel({
         feedbackChoiceSelections={feedbackChoiceSelections}
         attachmentContext={attachmentContext}
       />
-      <footer class="ticket-inspector__provenance">
+      <footer class="ticket-info-panel__provenance">
         <span>{providerName}</span>
         <span>{updatedLabel}</span>
       </footer>
-    </div>
+    </TicketInspectorPanel>
   );
 }

@@ -53,8 +53,11 @@ const kerfSpacingMigratedComponents = [
   'ticket-link-choice-dialog.css',
   'ticket-list.css',
   'ticket-code-review.css',
+  'ticket-attachments.css',
+  'ticket-info-panel.css',
   'ticket-inspector-panel.css',
   'ticket-inspector.css',
+  'ticket-timeline.css',
   'ticket-row.css',
   'ticket-tag-editor.css',
   'trash-settings.css',
@@ -109,9 +112,7 @@ describe('shared client theme', () => {
       '--hs-command-pink',
       '--hs-command-teal',
       '--hs-command-gray',
-      '--hs-reader-font-size-s',
-      '--hs-reader-font-size-m',
-      '--hs-reader-font-size-l',
+      '--hs-reader-text-scale',
       '--hs-selected-row-overlap',
     ];
     const cssReferences = required.filter(
@@ -211,9 +212,10 @@ describe('shared client theme', () => {
 
   it('uses the Web Awesome typography scale instead of one-off font sizes', () => {
     const typeToken = 'var\\(--wa-font-size-(?:3xs|2xs|xs|s|m|l|xl|2xl|3xl|4xl|5xl|smaller|larger)\\)';
-    const semanticTypeToken = 'var\\(--hs-reader-font-size-(?:xs|s|m|l)\\)';
+    // Reading scale (HS2-MGVE50): a reading surface multiplies a typography step (or the inherited size).
+    const readingToken = `calc\\(var\\(--hotsheet-reading-scale, 1\\) \\* (?:${typeToken}|1em)\\)`;
     const allowedSize = new RegExp(
-      `^(?:${typeToken}|${semanticTypeToken}|clamp\\(${typeToken}, \\d*\\.?\\d+vw, ${typeToken}\\))$`,
+      `^(?:${typeToken}|${readingToken}|clamp\\(${typeToken}, \\d*\\.?\\d+vw, ${typeToken}\\))$`,
     );
     for (const path of clientCss) {
       const source = css(path);
@@ -228,6 +230,6 @@ describe('shared client theme', () => {
     expect(css(resolve(sourceRoot, 'components/workspace-header.css'))).toMatch(
       /view-mode-switcher__badge[^}]*font-size: var\(--wa-font-size-3xs\)/,
     );
-    expect(css(tokenPath)).toContain('--hs-reader-font-size-s: calc(1.5 * var(--wa-font-size-s))');
+    expect(css(tokenPath)).toContain('--hs-reader-text-scale: 1.5;');
   });
 });

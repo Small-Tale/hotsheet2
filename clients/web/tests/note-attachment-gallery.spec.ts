@@ -113,7 +113,7 @@ test('each image in one note opens its own gallery attachment', async ({ page })
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-IMAGES"]').click();
   const visibleInspector = page.locator('#app-right-rail'),
-    details = visibleInspector.locator('.ticket-inspector__details-surface');
+    details = visibleInspector.locator('.ticket-info-panel__details-surface');
   await expect(details.getByRole('button', { name: 'Open first.svg in image gallery' })).toHaveAttribute(
     'data-attachment-url',
     /\/checkouts\/demo\/tickets\/HS2-IMAGES\/attachments\/A-FIRST$/,

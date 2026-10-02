@@ -77,6 +77,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-project-scope.ts # Host-wide terminal ownership projection into the most-specific open project root
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
     src/components/note-card.tsx # Kind-specific NoteCard (re-exports ConfidenceBadge for older imports)
+    src/components/ticket-inspector-panel.tsx # Shared scrolling content column (sidebar/reader variants) composed by every inspector tab panel; each panel owns its colocated stylesheet (ticket-info-panel/ticket-timeline/ticket-attachments .css, HS2-MGVE50)
     src/components/confidence-calibration.tsx # Project statistics calibration table (per-band reopen vs. verified, recent completions) + colocated CSS; loaded from GET /checkouts/{id}/confidence-report in the stats shell mode; demo src/ux-demo/confidence-calibration-demo.tsx (HS2-Q1WCCY)
     src/note-authorship.ts # Note author/AI-label facets from the recorded note actor (tool name from the worker-id prefix; HS2-32QDZ3)
     src/components/confidence-badge.tsx # Shared banded AI completion ConfidenceBadge + colocated CSS: compact pill (note header, TicketRow list/board summaries, HS2-A0Q6G6) and labeled inspector/reader header (HS2-DWTJ43); demo in src/ux-demo/confidence-badge-demo.tsx

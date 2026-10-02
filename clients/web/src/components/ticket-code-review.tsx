@@ -20,6 +20,7 @@ import {
 import type { CodeReview, CodeReviewTarget, CommitRef } from '../api';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { MarkdownPreview } from './markdown-preview';
+import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
 export interface CodeReviewComparison {
   active: boolean;
@@ -36,7 +37,10 @@ export interface TicketCodeReviewProps {
   emptyMessage?: string;
   loadingMessage?: string;
   action?: string;
+  /** Rendered inside another surface (the repository popover) rather than as an inspector tab panel. */
   embedded?: boolean;
+  /** The inspector tab panel presentation when not `embedded`. */
+  presentation?: TicketInspectorPanelPresentation;
   comparison?: CodeReviewComparison;
   expandedCommits?: readonly string[];
 }
@@ -50,6 +54,7 @@ export function TicketCodeReview({
   loadingMessage = 'Finding ticket commits…',
   action = 'open-code-review',
   embedded = false,
+  presentation = 'sidebar',
   comparison,
   expandedCommits = [],
 }: TicketCodeReviewProps) {
@@ -59,211 +64,220 @@ export function TicketCodeReview({
     <ToolbarText text={title} size="xlarge" headingLevel={2} />,
     review?.difftool ? <ToolbarText text={`Opens in ${review.difftool}`} size="small" /> : undefined,
   ];
-  return (
-    <div
-      class={`${embedded ? '' : 'ticket-inspector__content '}ticket-code-review`}
-      data-component="ticket-code-review"
-      data-embedded={embedded ? 'true' : undefined}
-    >
-      <section>
-        <div class="ticket-code-review__header">
-          <Toolbar dividerSides="" leading={heading} />
+  const body = (
+    <section class="ticket-code-review__section">
+      <div class="ticket-code-review__header">
+        <Toolbar dividerSides="" leading={heading} />
+      </div>
+      {loading && <p role="status">{loadingMessage}</p>}
+      {!loading && review && review.commits.length === 0 && (
+        <div class="ticket-code-review__empty">
+          <LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" />
+          <p>{emptyMessage}</p>
         </div>
-        {loading && <p role="status">{loadingMessage}</p>}
-        {!loading && review && review.commits.length === 0 && (
-          <div class="ticket-code-review__empty">
-            <LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" />
-            <p>{emptyMessage}</p>
-          </div>
-        )}
-        {!loading && review && review.commits.length > 0 && (
-          <>
-            {review.summary && (
-              <button
-                type="button"
-                class="ticket-code-review__evidence"
-                {...REPOSITORY_ACTIONS.openChangeEvidence.attrs}
-                aria-label="Open change evidence"
-              >
-                <h3>Change evidence</h3>
-                <div class="ticket-code-review__evidence-grid">
+      )}
+      {!loading && review && review.commits.length > 0 && (
+        <>
+          {review.summary && (
+            <button
+              type="button"
+              class="ticket-code-review__evidence"
+              {...REPOSITORY_ACTIONS.openChangeEvidence.attrs}
+              aria-label="Open change evidence"
+            >
+              <h3>Change evidence</h3>
+              <div class="ticket-code-review__evidence-grid">
+                <span>
+                  <LucideIcon icon={FileText} name="file-text" />
+                  <strong>{review.summary.files.docs}</strong> docs
+                </span>
+                <span>
+                  <LucideIcon icon={FlaskConical} name="flask-conical" />
+                  <strong>{review.summary.files.tests}</strong> tests
+                </span>
+                <span>
+                  <LucideIcon icon={FileCode2} name="file-code-2" />
+                  <strong>{review.summary.files.source}</strong> source
+                </span>
+                {review.summary.files.other > 0 && (
                   <span>
-                    <LucideIcon icon={FileText} name="file-text" />
-                    <strong>{review.summary.files.docs}</strong> docs
+                    <LucideIcon icon={CircleHelp} name="circle-help" />
+                    <strong>{review.summary.files.other}</strong> other
                   </span>
-                  <span>
-                    <LucideIcon icon={FlaskConical} name="flask-conical" />
-                    <strong>{review.summary.files.tests}</strong> tests
-                  </span>
-                  <span>
-                    <LucideIcon icon={FileCode2} name="file-code-2" />
-                    <strong>{review.summary.files.source}</strong> source
-                  </span>
-                  {review.summary.files.other > 0 && (
-                    <span>
-                      <LucideIcon icon={CircleHelp} name="circle-help" />
-                      <strong>{review.summary.files.other}</strong> other
-                    </span>
-                  )}
-                </div>
-                <p data-tests-modified={review.summary.tests_modified > 0 ? 'true' : 'false'}>
-                  {review.summary.tests_added} new test file{review.summary.tests_added === 1 ? '' : 's'} ·{' '}
-                  {review.summary.tests_modified} existing test file{review.summary.tests_modified === 1 ? '' : 's'}{' '}
-                  modified
-                </p>
-              </button>
-            )}
-            {!enabled && (
-              <p class="ticket-code-review__notice" role="status">
-                No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.
-              </p>
-            )}
-            {comparison?.active && (
-              <div class="ticket-code-review__compare-banner" role="status">
-                <div>
-                  <LucideIcon icon={GitCompare} name="git-compare" />
-                  <span>
-                    Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.
-                  </span>
-                </div>
-                <div class="ticket-code-review__compare-toolbar">
-                  <Toolbar
-                    leading={
-                      <ToolbarControlGroup label="Comparison side" size="compact" selectedChrome="filled">
-                        <button
-                          type="button"
-                          {...REPOSITORY_ACTIONS.setRepositoryComparisonSide.attrs}
-                          data-comparison-side="a"
-                          data-selected={String(comparison.side === 'a')}
-                          aria-pressed={String(comparison.side === 'a')}
-                        >
-                          A
-                        </button>
-                        <button
-                          type="button"
-                          {...REPOSITORY_ACTIONS.setRepositoryComparisonSide.attrs}
-                          data-comparison-side="b"
-                          data-selected={String(comparison.side === 'b')}
-                          aria-pressed={String(comparison.side === 'b')}
-                        >
-                          B
-                        </button>
-                      </ToolbarControlGroup>
-                    }
-                  />
-                </div>
-                <button
-                  type="button"
-                  class="ticket-code-review__compare-open"
-                  data-action={action}
-                  data-review-mode="compare"
-                  data-review-from={comparison.a}
-                  data-review-to={comparison.b}
-                  disabled={!enabled || !compareReady}
-                  aria-label={`Open comparison in ${review.difftool ?? 'configured diff tool'}`}
-                >
-                  <LucideIcon icon={ExternalLink} name="external-link" />
-                  Open
-                </button>
+                )}
               </div>
-            )}
-            <ol class="ticket-code-review__commits">
-              {review.commits.flatMap((commit) => {
-                const expanded = expandedCommits.includes(commit.sha),
-                  body = commit.body?.trim() ?? '',
-                  labels = [comparison?.a === commit.sha ? 'A' : '', comparison?.b === commit.sha ? 'B' : ''].filter(
-                    Boolean,
-                  ),
-                  ranges = review.ranges.filter((range) => range.count > 1 && range.to === commit.sha);
-                return [
-                  ...ranges.map((range) => (
-                    <li class="ticket-code-review__range-item">
+              <p data-tests-modified={review.summary.tests_modified > 0 ? 'true' : 'false'}>
+                {review.summary.tests_added} new test file{review.summary.tests_added === 1 ? '' : 's'} ·{' '}
+                {review.summary.tests_modified} existing test file{review.summary.tests_modified === 1 ? '' : 's'}{' '}
+                modified
+              </p>
+            </button>
+          )}
+          {!enabled && (
+            <p class="ticket-code-review__notice" role="status">
+              No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.
+            </p>
+          )}
+          {comparison?.active && (
+            <div class="ticket-code-review__compare-banner" role="status">
+              <div>
+                <LucideIcon icon={GitCompare} name="git-compare" />
+                <span>
+                  Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.
+                </span>
+              </div>
+              <div class="ticket-code-review__compare-toolbar">
+                <Toolbar
+                  leading={
+                    <ToolbarControlGroup label="Comparison side" size="compact" selectedChrome="filled">
                       <button
                         type="button"
-                        class="ticket-code-review__range"
-                        data-action={action}
-                        data-review-mode="range"
-                        data-review-from={range.from}
-                        data-review-to={range.to}
-                        disabled={!enabled}
-                        aria-label={`Open ${range.count} commit bundle ${shortSha(range.from)} through ${shortSha(range.to)} in ${review.difftool ?? 'configured diff tool'}`}
+                        {...REPOSITORY_ACTIONS.setRepositoryComparisonSide.attrs}
+                        data-comparison-side="a"
+                        data-selected={String(comparison.side === 'a')}
+                        aria-pressed={String(comparison.side === 'a')}
                       >
-                        <LucideIcon icon={GitCompareArrows} name="git-compare-arrows" />
-                        <span>
-                          Open {range.count}-commit bundle
-                          <small>
-                            {shortSha(range.from)} → {shortSha(range.to)}
-                          </small>
-                        </span>
-                        <LucideIcon icon={ExternalLink} name="external-link" />
+                        A
                       </button>
-                    </li>
-                  )),
-                  <li
-                    class="ticket-code-review__commit"
-                    data-commit-sha={commit.sha}
-                    data-expanded={String(expanded)}
-                    data-compared={labels.length ? labels.join('').toLowerCase() : undefined}
-                  >
-                    <span class="ticket-code-review__graph" aria-hidden="true">
-                      <LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" />
-                    </span>
-                    <div
-                      class="ticket-code-review__commit-summary"
-                      data-action={
-                        comparison?.active ? 'select-repository-comparison-commit' : 'toggle-code-review-commit'
-                      }
-                      data-commit-sha={commit.sha}
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={body ? String(expanded) : undefined}
-                    >
-                      <strong>{commit.subject}</strong>
-                      {commitRefs(commit.refs)}
-                      {body && (
-                        <div class="ticket-code-review__commit-body">
-                          <MarkdownPreview
-                            source={expanded ? body : commitBodyPreview(body)}
-                            tone="inherit"
-                            size="small"
-                            density="compact"
-                          />
-                        </div>
-                      )}
-                      <span>
-                        <code>{commit.short_sha}</code>
-                        <time dateTime={commit.committed_at}>{formatCommitDate(commit.committed_at)}</time>
-                        {labels.map((label) => (
-                          <b class="ticket-code-review__compare-label">{label}</b>
-                        ))}
-                      </span>
-                    </div>
+                      <button
+                        type="button"
+                        {...REPOSITORY_ACTIONS.setRepositoryComparisonSide.attrs}
+                        data-comparison-side="b"
+                        data-selected={String(comparison.side === 'b')}
+                        aria-pressed={String(comparison.side === 'b')}
+                      >
+                        B
+                      </button>
+                    </ToolbarControlGroup>
+                  }
+                />
+              </div>
+              <button
+                type="button"
+                class="ticket-code-review__compare-open"
+                data-action={action}
+                data-review-mode="compare"
+                data-review-from={comparison.a}
+                data-review-to={comparison.b}
+                disabled={!enabled || !compareReady}
+                aria-label={`Open comparison in ${review.difftool ?? 'configured diff tool'}`}
+              >
+                <LucideIcon icon={ExternalLink} name="external-link" />
+                Open
+              </button>
+            </div>
+          )}
+          <ol class="ticket-code-review__commits">
+            {review.commits.flatMap((commit) => {
+              const expanded = expandedCommits.includes(commit.sha),
+                body = commit.body?.trim() ?? '',
+                labels = [comparison?.a === commit.sha ? 'A' : '', comparison?.b === commit.sha ? 'B' : ''].filter(
+                  Boolean,
+                ),
+                ranges = review.ranges.filter((range) => range.count > 1 && range.to === commit.sha);
+              return [
+                ...ranges.map((range) => (
+                  <li class="ticket-code-review__range-item">
                     <button
                       type="button"
+                      class="ticket-code-review__range"
                       data-action={action}
-                      data-review-mode="commit"
-                      data-review-commit={commit.sha}
+                      data-review-mode="range"
+                      data-review-from={range.from}
+                      data-review-to={range.to}
                       disabled={!enabled}
-                      aria-label={`Open commit ${commit.short_sha} in ${review.difftool ?? 'configured diff tool'}`}
+                      aria-label={`Open ${range.count} commit bundle ${shortSha(range.from)} through ${shortSha(range.to)} in ${review.difftool ?? 'configured diff tool'}`}
                     >
+                      <LucideIcon icon={GitCompareArrows} name="git-compare-arrows" />
+                      <span>
+                        Open {range.count}-commit bundle
+                        <small>
+                          {shortSha(range.from)} → {shortSha(range.to)}
+                        </small>
+                      </span>
                       <LucideIcon icon={ExternalLink} name="external-link" />
                     </button>
-                  </li>,
-                ];
-              })}
-            </ol>
-            {review.truncated && (
-              <p class="ticket-code-review__notice">Showing matches from the newest 2,000 commits.</p>
-            )}
-          </>
-        )}
-        {message && (
-          <p class="ticket-code-review__message" role="status">
-            {message}
-          </p>
-        )}
-      </section>
+                  </li>
+                )),
+                <li
+                  class="ticket-code-review__commit"
+                  data-commit-sha={commit.sha}
+                  data-expanded={String(expanded)}
+                  data-compared={labels.length ? labels.join('').toLowerCase() : undefined}
+                >
+                  <span class="ticket-code-review__graph" aria-hidden="true">
+                    <LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" />
+                  </span>
+                  <div
+                    class="ticket-code-review__commit-summary"
+                    data-action={
+                      comparison?.active ? 'select-repository-comparison-commit' : 'toggle-code-review-commit'
+                    }
+                    data-commit-sha={commit.sha}
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={body ? String(expanded) : undefined}
+                  >
+                    <strong>{commit.subject}</strong>
+                    {commitRefs(commit.refs)}
+                    {body && (
+                      <div class="ticket-code-review__commit-body">
+                        <MarkdownPreview
+                          source={expanded ? body : commitBodyPreview(body)}
+                          tone="inherit"
+                          size="small"
+                          density="compact"
+                        />
+                      </div>
+                    )}
+                    <span>
+                      <code>{commit.short_sha}</code>
+                      <time dateTime={commit.committed_at}>{formatCommitDate(commit.committed_at)}</time>
+                      {labels.map((label) => (
+                        <b class="ticket-code-review__compare-label">{label}</b>
+                      ))}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    data-action={action}
+                    data-review-mode="commit"
+                    data-review-commit={commit.sha}
+                    disabled={!enabled}
+                    aria-label={`Open commit ${commit.short_sha} in ${review.difftool ?? 'configured diff tool'}`}
+                  >
+                    <LucideIcon icon={ExternalLink} name="external-link" />
+                  </button>
+                </li>,
+              ];
+            })}
+          </ol>
+          {review.truncated && <p class="ticket-code-review__notice">Showing matches from the newest 2,000 commits.</p>}
+        </>
+      )}
+      {message && (
+        <p class="ticket-code-review__message" role="status">
+          {message}
+        </p>
+      )}
+    </section>
+  );
+  return embedded ? (
+    <div
+      class="ticket-code-review ticket-code-review--embedded"
+      data-component="ticket-code-review"
+      data-embedded="true"
+    >
+      {body}
     </div>
+  ) : (
+    <TicketInspectorPanel
+      component="ticket-code-review"
+      className="ticket-code-review ticket-code-review--panel"
+      presentation={presentation}
+    >
+      {body}
+    </TicketInspectorPanel>
   );
 }
 

@@ -1,4 +1,4 @@
-import './ticket-inspector-panel.css';
+import './ticket-attachments.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
@@ -6,6 +6,7 @@ import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
 import type { AttachmentActor, AttachmentPurpose } from '../api';
 import { isGalleryMediaAttachment, isVideoAttachment } from '../attachment-references';
 import { ATTACHMENTS_AND_GALLERY_ACTIONS } from '../interaction-attrs/attachments-and-gallery';
+import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
 export interface TicketAttachmentItem {
   id: string;
@@ -99,6 +100,7 @@ export function TicketAttachments({
   enabled = true,
   editable = enabled,
   message = '',
+  presentation = 'sidebar',
 }: {
   attachments?: readonly TicketAttachmentItem[];
   /** New files can be added (the provider reports `attachments`). */
@@ -110,18 +112,20 @@ export function TicketAttachments({
    */
   editable?: boolean;
   message?: string;
+  presentation?: TicketInspectorPanelPresentation;
 }) {
   const manageable = enabled && editable;
   const groups = groupAttachments(attachments);
   return (
-    <div
-      class="ticket-inspector__content ticket-attachments"
-      data-component="ticket-attachments"
-      data-attachment-drop-target={String(enabled)}
+    <TicketInspectorPanel
+      component="ticket-attachments"
+      className="ticket-attachments"
+      presentation={presentation}
+      attributes={{ 'data-attachment-drop-target': String(enabled) }}
     >
-      <section>
-        <header class="ticket-inspector__section-header">
-          <h2>
+      <section class="ticket-attachments__section">
+        <header class="ticket-attachments__header">
+          <h2 class="ticket-attachments__title">
             Attachments{' '}
             <span
               class="ticket-attachments__count"
@@ -202,7 +206,7 @@ export function TicketAttachments({
                 </header>
                 {group.items.map((attachment) => (
                   <div
-                    class="ticket-inspector__attachment"
+                    class="ticket-attachments__item"
                     draggable={manageable ? 'true' : undefined}
                     data-drag-attachment-id={manageable ? attachment.id : undefined}
                     data-component="ticket-attachment-item"
@@ -223,7 +227,7 @@ export function TicketAttachments({
                     )}
                     {manageable && (
                       <button
-                        class="ticket-inspector__attachment-menu"
+                        class="ticket-attachments__item-menu"
                         type="button"
                         {...ATTACHMENTS_AND_GALLERY_ACTIONS.openAttachmentMenu.attrs}
                         aria-label={`More actions for ${attachment.name}`}
@@ -304,6 +308,6 @@ export function TicketAttachments({
           </p>
         )}
       </section>
-    </div>
+    </TicketInspectorPanel>
   );
 }

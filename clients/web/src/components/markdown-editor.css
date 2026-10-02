@@ -57,6 +57,12 @@
   field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
   resize: var(--hotsheet-textarea-resize, vertical);
 }
+/* `inset="flush"`: the host surface owns the inset, so preview and source text sit on its column
+   (the inspector Details surface, HS2-EQEGGG / HS2-MGVE50). */
+.markdown-editor--flush .markdown-editor__preview,
+.markdown-editor--flush .markdown-editor__surface textarea {
+  padding: 0;
+}
 .markdown-editor__toolbar {
   display: flex;
   min-height: remify(44px);
@@ -129,8 +135,9 @@
   color: var(--wa-color-text-normal);
   background: transparent;
   outline: 0;
+  /* A reading surface (the large-text reader) scales the source through the shared reading scale. */
   font:
-    var(--wa-font-size-s)/1.6 ui-monospace,
+    calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-s))/1.6 ui-monospace,
     SFMono-Regular,
     Menlo,
     monospace;

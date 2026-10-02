@@ -46,10 +46,8 @@ const publicClassOverrides = {
   'project-tabs': ['project-tab-bar'],
   'tag-chip': [],
   'terminal-rename-dialog': ['terminal-rename'],
-  'ticket-info-panel': ['ticket-inspector__content'],
   'ticket-inspector-skeleton': ['ticket-inspector'],
   'ticket-row': ['ticket-list-row'],
-  'ticket-timeline': ['ticket-inspector__timeline'],
 };
 
 function demos(source) {

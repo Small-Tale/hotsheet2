@@ -55,82 +55,11 @@
   flex: none;
   font: inherit;
 }
-.ticket-reader .ticket-inspector--reader {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-.ticket-reader .ticket-inspector--reader .ticket-inspector__header h1 {
-  max-width: remify(864px);
-  font-size: var(--wa-font-size-l);
-}
-.ticket-reader .ticket-inspector--reader .ticket-inspector__content {
-  width: 100%;
-  margin: 0;
-  padding: remify(20px) remify(32px) remify(32px);
-}
-.ticket-reader-dialog[data-large-text='true']
-  :is(
-    .ticket-inspector__details-surface .markdown-preview,
-    .note-card__body,
-    .note-card__feedback-prompt,
-    textarea[name='markdown-source'],
-    textarea[name='note-body']
-  ) {
-  font-size: var(--hs-reader-font-size-s);
-}
-.ticket-reader-dialog[data-large-text='true']
-  :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt)
-  .markdown-preview
-  :is(p, li, th, td) {
-  font-size: var(--hs-reader-font-size-s);
-}
-.ticket-reader-dialog[data-large-text='true'] .ticket-inspector--reader .note-card .note-card__body {
-  font-size: var(--hs-reader-font-size-s);
-  line-height: 1.5;
-}
-.ticket-reader-dialog[data-large-text='true']
-  .ticket-inspector--reader
-  .note-card[data-kind='activity']
-  .note-card__body,
-.ticket-reader-dialog[data-large-text='true']
-  .ticket-inspector--reader
-  .note-card[data-kind='activity']
-  .markdown-preview
-  :is(p, li, th, td) {
-  font-size: var(--hs-reader-font-size-s);
-}
-.ticket-reader-dialog[data-large-text='true']
-  :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt)
-  .markdown-preview
-  h1 {
-  font-size: var(--hs-reader-font-size-l);
-}
-.ticket-reader-dialog[data-large-text='true']
-  :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt)
-  .markdown-preview
-  :is(h2, h3, h4, h5, h6) {
-  font-size: var(--hs-reader-font-size-m);
-}
-.ticket-reader-dialog[data-large-text='true']
-  :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt)
-  .markdown-preview
-  code {
-  font-size: var(--hs-reader-font-size-s);
-}
-.ticket-reader-dialog[data-large-text='true']
-  :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt)
-  .markdown-preview
-  blockquote,
-.ticket-reader-dialog[data-large-text='true']
-  :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt)
-  .markdown-preview
-  blockquote
-  :is(p, li, h1, h2, h3, h4, h5, h6, th, td) {
-  font-size: var(--hs-reader-font-size-s);
+/* Large reader text (HS2-MGVE50): the reader sets the shared reading scale on its own root, and every
+   reading surface inside (Markdown previews and sources, note bodies, feedback prompts, choices, and
+   responses) multiplies its own size by it; the reader never restyles those components. */
+.ticket-reader-dialog[data-large-text='true'] {
+  --hotsheet-reading-scale: var(--hs-reader-text-scale);
 }
 @media (max-width: remify(768px)) {
   .ticket-reader-dialog {
@@ -139,9 +68,6 @@
   }
   .ticket-reader-dialog::part(dialog) {
     transform: none;
-  }
-  .ticket-reader .ticket-inspector--reader .ticket-inspector__content {
-    padding-inline: remify(16px);
   }
   .ticket-reader__layer-context {
     padding-inline: remify(16px);

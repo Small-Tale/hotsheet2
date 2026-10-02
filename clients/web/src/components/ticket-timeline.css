@@ -1,0 +1,80 @@
+/* TicketTimeline (HS2-MGVE50): chronological ticket activity on the TicketInspectorPanel column. */
+.ticket-timeline__section {
+  display: grid;
+  min-width: 0;
+  gap: var(--kui-space-xs);
+}
+/* The section label aligns its text to the 17px column: 1px transparent border + 8px padding. */
+.ticket-timeline__heading {
+  margin: 0;
+  padding-inline: var(--kui-space-xs);
+  border-inline: 1px solid transparent;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ticket-timeline__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ticket-timeline__list li {
+  position: relative;
+  display: grid;
+  min-height: remify(64px);
+  padding: 0 0 var(--kui-space-m) var(--kui-space-m);
+  grid-template-columns: remify(73.6px) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--kui-space-xs);
+}
+.ticket-timeline__list li::before {
+  position: absolute;
+  top: remify(3.52px);
+  left: 0;
+  width: remify(8px);
+  height: remify(8px);
+  border: 2px solid var(--wa-color-neutral-border-loud);
+  border-radius: 50%;
+  background: var(--wa-color-surface-default);
+  content: '';
+  transform: translateX(-50%);
+}
+.ticket-timeline__list li[data-emphasized='true']::before {
+  background: var(--wa-color-neutral-border-loud);
+}
+.ticket-timeline__list li:not(:last-child)::after {
+  position: absolute;
+  top: remify(13.6px);
+  bottom: remify(2.4px);
+  left: 0;
+  width: 1px;
+  background: var(--wa-color-neutral-border-normal);
+  content: '';
+}
+.ticket-timeline__list time {
+  padding-top: remify(0.32px);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  white-space: nowrap;
+}
+.ticket-timeline__list strong {
+  display: block;
+  color: var(--wa-color-text-normal);
+  font-size: var(--wa-font-size-s);
+  line-height: 1.3;
+}
+.ticket-timeline__subtitle {
+  margin: var(--kui-space-2xs) 0 0;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  line-height: 1.4;
+}
+.ticket-timeline__summary {
+  margin: 0;
+  color: var(--wa-color-neutral-on-normal);
+  font-size: var(--wa-font-size-s);
+  line-height: 1.5;
+}

@@ -1,8 +1,11 @@
+/* Reading scale (HS2-MGVE50): a reading surface such as the large-text reader sets the unitless
+   --hotsheet-reading-scale on its own root, and every size below scales by it, so each element stays
+   exactly that multiple of its ordinary size without the host restyling this component. */
 .markdown-preview {
   min-width: 0;
   max-width: 100%;
   color: var(--wa-color-text-normal);
-  font-size: var(--wa-font-size-s);
+  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-s));
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
@@ -14,18 +17,18 @@
 }
 .markdown-preview h1 {
   margin: var(--kui-space-l) 0 var(--kui-space-xs);
-  font-size: var(--wa-font-size-l);
+  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-l));
 }
 .markdown-preview h2 {
   margin: var(--kui-space-m) 0 var(--kui-space-xs);
-  font-size: var(--wa-font-size-m);
+  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-m));
 }
 .markdown-preview h3,
 .markdown-preview h4,
 .markdown-preview h5,
 .markdown-preview h6 {
   margin: var(--kui-space-m) 0 var(--kui-space-2xs);
-  font-size: var(--wa-font-size-m);
+  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-m));
 }
 .markdown-preview p {
   margin: var(--kui-space-m) 0;
@@ -65,7 +68,7 @@
   border-radius: remify(4.8px);
   background: var(--wa-color-neutral-fill-normal);
   font:
-    var(--wa-font-size-s)/1.5 ui-monospace,
+    calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-s))/1.5 ui-monospace,
     SFMono-Regular,
     Menlo,
     monospace;
@@ -87,11 +90,11 @@
   padding: var(--kui-space-2xs) 0 var(--kui-space-2xs) var(--kui-space-xs);
   border-left: 2px solid var(--wa-color-neutral-border-normal);
   color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
+  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-xs));
   line-height: 1.5;
 }
 .markdown-preview blockquote :is(h1, h2, h3, h4, h5, h6) {
-  font-size: var(--wa-font-size-xs);
+  font-size: calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-xs));
 }
 .markdown-preview blockquote > :first-child {
   margin-top: 0;

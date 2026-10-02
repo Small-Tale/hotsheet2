@@ -7,7 +7,7 @@ test('keeps details, metadata, and notes inside the ticket inspector at narrow a
   await page.goto('/ux-demo?component=ticket-inspector');
 
   const inspector = page.locator('[data-component="ticket-inspector"]');
-  const content = inspector.locator('.ticket-inspector__content');
+  const content = inspector.locator('.ticket-inspector-panel');
   await expect(inspector).toBeVisible();
   await content.evaluate((node) => {
     const details = node.querySelector('.markdown-preview');
@@ -25,7 +25,7 @@ test('keeps details, metadata, and notes inside the ticket inspector at narrow a
       const contentRect = node.getBoundingClientRect();
       const surfaces = [
         ...node.querySelectorAll(
-          '.ticket-inspector__metadata > .kui-select, .ticket-inspector__details-surface, .note-card',
+          '.ticket-info-panel__metadata > .kui-select, .ticket-info-panel__details-surface, .note-card',
         ),
       ];
       return {

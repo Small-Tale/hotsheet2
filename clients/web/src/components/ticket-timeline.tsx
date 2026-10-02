@@ -1,4 +1,6 @@
-import './ticket-inspector-panel.css';
+import './ticket-timeline.css';
+
+import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
 export interface TicketTimelineEntry {
   id: string;
@@ -36,26 +38,32 @@ export const DEFAULT_TIMELINE_ENTRIES: readonly TicketTimelineEntry[] = [
     emphasized: true,
   },
 ];
-export function TicketTimeline({ entries = DEFAULT_TIMELINE_ENTRIES }: { entries?: readonly TicketTimelineEntry[] }) {
+export function TicketTimeline({
+  entries = DEFAULT_TIMELINE_ENTRIES,
+  presentation = 'sidebar',
+}: {
+  entries?: readonly TicketTimelineEntry[];
+  presentation?: TicketInspectorPanelPresentation;
+}) {
   return (
-    <div class="ticket-inspector__content" data-component="ticket-timeline">
-      <section>
-        <h2>Timeline</h2>
-        <ol class="ticket-inspector__timeline">
+    <TicketInspectorPanel component="ticket-timeline" className="ticket-timeline" presentation={presentation}>
+      <section class="ticket-timeline__section">
+        <h2 class="ticket-timeline__heading">Timeline</h2>
+        <ol class="ticket-timeline__list">
           {entries.map((entry) => (
             <li data-entry-id={entry.id} data-emphasized={String(Boolean(entry.emphasized))}>
               <time>{entry.time}</time>
               <div>
                 <strong>{entry.title}</strong>
-                {entry.subtitle && <p>{entry.subtitle}</p>}
+                {entry.subtitle && <p class="ticket-timeline__subtitle">{entry.subtitle}</p>}
               </div>
             </li>
           ))}
         </ol>
-        <p>
+        <p class="ticket-timeline__summary">
           {entries.length} {entries.length === 1 ? 'event' : 'events'} total
         </p>
       </section>
-    </div>
+    </TicketInspectorPanel>
   );
 }

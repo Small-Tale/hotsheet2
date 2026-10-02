@@ -247,7 +247,7 @@ async function resolvedColor(locator: Locator, value: string) {
 }
 
 async function captureInspectorStatus(surface: Locator, path: string) {
-  const clip = await surface.locator('.ticket-inspector__status-field').evaluate((node) => {
+  const clip = await surface.locator('.ticket-info-panel__status-field').evaluate((node) => {
     const field = node.getBoundingClientRect(),
       inspector = node.closest('[data-component="ticket-inspector"], #app-right-rail')!.getBoundingClientRect();
     return { x: inspector.left, y: field.top - 8, width: inspector.width, height: field.height + 16 };
@@ -6142,7 +6142,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
   await expect(ticket.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await ticket.click();
   const inspector = page.locator('#app-right-rail'),
-    sidebarDetails = inspector.locator('.ticket-inspector__details-surface[data-feedback-needed="true"]'),
+    sidebarDetails = inspector.locator('.ticket-info-panel__details-surface[data-feedback-needed="true"]'),
     open = inspector.getByRole('button', { name: 'Respond to Feedback' });
   await expect(sidebarDetails).toHaveCSS('background-color', 'color(srgb 1 0.982 0.91)');
   const sidebarInsets = await sidebarDetails.evaluate((surface) => {
@@ -6155,12 +6155,12 @@ test('responds to feedback choices embedded in the ticket description', async ({
   await expect(open).toBeVisible();
   await open.click();
   const reader = page.getByRole('dialog'),
-    readerSurface = reader.locator('.ticket-inspector__details-surface[data-feedback-needed="true"]'),
+    readerSurface = reader.locator('.ticket-info-panel__details-surface[data-feedback-needed="true"]'),
     details = reader.locator('[data-details-feedback="true"]'),
     choices = details.getByRole('group', { name: 'Feedback choices' }).locator('.note-card__choice');
-  await expect(details.locator('.ticket-inspector__details-feedback-header')).toContainText('Feedback needed');
+  await expect(details.locator('.ticket-info-panel__details-feedback-header')).toContainText('Feedback needed');
   await expect(
-    details.locator('.ticket-inspector__details-feedback-header [data-lucide="circle-alert"]'),
+    details.locator('.ticket-info-panel__details-feedback-header [data-lucide="circle-alert"]'),
   ).toBeVisible();
   await expect(readerSurface).toHaveCSS('background-color', 'color(srgb 1 0.982 0.91)');
   await expect(choices).toHaveCount(2);
@@ -6599,7 +6599,7 @@ test('enlarges reader description and note text 1.5× with a remembered global t
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   await page.getByRole('button', { name: 'Open ticket reader' }).click();
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
-  const details = reader.locator('.ticket-inspector__details-surface .markdown-preview').first(),
+  const details = reader.locator('.ticket-info-panel__details-surface .markdown-preview').first(),
     note = reader.locator('article[data-note-id="N3"] .note-card__body .markdown-preview'),
     feedback = reader.locator('article[data-note-id="N4"] .note-card__feedback-prompt .markdown-preview'),
     activity = reader.locator('article[data-note-id="N1"] .note-card__body .markdown-preview'),
@@ -6819,7 +6819,13 @@ test('renders the exact shared Code Review component in the inspector and reader
   const readerReview = reader.locator('[data-component="ticket-code-review"]');
   await expect(readerReview).toContainText('Opens in Glassbox');
   await expect(readerReview).toContainText('No commits referencing this ticket were found.');
-  expect(await readerReview.evaluate((element) => element.outerHTML)).toBe(sharedMarkup);
+  // Identical component markup; only the shared panel column carries its reader presentation variant (HS2-MGVE50).
+  expect(await readerReview.evaluate((element) => element.outerHTML)).toBe(
+    sharedMarkup.replace(
+      'class="ticket-inspector-panel ',
+      'class="ticket-inspector-panel ticket-inspector-panel--reader ',
+    ),
+  );
   await page.screenshot({ path: '/private/tmp/hs2-g7p7s7-code-review-reader-after.png', fullPage: true });
 });
 
@@ -11391,7 +11397,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
     status = inspector.locator('wa-select[name="inspector-status"]'),
     badge = status.locator('.kui-select__custom-selected [data-component="status-badge"]');
   const expectStatusGeometry = async (surface: Locator) => {
-    const field = surface.locator('.ticket-inspector__status-field');
+    const field = surface.locator('.ticket-info-panel__status-field');
     await expect(field.getByRole('heading', { name: 'Status' })).toHaveCSS('text-transform', 'uppercase');
     await expect(field.locator('.kui-list-inset-control')).toHaveCount(1);
     await expect(async () => {
@@ -11400,7 +11406,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
           control = category.shadowRoot!.querySelector('[part~="combobox"]')!.getBoundingClientRect(),
           categoryLabelNode = category.shadowRoot!.querySelector('[part~="form-control-label"]')!,
           categoryLabel = categoryLabelNode.getBoundingClientRect(),
-          statusField = node.querySelector('.ticket-inspector__status-field')!,
+          statusField = node.querySelector('.ticket-info-panel__status-field')!,
           label = statusField.querySelector('h2')!.getBoundingClientRect(),
           row = statusField.querySelector('.kui-list-inset-control')!,
           rowStyle = getComputedStyle(row),
@@ -11446,7 +11452,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   await inspector.getByRole('textbox', { name: 'Blocked reason' }).fill('Waiting for review');
   await inspector.getByRole('textbox', { name: 'Blocked reason' }).blur();
-  await expect(inspector.locator('.ticket-inspector__status-line [data-component="blocked-badge"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-info-panel__status-line [data-component="blocked-badge"]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 700 });
   await expectStatusGeometry(inspector);
   await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-blocked-narrow.png');
@@ -11471,8 +11477,8 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
         const category = node.querySelector('wa-select[name="inspector-category"]')!.shadowRoot!,
           categoryLabel = category.querySelector('[part~="form-control-label"]')!.getBoundingClientRect(),
           categoryField = category.querySelector('[part~="combobox"]')!.getBoundingClientRect(),
-          detailsLabel = node.querySelector('.ticket-inspector__details-section h2')!.getBoundingClientRect(),
-          detailsField = node.querySelector('.ticket-inspector__details-surface')!.getBoundingClientRect();
+          detailsLabel = node.querySelector('.ticket-info-panel__details-section h2')!.getBoundingClientRect(),
+          detailsField = node.querySelector('.ticket-info-panel__details-surface')!.getBoundingClientRect();
         return {
           categoryGap: categoryField.top - categoryLabel.bottom,
           detailsGap: detailsField.top - detailsLabel.bottom,
@@ -11483,7 +11489,7 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
     }).toPass({ timeout: 5_000 });
   };
   const exerciseDetails = async (surface: Locator, name: string) => {
-    const section = surface.locator('.ticket-inspector__details-section');
+    const section = surface.locator('.ticket-info-panel__details-section');
     await expectDetailsSpacing(surface);
     await section.screenshot({ path: `/private/tmp/hs2-s6s709-${name}-preview.png` });
     await surface.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
@@ -11532,7 +11538,7 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
     .poll(() => patches.some((patch) => patch.note_id === 'N3' && patch.note === 'Autosaved note'))
     .toBe(true);
 
-  await inspector.locator('.ticket-inspector__content').evaluate((node) => {
+  await inspector.locator('.ticket-inspector-panel').evaluate((node) => {
     node.scrollTop = 0;
   });
   await inspector.screenshot({ path: '/private/tmp/hs2-qbscn2-block-ticket-empty.png' });
@@ -11544,7 +11550,7 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await expect(inspector.getByText('Waiting for review', { exact: true })).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Blocked reason' })).toBeVisible();
   await inspector.screenshot({ path: '/private/tmp/hs2-72kryh-blocked-reason.png' });
-  await inspector.locator('.ticket-inspector__blocked-surface').dblclick();
+  await inspector.locator('.ticket-info-panel__blocked-surface').dblclick();
   const clearReason = inspector.getByRole('textbox', { name: 'Blocked reason' });
   await expect(clearReason).toBeFocused();
   await clearReason.fill('   ');
@@ -11712,7 +11718,9 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   await expect(info).toBeVisible();
   await expect(info.locator('[data-component="list-header"]')).toHaveCount(4);
   await expect(info.locator('[data-component="list-item"]')).toHaveCount(2);
-  await expect(info.locator('.ticket-inspector__details-section [data-component="list-header"]')).toHaveText('Details');
+  await expect(info.locator('.ticket-info-panel__details-section [data-component="list-header"]')).toHaveText(
+    'Details',
+  );
   const notesHeader = info.locator('[data-component="ticket-notes"] [data-component="list-header"]'),
     notesCount = notesHeader.locator('.kui-badge');
   await expect(notesHeader).toContainText('Notes');
@@ -11724,11 +11732,11 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   const geometry = await info.evaluate((node) => {
     const style = getComputedStyle(node),
       detailsHeadingNode = node.querySelector<HTMLElement>(
-        '.ticket-inspector__details-section [data-component="list-header"] h2',
+        '.ticket-info-panel__details-section [data-component="list-header"] h2',
       )!,
       detailsHeading = detailsHeadingNode.getBoundingClientRect(),
       detailsText = node
-        .querySelector<HTMLElement>('.ticket-inspector__details-section .markdown-preview p')!
+        .querySelector<HTMLElement>('.ticket-info-panel__details-section .markdown-preview p')!
         .getBoundingClientRect(),
       blockIcon = node
         .querySelector<HTMLElement>('[data-action="edit-blocked-reason"] .kui-list-item__icon')!
@@ -11820,7 +11828,7 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await expect(inspector.locator('[data-component="tag-chip"] [data-action="remove-tag-chip"]')).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Edit note' })).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Delete note' })).toHaveCount(0);
-  const statusField = inspector.locator('.ticket-inspector__status-field'),
+  const statusField = inspector.locator('.ticket-info-panel__status-field'),
     status = statusField.locator('wa-select[name="inspector-status"]');
   await expect(statusField.getByRole('heading', { name: 'Status' })).toBeVisible();
   await expect(statusField.locator('.kui-list-inset-control')).toHaveCount(1);
@@ -14224,7 +14232,7 @@ test('edits non-empty details on double click and empty details on one click', a
   const source = page.getByRole('textbox', { name: 'Ticket details' });
   await expect(source).toBeFocused();
   await source.fill('Carried into the larger editor');
-  const detailsSurface = page.locator('.ticket-inspector__details-surface');
+  const detailsSurface = page.locator('.ticket-info-panel__details-surface');
   const editorGeometry = await detailsSurface.evaluate((surface) => {
     const editor = surface.querySelector<HTMLTextAreaElement>('textarea[name="markdown-source"]')!,
       outer = surface.getBoundingClientRect(),
@@ -14268,7 +14276,7 @@ test('edits non-empty details on double click and empty details on one click', a
   await expect(source).toBeFocused();
   await source.fill('Added from an empty ticket');
   await source.blur();
-  await expect(page.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText(
+  await expect(page.locator('.ticket-info-panel__details-surface [data-component="markdown-preview"]')).toContainText(
     'Added from an empty ticket',
   );
   await page.getByRole('button', { name: 'Edit Ticket details' }).dblclick();

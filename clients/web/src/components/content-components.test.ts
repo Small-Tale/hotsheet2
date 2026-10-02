@@ -89,8 +89,16 @@ describe('content components', () => {
     );
     // The preview fills the editor's overflow:hidden bounds, so its focus ring must be inset or it is clipped (HS2-0WD3YK).
     expect(css).toMatch(/markdown-editor__preview:focus-visible \{[^}]*outline-offset: -\d/);
-    const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(panelCss).toMatch(/ticket-inspector__details-surface \{[^}]*padding: var\(--kui-space-xs\);/);
+    // `inset="flush"` lets a host surface own the inset instead of restyling the editor (HS2-MGVE50).
+    expect(css).toMatchSource(
+      /\.markdown-editor--flush \.markdown-editor__preview,\s*\.markdown-editor--flush \.markdown-editor__surface textarea \{ padding: 0; \}/,
+    );
+    expect(css).not.toContain('.ticket-inspector__body');
+    expect(String(MarkdownEditor({ value: 'x', mode: 'preview', appearance: 'embedded', inset: 'flush' }))).toContain(
+      'markdown-editor--embedded markdown-editor--flush',
+    );
+    const infoCss = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
+    expect(infoCss).toMatch(/ticket-info-panel__details-surface \{[^}]*padding: var\(--kui-space-xs\);/);
     expect(embedded).not.toContain('Saving changes');
     const preview = String(MarkdownEditor({ value: '## Goal', mode: 'preview', expanded: true }));
     expect(preview).toContain('data-component="markdown-preview"');
@@ -145,13 +153,15 @@ describe('content components', () => {
     expect(markup).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     const css = readFileSync(resolve(import.meta.dirname, 'markdown-preview.css'), 'utf8');
     expect(css).toContainSource('.markdown-preview p { margin: var(--kui-space-m) 0; }');
+    // The inspector panel no longer restyles descendant paragraphs or headings (HS2-MGVE50).
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(panelCss).toContainSource('.ticket-inspector__content :where(p) { margin: 0;');
-    expect(panelCss).not.toContain('.ticket-inspector__content p {');
+    expect(panelCss).not.toMatch(/:where\((?:p|h2)\)|\bp \{|\bh2 \{/);
     expect(css).toMatch(
-      /blockquote \{[^}]*margin-inline: 0;[^}]*border-left: 2px[^}]*font-size: var\(--wa-font-size-xs\);[^}]*line-height: 1\.5;/,
+      /blockquote \{[^}]*margin-inline: 0;[^}]*border-left: 2px[^}]*font-size: calc\(var\(--hotsheet-reading-scale, 1\) \* var\(--wa-font-size-xs\)\);[^}]*line-height: 1\.5;/,
     );
-    expect(css).toMatchSource(/blockquote :is\(h1, h2, h3, h4, h5, h6\) \{ font-size: var\(--wa-font-size-xs\); \}/);
+    expect(css).toMatchSource(
+      /blockquote :is\(h1, h2, h3, h4, h5, h6\) \{ font-size: calc\(var\(--hotsheet-reading-scale, 1\) \* var\(--wa-font-size-xs\)\); \}/,
+    );
     expect(css).toMatch(/\.markdown-preview img \{[^}]*display: block;[^}]*height: auto;/);
     expect(css).toMatch(
       /\.markdown-preview__attachment-image \{[^}]*width: fit-content;[^}]*height: auto;[^}]*overflow: hidden;/,
@@ -234,17 +244,25 @@ describe('content components', () => {
     );
     expect(readerCss).not.toMatch(/\.ticket-reader-dialog \{[^}]*\b(?:display|height):/);
     expect(readerCss).toMatch(/\.ticket-reader-dialog::part\(dialog\) \{[^}]*height: calc\(100vh - remify\(48px\)\);/);
+    // Large text sets the shared reading-size tokens on the reader's own root; the reading surfaces inside
+    // scale themselves and the reader never restyles them (HS2-MGVE50).
     expect(readerCss).toMatchSource(
-      /\.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/,
+      /\.ticket-reader-dialog\[data-large-text="true"\] \{ --hotsheet-reading-scale: var\(--hs-reader-text-scale\); \}/,
     );
-    expect(readerCss).toMatchSource(
-      /\.note-card__feedback-prompt\) \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/,
+    expect(readerCss).not.toMatch(/\.(?:ticket-inspector|note-card|markdown-preview|ticket-info-panel)/);
+    const previewCss = readFileSync(resolve(import.meta.dirname, 'markdown-preview.css'), 'utf8');
+    expect(previewCss).toMatch(
+      /\.markdown-preview \{[^}]*font-size: calc\(var\(--hotsheet-reading-scale, 1\) \* var\(--wa-font-size-s\)\);/,
     );
-    expect(readerCss).toMatchSource(
-      /\.note-card\[data-kind="activity"\] \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/,
+    expect(previewCss).toMatch(
+      /\.markdown-preview h1 \{[^}]*font-size: calc\(var\(--hotsheet-reading-scale, 1\) \* var\(--wa-font-size-l\)\);/,
     );
-    expect(readerCss).toMatchSource(
-      /\.markdown-preview blockquote :is\(p, li, h1, h2, h3, h4, h5, h6, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/,
+    const noteCss = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    expect(noteCss).toMatch(
+      /\.note-card__body \{[^}]*font-size: calc\(var\(--hotsheet-reading-scale, 1\) \* var\(--wa-font-size-s\)\);/,
+    );
+    expect(noteCss).toMatch(
+      /\.note-card__feedback-prompt \{[^}]*font-size: calc\(var\(--hotsheet-reading-scale, 1\) \* 1em\);/,
     );
     expect(readerCss).toContainSource(
       '.ticket-reader-dialog::part(body) { height: 100%; padding: 0; overflow: hidden; }',

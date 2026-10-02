@@ -590,7 +590,7 @@
         "The interaction does not need Hot Sheet's domain-specific TicketInfoPanel behavior."
       ],
       "publicClasses": [
-        "ticket-inspector__content"
+        "ticket-info-panel"
       ],
       "publicTokens": [],
       "geometry": {
@@ -615,7 +615,7 @@
         "The interaction does not need Hot Sheet's domain-specific TicketTimeline behavior."
       ],
       "publicClasses": [
-        "ticket-inspector__timeline"
+        "ticket-timeline"
       ],
       "publicTokens": [],
       "geometry": {

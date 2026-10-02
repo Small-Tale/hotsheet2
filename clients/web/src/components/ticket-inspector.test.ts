@@ -282,15 +282,17 @@ describe('TicketInspector', () => {
     expect(sidebar).toContain('Respond to Feedback');
     const reader = String(TicketInspector({ ...base, details, feedbackNeeded: true, presentation: 'reader' }));
     expect(reader).toContain('data-details-feedback="true"');
-    expect(reader).toContain('ticket-inspector__details-feedback-header');
+    expect(reader).toContain('ticket-info-panel__details-feedback-header');
     expect(reader).toContain('Feedback needed');
     expect(reader).toContain('data-lucide="circle-alert"');
     expect(reader.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
     expect(reader).toContain('aria-label="Feedback response"');
     expect(reader).not.toContain('CHOICE:');
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
+    // The feedback state keeps the surface's own 8px padding and only recolors it.
+    expect(css).toMatch(/\.ticket-info-panel__details-surface \{[^}]*padding: var\(--kui-space-xs\);/);
     expect(css).toMatchSource(
-      /details-surface\[data-feedback-needed="true"\] \{[^}]*padding: var\(--kui-space-xs\);[^}]*warning-border-normal[^}]*warning-fill-quiet/,
+      /details-surface\[data-feedback-needed="true"\] \{[^}]*warning-border-normal[^}]*warning-fill-quiet/,
     );
   });
 
@@ -311,32 +313,33 @@ describe('TicketInspector', () => {
   });
 
   it('keeps attachment names shrinkable while preserving the compact menu trigger', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-attachments.css'), 'utf8');
     expect(css).toContainSource(
-      '.ticket-inspector__attachment { display: flex; box-sizing: border-box; width: 100%; min-width: 0;',
+      '.ticket-attachments__item { display: flex; box-sizing: border-box; width: 100%; min-width: 0;',
     );
-    expect(css).toContainSource('.ticket-inspector__attachment > span { min-width: 0; overflow: hidden; flex: 1;');
+    expect(css).toContainSource('.ticket-attachments__item > span { min-width: 0; overflow: hidden; flex: 1;');
     expect(css).toContainSource(
-      '.ticket-inspector__attachment-menu { display: inline-grid; width: remify(28px); height: remify(28px); margin-left: auto;',
+      '.ticket-attachments__item-menu { display: inline-grid; width: remify(28px); height: remify(28px); margin-left: auto;',
     );
   });
 
   it('contains metadata and ticket content within narrow inspector bounds', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    const infoCss = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
     const noteCss = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
     const markup = String(TicketInspector({ ...base }));
     expect(inspectorCss).toMatch(/\.ticket-inspector \{[^}]*min-width: 0;[^}]*max-width: 100%/);
     expect(markup).toMatch(/ticket-inspector__tabs[^>]*data-allocation="fill"[^>]*data-presentation="inspector"/);
-    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
-    expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(panelCss).toMatch(/\.ticket-inspector-panel \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
+    expect(infoCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
     // Category and Priority fill their grid cells through Kerf's trigger width prop (HS2-PKPGGZ).
-    expect(panelCss).not.toContain('.kui-select');
+    expect(infoCss).not.toContain('.kui-select');
     expect(markup).toContain('data-trigger-width="fill"');
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
     expect(noteCss).toMatchSource(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
     expect(noteCss).toMatchSource(
-      /\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/,
+      /\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: calc\(var\(--hotsheet-reading-scale, 1\) \* var\(--wa-font-size-xs\)\)/,
     );
     // Kerf beta.62 switches the reader's segmented tabs to icon-only below 832px itself.
     expect(inspectorCss).not.toContain('@container');
@@ -367,14 +370,25 @@ describe('TicketInspector', () => {
     expect(inspectorCss).toMatch(/\.ticket-inspector__tabs-frame \{[^}]*--kui-layout-item-gap: var\(--kui-space-2xs\)/);
     expect(inspectorCss).not.toMatch(/\.kui-app-tab__select \{/);
     expect(panelCss).toMatch(
-      /\.ticket-inspector__content \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/,
+      /\.ticket-inspector-panel \{[^}]*padding: 0 0 var\(--kui-space-xs\);[^}]*gap: var\(--kui-space-l\);/,
     );
     // Each direct child sits 8px from the edge with no border/padding of its own; headers get a 1px
     // transparent border + 8px padding (17px text) and bordered surfaces own their border+padding at the
     // 8px column — no negative margins anywhere (HS2-R64ETQ).
-    expect(panelCss).toMatchSource(/\.ticket-inspector__content > \* \{ margin-inline: var\(--kui-space-xs\); \}/);
-    expect(panelCss).toContainSource('border-inline: 1px solid transparent; padding-inline: var(--kui-space-xs);');
-    expect(panelCss).not.toContain('margin-inline: calc((remify(8px) + 1px) * -1)');
+    expect(panelCss).toMatchSource(/\.ticket-inspector-panel > \* \{ margin-inline: var\(--kui-space-xs\); \}/);
+    // Each tab panel owns its own header inset (HS2-MGVE50).
+    for (const file of [
+      'ticket-info-panel.css',
+      'ticket-timeline.css',
+      'ticket-attachments.css',
+      'ticket-code-review.css',
+    ]) {
+      const own = readFileSync(resolve(import.meta.dirname, file), 'utf8');
+      expect(own).toMatch(
+        /padding-inline: var\(--kui-space-xs\);\s*border-inline: 1px solid transparent;|padding: var\(--kui-space-2xs\) var\(--kui-space-xs\) 0;\s*border-inline: 1px solid transparent;/,
+      );
+      expect(own).not.toContain('margin-inline: calc((remify(8px) + 1px) * -1)');
+    }
   });
 
   it('hides the Up Next action for ineligible lifecycle states', () => {

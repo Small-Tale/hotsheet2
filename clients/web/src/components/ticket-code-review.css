@@ -1,8 +1,26 @@
+/* As an inspector tab panel, the review's own paragraphs keep the panel's compact text rhythm; the
+   single-class specificity lets each paragraph's own rule below refine it. */
+.ticket-code-review--panel
+  :where(.ticket-code-review__section > p, .ticket-code-review__empty > p, .ticket-code-review__evidence p) {
+  margin: 0;
+  color: var(--wa-color-neutral-on-normal);
+  font-size: var(--wa-font-size-s);
+  line-height: 1.5;
+}
 /* App-owned wrapper: the heading Toolbar drops its inset through the public gap token; its texts keep
-   their own inline padding (HS2-VABS08). */
+   their own inline padding (HS2-VABS08). The 1px transparent border + 8px padding aligns the heading to
+   the inspector's 17px text column (HS2-EQEGGG). */
 .ticket-code-review__header {
   --kui-toolbar-gap: 0px;
   display: grid;
+  padding-inline: var(--kui-space-xs);
+  border-inline: 1px solid transparent;
+}
+/* As an inspector tab panel (not embedded), the section stacks its parts on the 8px rhythm. */
+.ticket-code-review--panel .ticket-code-review__section {
+  display: grid;
+  min-width: 0;
+  gap: var(--kui-space-xs);
 }
 /* Embedded in another surface (the repository status popover), the review spaces its heading from the
    commit list itself rather than leaving the host to reach in (HS2-4APEJP). */

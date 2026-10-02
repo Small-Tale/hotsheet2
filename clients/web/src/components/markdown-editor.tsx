@@ -14,6 +14,11 @@ export interface MarkdownEditorProps {
   dirty?: boolean;
   label?: string;
   appearance?: 'standalone' | 'embedded';
+  /**
+   * `flush` drops the preview and source padding so a host surface that owns its own inset (the
+   * inspector Details surface, HS2-MGVE50) aligns the text to its column.
+   */
+  inset?: 'padded' | 'flush';
   showExpand?: boolean;
   expandAction?: string;
   editable?: boolean;
@@ -26,6 +31,7 @@ export function MarkdownEditor({
   expanded = false,
   label = 'Markdown content',
   appearance = 'standalone',
+  inset = 'padded',
   showExpand = true,
   expandAction = 'toggle-markdown-expanded',
   editable = true,
@@ -34,11 +40,12 @@ export function MarkdownEditor({
   const empty = !value.trim();
   return (
     <section
-      class={`${expanded ? 'markdown-editor markdown-editor--expanded' : 'markdown-editor'}${appearance === 'embedded' ? ' markdown-editor--embedded' : ''}`}
+      class={`${expanded ? 'markdown-editor markdown-editor--expanded' : 'markdown-editor'}${appearance === 'embedded' ? ' markdown-editor--embedded' : ''}${inset === 'flush' ? ' markdown-editor--flush' : ''}`}
       data-component="markdown-editor"
       data-mode={mode}
       data-expanded={String(expanded)}
       data-appearance={appearance}
+      data-inset={inset}
     >
       {(appearance === 'standalone' || showExpand) && (
         <header class="markdown-editor__toolbar">

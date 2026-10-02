@@ -159,9 +159,14 @@ import {
   inspectorBlockedReason,
   inspectorBlockedReasonDraft,
   inspectorBlockedReasonEditing,
+  markdownAppearance,
+  type MarkdownEditorAppearanceDemo,
   MarkdownEditorDemo,
+  type MarkdownEditorInsetDemo,
+  MarkdownEditorSettings,
   markdownEvent,
   markdownExpanded,
+  markdownInset,
   markdownMode,
   MarkdownPreviewDemo,
   markdownSavedValue,
@@ -1283,6 +1288,8 @@ function DemoApp() {
             <QuickTicketComposerSettings />
           ) : selected.id === 'ticket-inspector' ? (
             <TicketInspectorSettings />
+          ) : selected.id === 'markdown-editor' ? (
+            <MarkdownEditorSettings />
           ) : (
             <p>This demo has no adjustable settings.</p>
           )}
@@ -2590,6 +2597,16 @@ demoListeners.add(
 demoListeners.add(
   delegate(root, 'change', DEMO_FIELDS.newTicketSource.selector, (_event, target) => {
     composerSourcePick.value = (target as FormControl).value;
+  }),
+);
+demoListeners.add(
+  delegate(root, 'change', '[data-settings="markdown-editor"] [name="markdown-appearance"]', (_event, target) => {
+    markdownAppearance.value = (target as FormControl).value as MarkdownEditorAppearanceDemo;
+  }),
+);
+demoListeners.add(
+  delegate(root, 'change', '[data-settings="markdown-editor"] [name="markdown-inset"]', (_event, target) => {
+    markdownInset.value = (target as FormControl).value as MarkdownEditorInsetDemo;
   }),
 );
 demoListeners.add(

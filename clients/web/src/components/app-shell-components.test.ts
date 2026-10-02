@@ -60,7 +60,7 @@ describe('application shell components', () => {
     // (HS2-4A29RR): the rails route them into the sidebar and inspector Panes (HS2-RWGQWN), so the
     // shell carries no inspector inset rules of its own.
     expect(css).not.toContain('.ticket-inspector__header');
-    expect(css).not.toContain('.ticket-inspector__content');
+    expect(css).not.toContain('.ticket-inspector-panel');
     expect(css).not.toContain('--hotsheet-safe-area-right');
     expect(productionCss).toContainSource(
       'html:root { --kui-safe-area-block-start: var(--hotsheet-safe-area-top); --kui-safe-area-block-end: var(--hotsheet-safe-area-bottom); --kui-safe-area-inline-start: var(--hotsheet-safe-area-left); --kui-safe-area-inline-end: var(--hotsheet-safe-area-right); }',
