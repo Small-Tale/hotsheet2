@@ -2118,6 +2118,10 @@ inspector field headers keep Kerf's label line height; and the UX catalog stage 
 labelled section rather than a width-capped CatalogExampleStack. The remaining doctor warnings are
 tracked under HS2-9ME409 (delegate disposers, attr selectors) and `KF-VXWMM9` (root-level wiring
 for KUI-L401).
+HS2-TAZJ0V wires Kerf's `wireScrollDividers()` once, page-lifetime, at the production app root
+(`clients/web/src/app/runtime.tsx`). Kerf toolbars draw no divider by default; with the wiring each
+Pane header gains its bottom divider (`data-scroll-divider` containing `b`) only while content is
+scrolled beneath it, and each footer its top divider (`t`) only while content continues past it.
 HS2-8R25B6 upgraded to 5.0.0-beta.66: `WorkbenchPanel` is now a union of a static panel and a
 `navStack` navigation panel (`KF-WW33YJ`), so the shell's rails are typed `WorkbenchStaticPanel`. It
 also ships `KF-SCS4RH` (Toolbar zone focus rings stay unclipped) and `KF-6P4NAV` (the form-field

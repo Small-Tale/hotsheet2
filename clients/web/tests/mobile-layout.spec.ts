@@ -1474,3 +1474,25 @@ test('side panels settle cleanly across a 1280 -> 390 -> 1280 resize with the si
   expect({ sidebar: await geometry(sidebar), inspector: await geometry(inspector) }).toEqual(desktop);
   await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-1280-after.png' });
 });
+
+test('pane chrome draws scroll dividers only while content scrolls beneath it (HS2-TAZJ0V)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 420 });
+  await openDemoProject(page);
+  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  const sidebar = page.locator('#app-left-rail [data-component="pane"]').first(),
+    header = sidebar.locator('> .kui-pane__header'),
+    footer = sidebar.locator('> .kui-pane__footer'),
+    content = sidebar.locator('> .kui-pane__content');
+  // The app root calls wireScrollDividers once; at the top only the footer has content beyond it.
+  await expect(footer).toHaveAttribute('data-scroll-divider', /t/);
+  await expect(header).not.toHaveAttribute('data-scroll-divider', /b/);
+  await content.evaluate((node) => {
+    node.scrollTo({ top: node.scrollHeight });
+  });
+  await expect(header).toHaveAttribute('data-scroll-divider', /b/);
+  await expect(footer).not.toHaveAttribute('data-scroll-divider', /t/);
+  await content.evaluate((node) => {
+    node.scrollTo({ top: 0 });
+  });
+  await expect(header).not.toHaveAttribute('data-scroll-divider', /b/);
+});

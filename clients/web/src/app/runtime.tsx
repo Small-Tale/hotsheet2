@@ -5,6 +5,7 @@ import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
+import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
 import { Trash2 } from 'lucide';
@@ -4929,6 +4930,9 @@ export async function startHotSheetWebClient() {
     );
   }
   mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
+  // Kerf panes, NavStacks, TabScaffolds, and TabBar strips draw their chrome dividers only while
+  // content scrolls beneath them; this page-lifetime wiring reports that scroll state (HS2-TAZJ0V).
+  void wireScrollDividers(appRoot);
   // Kerf drives the shell rails' resizing and persistence (HS2-P289N2) and, through their `collapsed`
   // signals, the phone overlays' exclusivity, Escape/outside-press dismissal, focus trap, and focus
   // return (HS2-Y1B1Y1); the terminal drawer keeps the app's own drag for its measured maximum and
