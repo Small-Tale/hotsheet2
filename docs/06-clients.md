@@ -560,6 +560,16 @@ and identity-less legacy entries remain conservatively blocking.
   long-poll event channel and never introduce client interval polling. Press-and-hold
   remains reserved for output/history. A context or overflow menu will provide “Run in
   new terminal” for shell commands (HS2-NT3F3Q).
+  The Hot Sheet 2 repository itself ships a committed **Quality** group in its shared
+  `.hotsheet2/settings.json` (HS2-11285R): **Reqs ↔ Code**, **Check Code Hygiene**,
+  **Analyze Code Quality**, and **Everything**. Each is an `ai` command whose prompt runs a
+  project skill (`check-requirements-against-code`, `check-code-hygiene`,
+  `analyze-code-quality` in `.claude/skills/`, mirrored for Codex in `.agents/skills/`) across
+  the CLI, server, core crates, web client, and migrator; **Everything** runs the three in
+  order and files follow-up tickets. Shared definitions show until a project saves its own
+  machine-local `commands` list, which then takes precedence. Headlessly the same definitions
+  are read with `hotsheet-cli settings get commands`, and the skills run directly in any AI
+  terminal.
 
 - **Project settings navigation.** Entering Settings replaces the ticket-oriented
   project sidebar with a persistent category navigator, following the HS1 settings-tab

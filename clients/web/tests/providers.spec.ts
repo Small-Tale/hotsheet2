@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
@@ -9595,6 +9595,66 @@ test('runs a portable shell command in a named terminal and opens the bottom dra
   await page.setViewportSize({ width: 1180, height: 651 });
   await expect(drawer.getByRole('tab', { name: 'Lint project' })).toBeInViewport();
   await page.screenshot({ path: '/private/tmp/hs2-2bkgpk-shell-command-narrow.png', fullPage: true });
+});
+
+test('serves the repository Quality commands from a real server and queues Everything (HS2-11285R)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer(),
+    // The repository's committed command settings, unmodified: the same file a checkout of hotsheet2 ships.
+    settings = readFileSync(new URL('../../../.hotsheet2/settings.json', import.meta.url), 'utf8'),
+    ticketCreates: Array<Record<string, unknown>> = [];
+  try {
+    mkdirSync(`${server.root}/.hotsheet2`, { recursive: true });
+    writeFileSync(`${server.root}/.hotsheet2/settings.json`, settings);
+    const served = await server.request<Array<{ title: string; kind: string; group?: string; prompt?: string }>>(
+        `/checkouts/${server.checkoutId}/commands`,
+      ),
+      quality = served.filter((command) => command.group === 'Quality');
+    expect(quality.map(({ title, kind }) => `${title}:${kind}`)).toEqual([
+      'Reqs ↔ Code:ai',
+      'Check Code Hygiene:ai',
+      'Analyze Code Quality:ai',
+      'Everything:ai',
+    ]);
+    // Only project discovery is a fixture; the command list comes from the real server's settings read.
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/commands', async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      const response = await route.fetch({
+        url: `${server.url}/checkouts/${server.checkoutId}/commands`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/tickets'))
+        ticketCreates.push(request.postDataJSON());
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      if (width < 1024) await page.getByRole('button', { name: 'Show project sidebar' }).click();
+      for (const title of ['Reqs ↔ Code', 'Check Code Hygiene', 'Analyze Code Quality', 'Everything'])
+        await expect(page.getByRole('button', { name: `${title} AI command`, exact: true })).toBeVisible();
+      await page
+        .locator('#app-left-rail')
+        .screenshot({ path: test.info().outputPath(`hs2-11285r-quality-commands-${width}.png`) });
+    }
+    await page.getByRole('button', { name: 'Everything AI command', exact: true }).click();
+    const everything = quality.find((command) => command.title === 'Everything')!;
+    await expect
+      .poll(() => ticketCreates)
+      .toEqual([
+        { title: 'Everything', details: everything.prompt, category: 'task', priority: 'highest', up_next: true },
+      ]);
+  } finally {
+    await server.stop();
+  }
 });
 
 test('queues a custom AI command as an urgent Up Next ticket and signals an available AI', async ({ page }) => {

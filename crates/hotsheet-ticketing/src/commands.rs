@@ -131,6 +131,75 @@ mod tests {
         );
         assert_eq!(groups_from_settings(&settings).unwrap(), ["Ideas", "Later"]);
     }
+    /// The repository's committed Quality commands (HS2-11285R) parse as typed AI commands, and
+    /// every skill a prompt names exists for both Claude (`.claude/skills`) and Codex
+    /// (`.agents/skills`) with identical text, so a button never points at a missing skill.
+    #[test]
+    fn repository_quality_commands_reference_present_skills() {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let settings = crate::Settings::for_project(&repo);
+        let value = settings
+            .get("commands", crate::Scope::Shared)
+            .unwrap()
+            .expect("committed commands");
+        let commands: Vec<CommandDefinition> = serde_json::from_value(value).unwrap();
+        let quality: Vec<_> = commands
+            .iter()
+            .filter(|command| command.group.as_deref() == Some("Quality"))
+            .collect();
+        let titles: Vec<_> = quality
+            .iter()
+            .map(|command| command.title.as_str())
+            .collect();
+        assert_eq!(
+            titles,
+            [
+                "Reqs ↔ Code",
+                "Check Code Hygiene",
+                "Analyze Code Quality",
+                "Everything"
+            ]
+        );
+        let skills = [
+            "check-requirements-against-code",
+            "check-code-hygiene",
+            "analyze-code-quality",
+        ];
+        for command in &quality {
+            assert_eq!(command.kind, CommandKind::Ai, "{}", command.id);
+            let prompt = command
+                .prompt
+                .as_deref()
+                .expect("AI commands carry a prompt");
+            let named: Vec<_> = skills
+                .iter()
+                .filter(|skill| prompt.contains(*skill))
+                .collect();
+            assert!(!named.is_empty(), "{} names no quality skill", command.id);
+            assert!(
+                command.icon.is_some() && command.color.is_some(),
+                "{}",
+                command.id
+            );
+        }
+        // Everything runs all three, in order.
+        let everything = quality.last().unwrap().prompt.as_deref().unwrap();
+        let positions: Vec<_> = skills
+            .iter()
+            .map(|skill| everything.find(skill).expect(skill))
+            .collect();
+        assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
+        for skill in skills {
+            let claude =
+                std::fs::read_to_string(repo.join(format!(".claude/skills/{skill}/SKILL.md")))
+                    .unwrap();
+            let codex =
+                std::fs::read_to_string(repo.join(format!(".agents/skills/{skill}/SKILL.md")))
+                    .unwrap();
+            assert!(claude.contains(&format!("name: {skill}")), "{skill}");
+            assert_eq!(claude, codex, "{skill} Claude and Codex copies drifted");
+        }
+    }
     #[test]
     fn parses_legacy_argv_and_native_ai_command_schemas() {
         let value = serde_json::json!([

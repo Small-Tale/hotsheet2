@@ -1,6 +1,44 @@
 {
   "$hotsheetSchema": 1,
   "appName": "Hot Sheet 2",
+  "commands": [
+    {
+      "color": "#ec4899",
+      "group": "Quality",
+      "icon": "arrow-left-right",
+      "id": "quality-requirements-vs-code",
+      "kind": "ai",
+      "prompt": "Run the check-requirements-against-code skill (.claude/skills/check-requirements-against-code/SKILL.md; Codex: .agents/skills/check-requirements-against-code/SKILL.md) across the CLI, server, core crates, web client, and migrator. Sync docs/CODEBASE-MAP.md, the docs/README.md requirements summary, and docs/TEST-COVERAGE.md in place, and create a follow-up Hot Sheet ticket for every discrepancy that needs a code change.",
+      "title": "Reqs ↔ Code"
+    },
+    {
+      "color": "#f97316",
+      "group": "Quality",
+      "icon": "soap-dispenser-droplet",
+      "id": "quality-code-hygiene",
+      "kind": "ai",
+      "prompt": "Run the check-code-hygiene skill (.claude/skills/check-code-hygiene/SKILL.md; Codex: .agents/skills/check-code-hygiene/SKILL.md) across the CLI, server, core crates, web client, and migrator, and create a follow-up Hot Sheet ticket for every non-trivial finding.",
+      "title": "Check Code Hygiene"
+    },
+    {
+      "color": "#8b5cf6",
+      "group": "Quality",
+      "icon": "circle-check-big",
+      "id": "quality-code-analysis",
+      "kind": "ai",
+      "prompt": "Run the analyze-code-quality skill (.claude/skills/analyze-code-quality/SKILL.md; Codex: .agents/skills/analyze-code-quality/SKILL.md): every Rust, web client, and migrator gate, Playwright E2E, the feature coverage matrix, documented anti-patterns, and the state-transition audit. Create a follow-up Hot Sheet ticket for every non-trivial finding.",
+      "title": "Analyze Code Quality"
+    },
+    {
+      "color": "#e5e7eb",
+      "group": "Quality",
+      "icon": "balloon",
+      "id": "quality-everything",
+      "kind": "ai",
+      "prompt": "Do these sequentially across the CLI, server, core crates, web client, and migrator, creating follow-up Hot Sheet tickets for all concerns encountered:\n1. the check-requirements-against-code skill\n2. the check-code-hygiene skill\n3. the analyze-code-quality skill\nSkills live in .claude/skills/<name>/SKILL.md (Codex: .agents/skills/<name>/SKILL.md). End with one combined summary that lists every follow-up ticket slug.",
+      "title": "Everything"
+    }
+  ],
   "terminals": [
     {
       "command": "{{aiCommand}}",
