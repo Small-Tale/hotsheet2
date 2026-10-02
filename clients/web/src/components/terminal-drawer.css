@@ -163,16 +163,12 @@
   /* 2xs here plus the strip's 2xs padding keeps the tabs at the xs inline inset. */
   padding-inline: var(--kui-space-2xs);
 }
-.terminal-drawer__rail .terminal-tab i {
+.terminal-drawer__busy-dot {
+  display: inline-block;
   width: remify(7.2px);
   height: remify(7.2px);
   border-radius: var(--wa-border-radius-circle);
   background: var(--wa-color-success-fill-loud);
-  flex: none;
-}
-.terminal-drawer__rail svg {
-  width: remify(16px);
-  height: remify(16px);
   flex: none;
 }
 .terminal-drawer__create-wrap {

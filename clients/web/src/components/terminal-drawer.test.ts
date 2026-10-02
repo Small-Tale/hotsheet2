@@ -227,7 +227,9 @@ describe('TerminalDrawer', () => {
   it('reserves the shared trailing tab slot whether or not a terminal has state', () => {
     const markup = render();
     expect(markup.match(/kui-app-tab__trailing/g)).toHaveLength(2);
-    expect(markup).toMatch(/Terminal 1<\/span><span class="kui-app-tab__trailing"><i aria-label="Busy"/);
+    expect(markup).toMatch(
+      /Terminal 1<\/span><span class="kui-app-tab__trailing"><i class="terminal-drawer__busy-dot" aria-label="Busy"/,
+    );
     expect(markup).toMatch(/Terminal 2<\/span><span class="kui-app-tab__trailing"><\/span>/);
   });
   it('describes the rail double-click state', () => {

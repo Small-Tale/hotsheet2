@@ -20,18 +20,6 @@
       "reason": "Temporary until KF-FTADQT ships: Kerf ToolbarControlGroup's native-button rule keeps a pointer cursor on a disabled button, so the dashboard restores not-allowed on its own zoom buttons"
     },
     {
-      "file": "src/components/terminal-drawer.css",
-      "selector": ".terminal-drawer__rail .terminal-tab i",
-      "ticket": "HS2-7ZGYJY",
-      "reason": "hook-descendant: .terminal-tab is a hook class on <AppTab>'s root; <i> sits inside that component"
-    },
-    {
-      "file": "src/components/terminal-drawer.css",
-      "selector": ".terminal-drawer__rail svg",
-      "ticket": "HS2-7ZGYJY",
-      "reason": "foreign-element: the descendant selector below .terminal-drawer__rail also reaches inside <PopupMenu>, <TabBar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
-    },
-    {
       "file": "src/components/ticket-status-menu.css",
       "selector": ".ticket-status-menu > wa-select::part(combobox)",
       "ticket": "HS2-WQ8T6B",

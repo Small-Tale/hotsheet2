@@ -334,16 +334,14 @@ describe('the clients/web workspace', () => {
     expect(formatReport(report).ok).toBe(false);
   });
 
-  // HS2-148B5C's borrowed terminal-preview classes and HS2-M2W2DP's `.ai-conversation__activity svg` are
-  // fixed; the fixture tests above keep both shapes covered.
-  it('covers the reported missed cases (HS2-7ZGYJY)', () => {
-    const found = checkWorkspace(workspace).violations.map(({ file, selector }) => `${file} ${selector}`);
-    expect(found).toEqual(
-      expect.arrayContaining([
-        'src/components/terminal-drawer.css .terminal-drawer__rail svg',
-        'src/components/terminal-drawer.css .terminal-drawer__rail .terminal-tab i',
-      ]),
+  // HS2-148B5C's borrowed terminal-preview classes, HS2-M2W2DP's `.ai-conversation__activity svg`, and
+  // HS2-7ZGYJY's drawer-rail `svg` / `.terminal-tab i` rules are fixed; the fixture tests above keep each
+  // shape covered, and the real drawer stylesheet must stay clean.
+  it('keeps the terminal drawer rail free of reported missed cases (HS2-7ZGYJY)', () => {
+    const drawer = checkWorkspace(workspace).violations.filter(
+      ({ file }) => file === 'src/components/terminal-drawer.css',
     );
+    expect(drawer).toEqual([]);
   });
 
   it('keeps UX demo stage styles out of the demoed components (HS2-TV78E1)', () => {
