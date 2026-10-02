@@ -7,7 +7,7 @@ import { NotificationCenter } from './notification-center';
 import { NotificationNavigation, notificationNavigationPanel, type NotificationView } from './notification-navigation';
 import { ProjectSidebar, projectSidebarPanel, type ProjectSidebarProps } from './project-sidebar';
 import { type SettingsCategory, SettingsNavigation, settingsNavigationPanel } from './settings-navigation';
-import type { SidebarPanelParts } from './sidebar-panel';
+import type { NavigationPanelParts, SidebarPanelParts } from './sidebar-panel';
 import { TerminalDashboard, type TerminalDashboardProps } from './terminal-dashboard';
 import { TerminalDrawer, type TerminalDrawerProps } from './terminal-drawer';
 import {
@@ -70,7 +70,7 @@ export function TerminalRailSurface({ rail }: TerminalRailSurfaceProps) {
   return <TerminalTicketRail {...rail} />;
 }
 /** The workspace grid's right-rail panel for the same routing, composed by the Workbench (HS2-QQW6CT). */
-export function terminalRailSurfacePanel({ rail }: TerminalRailSurfaceProps): SidebarPanelParts {
+export function terminalRailSurfacePanel({ rail }: TerminalRailSurfaceProps): NavigationPanelParts {
   return terminalTicketRailPanel(rail);
 }
 

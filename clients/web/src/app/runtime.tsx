@@ -4,9 +4,10 @@ import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
+import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
-import { ChevronLeft, Trash2 } from 'lucide';
+import { Trash2 } from 'lucide';
 
 import {
   applyKnownActiveTicketExpiries,
@@ -128,9 +129,7 @@ import {
 import { TicketBoard } from '../components/ticket-board';
 import { TicketCloseDialog, type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import type { TicketEmptyStateProps } from '../components/ticket-empty-state';
-import { type InspectorTab, TicketInspector, type TicketInspectorProps } from '../components/ticket-inspector';
-import { TicketInspectorPlaceholder } from '../components/ticket-inspector-placeholder';
-import { TicketInspectorSkeleton } from '../components/ticket-inspector-skeleton';
+import { type InspectorTab, ticketInspectorPanel, type TicketInspectorProps } from '../components/ticket-inspector';
 import {
   corruptInspectorPanel,
   inspectorPanel,
@@ -445,8 +444,7 @@ export async function startHotSheetWebClient() {
     const target = projects.peek().find((item) => item.id === statsProjectId.value);
     if (target) void loadConfidenceReport(target);
   });
-  const terminalRailScreen = signal<'root' | 'ticket'>('root'),
-    terminalRailDirection = signal<'forward' | 'backward'>('forward');
+  const terminalRailScreen = signal<'root' | 'ticket'>('root');
   const terminalGroups = signal<TerminalDashboardGroup[]>([]),
     terminalDashboardLoading = signal(false),
     terminalDashboardMessage = signal('');
@@ -1708,7 +1706,6 @@ export async function startHotSheetWebClient() {
     if (mode !== 'stats') statsProjectId.value = undefined;
     if (mode === 'terminals' && shellMode.value !== 'terminals') {
       terminalRailScreen.value = 'root';
-      terminalRailDirection.value = 'forward';
     }
     shellMode.value = mode;
     if (mode === 'terminals' || mode === 'stats')
@@ -1737,7 +1734,6 @@ export async function startHotSheetWebClient() {
     const activated = activateOpenProject(next);
     if (!activated) return;
     terminalRailScreen.value = 'root';
-    terminalRailDirection.value = 'backward';
     void refreshActivatedProject(activated, false);
   }
   // Switch the active project tab (shared by the desktop project tab click and the mobile project Select —
@@ -3807,7 +3803,7 @@ export async function startHotSheetWebClient() {
       purpose: item.purpose,
     }));
   }
-  function selectedInspectorProps(slugPlacement?: 'leading' | 'center'): TicketInspectorProps | undefined {
+  function selectedInspectorProps(): TicketInspectorProps | undefined {
     const ticket = selectedTicket.value,
       current = project();
     if (!ticket || !current) return;
@@ -3816,7 +3812,6 @@ export async function startHotSheetWebClient() {
         ? duplicateBacklinkState.value
         : undefined;
     return {
-      slugPlacement,
       slug: ticket.slug,
       title: ticket.title,
       liveClaim: liveClaimNotice(ticket),
@@ -4229,36 +4224,13 @@ export async function startHotSheetWebClient() {
       ) : (
         <TicketList tickets={shown.map(row)} label="Project tickets" />
       );
+    // The pushed ticket detail is the rail NavStack's second view once its ticket is loaded
+    // (HS2-FY06N4); its key follows the ticket so a different ticket is a new push.
     const ready =
         terminalRailScreen.value === 'ticket' &&
         selectedTicketSlugs.value.length === 1 &&
         selectedTicket.value?.slug === selectedTicketSlugs.value[0],
-      railInspectorProps = ready ? selectedInspectorProps('center') : undefined;
-    const railTransitioning =
-      terminalRailScreen.value === 'ticket' &&
-      selectedTicketSlugs.value.length === 1 &&
-      Boolean(selectedTicket.value) &&
-      !ready;
-    const inspector = (
-      <div class="terminal-ticket-rail__inspector">
-        <button
-          type="button"
-          class="terminal-ticket-rail__back"
-          data-action="back-terminal-ticket-rail"
-          aria-label="Back to ticket list"
-          title="Back to ticket list"
-        >
-          <LucideIcon icon={ChevronLeft} name="chevron-left" />
-        </button>
-        {railInspectorProps ? (
-          <TicketInspector {...railInspectorProps} />
-        ) : railTransitioning ? (
-          <TicketInspectorSkeleton slug={selectedTicketSlugs.value[0]} />
-        ) : (
-          <TicketInspectorPlaceholder selectionCount={selectedTicketSlugs.value.length} />
-        )}
-      </div>
-    );
+      railInspectorProps = ready ? selectedInspectorProps() : undefined;
     return {
       rail: {
         projects: projects.value.map((item) => ({ id: item.id, name: item.name })),
@@ -4293,9 +4265,9 @@ export async function startHotSheetWebClient() {
           />
         ),
         content,
-        inspector,
-        active: ready ? 'ticket' : 'root',
-        direction: terminalRailDirection.value,
+        detail: railInspectorProps
+          ? { key: `ticket:${railInspectorProps.slug}`, parts: ticketInspectorPanel(railInspectorProps) }
+          : undefined,
         title: mode === 'notifications' ? 'Notifications' : ticketViewTitle(railView),
         action: mode === 'notifications' ? undefined : ticketViewAction(railView, canCreate, 'Ticket…'),
       },
@@ -4723,6 +4695,26 @@ export async function startHotSheetWebClient() {
   }
 
   const appRoot = document.querySelector<HTMLElement>('#app')!;
+  // The workspace grid's ticket rail is a Workbench navigation panel (HS2-FY06N4): Kerf's
+  // `wireNavStack` animates its push/pop, moves focus into each new view, and reports the back
+  // control, which pops the app-owned rail screen. The stack mounts with the terminals shell, so it is
+  // (re)wired after any render that mounted a new one.
+  let railNavStack: { section: Element; dispose: () => void } | undefined;
+  function syncTerminalRailNavStack() {
+    const section = appRoot.querySelector(`#app-right-rail [data-component="nav-stack"]`);
+    if (section === (railNavStack?.section ?? null)) return;
+    railNavStack?.dispose();
+    railNavStack = section
+      ? {
+          section,
+          dispose: wireNavStack(section, {
+            onBack: () => {
+              terminalRailScreen.value = 'root';
+            },
+          }),
+        }
+      : undefined;
+  }
   const renderMetrics = import.meta.env.DEV ? createRenderMetrics(appRoot) : undefined;
   const activeTicketCollectionKey = () => `${selectedProjectId.value}:${selectedView.value}`;
   const ticketScrollRoot = () => appRoot.querySelector<HTMLElement>('.app-shell__workspace') ?? appRoot;
@@ -4783,6 +4775,7 @@ export async function startHotSheetWebClient() {
       );
       animateTicketMotion(ticketMotion, appRoot, undefined, activeTicketCollectionKey());
       syncTerminalViewportMounts();
+      syncTerminalRailNavStack();
       terminalDrawerSizeObserver.sync();
       terminalDashboardSizeObserver.sync();
       syncRepositoryPaginationObserver();
@@ -5090,7 +5083,7 @@ export async function startHotSheetWebClient() {
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,
     changeEvidenceReader, selectedTicket, codeReviewMessage, openProject, currentRememberedProjectRoots, persistDrawerTabOrder, currentDrawerTabIds, focusDrawerTab,
     revealCorruptTicket, queueCorruptTicketRepair, corruptTickets, selectedCorruptKey, selectedTicketSlugs, setInspectorVisible, statsProjectId, setShellMode,
-    selectTerminalRailProject, selectTicketView, terminalRailDirection, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
+    selectTerminalRailProject, selectTicketView, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
     terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
     setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,

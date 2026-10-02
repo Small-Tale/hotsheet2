@@ -2843,7 +2843,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 1728, height: 971 });
     await expectMode(segments, 'board');
     await page.getByRole('button', { name: 'Workspace grid' }).click();
-    const rail = page.locator('[data-component="terminal-ticket-rail"]');
+    const rail = page.locator('#app-right-rail');
     const railSegments = rail.getByRole('group', { name: 'View mode', exact: true });
     // The rail mirrors the shared view mode and offers Columns too (HS2-656Q43).
     await expectMode(railSegments, 'board', ['list', 'board', 'notifications']);
@@ -2878,7 +2878,7 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const rail = page.locator('[data-component="terminal-ticket-rail"]');
+  const rail = page.locator('#app-right-rail');
   await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
   await rail.getByRole('button', { name: /Columns view/ }).click();
   const board = rail.locator('[data-component="ticket-board"]'),
@@ -2926,9 +2926,9 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
   await expect(columns.first()).toBeInViewport({ ratio: 0.95 });
   // Selecting a card from the paged board pushes into the rail's inspector as the list does.
   await board.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-DEMO01"]').click();
-  await expect(rail).toHaveAttribute('data-screen', 'ticket');
+  await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute('data-nav-active', 'false');
   await rail.getByRole('button', { name: 'Back to ticket list' }).click();
-  await expect(rail).toHaveAttribute('data-screen', 'root');
+  await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute('data-nav-active', 'true');
   await rail.getByRole('button', { name: /List view/ }).click();
   await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
   await expect(board).toHaveCount(0);
@@ -2942,7 +2942,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const rail = page.locator('[data-component="terminal-ticket-rail"]'),
+  const rail = page.locator('#app-right-rail'),
     projectSelect = page.locator('#app-right-rail wa-select[name="terminal-rail-project"]'),
     viewSelect = rail.locator('wa-select[name="terminal-rail-view"]'),
     launcher = rail.getByRole('button', { name: 'Ticket…' });
@@ -3049,14 +3049,31 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expect(rail).toBeVisible();
   await expect(rail.locator('[data-ticket-slug="HS2-START03"]')).toBeVisible();
   await rail.locator('[data-ticket-slug="HS2-START03"]').click();
-  await expect(rail).toHaveAttribute('data-screen', 'ticket');
+  await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute('data-nav-active', 'false');
   const back = rail.getByRole('button', { name: 'Back to ticket list' });
   await expect(back).toBeVisible();
   await expect(rail.getByRole('button', { name: /Copy ticket number HS2-START03/ })).toBeVisible();
-  await expect(rail.locator('[data-component="ticket-inspector"]')).toBeVisible();
-  await rail.locator('[data-component="content-transition"]').evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
-  });
+  await expect(rail.locator('[data-component="ticket-inspector-body"]')).toBeVisible();
+  // Wait for the NavStack push to settle (its chrome cross-fade copies are gone).
+  await expect(rail.locator('[data-component="nav-stack"]')).not.toHaveAttribute('data-nav-chrome-transition', 'true');
+  await expect(rail.locator('[data-nav-chrome-copy]')).toHaveCount(0);
+  // HS2-FY06N4: the pushed detail is one toolbar row — Kerf's back control, the centered ticket
+  // number, the ticket actions, then the rail's standard toggle — with the inspector header pinned
+  // beneath it, and focus moved into the pushed view.
+  const railToolbars = rail.locator(
+    '[data-nav-stack-chrome] [data-component="toolbar"]:not([data-nav-stack-header] *)',
+  );
+  await expect(railToolbars).toHaveCount(1);
+  await expect(railToolbars.getByRole('button', { name: 'Back to ticket list' })).toBeVisible();
+  await expect(railToolbars.getByRole('button', { name: 'Open ticket reader' })).toBeVisible();
+  await expect(railToolbars.getByRole('button', { name: 'Hide ticket rail' })).toBeVisible();
+  await expect(rail.locator('[data-nav-stack-header] [data-component="ticket-inspector-header"]')).toBeVisible();
+  await expect(rail.locator('[data-component="ticket-inspector"]')).toHaveCount(0);
+  expect(
+    await rail.evaluate((node) =>
+      Boolean(node.querySelector('.kui-nav-stack__view[data-nav-active="true"]')?.contains(document.activeElement)),
+    ),
+  ).toBe(true);
   const railInfo = rail.getByRole('tab', { name: 'Info' }),
     railTimeline = rail.getByRole('tab', { name: 'Timeline' });
   await expect(railInfo).toHaveAttribute('aria-selected', 'true');
@@ -3064,25 +3081,29 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await page.keyboard.press('ArrowRight');
   await expect(railTimeline).toHaveAttribute('aria-selected', 'true');
   const inspectorHeader = await rail.evaluate((node) => {
-    const railBox = node.getBoundingClientRect(),
-      backBox = node.querySelector<HTMLElement>('.terminal-ticket-rail__back')!.getBoundingClientRect(),
+    const backBox = node.querySelector<HTMLElement>('[data-nav-back]')!.getBoundingClientRect(),
       slugBox = node.querySelector<HTMLElement>('.ticket-inspector__slug')!.getBoundingClientRect();
     return {
       backCenter: backBox.top + backBox.height / 2,
       slugCenter: slugBox.top + slugBox.height / 2,
-      slugHorizontalCenter: slugBox.left + slugBox.width / 2,
-      railHorizontalCenter: railBox.left + railBox.width / 2,
+      slugLeft: slugBox.left,
+      backRight: backBox.right,
       backWidth: backBox.width,
-      backColor: getComputedStyle(node.querySelector('.terminal-ticket-rail__back')!).color,
+      toggleCenter: (() => {
+        const toggle = node.querySelector<HTMLElement>('[data-nav-stack-chrome] [aria-label="Hide ticket rail"]')!;
+        const box = toggle.getBoundingClientRect();
+        return box.top + box.height / 2;
+      })(),
     };
   });
   expect(inspectorHeader.backCenter).toBeCloseTo(inspectorHeader.slugCenter, 0);
-  expect(inspectorHeader.slugHorizontalCenter).toBeCloseTo(inspectorHeader.railHorizontalCenter, 0);
+  // The ticket number follows Kerf's back control in the leading zone (HS2-FY06N4).
+  expect(inspectorHeader.slugLeft).toBeGreaterThanOrEqual(inspectorHeader.backRight);
   expect(inspectorHeader.backWidth).toBeGreaterThanOrEqual(36);
-  expect(inspectorHeader.backColor).not.toBe('rgb(0, 0, 0)');
+  expect(inspectorHeader.toggleCenter).toBeCloseTo(inspectorHeader.slugCenter, 0);
   await page.screenshot({ path: '/private/tmp/hs2-gzn2hz-terminal-ticket-tabs-wide.png', fullPage: true });
   await back.click();
-  await expect(rail).toHaveAttribute('data-screen', 'root');
+  await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute('data-nav-active', 'true');
   await page.waitForTimeout(350);
   await rail.getByRole('button', { name: /Notifications view/ }).click();
   await expect(rail.locator('[data-component="notification-center"]')).toBeVisible();
@@ -16394,7 +16415,7 @@ for (const surface of ['workspace', 'rail'] as const) {
       await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
       if (surface === 'rail') await page.getByRole('button', { name: 'Workspace grid' }).click();
       else await page.getByRole('button', { name: 'Columns view', exact: true }).click();
-      const rail = page.locator('[data-component="terminal-ticket-rail"]');
+      const rail = page.locator('#app-right-rail');
       const controls =
         surface === 'rail' ? rail : page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
       const star = controls.getByRole('button', { name: 'Toggle Up Next for selected tickets' });
@@ -16404,9 +16425,15 @@ for (const surface of ['workspace', 'rail'] as const) {
           .locator(`[data-component="ticket-list-row"][data-ticket-slug="${slug}"]`)
           .click({ modifiers: toggle ? ['Meta'] : [] });
         if (surface === 'rail' && single) {
-          await expect(rail).toHaveAttribute('data-screen', 'ticket');
+          await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute(
+            'data-nav-active',
+            'false',
+          );
           await rail.getByRole('button', { name: 'Back to ticket list' }).click();
-          await expect(rail).toHaveAttribute('data-screen', 'root');
+          await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute(
+            'data-nav-active',
+            'true',
+          );
         }
       };
       const expectState = async (state: 'none' | 'mixed' | 'all') => {
@@ -16454,7 +16481,7 @@ for (const surface of ['workspace', 'rail'] as const) {
       await select('HS2-START02', true, false);
       await expectState('mixed');
       if (surface === 'rail')
-        await rail.locator('.terminal-ticket-rail__content').evaluate((node) => {
+        await rail.locator('.kui-nav-stack__view[data-nav-active="true"]').evaluate((node) => {
           node.scrollTop = 0;
         });
       await controls.screenshot({
@@ -16523,7 +16550,7 @@ for (const surface of ['workspace', 'rail'] as const) {
     if (surface === 'rail') await page.getByRole('button', { name: 'Workspace grid' }).click();
     const controls =
       surface === 'rail'
-        ? page.locator('[data-component="terminal-ticket-rail"]')
+        ? page.locator('#app-right-rail')
         : page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
     await expect(controls.getByRole('button', { name: 'Toggle Up Next for selected tickets' })).toBeDisabled();
     await expect(controls.getByRole('button', { name: 'More actions for selected tickets' })).toBeDisabled();

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { QuickTicketLauncher } from './quick-ticket-composer';
 import { TerminalTicketRail, terminalTicketRailPanel } from './terminal-ticket-rail';
+import { ticketInspectorPanel } from './ticket-inspector';
 
 describe('TerminalTicketRail', () => {
   const props = {
@@ -19,10 +20,22 @@ describe('TerminalTicketRail', () => {
     selectedViewId: 'all',
     controls: 'Controls' as never,
     content: 'Tickets' as never,
-    inspector: 'Inspector' as never,
+  };
+  const detail = {
+    key: 'ticket:HS2-TEST',
+    parts: ticketInspectorPanel({
+      slug: 'HS2-TEST',
+      title: 'Pushed ticket',
+      status: 'started',
+      priority: 'default',
+      category: 'task',
+      tags: [],
+      details: '',
+    }),
   };
   it('starts on a compact project ticket surface whose project menu can grow to fit longer names', () => {
-    const markup = String(TerminalTicketRail({ ...props, active: 'root', collapseControl: true }));
+    const markup = String(TerminalTicketRail({ ...props, collapseControl: true }));
+    expect(markup).toContain('data-component="nav-stack"');
     expect(markup).toContain('name="terminal-rail-project"');
     expect(markup).toMatch(/data-component="toolbar-control-group"[^>]*><wa-select[^>]*name="terminal-rail-project"/);
     expect(markup).toContain('Project One');
@@ -30,27 +43,43 @@ describe('TerminalTicketRail', () => {
     expect(markup).toContain('Queue');
     expect(markup).toContain('aria-label="Hide ticket rail"');
     expect(markup).toContain('data-action="toggle-ticket-inspector"');
-    // As Workbench panel parts (HS2-QQW6CT) the project selector rides the panel toolbar with the
-    // standard rail toggle, while the push navigation stays the panel's content.
-    const parts = terminalTicketRailPanel({ ...props, active: 'root' });
-    expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'ticket rail' });
-    expect(String(parts.toolbar.leading)).toContain('name="terminal-rail-project"');
-    expect(String(parts.content)).toContain('data-component="terminal-ticket-rail"');
-    expect(String(parts.content)).not.toContain('name="terminal-rail-project"');
-    expect(markup).toContain('<div class="terminal-ticket-rail__content"><div class="kui-sunken-panel"');
-    expect(markup).toContain('data-component="sunken-panel"');
-    expect(markup).toContain('data-shape="square"');
-    expect(markup).toContain('data-active-side="a"');
+    expect(markup).toContain('data-component="terminal-ticket-rail-list"');
     expect(markup.match(/<wa-select[^>]*name="terminal-rail-project"[^>]*>/)?.[0]).not.toContain(
       'kui-select--fit-menu',
     );
     expect(markup.match(/<wa-select[^>]*name="terminal-rail-view"[^>]*>/)?.[0]).not.toContain('kui-select--fit-menu');
   });
-  it('uses the shared backward pop when returning from a ticket', () => {
-    const markup = String(TerminalTicketRail({ ...props, active: 'root', direction: 'backward' }));
-    expect(markup).toContain('data-active-side="a"');
-    expect(markup).toContain('data-transition-style="push"');
-    expect(markup).toContain('data-transition-direction="backward"');
+  it('is a Workbench navigation panel whose root view lists tickets under its pinned controls (HS2-FY06N4)', () => {
+    const parts = terminalTicketRailPanel(props);
+    expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'ticket rail' });
+    expect(parts.navStack.backLabel).toBe('Back to ticket list');
+    expect(parts.navStack.toolbarConfig?.centerAlign).toBeUndefined();
+    expect(parts.navStack.views.map((view) => view.key)).toEqual(['root']);
+    const [root] = parts.navStack.views;
+    // The project selector is the root view's toolbar group, ahead of the panel's standard toggle.
+    expect(String(root.leading)).toContain('name="terminal-rail-project"');
+    expect(String(root.header)).toContain('class="kui-toolbar terminal-ticket-rail__controls"');
+    expect(String(root.header)).toContain('name="terminal-rail-view"');
+    expect(root.appearance).toBe('sunken');
+    expect(String(root.content)).toContain('Tickets');
+    expect(String(root.content)).not.toContain('name="terminal-rail-project"');
+  });
+  it('pushes the ticket detail as one toolbar row with its pinned header and scrolling body (HS2-FY06N4)', () => {
+    const parts = terminalTicketRailPanel({ ...props, detail });
+    expect(parts.navStack.views.map((view) => view.key)).toEqual(['root', 'ticket:HS2-TEST']);
+    const pushed = parts.navStack.views[1];
+    // Kerf renders the back control first and the panel toggle last; the view adds the ticket
+    // number (centered) and its actions — no second toolbar and no hand-made back button.
+    expect(String(pushed.leading)).toContain('data-action="copy-ticket-slug"');
+    expect(String(pushed.toolbar)).toContain('data-action="open-ticket-reader"');
+    expect(String(pushed.header)).toContain('data-component="ticket-inspector-header"');
+    expect(String(pushed.header)).toContain('Pushed ticket');
+    expect(String(pushed.content)).toContain('data-component="ticket-inspector-body"');
+    const markup = String(TerminalTicketRail({ ...props, detail, collapseControl: true }));
+    expect(markup).toContain('data-nav-back');
+    expect(markup).toContain('aria-label="Back to ticket list"');
+    expect(markup).not.toContain('terminal-ticket-rail__back');
+    expect(markup.match(/data-component="toolbar" /g)?.length).toBeGreaterThan(0);
   });
   it('keeps compact search last, animates active search onto a full row, and centers the ticket header independently', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8'),
@@ -73,9 +102,8 @@ describe('TerminalTicketRail', () => {
     // Kerf beta.62 balances the toolbar tracks itself (`centerAlign="balanced"`).
     expect(css).not.toContain('ticket-inspector__header > .kui-toolbar');
     expect(css).not.toContain('.kui-toolbar-text');
-    expect(css).toMatchSource(
-      /terminal-ticket-rail__back \{[^}]*width:remify\(36px\)[^}]*color:var\(--wa-color-brand-on-quiet\)/,
-    );
+    // Kerf's NavStack renders the back control; the app styles none of its own (HS2-FY06N4).
+    expect(css).not.toContain('terminal-ticket-rail__back');
   });
   it('uses the canonical compact-rail spacing while retaining control and transition geometry', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
@@ -97,9 +125,7 @@ describe('TerminalTicketRail', () => {
   });
   it('separates the heading from the ticket scroller and preserves the shared compact launcher', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8'),
-      markup = String(
-        TerminalTicketRail({ ...props, active: 'root', action: QuickTicketLauncher({ label: 'Ticket…' }) }),
-      ),
+      markup = String(TerminalTicketRail({ ...props, action: QuickTicketLauncher({ label: 'Ticket…' }) })),
       heading = markup.match(
         /<div class="terminal-ticket-rail__heading"><header class="kui-toolbar"[\s\S]*?<\/header>/,
       )![0];
@@ -108,10 +134,10 @@ describe('TerminalTicketRail', () => {
     expect(heading).toContain('Ticket…');
     expect(heading).not.toContain('kui-toolbar-control-group');
   });
-  it('keeps the ticket collection intrinsic so the rail surface owns vertical scrolling', () => {
+  it('lets the NavStack view own vertical scrolling instead of an app scroller (HS2-FY06N4)', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8');
-    expect(css).toMatchSource(/__content \{[^}]*overflow:auto[^}]*flex:1/);
-    expect(css).toMatchSource(/__content > \* > \.ticket-list \{[^}]*flex:none/);
-    expect(css).toMatchSource(/__content \{[^}]*grid-template-rows:minmax\(100%, max-content\)/);
+    expect(css).not.toContain('__content');
+    expect(css).not.toContain('content-transition');
+    expect(css).not.toContain('__back');
   });
 });

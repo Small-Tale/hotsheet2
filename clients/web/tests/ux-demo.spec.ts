@@ -868,8 +868,8 @@ test('represents aggregate and per-project terminal operations in the UX catalog
 test('represents the compact terminal ticket rail in the UX catalog', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
-  // The rail renders as Workbench panel parts (HS2-QQW6CT): its panel toolbar holds the project
-  // selector and the standard toggle above the push-navigation content.
+  // The rail is a navigation panel (HS2-FY06N4): its root NavStack view's toolbar holds the project
+  // selector before the standard toggle, above the pinned controls and the scrolling ticket list.
   const panel = page.locator('.terminal-ticket-rail-demo'),
     rail = page.locator('[data-component="terminal-ticket-rail"]'),
     project = panel.locator('wa-select[name="terminal-rail-project"]'),
@@ -887,7 +887,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     'toggle-ticket-inspector',
   );
   await expect(rail.locator('[data-component="ticket-list-row"]')).toHaveCount(7);
-  await expect(rail.locator('[data-component="content-transition"]')).toHaveAttribute('data-transition-style', 'push');
+  await expect(rail.locator('[data-component="nav-stack"]')).toHaveCount(1);
   const geometry = await rail.evaluate((node) => {
     const modeElement = node.querySelector<HTMLElement>('.view-mode-switcher')!,
       mode = modeElement.getBoundingClientRect(),
@@ -896,12 +896,12 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       utility = node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),
       project = document.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
       projectChrome = getComputedStyle(
-        document.querySelector<HTMLElement>('.terminal-ticket-rail-demo .kui-pane__header > .kui-toolbar')!,
+        document.querySelector<HTMLElement>('.terminal-ticket-rail-demo [data-nav-stack-chrome] .kui-toolbar')!,
       ),
       controls = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__controls')!),
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading .kui-toolbar')!),
       headingWrap = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
-      content = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__content .kui-sunken-panel')!),
+      content = getComputedStyle(node.querySelector<HTMLElement>('.kui-nav-stack__view[data-nav-active="true"]')!),
       launcherStyle = getComputedStyle(node.querySelector<HTMLElement>('.quick-ticket-composer__launcher')!);
     return {
       mode: {
@@ -938,11 +938,16 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     controls: geometry.controlsPadding,
     heading: geometry.headingPadding,
     content: geometry.contentPadding,
-  }).toEqual({ project: '8px', controls: '8px', heading: '8px', content: '8px' });
+  }).toEqual({ project: '8px', controls: '8px', heading: '8px', content: geometry.contentPadding });
+  // The list sits on the active view's sunken scroll surface (no app SunkenPanel or scroller).
+  await expect(rail.locator('.kui-nav-stack__view[data-nav-active="true"]')).toHaveAttribute(
+    'data-appearance',
+    'sunken',
+  );
   expect(geometry.headingBorderBottom).toBe('1px');
   expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
   expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThan(geometry.railWidth / 4);
-  const scroller = rail.locator('.terminal-ticket-rail__content'),
+  const scroller = rail.locator('.kui-nav-stack__view[data-nav-active="true"]'),
     rows = rail.locator('[data-component="ticket-list-row"]'),
     lastRow = rows.last();
   await expect.poll(() => scroller.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
@@ -1042,8 +1047,19 @@ for (const component of ['workspace-header', 'terminal-ticket-rail']) {
         ? page.getByRole('region', { name: 'WorkspaceHeader demo' })
         : page.locator('[data-component="terminal-ticket-rail"]');
     const star = demo.getByRole('button', { name: 'Toggle Up Next for selected tickets' });
+    // A plain click in the rail also pushes the ticket's detail (HS2-FY06N4); return to the list.
+    const plainClick = async (slug: string) => {
+      await demo.locator(`[data-component="ticket-list-row"][data-ticket-slug="${slug}"]`).click();
+      if (component === 'terminal-ticket-rail') {
+        await demo.getByRole('button', { name: 'Back to ticket list' }).click();
+        await expect(demo.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute(
+          'data-nav-active',
+          'true',
+        );
+      }
+    };
     await expect(star).toBeDisabled();
-    await demo.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-R76MMW"]').click();
+    await plainClick('HS2-R76MMW');
     await expect(star).toHaveAttribute('aria-pressed', 'true');
     await demo
       .locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-JN3X4W"]')
@@ -1058,9 +1074,9 @@ for (const component of ['workspace-header', 'terminal-ticket-rail']) {
     await demo.getByRole('button', { name: 'More actions for selected tickets' }).click();
     await expect(page.getByRole('menu', { name: 'Ticket actions' })).toBeVisible();
     await page.keyboard.press('Escape');
-    await demo.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-K00QPZ"]').click();
+    await plainClick('HS2-K00QPZ');
     await expect(star).toBeDisabled();
-    await demo.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-R76MMW"]').click();
+    await plainClick('HS2-R76MMW');
     await star.click();
     await expect(star).toHaveAttribute('aria-pressed', 'true');
     await demo
@@ -6369,4 +6385,57 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
     'true',
   );
   await expect(fields.nth(3)).toHaveAttribute('data-expanded', 'true');
+});
+
+test('pushes and pops ticket detail on the TerminalTicketRail NavStack with one toolbar row (HS2-FY06N4)', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
+    const rail = page.locator('[data-component="terminal-ticket-rail"]'),
+      chromeToolbars = rail.locator(
+        '[data-nav-stack-chrome] [data-component="toolbar"]:not([data-nav-stack-header] *)',
+      ),
+      root = rail.locator('.kui-nav-stack__view[data-nav-key="root"]');
+    await expect(root).toHaveAttribute('data-nav-active', 'true');
+    await expect(chromeToolbars).toHaveCount(1);
+    await expect(rail.getByRole('button', { name: 'Back to ticket list' })).toHaveCount(0);
+    await rail.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-R76MMW"]').click();
+    const pushed = rail.locator('.kui-nav-stack__view[data-nav-key="ticket:HS2-R76MMW"]');
+    await expect(pushed).toHaveAttribute('data-nav-active', 'true');
+    await expect(root).toHaveAttribute('data-nav-active', 'false');
+    // Wait for the NavStack push to settle (its chrome cross-fade copies are gone).
+    await expect(rail.locator('[data-component="nav-stack"]')).not.toHaveAttribute(
+      'data-nav-chrome-transition',
+      'true',
+    );
+    await expect(rail.locator('[data-nav-chrome-copy]')).toHaveCount(0);
+    // One toolbar row: Kerf's back control, the centered ticket number, the actions, and the toggle.
+    await expect(chromeToolbars).toHaveCount(1);
+    const back = chromeToolbars.getByRole('button', { name: 'Back to ticket list' });
+    await expect(back).toBeVisible();
+    await expect(chromeToolbars.getByRole('button', { name: /Copy ticket number HS2-R76MMW/ })).toBeVisible();
+    await expect(chromeToolbars.getByRole('button', { name: 'Open ticket reader' })).toBeVisible();
+    await expect(chromeToolbars.getByRole('button', { name: 'Hide ticket rail' })).toBeVisible();
+    const row = await chromeToolbars.evaluate((node) => {
+      const center = (selector: string) => {
+        const box = node.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+        return Math.round(box.top + box.height / 2);
+      };
+      return [center('[data-nav-back]'), center('.ticket-inspector__slug'), center('[aria-label="Hide ticket rail"]')];
+    });
+    expect(Math.max(...row) - Math.min(...row)).toBeLessThanOrEqual(1);
+    // The inspector header stays pinned while the detail body scrolls.
+    await expect(rail.locator('[data-nav-stack-header] [data-component="ticket-inspector-header"]')).toBeVisible();
+    await expect(pushed.locator('[data-component="ticket-inspector-body"]')).toBeVisible();
+    // Focus moved into the pushed view.
+    expect(await pushed.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+    await page.screenshot({ path: `/private/tmp/hs2-fy06n4-rail-detail-${width}.png` });
+    await back.click();
+    await expect(root).toHaveAttribute('data-nav-active', 'true');
+    await expect(pushed).toHaveCount(0);
+    await expect(rail.locator('wa-select[name="terminal-rail-project"]')).toBeVisible();
+    await page.screenshot({ path: `/private/tmp/hs2-fy06n4-rail-root-${width}.png` });
+  }
 });

@@ -16,7 +16,12 @@ import {
 import { TerminalTicketRail } from '../components/terminal-ticket-rail';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select';
-import { type InspectorTab, TicketInspector } from '../components/ticket-inspector';
+import {
+  type InspectorTab,
+  TicketInspector,
+  ticketInspectorPanel,
+  type TicketInspectorProps,
+} from '../components/ticket-inspector';
 import { TicketInspectorSkeleton } from '../components/ticket-inspector-skeleton';
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
@@ -50,6 +55,8 @@ import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 import { TICKET_ROW_CLAIM_ETA } from './ticket-row-demo';
 
 export const workspaceMode = signal<WorkspaceViewMode>('list');
+/** The ticket pushed onto the TerminalTicketRail demo's NavStack (HS2-FY06N4), if any. */
+export const terminalRailDemoTicket = signal<string | undefined>(undefined);
 export const workspaceSearchOpen = signal(false);
 /** The demo's Kerf-managed workspace search model (HS2-5JXBQY); the tags are the collection's. */
 export const workspaceSearchModel = createTicketSearchModel({
@@ -247,8 +254,15 @@ export function TerminalTicketRailDemo() {
             <TicketList tickets={filteredWorkspaceTickets().slice(0, 7)} label="Demo project tickets" />
           )
         }
-        inspector={<TicketInspectorDemo collapseControl={false} />}
-        active="root"
+        // Selecting a ticket pushes its detail onto the rail's NavStack; Back pops it (HS2-FY06N4).
+        detail={
+          terminalRailDemoTicket.value
+            ? {
+                key: `ticket:${terminalRailDemoTicket.value}`,
+                parts: ticketInspectorPanel(demoInspectorProps(terminalRailDemoTicket.value)),
+              }
+            : undefined
+        }
         action={<QuickTicketLauncher label="Ticket…" />}
       />
     </section>
@@ -494,40 +508,47 @@ export function TicketInspectorSettings() {
 }
 
 /** `collapseControl` mirrors the rail's standard toggle; the terminal rail's pushed detail omits it. */
+/** The demo inspector's props for `slug` (the selected demo ticket by default). */
+function demoInspectorProps(slug?: string): TicketInspectorProps {
+  const ticket =
+    collectionTickets.value.find((item) => item.slug === slug) ??
+    collectionTickets.value.find((item) => item.selected) ??
+    collectionTickets.value[0];
+  return {
+    slug: ticket.slug,
+    title: inspectorTitle.value,
+    titleEditing: inspectorTitleEditing.value,
+    titleDraft: inspectorTitleDraft.value,
+    status: inspectorStatus.value,
+    priority: inspectorPriority.value,
+    category: inspectorCategory.value,
+    tags: inspectorTags.value,
+    tagSuggestions: ['client', 'ux', 'server', 'regression', 'accessibility'],
+    details: markdownValue.value,
+    detailsMode: markdownMode.value,
+    detailsDirty: markdownValue.value !== markdownSavedValue.value,
+    notes: readerNotes.value,
+    editingNoteId: editingNoteId.value,
+    noteDraft: noteDraft.value,
+    blockedReason: inspectorBlockedReason.value,
+    blockedReasonEditing: inspectorBlockedReasonEditing.value,
+    blockedReasonDraft: inspectorBlockedReasonDraft.value,
+    providerName: 'Hot Sheet git',
+    updatedLabel: 'Updated now',
+    activeTab: inspectorTab.value,
+    upNext: ticket.upNext,
+    feedbackNeeded: readerNotes.value.some((note) => note.kind === 'feedback_needed'),
+    latestConfidence: latestDemoConfidence(readerNotes.value),
+    liveClaim: demoLiveClaim(),
+    codeReview: inspectorCodeReview,
+  };
+}
+
 export function TicketInspectorDemo({ collapseControl = true }: { collapseControl?: boolean } = {}) {
-  const ticket = collectionTickets.value.find((item) => item.selected) ?? collectionTickets.value[0];
   return (
     <section class="inspector-demo" aria-label="TicketInspector demo">
       {inspectorOpen.value ? (
-        <TicketInspector
-          slug={ticket.slug}
-          title={inspectorTitle.value}
-          titleEditing={inspectorTitleEditing.value}
-          titleDraft={inspectorTitleDraft.value}
-          status={inspectorStatus.value}
-          priority={inspectorPriority.value}
-          category={inspectorCategory.value}
-          tags={inspectorTags.value}
-          tagSuggestions={['client', 'ux', 'server', 'regression', 'accessibility']}
-          details={markdownValue.value}
-          detailsMode={markdownMode.value}
-          detailsDirty={markdownValue.value !== markdownSavedValue.value}
-          notes={readerNotes.value}
-          editingNoteId={editingNoteId.value}
-          noteDraft={noteDraft.value}
-          blockedReason={inspectorBlockedReason.value}
-          blockedReasonEditing={inspectorBlockedReasonEditing.value}
-          blockedReasonDraft={inspectorBlockedReasonDraft.value}
-          providerName="Hot Sheet git"
-          updatedLabel="Updated now"
-          activeTab={inspectorTab.value}
-          upNext={ticket.upNext}
-          feedbackNeeded={readerNotes.value.some((note) => note.kind === 'feedback_needed')}
-          latestConfidence={latestDemoConfidence(readerNotes.value)}
-          liveClaim={demoLiveClaim()}
-          codeReview={inspectorCodeReview}
-          collapseControl={collapseControl}
-        />
+        <TicketInspector {...demoInspectorProps()} collapseControl={collapseControl} />
       ) : (
         <wa-button data-action="toggle-ticket-inspector">Open ticket inspector</wa-button>
       )}

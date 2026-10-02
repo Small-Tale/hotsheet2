@@ -208,8 +208,12 @@ and identity-less legacy entries remain conservatively blocking.
   needs-review and confidence notices, close outcome, duplicates, field conflict, and section
   tabs pinned while the one Pane content scrolls, and the Workbench relocates the toggle to the
   trailing edge of the workspace toolbar while the rail is collapsed; Kerf's Pane pads the
-  header and content slots for the device safe areas. The ticket rail's push navigation into
-  ticket detail stays its panel content, with the detail rendered standalone inside it. The
+  header and content slots for the device safe areas. The workspace grid's ticket rail is a
+  Workbench navigation panel (HS2-FY06N4, Kerf `KF-WW33YJ`): a controlled NavStack whose root view
+  lists tickets and whose pushed view is the selected ticket's detail, each with one toolbar row
+  (the detail: Kerf's back control, the ticket number, the ticket actions, then the rail toggle)
+  above its pinned header and scrolling content; `wireNavStack` animates push and pop and moves
+  focus into the new view. The
   reader modal is not a Workbench panel: it renders the same parts through `SidebarPane` with
   its own close and text-size controls instead of the rail toggle.
   The shell and viewport roots clip offscreen panels without becoming scroll containers: opening,
@@ -2055,8 +2059,9 @@ are evaluated against the complete checkout rather than only the currently visib
 an explicit archived or backlogged predicate can find those rows. Queue, Backlog, and Archive
 switch from a content-sized view selector in the page
 heading without a redundant separator above it. Selecting one ticket pushes the shared inspector
-into the rail. Its larger blue Back action is vertically centered with the independently centered
-ticket slug and pops to the stable list through the shared `ContentTransition`. Terminal sessions
+onto the rail's NavStack (HS2-FY06N4): the detail's single toolbar row holds Kerf's back control,
+the ticket number, the ticket actions, and the rail toggle, its title, notices, and section tabs
+stay pinned, and Back pops to the stable list with Kerf's push/pop animation. Terminal sessions
 and the dashboard grid remain mounted throughout rail navigation, visibility changes, and project
 switching.
 Every dashboard tile presents a read-only terminal card, while only visible and near-visible

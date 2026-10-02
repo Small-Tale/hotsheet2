@@ -105,17 +105,21 @@ Workbench renders the panel's toolbar with the collapse toggle and relocates tha
 the workspace toolbar while the rail is collapsed; the standalone components render the same
 parts as a Kerf `Pane` through `SidebarPane` for the catalog. The right rail is a Workbench
 toolbar panel too (HS2-QQW6CT): `ticketInspectorPanel`, `ticketInspectorSkeletonPanel`,
-`ticketInspectorPlaceholderPanel`, `notificationInspectorPanel`, `corruptTicketInspectorPanel`,
-and `terminalTicketRailPanel` return `SidebarPanelParts` with an optional fixed `header` (Kerf
-`KF-ZBW7MS`) and the shared `inspectorToggle()` (`toggle-ticket-inspector`), routed by
+`ticketInspectorPlaceholderPanel`, `notificationInspectorPanel`, and `corruptTicketInspectorPanel`
+return `SidebarPanelParts` with an optional fixed `header` (Kerf `KF-ZBW7MS`) and the shared `inspectorToggle()` (`toggle-ticket-inspector`), routed by
 `ticket-inspector-surface.tsx`; the shell spreads them into the right rail and composes no Show
 inspector control of its own. Because the Workbench owns the panel's Pane root, the inspector's
 identity (`data-ticket-slug`, `data-needs-review`, `data-presentation`) and attachment drop
 target live on its app-owned `ticket-inspector-header` and `ticket-inspector-body` wrappers, and
 inspector CSS scopes to those wrappers. The standalone components (`TicketInspector` for the
-reader modal, the terminal rail's pushed detail, and the catalog) render the parts inside their
-`[data-component]` card through `SidebarPane`; `collapseControl` mirrors the rail toggle in the
-catalog. `mobile-side-panels.css` is gone.
+reader modal and the catalog) render the parts inside their `[data-component]` card through
+`SidebarPane`; `collapseControl` mirrors the rail toggle in the catalog. `terminalTicketRailPanel`
+returns `NavigationPanelParts` instead (HS2-FY06N4, Kerf beta.66 `KF-WW33YJ`): the shell's right
+rail becomes a `WorkbenchNavigationPanel` (through `workbenchRailPanel`) whose controlled NavStack
+has a root view (project selector in `leading`, controls and heading as the pinned `header`, the
+ticket collection on the sunken scroll surface) and, once a ticket is open, a `ticket:<slug>`
+view built from that ticket's `ticketInspectorPanel` parts. The runtime wires `wireNavStack` to
+the mounted stack, and its Back pops the app-owned rail screen. `mobile-side-panels.css` is gone.
 Magnified terminal mode suppresses side-panel
 separators through the typed policy, and terminal focus mode lifts the drawer through the
 public `--kui-workbench-popup-z` token instead of descendant CSS. The main column (shell
@@ -1603,10 +1607,12 @@ the popup a user is reading (HS2-S59CRP).
 `TerminalTicketRail` is the dashboard's compact right-side companion. It composes the shared
 content-sized project and view selectors, a rectangular full-row list/columns/notification switch (its columns view is the paged, snapping `TicketBoard` the phone uses, HS2-656Q43), the
 same chip-based advanced search control used by the main workspace (placed last on its action row),
-ticket list, quick-ticket launcher, ticket inspector, and forward/backward `ContentTransition`.
+ticket list, quick-ticket launcher, and ticket inspector inside a Kerf NavStack navigation panel
+(HS2-FY06N4).
 The header/scroller boundary has a quiet one-pixel separator. Its launcher is the same blue pill
 component used by list and column views, with the compact rail label `Ticket…` to prevent wrapping.
-Its inspector route keeps the Back affordance visually independent from the centered ticket slug.
+Its inspector route is one toolbar row: Kerf's back control, the ticket number, the ticket actions,
+and the rail toggle; the catalog demo pushes a ticket on a plain row click and pops on Back.
 The rail remains independently resizable and hideable beside the terminal grid and is represented
 directly in the UX catalog. It already composes Kerf `Toolbar`, `ToolbarControlGroup`, `ToolbarText`,
 `SegmentedControl`, and `Select` primitives. Its shared `WorkspaceControls` groups are the
@@ -1804,7 +1810,7 @@ ticket-note cards, and terminal operations summaries use the package `List` for
 vertical layout and explicit gaps. Their existing navigation landmarks, actions, and
 pane/workspace scroll owners remain unchanged. `List` adds no list semantics;
 semantic `ul`/`li` collections and ticket listboxes retain their existing structure.
-The terminal rail uses the public `SunkenPanel` square shape, and divider-free
+The terminal rail lists tickets on its NavStack view's sunken scroll surface, and divider-free
 toolbars use `dividerSides=""`. These compositions are exercised in their existing UX
 demos and production flows.
 

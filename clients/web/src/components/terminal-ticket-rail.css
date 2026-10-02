@@ -1,25 +1,14 @@
+/* The standalone rail (the UX catalog) hosts the same NavStack the Workbench navigation panel does
+   (HS2-FY06N4); the stack fills it and owns the toolbar row, pinned header, and scrolling view. */
 .terminal-ticket-rail {
+  display: grid;
   width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   background: var(--wa-color-surface-default);
 }
-.terminal-ticket-rail > .content-transition,
-.terminal-ticket-rail > .content-transition > .content-transition__side {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-.terminal-ticket-rail__root {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  flex-direction: column;
-}
-/* Kerf beta.60 public tokens: the project Select in the rail's panel toolbar (HS2-QQW6CT) reads its
+/* Kerf beta.60 public tokens: the project Select in the root view's toolbar (HS2-FY06N4) reads its
    selected name at body size in the normal text color. */
 .terminal-ticket-rail__project {
   --kui-select-selected-color: var(--wa-color-neutral-on-normal);
@@ -27,7 +16,7 @@
 }
 /* The rail chrome clips overflow on several ancestors; inset the select focus ring so an
    overflow:hidden ancestor can never crop it (HS2-HEYASQ). */
-.terminal-ticket-rail .kui-select::part(combobox) {
+.terminal-ticket-rail__header .kui-select::part(combobox) {
   outline-offset: -3px;
 }
 /* The rail's controls Toolbar stacks its trailing zone (the rail is always narrower than Kerf's
@@ -46,7 +35,7 @@
   width: 100%;
   animation: terminal-ticket-rail-search-enter 0.25s ease;
 }
-/* App-owned wrappers around the rail's Kerf Toolbar, Select, and SunkenPanel (HS2-VABS08). */
+/* App-owned wrappers around the root view's Kerf Toolbar and Select (HS2-VABS08). */
 .terminal-ticket-rail__heading {
   display: grid;
   border-bottom: 1px solid var(--wa-color-surface-border);
@@ -67,68 +56,12 @@
   position: absolute;
   inset-inline-end: remify(2.4px);
 }
-.terminal-ticket-rail .quick-ticket-composer__launcher {
+.terminal-ticket-rail__header .quick-ticket-composer__launcher {
   min-height: remify(36px);
   padding-inline: remify(12.8px);
 }
-.terminal-ticket-rail__content {
-  display: grid;
-  min-height: 0;
-  overflow: auto;
-  flex: 1;
-  /* The SunkenPanel fills the visible rail even when its content is short, and grows past it so this
-     wrapper, not the panel, scrolls. */
-  grid-template-rows: minmax(100%, max-content);
-}
-.terminal-ticket-rail__content > * > .ticket-list {
-  /* SunkenPanel is a flex column. Keep the ticket collection at its natural
-     height so this application-owned surface receives the overflow instead of
-     shrinking TicketList and clipping its rows (HS2-8J0378). */
-  flex: none;
-}
-.terminal-ticket-rail__content .notification-center {
+.terminal-ticket-rail__list .notification-center {
   padding: 0;
-}
-.terminal-ticket-rail__inspector {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-.terminal-ticket-rail__inspector > .ticket-inspector {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-.terminal-ticket-rail__back {
-  position: absolute;
-  z-index: 3;
-  top: remify(12px);
-  left: remify(8px);
-  display: grid;
-  width: remify(36px);
-  height: remify(36px);
-  padding: 0;
-  border: 0;
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-surface-default);
-  cursor: pointer;
-  place-items: center;
-}
-.terminal-ticket-rail__back:hover {
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.terminal-ticket-rail__back:focus-visible {
-  outline: var(--wa-focus-ring);
-  outline-offset: 1px;
-}
-.terminal-ticket-rail__back svg {
-  width: remify(24px);
-  height: remify(24px);
 }
 @keyframes terminal-ticket-rail-search-enter {
   from {

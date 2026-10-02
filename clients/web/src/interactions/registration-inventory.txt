@@ -58,7 +58,6 @@ navigation-and-tabs	delegate	document.body	'click'	'[data-action="set-shell-mode
 navigation-and-tabs	delegate	document.body	'change'	'wa-select[name="terminal-rail-project"]'
 navigation-and-tabs	delegate	document.body	'change'	'wa-select[name="terminal-rail-view"]'
 navigation-and-tabs	delegate	document.body	'change'	'wa-select[name="mobile-view"]'
-navigation-and-tabs	delegate	document.body	'click'	'[data-action="back-terminal-ticket-rail"]'
 navigation-and-tabs	delegate	document.body	'click'	'[data-action="open-project-stats"]'
 navigation-and-tabs	delegate	document.body	'click'	'[data-action="select-project-tab"]'
 navigation-and-tabs	delegate	document.body	'change'	'wa-select[name="mobile-project"]'

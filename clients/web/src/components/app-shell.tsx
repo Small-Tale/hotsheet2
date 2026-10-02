@@ -5,7 +5,7 @@ import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import type { ResizableRegionContentOverflow, ResizableRegionSeparator } from '@kerfjs/ui/resizable-region';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { Workbench, type WorkbenchStaticPanel } from '@kerfjs/ui/workbench';
+import { Workbench, type WorkbenchPanel, type WorkbenchStaticPanel } from '@kerfjs/ui/workbench';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { PanelBottomOpen } from 'lucide';
 
@@ -13,7 +13,12 @@ import { APP_REGION_BOUNDS, TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resiz
 import type { ProjectTabProps } from './project-tab';
 import type { ProjectTabBarMode } from './project-tab-bar';
 import { ProjectTabBar } from './project-tab-bar';
-import { type SidebarPanelParts, workbenchSidebarPanel } from './sidebar-panel';
+import {
+  type RailPanelParts,
+  type SidebarPanelParts,
+  workbenchRailPanel,
+  workbenchSidebarPanel,
+} from './sidebar-panel';
 
 /** The Workbench id; Kerf derives the panel ids `app-left-rail`, `app-right-rail`, and `app-bottom-drawer`. */
 export const APP_WORKBENCH_ID = 'app';
@@ -30,7 +35,7 @@ export interface AppShellProps {
   composer?: SafeHtml;
   /** The right rail's panel parts; the Workbench composes its toolbar, header, and collapse toggle and
    * relocates the toggle to the trailing edge of the workspace toolbar while the rail is collapsed. */
-  inspector?: SidebarPanelParts;
+  inspector?: RailPanelParts;
   inspectorVisible?: boolean;
   banner?: SafeHtml;
   sidebarSize?: number;
@@ -114,13 +119,14 @@ export function AppShell({
           responsiveOverlayAt: 'never',
         }
       : undefined;
-  const rightRail: WorkbenchStaticPanel | undefined =
+  const rightRail: WorkbenchPanel | undefined =
     mode !== 'stats' && inspector
       ? {
           // Every right-rail surface exposes panel parts (HS2-QQW6CT): the Workbench composes the
           // toolbar, the fixed header, and the scrolling content in one Pane, which takes the
-          // safe-area insets the rail routes to its content.
-          ...workbenchSidebarPanel(inspector),
+          // safe-area insets the rail routes to its content. The terminal ticket rail navigates: its
+          // NavStack's active view supplies that toolbar row, header, and content (HS2-FY06N4).
+          ...workbenchRailPanel(inspector),
           label: mode === 'terminals' ? 'Tickets rail' : 'Inspector rail',
           collapsed: !inspectorVisible,
           size: inspectorSize,

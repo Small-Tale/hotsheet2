@@ -32,8 +32,6 @@ export interface NavigationAndTabInteractionsDependencies {
   readonly setShellMode: (mode: ProjectTabBarMode) => void;
   readonly selectTerminalRailProject: (next: string) => void;
   readonly selectTicketView: (next: TicketView, { refresh }?: { refresh?: boolean }) => void;
-  readonly terminalRailDirection: Signal<'forward' | 'backward'>;
-  readonly terminalRailScreen: Signal<'root' | 'ticket'>;
   readonly selectProjectTab: (next: string) => void;
   readonly retryProjectRestore: (root: string) => Promise<void>;
 }
@@ -59,8 +57,6 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
     setShellMode,
     selectTerminalRailProject,
     selectTicketView,
-    terminalRailDirection,
-    terminalRailScreen,
     selectProjectTab,
     retryProjectRestore,
   } = dependencies;
@@ -139,10 +135,6 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
   });
   delegate(document.body, 'change', 'wa-select[name="mobile-view"]', (_event, target) => {
     selectTicketView((target as Control).value as TicketView);
-  });
-  delegate(document.body, 'click', '[data-action="back-terminal-ticket-rail"]', () => {
-    terminalRailDirection.value = 'backward';
-    terminalRailScreen.value = 'root';
   });
   delegate(document.body, 'click', '[data-action="open-project-stats"]', (_event, target) => {
     const current = project();

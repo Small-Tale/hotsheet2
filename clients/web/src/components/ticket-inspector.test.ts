@@ -102,10 +102,6 @@ describe('TicketInspector', () => {
     const reader = String(TicketInspector({ ...base, presentation: 'reader' }));
     expect(reader).toContain(`kui-toolbar__leading"><button type="button" ${slugChild}`);
     expect(reader).not.toContain(`kui-toolbar__center"><button type="button" ${slugChild}`);
-    // The terminal rail forces center (its overlaid back button sits at the leading edge).
-    const railScoped = String(TicketInspector({ ...base, slugPlacement: 'center' }));
-    expect(railScoped).toContain(`kui-toolbar__center"><button type="button" ${slugChild}`);
-    expect(railScoped).not.toContain(`kui-toolbar__leading"><button type="button" ${slugChild}`);
   });
 
   it('uses the same capability surface at reader scale with dialog close semantics', () => {
@@ -419,10 +415,6 @@ describe('TicketInspector', () => {
     expect(content).toContain('data-attachment-drop-target="true"');
     expect(content).toContain('data-presentation="sidebar"');
     expect(content).not.toContain('data-component="tab-bar"');
-    // The center placement the terminal rail uses balances the toolbar tracks.
-    const centered = ticketInspectorPanel({ ...base, slugPlacement: 'center' });
-    expect(centered.toolbar.centerAlign).toBe('balanced');
-    expect(String(centered.toolbar.center)).toContain('data-action="copy-ticket-slug"');
     // The reader keeps its own close control and never the rail toggle.
     const reader = String(TicketInspector({ ...base, presentation: 'reader', collapseControl: true }));
     expect(reader).not.toContain('toggle-ticket-inspector');

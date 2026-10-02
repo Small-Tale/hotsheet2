@@ -1321,9 +1321,9 @@
       "id": "terminal-ticket-rail",
       "name": "TerminalTicketRail",
       "kind": "composition",
-      "purpose": "Compact rail with equal-width List/Notifications segments, bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail.",
+      "purpose": "Compact navigation rail (a Kerf NavStack) with equal-width List/Notifications segments, bordered collapsible search, a sunken scrolling list, ticket launcher, and push navigation into ticket detail on one toolbar row.",
       "useWhen": [
-        "Hot Sheet needs compact rail with equal-width List/Notifications segments, bordered collapsible search, separated scroller, ticket launcher, and push navigation into detail."
+        "Hot Sheet needs compact navigation rail (a Kerf NavStack) with equal-width List/Notifications segments, bordered collapsible search, a sunken scrolling list, ticket launcher, and push navigation into ticket detail on one toolbar row."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalTicketRail behavior."

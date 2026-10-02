@@ -3,7 +3,12 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Pane, type PaneConfig, type PaneElement } from '@kerfjs/ui/pane';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import type { WorkbenchPanelToggle, WorkbenchPanelToolbar, WorkbenchStaticPanel } from '@kerfjs/ui/workbench';
+import type {
+  WorkbenchNavigationPanel,
+  WorkbenchPanelToggle,
+  WorkbenchPanelToolbar,
+  WorkbenchStaticPanel,
+} from '@kerfjs/ui/workbench';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 /**
@@ -41,6 +46,56 @@ export const inspectorToggle = (name = 'ticket inspector'): WorkbenchPanelToggle
   name,
 });
 
+/**
+ * A side panel that navigates (HS2-FY06N4): a controlled Kerf NavStack whose active view supplies the
+ * panel's toolbar groups, pinned header, and scrolling content, while the panel's own toolbar adds
+ * only the standard collapse `toggle` (Kerf `KF-WW33YJ`).
+ */
+export interface NavigationPanelParts {
+  /** Accessible name of the standalone landmark. */
+  label: string;
+  /** The panel toolbar's configuration; the active view supplies its groups. */
+  toolbar: Omit<WorkbenchPanelToolbar, 'title' | 'leading' | 'center' | 'trailing' | 'toggle'>;
+  toggle: WorkbenchPanelToggle;
+  navStack: WorkbenchNavigationPanel['navStack'];
+}
+
+/** Any rail surface's parts: a static toolbar panel or a navigating one. */
+export type RailPanelParts = SidebarPanelParts | NavigationPanelParts;
+
+export const isNavigationPanel = (parts: RailPanelParts): parts is NavigationPanelParts => 'navStack' in parts;
+
+/** The Workbench panel fields a rail surface provides; the shell adds state and sizing. */
+export function workbenchRailPanel(
+  parts: RailPanelParts,
+):
+  | Pick<WorkbenchStaticPanel, 'content' | 'toolbar' | 'header' | 'footer' | 'pane'>
+  | Pick<WorkbenchNavigationPanel, 'toolbar' | 'navStack'> {
+  if (isNavigationPanel(parts))
+    return { toolbar: { ...parts.toolbar, toggle: parts.toggle }, navStack: parts.navStack };
+  return workbenchSidebarPanel(parts);
+}
+
+/**
+ * The standard collapse control a standalone surface renders while open, mirroring the toggle the
+ * Workbench renders for the docked panel (glyph per `side`, `aria-expanded`, "Hide …" label).
+ */
+export function PanelCollapseControl({ toggle, side }: { toggle: WorkbenchPanelToggle; side: 'left' | 'right' }) {
+  return (
+    <ToolbarControlGroup appearance="borderless" single label={toggle.name}>
+      <button
+        type="button"
+        data-action={toggle.action}
+        aria-expanded="true"
+        aria-label={toggle.hideLabel ?? `Hide ${toggle.name}`}
+        title={toggle.hideLabel ?? `Hide ${toggle.name}`}
+      >
+        <LucideIcon {...collapsiblePanelToggleIcon(side, false)} />
+      </button>
+    </ToolbarControlGroup>
+  );
+}
+
 /** The Workbench panel fields a {@link SidebarPanelParts} provides; the shell adds state and sizing. */
 export function workbenchSidebarPanel(
   parts: SidebarPanelParts,
@@ -75,19 +130,7 @@ export function SidebarPane({
   element?: PaneElement;
 }) {
   const { label: toolbarLabel, title, leading, center, trailing, ...toolbarConfig } = parts.toolbar;
-  const toggle = collapseControl ? (
-    <ToolbarControlGroup appearance="borderless" single label={parts.toggle.name}>
-      <button
-        type="button"
-        data-action={parts.toggle.action}
-        aria-expanded="true"
-        aria-label={parts.toggle.hideLabel ?? `Hide ${parts.toggle.name}`}
-        title={parts.toggle.hideLabel ?? `Hide ${parts.toggle.name}`}
-      >
-        <LucideIcon {...collapsiblePanelToggleIcon(side, false)} />
-      </button>
-    </ToolbarControlGroup>
-  ) : undefined;
+  const toggle = collapseControl ? <PanelCollapseControl toggle={parts.toggle} side={side} /> : undefined;
   const toolbar =
     title || leading || center || trailing || toggle ? (
       <Toolbar

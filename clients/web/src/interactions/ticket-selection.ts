@@ -28,7 +28,6 @@ export interface TicketSelectionInteractionsDependencies {
   ) => Promise<FullTicket | null> | Promise<(FullTicket & { store: string }) | undefined>;
   readonly selectionOrder: (target: Element) => string[];
   readonly selectedTicketSlugs: Signal<string[]>;
-  readonly terminalRailDirection: Signal<'forward' | 'backward'>;
   readonly terminalRailScreen: Signal<'root' | 'ticket'>;
   readonly selectedTicket: Signal<FullTicket | null>;
   readonly visibleTickets: () => WireTicketRow[];
@@ -82,7 +81,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     selectTickets,
     selectionOrder,
     selectedTicketSlugs,
-    terminalRailDirection,
     terminalRailScreen,
     selectedTicket,
     visibleTickets,
@@ -127,7 +125,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
   delegate(document.body, 'click', '[data-action="select-ticket-row"]', (event, target) => {
     if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
     const pointer = event as MouseEvent,
-      rail = Boolean(target.closest('[data-component="terminal-ticket-rail"]'));
+      rail = Boolean(target.closest('[data-component="terminal-ticket-rail-list"]'));
     // Mobile has no persistent side inspector, so a plain tap on a workspace-list ticket auto-opens the
     // right inspector overlay (tap-away on the scrim returns to the list) — HS2-N7RPFP. Range/toggle
     // multi-select taps and the terminal rail are excluded.
@@ -147,7 +145,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       selectionOrder(target),
     ).then((ticket) => {
       if (rail && ticket && selectedTicketSlugs.value.length === 1) {
-        terminalRailDirection.value = 'forward';
         terminalRailScreen.value = 'ticket';
       }
     });

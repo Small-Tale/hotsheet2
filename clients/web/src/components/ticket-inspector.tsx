@@ -100,10 +100,6 @@ export interface TicketInspectorProps {
   providerName?: string;
   updatedLabel?: string;
   presentation?: 'sidebar' | 'reader';
-  /** Where the ticket number sits in the header toolbar. Defaults to leading for the sidebar
-   * (HS2-9MCJ2B) and center for the reader; the terminal rail forces center so its overlaid
-   * back button never sits on top of the slug. */
-  slugPlacement?: 'leading' | 'center';
   largeText?: boolean;
   fieldConflict?: TicketFieldConflictState;
   fieldConflictResolution?: string;
@@ -174,7 +170,6 @@ export function ticketInspectorPanel({
   providerName,
   updatedLabel,
   presentation = 'sidebar',
-  slugPlacement,
   largeText = false,
   fieldConflict,
   fieldConflictResolution = fieldConflict?.mine ?? '',
@@ -235,9 +230,9 @@ export function ticketInspectorPanel({
         </button>
       </ToolbarControlGroup>
     );
-  // The ticket number sits in the leading slot for both the sidebar inspector (HS2-9MCJ2B) and the
-  // reader modal (HS2-FZ5HB2); only the terminal rail forces center, because its overlaid back
-  // button occupies the leading edge (it passes slugPlacement="center" explicitly).
+  // The ticket number leads the toolbar for the sidebar inspector (HS2-9MCJ2B), the reader modal
+  // (HS2-FZ5HB2), and the terminal rail's pushed detail, where it follows Kerf's back control
+  // (HS2-FY06N4).
   const slugButton = (
     <button
       type="button"
@@ -252,7 +247,6 @@ export function ticketInspectorPanel({
       <ToolbarText text={slug} size="small" />
     </button>
   );
-  const slugCentered = (slugPlacement ?? 'leading') === 'center';
   // The Workbench owns the panel's Pane root, so the ticket identity, review state, and attachment drop
   // target live on the app-owned header and body wrappers (HS2-QQW6CT).
   const identity = {
@@ -407,9 +401,7 @@ export function ticketInspectorPanel({
     toolbar: {
       label: 'Ticket inspector toolbar',
       dividerSides: '',
-      // The rail centers the ticket number on the toolbar itself (Kerf beta.62 balanced tracks).
-      centerAlign: slugCentered ? 'balanced' : undefined,
-      ...(slugCentered ? { center: slugButton } : { leading: slugButton }),
+      leading: slugButton,
       trailing: actions,
     },
     toggle: inspectorToggle(),

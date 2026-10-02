@@ -31,6 +31,7 @@ import { clampRegionSize, type ResizableRegionEdge, resizeRegionFromPointer } fr
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
+import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
@@ -353,6 +354,7 @@ import {
   QuickTicketComposerSettings,
   resetWorkspaceDemoNotifications,
   resolveWorkspaceDemoPermission,
+  terminalRailDemoTicket,
   TerminalTicketRailDemo,
   TicketInspectorDemo,
   TicketInspectorSettings,
@@ -1329,6 +1331,27 @@ const syncDemoTerminals = () => {
   syncTerminalDemoViewports(root, terminalDemoMounts);
 };
 new MutationObserver(syncDemoTerminals).observe(root, { childList: true, subtree: true });
+// The TerminalTicketRail demo's NavStack animates push/pop and reports Back through `wireNavStack`
+// (HS2-FY06N4), rewired whenever the demo mounts a new stack.
+let demoRailNavStack: { section: Element; dispose: () => void } | undefined;
+function syncDemoRailNavStack() {
+  const section = root.querySelector('.terminal-ticket-rail-demo [data-component="nav-stack"]');
+  if (section === (demoRailNavStack?.section ?? null)) return;
+  demoRailNavStack?.dispose();
+  demoRailNavStack = section
+    ? {
+        section,
+        dispose: wireNavStack(section, {
+          onBack: () => {
+            terminalRailDemoTicket.value = undefined;
+            recordCollectionEvent('Back to the ticket list');
+          },
+        }),
+      }
+    : undefined;
+}
+new MutationObserver(syncDemoRailNavStack).observe(root, { childList: true, subtree: true });
+queueMicrotask(syncDemoRailNavStack);
 queueMicrotask(syncDemoTerminals);
 startPermissionRequestDemoCountdown(root, () => selectedId.value === 'permission-request');
 if (import.meta.env.DEV)
@@ -2618,6 +2641,12 @@ delegate(root, 'click', '[data-action="select-ticket-row"]', (event, target) => 
       range: pointer.shiftKey,
       toggle: pointer.metaKey || pointer.ctrlKey,
     });
+    // Like the workspace grid's rail, a plain click in the TerminalTicketRail demo pushes that ticket's
+    // detail onto its NavStack (HS2-FY06N4).
+    if (row.closest('.terminal-ticket-rail-demo') && !pointer.shiftKey && !pointer.metaKey && !pointer.ctrlKey) {
+      terminalRailDemoTicket.value = row.dataset.ticketSlug;
+      recordCollectionEvent(`${row.dataset.ticketSlug} pushed onto the ticket rail`);
+    }
     return;
   }
   ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
