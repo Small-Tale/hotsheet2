@@ -3,6 +3,7 @@ import './project-dialog-demo.css';
 import { delegate, signal } from 'kerfjs';
 
 import { ProjectDialog, RemoteProjectDialog } from '../components/project-dialog';
+import { createDisposerScope } from './disposer-scope';
 
 const variants = {
   projects: 'Remote projects',
@@ -71,43 +72,67 @@ export function ProjectDialogDemo() {
   );
 }
 
-/** Wire demo-only fixture effects while preserving the production dialog actions. */
-export function wireProjectDialogDemo(root: HTMLElement) {
+/**
+ * Wire demo-only fixture effects while preserving the production dialog actions.
+ *
+ * @returns A teardown that removes every listener this call installed.
+ */
+export function wireProjectDialogDemo(root: HTMLElement): () => void {
   const scope = '[aria-label="Project dialog variants"]';
-  delegate(root, 'click', `${scope} [data-action="show-project-dialog-demo"]`, (_event, target) => {
-    const next = (target as HTMLElement).dataset.variant;
-    if (!next || !(next in variants)) return;
-    variant.value = next as ProjectDialogDemoVariant;
-    open.value = true;
-  });
-  delegate(root, 'click', `${scope} [data-action="open-remote-checkout"]`, (_event, target) => {
-    result.value = `Opened ${(target as HTMLElement).dataset.checkoutRoot ?? ''}`;
-    open.value = false;
-  });
-  delegate(
-    root,
-    'click',
-    `${scope} [data-action="cancel-remote-project"], ${scope} [data-action="cancel-open-project"]`,
-    () => {
-      open.value = false;
-    },
+  const listeners = createDisposerScope();
+  listeners.add(
+    delegate(root, 'click', `${scope} [data-action="show-project-dialog-demo"]`, (_event, target) => {
+      const next = (target as HTMLElement).dataset.variant;
+      if (!next || !(next in variants)) return;
+      variant.value = next as ProjectDialogDemoVariant;
+      open.value = true;
+    }),
   );
-  delegate(root, 'wa-hide', `${scope} wa-dialog`, () => {
-    open.value = false;
-  });
-  delegate(root, 'input', `${scope} [name="project-root"]`, (_event, target) => {
-    localRoot.value = (target as HTMLInputElement).value;
-  });
-  delegate(root, 'submit', `${scope} [data-action="open-project-form"]`, (event) => {
-    event.preventDefault();
-    result.value = `Opened ${localRoot.value}`;
-    open.value = false;
-  });
-  delegate(root, 'click', `${scope} [data-action="browse-project-path"]`, () => {
-    result.value = 'The demo uses fixture folders; production opens the native folder chooser.';
-  });
-  delegate(root, 'click', `${scope} [data-action="recover-unhealthy-server"]`, () => {
-    result.value = 'Recovered the demo server.';
-    variant.value = 'local';
-  });
+  listeners.add(
+    delegate(root, 'click', `${scope} [data-action="open-remote-checkout"]`, (_event, target) => {
+      result.value = `Opened ${(target as HTMLElement).dataset.checkoutRoot ?? ''}`;
+      open.value = false;
+    }),
+  );
+  listeners.add(
+    delegate(
+      root,
+      'click',
+      `${scope} [data-action="cancel-remote-project"], ${scope} [data-action="cancel-open-project"]`,
+      () => {
+        open.value = false;
+      },
+    ),
+  );
+  listeners.add(
+    delegate(root, 'wa-hide', `${scope} wa-dialog`, () => {
+      open.value = false;
+    }),
+  );
+  listeners.add(
+    delegate(root, 'input', `${scope} [name="project-root"]`, (_event, target) => {
+      localRoot.value = (target as HTMLInputElement).value;
+    }),
+  );
+  listeners.add(
+    delegate(root, 'submit', `${scope} [data-action="open-project-form"]`, (event) => {
+      event.preventDefault();
+      result.value = `Opened ${localRoot.value}`;
+      open.value = false;
+    }),
+  );
+  listeners.add(
+    delegate(root, 'click', `${scope} [data-action="browse-project-path"]`, () => {
+      result.value = 'The demo uses fixture folders; production opens the native folder chooser.';
+    }),
+  );
+  listeners.add(
+    delegate(root, 'click', `${scope} [data-action="recover-unhealthy-server"]`, () => {
+      result.value = 'Recovered the demo server.';
+      variant.value = 'local';
+    }),
+  );
+  return () => {
+    listeners.dispose();
+  };
 }

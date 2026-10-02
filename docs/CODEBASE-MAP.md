@@ -149,6 +149,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ux-demo/             #   Categorized master/detail catalog with native component bounds/margin inspection, focus-preserving selection reveal, dependency-aware modification recency, connected mock state, and optional settings inspector
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
+      demo-actions.ts      # Kerf attr() specs (DEMO_ACTIONS/COMPONENTS/FIELDS/MARKERS) for every simple selector the catalog delegates on (HS2-G838PZ)
+      disposer-scope.ts    # createDisposerScope(): collects delegate() disposers (main.tsx demoListeners, project-dialog-demo) behind one teardown
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review
     tests/insecure-origin.ts # Streaming HTTP proxy preserving actual non-loopback browser security rules
     tests/browser-ids-lan.spec.ts # LAN WebKit draft/attachment persistence, visibility and chat identity transitions
