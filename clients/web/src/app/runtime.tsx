@@ -330,7 +330,10 @@ import { installDevelopmentDiagnostics } from './development-bootstrap';
 import { createHotSheetInteractionBindings, type InteractionBindingsPort } from './interaction-bindings';
 import { wireHotSheetInteractions } from './wire-interactions';
 
-/** Create and start one Hot Sheet browser application runtime. */
+/**
+ * Create and start one Hot Sheet browser application runtime. The returned `disposeInteractions`
+ * removes every delegated and native interaction listener the runtime registered.
+ */
 export async function startHotSheetWebClient() {
   const uiStabilityDiagnostics = await installDevelopmentDiagnostics();
   const turnStreamReplayGuard = new TurnStreamReplayGuard();
@@ -5286,7 +5289,8 @@ export async function startHotSheetWebClient() {
             clipboard = value;
           },
   };
-  wireHotSheetInteractions(createHotSheetInteractionBindings(interactionBindingsPort));
+  // One page-lifetime teardown for every delegated and native interaction listener (HS2-NZT3MT).
+  const disposeInteractions = wireHotSheetInteractions(createHotSheetInteractionBindings(interactionBindingsPort));
   // Flush the debounced session (including the in-progress new-ticket composer draft) before the page
   // is hidden, reloaded, or restarted, so a background refresh/restart never loses typed text (HS2-D4PB9Y).
   const flushProjectSessionPersistence = () => {
@@ -5340,4 +5344,5 @@ export async function startHotSheetWebClient() {
       projectRestorePendingRoots.value = [];
     }
   })();
+  return { disposeInteractions };
 }

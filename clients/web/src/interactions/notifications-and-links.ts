@@ -12,6 +12,7 @@ import {
 } from '../permission-notifications';
 import { type TicketLinkMatch, ticketLinkMatchKey, type TicketLinkReference } from '../ticket-link-resolution';
 import { data } from './dom';
+import { createInteractionLifetime } from './lifetime';
 import { type Control, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -45,6 +46,7 @@ export interface NotificationAndLinkInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireNotificationAndLinkInteractions(dependencies: NotificationAndLinkInteractionsDependencies) {
+  const lifetime = createInteractionLifetime();
   const {
     notificationView,
     project,
@@ -63,78 +65,105 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
     openTicketLinkMatch,
     cancelTicketLinkChoice,
   } = dependencies;
-  delegate(document.body, 'click', '[data-action="select-notification-view"]', (_event, target) => {
-    notificationView.value = (data(target).itemId ?? 'pending') as NotificationView;
-  });
-  delegate(
-    document.body,
-    'change',
-    '[name="permission-automation-action"], [name="permission-automation-delay"]',
-    () => {
-      const current = project();
-      if (!current) return;
-      const action = (document.querySelector<Control>('[name="permission-automation-action"]')?.value ??
-          'off') as PermissionAutomation['action'],
-        delayMs = Number(document.querySelector<Control>('[name="permission-automation-delay"]')?.value ?? 60_000),
-        next = parsePermissionAutomation({ action, delayMs });
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="select-notification-view"]', (_event, target) => {
+      notificationView.value = (data(target).itemId ?? 'pending') as NotificationView;
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'change',
+      '[name="permission-automation-action"], [name="permission-automation-delay"]',
+      () => {
+        const current = project();
+        if (!current) return;
+        const action = (document.querySelector<Control>('[name="permission-automation-action"]')?.value ??
+            'off') as PermissionAutomation['action'],
+          delayMs = Number(document.querySelector<Control>('[name="permission-automation-delay"]')?.value ?? 60_000),
+          next = parsePermissionAutomation({ action, delayMs });
+        permissionTimer.hide();
+        dependencies.permissionCountdown = undefined;
+        permissionAutomationByProject.value = { ...permissionAutomationByProject.value, [current.id]: next };
+        localStorage.setItem(`hotsheet.project.${current.id}.permission-automation`, JSON.stringify(next));
+        updatePermissionTimer();
+        permissionRevision.value += 1;
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="ignore-permission"]', (_event, target) => {
+      const key = data(target).requestKey;
+      if (!key) return;
       permissionTimer.hide();
-      dependencies.permissionCountdown = undefined;
-      permissionAutomationByProject.value = { ...permissionAutomationByProject.value, [current.id]: next };
-      localStorage.setItem(`hotsheet.project.${current.id}.permission-automation`, JSON.stringify(next));
+      permissionInbox.ignore(key);
       updatePermissionTimer();
       permissionRevision.value += 1;
-    },
+    }),
   );
-  delegate(document.body, 'click', '[data-action="ignore-permission"]', (_event, target) => {
-    const key = data(target).requestKey;
-    if (!key) return;
-    permissionTimer.hide();
-    permissionInbox.ignore(key);
-    updatePermissionTimer();
-    permissionRevision.value += 1;
-  });
-  delegate(document.body, 'click', '[data-action="cancel-permission-automation"]', (event, target) => {
-    event.stopImmediatePropagation();
-    const key = data(target).requestKey;
-    if (!key) return;
-    permissionTimer.cancel(key);
-    dependencies.permissionCountdown = undefined;
-    permissionRevision.value += 1;
-  });
-  delegate(document.body, 'click', '[data-action="resolve-permission"]', (_event, target) => {
-    const key = data(target).requestKey,
-      item = pendingPermissions().find((value) => value.key === key);
-    if (item)
-      void resolvePermission(item, data(target).decision as PermissionDecision, data(target).scope as PermissionScope);
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-app-error"]', () => {
-    error.value = '';
-  });
-  delegate(document.body, 'change', '[data-action="toggle-verified-column"]', (_event, target) => {
-    const id = selectedProjectId.value;
-    if (!id) return;
-    const checked = (target as HTMLInputElement).checked;
-    hideVerifiedByProject.value = { ...hideVerifiedByProject.value, [id]: checked };
-    localStorage.setItem(`hotsheet.project.${id}.hide-verified-column`, String(checked));
-  });
-  delegate(document.body, 'click', '[data-action="open-linked-ticket"]', (event, target) => {
-    event.preventDefault();
-    const slug = data(target).ticketSlug;
-    if (slug) {
-      dependencies.ticketLinkReturnFocus = target as HTMLElement;
-      void selectLinkedTicket(slug, data(target).ticketProjectId);
-    }
-  });
-  delegate(document.body, 'click', '[data-action="select-ticket-link-match"]', (_event, target) => {
-    const choice = ticketLinkChoice.value,
-      key = data(target).matchKey,
-      match = choice?.matches.find((item) => ticketLinkMatchKey(item) === key);
-    if (match) void openTicketLinkMatch(match);
-  });
-  delegate(document.body, 'click', '[data-action="cancel-ticket-link-choice"]', () => {
-    cancelTicketLinkChoice();
-  });
-  delegateCapture(document.body, 'wa-hide', '[data-component="ticket-link-choice-dialog"]', () => {
-    if (ticketLinkChoice.value) cancelTicketLinkChoice();
-  });
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="cancel-permission-automation"]', (event, target) => {
+      event.stopImmediatePropagation();
+      const key = data(target).requestKey;
+      if (!key) return;
+      permissionTimer.cancel(key);
+      dependencies.permissionCountdown = undefined;
+      permissionRevision.value += 1;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="resolve-permission"]', (_event, target) => {
+      const key = data(target).requestKey,
+        item = pendingPermissions().find((value) => value.key === key);
+      if (item)
+        void resolvePermission(
+          item,
+          data(target).decision as PermissionDecision,
+          data(target).scope as PermissionScope,
+        );
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="dismiss-app-error"]', () => {
+      error.value = '';
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', '[data-action="toggle-verified-column"]', (_event, target) => {
+      const id = selectedProjectId.value;
+      if (!id) return;
+      const checked = (target as HTMLInputElement).checked;
+      hideVerifiedByProject.value = { ...hideVerifiedByProject.value, [id]: checked };
+      localStorage.setItem(`hotsheet.project.${id}.hide-verified-column`, String(checked));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="open-linked-ticket"]', (event, target) => {
+      event.preventDefault();
+      const slug = data(target).ticketSlug;
+      if (slug) {
+        dependencies.ticketLinkReturnFocus = target as HTMLElement;
+        void selectLinkedTicket(slug, data(target).ticketProjectId);
+      }
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="select-ticket-link-match"]', (_event, target) => {
+      const choice = ticketLinkChoice.value,
+        key = data(target).matchKey,
+        match = choice?.matches.find((item) => ticketLinkMatchKey(item) === key);
+      if (match) void openTicketLinkMatch(match);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="cancel-ticket-link-choice"]', () => {
+      cancelTicketLinkChoice();
+    }),
+  );
+  lifetime.add(
+    delegateCapture(document.body, 'wa-hide', '[data-component="ticket-link-choice-dialog"]', () => {
+      if (ticketLinkChoice.value) cancelTicketLinkChoice();
+    }),
+  );
+  return lifetime.dispose;
 }

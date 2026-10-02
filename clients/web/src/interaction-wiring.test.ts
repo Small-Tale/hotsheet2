@@ -50,13 +50,13 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
       'inspectorAndEditor',
       'shellAndGlobal',
     ];
-    expect([...applicationWiring.matchAll(/registrations\.(\w+)\(\);/g)].map((match) => match[1])).toEqual(
+    expect([...applicationWiring.matchAll(/registrations\.(\w+)\(\)/g)].map((match) => match[1])).toEqual(
       orderedRegistrations,
     );
     expect(runtime.match(/wireHotSheetInteractions\(/g)).toHaveLength(1);
     expect(runtime).not.toMatch(/const register\w+Interactions/);
-    expect(interactionBindings.match(/wire\w+Interactions\(dependencies\);/g)).toHaveLength(groups.length);
-    for (const [, group] of groups) expect(interactionBindings).toContain(`${group}(dependencies);`);
+    expect(interactionBindings.match(/wire\w+Interactions\(dependencies\)/g)).toHaveLength(groups.length);
+    for (const [, group] of groups) expect(interactionBindings).toContain(`${group}(dependencies)`);
     for (const [file, group] of groups) {
       const source = read(`./interactions/${file}.ts`);
       const module = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);

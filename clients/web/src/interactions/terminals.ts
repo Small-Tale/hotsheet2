@@ -34,6 +34,7 @@ import {
 import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
 import { wireTopLayerOverlays } from '../top-layer-overlay';
 import { data } from './dom';
+import { createInteractionLifetime } from './lifetime';
 import { type Control, type Project } from './types';
 
 export function allowInterruptedDrawerPopupShow(menu: { open: boolean; popup?: { active: boolean } }) {
@@ -118,6 +119,7 @@ export interface TerminalInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireTerminalInteractions(dependencies: TerminalInteractionsDependencies) {
+  const lifetime = createInteractionLifetime();
   const {
     terminalDrawerBounds,
     terminalDashboardSize,
@@ -170,119 +172,143 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   } = dependencies;
   // The magnified terminal is a manual popover; keep it in the top layer as Kerf renders it (HS2-Z9PQSC).
   wireTopLayerOverlays(document.body);
-  delegate(document.body, 'focusin', '.terminal-session:not([hidden]) .xterm-helper-textarea', (_event, target) => {
-    const viewport = target.closest<HTMLElement>('[data-terminal-id]');
-    if (!viewport?.closest('[data-component="terminal-drawer"][data-mode="dedicated"]')) return;
-    enterMobileTerminalFocus(viewport.dataset.terminalId!);
-  });
-  delegate(document.body, 'click', '[data-action="exit-terminal-focus-mode"]', () => {
-    terminalModifiers.value = NO_TERMINAL_MODIFIERS;
-    terminalFunctionRow.value = false;
-    const current = project(),
-      drawer = document.querySelector<HTMLElement>('[data-component="terminal-drawer"]'),
-      terminalId = drawer?.querySelector<HTMLElement>('.terminal-session:not([hidden]) [data-terminal-id]')?.dataset
-        .terminalId;
-    exitMobileTerminalFocus();
-    if (current && drawer?.dataset.mode === 'dedicated' && terminalId) focusDrawerTab(current.id, terminalId);
-  });
-  delegate(document.body, 'click', '[data-action="zoom-terminal-grid"]', (_event, target) => {
-    const drawer = Boolean(target.closest('[data-component="terminal-drawer"]')),
-      bounds = drawer ? terminalDrawerBounds.value : terminalDashboardSize.value,
-      basis = drawer ? 'high' : terminalGridBasis(bounds.height),
-      direction = data(target).zoomDirection as 'in' | 'out';
-    if (drawer) {
-      terminalDrawerFitHigh.value = adjustTerminalFit(terminalDrawerFitHigh.value, basis, direction);
-      localStorage.setItem('hotsheet.terminals.drawer-fit-high', String(terminalDrawerFitHigh.value));
-    } else if (basis === 'across') {
-      terminalFitAcross.value = adjustTerminalFit(terminalFitAcross.value, basis, direction);
-      localStorage.setItem('hotsheet.terminals.fit-across', String(terminalFitAcross.value));
-    } else {
-      terminalFitHigh.value = adjustTerminalFit(terminalFitHigh.value, basis, direction);
-      localStorage.setItem('hotsheet.terminals.fit-high', String(terminalFitHigh.value));
-    }
-  });
-  delegate(document.body, 'click', '[data-action="preview-terminal"]', (event, target) => {
-    if ((event.target as Element).closest('button') || (event as MouseEvent).detail > 1) return;
-    if (dependencies.terminalPreviewClickTimer !== undefined)
-      window.clearTimeout(dependencies.terminalPreviewClickTimer);
-    const key = data(target).terminalKey;
-    dependencies.terminalPreviewClickTimer = window.setTimeout(() => {
-      dependencies.terminalPreviewClickTimer = undefined;
-      const session = terminalSession(key);
+  lifetime.add(
+    delegate(document.body, 'focusin', '.terminal-session:not([hidden]) .xterm-helper-textarea', (_event, target) => {
+      const viewport = target.closest<HTMLElement>('[data-terminal-id]');
+      if (!viewport?.closest('[data-component="terminal-drawer"][data-mode="dedicated"]')) return;
+      enterMobileTerminalFocus(viewport.dataset.terminalId!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="exit-terminal-focus-mode"]', () => {
+      terminalModifiers.value = NO_TERMINAL_MODIFIERS;
+      terminalFunctionRow.value = false;
+      const current = project(),
+        drawer = document.querySelector<HTMLElement>('[data-component="terminal-drawer"]'),
+        terminalId = drawer?.querySelector<HTMLElement>('.terminal-session:not([hidden]) [data-terminal-id]')?.dataset
+          .terminalId;
+      exitMobileTerminalFocus();
+      if (current && drawer?.dataset.mode === 'dedicated' && terminalId) focusDrawerTab(current.id, terminalId);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="zoom-terminal-grid"]', (_event, target) => {
+      const drawer = Boolean(target.closest('[data-component="terminal-drawer"]')),
+        bounds = drawer ? terminalDrawerBounds.value : terminalDashboardSize.value,
+        basis = drawer ? 'high' : terminalGridBasis(bounds.height),
+        direction = data(target).zoomDirection as 'in' | 'out';
+      if (drawer) {
+        terminalDrawerFitHigh.value = adjustTerminalFit(terminalDrawerFitHigh.value, basis, direction);
+        localStorage.setItem('hotsheet.terminals.drawer-fit-high', String(terminalDrawerFitHigh.value));
+      } else if (basis === 'across') {
+        terminalFitAcross.value = adjustTerminalFit(terminalFitAcross.value, basis, direction);
+        localStorage.setItem('hotsheet.terminals.fit-across', String(terminalFitAcross.value));
+      } else {
+        terminalFitHigh.value = adjustTerminalFit(terminalFitHigh.value, basis, direction);
+        localStorage.setItem('hotsheet.terminals.fit-high', String(terminalFitHigh.value));
+      }
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="preview-terminal"]', (event, target) => {
+      if ((event.target as Element).closest('button') || (event as MouseEvent).detail > 1) return;
+      if (dependencies.terminalPreviewClickTimer !== undefined)
+        window.clearTimeout(dependencies.terminalPreviewClickTimer);
+      const key = data(target).terminalKey;
+      dependencies.terminalPreviewClickTimer = window.setTimeout(() => {
+        dependencies.terminalPreviewClickTimer = undefined;
+        const session = terminalSession(key);
+        if (!session) return;
+        dependencies.pendingTerminalFocus = { projectId: session.projectId, terminalId: session.id };
+        magnifiedTerminalKey.value = key;
+      }, 220);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'keydown', '[data-action="preview-terminal"]', (event, target) => {
+      const keyboard = event as KeyboardEvent;
+      if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
+      event.preventDefault();
+      const key = data(target).terminalKey,
+        session = terminalSession(key);
       if (!session) return;
       dependencies.pendingTerminalFocus = { projectId: session.projectId, terminalId: session.id };
       magnifiedTerminalKey.value = key;
-    }, 220);
-  });
-  delegate(document.body, 'keydown', '[data-action="preview-terminal"]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
-    event.preventDefault();
-    const key = data(target).terminalKey,
-      session = terminalSession(key);
-    if (!session) return;
-    dependencies.pendingTerminalFocus = { projectId: session.projectId, terminalId: session.id };
-    magnifiedTerminalKey.value = key;
-  });
-  delegate(document.body, 'dblclick', '[data-component="terminal-tile"]', (event, target) => {
-    if (data(target).magnified === 'true') return;
-    event.preventDefault();
-    if (dependencies.terminalPreviewClickTimer !== undefined) {
-      window.clearTimeout(dependencies.terminalPreviewClickTimer);
-      dependencies.terminalPreviewClickTimer = undefined;
-    }
-    openTerminalInProject(data(target).terminalKey!);
-  });
-  delegate(document.body, 'dblclick', '.terminal-dashboard__magnified .terminal-tile__footer', (event, target) => {
-    if ((event.target as Element).closest('button')) return;
-    event.preventDefault();
-    openTerminalInProject(data(target.closest('[data-component="terminal-tile"]')!).terminalKey!);
-  });
-  delegate(document.body, 'contextmenu', '[data-component="terminal-tile"]', (event, target) => {
-    if (data(target).magnified === 'true') return;
-    event.preventDefault();
-    const pointer = event as MouseEvent;
-    terminalContextMenu.value = {
-      key: data(target).terminalKey!,
-      ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-        width: 224,
-        height: 104,
-      }),
-    };
-  });
-  delegate(document.body, 'click', '[data-action="open-terminal-context-menu"]', (event, target) => {
-    event.preventDefault();
-    const box = target.getBoundingClientRect();
-    terminalContextMenu.value = {
-      key: data(target).itemId!,
-      ...viewportSafeContextMenuPosition(box.right, box.bottom, window.innerWidth, window.innerHeight, {
-        width: 224,
-        height: 104,
-      }),
-    };
-  });
-  delegate(document.body, 'click', '[data-action="dismiss-magnified-terminal"]', (event, target) => {
-    // Only the desktop scrim dismisses on click-away. The phone overlay is a full-bleed terminal
-    // whose blackout backdrop and safe-area insets are not a scrim, and it has an explicit Close
-    // (HS2-SB1FSQ).
-    if (data(target).mobile === 'true') return;
-    if (event.target === target) magnifiedTerminalKey.value = undefined;
-  });
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'dblclick', '[data-component="terminal-tile"]', (event, target) => {
+      if (data(target).magnified === 'true') return;
+      event.preventDefault();
+      if (dependencies.terminalPreviewClickTimer !== undefined) {
+        window.clearTimeout(dependencies.terminalPreviewClickTimer);
+        dependencies.terminalPreviewClickTimer = undefined;
+      }
+      openTerminalInProject(data(target).terminalKey!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'dblclick', '.terminal-dashboard__magnified .terminal-tile__footer', (event, target) => {
+      if ((event.target as Element).closest('button')) return;
+      event.preventDefault();
+      openTerminalInProject(data(target.closest('[data-component="terminal-tile"]')!).terminalKey!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'contextmenu', '[data-component="terminal-tile"]', (event, target) => {
+      if (data(target).magnified === 'true') return;
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      terminalContextMenu.value = {
+        key: data(target).terminalKey!,
+        ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
+          width: 224,
+          height: 104,
+        }),
+      };
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="open-terminal-context-menu"]', (event, target) => {
+      event.preventDefault();
+      const box = target.getBoundingClientRect();
+      terminalContextMenu.value = {
+        key: data(target).itemId!,
+        ...viewportSafeContextMenuPosition(box.right, box.bottom, window.innerWidth, window.innerHeight, {
+          width: 224,
+          height: 104,
+        }),
+      };
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="dismiss-magnified-terminal"]', (event, target) => {
+      // Only the desktop scrim dismisses on click-away. The phone overlay is a full-bleed terminal
+      // whose blackout backdrop and safe-area insets are not a scrim, and it has an explicit Close
+      // (HS2-SB1FSQ).
+      if (data(target).mobile === 'true') return;
+      if (event.target === target) magnifiedTerminalKey.value = undefined;
+    }),
+  );
   // Leaving a phone terminal clears its key-bar state, so a locked modifier never carries over.
   const resetKeyBar = () => {
     terminalModifiers.value = NO_TERMINAL_MODIFIERS;
     terminalFunctionRow.value = false;
   };
-  delegate(document.body, 'click', '[data-action="close-magnified-terminal"]', () => {
-    magnifiedTerminalKey.value = undefined;
-    resetKeyBar();
-  });
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="close-magnified-terminal"]', () => {
+      magnifiedTerminalKey.value = undefined;
+      resetKeyBar();
+    }),
+  );
   // Phone key bar (HS2-CKS78M). Its buttons never take focus: cancelling the mousedown default (also
   // dispatched for touch taps) keeps the terminal's textarea focused so the soft keyboard stays up, and
   // each action restores that focus if something else took it.
-  delegate(document.body, 'mousedown', '[data-component="terminal-key-bar"]', (event) => {
-    event.preventDefault();
-  });
+  lifetime.add(
+    delegate(document.body, 'mousedown', '[data-component="terminal-key-bar"]', (event) => {
+      event.preventDefault();
+    }),
+  );
   const keyBarViewport = (target: Element) =>
     target
       .closest('[data-component="terminal-drawer"], [data-component="terminal-tile"]')
@@ -293,164 +319,219 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     const input = viewport?.querySelector<HTMLElement>('.xterm-helper-textarea');
     if (input && document.activeElement !== input) input.focus({ preventScroll: true });
   };
-  delegate(document.body, 'click', '[data-action="toggle-terminal-modifier"]', (_event, target) => {
-    const modifier = data(target).modifier as TerminalModifier | undefined;
-    if (modifier) terminalModifiers.value = toggleTerminalModifier(terminalModifiers.value, modifier);
-    keepTerminalFocus(keyBarViewport(target));
-  });
-  delegate(document.body, 'click', '[data-action="toggle-terminal-function-row"]', (_event, target) => {
-    terminalFunctionRow.value = !terminalFunctionRow.value;
-    // Each row starts at its leading edge, so a swapped row never opens mid-scroll.
-    target.closest('[data-component="terminal-key-bar"]')?.scrollTo({ left: 0 });
-    keepTerminalFocus(keyBarViewport(target));
-  });
-  delegate(document.body, 'click', '[data-action="send-terminal-key"]', (_event, target) => {
-    const key = data(target).key as TerminalSpecialKey | undefined,
-      viewport = keyBarViewport(target);
-    if (key && viewport) viewport.dispatchEvent(new CustomEvent(TERMINAL_KEY_EVENT, { detail: { key } }));
-    keepTerminalFocus(viewport);
-  });
-  delegate(document.body, 'click', '[data-action="cycle-mobile-terminal-columns"]', () => {
-    cycleMobileTerminalColumns();
-  });
-  delegate(document.body, 'click', '[data-action="hide-dashboard-terminal"]', (_event, target) => {
-    const key = data(target).terminalKey ?? data(target).itemId,
-      scope = terminalVisibilityScopeFor(target),
-      active = activeTerminalVisibilityGroup(terminalVisibility.value, scope);
-    if (key) persistTerminalVisibility(setTerminalVisibleInGroup(terminalVisibility.value, active.id, key, false));
-    terminalContextMenu.value = undefined;
-    if (magnifiedTerminalKey.value === key) magnifiedTerminalKey.value = undefined;
-  });
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="toggle-terminal-modifier"]', (_event, target) => {
+      const modifier = data(target).modifier as TerminalModifier | undefined;
+      if (modifier) terminalModifiers.value = toggleTerminalModifier(terminalModifiers.value, modifier);
+      keepTerminalFocus(keyBarViewport(target));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="toggle-terminal-function-row"]', (_event, target) => {
+      terminalFunctionRow.value = !terminalFunctionRow.value;
+      // Each row starts at its leading edge, so a swapped row never opens mid-scroll.
+      target.closest('[data-component="terminal-key-bar"]')?.scrollTo({ left: 0 });
+      keepTerminalFocus(keyBarViewport(target));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="send-terminal-key"]', (_event, target) => {
+      const key = data(target).key as TerminalSpecialKey | undefined,
+        viewport = keyBarViewport(target);
+      if (key && viewport) viewport.dispatchEvent(new CustomEvent(TERMINAL_KEY_EVENT, { detail: { key } }));
+      keepTerminalFocus(viewport);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="cycle-mobile-terminal-columns"]', () => {
+      cycleMobileTerminalColumns();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="hide-dashboard-terminal"]', (_event, target) => {
+      const key = data(target).terminalKey ?? data(target).itemId,
+        scope = terminalVisibilityScopeFor(target),
+        active = activeTerminalVisibilityGroup(terminalVisibility.value, scope);
+      if (key) persistTerminalVisibility(setTerminalVisibleInGroup(terminalVisibility.value, active.id, key, false));
+      terminalContextMenu.value = undefined;
+      if (magnifiedTerminalKey.value === key) magnifiedTerminalKey.value = undefined;
+    }),
+  );
   wireTerminalVisibilityTypeFilter(document.body, (types) => {
     terminalVisibilityFilter.value = types;
   });
-  delegate(document.body, 'click', '[data-action="open-terminal-visibility"]', (event, target) => {
-    event.stopImmediatePropagation();
-    terminalVisibilityContextMenu.value = undefined;
-    terminalVisibilityFilter.value = TERMINAL_VISIBILITY_TYPES;
-    terminalVisibilityDialogScope.value = terminalVisibilityScopeFor(target);
-  });
-  delegate(document.body, 'wa-hide', '[data-terminal-visibility-dialog]', (event, target) => {
-    if (event.target !== target) return;
-    terminalVisibilityContextMenu.value = undefined;
-    terminalVisibilityNamePrompt.value = undefined;
-    terminalVisibilityDialogScope.value = undefined;
-  });
-  delegate(document.body, 'change', '[name="terminal-visibility-group"]', (_event, target) => {
-    const scope = terminalVisibilityScopeFor(target),
-      id = (target as Control).value;
-    persistTerminalVisibility(selectTerminalVisibilityGroup(terminalVisibility.value, scope, id));
-  });
-  delegate(document.body, 'click', '[data-action="select-terminal-visibility-tab"]', (_event, target) => {
-    const scope = terminalVisibilityDialogScope.value,
-      id = data(target).itemId;
-    terminalVisibilityContextMenu.value = undefined;
-    if (scope && id) persistTerminalVisibility(selectTerminalVisibilityGroup(terminalVisibility.value, scope, id));
-  });
-  delegate(document.body, 'contextmenu', '[data-visibility-group-id]', (event, target) => {
-    const id = data(target).visibilityGroupId;
-    if (!id || id === 'default') return;
-    event.preventDefault();
-    const pointer = event as MouseEvent;
-    // Kerf's context PopupMenu flips and clamps itself at the pointer, so the raw point is the anchor.
-    terminalVisibilityContextMenu.value = { id, x: pointer.clientX, y: pointer.clientY };
-    revealContextPopupMenu('terminal-visibility-group');
-  });
-  delegate(document.body, 'click', '[data-action="add-terminal-visibility-group"]', () => {
-    terminalVisibilityContextMenu.value = undefined;
-    terminalVisibilityNamePrompt.value = { mode: 'add', value: '' };
-    requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
-        ?.focus(),
-    );
-  });
-  delegate(document.body, 'click', '[data-action="rename-terminal-visibility-group"]', () => {
-    const menu = terminalVisibilityContextMenu.value,
-      group = terminalVisibility.value.groups.find((item) => item.id === menu?.id);
-    terminalVisibilityContextMenu.value = undefined;
-    if (!group) return;
-    terminalVisibilityNamePrompt.value = { mode: 'rename', groupId: group.id, value: group.name };
-    requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
-        ?.focus(),
-    );
-  });
-  delegate(document.body, 'click', '[data-action="remove-terminal-visibility-group"]', () => {
-    const id = terminalVisibilityContextMenu.value?.id;
-    terminalVisibilityContextMenu.value = undefined;
-    if (id) persistTerminalVisibility(removeTerminalVisibilityGroup(terminalVisibility.value, id));
-  });
-  delegate(document.body, 'submit', '[data-action="submit-terminal-visibility-name"]', (event, target) => {
-    event.preventDefault();
-    const prompt = terminalVisibilityNamePrompt.value,
-      scope = terminalVisibilityDialogScope.value,
-      name = target.querySelector<Control>('[name="terminal-visibility-group-name"]')?.value.trim();
-    if (!prompt || !scope || !name) return;
-    if (prompt.mode === 'add') {
-      const added = addTerminalVisibilityGroup(terminalVisibility.value, browserRandomId(), name);
-      persistTerminalVisibility(selectTerminalVisibilityGroup(added.state, scope, added.group.id));
-    } else if (prompt.groupId)
-      persistTerminalVisibility(renameTerminalVisibilityGroup(terminalVisibility.value, prompt.groupId, name));
-    terminalVisibilityNamePrompt.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="cancel-terminal-visibility-name"]', () => {
-    terminalVisibilityNamePrompt.value = undefined;
-  });
-  delegate(document.body, 'wa-hide', '[data-terminal-visibility-name-dialog]', () => {
-    terminalVisibilityNamePrompt.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="toggle-terminal-visibility"]', (_event, target) => {
-    const scope = terminalVisibilityDialogScope.value,
-      key = data(target).itemId;
-    if (!scope || !key) return;
-    const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
-      visible = active.hiddenKeys.includes(key);
-    persistTerminalVisibility(setTerminalVisibleInGroup(terminalVisibility.value, active.id, key, visible));
-  });
-  delegate(
-    document.body,
-    'click',
-    '[data-action="show-all-terminals-in-group"], [data-action="hide-all-terminals-in-group"]',
-    (_event, target) => {
-      const scope = terminalVisibilityDialogScope.value;
-      if (!scope) return;
-      const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
-        visible = data(target).action === 'show-all-terminals-in-group';
-      persistTerminalVisibility(
-        setAllTerminalsVisibleInGroup(terminalVisibility.value, active.id, terminalKeysForVisibilityDialog(), visible),
-      );
-    },
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="open-terminal-visibility"]', (event, target) => {
+      event.stopImmediatePropagation();
+      terminalVisibilityContextMenu.value = undefined;
+      terminalVisibilityFilter.value = TERMINAL_VISIBILITY_TYPES;
+      terminalVisibilityDialogScope.value = terminalVisibilityScopeFor(target);
+    }),
   );
-  delegate(document.body, 'click', '[data-action="open-terminal-project"]', (_event, target) => {
-    openTerminalInProject(data(target).terminalKey ?? data(target).itemId!);
-  });
-  delegate(document.body, 'click', '[data-action="open-grid-ai-chat"]', (_event, target) => {
-    openGridAIChat(data(target).projectId!, data(target).chatId!);
-  });
-  delegate(document.body, 'keydown', '[data-component="workspace-chat-tile"]', (event, target) => {
-    const keyboard = event as KeyboardEvent;
-    if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
-    event.preventDefault();
-    openGridAIChat(data(target).projectId!, data(target).chatId!);
-  });
-  delegate(document.body, 'click', '[data-action="toggle-terminal-drawer"]', () => {
-    setTerminalDrawerVisible(!terminalDrawerVisible.value);
-  });
-  delegate(document.body, 'dblclick', '[data-action="toggle-terminal-drawer-maximize"]', (event) => {
-    if ((event.target as Element).closest('button, input, textarea, select, a, [data-tab-kind="terminal"]')) return;
-    toggleTerminalDrawerMaximized();
-  });
-  delegate(document.body, 'dblclick', '[data-tab-kind="terminal"], [data-action="select-drawer-item"]', (event) => {
-    if ((event.target as Element).closest('[data-tab-kind="ai-chat"]')) return;
-    event.stopPropagation();
-    toggleTerminalDrawerMaximized();
-  });
-  delegate(document.body, 'click', '[data-action="select-drawer-item"]', (_event, target) => {
-    const tab = target.closest<HTMLElement>('[data-tab-kind]');
-    selectDrawerItem(tab?.dataset.terminalId || tab?.dataset.chatId || data(target).itemId || 'grid');
-  });
+  lifetime.add(
+    delegate(document.body, 'wa-hide', '[data-terminal-visibility-dialog]', (event, target) => {
+      if (event.target !== target) return;
+      terminalVisibilityContextMenu.value = undefined;
+      terminalVisibilityNamePrompt.value = undefined;
+      terminalVisibilityDialogScope.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', '[name="terminal-visibility-group"]', (_event, target) => {
+      const scope = terminalVisibilityScopeFor(target),
+        id = (target as Control).value;
+      persistTerminalVisibility(selectTerminalVisibilityGroup(terminalVisibility.value, scope, id));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="select-terminal-visibility-tab"]', (_event, target) => {
+      const scope = terminalVisibilityDialogScope.value,
+        id = data(target).itemId;
+      terminalVisibilityContextMenu.value = undefined;
+      if (scope && id) persistTerminalVisibility(selectTerminalVisibilityGroup(terminalVisibility.value, scope, id));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'contextmenu', '[data-visibility-group-id]', (event, target) => {
+      const id = data(target).visibilityGroupId;
+      if (!id || id === 'default') return;
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      // Kerf's context PopupMenu flips and clamps itself at the pointer, so the raw point is the anchor.
+      terminalVisibilityContextMenu.value = { id, x: pointer.clientX, y: pointer.clientY };
+      revealContextPopupMenu('terminal-visibility-group');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="add-terminal-visibility-group"]', () => {
+      terminalVisibilityContextMenu.value = undefined;
+      terminalVisibilityNamePrompt.value = { mode: 'add', value: '' };
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
+          ?.focus(),
+      );
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="rename-terminal-visibility-group"]', () => {
+      const menu = terminalVisibilityContextMenu.value,
+        group = terminalVisibility.value.groups.find((item) => item.id === menu?.id);
+      terminalVisibilityContextMenu.value = undefined;
+      if (!group) return;
+      terminalVisibilityNamePrompt.value = { mode: 'rename', groupId: group.id, value: group.name };
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')
+          ?.focus(),
+      );
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="remove-terminal-visibility-group"]', () => {
+      const id = terminalVisibilityContextMenu.value?.id;
+      terminalVisibilityContextMenu.value = undefined;
+      if (id) persistTerminalVisibility(removeTerminalVisibilityGroup(terminalVisibility.value, id));
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', '[data-action="submit-terminal-visibility-name"]', (event, target) => {
+      event.preventDefault();
+      const prompt = terminalVisibilityNamePrompt.value,
+        scope = terminalVisibilityDialogScope.value,
+        name = target.querySelector<Control>('[name="terminal-visibility-group-name"]')?.value.trim();
+      if (!prompt || !scope || !name) return;
+      if (prompt.mode === 'add') {
+        const added = addTerminalVisibilityGroup(terminalVisibility.value, browserRandomId(), name);
+        persistTerminalVisibility(selectTerminalVisibilityGroup(added.state, scope, added.group.id));
+      } else if (prompt.groupId)
+        persistTerminalVisibility(renameTerminalVisibilityGroup(terminalVisibility.value, prompt.groupId, name));
+      terminalVisibilityNamePrompt.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="cancel-terminal-visibility-name"]', () => {
+      terminalVisibilityNamePrompt.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'wa-hide', '[data-terminal-visibility-name-dialog]', () => {
+      terminalVisibilityNamePrompt.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="toggle-terminal-visibility"]', (_event, target) => {
+      const scope = terminalVisibilityDialogScope.value,
+        key = data(target).itemId;
+      if (!scope || !key) return;
+      const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+        visible = active.hiddenKeys.includes(key);
+      persistTerminalVisibility(setTerminalVisibleInGroup(terminalVisibility.value, active.id, key, visible));
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      '[data-action="show-all-terminals-in-group"], [data-action="hide-all-terminals-in-group"]',
+      (_event, target) => {
+        const scope = terminalVisibilityDialogScope.value;
+        if (!scope) return;
+        const active = activeTerminalVisibilityGroup(terminalVisibility.value, scope),
+          visible = data(target).action === 'show-all-terminals-in-group';
+        persistTerminalVisibility(
+          setAllTerminalsVisibleInGroup(
+            terminalVisibility.value,
+            active.id,
+            terminalKeysForVisibilityDialog(),
+            visible,
+          ),
+        );
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="open-terminal-project"]', (_event, target) => {
+      openTerminalInProject(data(target).terminalKey ?? data(target).itemId!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="open-grid-ai-chat"]', (_event, target) => {
+      openGridAIChat(data(target).projectId!, data(target).chatId!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'keydown', '[data-component="workspace-chat-tile"]', (event, target) => {
+      const keyboard = event as KeyboardEvent;
+      if (keyboard.key !== 'Enter' && keyboard.key !== ' ') return;
+      event.preventDefault();
+      openGridAIChat(data(target).projectId!, data(target).chatId!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="toggle-terminal-drawer"]', () => {
+      setTerminalDrawerVisible(!terminalDrawerVisible.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'dblclick', '[data-action="toggle-terminal-drawer-maximize"]', (event) => {
+      if ((event.target as Element).closest('button, input, textarea, select, a, [data-tab-kind="terminal"]')) return;
+      toggleTerminalDrawerMaximized();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'dblclick', '[data-tab-kind="terminal"], [data-action="select-drawer-item"]', (event) => {
+      if ((event.target as Element).closest('[data-tab-kind="ai-chat"]')) return;
+      event.stopPropagation();
+      toggleTerminalDrawerMaximized();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="select-drawer-item"]', (_event, target) => {
+      const tab = target.closest<HTMLElement>('[data-tab-kind]');
+      selectDrawerItem(tab?.dataset.terminalId || tab?.dataset.chatId || data(target).itemId || 'grid');
+    }),
+  );
   void delegateCapture(document.body, 'wa-show', '[data-terminal-drawer-create]', (event, target) => {
     if (event.target !== target) return;
     const menu = target as HTMLElement & { open: boolean; popup?: { active: boolean } };
@@ -458,117 +539,150 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     // showMenu call otherwise returns early and misses the keyboard listener.
     allowInterruptedDrawerPopupShow(menu);
   });
-  delegate(document.body, 'click', '[data-action="create-terminal-drawer-item"]', (event, target) => {
-    const kind = data(target).itemId as 'default-shell' | 'ai-shell' | 'ai-chat';
-    if (kind === 'default-shell') {
-      void createProjectTerminal();
-      return;
-    }
-    const configuration = aiLaunchConfiguration(kind, (event as MouseEvent).altKey, data(target).provider);
-    if (!configuration) return;
-    if (kind === 'ai-shell') void createProjectTerminal(configuration);
-    else void createDrawerAIChat(configuration);
-  });
-  delegate(document.body, 'click', '[data-action="open-saved-conversation"]', () => {
-    void openSavedConversation();
-  });
-  delegate(document.body, 'click', '[data-action="create-project-terminal"]', () => {
-    void createProjectTerminal();
-  });
-  delegate(document.body, 'click', '[data-action="close-project-tab"]', (event, target) => {
-    event.stopPropagation();
-    requestProjectClose([data(target.closest<HTMLElement>('[data-tab-kind="project"]')!).projectId!]);
-  });
-  delegate(document.body, 'click', '[data-action="select-project-close-resource"]', (_event, target) => {
-    const state = projectCloseDialog.value,
-      key = data(target).itemId;
-    if (!state || !key || key === state.selectedKey) return;
-    projectCloseDialog.value = { ...state, selectedKey: key, error: '' };
-    restoreBorrowedProjectCloseTerminal(state);
-  });
-  delegate(document.body, 'click', '[data-action="cancel-project-close"]', () => {
-    cancelProjectClose();
-  });
-  delegateCapture(document.body, 'wa-hide', '[data-component="project-close-dialog"]', () => {
-    if (!projectCloseDialog.value?.operation) cancelProjectClose();
-  });
-  delegate(document.body, 'click', '[data-action="confirm-close-project"]', () => {
-    confirmProjectClose();
-  });
-  delegate(document.body, 'click', '[data-action="close-all-project-resources"]', () => {
-    void closeAllProjectResources();
-  });
-  delegate(document.body, 'click', '[data-action="close-terminal-tab"]', (event, target) => {
-    event.stopPropagation();
-    void closeTerminalIds([data(target.closest<HTMLElement>('[data-tab-kind="terminal"]')!).terminalId!]);
-  });
-  delegate(document.body, 'click', '[data-action="close-ai-chat-tab"]', (event, target) => {
-    event.stopPropagation();
-    closeDrawerAIChat(data(target.closest<HTMLElement>('[data-tab-kind="ai-chat"]')!).chatId!);
-  });
-  delegate(document.body, 'contextmenu', '[data-tab-kind]', (event, target) => {
-    event.preventDefault();
-    if (data(target).restoreFailure === 'true') return;
-    const pointer = event as MouseEvent,
-      kind = data(target).tabKind as AppTabKind,
-      id =
-        kind === 'project'
-          ? data(target).projectId!
-          : kind === 'ai-chat'
-            ? data(target).chatId!
-            : data(target).terminalId!;
-    appTabContextMenu.value = {
-      kind,
-      id,
-      direction: pointer.altKey ? 'left' : 'right',
-      ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
-        width: 256,
-        height: 202,
-      }),
-    };
-  });
-  delegate(
-    document.body,
-    'click',
-    '[data-action="project-tab-context-action"], [data-action="terminal-tab-context-action"]',
-    (_event, target) => {
-      const menu = appTabContextMenu.value;
-      if (!menu) return;
-      const ordered =
-          menu.kind === 'project' ? projects.value.map((item) => item.id) : currentDrawerTabIds(project()?.id ?? ''),
-        action = data(target).tabAction;
-      if (action === 'rename' && menu.kind === 'terminal') {
-        const group = terminalGroups.value.find((item) => item.projectId === project()?.id),
-          session = group?.sessions.find((item) => item.id === menu.id);
-        appTabContextMenu.value = undefined;
-        if (session) {
-          terminalRename.value = {
-            projectId: session.projectId,
-            terminalId: session.id,
-            value: session.title ?? session.id,
-          };
-          queueMicrotask(() => document.querySelector<Control>('[name="terminal-name"]')?.focus());
-        }
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="create-terminal-drawer-item"]', (event, target) => {
+      const kind = data(target).itemId as 'default-shell' | 'ai-shell' | 'ai-chat';
+      if (kind === 'default-shell') {
+        void createProjectTerminal();
         return;
       }
-      const ids = drawerTabCloseIds(ordered, menu.id, action as DrawerTabCloseAction);
-      appTabContextMenu.value = undefined;
-      if (menu.kind === 'project') requestProjectClose(ids);
-      else void closeDrawerTabIds(ids);
-    },
+      const configuration = aiLaunchConfiguration(kind, (event as MouseEvent).altKey, data(target).provider);
+      if (!configuration) return;
+      if (kind === 'ai-shell') void createProjectTerminal(configuration);
+      else void createDrawerAIChat(configuration);
+    }),
   );
-  delegate(document.body, 'submit', '[data-action="rename-terminal-form"]', (event, target) => {
-    event.preventDefault();
-    const rename = terminalRename.value,
-      name = target.querySelector<Control>('[name="terminal-name"]')?.value ?? '';
-    if (!rename || !name.trim()) return;
-    saveTerminalName(rename.projectId, rename.terminalId, name);
-    terminalRename.value = undefined;
-  });
-  delegate(document.body, 'click', '[data-action="cancel-terminal-rename"]', () => {
-    terminalRename.value = undefined;
-  });
-  delegate(document.body, 'wa-hide', '[data-terminal-rename-dialog]', () => {
-    terminalRename.value = undefined;
-  });
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="open-saved-conversation"]', () => {
+      void openSavedConversation();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="create-project-terminal"]', () => {
+      void createProjectTerminal();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="close-project-tab"]', (event, target) => {
+      event.stopPropagation();
+      requestProjectClose([data(target.closest<HTMLElement>('[data-tab-kind="project"]')!).projectId!]);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="select-project-close-resource"]', (_event, target) => {
+      const state = projectCloseDialog.value,
+        key = data(target).itemId;
+      if (!state || !key || key === state.selectedKey) return;
+      projectCloseDialog.value = { ...state, selectedKey: key, error: '' };
+      restoreBorrowedProjectCloseTerminal(state);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="cancel-project-close"]', () => {
+      cancelProjectClose();
+    }),
+  );
+  lifetime.add(
+    delegateCapture(document.body, 'wa-hide', '[data-component="project-close-dialog"]', () => {
+      if (!projectCloseDialog.value?.operation) cancelProjectClose();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="confirm-close-project"]', () => {
+      confirmProjectClose();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="close-all-project-resources"]', () => {
+      void closeAllProjectResources();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="close-terminal-tab"]', (event, target) => {
+      event.stopPropagation();
+      void closeTerminalIds([data(target.closest<HTMLElement>('[data-tab-kind="terminal"]')!).terminalId!]);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="close-ai-chat-tab"]', (event, target) => {
+      event.stopPropagation();
+      closeDrawerAIChat(data(target.closest<HTMLElement>('[data-tab-kind="ai-chat"]')!).chatId!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'contextmenu', '[data-tab-kind]', (event, target) => {
+      event.preventDefault();
+      if (data(target).restoreFailure === 'true') return;
+      const pointer = event as MouseEvent,
+        kind = data(target).tabKind as AppTabKind,
+        id =
+          kind === 'project'
+            ? data(target).projectId!
+            : kind === 'ai-chat'
+              ? data(target).chatId!
+              : data(target).terminalId!;
+      appTabContextMenu.value = {
+        kind,
+        id,
+        direction: pointer.altKey ? 'left' : 'right',
+        ...viewportSafeContextMenuPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight, {
+          width: 256,
+          height: 202,
+        }),
+      };
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      '[data-action="project-tab-context-action"], [data-action="terminal-tab-context-action"]',
+      (_event, target) => {
+        const menu = appTabContextMenu.value;
+        if (!menu) return;
+        const ordered =
+            menu.kind === 'project' ? projects.value.map((item) => item.id) : currentDrawerTabIds(project()?.id ?? ''),
+          action = data(target).tabAction;
+        if (action === 'rename' && menu.kind === 'terminal') {
+          const group = terminalGroups.value.find((item) => item.projectId === project()?.id),
+            session = group?.sessions.find((item) => item.id === menu.id);
+          appTabContextMenu.value = undefined;
+          if (session) {
+            terminalRename.value = {
+              projectId: session.projectId,
+              terminalId: session.id,
+              value: session.title ?? session.id,
+            };
+            queueMicrotask(() => document.querySelector<Control>('[name="terminal-name"]')?.focus());
+          }
+          return;
+        }
+        const ids = drawerTabCloseIds(ordered, menu.id, action as DrawerTabCloseAction);
+        appTabContextMenu.value = undefined;
+        if (menu.kind === 'project') requestProjectClose(ids);
+        else void closeDrawerTabIds(ids);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', '[data-action="rename-terminal-form"]', (event, target) => {
+      event.preventDefault();
+      const rename = terminalRename.value,
+        name = target.querySelector<Control>('[name="terminal-name"]')?.value ?? '';
+      if (!rename || !name.trim()) return;
+      saveTerminalName(rename.projectId, rename.terminalId, name);
+      terminalRename.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="cancel-terminal-rename"]', () => {
+      terminalRename.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'wa-hide', '[data-terminal-rename-dialog]', () => {
+      terminalRename.value = undefined;
+    }),
+  );
+  return lifetime.dispose;
 }

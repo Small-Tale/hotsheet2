@@ -103,41 +103,17 @@ export function createHotSheetInteractionBindings(port: InteractionBindingsPort)
   });
 
   return {
-    projectLifecycle: () => {
-      wireProjectLifecycleInteractions(dependencies);
-    },
-    repository: () => {
-      wireRepositoryInteractions(dependencies);
-    },
-    navigationAndTabs: () => {
-      wireNavigationAndTabInteractions(dependencies);
-    },
-    terminals: () => {
-      wireTerminalInteractions(dependencies);
-    },
-    ticketSelection: () => {
-      wireTicketSelectionInteractions(dependencies);
-    },
-    viewsAndSavedViews: () => {
-      wireViewAndSavedViewInteractions(dependencies);
-    },
-    commandsAndAi: () => {
-      wireCommandAndAiInteractions(dependencies);
-    },
-    notificationsAndLinks: () => {
-      wireNotificationAndLinkInteractions(dependencies);
-    },
-    searchAndComposer: () => {
-      wireSearchAndComposerInteractions(dependencies);
-    },
-    attachmentsAndGallery: () => {
-      wireAttachmentAndGalleryInteractions(dependencies);
-    },
-    inspectorAndEditor: () => {
-      wireInspectorAndEditorInteractions(dependencies);
-    },
-    shellAndGlobal: () => {
-      wireShellAndGlobalInteractions(dependencies);
-    },
+    projectLifecycle: () => wireProjectLifecycleInteractions(dependencies),
+    repository: () => wireRepositoryInteractions(dependencies),
+    navigationAndTabs: () => wireNavigationAndTabInteractions(dependencies),
+    terminals: () => wireTerminalInteractions(dependencies),
+    ticketSelection: () => wireTicketSelectionInteractions(dependencies),
+    viewsAndSavedViews: () => wireViewAndSavedViewInteractions(dependencies),
+    commandsAndAi: () => wireCommandAndAiInteractions(dependencies),
+    notificationsAndLinks: () => wireNotificationAndLinkInteractions(dependencies),
+    searchAndComposer: () => wireSearchAndComposerInteractions(dependencies),
+    attachmentsAndGallery: () => wireAttachmentAndGalleryInteractions(dependencies),
+    inspectorAndEditor: () => wireInspectorAndEditorInteractions(dependencies),
+    shellAndGlobal: () => wireShellAndGlobalInteractions(dependencies),
   };
 }

@@ -2,6 +2,7 @@ import { signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MediaAnnotation } from '../api';
+import { wireHotSheetInteractions } from '../app/wire-interactions';
 import type { TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { KEYBOARD_SHORTCUT_STORAGE_KEY, type ShortcutChord } from '../keyboard-shortcuts';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
@@ -10,6 +11,7 @@ import {
   wireAttachmentAndGalleryInteractions,
 } from './attachments-and-gallery';
 import { type CommandAndAiInteractionsDependencies, wireCommandAndAiInteractions } from './commands-and-ai';
+import { createInteractionLifetime } from './lifetime';
 import { type ProjectLifecycleInteractionsDependencies, wireProjectLifecycleInteractions } from './project-lifecycle';
 import { type RepositoryInteractionsDependencies, wireRepositoryInteractions } from './repository';
 import { type TerminalInteractionsDependencies, wireTerminalInteractions } from './terminals';
@@ -24,15 +26,32 @@ interface Registration {
   selector: string;
   capture: boolean;
   handle: (event: Event, target: Element) => unknown;
+  /** Cleared by the disposer the mocked delegate returns, like Kerf's real listener removal. */
+  attached: boolean;
 }
 const registrations = vi.hoisted(() => [] as Registration[]);
-vi.mock('kerfjs', async (original) => ({
-  ...(await original<typeof import('kerfjs')>()),
-  delegate: (root: unknown, event: string, selector: string, handle: Registration['handle']) =>
-    registrations.push({ root, event, selector, handle, capture: false }),
-  delegateCapture: (root: unknown, event: string, selector: string, handle: Registration['handle']) =>
-    registrations.push({ root, event, selector, handle, capture: true }),
-}));
+vi.mock('kerfjs', async (original) => {
+  const register = (registration: Omit<Registration, 'attached'>) => {
+    const entry = { ...registration, attached: true };
+    registrations.push(entry);
+    return () => {
+      entry.attached = false;
+    };
+  };
+  return {
+    ...(await original<typeof import('kerfjs')>()),
+    delegate: (root: unknown, event: string, selector: string, handle: Registration['handle']) =>
+      register({ root, event, selector, handle, capture: false }),
+    delegateCapture: (root: unknown, event: string, selector: string, handle: Registration['handle']) =>
+      register({ root, event, selector, handle, capture: true }),
+  };
+});
+/** Deliver an event to every still-attached delegate registered for it, as the delegated root would. */
+function dispatchDelegated(event: Event, selector: string, element: Element) {
+  for (const registration of registrations)
+    if (registration.attached && registration.event === event.type && registration.selector === selector)
+      registration.handle(event, element);
+}
 function handler(event: string, selector: string, capture = false) {
   const found = registrations.find(
     (registration) =>
@@ -356,4 +375,86 @@ it('keeps LAN annotation IDs distinct across repeated drawing and empty/refill (
   expect(previous).not.toContain(selected.value);
   expect(bindings.attachmentAnnotationGesture?.annotation.id).toBe(selected.value);
   expect(annotations.value[0]).toMatchObject({ x: 1000, y: 2000, width: 1, height: 1 });
+});
+
+describe('interaction group teardown (HS2-NZT3MT)', () => {
+  it('removes every delegated and native listener the wired groups registered, once, newest group first', () => {
+    const native = Object.assign(new EventTarget(), { body: {} }),
+      add = vi.spyOn(native, 'addEventListener');
+    vi.stubGlobal('document', native);
+    const opened = signal(true),
+      order: string[] = [],
+      spy = (name: string) => () => () => {
+        order.push(name);
+      };
+    const teardown = wireHotSheetInteractions({
+      projectLifecycle: () =>
+        wireProjectLifecycleInteractions({
+          projectDialogOpen: opened,
+          unhealthyServerRecovery: signal(undefined),
+        } as unknown as ProjectLifecycleInteractionsDependencies),
+      repository: () => wireRepositoryInteractions({} as RepositoryInteractionsDependencies),
+      navigationAndTabs: spy('navigationAndTabs'),
+      terminals: spy('terminals'),
+      ticketSelection: spy('ticketSelection'),
+      viewsAndSavedViews: () => wireViewAndSavedViewInteractions({} as ViewAndSavedViewInteractionsDependencies),
+      commandsAndAi: spy('commandsAndAi'),
+      notificationsAndLinks: spy('notificationsAndLinks'),
+      searchAndComposer: spy('searchAndComposer'),
+      attachmentsAndGallery: () =>
+        wireAttachmentAndGalleryInteractions({} as AttachmentAndGalleryInteractionsDependencies),
+      inspectorAndEditor: spy('inspectorAndEditor'),
+      shellAndGlobal: spy('shellAndGlobal'),
+    });
+    expect(registrations.length).toBeGreaterThan(50);
+    expect(registrations.every((registration) => registration.attached)).toBe(true);
+    // The gallery's native document listeners all carry the group's lifetime signal.
+    const signals = add.mock.calls.map(([, , options]) => (options as AddEventListenerOptions).signal);
+    expect(signals.length).toBe(6);
+    expect(signals.every((item) => item && !item.aborted)).toBe(true);
+
+    // Before teardown the delegated project-dialog dismissal reaches its handler.
+    dispatchDelegated(new Event('wa-hide'), '[data-project-dialog]', target({}));
+    expect(opened.value).toBe(false);
+
+    teardown();
+    expect(registrations.some((registration) => registration.attached)).toBe(false);
+    expect(signals.every((item) => item!.aborted)).toBe(true);
+    expect(order).toEqual([
+      'shellAndGlobal',
+      'inspectorAndEditor',
+      'searchAndComposer',
+      'notificationsAndLinks',
+      'commandsAndAi',
+      'ticketSelection',
+      'terminals',
+      'navigationAndTabs',
+    ]);
+    // An event dispatched after teardown no longer reaches the handler.
+    opened.value = true;
+    dispatchDelegated(new Event('wa-hide'), '[data-project-dialog]', target({}));
+    expect(opened.value).toBe(true);
+
+    // Repeating the teardown is a no-op rather than a second removal pass.
+    teardown();
+    expect(order).toHaveLength(8);
+  });
+
+  it('aborts native listeners so events dispatched after disposal no longer reach them', () => {
+    const lifetime = createInteractionLifetime(),
+      root = new EventTarget(),
+      handle = vi.fn(),
+      dispose = vi.fn();
+    root.addEventListener('pointerup', handle, { signal: lifetime.signal });
+    expect(lifetime.add(dispose)).toBe(dispose);
+    root.dispatchEvent(new Event('pointerup'));
+    expect(handle).toHaveBeenCalledTimes(1);
+    lifetime.dispose();
+    root.dispatchEvent(new Event('pointerup'));
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(lifetime.signal.aborted).toBe(true);
+    lifetime.dispose();
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
 });

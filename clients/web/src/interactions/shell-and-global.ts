@@ -20,6 +20,7 @@ import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { ticketClipboardAction } from '../ticket-clipboard-shortcuts';
 import { type ClipboardTicket, type TicketHistory } from '../ticket-operations';
 import { data } from './dom';
+import { createInteractionLifetime } from './lifetime';
 import { type AttachmentMenu, type Project } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -104,6 +105,7 @@ export interface ShellAndGlobalInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInteractionsDependencies) {
+  const lifetime = createInteractionLifetime();
   const {
     sidebarCollapsed,
     inspectorCollapsed,
@@ -160,74 +162,86 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   } = dependencies;
   // Every right-rail surface shares the Workbench's standard toggle, in the open rail's toolbar or
   // relocated to the workspace toolbar while the rail is collapsed (HS2-QQW6CT).
-  delegate(document.body, 'click', '[data-action="toggle-ticket-inspector"]', () => {
-    setInspectorVisible(inspectorCollapsed.value);
-  });
-  delegate(document.body, 'click', '[data-action="toggle-project-sidebar"]', () => {
-    setSidebarVisible(sidebarCollapsed.value);
-  });
-  delegate(document.body, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
-    const handle = target as HTMLElement,
-      region = handle.closest<HTMLElement>('[data-workbench-rail], [data-workbench-drawer]'),
-      id = handle.dataset.regionId;
-    // The rails are driven by Kerf's `wireWorkbench`; only the terminal drawer keeps the app's own drag
-    // (its measured maximum and drag-past-minimum collapse, HS2-P289N2).
-    if (!region || id !== 'app-bottom-drawer' || region.dataset.collapsed === 'true') return;
-    event.preventDefault();
-    const axis = (region.dataset.axis ?? 'horizontal') as ResizableRegionAxis;
-    dependencies.appRegionResizeDrag = {
-      id,
-      axis,
-      edge: (region.dataset.edge ?? 'end') as ResizableRegionEdge,
-      startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY,
-      startSize: appRegionSize(id),
-      pendingSize: appRegionSize(id),
-      region,
-      handle,
-    };
-    region.dataset.resizing = 'true';
-    document.body.dataset.resizingRegion = axis;
-  });
-  delegate(document.body, 'keydown', '[data-kui-resize-handle]', (event, target) => {
-    const keyboard = event as KeyboardEvent,
-      handle = target as HTMLElement,
-      region = handle.closest<HTMLElement>('[data-workbench-rail], [data-workbench-drawer]'),
-      id = handle.dataset.regionId;
-    if (!region || id !== 'app-bottom-drawer') return;
-    const axis = (region.dataset.axis ?? 'horizontal') as ResizableRegionAxis;
-    if (
-      (axis === 'horizontal' && !['ArrowLeft', 'ArrowRight'].includes(keyboard.key)) ||
-      (axis === 'vertical' && !['ArrowUp', 'ArrowDown'].includes(keyboard.key))
-    )
-      return;
-    event.preventDefault();
-    const direction = ['ArrowRight', 'ArrowDown'].includes(keyboard.key) ? 1 : -1,
-      edge = (region.dataset.edge ?? 'end') as ResizableRegionEdge,
-      raw = resizeRegionFromPointer(appRegionSize(id), direction * 16, edge);
-    if (appRegionSize(id) <= terminalDrawerMin.value && raw < terminalDrawerMin.value) {
-      setTerminalDrawerVisible(false);
-      return;
-    }
-    setAppRegionSize(id, raw);
-  });
-  window.addEventListener('pointermove', (event) => {
-    const drag = dependencies.appRegionResizeDrag;
-    if (!drag) return;
-    const point = drag.axis === 'horizontal' ? event.clientX : event.clientY,
-      raw = resizeRegionFromPointer(drag.startSize, point - drag.startPoint, drag.edge);
-    if (drag.id === 'app-bottom-drawer') {
-      const decision = terminalDrawerDragDecision(raw, terminalDrawerMax.value, terminalDrawerMin.value);
-      drag.pendingSize = decision.size;
-      drag.collapseRequested = decision.collapse;
-    } else drag.pendingSize = normalizeAppRegionSize(drag.id, raw);
-    if (drag.frame !== undefined) return;
-    drag.frame = requestAnimationFrame(() => {
-      drag.frame = undefined;
-      drag.region.style.setProperty('--kui-resizable-region-size', `${drag.pendingSize}px`);
-      drag.handle.setAttribute('aria-valuenow', String(drag.pendingSize));
-    });
-  });
-  window.addEventListener('resize', syncTerminalDrawerMaximum);
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="toggle-ticket-inspector"]', () => {
+      setInspectorVisible(inspectorCollapsed.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="toggle-project-sidebar"]', () => {
+      setSidebarVisible(sidebarCollapsed.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'pointerdown', '[data-kui-resize-handle]', (event, target) => {
+      const handle = target as HTMLElement,
+        region = handle.closest<HTMLElement>('[data-workbench-rail], [data-workbench-drawer]'),
+        id = handle.dataset.regionId;
+      // The rails are driven by Kerf's `wireWorkbench`; only the terminal drawer keeps the app's own drag
+      // (its measured maximum and drag-past-minimum collapse, HS2-P289N2).
+      if (!region || id !== 'app-bottom-drawer' || region.dataset.collapsed === 'true') return;
+      event.preventDefault();
+      const axis = (region.dataset.axis ?? 'horizontal') as ResizableRegionAxis;
+      dependencies.appRegionResizeDrag = {
+        id,
+        axis,
+        edge: (region.dataset.edge ?? 'end') as ResizableRegionEdge,
+        startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY,
+        startSize: appRegionSize(id),
+        pendingSize: appRegionSize(id),
+        region,
+        handle,
+      };
+      region.dataset.resizing = 'true';
+      document.body.dataset.resizingRegion = axis;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'keydown', '[data-kui-resize-handle]', (event, target) => {
+      const keyboard = event as KeyboardEvent,
+        handle = target as HTMLElement,
+        region = handle.closest<HTMLElement>('[data-workbench-rail], [data-workbench-drawer]'),
+        id = handle.dataset.regionId;
+      if (!region || id !== 'app-bottom-drawer') return;
+      const axis = (region.dataset.axis ?? 'horizontal') as ResizableRegionAxis;
+      if (
+        (axis === 'horizontal' && !['ArrowLeft', 'ArrowRight'].includes(keyboard.key)) ||
+        (axis === 'vertical' && !['ArrowUp', 'ArrowDown'].includes(keyboard.key))
+      )
+        return;
+      event.preventDefault();
+      const direction = ['ArrowRight', 'ArrowDown'].includes(keyboard.key) ? 1 : -1,
+        edge = (region.dataset.edge ?? 'end') as ResizableRegionEdge,
+        raw = resizeRegionFromPointer(appRegionSize(id), direction * 16, edge);
+      if (appRegionSize(id) <= terminalDrawerMin.value && raw < terminalDrawerMin.value) {
+        setTerminalDrawerVisible(false);
+        return;
+      }
+      setAppRegionSize(id, raw);
+    }),
+  );
+  window.addEventListener(
+    'pointermove',
+    (event) => {
+      const drag = dependencies.appRegionResizeDrag;
+      if (!drag) return;
+      const point = drag.axis === 'horizontal' ? event.clientX : event.clientY,
+        raw = resizeRegionFromPointer(drag.startSize, point - drag.startPoint, drag.edge);
+      if (drag.id === 'app-bottom-drawer') {
+        const decision = terminalDrawerDragDecision(raw, terminalDrawerMax.value, terminalDrawerMin.value);
+        drag.pendingSize = decision.size;
+        drag.collapseRequested = decision.collapse;
+      } else drag.pendingSize = normalizeAppRegionSize(drag.id, raw);
+      if (drag.frame !== undefined) return;
+      drag.frame = requestAnimationFrame(() => {
+        drag.frame = undefined;
+        drag.region.style.setProperty('--kui-resizable-region-size', `${drag.pendingSize}px`);
+        drag.handle.setAttribute('aria-valuenow', String(drag.pendingSize));
+      });
+    },
+    { signal: lifetime.signal },
+  );
+  window.addEventListener('resize', syncTerminalDrawerMaximum, { signal: lifetime.signal });
   function finishAppRegionResize() {
     const drag = dependencies.appRegionResizeDrag;
     if (!drag) return;
@@ -249,8 +263,8 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         window.dispatchEvent(new CustomEvent(TERMINAL_DRAWER_RESIZE_END_EVENT));
       });
   }
-  window.addEventListener('pointerup', finishAppRegionResize);
-  window.addEventListener('pointercancel', finishAppRegionResize);
+  window.addEventListener('pointerup', finishAppRegionResize, { signal: lifetime.signal });
+  window.addEventListener('pointercancel', finishAppRegionResize, { signal: lifetime.signal });
   // Kerf ListItem rows show their drag-target state through Kerf's own `data-state`; other targets
   // (project tabs, the composer) keep the app attribute only.
   function markDragTarget(target: HTMLElement) {
@@ -269,83 +283,97 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       clearDragTarget(target);
     });
   }
-  delegate(document.body, 'dragstart', '[data-action="select-ticket-row"]', (event, target) => {
-    const source = project(),
-      slug = data(target).ticketSlug;
-    if (!source || !slug) return;
-    const slugs = selectedTicketSlugs.value.includes(slug) ? [...selectedTicketSlugs.value] : [slug];
-    dependencies.draggedTickets = { slugs, source };
-    const transfer = (event as DragEvent).dataTransfer;
-    if (transfer) {
-      transfer.effectAllowed = 'copyMove';
-      transfer.setData('application/x-hotsheet-tickets', slugs.join(','));
-    }
-  });
-  delegate(
-    document.body,
-    'dragover',
-    '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
-    (event, target) => {
+  lifetime.add(
+    delegate(document.body, 'dragstart', '[data-action="select-ticket-row"]', (event, target) => {
+      const source = project(),
+        slug = data(target).ticketSlug;
+      if (!source || !slug) return;
+      const slugs = selectedTicketSlugs.value.includes(slug) ? [...selectedTicketSlugs.value] : [slug];
+      dependencies.draggedTickets = { slugs, source };
+      const transfer = (event as DragEvent).dataTransfer;
+      if (transfer) {
+        transfer.effectAllowed = 'copyMove';
+        transfer.setData('application/x-hotsheet-tickets', slugs.join(','));
+      }
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'dragover',
+      '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
+      (event, target) => {
+        const drag = dependencies.draggedTickets;
+        if (!drag) return;
+        const destinationProject = data(target).ticketDropProject;
+        if (destinationProject === drag.source.id) return;
+        event.preventDefault();
+        markDragTarget(target as HTMLElement);
+        if ((event as DragEvent).dataTransfer)
+          (event as DragEvent).dataTransfer!.dropEffect =
+            destinationProject || data(target).ticketDropAction ? 'copy' : 'move';
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'dragleave',
+      '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
+      (_event, target) => {
+        clearDragTarget(target as HTMLElement);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'drop', '[data-ticket-drop-status]', (event, target) => {
       const drag = dependencies.draggedTickets;
-      if (!drag) return;
-      const destinationProject = data(target).ticketDropProject;
-      if (destinationProject === drag.source.id) return;
+      if (!drag || project()?.id !== drag.source.id) return;
       event.preventDefault();
-      markDragTarget(target as HTMLElement);
-      if ((event as DragEvent).dataTransfer)
-        (event as DragEvent).dataTransfer!.dropEffect =
-          destinationProject || data(target).ticketDropAction ? 'copy' : 'move';
-    },
+      event.stopPropagation();
+      const nextStatus = data(target).ticketDropStatus,
+        itemId = data(target).itemId,
+        rows = tickets.value.filter((ticket) => drag.slugs.includes(ticket.slug)),
+        eligible = rows
+          .filter((ticket) =>
+            nextStatus === 'not_started' && itemId === 'all'
+              ? ['backlog', 'archive', 'deleted', 'moved'].includes(ticket.status ?? '')
+              : ticket.status !== nextStatus,
+          )
+          .map((ticket) => ticket.slug);
+      clearTicketDrag();
+      if (eligible.length === 1) void history().execute(eligible[0], { status: nextStatus });
+      else if (eligible.length > 1)
+        void executeBulkTicketAction({ kind: 'field', field: 'status', value: nextStatus! }, eligible);
+    }),
   );
-  delegate(
-    document.body,
-    'dragleave',
-    '[data-ticket-drop-status], [data-ticket-drop-action], [data-ticket-drop-project]',
-    (_event, target) => {
-      clearDragTarget(target as HTMLElement);
-    },
+  lifetime.add(
+    delegate(document.body, 'drop', '[data-ticket-drop-action="duplicate"]', (event) => {
+      const drag = dependencies.draggedTickets,
+        destination = project();
+      if (!drag || !destination) return;
+      event.preventDefault();
+      event.stopPropagation();
+      clearTicketDrag();
+      void copyDraggedTickets(destination, drag);
+    }),
   );
-  delegate(document.body, 'drop', '[data-ticket-drop-status]', (event, target) => {
-    const drag = dependencies.draggedTickets;
-    if (!drag || project()?.id !== drag.source.id) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const nextStatus = data(target).ticketDropStatus,
-      itemId = data(target).itemId,
-      rows = tickets.value.filter((ticket) => drag.slugs.includes(ticket.slug)),
-      eligible = rows
-        .filter((ticket) =>
-          nextStatus === 'not_started' && itemId === 'all'
-            ? ['backlog', 'archive', 'deleted', 'moved'].includes(ticket.status ?? '')
-            : ticket.status !== nextStatus,
-        )
-        .map((ticket) => ticket.slug);
-    clearTicketDrag();
-    if (eligible.length === 1) void history().execute(eligible[0], { status: nextStatus });
-    else if (eligible.length > 1)
-      void executeBulkTicketAction({ kind: 'field', field: 'status', value: nextStatus! }, eligible);
-  });
-  delegate(document.body, 'drop', '[data-ticket-drop-action="duplicate"]', (event) => {
-    const drag = dependencies.draggedTickets,
-      destination = project();
-    if (!drag || !destination) return;
-    event.preventDefault();
-    event.stopPropagation();
-    clearTicketDrag();
-    void copyDraggedTickets(destination, drag);
-  });
-  delegate(document.body, 'drop', '[data-ticket-drop-project]', (event, target) => {
-    const drag = dependencies.draggedTickets,
-      destination = projects.value.find((item) => item.id === data(target).ticketDropProject);
-    if (!drag || !destination || destination.id === drag.source.id) return;
-    event.preventDefault();
-    event.stopPropagation();
-    clearTicketDrag();
-    void copyDraggedTickets(destination, drag);
-  });
-  delegate(document.body, 'dragend', '[data-action="select-ticket-row"]', () => {
-    clearTicketDrag();
-  });
+  lifetime.add(
+    delegate(document.body, 'drop', '[data-ticket-drop-project]', (event, target) => {
+      const drag = dependencies.draggedTickets,
+        destination = projects.value.find((item) => item.id === data(target).ticketDropProject);
+      if (!drag || !destination || destination.id === drag.source.id) return;
+      event.preventDefault();
+      event.stopPropagation();
+      clearTicketDrag();
+      void copyDraggedTickets(destination, drag);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'dragend', '[data-action="select-ticket-row"]', () => {
+      clearTicketDrag();
+    }),
+  );
   document.addEventListener(
     'pointerdown',
     (event) => {
@@ -359,7 +387,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       )
         active.blur();
     },
-    { capture: true },
+    { capture: true, signal: lifetime.signal },
   );
   document.addEventListener(
     'keydown',
@@ -496,7 +524,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       if (action === 'copy' || action === 'cut') copySelection(action === 'cut');
       else void pasteSelection();
     },
-    { capture: true },
+    { capture: true, signal: lifetime.signal },
   );
   // Each pointer-positioned menu renders a context-mode Kerf PopupMenu from its signal; open it once
   // it is in the DOM. The signal stays the source of truth for dismissal below (HS2-2EHD8R).
@@ -532,53 +560,66 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       if (attachmentMenu.value && !(event.target as Element).closest('[data-component="attachment-context-menu"]'))
         attachmentMenu.value = undefined;
     },
-    { capture: true },
+    { capture: true, signal: lifetime.signal },
   );
-  document.addEventListener('pointerdown', (event) => {
-    const target = (event.target as Element).closest<HTMLElement>('[data-action="run-command"]');
-    if (!target) return;
-    dependencies.commandLongPressFired = false;
-    if (dependencies.commandLongPressTimer !== undefined) window.clearTimeout(dependencies.commandLongPressTimer);
-    dependencies.commandLongPressTimer = window.setTimeout(() => {
-      dependencies.commandLongPressTimer = undefined;
-      dependencies.commandLongPressFired = true;
-      void openCommandHistory(target.dataset.itemId!);
-    }, 550);
-  });
-  for (const eventName of ['pointerup', 'pointercancel'] as const)
-    document.addEventListener(eventName, () => {
-      if (dependencies.commandLongPressTimer !== undefined) {
-        window.clearTimeout(dependencies.commandLongPressTimer);
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      const target = (event.target as Element).closest<HTMLElement>('[data-action="run-command"]');
+      if (!target) return;
+      dependencies.commandLongPressFired = false;
+      if (dependencies.commandLongPressTimer !== undefined) window.clearTimeout(dependencies.commandLongPressTimer);
+      dependencies.commandLongPressTimer = window.setTimeout(() => {
         dependencies.commandLongPressTimer = undefined;
-      }
-    });
-  document.addEventListener('keydown', (event) => {
-    if (
-      !event.defaultPrevented &&
-      attachmentGalleryUrl.value &&
-      !document.querySelector('.attachment-gallery video') &&
-      ['ArrowLeft', 'ArrowRight'].includes(event.key)
-    ) {
-      event.preventDefault();
-      shiftGallery(event.key === 'ArrowLeft' ? -1 : 1);
-      return;
-    }
-    if (event.key === 'Escape') {
-      const galleryOpen = Boolean(attachmentGalleryUrl.value);
-      ticketContextMenu.value = undefined;
-      appTabContextMenu.value = undefined;
-      terminalContextMenu.value = undefined;
-      repositoryFileMenu.value = undefined;
-      attachmentMenu.value = undefined;
-      resetAttachmentGallery();
-      magnifiedTerminalKey.value = undefined;
-      if (galleryOpen) {
+        dependencies.commandLongPressFired = true;
+        void openCommandHistory(target.dataset.itemId!);
+      }, 550);
+    },
+    { signal: lifetime.signal },
+  );
+  for (const eventName of ['pointerup', 'pointercancel'] as const)
+    document.addEventListener(
+      eventName,
+      () => {
+        if (dependencies.commandLongPressTimer !== undefined) {
+          window.clearTimeout(dependencies.commandLongPressTimer);
+          dependencies.commandLongPressTimer = undefined;
+        }
+      },
+      { signal: lifetime.signal },
+    );
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (
+        !event.defaultPrevented &&
+        attachmentGalleryUrl.value &&
+        !document.querySelector('.attachment-gallery video') &&
+        ['ArrowLeft', 'ArrowRight'].includes(event.key)
+      ) {
         event.preventDefault();
-        event.stopImmediatePropagation();
+        shiftGallery(event.key === 'ArrowLeft' ? -1 : 1);
+        return;
       }
-    }
-  });
-  delegate(document.body, 'click', '*', completePointerDetailsFinish);
-  delegateCapture(document.body, 'pointerup', '*', schedulePointerDetailsFinish);
-  delegateCapture(document.body, 'pointercancel', '*', schedulePointerDetailsFinish);
+      if (event.key === 'Escape') {
+        const galleryOpen = Boolean(attachmentGalleryUrl.value);
+        ticketContextMenu.value = undefined;
+        appTabContextMenu.value = undefined;
+        terminalContextMenu.value = undefined;
+        repositoryFileMenu.value = undefined;
+        attachmentMenu.value = undefined;
+        resetAttachmentGallery();
+        magnifiedTerminalKey.value = undefined;
+        if (galleryOpen) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }
+    },
+    { signal: lifetime.signal },
+  );
+  lifetime.add(delegate(document.body, 'click', '*', completePointerDetailsFinish));
+  lifetime.add(delegateCapture(document.body, 'pointerup', '*', schedulePointerDetailsFinish));
+  lifetime.add(delegateCapture(document.body, 'pointercancel', '*', schedulePointerDetailsFinish));
+  return lifetime.dispose;
 }

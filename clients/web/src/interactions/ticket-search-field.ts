@@ -9,6 +9,7 @@ import {
 } from '../components/ticket-search-field';
 import { dateTokenFromInput, type SearchDatePrefix } from '../inline-search';
 import { data } from './dom';
+import { createInteractionLifetime, type InteractionTeardown } from './lifetime';
 
 /**
  * Per-field callbacks for the actions every TicketSearchField renders. Each receives the owning
@@ -59,54 +60,72 @@ function applyDate(root: HTMLElement, target: Element, handlers: TicketSearchFie
  * clear actions, and Home/⌘← caret placement. Register it before `wireTokenSearchFields` so the
  * focus handlers can read a chip's position before Kerf removes or expands it.
  */
-export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearchFieldHandlers): void {
+export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearchFieldHandlers): InteractionTeardown {
+  const lifetime = createInteractionLifetime();
   const action = (name: string) => `[data-action="${name}"]`;
-  delegate(
-    root,
-    'keydown',
-    '.ticket-search-field [data-token-search-editor], .ticket-search-form-field [data-token-search-editor]',
-    (event, target) => {
-      const keyboard = event as KeyboardEvent;
-      if (keyboard.key === 'Home' || (keyboard.key === 'ArrowLeft' && (keyboard.metaKey || keyboard.ctrlKey))) {
-        event.preventDefault();
-        placeTokenSearchCaret(target as HTMLElement, 0);
-      }
-    },
+  lifetime.add(
+    delegate(
+      root,
+      'keydown',
+      '.ticket-search-field [data-token-search-editor], .ticket-search-form-field [data-token-search-editor]',
+      (event, target) => {
+        const keyboard = event as KeyboardEvent;
+        if (keyboard.key === 'Home' || (keyboard.key === 'ArrowLeft' && (keyboard.metaKey || keyboard.ctrlKey))) {
+          event.preventDefault();
+          placeTokenSearchCaret(target as HTMLElement, 0);
+        }
+      },
+    ),
   );
-  delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.removeToken), (_event, target) => {
-    const raw = data(target).tokenValue;
-    if (raw)
+  lifetime.add(
+    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.removeToken), (_event, target) => {
+      const raw = data(target).tokenValue;
+      if (raw)
+        withField(root, target, (id) => {
+          handlers.removeToken(id, raw);
+        });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.editToken), (_event, target) => {
+      const raw = data(target).tokenValue;
+      if (raw)
+        withField(root, target, (id) => {
+          handlers.editToken(id, raw);
+        });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.toggleHelp), (_event, target) => {
       withField(root, target, (id) => {
-        handlers.removeToken(id, raw);
+        handlers.toggleHelp(id);
       });
-  });
-  delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.editToken), (_event, target) => {
-    const raw = data(target).tokenValue;
-    if (raw)
-      withField(root, target, (id) => {
-        handlers.editToken(id, raw);
-      });
-  });
-  delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.toggleHelp), (_event, target) => {
-    withField(root, target, (id) => {
-      handlers.toggleHelp(id);
-    });
-  });
-  delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.applyDate), (_event, target) => {
-    applyDate(root, target, handlers);
-  });
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.applyDate), (_event, target) => {
+      applyDate(root, target, handlers);
+    }),
+  );
   // Enter inside the date helper applies it instead of submitting an enclosing form.
-  delegate(root, 'keydown', '.ticket-search-field__date input', (event, target) => {
-    if ((event as KeyboardEvent).key !== 'Enter') return;
-    event.preventDefault();
-    applyDate(root, target, handlers);
-  });
-  delegate(root, 'mousedown', action(TICKET_SEARCH_ACTIONS.clear), (event) => {
-    event.preventDefault();
-  });
-  delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.clear), (_event, target) => {
-    withField(root, target, (id) => {
-      handlers.clear(id);
-    });
-  });
+  lifetime.add(
+    delegate(root, 'keydown', '.ticket-search-field__date input', (event, target) => {
+      if ((event as KeyboardEvent).key !== 'Enter') return;
+      event.preventDefault();
+      applyDate(root, target, handlers);
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'mousedown', action(TICKET_SEARCH_ACTIONS.clear), (event) => {
+      event.preventDefault();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', action(TICKET_SEARCH_ACTIONS.clear), (_event, target) => {
+      withField(root, target, (id) => {
+        handlers.clear(id);
+      });
+    }),
+  );
+  return lifetime.dispose;
 }

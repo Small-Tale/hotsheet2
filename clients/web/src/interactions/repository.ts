@@ -13,6 +13,7 @@ import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { updateRepositoryFileSelection } from '../repository-file-selection';
 import { data } from './dom';
+import { createInteractionLifetime } from './lifetime';
 import { type Control, type Project, type RepositoryDetailState } from './types';
 
 /** Live application bindings used by this handler group. */
@@ -51,6 +52,7 @@ export interface RepositoryInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireRepositoryInteractions(dependencies: RepositoryInteractionsDependencies) {
+  const lifetime = createInteractionLifetime();
   const {
     repository,
     repositoryView,
@@ -78,28 +80,38 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
   } = dependencies;
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  delegate(document.body,'click','[data-action="open-repository-status"]',()=>{const status=repository.value,view=status?.conflicted?'conflicted':status?.unstaged?'unstaged':status?.staged?'staged':status?.untracked?'untracked':'commits';repositoryView.value=view;repositorySetupStep.value=status?.initialized===false?'initialize':undefined;repositorySetupError.value='';repositoryFileMenu.value=undefined;repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;repositoryComparison.value={active:false,side:'a'};expandedCodeReviewCommits.value=[];(document.querySelector('#repository-status-popover') as Control).showPopover?.();if(status?.initialized!==false)void loadRepositoryDetail(view,true)});
-  delegate(document.body, 'click', '[data-action="refresh-repository-status"]', () => {
-    void refreshRepositoryStatus();
-  });
-  delegate(document.body, 'click', '[data-action="initialize-repository"]', () => {
-    void initializeRepository();
-  });
-  delegate(document.body, 'submit', '[data-action="connect-repository-remote"]', (event, target) => {
-    event.preventDefault();
-    void connectRepositoryRemote(target as HTMLFormElement);
-  });
-  delegate(document.body, 'click', '[data-action="skip-repository-remote"]', () => {
-    skipRepositoryRemote();
-  });
-  delegate(document.body, 'click', '[data-action="select-repository-view"]', (_event, target) => {
-    const view = data(target).itemId as RepositoryStatusView;
-    repositoryView.value = view;
-    repositoryFileMenu.value = undefined;
-    repositorySelectedFiles.value = [];
-    dependencies.repositoryFileSelectionAnchor = undefined;
-    void loadRepositoryDetail(view, true);
-  });
+  lifetime.add(delegate(document.body,'click','[data-action="open-repository-status"]',()=>{const status=repository.value,view=status?.conflicted?'conflicted':status?.unstaged?'unstaged':status?.staged?'staged':status?.untracked?'untracked':'commits';repositoryView.value=view;repositorySetupStep.value=status?.initialized===false?'initialize':undefined;repositorySetupError.value='';repositoryFileMenu.value=undefined;repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;repositoryComparison.value={active:false,side:'a'};expandedCodeReviewCommits.value=[];(document.querySelector('#repository-status-popover') as Control).showPopover?.();if(status?.initialized!==false)void loadRepositoryDetail(view,true)}));
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="refresh-repository-status"]', () => {
+      void refreshRepositoryStatus();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="initialize-repository"]', () => {
+      void initializeRepository();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', '[data-action="connect-repository-remote"]', (event, target) => {
+      event.preventDefault();
+      void connectRepositoryRemote(target as HTMLFormElement);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="skip-repository-remote"]', () => {
+      skipRepositoryRemote();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="select-repository-view"]', (_event, target) => {
+      const view = data(target).itemId as RepositoryStatusView;
+      repositoryView.value = view;
+      repositoryFileMenu.value = undefined;
+      repositorySelectedFiles.value = [];
+      dependencies.repositoryFileSelectionAnchor = undefined;
+      void loadRepositoryDetail(view, true);
+    }),
+  );
   function selectRepositoryComparisonCommit(sha: string) {
     const current = repositoryComparison.value;
     repositoryComparison.value = current.side === 'a' ? { ...current, a: sha, side: 'b' } : { ...current, b: sha };
@@ -109,37 +121,47 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
       ? expandedCodeReviewCommits.value.filter((item) => item !== sha)
       : [...expandedCodeReviewCommits.value, sha];
   }
-  delegate(document.body, 'click', '[data-action="toggle-repository-comparison"]', () => {
-    if (repositoryComparison.value.active) {
-      repositoryComparison.value = { active: false, side: 'a' };
-      return;
-    }
-    repositoryView.value = 'commits';
-    repositoryComparison.value = { active: true, side: 'a' };
-    if (repositoryDetail.value.view !== 'commits') void loadRepositoryDetail('commits', true);
-  });
-  delegate(document.body, 'click', '[data-action="set-repository-comparison-side"]', (_event, target) => {
-    repositoryComparison.value = { ...repositoryComparison.value, side: data(target).comparisonSide as 'a' | 'b' };
-  });
-  delegate(document.body, 'click', '[data-action="select-repository-comparison-commit"]', (_event, target) => {
-    selectRepositoryComparisonCommit(data(target).commitSha!);
-  });
-  delegate(document.body, 'click', '[data-action="toggle-code-review-commit"]', (_event, target) => {
-    toggleExpandedCodeReviewCommit(data(target).commitSha!);
-  });
-  delegate(
-    document.body,
-    'keydown',
-    '[data-action="select-repository-comparison-commit"],[data-action="toggle-code-review-commit"]',
-    (event, target) => {
-      const key = (event as KeyboardEvent).key;
-      if (key !== 'Enter' && key !== ' ') return;
-      event.preventDefault();
-      const action = data(target).action,
-        sha = data(target).commitSha!;
-      if (action === 'select-repository-comparison-commit') selectRepositoryComparisonCommit(sha);
-      else toggleExpandedCodeReviewCommit(sha);
-    },
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="toggle-repository-comparison"]', () => {
+      if (repositoryComparison.value.active) {
+        repositoryComparison.value = { active: false, side: 'a' };
+        return;
+      }
+      repositoryView.value = 'commits';
+      repositoryComparison.value = { active: true, side: 'a' };
+      if (repositoryDetail.value.view !== 'commits') void loadRepositoryDetail('commits', true);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="set-repository-comparison-side"]', (_event, target) => {
+      repositoryComparison.value = { ...repositoryComparison.value, side: data(target).comparisonSide as 'a' | 'b' };
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="select-repository-comparison-commit"]', (_event, target) => {
+      selectRepositoryComparisonCommit(data(target).commitSha!);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="toggle-code-review-commit"]', (_event, target) => {
+      toggleExpandedCodeReviewCommit(data(target).commitSha!);
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'keydown',
+      '[data-action="select-repository-comparison-commit"],[data-action="toggle-code-review-commit"]',
+      (event, target) => {
+        const key = (event as KeyboardEvent).key;
+        if (key !== 'Enter' && key !== ' ') return;
+        event.preventDefault();
+        const action = data(target).action,
+          sha = data(target).commitSha!;
+        if (action === 'select-repository-comparison-commit') selectRepositoryComparisonCommit(sha);
+        else toggleExpandedCodeReviewCommit(sha);
+      },
+    ),
   );
   async function performRepositoryFileAction(path: string, action: 'open' | 'reveal') {
     const current = project();
@@ -234,86 +256,104 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
       ...position,
     };
   }
-  delegate(document.body, 'click', '[data-action="open-repository-file-menu-trigger"]', (event, target) => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const box = target.getBoundingClientRect();
-    openRepositoryFileMenu(target, box.right, box.bottom);
-  });
-  delegate(document.body, 'keydown', '[data-action="open-repository-file-menu-trigger"]', (event, target) => {
-    const key = (event as KeyboardEvent).key;
-    if (key !== 'Enter' && key !== ' ') return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const box = target.getBoundingClientRect();
-    openRepositoryFileMenu(target, box.right, box.bottom);
-  });
-  delegate(document.body, 'click', repositoryFileSelector, (event, target) => {
-    selectRepositoryFile(target, event as MouseEvent);
-  });
-  delegate(document.body, 'dblclick', repositoryFileSelector, (event, target) => {
-    if ((event.target as Element).closest('[data-action="open-repository-file-menu-trigger"]')) return;
-    void performRepositoryFileAction(data(target).itemId!, 'open');
-  });
-  delegate(document.body, 'keydown', repositoryFileSelector, (event, target) => {
-    const key = (event as KeyboardEvent).key;
-    if (key !== 'Enter' && key !== ' ') return;
-    event.preventDefault();
-    selectRepositoryFile(target, event as KeyboardEvent);
-  });
-  delegate(document.body, 'contextmenu', repositoryFileSelector, (event, target) => {
-    event.preventDefault();
-    const pointer = event as MouseEvent;
-    openRepositoryFileMenu(target, pointer.clientX, pointer.clientY);
-  });
-  delegate(document.body, 'click', '[data-repository-file-action]', (event, target) => {
-    event.stopPropagation();
-    const menu = repositoryFileMenu.value,
-      action = data(target).repositoryFileAction;
-    if (!menu) return;
-    const paths = menu.paths ?? [menu.path];
-    repositoryFileMenu.value = undefined;
-    if (action === 'show-diff') {
-      if (menu.diff === 'ticket') openTicketFileDiff(paths);
-      else if (menu.diff === 'staged' || menu.diff === 'unstaged') void openRepositoryFileDiff(paths, menu.diff);
-      return;
-    }
-    if (action === 'copy-path' || action === 'copy-absolute-path') {
-      const values =
-        action === 'copy-path' ? paths : (menu.absolutePaths ?? (menu.absolutePath ? [menu.absolutePath] : []));
-      void copyText(values.join('\n'))
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="open-repository-file-menu-trigger"]', (event, target) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const box = target.getBoundingClientRect();
+      openRepositoryFileMenu(target, box.right, box.bottom);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'keydown', '[data-action="open-repository-file-menu-trigger"]', (event, target) => {
+      const key = (event as KeyboardEvent).key;
+      if (key !== 'Enter' && key !== ' ') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const box = target.getBoundingClientRect();
+      openRepositoryFileMenu(target, box.right, box.bottom);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', repositoryFileSelector, (event, target) => {
+      selectRepositoryFile(target, event as MouseEvent);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'dblclick', repositoryFileSelector, (event, target) => {
+      if ((event.target as Element).closest('[data-action="open-repository-file-menu-trigger"]')) return;
+      void performRepositoryFileAction(data(target).itemId!, 'open');
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'keydown', repositoryFileSelector, (event, target) => {
+      const key = (event as KeyboardEvent).key;
+      if (key !== 'Enter' && key !== ' ') return;
+      event.preventDefault();
+      selectRepositoryFile(target, event as KeyboardEvent);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'contextmenu', repositoryFileSelector, (event, target) => {
+      event.preventDefault();
+      const pointer = event as MouseEvent;
+      openRepositoryFileMenu(target, pointer.clientX, pointer.clientY);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-repository-file-action]', (event, target) => {
+      event.stopPropagation();
+      const menu = repositoryFileMenu.value,
+        action = data(target).repositoryFileAction;
+      if (!menu) return;
+      const paths = menu.paths ?? [menu.path];
+      repositoryFileMenu.value = undefined;
+      if (action === 'show-diff') {
+        if (menu.diff === 'ticket') openTicketFileDiff(paths);
+        else if (menu.diff === 'staged' || menu.diff === 'unstaged') void openRepositoryFileDiff(paths, menu.diff);
+        return;
+      }
+      if (action === 'copy-path' || action === 'copy-absolute-path') {
+        const values =
+          action === 'copy-path' ? paths : (menu.absolutePaths ?? (menu.absolutePath ? [menu.absolutePath] : []));
+        void copyText(values.join('\n'))
+          .then(() => {
+            showToast(`${values.length === 1 ? 'Path' : `${values.length} paths`} copied.`);
+          })
+          .catch((reason: unknown) => {
+            error.value = `Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`;
+          });
+        return;
+      }
+      if ((action === 'open' || action === 'reveal') && paths.length === 1)
+        void performRepositoryFileAction(paths[0], action);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="open-repository-review"]', (_event, target) => {
+      const current = project(),
+        reviewTarget = codeReviewTarget(data(target));
+      if (!current || !reviewTarget) return;
+      void new Api(current.apiPath)
+        .openRepositoryReview(current.id, reviewTarget)
         .then(() => {
-          showToast(`${values.length === 1 ? 'Path' : `${values.length} paths`} copied.`);
+          showToast(`Opened in ${repository.value?.difftool ?? 'the configured diff tool'}.`);
         })
         .catch((reason: unknown) => {
-          error.value = `Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`;
+          error.value = reason instanceof Error ? reason.message : String(reason);
         });
-      return;
-    }
-    if ((action === 'open' || action === 'reveal') && paths.length === 1)
-      void performRepositoryFileAction(paths[0], action);
-  });
-  delegate(document.body, 'click', '[data-action="open-repository-review"]', (_event, target) => {
-    const current = project(),
-      reviewTarget = codeReviewTarget(data(target));
-    if (!current || !reviewTarget) return;
-    void new Api(current.apiPath)
-      .openRepositoryReview(current.id, reviewTarget)
-      .then(() => {
-        showToast(`Opened in ${repository.value?.difftool ?? 'the configured diff tool'}.`);
-      })
-      .catch((reason: unknown) => {
-        error.value = reason instanceof Error ? reason.message : String(reason);
-      });
-  });
+    }),
+  );
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  delegate(document.body,'click','[data-action="open-change-evidence"]',(_event,target)=>{const review=codeReview.value;if(!review)return;changeEvidenceView.value=(['docs','tests','source','other'] as const).find(category=>review.files?.some(file=>file.category===category))??'docs';repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;changeEvidenceReader.value=target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId;requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector<Control>('#change-evidence-dialog')?.showPopover?.()))});
-  delegate(document.body, 'click', '[data-action="select-change-evidence-view"]', (_event, target) => {
-    changeEvidenceView.value = data(target).itemId as ChangeEvidenceView;
-    repositorySelectedFiles.value = [];
-    dependencies.repositoryFileSelectionAnchor = undefined;
-  });
+  lifetime.add(delegate(document.body,'click','[data-action="open-change-evidence"]',(_event,target)=>{const review=codeReview.value;if(!review)return;changeEvidenceView.value=(['docs','tests','source','other'] as const).find(category=>review.files?.some(file=>file.category===category))??'docs';repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;changeEvidenceReader.value=target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId;requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector<Control>('#change-evidence-dialog')?.showPopover?.()))}));
+  lifetime.add(
+    delegate(document.body, 'click', '[data-action="select-change-evidence-view"]', (_event, target) => {
+      changeEvidenceView.value = data(target).itemId as ChangeEvidenceView;
+      repositorySelectedFiles.value = [];
+      dependencies.repositoryFileSelectionAnchor = undefined;
+    }),
+  );
   function openTicketFileDiff(paths: string[]) {
     const current = project(),
       ticket = selectedTicket.value;
@@ -334,10 +374,13 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
           codeReviewMessage.value = reason instanceof Error ? reason.message : String(reason);
       });
   }
-  delegate(document.body, 'submit', '[data-action="open-project-form"]', (event, target) => {
-    event.preventDefault();
-    const root = (target.querySelector('[name="project-root"]') as Control).value,
-      store = (target.querySelector('[name="ticket-store"]') as Control).value;
-    void openProject(root, store || undefined);
-  });
+  lifetime.add(
+    delegate(document.body, 'submit', '[data-action="open-project-form"]', (event, target) => {
+      event.preventDefault();
+      const root = (target.querySelector('[name="project-root"]') as Control).value,
+        store = (target.querySelector('[name="ticket-store"]') as Control).value;
+      void openProject(root, store || undefined);
+    }),
+  );
+  return lifetime.dispose;
 }

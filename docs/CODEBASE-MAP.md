@@ -57,6 +57,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/interactions/         # Twelve feature wiring modules: project-lifecycle, repository, navigation-and-tabs, terminals, ticket-selection, views-and-saved-views, commands-and-ai, notifications-and-links, search-and-composer, attachments-and-gallery, inspector-and-editor, shell-and-global
       types.ts                # Shared DOM/application contracts; no state ownership or import of main
       dom.ts                  # Shared delegated-host dataset helper
+      lifetime.ts             # InteractionLifetime: retained delegate disposers + native-listener AbortSignal; combined group teardown
       handler-transitions.test.ts # Callback-level live binding, range-selection, long-press and captured native-close regressions
       registration-inventory.txt # Ordered pre-extraction delegate/native/adapter contract, checked by interaction-wiring.test.ts
     src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
