@@ -1282,6 +1282,10 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
     'rgba(0, 0, 0, 0)',
   );
   await expect(dialog.getByRole('tab', { name: 'Focus' })).toHaveAttribute('aria-selected', 'true');
+  // The Add icon is sized by its LucideIcon `size` prop, not by CSS reaching into the AppTabs (HS2-YNW0B3).
+  const addIcon = dialog.getByRole('button', { name: 'Add visibility group' }).locator('svg');
+  await expect(addIcon).toHaveCSS('width', '16px');
+  await expect(addIcon).toHaveCSS('height', '16px');
   const types = dialog.locator('wa-select[name="terminal-visibility-types"]');
   await expect(types).toHaveJSProperty('value', ['shell', 'ai', 'chat']);
   await types.click();
@@ -4934,7 +4938,23 @@ test('catalogs the drawer phone focus-mode text-size control with and without th
     });
     expect(contained).toBe(true);
   }
-  await expect(page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]')).toBeVisible();
+  const drawerDemo = page.locator('.terminal-drawer-demo [data-component="terminal-drawer"]');
+  await expect(drawerDemo).toBeVisible();
+  // The drawer configures its dedicated TerminalSession through `focus`: inset in the drawer, edge to
+  // edge in focus mode, with no drawer CSS reaching into the session (HS2-YNW0B3).
+  const dedicated = (scope: typeof drawerDemo) =>
+    scope.locator('[data-component="terminal-session"]:not([hidden]) [data-component="terminal-viewport"]');
+  await expect(drawerDemo.locator('[data-component="terminal-session"]:not([hidden])')).toHaveAttribute(
+    'data-focus',
+    'false',
+  );
+  await expect(dedicated(drawerDemo)).toHaveCSS('padding', '8px');
+  await expect(shown.locator('[data-component="terminal-session"]:not([hidden])')).toHaveAttribute(
+    'data-focus',
+    'true',
+  );
+  await expect(dedicated(shown)).toHaveCSS('padding', '0px');
+  await expect(dedicated(shown)).toHaveCSS('overflow', 'hidden');
   // The control cycles the column fixture; both variants share it.
   await control.click();
   await expect(control).toHaveAttribute('data-columns', '50');

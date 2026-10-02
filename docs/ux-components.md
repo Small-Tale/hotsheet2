@@ -1625,11 +1625,15 @@ Styling ownership (HS2-DR549A):
   already padded by the home-indicator inset. The drawer never reaches into the dashboard.
 - **Buttons.** Only the tile's own footer actions get app button chrome. The zoom toolbar's and
   key bar's Kerf control groups own their buttons. One temporary rule restores the not-allowed
-  cursor on a disabled zoom button until KF-FTADQT ships.
+  cursor on a disabled zoom button until KF-FTADQT ships; its CSS-ownership allowlist entry is
+  tracked under KF-FTADQT itself.
 - **Visibility Select.** It uses Kerf's `toolbar-borderless` compact presentation, with a
   group-owned focus ring.
-- **`TerminalSession`.** It takes `mobile` from `TerminalDrawer` (the app's phone layout) and
-  clips its scaled xterm there.
+- **`TerminalSession`.** `TerminalDashboard` renders and styles it; `TerminalDrawer` composes it
+  with props only (HS2-YNW0B3). `mobile` (the app's phone layout) clips its scaled xterm, and
+  `focus` (drawer focus mode) drops the viewport's `--kui-space-xs` inset so the terminal fills
+  the focused surface edge to edge. Its dedicated rules follow the shared viewport rules so they
+  win in every connection state.
 - **`TerminalPreview`.** The live, non-interactive scaled terminal preview fills its positioned
   container and owns its frame, 1280×768 scaled canvas, and connecting fallback, which hides once
   the viewport connects or reconnects (HS2-148B5C). Containers tune only its public tokens:

@@ -65,7 +65,9 @@ describe('TerminalDrawer', () => {
     );
     // The drawer grid's tighter top inset is TerminalDashboard's own `drawer` layout (HS2-DR549A).
     expect(css).not.toContain('.terminal-dashboard__content');
-    expect(css).toMatch(/\.terminal-session \.terminal-viewport \{[^}]*padding: var\(--kui-space-xs\)/);
+    // The dedicated session's inset belongs to TerminalSession, which TerminalDashboard renders (HS2-YNW0B3).
+    expect(css).not.toContain('.terminal-session');
+    expect(css).not.toContain('.terminal-viewport');
   });
   it('reserves a complete gutter for focus rings and selected-tab shadows inside the shared scroller', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8'),
@@ -272,6 +274,8 @@ describe('TerminalDrawer', () => {
       ),
       css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     expect(markup).toContain('data-focus-mode="true"');
+    // Focus mode configures the dedicated session through its `focus` prop, not drawer CSS (HS2-YNW0B3).
+    expect(markup).toMatch(/class="terminal-session"[^>]*data-focus="true"/);
     expect(markup).toContain(
       'style="--terminal-focus-left:4px;--terminal-focus-top:18px;--terminal-focus-width:382px;--terminal-focus-height:492px"',
     );

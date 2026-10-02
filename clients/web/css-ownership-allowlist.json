@@ -327,14 +327,8 @@
     {
       "file": "src/components/terminal-dashboard.css",
       "selector": ".terminal-dashboard__zoom button:disabled",
-      "ticket": "HS2-YNW0B3",
-      "reason": "foreign-element: the descendant selector below .terminal-dashboard__zoom also reaches inside <FloatingToolbar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/terminal-drawer.css",
-      "selector": ".terminal-drawer[data-focus-mode='true'] .terminal-session .terminal-viewport",
-      "ticket": "HS2-YNW0B3",
-      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx; .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
+      "ticket": "KF-FTADQT",
+      "reason": "Temporary until KF-FTADQT ships: Kerf ToolbarControlGroup's native-button rule keeps a pointer cursor on a disabled button, so the dashboard restores not-allowed on its own zoom buttons"
     },
     {
       "file": "src/components/terminal-drawer.css",
@@ -347,42 +341,6 @@
       "selector": ".terminal-drawer__rail svg",
       "ticket": "HS2-7ZGYJY",
       "reason": "foreign-element: the descendant selector below .terminal-drawer__rail also reaches inside <PopupMenu>, <TabBar>, <ToolbarControlGroup>; use a child combinator, an own class, or the child's props"
-    },
-    {
-      "file": "src/components/terminal-drawer.css",
-      "selector": ".terminal-session",
-      "ticket": "HS2-YNW0B3",
-      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/components/terminal-drawer.css",
-      "selector": ".terminal-session[hidden]",
-      "ticket": "HS2-YNW0B3",
-      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/components/terminal-drawer.css",
-      "selector": ".terminal-session .terminal-viewport",
-      "ticket": "HS2-YNW0B3",
-      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx; .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/components/terminal-drawer.css",
-      "selector": ".terminal-session[data-mobile='true'] .terminal-viewport",
-      "ticket": "HS2-YNW0B3",
-      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx; .terminal-viewport belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/components/terminal-drawer.css",
-      "selector": ".terminal-session .xterm",
-      "ticket": "HS2-YNW0B3",
-      "reason": "foreign-class: .terminal-session belongs to src/components/terminal-dashboard.tsx"
-    },
-    {
-      "file": "src/components/terminal-visibility-dialog.css",
-      "selector": ".terminal-visibility-dialog__tabs svg",
-      "ticket": "HS2-YNW0B3",
-      "reason": "foreign-element: the descendant selector below .terminal-visibility-dialog__tabs also reaches inside <AppTab>; use a child combinator, an own class, or the child's props"
     },
     {
       "file": "src/components/ticket-close-dialog.css",

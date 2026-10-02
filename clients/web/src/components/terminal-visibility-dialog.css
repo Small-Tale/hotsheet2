@@ -46,10 +46,6 @@
   outline: var(--wa-focus-ring);
   outline-offset: -2px;
 }
-.terminal-visibility-dialog__tabs svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .terminal-visibility-dialog__body {
   min-height: 0;
   padding: var(--wa-space-s);

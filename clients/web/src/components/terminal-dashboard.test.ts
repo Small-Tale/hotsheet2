@@ -310,8 +310,22 @@ describe('TerminalDashboard', () => {
       'class="terminal-session" data-key="p:t1" data-mobile="false"',
     );
     expect(String(TerminalSession({ session, mobile: true }))).toContain('data-mobile="true"');
+    expect(css).toContainSource(".terminal-session[data-mobile='true'] .terminal-viewport { overflow: clip; }");
+  });
+  it('owns the dedicated session presentation and its focus-mode variant (HS2-YNW0B3)', () => {
+    const session = { id: 't1', projectId: 'p', projectName: 'P', alive: true, busy: false, scrollback: '' };
+    expect(String(TerminalSession({ session }))).toContain('data-focus="false"');
+    expect(String(TerminalSession({ session, focus: true }))).toContain('data-focus="true"');
+    expect(String(TerminalSession({ session, active: false }))).toMatch(/class="terminal-session"[^>]*hidden/);
+    expect(css).toMatchSource(/\.terminal-session \.terminal-viewport \{[^}]*padding: var\(--kui-space-xs\)/);
+    expect(css).toContainSource(".terminal-session[data-focus='true'] .terminal-viewport { padding: 0; }");
+    expect(css).toContainSource('.terminal-session .xterm { background: var(--hs-terminal-background); }');
+    // The dedicated rules follow the shared viewport rules so they win in every connection state.
+    expect(css.indexOf('.terminal-session .terminal-viewport {')).toBeGreaterThan(
+      css.indexOf(".terminal-viewport[data-connection='error'] {"),
+    );
     const drawerCss = readFileSync(new URL('./terminal-drawer.css', import.meta.url), 'utf8');
-    expect(drawerCss).toContainSource(".terminal-session[data-mobile='true'] .terminal-viewport { overflow: clip; }");
+    expect(drawerCss).not.toContain('.terminal-session');
   });
   it('owns the shared scaled preview frame, canvas, and connecting fallback (HS2-148B5C)', () => {
     const markup = String(TerminalPreview({ projectId: 'p', terminalId: 't1', viewportKey: 'close:t1' }));

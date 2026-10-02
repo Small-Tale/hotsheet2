@@ -397,17 +397,21 @@ export function TerminalSession({
   session,
   active = true,
   mobile = false,
+  focus = false,
 }: {
   session: TerminalDashboardSession;
   active?: boolean;
   /** Phone presentation: the scaled xterm is clipped rather than scrolled by its viewport. */
   mobile?: boolean;
+  /** Focus-mode presentation: the viewport drops its inset and fills the focused surface. */
+  focus?: boolean;
 }) {
   return (
     <section
       class="terminal-session"
       data-key={keyFor(session)}
       data-mobile={String(mobile)}
+      data-focus={String(focus)}
       data-component="terminal-session"
       data-terminal-key={keyFor(session)}
       hidden={!active}

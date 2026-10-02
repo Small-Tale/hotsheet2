@@ -123,7 +123,7 @@ export function TerminalVisibilityDialog({
               aria-label="Add visibility group"
               title="Add visibility group"
             >
-              <LucideIcon icon={Plus} name="plus" />
+              <LucideIcon icon={Plus} name="plus" size={16} />
             </button>
           </div>
         </div>

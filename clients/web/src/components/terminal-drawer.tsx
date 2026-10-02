@@ -304,7 +304,12 @@ export function TerminalDrawer({
           selectedChat.content
         ) : selectedSession ? (
           sessions.map((session) => (
-            <TerminalSession session={session} active={session.id === selectedSession.id} mobile={mobile} />
+            <TerminalSession
+              session={session}
+              active={session.id === selectedSession.id}
+              mobile={mobile}
+              focus={focusMode}
+            />
           ))
         ) : (
           <TerminalDashboard

@@ -53,6 +53,14 @@ describe('TerminalVisibilityDialog', () => {
       toolbar = css.match(/\.terminal-visibility-dialog__toolbar \{([^}]+)\}/)?.[1] ?? '';
     expect(toolbar).toContainSource('background:transparent');
     expect(toolbar).not.toContain('surface-lowered');
+    // The Add icon is sized by its LucideIcon prop; no selector reaches into the Kerf AppTabs (HS2-YNW0B3).
+    expect(css).not.toMatch(/__tabs svg/);
+    const markup = String(
+      TerminalVisibilityDialog({ open: true, state: initialTerminalVisibilityState(), scope: 'dashboard', groups }),
+    );
+    expect(markup).toMatch(
+      /class="terminal-visibility-dialog__add"[^]*?<svg[^>]*data-lucide="plus"[^>]*data-size="16"/,
+    );
   });
   it('uses selected app-tab styling, shared menu headers, and shared menu rows', () => {
     const markup = String(
