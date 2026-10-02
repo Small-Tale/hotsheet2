@@ -205,20 +205,26 @@ async fn terminal_creation_kind_is_stable_across_http_reattach_and_osc_output() 
             server.assert_output_kind(id, kind, None).await;
         }
         let list = server.list().await;
-        for (id, kind) in [
-            ("default", "shell"),
-            ("shell", "shell"),
-            ("ai", "ai"),
-            ("explicit-ai", "ai"),
+        // AI terminals also report the tool they launched, so clients can name their tabs after
+        // it; shells report none (HS2-HZK0NK).
+        for (id, kind, tool) in [
+            ("default", "shell", None),
+            ("shell", "shell", None),
+            ("ai", "ai", Some("kind-agent")),
+            // An explicit command that also connects a tool keeps the generic shell-session worker.
+            ("explicit-ai", "ai", None),
         ] {
-            assert_eq!(
-                list.as_array()
-                    .unwrap()
-                    .iter()
-                    .find(|info| info["id"] == id)
-                    .unwrap()["kind"],
-                kind
-            );
+            let info = list
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|info| info["id"] == id)
+                .unwrap();
+            assert_eq!(info["kind"], kind);
+            match tool {
+                Some(tool) => assert_eq!(info["tool"], tool, "{id} tool"),
+                None => assert!(info.get("tool").is_none(), "{id} reports no tool"),
+            }
             assert_eq!(
                 server
                     .request("DELETE", &format!("/terminals/{id}"), None)

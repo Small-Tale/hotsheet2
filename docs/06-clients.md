@@ -2196,6 +2196,11 @@ default, or this session's Drive choice), a divider, and every provider by name,
 that provider's own default model and effort (HS2-EK24KF). At phone widths (480 px and narrower)
 Kerf's PopupMenu places the submenu below its parent menu, or above when there is more room there,
 never over it, so the AI shell row and its siblings stay readable (`KF-5PZ768`, HS2-282GTZ).
+Default tab names follow what each terminal runs (HS2-HZK0NK): an AI shell is named after its
+provider and numbered among that provider's terminals in the project ("Claude 1", "Claude 2",
+"Codex 1", from the server-reported `tool`), and a plain shell is numbered among the project's
+shells ("Terminal 1"). Readable terminal ids keep their title-cased words, and a user's rename
+always wins.
 The menu has no redundant heading, and only the AI shell submenu carries a disclosure chevron. Its popup keeps the commands within the
 viewport as the drawer and window resize, and supplies native menu keyboard navigation
 (HS2-ZKKRZS, HS2-R8SMK2). Rapid Escape/reopen keeps arrow navigation and Enter selection

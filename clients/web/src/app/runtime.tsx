@@ -257,7 +257,7 @@ import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../ser
 import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
-import { defaultTerminalName, parseTerminalNames, terminalNameKey } from '../terminal-names';
+import { defaultTerminalNames, parseTerminalNames, terminalNameKey } from '../terminal-names';
 import { terminalDrawerActivation, terminalProjectOwner } from '../terminal-project-scope';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT, type TerminalFocusRequest } from '../terminal-viewport';
 import {
@@ -1322,13 +1322,13 @@ export async function startHotSheetWebClient() {
                 : []),
             ]),
             owned = infos.filter((session) => terminalProjectOwner(openProjects, session.cwd) === current.id),
+            defaultNames = defaultTerminalNames(owned, aiToolLabel),
             sessions = owned.map((session, index) => ({
               ...session,
               scrollback: '',
               projectId: current.id,
               projectName: current.name,
-              title:
-                terminalNames.value[terminalNameKey(current.id, session.id)] ?? defaultTerminalName(session.id, index),
+              title: terminalNames.value[terminalNameKey(current.id, session.id)] ?? defaultNames[index],
             }));
           return {
             projectId: current.id,

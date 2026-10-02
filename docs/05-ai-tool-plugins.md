@@ -500,7 +500,10 @@ its `[launch]` command. `[launch]` is explicitly separate from `[drive]`: the fo
 starts the interactive REPL, while the latter may start a headless protocol such as
 Codex app-server or Claude stream-json. `POST /terminals` with `connect:<tool>` and no
 `command` runs setup, safely resolves `[launch].program`, injects the server permission
-route, and spawns it in the PTY. Launching then spawns that command in a PTY. This is exactly
+route, and spawns it in the PTY. Launching then spawns that command in a PTY. `GET /terminals`
+reports such a terminal as `kind: "ai"` with `tool: "<tool>"` (from its immutable `<tool>-<id>`
+session worker id; an explicit `command` that also connects a tool reports no `tool`), which clients
+use to name AI tabs after the provider (HS2-HZK0NK). This is exactly
 the ticket's "initializing AI tools in terminals including setting up MCP and
 similar connections."
 

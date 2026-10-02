@@ -470,6 +470,8 @@ export interface TerminalInfo {
   id: string;
   /** Creation kind; older servers omit it and are treated as shell terminals. */
   kind?: 'shell' | 'ai';
+  /** The AI tool an `ai` terminal launched (for example `claude`); names its tab (HS2-HZK0NK). */
+  tool?: string;
   alive: boolean;
   busy: boolean;
   cwd?: string;

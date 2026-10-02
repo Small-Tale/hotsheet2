@@ -7996,6 +7996,27 @@ struct TerminalInfo {
     /// Tool progress percent 0-100 (OSC 9;4), if reported.
     #[serde(skip_serializing_if = "Option::is_none")]
     progress: Option<u8>,
+    /// The AI tool an `ai` terminal launched (for example `claude`), from its immutable
+    /// `<tool>-<id>` worker id; clients name AI tabs after it (HS2-HZK0NK).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool: Option<String>,
+}
+
+/// The AI tool of an `ai` terminal, recovered from its `<tool>-<id>` worker id. Shell terminals,
+/// workers that do not follow that shape, and an explicit-command terminal that also connects a
+/// tool (whose session worker is in the reserved `terminal` namespace) have none.
+fn ai_terminal_tool(
+    kind: hotsheet_terminals::TerminalKind,
+    worker: Option<&str>,
+    id: &str,
+) -> Option<String> {
+    if kind != hotsheet_terminals::TerminalKind::Ai {
+        return None;
+    }
+    worker?
+        .strip_suffix(&format!("-{id}"))
+        .filter(|tool| !tool.is_empty() && *tool != "terminal")
+        .map(str::to_string)
 }
 
 /// The terminal-manager key for a terminal id — the served store root is the project.
@@ -8013,11 +8034,13 @@ fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
         cwd: osc.cwd,
         link: osc.link,
         progress: osc.progress,
+        tool: ai_terminal_tool(term.kind(), term.worker_id(), id),
     }
 }
 
 /// Map a broker terminal-info onto the HTTP `TerminalInfo`.
 fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInfo {
+    let tool = ai_terminal_tool(bi.kind, bi.worker.as_deref(), &bi.id);
     TerminalInfo {
         id: bi.id,
         kind: bi.kind,
@@ -8026,6 +8049,7 @@ fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInfo {
         cwd: bi.cwd,
         link: bi.link,
         progress: bi.progress,
+        tool,
     }
 }
 
@@ -11951,6 +11975,39 @@ mod startup_bridge_tests {
         assert!(
             seen.paths.iter().any(|path| path.ends_with("ticket.md")),
             "{seen:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod ai_terminal_tool_tests {
+    use super::ai_terminal_tool;
+    use hotsheet_terminals::TerminalKind;
+
+    /// The tool comes only from an `ai` terminal's `<tool>-<id>` worker id (HS2-HZK0NK).
+    #[test]
+    fn recovers_the_tool_from_an_ai_terminal_worker_id() {
+        assert_eq!(
+            ai_terminal_tool(TerminalKind::Ai, Some("claude-01ABC"), "01ABC").as_deref(),
+            Some("claude")
+        );
+        // Tool names may themselves contain dashes.
+        assert_eq!(
+            ai_terminal_tool(TerminalKind::Ai, Some("kind-agent-ai"), "ai").as_deref(),
+            Some("kind-agent")
+        );
+        assert_eq!(
+            ai_terminal_tool(TerminalKind::Shell, Some("claude-01ABC"), "01ABC"),
+            None
+        );
+        assert_eq!(ai_terminal_tool(TerminalKind::Ai, None, "01ABC"), None);
+        assert_eq!(
+            ai_terminal_tool(TerminalKind::Ai, Some("claude-other"), "01ABC"),
+            None
+        );
+        assert_eq!(
+            ai_terminal_tool(TerminalKind::Ai, Some("-01ABC"), "01ABC"),
+            None
         );
     }
 }

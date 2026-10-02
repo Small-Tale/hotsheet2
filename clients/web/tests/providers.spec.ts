@@ -3976,6 +3976,72 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await page.screenshot({ path: test.info().outputPath('ai-shell-submenu-narrow.png') });
 });
 
+test('names AI shell tabs after their provider, numbered per provider (HS2-HZK0NK)', async ({ page }) => {
+  await mockProject(page);
+  // Mirrors POST/GET /terminals: generated ULID ids, and an `ai` terminal reports the tool it launched.
+  const terminals: Array<{
+    id: string;
+    kind: 'shell' | 'ai';
+    tool?: string;
+    alive: boolean;
+    busy: boolean;
+    cwd: string;
+  }> = [];
+  await page.route('**/*', async (route) => {
+    const request = route.request(),
+      path = new URL(request.url()).pathname;
+    if (!path.endsWith('/terminals')) return route.fallback();
+    if (request.method() === 'GET') return route.fulfill({ json: terminals });
+    if (request.method() !== 'POST') return route.fallback();
+    const body = request.postDataJSON() as { connect?: string },
+      id = `01JEDZC1ATK1BH4KGAZC3Z6W${String(terminals.length + 10).padStart(2, '0')}`,
+      info = {
+        id,
+        kind: body.connect ? ('ai' as const) : ('shell' as const),
+        ...(body.connect ? { tool: body.connect } : {}),
+        alive: true,
+        busy: false,
+        cwd: '/work/demo',
+      };
+    terminals.push(info);
+    return route.fulfill({ json: info });
+  });
+  await page.setViewportSize({ width: 1600, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    create = drawer.getByRole('button', { name: 'New drawer item' }),
+    menu = drawer.locator('[data-terminal-drawer-create]'),
+    parent = menu.locator('[data-item-id="ai-shell-providers"]'),
+    open = async (item: 'claude' | 'codex' | 'terminal') => {
+      await create.click();
+      if (item === 'terminal') {
+        await menu.locator('[data-action="create-terminal-drawer-item"][data-item-id="default-shell"]').click();
+        return;
+      }
+      await page.mouse.move(0, 0);
+      await parent.hover();
+      await parent.locator(`[data-action="create-terminal-drawer-item"][data-provider="${item}"]`).click();
+    },
+    tabNames = async () =>
+      (await drawer.getByRole('tablist', { name: 'Terminal drawer views' }).getByRole('tab').allTextContents())
+        .map((name) => name.trim())
+        .filter((name) => name !== 'Project grid' && name !== '');
+  await open('claude');
+  await expect.poll(tabNames).toEqual(['Claude 1']);
+  await open('claude');
+  await open('codex');
+  await open('terminal');
+  await expect.poll(tabNames).toEqual(['Claude 1', 'Claude 2', 'Codex 1', 'Terminal 1']);
+  await drawer.screenshot({ path: test.info().outputPath('ai-shell-tab-names-wide.png') });
+  // The names are derived from the server's terminal list, so a reload keeps them.
+  await page.reload();
+  await expect(drawer).toBeVisible();
+  await expect.poll(tabNames).toEqual(['Claude 1', 'Claude 2', 'Codex 1', 'Terminal 1']);
+});
+
 test('reopens the drawer AI shell submenu after Escape closes and breakpoint resizes (HS2-GV7A43)', async ({
   page,
 }) => {
