@@ -72,7 +72,7 @@ export function CorruptTicketRow({
   const key = corruptTicketKey(ticket);
   return (
     <article
-      class={`ticket-list-row ticket-list-row--list corrupt-ticket-row${selected ? ' ticket-list-row--selected' : ''}`}
+      class="corrupt-ticket-row"
       data-component="corrupt-ticket-row"
       data-list-edge={listEdge}
       data-selected={String(selected)}

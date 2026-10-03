@@ -11001,7 +11001,10 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(corrupt).toContainText('Ticket file could not be read');
   await expect(corrupt).toHaveAttribute('role', 'group');
   await expect(corrupt).toHaveCSS('padding', '8px 16px');
-  await expect(corrupt).toHaveCSS('gap', '8px');
+  // The row owns its list-row shell rather than TicketRow's `ticket-list-row` block (HS2-QSR1TG).
+  await expect(corrupt).not.toHaveClass(/ticket-list-row/);
+  await expect(corrupt).toHaveCSS('display', 'block');
+  await expect(corrupt).toHaveCSS('border-top-left-radius', '10.4px');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
   const errorRowBefore = await corrupt.evaluate((node) => {
     const icon = node.querySelector('[data-lucide="file-warning"]')!.getBoundingClientRect(),

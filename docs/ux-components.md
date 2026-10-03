@@ -2362,8 +2362,9 @@ findings) without changing a rendered pixel or computed style. Each fix gives ap
 - **ListItem tokens.** The Errors view row takes its danger tone from ListItem tokens on its app
   wrapper (`data-view-tone="danger"`) instead of a class on the ListItem.
 - **Own state.** `CorruptTicketRow`'s selected wiggle keys off its own `data-selected` instead of
-  TicketRow's modifier. `HS2-QSR1TG` tracks the remaining borrowed `ticket-list-row` markup
-  classes.
+  TicketRow's modifier. Since HS2-QSR1TG it also owns its list-row shell (surface, divider,
+  `listEdge` rounding, hover, and selected presentation) in `corrupt-ticket-row.css` instead of
+  rendering TicketRow's `ticket-list-row` classes; the rendered row is pixel-identical.
 
 Three entries remain, waiting on Kerf releases:
 

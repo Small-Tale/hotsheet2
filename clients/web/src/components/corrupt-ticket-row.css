@@ -1,12 +1,38 @@
+/* The row owns its list-row shell instead of borrowing TicketRow's `ticket-list-row` block (HS2-QSR1TG):
+   the same surface, divider, list-edge rounding, hover, and selected presentation as a list TicketRow. */
 .corrupt-ticket-row {
-  display: grid;
-  grid-template-columns: remify(32px) minmax(0, 1fr);
-  align-items: start;
-  gap: var(--kui-space-xs);
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: hidden;
   padding: var(--kui-space-xs) var(--kui-space-m);
+  border: 1px solid transparent;
+  border-bottom-color: var(--wa-color-surface-border);
+  border-radius: 0;
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+/* A list section clips to a rounded box; the rows at its edges round to match, as TicketRow does. */
+.corrupt-ticket-row[data-list-edge='start'] {
+  border-radius: remify(10.4px) remify(10.4px) 0 0;
+}
+.corrupt-ticket-row[data-list-edge='end'] {
+  border-radius: 0 0 remify(10.4px) remify(10.4px);
+}
+.corrupt-ticket-row[data-list-edge='only'] {
+  border-radius: remify(10.4px);
+}
+.corrupt-ticket-row:hover {
+  border-color: var(--wa-color-brand-border-normal);
 }
 /* The row's own selected state (its `data-selected`), not TicketRow's selected modifier (HS2-QM0C3T). */
 .corrupt-ticket-row[data-selected='true'] {
+  border-color: var(--wa-color-brand-border-normal);
+  background: var(--wa-color-brand-fill-quiet);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wa-color-brand-fill-loud) 12%, transparent);
   animation: corrupt-ticket-selected-wiggle 150ms ease-out;
 }
 @keyframes corrupt-ticket-selected-wiggle {

@@ -65,7 +65,15 @@ describe('CorruptTicketRow', () => {
   it('uses a visibly distinct actionable treatment and platform labels', () => {
     const markup = String(CorruptTicketRow({ ticket: corrupt, selected: true }));
     const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
-    expect(markup).toContain('ticket-list-row ticket-list-row--list corrupt-ticket-row ticket-list-row--selected');
+    // The row owns its list-row shell; it never borrows TicketRow's block classes (HS2-QSR1TG).
+    expect(markup).toContain('class="corrupt-ticket-row" data-component="corrupt-ticket-row"');
+    expect(markup).toContain('data-selected="true"');
+    expect(markup).not.toContain('ticket-list-row');
+    expect(css).not.toMatch(/\.ticket-list-row/);
+    expect(css).toContainSource(
+      ".corrupt-ticket-row[data-selected='true'] { border-color:var(--wa-color-brand-border-normal); background:var(--wa-color-brand-fill-quiet); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--wa-color-brand-fill-loud) 12%, transparent); animation:corrupt-ticket-selected-wiggle 150ms ease-out; }",
+    );
+    expect(css).toContainSource(".corrupt-ticket-row[data-list-edge='only'] { border-radius:remify(10.4px); }");
     expect(css).toMatch(
       /corrupt-ticket-row::before[^}]*width: remify\(4px\)[^}]*background: var\(--wa-color-danger-fill-loud\)/,
     );
@@ -78,8 +86,8 @@ describe('CorruptTicketRow', () => {
 
   it('wiggles newly selected corrupt content and honors reduced motion', () => {
     const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
-    expect(css).toContainSource(
-      ".corrupt-ticket-row[data-selected='true'] { animation:corrupt-ticket-selected-wiggle 150ms ease-out; }",
+    expect(css).toMatch(
+      /\.corrupt-ticket-row\[data-selected='true'\] \{[^}]*animation: corrupt-ticket-selected-wiggle 150ms ease-out;/,
     );
     expect(css).toContainSource('45% { transform:translateX(remify(5.6px)); }');
     expect(css).toContainSource(
