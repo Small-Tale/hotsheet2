@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -488,13 +488,14 @@ describe('the clients/web workspace', { timeout: 30_000 }, () => {
   });
 
   it('fails when a new cross-component selector is added', () => {
+    // The real allowlist is empty since HS2-PX4JNP, so add the selector to a copy of the sources.
     temporary = mkdtempSync(join(tmpdir(), 'hotsheet-css-ownership-'));
-    const allowlist = join(temporary, 'allowlist.json');
-    const entries = JSON.parse(readFileSync(join(workspace, 'css-ownership-allowlist.json'), 'utf8')).entries;
-    writeFileSync(allowlist, JSON.stringify({ entries: entries.slice(1) }));
-    const report = checkWorkspace(workspace, allowlist);
+    cpSync(join(workspace, 'src'), join(temporary, 'src'), { recursive: true });
+    const sheet = join(temporary, 'src/components/ticket-page-more.css');
+    writeFileSync(sheet, `${readFileSync(sheet, 'utf8')}\n.ticket-page-more .app-empty { color: red; }\n`);
+    const report = checkWorkspace(temporary, join(workspace, 'css-ownership-allowlist.json'));
     expect(report.unexpected.map(({ file, selector }) => ({ file, selector }))).toEqual([
-      { file: entries[0].file, selector: entries[0].selector },
+      { file: 'src/components/ticket-page-more.css', selector: '.ticket-page-more .app-empty' },
     ]);
     expect(formatReport(report).ok).toBe(false);
   });

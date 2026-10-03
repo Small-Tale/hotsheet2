@@ -1,47 +1,4 @@
 {
   "$comment": "Known cross-component CSS residue for scripts/check-css-ownership.mjs (HS2-EWYDH7): stylesheet selectors, and (in .tsx/.ts files, selector `.class`) classes a module renders from another component's block (HS2-TM6K9V). Every entry names its tracking ticket and covers exactly `count` (default 1) findings of that selector in that file. Never add entries for new code; fix the selector instead. Delete or lower an entry when its ticket fixes it; a stale entry fails npm run lint.",
-  "entries": [
-    {
-      "file": "src/dev-review/index.ts",
-      "selector": ".kui-toolbar",
-      "ticket": "HS2-PX4JNP",
-      "reason": "borrowed-markup: raw HTML class attribute renders a Kerf component class; compose the Kerf component and configure it through its props"
-    },
-    {
-      "file": "src/dev-review/index.ts",
-      "selector": ".kui-toolbar__center",
-      "ticket": "HS2-PX4JNP",
-      "reason": "borrowed-markup: raw HTML class attribute renders a Kerf component class; compose the Kerf component and configure it through its props"
-    },
-    {
-      "file": "src/dev-review/index.ts",
-      "selector": ".kui-toolbar__leading",
-      "ticket": "HS2-PX4JNP",
-      "reason": "borrowed-markup: raw HTML class attribute renders a Kerf component class; compose the Kerf component and configure it through its props"
-    },
-    {
-      "file": "src/dev-review/index.ts",
-      "selector": ".kui-toolbar__trailing",
-      "ticket": "HS2-PX4JNP",
-      "reason": "borrowed-markup: raw HTML class attribute renders a Kerf component class; compose the Kerf component and configure it through its props"
-    },
-    {
-      "file": "src/dev-review/index.ts",
-      "selector": ".kui-toolbar-control-group",
-      "ticket": "HS2-PX4JNP",
-      "reason": "borrowed-markup: raw HTML class attribute renders a Kerf component class; compose the Kerf component and configure it through its props"
-    },
-    {
-      "file": "src/dev-review/index.ts",
-      "selector": ".kui-toolbar-text",
-      "ticket": "HS2-PX4JNP",
-      "reason": "borrowed-markup: raw HTML class attribute renders a Kerf component class; compose the Kerf component and configure it through its props"
-    },
-    {
-      "file": "src/dev-review/index.ts",
-      "selector": ".kui-toolbar-text__text",
-      "ticket": "HS2-PX4JNP",
-      "reason": "borrowed-markup: raw HTML class attribute renders a Kerf component class; compose the Kerf component and configure it through its props"
-    }
-  ]
+  "entries": []
 }

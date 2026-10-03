@@ -4,7 +4,11 @@ import '@kerfjs/ui/toolbar-text.css';
 import '@kerfjs/ui/toolbar-control-group.css';
 import './dev-review.css';
 
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import html2canvas from 'html2canvas';
+import { raw } from 'kerfjs';
 
 import { normalizeCaptureColors } from './capture-colors';
 import { captureCssSnapshot, CSS_LIVE_EDIT_TICKET_NOTES, cssSnapshotAttachment } from './css-live-edit';
@@ -19,6 +23,25 @@ import {
   translateAnchoredRect,
 } from './geometry';
 import { promoteDevReviewPopover } from './request';
+
+/**
+ * The new-ticket dialog's heading row, composed from Kerf's Toolbar, ToolbarText, and
+ * ToolbarControlGroup rather than a copy of their markup (HS2-PX4JNP). This module renders into
+ * `innerHTML`, so it takes the components' SafeHtml string output.
+ */
+function devReviewDialogToolbar(): string {
+  return String(
+    Toolbar({
+      leading: ToolbarText({ text: 'New Hot Sheet ticket', size: 'xlarge', id: 'hs-dev-review-dialog-title' }),
+      trailing: ToolbarControlGroup({
+        label: 'New ticket actions',
+        children: raw(
+          '<button class="hs-dev-review__close" type="button" data-action="close-dialog" aria-label="Close new ticket dialog" title="Close"></button>',
+        ),
+      }),
+    }),
+  );
+}
 
 export interface ReviewCapture {
   id: string;
@@ -335,7 +358,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     dialog.setAttribute('aria-labelledby', 'hs-dev-review-dialog-title');
     let captures: ReviewCapture[] = [];
     const attachments: ReviewAttachment[] = [];
-    dialog.innerHTML = `<form method="dialog" class="hs-dev-review__form"><div class="app-heading" data-component="heading" data-has-icon="false" data-has-actions="true" data-has-summary="true"><header class="kui-toolbar" data-component="toolbar" data-has-center="false"><div class="kui-toolbar__leading"><span class="kui-toolbar-text" data-component="toolbar-text" data-size="xlarge" id="hs-dev-review-dialog-title"><span class="kui-toolbar-text__text">New Hot Sheet ticket</span></span></div><div class="kui-toolbar__center"></div><div class="kui-toolbar__trailing"><div class="kui-toolbar-control-group" data-component="toolbar-control-group" data-appearance="contained" role="group" aria-label="New ticket actions"><button class="hs-dev-review__close" type="button" data-action="close-dialog" aria-label="Close new ticket dialog" title="Close"></button></div></div></header><p class="app-heading__summary" id="hs-dev-review-dialog-summary">Attach visual context and describe the change you need.</p></div><div class="hs-dev-review__dialog-body"><section class="hs-dev-review__evidence" aria-label="Visual evidence"><div class="hs-dev-review__thumbnails" aria-label="Captured regions"></div><div class="hs-dev-review__preview" aria-label="Selected capture preview"></div><label class="hs-dev-review__dropzone">Drop attachments here or <span>browse</span><input type="file" multiple aria-label="Add attachments"></label><div class="hs-dev-review__attachments" aria-label="Added attachments"></div></section><label class="hs-dev-review__notes">Feedback notes<textarea name="notes" required placeholder="Describe the issue or requested change…"></textarea></label>${options.diagnostics ? '<label class="hs-dev-review__diagnostics"><input type="checkbox" checked><span>Attach diagnostic logs</span></label>' : ''}<p class="hs-dev-review__status" role="status"></p></div><footer><button type="button" data-action="close-dialog">Cancel</button><button class="hs-dev-review__submit" type="submit">Create Ticket</button></footer></form>`;
+    dialog.innerHTML = `<form method="dialog" class="hs-dev-review__form"><div class="app-heading" data-component="heading" data-has-icon="false" data-has-actions="true" data-has-summary="true">${devReviewDialogToolbar()}<p class="app-heading__summary" id="hs-dev-review-dialog-summary">Attach visual context and describe the change you need.</p></div><div class="hs-dev-review__dialog-body"><section class="hs-dev-review__evidence" aria-label="Visual evidence"><div class="hs-dev-review__thumbnails" aria-label="Captured regions"></div><div class="hs-dev-review__preview" aria-label="Selected capture preview"></div><label class="hs-dev-review__dropzone">Drop attachments here or <span>browse</span><input type="file" multiple aria-label="Add attachments"></label><div class="hs-dev-review__attachments" aria-label="Added attachments"></div></section><label class="hs-dev-review__notes">Feedback notes<textarea name="notes" required placeholder="Describe the issue or requested change…"></textarea></label>${options.diagnostics ? '<label class="hs-dev-review__diagnostics"><input type="checkbox" checked><span>Attach diagnostic logs</span></label>' : ''}<p class="hs-dev-review__status" role="status"></p></div><footer><button type="button" data-action="close-dialog">Cancel</button><button class="hs-dev-review__submit" type="submit">Create Ticket</button></footer></form>`;
     doc.body.append(dialog);
     const thumbnails = dialog.querySelector<HTMLElement>('.hs-dev-review__thumbnails')!;
     const preview = dialog.querySelector<HTMLElement>('.hs-dev-review__preview')!;

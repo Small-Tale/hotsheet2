@@ -2480,6 +2480,13 @@ HS2-T35VN7 removed the last two runtime shell entries: AppShell now renders the 
 through its `mobileView` prop. The Trash action at 1280 and the Queue and Trash phone headers at
 390 are identical before and after.
 
+HS2-PX4JNP composes Kerf `Toolbar`, `ToolbarText`, and `ToolbarControlGroup` for the dev review
+dialog's heading row. Its earlier version was a raw HTML copy of their markup. The module writes
+the dialog through `innerHTML`, so it inserts the components' SafeHtml string output. Only the
+close button inside the group stays a literal `raw()` string. The heading at 1280 and 390 is
+identical before and after. This fix removed the last seven entries, so the allowlist is now
+empty.
+
 Known residue is listed in `clients/web/css-ownership-allowlist.json`. Each entry has `file`,
 `selector` (with whitespace normalized), an exact `count` when the selector occurs more than once,
 a `ticket` (`HS2-*` or `KF-*`) and a `reason`.
