@@ -17,6 +17,90 @@
       "rules": ["KUI-L022"],
       "target": "src/components/ticket-search-field.tsx",
       "rationale": "Only the ticket-search-field--grow and --open root modifiers styled in ticket-search-field.css: the workspace header's expanded search keeps a plain 19rem floor because Kerf's sizing=\"grow\" min(100%, basis) floor drops out of a content-sized trailing zone and wraps the field in a wide header (KF-K4VBTS). Every other HS2-8FS5BJ hook now uses Kerf props (HS2-DAMHD1). Remove with HS2-AEK8GK."
+    },
+    {
+      "id": "test-markup-assertion-scripts-check-css-ownership-test-mjs",
+      "rules": ["KUI-L023"],
+      "target": "scripts/check-css-ownership.test.mjs",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-app-shell-components-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/app-shell-components.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-attachment-gallery-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/attachment-gallery.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-content-components-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/content-components.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-hs1-migration-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/hs1-migration.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-permission-components-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/permission-components.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-project-sidebar-components-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/project-sidebar-components.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-repository-status-popover-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/repository-status-popover.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-saved-view-dialog-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/saved-view-dialog.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-terminal-dashboard-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/terminal-dashboard.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-terminal-operations-sidebar-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/terminal-operations-sidebar.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-ticket-code-review-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/ticket-code-review.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-ticket-search-field-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/ticket-search-field.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
+    },
+    {
+      "id": "test-markup-assertion-components-workspace-header-test-ts",
+      "rules": ["KUI-L023"],
+      "target": "src/components/workspace-header.test.ts",
+      "rationale": "Unit test asserts on rendered component HTML strings; the analyzer reads those literals as markup this test module renders (KF-GESM24). Remove when Kerf stops applying KUI-L023 to test modules."
     }
   ],
   "failOn": "warning"

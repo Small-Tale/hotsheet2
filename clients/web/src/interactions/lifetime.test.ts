@@ -126,7 +126,7 @@ describe('kerfjs/scope createScope (the interaction lifetime contract)', () => {
     const dispose = vi.fn();
     scope.add(dispose);
     // Kerf implements dispose as a closure but types it as a method (KF-9AH3G8).
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- external Kerf typing boundary
+
     const teardown = scope.dispose;
     teardown();
     teardown();
