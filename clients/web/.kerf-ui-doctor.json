@@ -12,18 +12,6 @@
   "cache": true,
   "suppressions": [
     {
-      "id": "app-entry-wiring-reachable",
-      "rules": ["KUI-L401"],
-      "target": "src/main.tsx",
-      "rationale": "The application wires TabBar, TokenSearchField, NavStack and the app-owned search/overflow helpers inside modules the entry imports (startHotSheetWebClient and its interaction groups, retained in one teardown); Kerf ui-wiring credits only calls written in the entry file and cannot resolve app-owned helpers (KF-KWMJMS, HS2-Y2QG3G). Remove when that ships."
-    },
-    {
-      "id": "ux-demo-entry-wiring",
-      "rules": ["KUI-L401"],
-      "target": "src/ux-demo/main.tsx",
-      "rationale": "wireCatalog already installs wireScrollDividers on the demo root (a second instance loops forever, HS2-E6AG7W, KF-XKMC7W), and the demo calls the app-owned wireTicketSearchFields/wireWorkspaceOverflowKeyboard helpers that Kerf cannot resolve yet (KF-KWMJMS). Remove when both ship."
-    },
-    {
       "id": "hs2-8fs5bj-search-layout-hooks",
       "rules": ["KUI-L022"],
       "target": "src/components/ticket-search-field.tsx",
@@ -41,5 +29,6 @@
       "target": "src/components/terminal-ticket-rail.tsx",
       "rationale": "Only the terminal-ticket-rail__view-select hook: the rail's view-title Select geometry and inset focus ring (HS2-HEYASQ) have no Kerf presentation yet (KF-PZ23ZP). It replaced .kui-select::part selectors (HS2-8FS5BJ). Remove with HS2-DAMHD1."
     }
-  ]
+  ],
+  "failOn": "warning"
 }

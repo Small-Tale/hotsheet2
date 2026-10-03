@@ -2227,19 +2227,20 @@ The web package checks in a workspace-scoped `.kerf-ui-profile.json` and
 reports those 63 suppressed findings with their rationale. The doctor runs catalog,
 TypeScript, isolated Kerf ESLint, and analyzer stages in full mode with a content cache.
 Browser evaluation remains disabled unless a developer explicitly supplies a trusted
-URL, for example `npm run ui:doctor:raw -- --browser-url http://127.0.0.1:4173`.
+URL, for example `npm run ui:doctor -- --browser-url http://127.0.0.1:4173`.
 
-`npm run ui:doctor` is the repeatable local and CI gate. Since HS2-6PD4FS it keeps no per-id budget
-table: it runs `kerf-ui-doctor --full` and fails on any active error, review finding, or warning.
-`kerf-ui-doctor` itself exits non-zero only for errors, so this thin wrapper stays until Kerf ships
-a failure threshold (`KF-6S5EKX`), after which `ui:doctor` becomes the plain doctor command. Known,
-tracked gaps are not budgeted; they are documented `suppressions` in `.kerf-ui-doctor.json`, each
-with a rationale naming the Kerf ticket that removes it (today the 13 `KUI-L401` wiring findings on
-the two entry modules, `KF-KWMJMS` and `KF-XKMC7W`). The doctor report keeps counting them as
-`suppressed`. The Kerf ESLint rules the gate cleared (`kerfjs/require-delegate-disposer`,
-`kerfjs/prefer-attr-selector`) are also enforced by `npm run lint` with `--max-warnings 0`. Earlier
-releases carried an exact per-id error/review budget that only ever decreased; HS2-9ME409 and
-HS2-TF76Z2 drove it to zero.
+`npm run ui:doctor` is the repeatable local and CI gate: since HS2-Z44YPD (Kerf 5.0.0-beta.69) it is
+the plain `kerf-ui-doctor --full` command, with `"failOn": "warning"` in `.kerf-ui-doctor.json`, so any
+active error, review finding, or warning fails it (`KF-6S5EKX`). The interim wrapper script from
+HS2-6PD4FS is gone. Known, tracked gaps are not budgeted; they are documented `suppressions` in
+`.kerf-ui-doctor.json`, each with a rationale naming the Kerf ticket whose adoption removes it. Today
+that is only the three `KUI-L022` hook classes tracked by HS2-DAMHD1. Beta.69 credits wiring calls
+reachable from a declared entry and resolves app-owned helpers through the composition catalog's
+`wiring.sources`, so the former `KUI-L401` suppressions are gone (`KF-KWMJMS`, `KF-XKMC7W`,
+HS2-Y2QG3G). The doctor report keeps counting suppressions as `suppressed`. The Kerf ESLint rules the
+gate cleared (`kerfjs/require-delegate-disposer`, `kerfjs/prefer-attr-selector`) are also enforced
+by `npm run lint` with `--max-warnings 0`. Earlier releases carried an exact per-id error/review
+budget that only ever decreased; HS2-9ME409 and HS2-TF76Z2 drove it to zero.
 
 #### Component CSS ownership guard (HS2-EWYDH7)
 

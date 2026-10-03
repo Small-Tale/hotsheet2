@@ -217,7 +217,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       };
     }),
   );
-  wireWorkspaceOverflowKeyboard(document.body);
+  lifetime.add(wireWorkspaceOverflowKeyboard(document.body));
   lifetime.add(
     delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.toggleSelectedUpNext.selector, () => {
       const selected = selectedRows();

@@ -11,6 +11,7 @@ interface KerfDoctorConfig {
   mode: string;
   stages: Record<string, boolean>;
   cache: boolean;
+  failOn?: string;
   suppressions: { id: string; rules: string[]; target: string; rationale: string }[];
 }
 
@@ -76,13 +77,13 @@ describe('Kerf application UI profile', () => {
         },
       }),
     );
-    // Known Kerf gaps are documented suppressions, never budgets: the entry modules' KUI-L401 wiring
-    // findings and the three KUI-L022 hook classes HS2-8FS5BJ moved into their owning components
-    // (search layout, header yield, rail view title), each naming the Kerf ticket whose release
-    // removes it (HS2-6PD4FS, HS2-DAMHD1).
+    // The doctor itself is the CI gate: any active error, review finding, or warning fails it
+    // (beta.69 `failOn`, KF-6S5EKX; HS2-Z44YPD retired the wrapper script).
+    expect(config.failOn).toBe('warning');
+    // Known Kerf gaps are documented suppressions, never budgets: the three KUI-L022 hook classes
+    // HS2-8FS5BJ moved into their owning components (search layout, header yield, rail view title),
+    // each naming the Kerf ticket whose adoption removes it (HS2-DAMHD1).
     expect(config.suppressions.map(({ rules, target }) => `${rules.join(',')} ${target}`)).toEqual([
-      'KUI-L401 src/main.tsx',
-      'KUI-L401 src/ux-demo/main.tsx',
       'KUI-L022 src/components/ticket-search-field.tsx',
       'KUI-L022 src/components/workspace-controls.tsx',
       'KUI-L022 src/components/terminal-ticket-rail.tsx',
