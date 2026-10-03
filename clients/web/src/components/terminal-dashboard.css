@@ -444,11 +444,6 @@
 .terminal-dashboard[data-layout-mode='drawer'] .terminal-dashboard__zoom {
   inset-block-end: 0;
 }
-/* Temporary until KF-FTADQT: ToolbarControlGroup's native-button rule keeps a pointer cursor on a
-   disabled button, outranking the global cursor semantics; remove this when Kerf ships the fix. */
-.terminal-dashboard__zoom button:disabled {
-  cursor: not-allowed;
-}
 .terminal-dashboard__magnified {
   position: fixed;
   z-index: 1000;

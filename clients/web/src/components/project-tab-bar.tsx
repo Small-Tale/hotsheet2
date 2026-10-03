@@ -80,7 +80,6 @@ export function ProjectTabBar({
       >
         <LucideIcon icon={Plus} name="plus" />
       </button>
-      {!mobile && workspaceAction && <div class="project-tab-bar__workspace-action">{workspaceAction}</div>}
     </div>
   );
   const rootAttributes = {
@@ -146,11 +145,12 @@ export function ProjectTabBar({
         // Selecting a project loads/refreshes it, so keep manual activation: arrow keys move roving focus
         // only and the user selects with Enter/Space/click (HS2-08ZG4J). `wireTabBars` reads this.
         activation="manual"
-        // Add-project stays beside the last tab; the workspace action is pushed to the far edge
-        // inside the growing trailing group (HS2-NE8JBS).
+        // Add-project stays beside the last tab; Kerf pins the workspace action (a standalone
+        // primary action) at the far edge through its `end` zone (HS2-NE8JBS, KF-A59SC4, HS2-T44PFW).
         trailingPlacement="adjacent"
         leading={modes}
         trailing={actions}
+        end={workspaceAction}
       >
         {tabs.map((tab) => (
           <ProjectTab {...tab} selected={mode === 'project' && tab.selected} />

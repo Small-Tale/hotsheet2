@@ -10,8 +10,9 @@
   --kui-toolbar-gap: var(--kui-space-2xs);
   /* The strip keeps a 2xs inset (cancelled by a negative block margin so the bar height is unchanged)
      so a focused/selected tab's pill focus ring and shadow are not clipped at the scrolling edges,
-     reserves the same scroll padding, and drops Kerf's track chrome; the trailing zone grows so
-     Add-project sits right after the last tab (HS2-HV52WR, HS2-NE8JBS). Kerf beta.60 public tokens. */
+     reserves the same scroll padding, and drops Kerf's track chrome (HS2-HV52WR). Kerf beta.60 public
+     tokens. Add-project follows the last tab through TabBar's adjacent trailing placement and the
+     workspace action sits in TabBar's far-edge `end` zone (HS2-NE8JBS, KF-A59SC4). */
   --kui-tab-bar-strip-margin-block: calc(var(--kui-space-2xs) * -1);
   --kui-tab-bar-strip-padding: var(--kui-space-2xs);
   --kui-tab-bar-strip-scroll-padding-inline: var(--kui-space-2xs);
@@ -19,7 +20,6 @@
   --kui-tab-bar-strip-radius: 0;
   --kui-tab-bar-strip-background: transparent;
   --kui-tab-bar-strip-gap: var(--kui-space-2xs);
-  --kui-tab-bar-trailing-flex: 1 0 auto;
   display: grid;
   height: remify(60px);
   min-height: remify(60px);
@@ -42,20 +42,6 @@
 }
 .project-tab-bar__actions {
   gap: var(--kui-space-xs);
-}
-/* Desktop: Kerf's adjacent placement shrink-wraps the tabs and its trailing zone grows (the public
-   trailing-flex token above); the strip's own actions group fills that zone so Add-project (+) sits
-   right after the last tab while the workspace action (New ticket…) holds the far edge. When tabs
-   overflow, the trailing zone keeps its content width and the tabs shrink and scroll, bringing +
-   beside the workspace action (HS2-NE8JBS). Kerf's `end` zone takes only a ToolbarControlGroup, so
-   the workspace action stays in this group until KF-A59SC4 lets it move there. */
-.project-tab-bar:not(.project-tab-bar--mobile) .project-tab-bar__actions {
-  flex: 1 0 auto;
-}
-.project-tab-bar__workspace-action {
-  display: flex;
-  align-items: center;
-  margin-inline-start: auto;
 }
 .project-tab-bar__modes {
   gap: var(--kui-space-2xs);

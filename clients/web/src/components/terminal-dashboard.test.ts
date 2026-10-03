@@ -318,11 +318,9 @@ describe('TerminalDashboard', () => {
     expect(css).not.toContain('.app-shell');
     expect(css).not.toContain('.kui-');
     expect(css).not.toContain('::part(');
-    // The one temporary rule on the app's own zoom buttons is tied to its Kerf fix (KF-FTADQT).
-    expect(css).toContainSource(
-      "/* Temporary until KF-FTADQT: ToolbarControlGroup's native-button rule keeps a pointer cursor on a",
-    );
-    expect(css).toContainSource('.terminal-dashboard__zoom button:disabled { cursor: not-allowed; }');
+    // Kerf's ToolbarControlGroup owns the disabled zoom buttons' cursor, dimming, and hover (KF-FTADQT,
+    // HS2-T44PFW), so the dashboard no longer styles its own group buttons.
+    expect(css).not.toContain('.terminal-dashboard__zoom button');
     // HS2-KKP8YJ: iOS must not raise its own callout over a long-pressed interactive terminal.
     expect(css).toContainSource(".terminal-viewport[data-display-mode='interactive'] { -webkit-touch-callout: none; }");
     expect(css).toMatchSource(

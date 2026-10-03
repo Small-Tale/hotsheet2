@@ -581,10 +581,12 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
   - `divider`: draws the bottom rule (default `true`).
 
   The demo shows the standalone strip and the shell-column variant (`surface="default"`,
-  `divider={false}`). On desktop, Add project stays beside the last tab and the workspace action
-  holds the far edge of the growing trailing zone, set through Kerf's public
-  `--kui-tab-bar-trailing-flex` token. Kerf's `end` zone accepts only a ToolbarControlGroup, so the
-  action moves there only after KF-A59SC4 ships. Each `ProjectTab` sets Kerf's attention-color token
+  `divider={false}`). On desktop, Add project stays beside the last tab (TabBar's adjacent trailing
+  placement) and the workspace action sits in TabBar's far-edge `end` zone (KF-A59SC4, HS2-T44PFW), so
+  the strip needs no trailing-flex token, growing group, or auto margin. When the tabs overflow they
+  shrink and scroll while + and the action stay visible. `QuickTicketLauncher` is a native-button
+  pill rather than the cataloged standalone `wa-button`; HS2-PNCDAE tracks making that zone content
+  catalog-conformant. Each `ProjectTab` sets Kerf's attention-color token
   on its own AppTab root (`[data-tab-kind='project']`). It keeps Kerf's own drop-target treatment.
 
 - `ProjectTabContextMenu` — **built** with Lucide icons for Close Tab, Close Other
@@ -1678,9 +1680,8 @@ Styling ownership (HS2-DR549A):
   top inset. That layout anchors the zoom toolbar at the drawer's edge, which the Workbench has
   already padded by the home-indicator inset. The drawer never reaches into the dashboard.
 - **Buttons.** Only the tile's own footer actions get app button chrome. The zoom toolbar's and
-  key bar's Kerf control groups own their buttons. One temporary rule restores the not-allowed
-  cursor on a disabled zoom button until KF-FTADQT ships; its CSS-ownership allowlist entry is
-  tracked under KF-FTADQT itself.
+  key bar's Kerf control groups own their buttons, including a disabled zoom button's not-allowed
+  cursor, dimming, and absent hover chrome (KF-FTADQT, adopted in HS2-T44PFW).
 - **Visibility Select.** It uses Kerf's `toolbar-borderless` compact presentation, with a
   group-owned focus ring.
 - **`TerminalSession`.** `TerminalDashboard` renders and styles it; `TerminalDrawer` composes it
@@ -2378,8 +2379,8 @@ findings) without changing a rendered pixel or computed style. Each fix gives ap
 - **Own classes.** `CommandNavigation`'s running indicator is `.command-navigation__running`.
   `ViewNavigation` renders `.view-navigation__list` and `.view-navigation__entry`. Both popover
   `<nav>`s are `.repository-status-popover__nav`. The workspace header's utility buttons are
-  `.workspace-header__utility-action`, which keeps its disabled dimming until Kerf's group owns
-  that state (`KF-FTADQT`).
+  `.workspace-header__utility-action`, which still restyles its disabled state although Kerf's
+  group owns it since `KF-FTADQT` shipped; HS2-0MH5V1 removes that rule.
 - **Child props.** `RepositorySummary` and the popover's synchronization values size their icons
   through `LucideIcon`'s `size`. The popover tints them through an app wrapper,
   `.repository-status-popover__sync-icon`.
@@ -2390,7 +2391,8 @@ findings) without changing a rendered pixel or computed style. Each fix gives ap
   `listEdge` rounding, hover, and selected presentation) in `corrupt-ticket-row.css` instead of
   rendering TicketRow's `ticket-list-row` classes; the rendered row is pixel-identical.
 
-Only the terminal zoom entry (`KF-FTADQT`, see TerminalDashboard) remains.
+No stylesheet entries from this group remain: HS2-T44PFW removed the terminal zoom entry
+(`KF-FTADQT`).
 
 HS2-JVPPVV removed the two spinner entries. `ActiveClaimSpinner` and the project tab busy/opening
 spinner pass Kerf `LoadingSpinner` `size` (`KF-PA81HY`) of 16.8 and 12.8 px. Their wrappers no

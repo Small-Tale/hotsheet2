@@ -414,27 +414,28 @@ describe('application shell components', () => {
     expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
   });
 
-  it('moves a desktop workspace action to the project-tab trailing edge without changing mobile', () => {
+  it('pins a desktop workspace action in the TabBar end zone without changing mobile', () => {
     const desktop = String(
       ProjectTabBar({
         tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }],
         workspaceAction: 'new-ticket' as never,
       }),
     );
-    // Add-project stays adjacent to the tabs; the workspace action is pushed to the far edge inside the
-    // growing trailing group (HS2-NE8JBS). The strip grows the zone through Kerf's public token and its
-    // own group, never through a selector on the TabBar's markup (HS2-DR549A).
+    // Add-project stays adjacent to the tabs; Kerf pins the workspace action in TabBar's far-edge `end`
+    // zone, so the strip needs no trailing-flex token, growing group, or auto margin (HS2-NE8JBS,
+    // KF-A59SC4, HS2-T44PFW). The strip never styles the TabBar's markup (HS2-DR549A).
     expect(desktop).toContain('data-trailing-placement="adjacent"');
-    expect(desktop).toMatch(
-      /project-tab-bar__actions[^]*data-action="choose-project"[^]*project-tab-bar__workspace-action">new-ticket/,
-    );
+    expect(desktop).toMatch(/kui-tab-bar__trailing[^]*project-tab-bar__actions[^]*data-action="choose-project"/);
+    expect(desktop).toMatch(/<div class="kui-tab-bar__end"[^>]*>new-ticket<\/div>/);
+    expect(desktop).not.toContain('project-tab-bar__workspace-action');
     const css = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
-    expect(css).toMatch(/\.project-tab-bar \{[^}]*--kui-tab-bar-trailing-flex: 1 0 auto;/);
-    expect(css).toContainSource(
+    const rules = css.replace(/\/\*[^]*?\*\//g, '');
+    expect(rules).not.toContain('--kui-tab-bar-trailing-flex');
+    expect(rules).not.toContain('margin-inline-start: auto');
+    expect(rules).not.toContain('.kui-');
+    expect(css).not.toContainSource(
       '.project-tab-bar:not(.project-tab-bar--mobile) .project-tab-bar__actions { flex: 1 0 auto; }',
     );
-    expect(css.replace(/\/\*[^]*?\*\//g, '')).not.toContain('.kui-');
-    expect(css).toMatch(/\.project-tab-bar__workspace-action \{[^}]*margin-inline-start: auto;/);
     const mobile = String(
       ProjectTabBar({
         mobile: true,

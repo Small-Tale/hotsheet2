@@ -32,12 +32,6 @@
       "reason": "borrowed-markup: <p> class renders .ticket-code-review, which belongs to src/components/ticket-code-review.tsx; compose that component or give this element an own class"
     },
     {
-      "file": "src/components/terminal-dashboard.css",
-      "selector": ".terminal-dashboard__zoom button:disabled",
-      "ticket": "KF-FTADQT",
-      "reason": "Temporary until KF-FTADQT ships: Kerf ToolbarControlGroup's native-button rule keeps a pointer cursor on a disabled button, so the dashboard restores not-allowed on its own zoom buttons"
-    },
-    {
       "file": "src/components/ticket-board-column.tsx",
       "selector": ".ticket-page-more",
       "ticket": "HS2-WP69TD",

@@ -154,11 +154,15 @@ test('composes the desktop shell, project strip, grid zoom, and magnified focus 
   await expect(visibility).toHaveAttribute('data-presentation', 'toolbar-borderless');
   await expect(visibility).toHaveAttribute('data-focus-ring-owner', 'group');
 
-  // The zoom group owns its buttons; a disabled zoom button still reads as unavailable.
+  // Kerf's zoom group owns its buttons' disabled state (KF-FTADQT, HS2-T44PFW): a disabled zoom button
+  // reads as unavailable, dims, and paints no hover chrome.
   const zoomIn = page.getByRole('button', { name: /^Zoom in/ });
   for (let step = 0; step < 8 && (await zoomIn.isEnabled()); step += 1) await zoomIn.click();
   await expect(zoomIn).toBeDisabled();
   await expect(zoomIn).toHaveCSS('cursor', 'not-allowed');
+  await expect(zoomIn).toHaveCSS('opacity', '0.5');
+  await zoomIn.hover({ force: true });
+  await expect(zoomIn).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
 
   // Magnifying a terminal turns the work-area ring off; dismissing it restores the ring.
   await expect(workArea).toHaveAttribute('data-focus-ring', 'true');

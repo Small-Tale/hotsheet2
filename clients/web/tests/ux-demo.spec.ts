@@ -5596,13 +5596,13 @@ test('operates the project tab bar across pointer, keyboard, and responsive stat
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
   const tabBar = page.locator('.project-tab-bar').first();
-  // Workspace-action variant: + stays beside the last tab while the workspace action holds the far
-  // edge of the bar (HS2-NE8JBS).
+  // Workspace-action variant: + stays beside the last tab while Kerf's TabBar `end` zone pins the
+  // workspace action at the far edge of the bar (HS2-NE8JBS, KF-A59SC4, HS2-T44PFW).
   const withAction = page.getByRole('navigation', { name: 'Open projects with workspace action' });
   const actionGeometry = await withAction.evaluate((bar) => {
     const tabs = bar.querySelector('.kui-tab-bar__tabs')!.getBoundingClientRect(),
       add = bar.querySelector('[data-action="choose-project"]')!.getBoundingClientRect(),
-      action = bar.querySelector('.project-tab-bar__workspace-action')!.getBoundingClientRect(),
+      action = bar.querySelector('.kui-tab-bar__end > wa-button')!.getBoundingClientRect(),
       edge = bar.getBoundingClientRect();
     return { addGap: add.left - tabs.right, actionGap: action.left - add.right, edgeGap: edge.right - action.right };
   });
