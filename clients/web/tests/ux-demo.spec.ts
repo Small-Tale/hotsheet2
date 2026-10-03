@@ -7162,11 +7162,19 @@ test('renders the ProjectCloseDialog TerminalPreview at a legible glyph size at 
   const region = dialog.getByRole('region', { name: 'Tests terminal preview' }),
     viewport = region.locator('[data-component="terminal-viewport"]');
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
+  // Wait on deterministic render signals before measuring (HS2-5114VH): under full-suite load xterm can
+  // connect before it writes its first text row or before the scaled-preview transform is applied.
+  await expect(viewport).toHaveAttribute('data-preview-scale', /^\d/);
+  await expect(viewport.locator('.xterm-rows > div').filter({ hasText: /\S/ }).first()).toBeVisible();
   const glyphs = () =>
     viewport.evaluate((node) => {
       const frame = node.parentElement!.getBoundingClientRect(),
-        screen = node.querySelector('.xterm-screen')!.getBoundingClientRect(),
-        row = [...node.querySelectorAll<HTMLElement>('.xterm-rows > div')].find((item) => item.textContent.trim())!;
+        screenNode = node.querySelector('.xterm-screen'),
+        row = [...node.querySelectorAll<HTMLElement>('.xterm-rows > div')].find((item) => item.textContent.trim());
+      // Not rendered yet (for example while a resize re-renders the grid): report a not-ready result the
+      // poll below retries instead of throwing out of the evaluate.
+      if (!screenNode || !row) return { gridSize: node.dataset.gridSize, rowHeight: 0, fill: 0, inside: false };
+      const screen = screenNode.getBoundingClientRect();
       return {
         gridSize: node.dataset.gridSize,
         // The rendered (post-transform) height of one terminal row: the on-screen glyph size.
