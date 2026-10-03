@@ -171,13 +171,17 @@ describe('content components', () => {
   it('links plain ticket references in details and notes without nesting links or changing code', () => {
     const markup = String(
       MarkdownPreview({
-        source: 'Depends on HS2-BD09B6 and HS2-OTHER2. Keep `HS2-CODE12` literal and preserve [HS2-LINK12](/tickets).',
+        source:
+          'Depends on HS2-BD09B6 and HS2-OTHER2. Keep `run HS2-CODE12` literal, link the `HS2-CHIP12` chip, and preserve [HS2-LINK12](/tickets).',
       }),
     );
-    expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(2);
+    expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(3);
     expect(markup).toContain('data-ticket-slug="HS2-BD09B6"');
     expect(markup).toContain('data-ticket-slug="HS2-OTHER2"');
-    expect(markup).toContain('<code>HS2-CODE12</code>');
+    expect(markup).toContain('<code>run HS2-CODE12</code>');
+    expect(markup).not.toContain('data-ticket-slug="HS2-CODE12"');
+    // A code chip that is exactly one slug links while keeping its code presentation (HS2-5T33YV).
+    expect(markup).toContain('data-ticket-slug="HS2-CHIP12" title="Open HS2-CHIP12"><code>HS2-CHIP12</code></a>');
     expect(markup).toContain('>HS2-LINK12</a>');
     expect(markup).not.toContain('data-ticket-slug="HS2-LINK12"');
     const css = readFileSync(resolve(import.meta.dirname, 'markdown-preview.css'), 'utf8');

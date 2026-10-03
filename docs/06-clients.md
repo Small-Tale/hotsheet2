@@ -1396,7 +1396,10 @@ and identity-less legacy entries remain conservatively blocking.
   becomes internally scrollable when the viewport is smaller than the menu.
 
   Plain uppercase ticket references such as `HS2-BD09B6` in details and notes render
-  as accessible links. Activating one searches exact slugs across every open project:
+  as accessible links. An inline code span whose entire content is one ticket reference
+  (the code-formatted slug FEEDBACK NEEDED and other AI notes use) links the same way while
+  keeping its code chip; code holding other text, code blocks, and existing links stay
+  unlinked (HS2-5T33YV). Activating one searches exact slugs across every open project:
   one match opens an exact, read-only reader layer above the current inspector or reader,
   no match reports a transient toast, and multiple matches open a compact source chooser
   rather than the advanced-search surface. The chooser separates its major regions by 16 px,

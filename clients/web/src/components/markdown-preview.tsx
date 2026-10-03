@@ -8,7 +8,7 @@ import {
   expandAttachmentReferences,
   parseAttachmentReference,
 } from '../attachment-references';
-import { parseTicketLinkReference, ticketReferencePattern } from '../ticket-link-resolution';
+import { parseTicketLinkReference, type TicketLinkReference, ticketReferencePattern } from '../ticket-link-resolution';
 
 export function escapeMarkdownHtml(value: string): string {
   return value
@@ -48,26 +48,48 @@ function attachmentUrlInfo(
 
 const REFERENCE_SUPPRESSING_TAGS = new Set(['a', 'button', 'code', 'pre']);
 
-/** Link plain-text ticket references after Markdown rendering, without touching code or links. */
+function ticketReferenceAnchor(reference: TicketLinkReference, inner: string): string {
+  return `<a class="markdown-preview__ticket-reference" href="#ticket-${reference.slug}" data-action="open-linked-ticket" data-ticket-slug="${reference.slug}"${reference.projectId ? ` data-ticket-project-id="${reference.projectId}"` : ''} title="Open ${reference.raw}">${inner}</a>`;
+}
+
+/**
+ * Link plain-text ticket references after Markdown rendering, without touching links, buttons,
+ * or code blocks. Inline code whose whole content is one ticket reference (the `HS2-XXXX` form
+ * notes use for slugs) becomes a link around the code chip (HS2-5T33YV); other code stays inert.
+ */
 export function linkTicketReferences(html: string): string {
   let suppressed = 0;
-  return html
-    .split(/(<[^>]+>)/g)
-    .map((part) => {
-      if (part.startsWith('<')) {
-        const match = /^<\/?([a-z0-9]+)/i.exec(part),
-          tag = match?.[1]?.toLocaleLowerCase();
-        if (tag && REFERENCE_SUPPRESSING_TAGS.has(tag))
-          suppressed += part.startsWith('</') ? -1 : part.endsWith('/>') ? 0 : 1;
-        return part;
+  const parts = html.split(/(<[^>]+>)/g),
+    output: string[] = [];
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    if (part.startsWith('<')) {
+      const codeText = parts[index + 1],
+        reference =
+          suppressed === 0 && part === '<code>' && parts[index + 2] === '</code>' && codeText
+            ? parseTicketLinkReference(codeText)
+            : undefined;
+      if (reference && reference.raw === codeText) {
+        output.push(ticketReferenceAnchor(reference, `<code>${codeText}</code>`));
+        index += 2;
+        continue;
       }
-      if (suppressed > 0) return part;
-      return part.replace(ticketReferencePattern(), (raw: string) => {
-        const reference = parseTicketLinkReference(raw)!;
-        return `<a class="markdown-preview__ticket-reference" href="#ticket-${reference.slug}" data-action="open-linked-ticket" data-ticket-slug="${reference.slug}"${reference.projectId ? ` data-ticket-project-id="${reference.projectId}"` : ''} title="Open ${reference.raw}">${reference.raw}</a>`;
-      });
-    })
-    .join('');
+      const match = /^<\/?([a-z0-9]+)/i.exec(part),
+        tag = match?.[1]?.toLocaleLowerCase();
+      if (tag && REFERENCE_SUPPRESSING_TAGS.has(tag))
+        suppressed += part.startsWith('</') ? -1 : part.endsWith('/>') ? 0 : 1;
+      output.push(part);
+      continue;
+    }
+    output.push(
+      suppressed > 0
+        ? part
+        : part.replace(ticketReferencePattern(), (raw: string) =>
+            ticketReferenceAnchor(parseTicketLinkReference(raw)!, raw),
+          ),
+    );
+  }
+  return output.join('');
 }
 
 marked.setOptions({ breaks: true, gfm: true });

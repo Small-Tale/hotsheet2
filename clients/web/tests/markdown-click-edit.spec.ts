@@ -60,10 +60,10 @@ const NOTE = 'Note body text with a link to HS2-OTHER1 for context.';
 
 type Patch = Record<string, unknown>;
 
-async function mockTickets(page: Page) {
+async function mockTickets(page: Page, fixture: { note?: string; noteKind?: string } = {}) {
   const patches: Patch[] = [];
   let details = DETAILS,
-    note = NOTE,
+    note = fixture.note ?? NOTE,
     token = 0;
   const full = (id: string) => ({
     store: 'git-local',
@@ -75,7 +75,7 @@ async function mockTickets(page: Page) {
         ? [
             {
               id: 'N1',
-              kind: 'regular',
+              kind: fixture.noteKind ?? 'regular',
               created_at: '2026-09-01T00:00:00Z',
               edited_at: '2026-09-01T00:00:00Z',
               text: note,
@@ -343,4 +343,39 @@ test('a single tap edits details and notes on a phone', async ({ browser }) => {
   } finally {
     await context.close();
   }
+});
+
+// HS2-5T33YV: FEEDBACK NEEDED notes format slugs as inline code, which used to render as an
+// inert chip. A code span that is exactly one ticket reference now links to that ticket.
+test('a code-formatted ticket slug in a feedback-needed note opens the ticket from inspector and reader', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await mockTickets(page, {
+    noteKind: 'feedback_needed',
+    note: 'FEEDBACK NEEDED: this is intended from `HS2-OTHER1`; keep `hotsheet-cli show HS2-OTHER1` as code.',
+  });
+  const inspector = await openTicket(page);
+  const note = inspector.locator('article[data-note-id="N1"]');
+  const reference = note.getByRole('link', { name: 'HS2-OTHER1', exact: true });
+  await expect(reference).toHaveAttribute('data-ticket-slug', 'HS2-OTHER1');
+  await expect(reference.locator('code')).toHaveText('HS2-OTHER1');
+  // Code that holds other text stays a plain chip.
+  await expect(note.locator('code', { hasText: 'hotsheet-cli show' })).toHaveCount(1);
+  await expect(note.locator('a code', { hasText: 'hotsheet-cli show' })).toHaveCount(0);
+  await reference.click();
+  const linked = page.getByRole('dialog', { name: 'Read and edit HS2-OTHER1 in Demo' });
+  await expect(linked).toBeVisible();
+  await expect(note.getByRole('textbox', { name: 'Note body' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(linked).toHaveCount(0);
+
+  // The reader renders the same note as a feedback prompt; its code slug is a link there too, and
+  // following it opens the ticket instead of adding an inline reply.
+  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  const reader = page.getByRole('dialog', { name: /Read and edit HS2-EDIT01/ });
+  const prompt = reader.locator('article[data-note-id="N1"] .note-card__feedback-prompt');
+  await prompt.getByRole('link', { name: 'HS2-OTHER1', exact: true }).click();
+  await expect(linked).toBeVisible();
+  await expect(reader.locator('[name="inline-feedback-response"]')).toHaveCount(0);
 });

@@ -25,9 +25,38 @@ describe('Markdown ticket links', () => {
     expect(markup).toContain('AB-1 and HS-A');
   });
 
-  it('does not link references inside existing links, buttons, or code', () => {
+  it('links an inline code span that is exactly one ticket reference, keeping the code chip (HS2-5T33YV)', () => {
     const markup = linkTicketReferences(
-      '<a href="/ticket">HS2-LINKED1</a><button>HS2-BUTTON1</button><code>@beta-02/HS2-CODE01</code> HS2-PLAIN1',
+      '<p>FEEDBACK NEEDED: intended from <code>HS2-3SCH1K</code>; see <code>@beta-02/HS2-REMOTE1</code>.</p>',
+    );
+    expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(2);
+    expect(markup).toContain(
+      '<a class="markdown-preview__ticket-reference" href="#ticket-HS2-3SCH1K" data-action="open-linked-ticket" data-ticket-slug="HS2-3SCH1K" title="Open HS2-3SCH1K"><code>HS2-3SCH1K</code></a>',
+    );
+    expect(markup).toContain('data-ticket-slug="HS2-REMOTE1" data-ticket-project-id="beta-02"');
+    expect(markup).toContain('><code>@beta-02/HS2-REMOTE1</code></a>');
+    // The visible text is unchanged, so inline feedback reply offsets stay aligned.
+    expect(markup.replace(/<[^>]+>/g, '')).toBe('FEEDBACK NEEDED: intended from HS2-3SCH1K; see @beta-02/HS2-REMOTE1.');
+  });
+
+  it('keeps code with other text, code blocks, and linked code inert, and resumes linking after them', () => {
+    const markup = linkTicketReferences(
+      [
+        '<p><code>hotsheet-cli show HS2-MIXED1</code> <code> HS2-SPACE1 </code></p>',
+        '<pre><code>HS2-BLOCK1</code></pre>',
+        '<p><a href="/x"><code>HS2-INLINK</code></a> <code></code> then HS2-AFTER1 and <code>HS2-AFTER2</code></p>',
+      ].join(''),
+    );
+    expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(2);
+    expect(markup).toContain('data-ticket-slug="HS2-AFTER1"');
+    expect(markup).toContain('data-ticket-slug="HS2-AFTER2"');
+    for (const inert of ['HS2-MIXED1', 'HS2-SPACE1', 'HS2-BLOCK1', 'HS2-INLINK'])
+      expect(markup).not.toContain(`data-ticket-slug="${inert}"`);
+  });
+
+  it('does not link references inside existing links, buttons, or code that holds other text', () => {
+    const markup = linkTicketReferences(
+      '<a href="/ticket">HS2-LINKED1</a><button>HS2-BUTTON1</button><code>open @beta-02/HS2-CODE01</code> HS2-PLAIN1',
     );
     expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(1);
     expect(markup).toContain('data-ticket-slug="HS2-PLAIN1"');
