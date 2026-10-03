@@ -2327,17 +2327,15 @@ HS2-6PD4FS is gone. Known, tracked gaps are not budgeted; they are documented `s
 Production code carries none: HS2-DAMHD1 adopted Kerf's toolbar yield, fill, placement,
 tiny-visibility, and Select title APIs, and HS2-AEK8GK removed the last one, the `KUI-L022`
 grow-floor hook on `TicketSearchField`, by adopting `sizing="grow"` once Kerf 5.0.0-beta.70 kept
-its basis floor (`KF-K4VBTS`). `src/kerf-ui-profile.test.ts` pins that the non-test suppression
-list is empty.
+its basis floor (`KF-K4VBTS`). `src/kerf-ui-profile.test.ts` pins that the suppression list is
+empty.
 
 Kerf 5.0.0-beta.70 (HS2-1GPHS5) added `KUI-L023`, the markup-borrowing rule. It flags a module that
-renders markup owned by another component. The analyzer also reads HTML string literals in
-unit-test assertions (for example `expect(markup).toContain('<div class="kui-…">')`) as markup the
-test module renders, so it flags those tests even though they only inspect output. Each such test
-file carries one exact `KUI-L023` suppression whose rationale cites `KF-GESM24`. The profile test
-requires every test-file suppression to be `KUI-L023` only and to cite `KF-GESM24`. `KF-GESM24`
-(skip test modules) is fixed in Kerf but not yet released; `HS2-51MB3F` removes the suppressions
-with the Kerf upgrade that ships it. Beta.69 credits wiring calls
+renders markup owned by another component. On beta.70 it also read HTML string literals in unit-test
+assertions as markup the test rendered, so 14 test files carried temporary per-file suppressions
+citing `KF-GESM24`. Beta.72 skips `*.test.*`, `*.spec.*`, and `__tests__/` modules for
+`KUI-L023`, so HS2-DF9N3D removed every suppression (`HS2-51MB3F`); the doctor's stale-suppression
+check (`KUI-D001`) would now reject them. Beta.69 credits wiring calls
 reachable from a declared entry and resolves app-owned helpers through the composition catalog's
 `wiring.sources`, so the former `KUI-L401` suppressions are gone (`KF-KWMJMS`, `KF-XKMC7W`,
 HS2-Y2QG3G). The doctor report keeps counting suppressions as `suppressed`. The Kerf ESLint rules the

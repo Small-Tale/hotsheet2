@@ -83,18 +83,9 @@ describe('Kerf application UI profile', () => {
     // Known Kerf gaps are documented suppressions, never budgets. HS2-DAMHD1 adopted Kerf's toolbar
     // yield, fill, placement, tiny-visibility, and Select title APIs, and HS2-AEK8GK adopted
     // `sizing="grow"` once its basis floor shipped (KF-K4VBTS), so production code carries none.
-    // Beta.70's KUI-L023 reads HTML string literals in unit-test assertions as rendered markup
-    // (KF-GESM24), so test files alone may carry exact per-file KUI-L023 suppressions until Kerf skips
-    // test modules (HS2-1GPHS5).
-    const [testSuppressions, productionSuppressions] = [
-      config.suppressions.filter(({ target }) => /\.test\.(?:ts|tsx|mjs)$/.test(target)),
-      config.suppressions.filter(({ target }) => !/\.test\.(?:ts|tsx|mjs)$/.test(target)),
-    ];
-    expect(productionSuppressions.map(({ rules, target }) => `${rules.join(',')} ${target}`)).toEqual([]);
-    for (const suppression of testSuppressions) {
-      expect(suppression.rules).toEqual(['KUI-L023']);
-      expect(suppression.rationale).toContain('KF-GESM24');
-    }
+    // Kerf 5.0.0-beta.72 skips test modules for KUI-L023 (KF-GESM24), so HS2-DF9N3D removed the
+    // per-file test suppressions too (HS2-51MB3F). A new suppression must cite its KF ticket.
+    expect(config.suppressions.map(({ rules, target }) => `${rules.join(',')} ${target}`)).toEqual([]);
     for (const suppression of config.suppressions) expect(suppression.rationale).toMatch(/KF-[0-9A-Z]{6}/);
   });
 });
