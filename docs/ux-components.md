@@ -1307,7 +1307,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   Markdown details, notes, and controlled state rather than maintaining a reduced
   parallel reader implementation. The inspector exposes a Reader action, reader content
   uses its full available width, and details/notes retain their normal direct editing
-  affordances without a separate reader-wide Edit mode. In-progress inline details
+  affordances without a separate reader-wide Edit mode. The reader demo projects its own title,
+  draft, and title-editing signals, so double-clicking (or Enter on) the reader title shows the
+  reader-presentation title input in the catalog and autosaves on blur (HS2-0VFPD5). In-progress inline details
   drafts carry into the larger surface without losing focus or content. Ticket-reference
   The persistent Web Awesome dialog is opened with `show()`, supplies native modality and
   focus confinement, delegates nested-control Escape handling to the platform, and is not

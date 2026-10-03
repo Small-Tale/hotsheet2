@@ -168,6 +168,12 @@ export const readerFeedbackChoiceSelections = signal<Record<string, string[]>>({
 export const readerTab = signal<InspectorTab>('info');
 export const readerLargeText = signal(false);
 export const readerDialogOpen = signal(true);
+/** The reader demo's own ticket title and its title-edit state (HS2-0VFPD5): the reader shows a different
+ * demo ticket than the sidebar inspector, so it projects its own editing signals into TicketReader. */
+export const READER_TITLE_INITIAL = 'Build TicketReader component and UX demo';
+export const readerTitle = signal(READER_TITLE_INITIAL);
+export const readerTitleDraft = signal(READER_TITLE_INITIAL);
+export const readerTitleEditing = signal(false);
 export const readerAttachments = signal([
   { id: 'wireframe', name: 'reader-wireframe.png' },
   { id: 'notes', name: 'reader-notes.md' },
@@ -185,7 +191,9 @@ export function TicketReaderDemo() {
         frameId="ux-demo-ticket-reader"
         open={readerDialogOpen.value}
         slug="HS2-H892P1"
-        title="Build TicketReader component and UX demo"
+        title={readerTitle.value}
+        titleEditing={readerTitleEditing.value}
+        titleDraft={readerTitleDraft.value}
         status="started"
         priority="high"
         category="feature"

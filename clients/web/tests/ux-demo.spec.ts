@@ -3887,6 +3887,41 @@ test('keeps QuickTicketComposer modal focus and dismissal in Web Awesome lifecyc
     .toBe(false);
 });
 
+test('enters, autosaves, and re-enters reader title editing in the TicketReader demo (HS2-0VFPD5)', async ({
+  page,
+}) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=ticket-reader');
+    const reader = page.locator('[data-component="ticket-reader"]');
+    const heading = reader.getByRole('heading', { name: 'Build TicketReader component and UX demo' });
+    await expect(heading).toBeVisible();
+    await heading.dblclick();
+    const titleEditor = reader.locator('.ticket-inspector__title-input');
+    await expect(titleEditor).toBeVisible();
+    await expect(titleEditor).toBeFocused();
+    await expect(titleEditor).toHaveJSProperty('value', 'Build TicketReader component and UX demo');
+    const box = (await titleEditor.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    await reader.screenshot({ path: `/private/tmp/hs2-0vfpd5-reader-title-editing-${width}.png` });
+    await titleEditor.fill(`Reader title at ${width}`);
+    await titleEditor.blur();
+    await expect(reader.getByRole('heading', { name: `Reader title at ${width}` })).toBeVisible();
+    await expect(reader.locator('.ticket-inspector__title-input')).toHaveCount(0);
+    // Keyboard re-entry starts from the saved title, and the sidebar inspector's title is untouched.
+    await reader.getByRole('heading', { name: `Reader title at ${width}` }).press('Enter');
+    await expect(reader.locator('.ticket-inspector__title-input')).toHaveJSProperty(
+      'value',
+      `Reader title at ${width}`,
+    );
+    await reader.locator('.ticket-inspector__title-input').blur();
+    await page.goto('/ux-demo?component=ticket-inspector');
+    await expect(
+      page.locator('[data-component="ticket-inspector"]').getByRole('heading', { name: /Build TicketList/ }),
+    ).toBeVisible();
+  }
+});
+
 test('navigates, toggles, closes, and reopens TicketInspector', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');

@@ -209,6 +209,9 @@ import {
   readerLargeText,
   readerNotes,
   readerTab,
+  readerTitle,
+  readerTitleDraft,
+  readerTitleEditing,
   resetMarkdownEditorDemo,
   TicketReaderDemo,
 } from './content-components-demo';
@@ -572,6 +575,10 @@ const noteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value
 });
 const titleAutosave = createDebouncedAutosave((value: string) => {
   inspectorTitle.value = value.trim();
+  return Promise.resolve(true);
+});
+const readerTitleAutosave = createDebouncedAutosave((value: string) => {
+  readerTitle.value = value.trim();
   return Promise.resolve(true);
 });
 const tagsAutosave = createDebouncedAutosave((value: string[]) => {
@@ -2932,34 +2939,49 @@ demoListeners.add(
     inspectorStatus.value = (target as FormControl).value as typeof inspectorStatus.value;
   }),
 );
-const beginTitleEdit = () => {
-  inspectorTitleDraft.value = inspectorTitle.value;
-  inspectorTitleEditing.value = true;
-  queueMicrotask(() => root.querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
+// The reader demo edits its own ticket's title; every other surface edits the inspector demo ticket's
+// (HS2-0VFPD5). Each surface projects its own title, draft, and editing signals.
+const titleSurface = (target: Element) =>
+  target.closest('[data-component="ticket-reader"]')
+    ? { title: readerTitle, draft: readerTitleDraft, editing: readerTitleEditing, autosave: readerTitleAutosave }
+    : {
+        title: inspectorTitle,
+        draft: inspectorTitleDraft,
+        editing: inspectorTitleEditing,
+        autosave: titleAutosave,
+      };
+const beginTitleEdit = (target: Element) => {
+  const surface = titleSurface(target),
+    host = target.closest('[data-component="ticket-reader"], [data-component="ticket-inspector-header"]') ?? root;
+  surface.draft.value = surface.title.value;
+  surface.editing.value = true;
+  queueMicrotask(() => host.querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
 };
 demoListeners.add(
-  delegate(root, 'dblclick', DEMO_ACTIONS.editTicketTitle.selector, () => {
-    beginTitleEdit();
+  delegate(root, 'dblclick', DEMO_ACTIONS.editTicketTitle.selector, (_event, target) => {
+    beginTitleEdit(target);
   }),
 );
 demoListeners.add(
-  delegate(root, 'keydown', DEMO_ACTIONS.editTicketTitle.selector, (event) => {
+  delegate(root, 'keydown', DEMO_ACTIONS.editTicketTitle.selector, (event, target) => {
     if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
     event.preventDefault();
-    beginTitleEdit();
+    beginTitleEdit(target);
   }),
 );
 demoListeners.add(
   delegate(root, 'input', DEMO_FIELDS.ticketTitle.selector, (_event, target) => {
-    inspectorTitleDraft.value = (target as FormControl).value;
-    if (inspectorTitleDraft.value.trim()) titleAutosave.schedule(inspectorTitleDraft.value);
+    const surface = titleSurface(target);
+    surface.draft.value = (target as FormControl).value;
+    if (surface.draft.value.trim()) surface.autosave.schedule(surface.draft.value);
   }),
 );
 demoListeners.add(
-  delegate(root, 'focusout', DEMO_FIELDS.ticketTitle.selector, () => {
-    if (!inspectorTitleDraft.value.trim()) return;
-    void titleAutosave.flush().then(() => {
-      inspectorTitleEditing.value = false;
+  delegate(root, 'focusout', DEMO_FIELDS.ticketTitle.selector, (_event, target) => {
+    const surface = titleSurface(target);
+    if (!surface.draft.value.trim()) return;
+    void surface.autosave.flush().then(() => {
+      surface.editing.value = false;
     });
   }),
 );

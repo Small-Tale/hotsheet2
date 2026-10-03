@@ -33,6 +33,13 @@ import {
   resetConnectionDetailsDemo,
 } from './connection-details-demo';
 import {
+  READER_TITLE_INITIAL,
+  readerTitle,
+  readerTitleDraft,
+  readerTitleEditing,
+  TicketReaderDemo,
+} from './content-components-demo';
+import {
   repositoryDemoScenario,
   repositoryStatusForScenario,
   RepositoryStatusPopoverDemo,
@@ -535,6 +542,21 @@ describe('UX demo catalog', () => {
     appShellSettings.overlayOpen.value = true;
     resetAppShellDemo();
     expect([appShellSettings.presentation.value, appShellSettings.overlayOpen.value]).toEqual(['framed', false]);
+  });
+
+  it('projects the reader demo title-editing state into TicketReader (HS2-0VFPD5)', () => {
+    expect(String(TicketReaderDemo())).not.toContain('ticket-inspector__title-input');
+    readerTitleDraft.value = 'Draft reader title';
+    readerTitleEditing.value = true;
+    try {
+      const editing = String(TicketReaderDemo());
+      expect(editing).toContain('class="ticket-inspector__title-input"');
+      expect(editing).toContain('value="Draft reader title"');
+    } finally {
+      readerTitleEditing.value = false;
+      readerTitleDraft.value = READER_TITLE_INITIAL;
+      readerTitle.value = READER_TITLE_INITIAL;
+    }
   });
 
   it('resets every canonical TagChip demo setting', () => {
