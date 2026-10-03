@@ -6206,11 +6206,19 @@ test('dims finished tickets in the list and uses the shared Tags menu header', a
 
   // Tags uses the same section-header primitive and trailing action as Views.
   await page.goto('/ux-demo?component=ticket-info-panel');
+  // The demo also shows the value-free placeholder variant (HS2-XBHADT), which deliberately keeps the
+  // Tags header as loading chrome; the interactive header belongs to the loaded panel (HS2-C7FY1B).
   const tagsHeader = page
-    .locator('[data-component="ticket-info-panel"] [data-component="list-header"]')
+    .locator('[data-component="ticket-info-panel"]:not([data-placeholder]) [data-component="list-header"]')
     .filter({ hasText: 'Tags' });
   await expect(tagsHeader).toHaveCount(1);
   await expect(tagsHeader.getByRole('button', { name: 'Add tag' }).locator('[data-lucide="plus"]')).toBeVisible();
+  await expect(tagsHeader.getByRole('button', { name: 'Add tag' })).toBeEnabled();
+  const placeholderTags = page
+    .locator('[data-component="ticket-info-panel"][data-placeholder="true"] [data-component="list-header"]')
+    .filter({ hasText: 'Tags' });
+  await expect(placeholderTags).toHaveCount(1);
+  await expect(placeholderTags.locator('button[aria-label="Add tag"]')).toBeDisabled();
   await expect(page.locator('.ticket-tag-editor__add')).toHaveCount(0);
 });
 
