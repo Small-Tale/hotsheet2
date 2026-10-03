@@ -323,6 +323,25 @@ describe('TicketRow', () => {
     );
   });
 
+  it('fills the Up Next star through LucideIcon appearance only while active (HS2-ZFFCHW)', () => {
+    const star = (upNext: boolean) =>
+      /<svg[^>]*data-lucide="star"[^>]*>/u.exec(
+        String(
+          TicketRow({
+            slug: 'HS2-STAR',
+            title: 'Star',
+            status: 'started',
+            priority: 'default',
+            category: 'task',
+            tags: [],
+            upNext,
+          }),
+        ),
+      )?.[0];
+    expect(star(true)).toContain('fill="currentColor"');
+    expect(star(false)).toContain('fill="none"');
+  });
+
   it('offers Up Next only for not-started and started lifecycle states', () => {
     for (const status of ['not_started', 'started'] as const)
       expect(

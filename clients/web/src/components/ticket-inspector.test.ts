@@ -249,6 +249,15 @@ describe('TicketInspector', () => {
     expect(reader).toContain('data-component="live-claim-notice"');
   });
 
+  it('fills the Up Next star through LucideIcon appearance only while active (HS2-ZFFCHW)', () => {
+    const star = (upNext: boolean) =>
+      /<svg[^>]*data-lucide="star"[^>]*>/u.exec(
+        String(TicketInspector({ ...base, upNext, upNextEligible: true })),
+      )?.[0];
+    expect(star(true)).toContain('fill="currentColor"');
+    expect(star(false)).toContain('fill="none"');
+  });
+
   it('shows the derived completion confidence only on completed or verified tickets (HS2-DWTJ43)', () => {
     const row = (props: Partial<Parameters<typeof TicketInspector>[0]>) =>
       /<div class="ticket-inspector__confidence"[^>]*>[\s\S]*?<\/div>/u.exec(

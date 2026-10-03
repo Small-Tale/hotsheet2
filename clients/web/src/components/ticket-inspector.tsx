@@ -189,7 +189,7 @@ export function ticketInspectorPanel({
           {...INSPECTOR_AND_EDITOR_ACTIONS.toggleInspectorUpNext.attrs}
           aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
         >
-          <LucideIcon icon={Star} name="star" />
+          <LucideIcon icon={Star} name="star" appearance={upNext ? 'solid' : 'outline'} />
         </button>
       )}
     </>

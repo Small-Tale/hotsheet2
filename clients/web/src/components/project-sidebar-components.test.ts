@@ -347,7 +347,7 @@ describe('ProjectSidebar component slice', () => {
     const idle = String(DriveControl({ running: false, tool: 'Codex', optionsOpen: true }));
     expect(idle).toContain('Drive with Codex');
     expect(idle).toContain('data-action="toggle-drive-options"');
-    expect(idle).toContain('data-lucide="triangle"');
+    expect(idle).toMatch(/data-lucide="triangle"[^>]*fill="currentColor"/);
     expect(idle).toContain('aria-expanded="true"');
     const running = String(DriveControl({ running: true, tool: 'Codex' }));
     expect(running).toContain('Codex workflow is running');

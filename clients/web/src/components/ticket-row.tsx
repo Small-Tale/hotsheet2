@@ -205,7 +205,7 @@ export function TicketRow(raw: TicketRowProps) {
                   title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
                 >
                   <span class="ticket-list-row__up-next-icon">
-                    <LucideIcon icon={Star} name="star" size="s" />
+                    <LucideIcon icon={Star} name="star" size="s" appearance={props.upNext ? 'solid' : 'outline'} />
                   </span>
                 </button>
               )}

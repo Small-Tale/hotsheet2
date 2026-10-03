@@ -144,9 +144,6 @@
 .ticket-inspector__star--active {
   color: var(--hs-ticket-state-up-next) !important;
 }
-.ticket-inspector__star--active svg {
-  fill: currentColor;
-}
 .ticket-inspector__feedback {
   display: flex;
   align-items: center;

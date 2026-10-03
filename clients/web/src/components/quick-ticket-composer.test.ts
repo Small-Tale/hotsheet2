@@ -83,7 +83,10 @@ describe('QuickTicketComposer', () => {
     expect(expanded).toContain('name="new-ticket-details" rows="1" data-morph-skip>Why this matters</textarea>');
     expect(expanded).toContain('data-action="toggle-new-ticket-up-next"');
     expect(expanded).toContain('aria-pressed="true"');
-    expect(expanded).toContain('data-lucide="star"');
+    expect(expanded).toMatch(/data-lucide="star"[^>]*fill="currentColor"/);
+    expect(String(QuickTicketComposer({ expanded: true, upNext: false }))).toMatch(
+      /data-lucide="star"[^>]*fill="none"/,
+    );
     expect(expanded).toContain('Browse attachments for new ticket');
     expect(expanded).toContain('Drop attachment files anywhere in this area or browse');
     expect(expanded).toContain('data-pending-attachment-id="proof"');

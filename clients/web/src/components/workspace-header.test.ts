@@ -347,6 +347,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain(`aria-pressed="${state === 'mixed' ? 'mixed' : String(state === 'all')}"`);
     expect(markup.match(new RegExp(`data-up-next-state="${state}"`, 'g'))).toHaveLength(2);
     expect(markup.match(/workspace-header__up-next-fill/g) ?? []).toHaveLength(state === 'mixed' ? 2 : 0);
+    expect(markup.match(/data-lucide="star"[^>]*fill="currentColor"/g) ?? []).toHaveLength(state === 'none' ? 0 : 2);
     const utility = markup.slice(
       markup.indexOf('workspace-header__utility-group'),
       markup.indexOf('ticket-search-field'),

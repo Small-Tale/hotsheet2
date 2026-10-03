@@ -248,11 +248,6 @@
   width: remify(16px);
   height: remify(16px);
 }
-/* Lucide renders fill="none" on the svg itself, so the active fill must target the svg,
-   not the wrapping icon span, or the star stays hollow (HS2-KGHRHS). */
-.ticket-list-row__up-next--active .ticket-list-row__up-next-icon > svg {
-  fill: currentColor;
-}
 @container (max-width: remify(384px)) {
   .ticket-list-row--list {
     border-color: var(--wa-color-neutral-border-quiet);

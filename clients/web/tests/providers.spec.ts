@@ -17661,7 +17661,7 @@ for (const surface of ['workspace', 'rail'] as const) {
             'clip-path',
             'inset(0px 50% 0px 0px)',
           );
-          await expect(icon.locator('.workspace-header__up-next-fill')).toHaveCSS(
+          await expect(icon.locator('.workspace-header__up-next-fill svg')).toHaveCSS(
             'fill',
             await icon.evaluate((node) => getComputedStyle(node).color),
           );

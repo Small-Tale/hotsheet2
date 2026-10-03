@@ -166,7 +166,7 @@ export function QuickTicketComposer({
               aria-label={upNext ? 'Remove new ticket from Up Next' : 'Add new ticket to Up Next'}
               title={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
             >
-              <LucideIcon size="s" icon={Star} name="star" />
+              <LucideIcon size="s" icon={Star} name="star" appearance={upNext ? 'solid' : 'outline'} />
             </button>
           </div>
           <label class="quick-ticket-composer__details">

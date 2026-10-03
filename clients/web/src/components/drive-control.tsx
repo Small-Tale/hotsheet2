@@ -43,7 +43,7 @@ export function DriveControl({
         disabled={optionsDisabled || undefined}
         title="Choose Drive provider, model, and effort"
       >
-        <LucideIcon size={11.2} icon={Triangle} name="triangle" />
+        <LucideIcon size={11.2} icon={Triangle} name="triangle" appearance="solid" />
       </button>
     </div>
   );

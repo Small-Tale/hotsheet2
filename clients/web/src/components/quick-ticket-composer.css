@@ -89,9 +89,6 @@
   color: var(--hs-ticket-state-up-next);
   border-color: var(--hs-ticket-state-up-next);
 }
-.quick-ticket-composer__up-next[aria-pressed='true'] svg {
-  fill: currentColor;
-}
 .quick-ticket-composer__up-next:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 1px;

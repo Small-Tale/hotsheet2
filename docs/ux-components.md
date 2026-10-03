@@ -2373,9 +2373,10 @@ is Kerf markup like any other child component's, so `.x svg` and `.x > svg` over
   `<span class="x__icon">` with `display: flex`. Examples include color, a `margin-top` that aligns
   the icon with text, a `grid-area`, a rotation, or a padded tinted chip. `color` reaches the glyph
   through `currentColor`.
-- **Fill** cannot go through a wrapper. The svg's `fill="none"` attribute stops inheritance, so the
-  five solid-glyph rules (active and pressed stars, the Drive options triangle) stay allowlisted
-  until Kerf ships a solid-glyph prop (`KF-RP5W0Z`, adoption `HS2-ZFFCHW`).
+- **Fill** a solid glyph with `appearance="solid"`, never a stylesheet rule. A wrapper `fill`
+  cannot reach the glyph because the svg's `fill="none"` attribute stops inheritance. The active
+  Up Next stars (row, inspector, composer, workspace header `all` state and its clipped `mixed`
+  half) and the Drive options triangle switch `appearance` from state (`KF-RP5W0Z`, `HS2-ZFFCHW`).
 
 `LucideIcon` stays transparent to subjects its markup cannot contain: `.x span` or `.x h2` over a
 subtree with an icon is not a finding.

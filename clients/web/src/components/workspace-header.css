@@ -29,11 +29,7 @@
 .workspace-header__up-next-icon[data-up-next-state='all'] {
   color: var(--hs-ticket-state-up-next);
 }
-.workspace-header__up-next-icon[data-up-next-state='all'] svg,
-.workspace-header__up-next-fill {
-  fill: currentColor;
-}
-/* The half fill is an app-owned span; its SVG inherits the fill (HS2-EZ1N7Z). */
+/* The half fill is an app-owned span clipping a solid LucideIcon star (HS2-EZ1N7Z, HS2-ZFFCHW). */
 .workspace-header__up-next-fill {
   position: absolute;
   display: block;

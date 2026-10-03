@@ -43,10 +43,10 @@ export function workspaceUpNextState(values: readonly boolean[]): WorkspaceUpNex
 function WorkspaceUpNextIcon({ state }: { state: WorkspaceUpNextState }) {
   return (
     <span class="workspace-header__up-next-icon" data-up-next-state={state} aria-hidden="true">
-      <LucideIcon icon={Star} name="star" />
+      <LucideIcon icon={Star} name="star" appearance={state === 'all' ? 'solid' : 'outline'} />
       {state === 'mixed' && (
         <span class="workspace-header__up-next-fill">
-          <LucideIcon icon={Star} name="star" />
+          <LucideIcon icon={Star} name="star" appearance="solid" />
         </span>
       )}
     </span>

@@ -51,6 +51,3 @@
   outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 35%, transparent);
   outline-offset: -3px;
 }
-.drive-control svg {
-  fill: currentColor;
-}
