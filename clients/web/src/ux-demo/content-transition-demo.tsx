@@ -7,6 +7,7 @@ import {
   type ContentTransitionSide,
   type ContentTransitionStyle,
 } from '../components/content-transition';
+import { syncSettingsControls } from './settings-controls';
 
 export const transitionSide = signal<ContentTransitionSide>('a'),
   transitionStyle = signal<ContentTransitionStyle>('push'),
@@ -66,6 +67,17 @@ export function ContentTransitionDemo() {
     </section>
   );
 }
+/** Restore the canonical transition settings and sync the live controls (HS2-X1SM48). */
+export function resetContentTransitionDemo(root?: ParentNode): void {
+  transitionStyle.value = 'push';
+  transitionSide.value = 'a';
+  transitionDirection.value = 'forward';
+  if (root)
+    syncSettingsControls(root, 'content-transition', {
+      values: { 'transition-style': transitionStyle.value, 'transition-side': transitionSide.value },
+    });
+}
+
 export function ContentTransitionSettings() {
   return (
     <form class="settings-form" data-settings="content-transition">
@@ -88,6 +100,9 @@ export function ContentTransitionSettings() {
           { value: 'b', label: 'B' },
         ]}
       />
+      <wa-button type="button" data-action="reset-settings">
+        Reset
+      </wa-button>
     </form>
   );
 }

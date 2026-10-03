@@ -16,6 +16,13 @@ import { describe, expect, it } from 'vitest';
 
 import componentCatalogExtension from '../../ai/component-catalog-extension.json';
 import { createDevApp, demoModifiedTimes } from '../dev-server';
+import {
+  aiConversationDemoOpen,
+  aiConversationPresentation,
+  aiConversationScenario,
+  AIConversationSettings,
+  resetAIConversationDemo,
+} from './ai-conversation-demo';
 import { AppShellSettings, appShellSettings, resetAppShellDemo } from './app-shell-demo';
 import {
   demoCatalog,
@@ -40,6 +47,13 @@ import {
   TicketReaderDemo,
 } from './content-components-demo';
 import {
+  ContentTransitionSettings,
+  resetContentTransitionDemo,
+  transitionDirection,
+  transitionSide,
+  transitionStyle,
+} from './content-transition-demo';
+import {
   repositoryDemoScenario,
   repositoryStatusForScenario,
   RepositoryStatusPopoverDemo,
@@ -49,6 +63,14 @@ import {
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, tagChipSettings } from './tag-chip-demo';
 import { resetTicketRowDemo, ticketRowSettings } from './ticket-row-demo';
+import {
+  composerMultipleSources,
+  inspectorLiveClaim,
+  QuickTicketComposerSettings,
+  resetQuickTicketComposerDemo,
+  resetTicketInspectorDemo,
+  TicketInspectorSettings,
+} from './workspace-components-demo';
 
 describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
@@ -557,6 +579,47 @@ describe('UX demo catalog', () => {
       readerTitleDraft.value = READER_TITLE_INITIAL;
       readerTitle.value = READER_TITLE_INITIAL;
     }
+  });
+
+  it('offers Reset in the inspector, conversation, composer, and transition settings (HS2-X1SM48)', () => {
+    for (const form of [
+      TicketInspectorSettings(),
+      AIConversationSettings(),
+      QuickTicketComposerSettings(),
+      ContentTransitionSettings(),
+    ])
+      expect(String(form)).toContain('data-action="reset-settings"');
+    inspectorLiveClaim.value = 'overrun';
+    composerMultipleSources.value = false;
+    aiConversationPresentation.value = 'embedded';
+    aiConversationScenario.value = 'failed';
+    aiConversationDemoOpen.value = false;
+    transitionStyle.value = 'crossfade';
+    transitionSide.value = 'b';
+    transitionDirection.value = 'backward';
+    resetTicketInspectorDemo();
+    resetQuickTicketComposerDemo();
+    resetAIConversationDemo();
+    resetContentTransitionDemo();
+    expect({
+      liveClaim: inspectorLiveClaim.value,
+      multipleSources: composerMultipleSources.value,
+      presentation: aiConversationPresentation.value,
+      scenario: aiConversationScenario.value,
+      open: aiConversationDemoOpen.value,
+      style: transitionStyle.value,
+      side: transitionSide.value,
+      direction: transitionDirection.value,
+    }).toEqual({
+      liveClaim: 'none',
+      multipleSources: true,
+      presentation: 'dialog',
+      scenario: 'streaming',
+      open: true,
+      style: 'push',
+      side: 'a',
+      direction: 'forward',
+    });
   });
 
   it('resets every canonical TagChip demo setting', () => {

@@ -114,6 +114,7 @@ import {
   aiConversationSaveCount,
   aiConversationScenario,
   AIConversationSettings,
+  resetAIConversationDemo,
 } from './ai-conversation-demo';
 import {
   addDemoProject,
@@ -218,6 +219,7 @@ import {
 import {
   ContentTransitionDemo,
   ContentTransitionSettings,
+  resetContentTransitionDemo,
   transitionDirection,
   transitionSide,
   transitionStyle,
@@ -408,6 +410,8 @@ import {
   PageHeaderDemo,
   QuickTicketComposerDemo,
   QuickTicketComposerSettings,
+  resetQuickTicketComposerDemo,
+  resetTicketInspectorDemo,
   resetWorkspaceDemoNotifications,
   resolveWorkspaceDemoPermission,
   terminalRailDemoTicket,
@@ -2415,6 +2419,13 @@ window.addEventListener('keydown', (event) => {
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.resetSettings.selector, () => {
     if (selectedId.value === 'app-shell') resetAppShellDemo(root);
+    if (selectedId.value === 'content-transition') resetContentTransitionDemo(root);
+    if (selectedId.value === 'quick-ticket-composer') resetQuickTicketComposerDemo(root);
+    if (selectedId.value === 'ticket-inspector') resetTicketInspectorDemo(root);
+    if (selectedId.value === 'ai-conversation') {
+      resetAIConversationDemo(root);
+      openAIConversationDemo();
+    }
     if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
     if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
     if (selectedId.value === 'confidence-badge') resetConfidenceBadgeDemo(root);

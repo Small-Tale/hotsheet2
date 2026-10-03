@@ -51,6 +51,7 @@ import {
   noteDraft,
   readerNotes,
 } from './content-components-demo';
+import { syncSettingsControls } from './settings-controls';
 import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 import { TICKET_ROW_CLAIM_ETA } from './ticket-row-demo';
 
@@ -442,6 +443,12 @@ export function PageHeaderDemo() {
   );
 }
 
+/** Restore the canonical composer settings and sync the live controls (HS2-X1SM48). */
+export function resetQuickTicketComposerDemo(root?: ParentNode): void {
+  composerMultipleSources.value = true;
+  if (root) syncSettingsControls(root, 'quick-ticket-composer', { values: { 'composer-source-count': 'several' } });
+}
+
 export function QuickTicketComposerSettings() {
   return (
     <form class="settings-form" data-settings="quick-ticket-composer">
@@ -454,6 +461,9 @@ export function QuickTicketComposerSettings() {
           { value: 'several', label: 'Several (source Select)' },
         ]}
       />
+      <wa-button type="button" data-action="reset-settings">
+        Reset
+      </wa-button>
     </form>
   );
 }
@@ -491,6 +501,12 @@ function demoLiveClaim(): LiveClaimNoticeProps | undefined {
   return { agentName: 'Claude', eta: state === 'no-eta' ? undefined : TICKET_ROW_CLAIM_ETA[state] };
 }
 
+/** Restore the canonical inspector settings and sync the live controls (HS2-X1SM48). */
+export function resetTicketInspectorDemo(root?: ParentNode): void {
+  inspectorLiveClaim.value = 'none';
+  if (root) syncSettingsControls(root, 'ticket-inspector', { values: { 'inspector-live-claim': 'none' } });
+}
+
 export function TicketInspectorSettings() {
   return (
     <form class="settings-form" data-settings="ticket-inspector">
@@ -505,6 +521,9 @@ export function TicketInspectorSettings() {
           { value: 'no-eta', label: 'Without an ETA' },
         ]}
       />
+      <wa-button type="button" data-action="reset-settings">
+        Reset
+      </wa-button>
     </form>
   );
 }

@@ -1947,7 +1947,8 @@ Dev Review toggle, and an optional manually closed settings inspector
 that keeps the demo visible during live adjustment. The settings action lives with the
 other catalog-header tools; while the inspector is open, its Close settings action stays
 viewport anchored. Stateful Web Awesome control properties stay synchronized when a demo
-reset restores its canonical mock state. The remaining catalog review-tooling package is
+reset restores its canonical mock state. Every settings form ends with a Reset action, including the
+TicketInspector, AIConversation, QuickTicketComposer, and ContentTransition forms (HS2-X1SM48). The remaining catalog review-tooling package is
 tracked by HS2-89692E. It should grow to provide:
 
 Kerf beta 18's native geometry overlay replaces the catalog's local alignment-outline

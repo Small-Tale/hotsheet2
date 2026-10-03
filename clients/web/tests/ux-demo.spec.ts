@@ -1780,6 +1780,100 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   await expect(badge).toHaveAttribute('data-band', 'partial');
 });
 
+test('resets the TicketInspector, AIConversation, QuickTicketComposer, and ContentTransition settings (HS2-X1SM48)', async ({
+  page,
+}) => {
+  const setValue = (control: Locator, value: string) =>
+    control.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  const openSettings = async (component: string, name: string) => {
+    await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+    const inspector = page.getByRole('complementary', { name: `${name} settings` });
+    if (component === 'ai-conversation') {
+      // The demo opens the conversation as a modal dialog; close it so the catalog chrome is reachable.
+      await expect(page.locator('[data-component="ai-conversation"]').getByRole('dialog')).toBeVisible();
+      await page.keyboard.press('Escape');
+    }
+    if (!(await inspector.isVisible()))
+      await page.locator('[data-action="toggle-settings"][aria-expanded="false"]').click();
+    await expect(inspector).toBeVisible();
+    return inspector;
+  };
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+
+    // TicketInspector: live claim → reset to none → edit again.
+    let settings = await openSettings('ticket-inspector', 'TicketInspector');
+    const notice = page.locator('[data-component="ticket-inspector"] [data-component="live-claim-notice"]');
+    const liveClaim = settings.locator('wa-select[name="inspector-live-claim"]');
+    await setValue(liveClaim, 'overrun');
+    await expect(notice).toHaveCount(1);
+    await settings.getByRole('button', { name: 'Reset' }).click();
+    await expect(liveClaim).toHaveJSProperty('value', 'none');
+    await expect(notice).toHaveCount(0);
+    await setValue(liveClaim, 'no-eta');
+    await expect(notice).toContainText('Claude is working on this');
+    await page.screenshot({ path: `/private/tmp/hs2-x1sm48-ticket-inspector-settings-${width}.png` });
+
+    // AIConversation: embedded + failed → reset to the dialog streaming state → edit again.
+    settings = await openSettings('ai-conversation', 'AIConversation');
+    const host = page.locator('[data-component="ai-conversation"]');
+    const presentation = settings.locator('wa-select[name="presentation"]'),
+      scenario = settings.locator('wa-select[name="scenario"]');
+    await setValue(scenario, 'failed');
+    await expect(host.first()).toContainText('Conversation unavailable');
+    await setValue(presentation, 'embedded');
+    await expect(page.locator('[data-component="ai-conversation"][data-presentation="embedded"]')).toHaveCount(1);
+    await settings.getByRole('button', { name: 'Reset' }).click();
+    await expect(presentation).toHaveJSProperty('value', 'dialog');
+    await expect(scenario).toHaveJSProperty('value', 'streaming');
+    await expect(host.getByRole('dialog')).toBeVisible();
+    await expect(host.first()).toContainText('Running the focused browser test');
+    await setValue(scenario, 'empty');
+    await expect(host.first()).toContainText('Start a conversation');
+    await page.keyboard.press('Escape');
+
+    // QuickTicketComposer: one source → reset to several (source Select) → edit again.
+    settings = await openSettings('quick-ticket-composer', 'QuickTicketComposer');
+    const sourceCount = settings.locator('wa-select[name="composer-source-count"]'),
+      source = page.locator('[data-component="quick-ticket-composer"] wa-select[name="new-ticket-source"]');
+    const expectSourceSelect = async (count: number) => {
+      await page.getByRole('button', { name: /New ticket/ }).click();
+      await expect(source).toHaveCount(count);
+      await page.getByRole('button', { name: /Cancel/ }).click();
+    };
+    await setValue(sourceCount, 'one');
+    await expectSourceSelect(0);
+    await settings.getByRole('button', { name: 'Reset' }).click();
+    await expect(sourceCount).toHaveJSProperty('value', 'several');
+    await expectSourceSelect(1);
+    await setValue(sourceCount, 'one');
+    await expect(sourceCount).toHaveJSProperty('value', 'one');
+    await expectSourceSelect(0);
+
+    // ContentTransition: crossfade on side B → reset to push on side A → edit again.
+    settings = await openSettings('content-transition', 'ContentTransition');
+    const transition = page.locator('[data-component="content-transition"][data-transition-region="content"]');
+    const style = settings.locator('wa-select[name="transition-style"]'),
+      side = settings.locator('wa-select[name="transition-side"]');
+    await setValue(style, 'crossfade');
+    await setValue(side, 'b');
+    await expect(transition).toHaveAttribute('data-transition-style', 'crossfade');
+    await expect(transition).toHaveAttribute('data-active-side', 'b');
+    await settings.getByRole('button', { name: 'Reset' }).click();
+    await expect(style).toHaveJSProperty('value', 'push');
+    await expect(side).toHaveJSProperty('value', 'a');
+    await expect(transition).toHaveAttribute('data-transition-style', 'push');
+    await expect(transition).toHaveAttribute('data-active-side', 'a');
+    await expect(transition).toHaveAttribute('data-transition-direction', 'forward');
+    await setValue(style, 'none');
+    await expect(transition).toHaveAttribute('data-transition-style', 'none');
+    await page.screenshot({ path: `/private/tmp/hs2-x1sm48-content-transition-settings-${width}.png` });
+  }
+});
+
 test('round-trips AppShell presentation and work-area focus-ring settings (HS2-8ZJMCE)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });

@@ -4,6 +4,7 @@ import { signal } from 'kerfjs';
 import { type ConversationActivity, type ConversationMessage, conversationUsage } from '../ai-conversation';
 import { AIConversation } from '../components/ai-conversation';
 import type { PermissionItem } from '../permission-notifications';
+import { syncSettingsControls } from './settings-controls';
 
 export type AIConversationScenario =
   'empty' | 'streaming' | 'permission' | 'completed' | 'usage-unpriced' | 'failed' | 'interrupted';
@@ -179,6 +180,17 @@ export function AIConversationDemo() {
   );
 }
 
+/** Restore the canonical conversation settings and sync the live controls (HS2-X1SM48). */
+export function resetAIConversationDemo(root?: ParentNode): void {
+  aiConversationPresentation.value = 'dialog';
+  aiConversationScenario.value = 'streaming';
+  aiConversationDemoOpen.value = true;
+  if (root)
+    syncSettingsControls(root, 'ai-conversation', {
+      values: { presentation: aiConversationPresentation.value, scenario: aiConversationScenario.value },
+    });
+}
+
 export function AIConversationSettings() {
   return (
     <form class="settings-form" data-settings="ai-conversation">
@@ -210,6 +222,9 @@ export function AIConversationSettings() {
           Open conversation
         </wa-button>
       )}
+      <wa-button type="button" data-action="reset-settings">
+        Reset
+      </wa-button>
     </form>
   );
 }
