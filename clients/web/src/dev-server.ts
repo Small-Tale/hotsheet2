@@ -305,44 +305,86 @@ const demoEntries: Record<string, string> = {
   'value-table': 'ux-demo/dialog-layout-demo.tsx',
 };
 
-async function demoModifiedTimes(sourceRoot: string): Promise<Record<string, string>> {
-  const resolveImport = async (from: string, specifier: string): Promise<string | undefined> => {
+interface SourceNode {
+  readonly modified: number;
+  readonly dependencies: readonly string[];
+}
+
+/**
+ * Report each demo's newest dependency-aware modification time.
+ *
+ * Every source file is stat'ed, read, and parsed at most once per call: demos share most
+ * of the component graph, so walking each entry with fresh I/O repeated the same reads
+ * for every demo and made the endpoint (and its test) slow enough to time out under a
+ * loaded test run (HS2-GGHVTQ).
+ */
+export async function demoModifiedTimes(
+  sourceRoot: string,
+  entries: Readonly<Record<string, string>> = demoEntries,
+  shared: readonly string[] = ['ux-demo/main.tsx', 'ux-demo/style.css'],
+): Promise<Record<string, string>> {
+  const resolved = new Map<string, Promise<string | undefined>>();
+  const resolveImport = (from: string, specifier: string): Promise<string | undefined> => {
     const base = resolve(from, '..', specifier);
-    for (const suffix of ['', '.ts', '.tsx', '.css', '/index.ts', '/index.tsx']) {
-      const candidate = `${base}${suffix}`;
-      try {
-        if ((await stat(candidate)).isFile()) return candidate;
-      } catch {
-        /* try next extension */
-      }
+    let pending = resolved.get(base);
+    if (!pending) {
+      pending = (async () => {
+        for (const suffix of ['', '.ts', '.tsx', '.css', '/index.ts', '/index.tsx']) {
+          const candidate = `${base}${suffix}`;
+          try {
+            if ((await stat(candidate)).isFile()) return candidate;
+          } catch {
+            /* try next extension */
+          }
+        }
+      })();
+      resolved.set(base, pending);
     }
+    return pending;
   };
+  const nodes = new Map<string, Promise<SourceNode | undefined>>();
+  const sourceNode = (file: string): Promise<SourceNode | undefined> => {
+    let pending = nodes.get(file);
+    if (!pending) {
+      pending = (async () => {
+        try {
+          const modified = (await stat(file)).mtimeMs;
+          const source = await readFile(file, 'utf8');
+          const dependencies = await Promise.all(
+            [...source.matchAll(/(?:from\s*|import\s*)['"](\.{1,2}\/[^'"]+)['"]/g)].map((match) =>
+              resolveImport(file, match[1]),
+            ),
+          );
+          return { modified, dependencies: dependencies.filter((dependency) => dependency !== undefined) };
+        } catch {
+          /* a removed optional dependency contributes no timestamp */
+          return undefined;
+        }
+      })();
+      nodes.set(file, pending);
+    }
+    return pending;
+  };
+  let sharedNewest = 0;
+  for (const file of shared) sharedNewest = Math.max(sharedNewest, (await stat(resolve(sourceRoot, file))).mtimeMs);
   const dependencyTime = async (entry: string): Promise<number> => {
     const pending = [resolve(sourceRoot, entry)];
     const seen = new Set<string>();
-    let newest = 0;
+    let newest = sharedNewest;
     while (pending.length) {
       const file = pending.pop()!;
       if (seen.has(file)) continue;
       seen.add(file);
-      try {
-        newest = Math.max(newest, (await stat(file)).mtimeMs);
-        const source = await readFile(file, 'utf8');
-        for (const match of source.matchAll(/(?:from\s*|import\s*)['"](\.{1,2}\/[^'"]+)['"]/g)) {
-          const dependency = await resolveImport(file, match[1]);
-          if (dependency) pending.push(dependency);
-        }
-      } catch {
-        /* a removed optional dependency contributes no timestamp */
-      }
+      const node = await sourceNode(file);
+      if (!node) continue;
+      newest = Math.max(newest, node.modified);
+      pending.push(...node.dependencies);
     }
-    for (const shared of ['ux-demo/main.tsx', 'ux-demo/style.css'])
-      newest = Math.max(newest, (await stat(resolve(sourceRoot, shared))).mtimeMs);
     return newest;
   };
   return Object.fromEntries(
     await Promise.all(
-      Object.entries(demoEntries).map(async ([id, entry]) => [id, new Date(await dependencyTime(entry)).toISOString()]),
+      Object.entries(entries).map(async ([id, entry]) => [id, new Date(await dependencyTime(entry)).toISOString()]),
     ),
   );
 }

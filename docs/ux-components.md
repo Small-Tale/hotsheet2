@@ -1943,6 +1943,8 @@ package identity, and use the ownership fields to avoid duplicate wrappers or in
 
 Implemented entries' tags include a dependency-aware last-modified time: changes to a demo, recursively
 imported component/style dependencies, or global catalog code make the demo current again.
+The development server reads and parses each source file at most once per request, so the
+shared component graph is not re-walked for every demo (HS2-GGHVTQ).
 Planned entries retain an explicit Planned tag. A development-only header toggle enables
 or disables Dev Review without coupling that state to component selection.
 
