@@ -128,7 +128,8 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
 - The web lint command ends with `npm run css:ownership`, which runs
   `clients/web/scripts/check-css-ownership.mjs` (HS2-EWYDH7). It enforces component CSS
   ownership between the app's own components. A stylesheet may style only the class blocks
-  its component renders, plus the native and raw Web Awesome elements it authors, and owners
+  its component renders, plus the native and raw Web Awesome elements it authors; a module renders
+  only its own class blocks (HS2-TM6K9V); and owners
   are derived from the TSX sources. The Kerf doctor runs in `ownership: "component"` mode
   (`KF-5X1TWD`, HS2-HGAH8E), but it only judges the subject class of composition-cataloged
   entries, so this check keeps the rest until `KF-1MRZ86`, `KF-GMM06Q`, and `KF-WMMDDW` ship

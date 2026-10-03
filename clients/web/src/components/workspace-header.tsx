@@ -1,3 +1,6 @@
+// The header family's stylesheet, shared with WorkspaceControls (which loads it first): the header renders its root block.
+import './workspace-header.css';
+
 import { Toolbar } from '@kerfjs/ui/toolbar';
 
 import {

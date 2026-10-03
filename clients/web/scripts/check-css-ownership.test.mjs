@@ -10,8 +10,10 @@ import {
   buildOwnership,
   checkWorkspace,
   classesIn,
+  findMarkupViolations,
   findViolations,
   formatReport,
+  kerfPlaceableClasses,
   moduleFacts,
   ownClassesIn,
   parseSelectorList,
@@ -240,6 +242,90 @@ export function mount(host: HTMLElement) { host.innerHTML = '<div class="raw"><b
   });
 });
 
+// Markup borrowing (HS2-TM6K9V): what a module writes into the DOM, judged against block ownership.
+function scanMarkup(files, placeable = new Set()) {
+  const entries = Object.entries(files).map(([path, source]) => ({ path, source }));
+  return findMarkupViolations(
+    buildOwnership({
+      stylesheets: entries.filter(({ path }) => path.endsWith('.css')),
+      modules: entries.filter(({ path }) => !path.endsWith('.css')),
+    }),
+    { placeable },
+  ).map(({ file, line, selector, kind }) => `${file}:${line} ${kind} ${selector}`);
+}
+
+describe('markup borrowing', () => {
+  it("flags a module rendering another component's block on its own element (the corrupt-row shape)", () => {
+    expect(
+      scanMarkup({
+        ...badge,
+        'src/components/row.tsx': `import './row.css';
+export function Row(p: { on: boolean }) {
+  return <article class={\`badge row\${p.on ? ' badge--on' : ''}\`}><span class="row__title" /></article>;
+}`,
+        'src/components/row.css': '.row { display: block; } .row__title { margin: 0; }',
+      }),
+    ).toEqual([
+      'src/components/row.tsx:3 borrowed-markup .badge',
+      'src/components/row.tsx:3 borrowed-markup .badge--on',
+    ]);
+  });
+
+  it('accepts own blocks, unstyled classes, and block names outside class positions', () => {
+    expect(
+      scanMarkup({
+        ...badge,
+        'src/components/row.tsx': `import './row.css';
+export function Row() {
+  return <article class="row free-standing" data-component="badge" data-kind={'badge__dot'}><Badge /></article>;
+}`,
+        'src/components/row.css': '.row { display: block; }',
+      }),
+    ).toEqual([]);
+  });
+
+  it("flags a hook class from another component's block placed on a child component", () => {
+    expect(
+      scanMarkup({
+        ...badge,
+        'src/components/row.tsx': `import './row.css';
+export const Row = () => <div class="row"><Toolbar className="badge__dot" /></div>;`,
+        'src/components/row.css': '.row { display: block; }',
+      }),
+    ).toEqual(['src/components/row.tsx:2 borrowed-markup .badge__dot']);
+  });
+
+  it('flags raw HTML, classList, className assignments, and setAttribute writes', () => {
+    expect(
+      scanMarkup({
+        ...badge,
+        'src/row.ts': `const html = '<p class="badge__dot extra">x</p>';
+element.classList.add('badge', 'mine');
+element.className = 'badge__dot';
+element.setAttribute('class', 'badge');
+element.classList.contains('badge');`,
+      }),
+    ).toEqual([
+      'src/row.ts:1 borrowed-markup .badge__dot',
+      'src/row.ts:2 borrowed-markup .badge',
+      'src/row.ts:3 borrowed-markup .badge__dot',
+      'src/row.ts:4 borrowed-markup .badge',
+    ]);
+  });
+
+  it('flags Kerf classes in markup except the ones Kerf documents as placeable', () => {
+    expect(
+      scanMarkup(
+        {
+          'src/page.ts': `export const page = '<div class="kui-app-root"><div class="kui-toolbar kui-toolbar__leading"></div></div>';`,
+        },
+        new Set(['kui-app-root']),
+      ),
+    ).toEqual(['src/page.ts:1 borrowed-markup .kui-toolbar', 'src/page.ts:1 borrowed-markup .kui-toolbar__leading']);
+    expect(kerfPlaceableClasses().has('kui-app-root')).toBe(true);
+  });
+});
+
 describe('allowlist', () => {
   const violation = (selector, file = 'src/components/card.css') => ({
     file,
@@ -375,10 +461,12 @@ describe('the clients/web workspace', { timeout: 30_000 }, () => {
     write('src/components/a.css', '.a .b { color: red; }');
     write('src/components/b.tsx', 'import \'./b.css\';\nexport const B = () => <div class="b" />;');
     write('src/components/b.css', '.b { color: blue; }');
+    write('src/components/c.tsx', 'export const C = () => <i class="b__icon" />;');
     write('css-ownership-allowlist.json', JSON.stringify({ entries: [] }));
     const report = checkWorkspace(temporary);
-    expect(report.unexpected.map(({ file, selector }) => `${file} ${selector}`)).toEqual([
-      'src/components/a.css .a .b',
+    expect(report.unexpected.map(({ file, selector, kind }) => `${file} ${kind} ${selector}`)).toEqual([
+      'src/components/a.css foreign-class .a .b',
+      'src/components/c.tsx borrowed-markup .b__icon',
     ]);
   });
 });

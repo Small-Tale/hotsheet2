@@ -3,13 +3,16 @@
 // A component stylesheet may style only the class blocks its owning component module renders,
 // plus native HTML and raw Web Awesome elements that component renders itself. It never reaches
 // into another component: not a Kerf component (`.kui-*`, `[data-component]`), and not another
-// application component's classes or markup.
+// application component's classes or markup. Symmetrically, a module never renders another
+// component's class block (or a Kerf class) in its own markup, which would borrow that
+// component's styles without any cross-component selector (HS2-TM6K9V).
 //
 // Kerf's doctor runs with `ownership: "component"` (KF-5X1TWD, HS2-HGAH8E), but it judges only
 // the selector subject against composition-cataloged entries' exact public classes. This check
 // still owns everything else: element/modifier classes and uncataloged components (KF-GMM06Q),
 // hook descendants and composed-child element subjects (KF-1MRZ86), and another component's class
-// used as context or inside `:has()` (KF-WMMDDW). HS2-1GWX47 retires it when those ship.
+// used as context or inside `:has()` (KF-WMMDDW), and markup borrowing (KF-GNQ124). HS2-1GWX47
+// retires it when those ship.
 //
 // Ownership comes from the TSX sources, not from file names: each stylesheet is owned by the
 // modules that import it, and each class block is owned by the module(s) that render it.
@@ -157,7 +160,12 @@ export function moduleFacts(path, source) {
     tags = new Set(),
     elements = [],
     cssImports = [],
-    declares = new Set();
+    declares = new Set(),
+    classUses = [];
+  const lineOf = (node) => file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1;
+  const useClasses = (tokens, node, via) => {
+    for (const token of tokens) classUses.push({ token, line: lineOf(node), via });
+  };
   const tokensOf = (text) =>
     text
       .split(/\s+/)
@@ -202,10 +210,12 @@ export function moduleFacts(path, source) {
     };
     visit(start);
   }
-  const rawHtml = (text) => {
+  const rawHtml = (text, node) => {
     for (const match of text.matchAll(/<([a-z][a-z0-9-]*)[\s>/]/gi)) tags.add(match[1].toLowerCase());
-    for (const match of text.matchAll(/\bclass=(["'])([^"']*)\1/g))
+    for (const match of text.matchAll(/\bclass=(["'])([^"']*)\1/g)) {
       for (const token of tokensOf(match[2])) classTokens.add(token);
+      useClasses(tokensOf(match[2]), node, 'raw HTML class attribute');
+    }
   };
   const visit = (node) => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
@@ -217,7 +227,41 @@ export function moduleFacts(path, source) {
       const element = nodeOf(node);
       if (!element.component) tags.add(element.name.toLowerCase());
       if (element.classes.size) elements.push(element);
+      for (const attribute of opening(node).attributes.properties)
+        if (
+          ts.isJsxAttribute(attribute) &&
+          attribute.initializer &&
+          ['class', 'className'].includes(attribute.name.getText(file))
+        )
+          useClasses(literalTokens(attribute.initializer, new Set()), attribute, `<${element.name}> class`);
     }
+    // Classes written into the DOM imperatively: classList calls, className assignments, setAttribute('class').
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const method = node.expression.name.text,
+        target = node.expression.expression;
+      if (
+        ['add', 'remove', 'toggle', 'replace'].includes(method) &&
+        ts.isPropertyAccessExpression(target) &&
+        target.name.text === 'classList'
+      )
+        for (const argument of node.arguments)
+          if (ts.isStringLiteralLike(argument)) useClasses(tokensOf(argument.text), argument, `classList.${method}`);
+      if (
+        method === 'setAttribute' &&
+        node.arguments[0] &&
+        ts.isStringLiteralLike(node.arguments[0]) &&
+        node.arguments[0].text === 'class' &&
+        node.arguments[1]
+      )
+        useClasses(literalTokens(node.arguments[1], new Set()), node, "setAttribute('class')");
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isPropertyAccessExpression(node.left) &&
+      node.left.name.text === 'className'
+    )
+      useClasses(literalTokens(node.right, new Set()), node, 'className assignment');
     if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
@@ -228,10 +272,10 @@ export function moduleFacts(path, source) {
     }
     if (ts.isStringLiteralLike(node)) {
       for (const token of tokensOf(node.text)) classTokens.add(token);
-      rawHtml(node.text);
+      rawHtml(node.text, node);
     } else if (ts.isTemplateExpression(node)) {
       literalTokens(node, classTokens);
-      rawHtml([node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join(' '));
+      rawHtml([node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join(' '), node);
     }
     ts.forEachChild(node, visit);
   };
@@ -243,7 +287,7 @@ export function moduleFacts(path, source) {
         if (ts.isIdentifier(declaration.name)) declares.add(declaration.name.text);
   }
   const components = new Set([...nodes.values()].filter((node) => node.component).map((node) => node.name));
-  return { path, classTokens, tags, components, elements, cssImports, declares };
+  return { path, classTokens, classUses, tags, components, elements, cssImports, declares };
 }
 
 /**
@@ -463,6 +507,37 @@ export function findViolations(model) {
 }
 
 /**
+ * Every markup-borrowing violation (HS2-TM6K9V), `{ file, line, selector, kind, detail }` with
+ * `kind` `borrowed-markup`: a module that writes another component's class block into the DOM (a
+ * JSX `class`/`className`, a raw HTML `class="…"`, `classList`, a `className` assignment, or
+ * `setAttribute('class', …)`) borrows that component's styles without any cross-component selector.
+ * Kerf classes (`kui-*`) are always another component's, except the classes Kerf's catalog
+ * documents as placeable on application elements (`placeable`, such as `kui-app-root`).
+ * `selector` is the class as `.name`.
+ */
+export function findMarkupViolations(model, { placeable = new Set() } = {}) {
+  const violations = [];
+  for (const fact of model.factsByPath.values())
+    for (const { token, line, via } of fact.classUses) {
+      const report = (detail) =>
+        violations.push({ file: fact.path, line, selector: `.${token}`, kind: 'borrowed-markup', detail });
+      if (placeable.has(token)) continue;
+      if (token.startsWith('kui-')) {
+        report(`${via} renders a Kerf component class; compose the Kerf component and configure it through its props`);
+        continue;
+      }
+      const owners = model.blockOwners.get(blockOf(token));
+      if (owners && !owners.has(fact.path))
+        report(
+          `${via} renders .${blockOf(token)}, which belongs to ${list(owners)}; compose that component or give this element an own class`,
+        );
+    }
+  return violations.sort(
+    (a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.selector.localeCompare(b.selector),
+  );
+}
+
+/**
  * Validate the allowlist and compare it with the findings. Each entry is
  * `{ file, selector, count?, ticket, reason }` and covers exactly `count` (default 1) findings of
  * that selector in that file. Returns the findings no entry covers (`unexpected`), the entries
@@ -507,6 +582,14 @@ function filesUnder(directory, predicate) {
   return result;
 }
 
+/** The Kerf classes the installed Kerf composition catalog documents as placeable on application-authored elements. */
+export function kerfPlaceableClasses(
+  catalogPath = resolve(import.meta.dirname, '../node_modules/@kerfjs/ui/ai/component-composition.json'),
+) {
+  const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
+  return new Set(catalog.entries.flatMap((entry) => entry.boundaries?.placeableClasses ?? []));
+}
+
 /** Scan a web workspace and compare the findings with its allowlist. */
 export function checkWorkspace(workspace, allowlistPath = join(workspace, 'css-ownership-allowlist.json')) {
   const read = (path) => ({ path: relative(workspace, path).split(sep).join('/'), source: readFileSync(path, 'utf8') });
@@ -516,7 +599,8 @@ export function checkWorkspace(workspace, allowlistPath = join(workspace, 'css-o
     src,
     (path) => /\.(?:tsx?|mts)$/.test(path) && !/\.(?:test|spec)\.|\.d\.ts$/.test(path),
   ).map(read);
-  const violations = findViolations(buildOwnership({ stylesheets, modules, shellScopes: SHELL_SCOPES }));
+  const model = buildOwnership({ stylesheets, modules, shellScopes: SHELL_SCOPES });
+  const violations = [...findViolations(model), ...findMarkupViolations(model, { placeable: kerfPlaceableClasses() })];
   const allowlist = JSON.parse(readFileSync(allowlistPath, 'utf8'));
   return { violations, ...applyAllowlist(violations, allowlist) };
 }
@@ -540,7 +624,8 @@ export function formatReport({ violations, unexpected, stale, problems, allowed,
     ok: false,
     text:
       `CSS ownership check failed: ${unexpected.length} uncovered cross-component selector(s), ${stale.length} stale allowlist entr${stale.length === 1 ? 'y' : 'ies'}, ${problems.length} malformed entr${problems.length === 1 ? 'y' : 'ies'} (${allowed} findings allowlisted).\n` +
-      'A component stylesheet may style only its own class blocks and the native/Web Awesome elements it renders itself; ' +
+      'A component stylesheet may style only its own class blocks and the native/Web Awesome elements it renders itself, ' +
+      "and a module may render only its own class blocks (never another component's or a Kerf class); " +
       'configure a child component through its props, variants, or tokens instead (docs/ux-components.md).\n\n' +
       errors.join('\n'),
   };

@@ -2300,7 +2300,8 @@ The doctor's coverage is still partial. HS2-HGAH8E ran the same probe rules thro
 The doctor judges only the selector subject, and only against the exact `publicClasses` of
 composition entries. Kerf tickets cover the gaps: `KF-1MRZ86` (element subjects inside a hook
 target, a sibling root, or a composed child), `KF-GMM06Q` (class ownership derived from source
-and selection entries), and `KF-WMMDDW` (opt-in strictness for a sibling's class used as context).
+and selection entries), `KF-WMMDDW` (opt-in strictness for a sibling's class used as context), and `KF-GNQ124` (markup
+borrowing).
 HS2-1GWX47 retires the app check once they ship.
 
 Until then, `npm run css:ownership` runs as the last step of `npm run lint`. It is
@@ -2319,14 +2320,15 @@ Ownership comes from the TSX sources, not from file names:
   stylesheet named after the block, and otherwise to the stylesheet that uses the block as a
   selector root.
 
-The check reports four kinds of finding:
+The check reports five kinds of finding:
 
-| Kind              | Example                                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `kerf`            | `.kui-*` classes or `[data-component]` anywhere in a selector.                                                                                                                                                                                                                                                                                                                             |
-| `foreign-class`   | Another component's block anywhere in the selector, including inside `:has()`. This covers blocks whose name differs from their file (`.ticket-list-row*`) and blocks of components without a stylesheet.                                                                                                                                                                                  |
-| `hook-descendant` | An element below a class the component places on another component's root, for example `.terminal-drawer__rail .terminal-tab i` on Kerf `AppTab`. It counts even when that element is content this component projected into the child's slots.                                                                                                                                             |
-| `foreign-element` | A classless element subject that also reaches markup another component renders. The JSX tree below the nearest own classed element decides. A descendant combinator over a subtree containing another component (`.ai-conversation__activity svg` over `AIContentLabel`) is a finding. So is a child-combinator element the component never authors, such as the root of `LoadingSpinner`. |
+| Kind              | Example                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kerf`            | `.kui-*` classes or `[data-component]` anywhere in a selector.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `foreign-class`   | Another component's block anywhere in the selector, including inside `:has()`. This covers blocks whose name differs from their file (`.ticket-list-row*`) and blocks of components without a stylesheet.                                                                                                                                                                                                                                                                                                                                                                                             |
+| `hook-descendant` | An element below a class the component places on another component's root, for example `.terminal-drawer__rail .terminal-tab i` on Kerf `AppTab`. It counts even when that element is content this component projected into the child's slots.                                                                                                                                                                                                                                                                                                                                                        |
+| `foreign-element` | A classless element subject that also reaches markup another component renders. The JSX tree below the nearest own classed element decides. A descendant combinator over a subtree containing another component (`.ai-conversation__activity svg` over `AIContentLabel`) is a finding. So is a child-combinator element the component never authors, such as the root of `LoadingSpinner`.                                                                                                                                                                                                            |
+| `borrowed-markup` | The markup direction (HS2-TM6K9V): a module writes another component's class block into the DOM, so it borrows that component's styles with no cross-component selector at all. Class positions are JSX `class`/`className` (including hook classes on child components), raw HTML `class="…"` strings, `classList` calls, `className` assignments, and `setAttribute('class', …)`. Any `kui-*` class counts too, except the classes Kerf's composition catalog lists as `placeableClasses` (`kui-app-root`). The finding's file is the `.tsx`/`.ts` module and its selector is the class as `.name`. |
 
 The check allows a few things:
 
@@ -2335,6 +2337,12 @@ The check allows a few things:
 - A `LucideIcon` the component renders itself counts as its own `svg`. `HS2-4AQJEX` tracks moving
   those sizing rules to the icon's `size` prop.
 - `*`, `html`, `body`, sibling chains, and `@keyframes` steps are ignored.
+
+The markup rule's residue at introduction was 15 findings: shell markup in `runtime.tsx`
+(`HS2-T35VN7`), four modules that render a sibling's class (`HS2-WP69TD`), and the dev review
+page's raw copy of Kerf Toolbar markup (`HS2-PX4JNP`). `CorruptTicketRow` was fixed first
+(HS2-QSR1TG). `WorkspaceHeader` and the app runtime now import the header and heading stylesheets
+whose root blocks they render.
 
 Known residue is listed in `clients/web/css-ownership-allowlist.json`. Each entry has `file`,
 `selector` (with whitespace normalized), an exact `count` when the selector occurs more than once,

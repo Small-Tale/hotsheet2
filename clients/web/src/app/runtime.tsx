@@ -1,3 +1,6 @@
+// The shell renders the shared app-heading presentation (main.tsx loads it first).
+import '../components/heading.css';
+
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
 import { Select } from '@kerfjs/ui/select';
