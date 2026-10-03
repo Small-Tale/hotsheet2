@@ -118,14 +118,20 @@
 }
 /* The foreground covers the dialog panel (its positioned `dialog` part), not the viewport, so its
    padding alone insets a foreground popup symmetrically inside the dialog, below the heading
-   (HS2-SH3DR7). */
+   (HS2-SH3DR7). The foreground, not the popup, scrolls a card taller than the dialog: its padding
+   stays inside the scrollable area, so the card's shadow keeps that room on every side instead of
+   being clipped by a scrolling popup (HS2-VYM95K). Wheel and touch scrolling over the
+   pointer-interactive card chain to this scroller. */
 .ai-conversation__foreground {
   position: absolute;
   z-index: 100;
   display: flex;
   padding: remify(96px) remify(32px) remify(16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   pointer-events: none;
   inset: 0;
+  align-items: flex-start;
   justify-content: center;
 }
 .ai-conversation__transcript {

@@ -310,6 +310,13 @@ describe('AIConversation', () => {
       /@media \(max-width: remify\(640px\)\) \{\s*\.ai-conversation::part\(dialog\) \{[^}]*width: calc\(100vw - remify\(16px\)\);/,
     );
   });
+  it('scrolls a foreground taller than the dialog in the foreground itself, keeping the shadow room (HS2-VYM95K)', () => {
+    expect(css).toMatch(
+      /\.ai-conversation__foreground \{[^}]*padding: remify\(96px\) remify\(32px\) remify\(16px\);[^}]*overflow-y: auto;[^}]*overscroll-behavior: contain;[^}]*pointer-events: none;/,
+    );
+    // The popup never becomes its own scroller, which clipped the card's shadow (HS2-SH3DR7).
+    expect(css).not.toContain('.permission-request-popup');
+  });
   it('offers exports for completed transcripts and makes partial saved transcripts read-only', () => {
     const message = {
       id: 'answer',

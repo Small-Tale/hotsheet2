@@ -1496,7 +1496,10 @@ capability-aware sections when their underlying features and data contracts land
   672px and below) applies only to `inline` and `top`. So the host's padding alone sets a `flow`
   popup's insets. The AI conversation's foreground covers the dialog panel (not the viewport) and
   opens the popup below the heading, with symmetric 32px insets (16px at 640px and below), fully
-  inside the dialog (HS2-SH3DR7).
+  inside the dialog (HS2-SH3DR7). When the card is taller than the dialog (a short viewport or a long
+  command), the foreground itself scrolls (wheel and touch over the card chain to it), keeping its
+  padding as shadow room, so the lower actions stay reachable without clipping the card's shadow
+  (HS2-VYM95K).
 - `PermissionSummary`
 - `PermissionDetailDisclosure`
 - allow/deny/session-scope actions

@@ -12431,6 +12431,77 @@ for (const viewport of [
   });
 }
 
+for (const viewport of [
+  { width: 390, height: 480 },
+  { width: 1280, height: 420 },
+]) {
+  test(`scrolls a foreground permission popup taller than the conversation dialog at ${viewport.width}x${viewport.height} (HS2-VYM95K)`, async ({
+    page,
+  }) => {
+    await mockProject(page);
+    const longCommand = Array.from(
+      { length: 14 },
+      (_, index) => `npm run test -- --project=package-${index + 1} --reporter=verbose`,
+    ).join(' \\\n  && ');
+    await page.route('**/permissions', (route) =>
+      route.fulfill({
+        json: [
+          { id: 42, connection: 'codex-session', tool: 'Bash', action: longCommand, always_allow_supported: true },
+        ],
+      }),
+    );
+    await page.route('**/ws/poll*', (route) => {
+      if (new URL(route.request().url()).searchParams.get('since') === null)
+        return route.fulfill({ json: { cursor: 0, events: [], overflow: false } });
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+    await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+    const conversation = page.locator('[data-component="ai-conversation"]'),
+      dialog = conversation.getByRole('dialog'),
+      foreground = conversation.locator('.ai-conversation__foreground'),
+      popup = foreground.locator('[data-component="permission-request-popup"]'),
+      allowOnce = popup.getByRole('button', { name: 'Allow Once' });
+    await expect(popup).toBeVisible();
+    await page.setViewportSize(viewport);
+    // The card is taller than the dialog, so the foreground (not the popup) becomes the scroller and
+    // the popup keeps visible overflow for its shadow (HS2-VYM95K, HS2-SH3DR7).
+    await expect(foreground).toHaveCSS('overflow-y', 'auto');
+    await expect(popup).toHaveCSS('overflow-y', 'visible');
+    await expect.poll(() => foreground.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeGreaterThan(0);
+    const inside = async () => {
+      const [dialogBox, buttonBox] = await Promise.all([dialog.boundingBox(), allowOnce.boundingBox()]);
+      return (
+        buttonBox!.y >= dialogBox!.y &&
+        buttonBox!.y + buttonBox!.height <= dialogBox!.y + dialogBox!.height &&
+        buttonBox!.x >= dialogBox!.x &&
+        buttonBox!.x + buttonBox!.width <= dialogBox!.x + dialogBox!.width
+      );
+    };
+    // Unscrolled, the lower actions start below the dialog's bottom edge.
+    expect(await inside()).toBe(false);
+    await dialog.evaluate((node) => Promise.all(node.getAnimations().map((animation) => animation.finished)));
+    await page.screenshot({ path: `/tmp/claude/hs2-vym95k-foreground-top-${viewport.width}x${viewport.height}.png` });
+    // A wheel over the pointer-interactive card scrolls its foreground host.
+    const popupBox = (await popup.boundingBox())!;
+    await page.mouse.move(popupBox.x + popupBox.width / 2, popupBox.y + 24);
+    await page.mouse.wheel(0, 2000);
+    await expect.poll(() => foreground.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    await expect.poll(inside).toBe(true);
+    await expect(allowOnce).toBeInViewport({ ratio: 1 });
+    await allowOnce.click({ trial: true });
+    // Scrolled to the end, the foreground keeps its bottom padding below the card for the shadow.
+    const [foregroundBox, endPopupBox] = await Promise.all([foreground.boundingBox(), popup.boundingBox()]);
+    expect(
+      Math.round(foregroundBox!.y + foregroundBox!.height - (endPopupBox!.y + endPopupBox!.height)),
+    ).toBeGreaterThanOrEqual(16);
+    await page.screenshot({ path: `/tmp/claude/hs2-vym95k-foreground-end-${viewport.width}x${viewport.height}.png` });
+  });
+}
+
 test('clears a foreground permission from its authoritative event while the Allow response is delayed', async ({
   page,
 }) => {
