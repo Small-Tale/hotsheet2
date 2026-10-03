@@ -12624,6 +12624,91 @@ test('wraps long titles while editing in the sidebar and reader at 1280 and 390 
   }
 });
 
+test('keeps the title editor on the surface that started the edit at 1280 and 390 (HS2-2M5BBN)', async ({ page }) => {
+  const patches = await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const inspector = page.locator('#app-right-rail'),
+    sidebarEditor = inspector.getByRole('textbox', { name: 'Ticket title' }),
+    ringVisible = (editor: Locator) =>
+      editor.evaluate((node) => {
+        const style = getComputedStyle(node),
+          alpha = /rgba\([^)]*,\s*([\d.]+)\)/.exec(style.outlineColor)?.[1];
+        return (
+          style.outlineStyle !== 'none' &&
+          parseFloat(style.outlineWidth) > 0 &&
+          style.outlineColor !== 'transparent' &&
+          (alpha === undefined || parseFloat(alpha) > 0)
+        );
+      });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
+    const sidebarTitle = inspector.locator('[data-action="edit-ticket-title"]');
+    await expect(sidebarTitle).toBeVisible();
+    const initialTitle = (await sidebarTitle.textContent())!.trim();
+
+    // A reader edit opens only the reader's editor; the sidebar behind it keeps its static heading.
+    await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+    const reader = page.getByRole('dialog').locator('[data-component="ticket-inspector-header"]'),
+      readerEditor = reader.getByRole('textbox', { name: 'Ticket title' });
+    await reader.locator('[data-action="edit-ticket-title"]').dblclick();
+    await expect(readerEditor).toBeFocused();
+    await expect(readerEditor).toHaveJSProperty('value', initialTitle);
+    await page.screenshot({ path: test.info().outputPath(`hs2-2m5bbn-reader-editing-${width}.png`) });
+    await expect(sidebarEditor).toHaveCount(0);
+    await expect(inspector.locator('[data-action="edit-ticket-title"]')).toHaveCount(1);
+    await expect.poll(() => ringVisible(readerEditor)).toBe(true);
+    const readerTitle = `Reader-only edit at ${width}`;
+    await readerEditor.fill(readerTitle);
+    await readerEditor.press('Enter');
+    await expect(readerEditor).toHaveCount(0);
+    await expect(reader.getByRole('heading', { name: readerTitle })).toBeVisible();
+    await expect.poll(() => patches.at(-1)?.title).toBe(readerTitle);
+    await page.getByRole('button', { name: 'Close ticket reader' }).click();
+    await expect(inspector.getByRole('heading', { name: readerTitle })).toBeVisible();
+    await expect(sidebarEditor).toHaveCount(0);
+
+    // A sidebar edit opens only the sidebar's editor. An emptied draft keeps it open after focus leaves,
+    // and the unfocused editor no longer draws the focus ring.
+    await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
+    await expect(sidebarEditor).toBeFocused();
+    await expect(sidebarEditor).toHaveJSProperty('value', readerTitle);
+    await expect.poll(() => ringVisible(sidebarEditor)).toBe(true);
+    await sidebarEditor.fill('');
+    await sidebarEditor.evaluate((node) => {
+      node.blur();
+    });
+    await expect(sidebarEditor).not.toBeFocused();
+    await expect.poll(() => ringVisible(sidebarEditor)).toBe(false);
+    await page.screenshot({ path: test.info().outputPath(`hs2-2m5bbn-sidebar-unfocused-${width}.png`) });
+
+    // Starting a reader edit moves the editor to the reader; the sidebar shows its heading again.
+    await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+    await reader.locator('[data-action="edit-ticket-title"]').dblclick();
+    await expect(readerEditor).toBeFocused();
+    await expect(sidebarEditor).toHaveCount(0);
+    const finalTitle = `Moved edit at ${width}`;
+    await readerEditor.fill(finalTitle);
+    await readerEditor.press('Enter');
+    await expect(readerEditor).toHaveCount(0);
+    await expect.poll(() => patches.at(-1)?.title).toBe(finalTitle);
+    await page.getByRole('button', { name: 'Close ticket reader' }).click();
+
+    // A sidebar edit after the reader edit still opens in the sidebar and saves once on Enter.
+    await inspector.locator('[data-action="edit-ticket-title"]').dblclick();
+    await expect(sidebarEditor).toBeFocused();
+    await sidebarEditor.fill(initialTitle);
+    await sidebarEditor.press('Enter');
+    await expect(sidebarEditor).toHaveCount(0);
+    await expect.poll(() => patches.at(-1)?.title).toBe(initialTitle);
+    await expect(inspector.getByRole('heading', { name: initialTitle })).toBeVisible();
+  }
+  expect(patches.some((patch) => patch.title === '')).toBe(false);
+});
+
 test('hides title and tag mutation affordances when the provider cannot update', async ({ page }) => {
   await mockProject(page, false);
   await page.goto('/');

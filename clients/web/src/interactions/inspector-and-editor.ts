@@ -20,7 +20,12 @@ import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKi
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
 import { type TicketReaderFrame } from '../ticket-reader-stack';
-import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
+import {
+  normalizeTicketTitleField,
+  type TicketTitleEditSurface,
+  ticketTitleEditSurfaceOf,
+  ticketTitleKeyFinishesEdit,
+} from '../ticket-title-editing';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
 import { type Control, type DetailsFinishTask, type Project } from './types';
@@ -49,7 +54,8 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly fieldConflictResolution: Signal<string>;
   readonly fieldConflict: Signal<TicketFieldConflict | undefined>;
   readonly canUpdateSelected: () => boolean;
-  readonly titleEditing: Signal<boolean>;
+  /** The one surface whose title editor is open (HS2-2M5BBN). */
+  readonly titleEditingSurface: Signal<TicketTitleEditSurface | undefined>;
   readonly activeTicketSurface: () => ParentNode;
   readonly titleAutosave: DebouncedAutosave<string>;
   readonly tagsAutosave: DebouncedAutosave<string[]>;
@@ -137,7 +143,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     fieldConflictResolution,
     fieldConflict,
     canUpdateSelected,
-    titleEditing,
+    titleEditingSurface,
     activeTicketSurface,
     titleAutosave,
     tagsAutosave,
@@ -312,25 +318,26 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       void updateSelectedTracked(resolvedConflictPatch(conflict, value));
     }),
   );
-  function beginTitleEdit() {
+  function beginTitleEdit(trigger: Element) {
     if (!selectedTicket.value || !canUpdateSelected()) return;
     const restoredTitle = restoreTicketDraft('title', selectedTicket.value.title);
     titleDraft.value = restoredTitle?.draft ?? selectedTicket.value.title;
     dependencies.titleDraftBase = restoredTitle?.base ?? selectedTicket.value.title;
-    titleEditing.value = true;
+    // Only the surface that started the edit shows the editor; the other keeps its heading (HS2-2M5BBN).
+    titleEditingSurface.value = ticketTitleEditSurfaceOf(trigger);
     if (restoredTitle) titleAutosave.schedule(titleDraft.value);
     queueMicrotask(() => activeTicketSurface().querySelector<HTMLElement>('[name="ticket-title"]')?.focus());
   }
   lifetime.add(
-    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_ACTIONS.editTicketTitle.selector, () => {
-      beginTitleEdit();
+    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_ACTIONS.editTicketTitle.selector, (_event, target) => {
+      beginTitleEdit(target);
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.editTicketTitle.selector, (event) => {
+    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.editTicketTitle.selector, (event, target) => {
       if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
       event.preventDefault();
-      beginTitleEdit();
+      beginTitleEdit(target);
     }),
   );
   lifetime.add(
@@ -352,7 +359,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     delegate(document.body, 'focusout', INSPECTOR_AND_EDITOR_TARGETS.ticketTitleField.selector, () => {
       if (!titleDraft.value.trim()) return;
       void titleAutosave.flush().then((saved) => {
-        if (saved) titleEditing.value = false;
+        if (saved) titleEditingSurface.value = undefined;
       });
     }),
   );

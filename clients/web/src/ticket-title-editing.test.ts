@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeTicketTitleField, singleLineTicketTitle, ticketTitleKeyFinishesEdit } from './ticket-title-editing';
+import {
+  normalizeTicketTitleField,
+  singleLineTicketTitle,
+  ticketTitleEditSurfaceOf,
+  ticketTitleKeyFinishesEdit,
+} from './ticket-title-editing';
 
 /** The slice of a live textarea the normalizer reads and writes. */
 function fakeField(value: string, selectionEnd: number) {
@@ -57,5 +62,23 @@ describe('single-line ticket title editing (HS2-98ZVPE)', () => {
     field.value = '';
     field.selectionEnd = 0;
     expect(normalizeTicketTitleField(field as unknown as HTMLTextAreaElement)).toBe('');
+  });
+});
+
+describe('title edit surface (HS2-2M5BBN)', () => {
+  /** An element whose ancestors carry the given data-component values. */
+  const within = (...components: string[]) =>
+    ({
+      closest: (selector: string) =>
+        components.some((component) => selector === `[data-component="${component}"]`) ? {} : null,
+    }) as unknown as Element;
+
+  it('assigns a gesture inside the ticket reader to the reader', () => {
+    expect(ticketTitleEditSurfaceOf(within('ticket-reader', 'ticket-inspector-header'))).toBe('reader');
+  });
+
+  it('assigns a gesture anywhere else to the sidebar inspector', () => {
+    expect(ticketTitleEditSurfaceOf(within('ticket-inspector-header'))).toBe('inspector');
+    expect(ticketTitleEditSurfaceOf(within())).toBe('inspector');
   });
 });

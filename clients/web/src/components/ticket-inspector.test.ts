@@ -107,6 +107,9 @@ describe('TicketInspector', () => {
       expect(shared).toContain(declaration);
     const editorRule = css.match(/\n\.ticket-inspector__title-input \{([^}]*resize: none;[^}]*)\}/)?.[1] ?? '';
     for (const declaration of ['overflow: hidden;', 'height: 100%;']) expect(editorRule).toContain(declaration);
+    // The focus ring marks keyboard focus only, so an unfocused editor never looks focused (HS2-2M5BBN).
+    expect(editorRule).not.toContain('outline');
+    expect(rule('.ticket-inspector__title-input:focus-visible')).toContain('outline: var(--wa-focus-ring);');
   });
 
   it('renders each public tab without changing ticket identity', () => {

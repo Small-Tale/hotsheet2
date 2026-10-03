@@ -127,9 +127,12 @@
   border-radius: remify(6.4px);
   background: var(--wa-color-surface-default);
   color: inherit;
+  resize: none;
+}
+/* The ring marks keyboard focus, so an editor that has lost focus no longer looks focused (HS2-2M5BBN). */
+.ticket-inspector__title-input:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
-  resize: none;
 }
 /* The reader's title editor keeps the reader title's size and reading width while editing (HS2-R8M8HB),
    so double-clicking the title never shrinks the text to the sidebar inspector's size. */

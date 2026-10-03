@@ -1221,7 +1221,9 @@ and identity-less legacy entries remain conservatively blocking.
   blocked-reason drafts autosave independently on focus loss; refresh reconciliation preserves a dirty
   local draft, and closing a reader flushes its pending writes through the owning project's
   checkout before the dialog is allowed to hide and the stack unwinds. Failed flushes veto
-  dismissal and preserve the visible reader and its drafts.
+  dismissal and preserve the visible reader and its drafts. A title edit belongs to the
+  surface that started it: while the reader edits the selected ticket's title, the sidebar
+  inspector behind it keeps its static heading, and the reverse (HS2-2M5BBN).
 
   The MessageSquare action is available before Drive and opens the production
   `AIConversation` dialog after preparing the default tool without sending a workflow turn.

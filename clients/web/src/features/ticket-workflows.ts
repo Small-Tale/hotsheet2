@@ -95,6 +95,7 @@ import {
   updateTicketReaderFrame,
 } from '../ticket-reader-stack';
 import { ticketTimelineEntries } from '../ticket-timeline-data';
+import type { TicketTitleEditSurface } from '../ticket-title-editing';
 import { copiedTicketPlacement } from '../ticket-transfer';
 import {
   createdTicketVisibleInView,
@@ -146,7 +147,8 @@ export interface TicketWorkflowDependencies {
   detailsDraft: Signal<string>;
   readerDetailsMode: Signal<MarkdownEditorMode>;
   readerDetailsDraft: Signal<string>;
-  titleEditing: Signal<boolean>;
+  /** The one surface whose title editor is open (HS2-2M5BBN). */
+  titleEditingSurface: Signal<TicketTitleEditSurface | undefined>;
   titleDraft: Signal<string>;
   blockedReasonEditing: Signal<boolean>;
   blockedReasonDraft: Signal<string>;
@@ -270,7 +272,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     detailsDraft,
     readerDetailsMode,
     readerDetailsDraft,
-    titleEditing,
+    titleEditingSurface,
     titleDraft,
     blockedReasonEditing,
     blockedReasonDraft,
@@ -374,7 +376,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             },
           ]
         : field === 'title'
-          ? [titleEditing.value && { base: () => state.titleDraftBase, draft: titleDraft }]
+          ? [titleEditingSurface.value !== undefined && { base: () => state.titleDraftBase, draft: titleDraft }]
           : field === 'blocked_reason'
             ? [
                 blockedReasonEditing.value && { base: () => state.blockedReasonDraftBase, draft: blockedReasonDraft },
@@ -611,7 +613,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     if (typeof patch.details === 'string' && detailsMode.value === 'write') state.detailsDraftBase = patch.details;
     if (typeof patch.details === 'string' && readerDetailsMode.value === 'write')
       state.readerDetailsDraftBase = patch.details;
-    if (typeof patch.title === 'string' && titleEditing.value) state.titleDraftBase = patch.title;
+    if (typeof patch.title === 'string' && titleEditingSurface.value !== undefined) state.titleDraftBase = patch.title;
     if (Object.hasOwn(patch, 'blocked_reason') && blockedReasonEditing.value)
       state.blockedReasonDraftBase = typeof patch.blocked_reason === 'string' ? patch.blocked_reason : '';
     if (Object.hasOwn(patch, 'blocked_reason') && readerBlockedReasonEditing.value)
@@ -1472,7 +1474,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       readerDetailsDraft.value = ticket.details;
       state.detailsDraftBase = ticket.details;
       state.readerDetailsDraftBase = ticket.details;
-      titleEditing.value = false;
+      titleEditingSurface.value = undefined;
       titleDraft.value = ticket.title;
       state.titleDraftBase = ticket.title;
       blockedReasonEditing.value = false;

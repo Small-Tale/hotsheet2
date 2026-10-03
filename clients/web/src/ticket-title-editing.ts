@@ -31,3 +31,15 @@ export function normalizeTicketTitleField(field: HTMLTextAreaElement | HTMLInput
   field.setSelectionRange(caret, caret);
   return normalized;
 }
+
+/**
+ * The ticket surface whose title editor is open (HS2-2M5BBN). The sidebar inspector and the reader both
+ * render the selected ticket's title, so the edit belongs to the one surface that started it: only that
+ * surface shows the editor, and the other keeps its static heading.
+ */
+export type TicketTitleEditSurface = 'inspector' | 'reader';
+
+/** The surface an edit-title gesture came from: the ticket reader when inside it, else the inspector. */
+export function ticketTitleEditSurfaceOf(target: Element): TicketTitleEditSurface {
+  return target.closest('[data-component="ticket-reader"]') ? 'reader' : 'inspector';
+}

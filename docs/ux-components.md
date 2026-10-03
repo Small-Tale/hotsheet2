@@ -1107,7 +1107,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     grows with its content in the sidebar and the reader, at wide and narrow widths, without
     depending on `field-sizing`. A title stays one line: Enter finishes the edit through the
     blur autosave instead of inserting a newline, and pasted line breaks collapse to spaces
-    (HS2-98ZVPE)
+    (HS2-98ZVPE). Only the surface that started the edit shows the editor: a reader edit leaves
+    the sidebar behind it on its static heading, and the reverse. The editor's focus ring is a
+    `:focus-visible` treatment, so an editor that has lost focus no longer looks focused
+    (HS2-2M5BBN)
   - up-next/star toggle
   - close/collapse action
 - `InspectorTabBar`
