@@ -224,6 +224,22 @@ test('copies and pastes from the phone magnified terminal toolbar', async ({ pag
   // Every footer control stays inside the phone width.
   const overflow = await footer.evaluate((node) => node.scrollWidth - node.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+  // HS2-8NQRJB: the phone toolbar leaves open-in-drawer to More actions, so the identity keeps room.
+  await expect(footer.getByRole('button', { name: /in project terminal drawer/ })).toHaveCount(0);
+  // The terminal's own name leads untruncated, with its project as a subtitle.
+  const identity = footer.locator('.terminal-tile__identity');
+  await expect(identity.locator('strong')).toHaveText('Nano');
+  await expect(identity.locator('.terminal-tile__identity-project')).toHaveText('Terminal feedback');
+  expect(await identity.locator('strong').evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(
+    0,
+  );
+  expect(await identity.evaluate((node) => node.clientWidth)).toBeGreaterThanOrEqual(88);
+  await footer.getByRole('button', { name: 'More actions for nano' }).tap();
+  const menu = page.locator('[data-context-menu="terminal"]');
+  await expect(menu.getByText('Open', { exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  if (!(await magnified.isVisible())) await tile.click();
   await magnified.evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => 0)));
   });

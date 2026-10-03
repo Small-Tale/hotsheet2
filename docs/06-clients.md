@@ -2664,8 +2664,12 @@ outside the terminal never dismisses it; Close does (HS2-SB1FSQ). It pads for th
 and clips rather than scrolls its scaled xterm root so a focus scroll or touch cannot pan the
 terminal sideways off screen. The card footer becomes a **top toolbar** carrying **Close**
 (Lucide `x`), the terminal identity, a **text-size** button (Lucide `a-large-small`; the
-column count is not shown inline — a toast reports the new size on change, HS2-89JZSN), the
-actions menu, and open-in-drawer. The toolbar is shown only while the
+column count is not shown inline — a toast reports the new size on change, HS2-89JZSN), Copy and
+Paste (HS2-FRB545), and the actions menu. The identity leads with the terminal's own name and shows
+its project as a smaller subtitle, so at 390px it names the terminal rather than truncating inside
+the project name. There is no separate open-in-drawer button on the phone: **More actions → Open**
+and tapping the identity both open the terminal in its project drawer (HS2-8NQRJB). The toolbar is
+shown only while the
 keyboard is hidden; keyboard visibility is inferred when the unscaled visual viewport is more than
 120px shorter than the layout viewport (pinch zoom is not mistaken for a keyboard). Text size
 cycles **80 → 70 → 60 → 50 → 40 → 80** columns; the choice is persisted per browser

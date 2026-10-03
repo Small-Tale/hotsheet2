@@ -140,7 +140,11 @@ for (const width of [390, 1280]) {
         expanded = magnified.locator('[data-display-mode="interactive"]');
       await expectGlyphPixels(page, expanded, 'REPLAY LAN GLYPHS');
       await magnified.screenshot({ path: testInfo.outputPath(`safari-lan-magnified-${width}.png`) });
-      await magnified.getByRole('button', { name: /^Open nano in project terminal drawer$/i }).click();
+      if (width === 390) {
+        // The phone toolbar reaches the drawer through More actions → Open (HS2-8NQRJB).
+        await magnified.getByRole('button', { name: /^More actions for nano$/i }).click();
+        await page.locator('[data-context-menu="terminal"]').getByText('Open', { exact: true }).click();
+      } else await magnified.getByRole('button', { name: /^Open nano in project terminal drawer$/i }).click();
       const dedicated = page.locator('[data-component="terminal-session"] [data-terminal-id="nano"]');
       await expectGlyphPixels(page, dedicated, 'REPLAY LAN GLYPHS');
       await dedicated.locator('.xterm-helper-textarea').focus();

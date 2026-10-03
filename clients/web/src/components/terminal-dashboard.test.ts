@@ -141,6 +141,14 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('data-action="copy-terminal-text"');
     expect(markup).toContain('data-action="paste-terminal-text"');
     expect(String(FixedAspectTerminalCard({ session, mode: 'magnified' }))).not.toContain('copy-terminal-text');
+    // HS2-8NQRJB: the phone toolbar drops the separate open-in-drawer button (More actions → Open and the
+    // identity keep that action) so the identity is not truncated; the desktop toolbar keeps it.
+    expect(markup).not.toContain('in project terminal drawer');
+    expect(markup).toContain('data-action="open-terminal-context-menu"');
+    expect(markup).toContain('data-action="open-terminal-project"');
+    expect(String(FixedAspectTerminalCard({ session, mode: 'magnified' }))).toContain(
+      'Open Codex in project terminal drawer',
+    );
   });
   it('keeps the smallest tile keyboard-focusable and makes its fitted magnified copy interactive', () => {
     const compact = String(TerminalDashboard({ groups, width: 900, height: 600, fitAcross: 7, fitHigh: 3 }));

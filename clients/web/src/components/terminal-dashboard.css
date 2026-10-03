@@ -391,6 +391,15 @@
   color: var(--wa-color-neutral-on-normal);
   font-size: var(--wa-font-size-s);
 }
+/* Phone toolbar subtitle under the terminal name (HS2-8NQRJB). */
+.terminal-tile__identity-project {
+  width: 100%;
+  overflow: hidden;
+  font-size: var(--wa-font-size-2xs);
+  line-height: var(--wa-line-height-condensed);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .terminal-tile__progress {
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
@@ -523,6 +532,9 @@
 }
 .terminal-tile[data-mobile-chrome='true'] .terminal-tile__identity strong {
   color: var(--hs-terminal-foreground);
+}
+.terminal-tile[data-mobile-chrome='true'] .terminal-tile__identity-project {
+  color: color-mix(in srgb, var(--hs-terminal-foreground) 70%, transparent);
 }
 .terminal-tile[data-mobile-chrome='true'] .terminal-tile__footer button {
   color: var(--hs-terminal-foreground);

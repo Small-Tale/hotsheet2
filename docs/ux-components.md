@@ -2618,3 +2618,9 @@ text-size control, and the magnified terminal toolbar adds the same two buttons.
 (a raw `wa-dialog` with an app-owned, read-only, terminal-colored native text view) and
 `TerminalPasteDialog` (the denied/unavailable fallback with an editable native field) are cataloged
 as `terminal-copy-dialog` and `terminal-paste-dialog`, with both paste reasons exposed in the demo.
+
+HS2-8NQRJB gives the phone magnified terminal toolbar more identity room. In mobile chrome the
+identity shows the terminal name with the project as a subtitle (`terminal-tile__identity-project`).
+The separate open-in-drawer button is omitted there because More actions → Open and the identity
+already carry that action. Desktop magnified toolbars keep the single-line `project › terminal`
+identity and the open-in-drawer button.

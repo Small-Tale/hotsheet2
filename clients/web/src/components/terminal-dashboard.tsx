@@ -283,11 +283,20 @@ function TerminalCard({
           data-item-id={key}
           aria-label={`Open ${session.title ?? session.id} in ${session.projectName}`}
         >
-          <strong>
-            {session.projectName}
-            <span aria-hidden="true"> › </span>
-            {session.title ?? session.id}
-          </strong>
+          {magnified && mobile ? (
+            // Phone toolbar: the terminal's own name leads, with its project as a subtitle, so a narrow
+            // identity still names the terminal instead of truncating inside the project (HS2-8NQRJB).
+            <>
+              <strong>{session.title ?? session.id}</strong>
+              <span class="terminal-tile__identity-project">{session.projectName}</span>
+            </>
+          ) : (
+            <strong>
+              {session.projectName}
+              <span aria-hidden="true"> › </span>
+              {session.title ?? session.id}
+            </strong>
+          )}
         </button>
         {session.progress !== undefined && <span class="terminal-tile__progress">{session.progress}%</span>}
         {magnified && mobile && (
@@ -334,7 +343,9 @@ function TerminalCard({
         >
           <LucideIcon icon={Ellipsis} name="ellipsis" />
         </button>
-        {magnified && (
+        {/* The phone toolbar leaves this to More actions → Open (and the identity), so the identity keeps
+            room beside Copy and Paste at 390px (HS2-8NQRJB). */}
+        {magnified && !mobile && (
           <button
             type="button"
             class="terminal-tile__open"
