@@ -2674,17 +2674,13 @@ async fn list_accounts_route(
 ) -> Result<Json<Vec<hotsheet_ticketing::accounts::Account>>, ApiError> {
     tokio::task::spawn_blocking(move || {
         let (connections, checkouts) = account_listing_inputs(&state)?;
-        let names = state
-            .key_registry()
-            .list()
-            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-            .into_iter()
-            .map(|key| key.provider)
-            .collect::<Vec<_>>();
+        // Records the site of sign-ins stored before keys.json kept one (HS2-16MYXN).
+        let credentials = hotsheet_extsync::credentials_with_sites(&state.key_registry())
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
         Ok(Json(hotsheet_ticketing::accounts::list_accounts(
             &connections,
             &checkouts,
-            &names,
+            &credentials,
         )))
     })
     .await
@@ -2915,8 +2911,23 @@ async fn create_provider_connection(
             &connection.locator,
         );
     }
+    fill_reused_sign_in_endpoint(&state, &mut connection);
     save_provider_connections(&state, connections, connection.clone(), None)?;
     Ok((StatusCode::CREATED, Json(connection)))
+}
+
+/// A new GitHub source reusing a GitHub Enterprise sign-in gets that site's `api_base` even
+/// when the client did not send one (HS2-16MYXN). Best effort: an unreadable key registry
+/// leaves the connection as sent.
+fn fill_reused_sign_in_endpoint(state: &AppState, connection: &mut ProviderConnection) {
+    if connection.provider != "github" {
+        return;
+    }
+    // keys.json metadata only: creating a source never reads the keychain (the listing that
+    // offered the account already backfilled any older sign-in's site).
+    if let Ok(credentials) = state.key_registry().list() {
+        hotsheet_ticketing::accounts::fill_reused_github_api_base(connection, &credentials);
+    }
 }
 
 async fn update_provider_connection(
@@ -3019,6 +3030,7 @@ async fn create_checkout_provider_connection(
     }
     // A project's default lives on its checkout, never on the shared record.
     connection.default = false;
+    fill_reused_sign_in_endpoint(&state, &mut connection);
     save_provider_connections(&state, connections, connection.clone(), None)?;
     let linked = state.checkout_registry.add_source(
         &checkout.id,

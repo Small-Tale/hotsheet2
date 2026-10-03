@@ -5060,12 +5060,9 @@ fn cmd_account(cmd: AccountCmd, path: &Path) -> Result<()> {
         hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json")).list()?;
     match cmd {
         AccountCmd::List { json } => {
-            let names = keys
-                .list()?
-                .into_iter()
-                .map(|key| key.provider)
-                .collect::<Vec<_>>();
-            let list = accounts::list_accounts(&connections, &checkouts, &names);
+            // Records the site of sign-ins stored before keys.json kept one (HS2-16MYXN).
+            let credentials = hotsheet_extsync::credentials_with_sites(&keys)?;
+            let list = accounts::list_accounts(&connections, &checkouts, &credentials);
             if json {
                 println!("{}", serde_json::to_string_pretty(&list)?);
                 return Ok(());
@@ -5080,6 +5077,13 @@ fn cmd_account(cmd: AccountCmd, path: &Path) -> Result<()> {
                     format!(" · {}", account.host)
                 };
                 println!("{} ({}{host})", account.id, account.provider);
+                // What a new source reusing this account needs besides its own locator.
+                if let Some(identity) = &account.identity {
+                    println!("  account: {identity}");
+                }
+                if let Some(base_url) = &account.base_url {
+                    println!("  endpoint: {base_url}");
+                }
                 if account.sources.is_empty() {
                     println!("  not used by any ticket source");
                 }

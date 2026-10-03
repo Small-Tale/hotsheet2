@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -149,5 +149,49 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     expect(((await removed.json()) as SourceDetach).removed_connection).toBe(true);
     expect(await (await api(owner.id, '/provider-connections')).json()).toEqual([]);
     expect(await (await api(owner.id, '/accounts')).json()).toEqual([]);
+  }, 120_000);
+
+  it('reports the host of an unused Enterprise sign-in and seeds a reusing source (HS2-16MYXN)', async () => {
+    const app = createDevApp(),
+      root = await mkdtemp(join(workspace, 'enterprise-')),
+      opened = await openLocalProject(root, await createLocalGitTicketStore(root)),
+      api = (path: string, init?: RequestInit) =>
+        app.request(`/__hotsheet/project-api/${encodeURIComponent(opened.id)}${path}`, init);
+    // What the device flow records beside the keychain entry: the name and its non-secret site.
+    await writeFile(
+      join(home, 'keys.json'),
+      JSON.stringify({
+        'github-app-01ghe': {
+          provider: 'github-app-01ghe',
+          env: 'HOTSHEET_API_KEY_GITHUB_APP_01GHE',
+          site: 'https://ghe.corp.test',
+        },
+      }),
+    );
+    const accounts = (await (await api('/accounts')).json()) as ProviderAccount[];
+    expect(accounts).toEqual([
+      expect.objectContaining({
+        id: 'github-app-01ghe',
+        host: 'ghe.corp.test',
+        base_url: 'https://ghe.corp.test/api/v3',
+        sources: [],
+      }),
+    ]);
+    // An older client that omits api_base still gets the Enterprise server's.
+    const created = await api('/provider-connections', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: '',
+        provider: 'github',
+        locator: 'corp/app',
+        name: 'Corp issues',
+        default: false,
+        settings: { credential: { secret: 'github-app-01ghe' } },
+      }),
+    });
+    expect(created.status).toBe(201);
+    expect(((await created.json()) as ProviderConnection).settings.api_base).toBe('https://ghe.corp.test/api/v3');
+    await writeFile(join(home, 'keys.json'), '{}');
   }, 120_000);
 });

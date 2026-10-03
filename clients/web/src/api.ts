@@ -73,8 +73,16 @@ export interface ProviderAccount {
   /** The credential reference (OS-keychain entry name); never the secret. */
   id: string;
   provider: string;
-  /** The host signed in to; empty when unknown (an unused Hot Sheet GitHub sign-in). */
+  /**
+   * The host signed in to. An unused Hot Sheet GitHub sign-in reports the site it signed in to
+   * (HS2-16MYXN); empty only for a sign-in whose site is unknown.
+   */
   host: string;
+  /**
+   * The endpoint a new source reusing this account needs: GitHub Enterprise or self-managed GitLab
+   * `api_base`, or the Jira site URL. Absent for github.com and gitlab.com.
+   */
+  base_url?: string;
   identity?: string;
   /** Minted by Hot Sheet's GitHub sign-in rather than registered with `hotsheet key set`. */
   managed: boolean;

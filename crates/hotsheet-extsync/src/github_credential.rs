@@ -1,8 +1,9 @@
 //! Shared persistence and refresh for GitHub App device credentials. Both the HTTP server and
 //! headless CLI keep the bundle in the OS keychain and pass only its access token to providers.
 
+use hotsheet_ticketing::connection_removal::MANAGED_CREDENTIAL_PREFIX;
 use hotsheet_ticketing::{
-    KeyRegistry, ProviderConnection, ProviderError, SecretError, SecretStore,
+    KeyMetadata, KeyRegistry, ProviderConnection, ProviderError, SecretError, SecretStore,
 };
 use serde_json::{Value, json};
 
@@ -31,7 +32,44 @@ pub fn store_device_authorization<S: SecretStore>(
     now: i64,
 ) -> Result<(), SecretError> {
     let stored = json!({"kind":"github_app","client_id":client_id,"web_base":web_base,"obtained_at":now,"token":token});
-    keys.set(reference, &stored.to_string())
+    keys.set(reference, &stored.to_string())?;
+    // The web origin is not secret: keep it beside the name so an account no source uses yet
+    // still reports its host (HS2-16MYXN).
+    keys.record_site(reference, web_base)
+}
+
+/// The registry's credentials, after recording the web origin of every Hot Sheet GitHub
+/// sign-in stored before `keys.json` kept one (HS2-16MYXN). Each such bundle is read from
+/// the keychain once; its `web_base` is then kept as non-secret metadata, so later listings
+/// need no keychain read. A bundle that cannot be read stays without a site rather than
+/// failing the listing. Shared by `GET /accounts` and `hotsheet account list`.
+pub fn credentials_with_sites<S: SecretStore>(
+    keys: &KeyRegistry<S>,
+) -> Result<Vec<KeyMetadata>, SecretError> {
+    let mut listed = keys.list()?;
+    for key in &mut listed {
+        if key.site.is_some() || !key.provider.starts_with(MANAGED_CREDENTIAL_PREFIX) {
+            continue;
+        }
+        let Some(site) = keys
+            .get(&key.provider)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .filter(|stored| stored.get("kind").and_then(Value::as_str) == Some("github_app"))
+            .and_then(|stored| {
+                stored
+                    .get("web_base")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+        else {
+            continue;
+        };
+        if keys.record_site(&key.provider, &site).is_ok() {
+            key.site = Some(site.trim_end_matches('/').to_owned());
+        }
+    }
+    Ok(listed)
 }
 
 pub fn connection_access_token<S: SecretStore>(
@@ -232,5 +270,43 @@ mod tests {
         let stored: Value = serde_json::from_str(&keys.get("github-app-test").unwrap()).unwrap();
         assert_eq!(stored["client_id"], "IvTest12345678");
         assert_eq!(stored["obtained_at"], 100);
+        // The web origin is recorded as non-secret metadata (HS2-16MYXN).
+        assert_eq!(
+            keys.list().unwrap()[0].site.as_deref(),
+            Some("https://github.com")
+        );
+    }
+
+    #[test]
+    fn sign_ins_stored_before_sites_existed_are_backfilled_once() {
+        let home = tempfile::tempdir().unwrap();
+        let secrets = MemorySecrets::default();
+        let keys = KeyRegistry::new(home.path(), secrets.clone());
+        // A pre-HS2-16MYXN Enterprise sign-in: bundle in the keychain, no site in keys.json.
+        keys.set(
+            "github-app-old",
+            &json!({"kind":"github_app","client_id":"IvTest12345678","web_base":"https://ghe.corp.test/","obtained_at":1,"token":bundle("a",None)}).to_string(),
+        )
+        .unwrap();
+        // A plain key and a managed-looking name whose bundle is not a sign-in stay site-less.
+        keys.set("anthropic", "sk-test").unwrap();
+        keys.set("github-app-broken", "not json").unwrap();
+        let listed = credentials_with_sites(&keys).unwrap();
+        let sites = listed
+            .iter()
+            .map(|key| (key.provider.as_str(), key.site.as_deref()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            sites,
+            [
+                ("anthropic", None),
+                ("github-app-broken", None),
+                ("github-app-old", Some("https://ghe.corp.test")),
+            ]
+        );
+        // Recorded on disk, so the next listing reads no keychain entry for it.
+        secrets.0.lock().unwrap().remove("github-app-old");
+        let again = credentials_with_sites(&keys).unwrap();
+        assert_eq!(again[2].site.as_deref(), Some("https://ghe.corp.test"));
     }
 }

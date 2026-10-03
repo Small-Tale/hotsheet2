@@ -904,8 +904,14 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     const target = ticketSourceSetupProject.value,
       account = providerAccounts.value.find((item) => item.id === id && item.provider === 'github');
     if (!target || !account || githubAuth.value?.state === 'waiting') return;
+    // An Enterprise account's site comes from its reported endpoint (also for an unused sign-in,
+    // HS2-16MYXN), so the new source gets that server's api_base rather than github.com's.
     const session = `account:${id}`,
-      enterpriseUrl = account.host && account.host !== 'github.com' ? `https://${account.host}` : undefined;
+      enterpriseUrl = account.base_url
+        ? new URL(account.base_url).origin
+        : account.host && account.host !== 'github.com'
+          ? `https://${account.host}`
+          : undefined;
     providerSettingsError.value = '';
     githubAuth.value = {
       session,

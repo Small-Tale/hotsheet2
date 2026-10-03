@@ -14927,6 +14927,127 @@ async fn project_owned_sources_and_machine_wide_accounts() {
     assert_eq!(all.as_array().unwrap().len(), 1);
 }
 
+/// HS2-16MYXN: an unused Hot Sheet GitHub Enterprise sign-in reports its host from the site
+/// recorded in keys.json, and a source another project creates by reusing it gets that site's
+/// `api_base` even though the client sent none.
+#[tokio::test]
+async fn an_unused_enterprise_sign_in_reports_its_host_and_seeds_reusing_sources() {
+    let home = tempfile::tempdir().unwrap();
+    let (primary, st) = state();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st
+        .with_machine_home(home.path())
+        .with_checkout_registry(registry.path().join("checkouts.json")));
+    std::fs::write(
+        home.path().join("keys.json"),
+        serde_json::json!({
+            "github-app-01ghe": {"provider": "github-app-01ghe", "env": "HOTSHEET_API_KEY_GITHUB_APP_01GHE", "site": "https://ghe.corp.test"},
+            "github-app-01dot": {"provider": "github-app-01dot", "env": "HOTSHEET_API_KEY_GITHUB_APP_01DOT", "site": "https://github.com"}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let registration =
+        serde_json::json!({"root":project.path(),"alias":"procurement","stores":[primary.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let call = |method: &'static str, path: &'static str, body: Option<serde_json::Value>| {
+        let app = app.clone();
+        async move {
+            let body = body.map(|value| value.to_string());
+            let response = app
+                .oneshot(authed(method, path, body.as_deref()))
+                .await
+                .unwrap();
+            let status = response.status();
+            let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&bytes)
+                    .unwrap_or(serde_json::Value::Null),
+            )
+        }
+    };
+    let (status, accounts) = call("GET", "/accounts", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let summary = accounts
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|account| {
+            (
+                account["id"].as_str().unwrap(),
+                account["host"].as_str().unwrap(),
+                account["base_url"].as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        summary,
+        [
+            (
+                "github-app-01ghe",
+                "ghe.corp.test",
+                Some("https://ghe.corp.test/api/v3")
+            ),
+            ("github-app-01dot", "github.com", None),
+        ],
+        "{accounts}"
+    );
+    // Reuse without an api_base (an older client): the server derives it from the sign-in.
+    let (status, created) = call(
+        "POST",
+        "/checkouts/procurement/provider-connections",
+        Some(serde_json::json!({
+            "provider":"github","locator":"corp/app",
+            "settings":{"credential":{"secret":"github-app-01ghe"}}
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(
+        created["settings"]["api_base"],
+        "https://ghe.corp.test/api/v3"
+    );
+    // A github.com sign-in stays on the public default.
+    let (status, dotcom) = call(
+        "POST",
+        "/checkouts/procurement/provider-connections",
+        Some(serde_json::json!({
+            "provider":"github","locator":"acme/app",
+            "settings":{"credential":{"secret":"github-app-01dot"}}
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{dotcom}");
+    assert!(dotcom["settings"].get("api_base").is_none(), "{dotcom}");
+    // The machine-wide create route seeds it the same way.
+    let (status, machine) = call(
+        "POST",
+        "/provider-connections",
+        Some(serde_json::json!({
+            "id":"","provider":"github","locator":"corp/other","name":null,"default":false,
+            "settings":{"credential":{"secret":"github-app-01ghe"}}
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{machine}");
+    assert_eq!(
+        machine["settings"]["api_base"],
+        "https://ghe.corp.test/api/v3"
+    );
+    // Once used, the account's host still reads ghe.corp.test, now from its source.
+    let (_, accounts) = call("GET", "/accounts", None).await;
+    assert_eq!(accounts[0]["host"], "ghe.corp.test", "{accounts}");
+    assert_eq!(accounts[0]["sources"].as_array().unwrap().len(), 2);
+}
+
 #[tokio::test]
 async fn stopping_server_cancels_a_held_permission_ask_with_503() {
     // HS2-W1KJR4: a hook parked on a decision must not hold the shutdown drain open.

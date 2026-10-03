@@ -4844,6 +4844,77 @@ fn provider_remove_unlinks_checkouts_and_repeats_cleanly() {
 }
 
 #[test]
+fn account_list_reports_the_host_of_unused_sign_ins() {
+    // HS2-16MYXN: an unused Hot Sheet GitHub sign-in reports the host it signed in to, from
+    // the site recorded in keys.json, or, for a sign-in stored before sites were kept, from
+    // its stored bundle (recorded once, then read from keys.json).
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path()).args(args);
+        cmd
+    };
+    run(&["init"]).assert().success();
+    std::fs::write(
+        home.path().join("keys.json"),
+        r#"{
+            "github-app-01ghe":{"provider":"github-app-01ghe","env":"HOTSHEET_API_KEY_GITHUB_APP_01GHE","site":"https://ghe.corp.test"},
+            "github-app-01old":{"provider":"github-app-01old","env":"HOTSHEET_API_KEY_GITHUB_APP_01OLD"}
+        }"#,
+    )
+    .unwrap();
+    let legacy = serde_json::json!({"kind":"github_app","client_id":"IvTest12345678","web_base":"https://github.com","obtained_at":1,"token":{"access_token":"a"}});
+    let list = run(&["account", "list", "--json"])
+        .env("HOTSHEET_API_KEY_GITHUB_APP_01OLD", legacy.to_string())
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let accounts: serde_json::Value = serde_json::from_slice(&list).unwrap();
+    let summary = accounts
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|account| {
+            (
+                account["id"].as_str().unwrap().to_owned(),
+                account["host"].as_str().unwrap().to_owned(),
+                account["base_url"].as_str().map(str::to_owned),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        summary,
+        [
+            (
+                "github-app-01ghe".to_owned(),
+                "ghe.corp.test".to_owned(),
+                Some("https://ghe.corp.test/api/v3".to_owned())
+            ),
+            ("github-app-01old".to_owned(), "github.com".to_owned(), None),
+        ]
+    );
+    // The legacy sign-in's site is now recorded, so no bundle read is needed again.
+    let keys = std::fs::read_to_string(home.path().join("keys.json")).unwrap();
+    assert!(keys.contains(r#""site": "https://github.com""#), "{keys}");
+    assert!(!keys.contains("access_token"), "{keys}");
+    run(&["account", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "github-app-01ghe (github · ghe.corp.test)",
+        ))
+        .stdout(predicate::str::contains(
+            "endpoint: https://ghe.corp.test/api/v3",
+        ))
+        .stdout(predicate::str::contains(
+            "github-app-01old (github · github.com)",
+        ));
+}
+
+#[test]
 fn project_owned_sources_and_accounts_have_headless_parity() {
     // HS2-SM9PM8: `checkout remove-source` and `account list|sign-out` run the same workflows
     // as Project Settings → Ticket sources and App Settings → Accounts.

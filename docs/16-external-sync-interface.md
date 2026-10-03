@@ -525,10 +525,23 @@ derives accounts from the connection records, the checkout links, and `keys.json
 never stored, so there is nothing to migrate:
 
 - `GET /accounts` / `hotsheet account list [--json]` list each account (`id` = credential
-  reference, `provider`, `host`, Jira `identity`, `managed` for a Hot Sheet GitHub sign-in)
-  with its sources and the projects using each. A Hot Sheet GitHub sign-in (`github-app-*`)
-  that no source uses yet is listed too; other unused keys (AI-provider keys) are not
-  accounts.
+  reference, `provider`, `host`, `base_url`, Jira `identity`, `managed` for a Hot Sheet GitHub
+  sign-in) with its sources and the projects using each. `base_url` is the endpoint a new
+  source reusing the account needs — a GitHub Enterprise or self-managed GitLab `api_base`, or
+  the Jira site — and is omitted for github.com and gitlab.com. A Hot Sheet GitHub sign-in
+  (`github-app-*`) that no source uses yet is listed too; other unused keys (AI-provider keys)
+  are not accounts.
+- **Host of an unused sign-in (HS2-16MYXN).** The device flow (server and `github-sign-in`)
+  records the sign-in's web origin as non-secret `site` metadata in `keys.json`, kept across
+  token refreshes. An unused sign-in reports that site's host and, for GitHub Enterprise, its
+  `/api/v3` `base_url`. A sign-in stored before sites were recorded is backfilled once from its
+  keychain bundle's `web_base` by the shared `credentials_with_sites` helper behind both
+  listings; one whose bundle cannot be read keeps an empty host (the picker then says
+  "Earlier GitHub sign-in"). Creating a GitHub source (`POST
+/checkouts/{reference}/provider-connections` or `POST /provider-connections`) without an
+  `api_base` fills it from the reused sign-in's recorded Enterprise site, so a reused
+  Enterprise account never falls back to github.com; `github-connect` already derives it from
+  the bundle.
 - `DELETE /accounts/{id}` / `hotsheet account sign-out <id>` delete the credential. Both
   refuse (409 / non-zero exit) while any source still uses the account, naming the projects.
 - `GET /accounts/{id}/github-repositories` lists the repositories a signed-in GitHub account

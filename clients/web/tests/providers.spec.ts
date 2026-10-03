@@ -404,22 +404,31 @@ async function mockProject(
   // source; `/providers` lists only linked sources (HS2-3SCH1K).
   let linkedConnectionIds: string[] = [],
     checkoutDefaultSource: string | undefined;
-  // Machine-wide sign-ins no source uses yet (HS2-SM9PM8): an abandoned earlier sign-in.
+  // Machine-wide sign-ins no source uses yet (HS2-SM9PM8): an abandoned earlier sign-in whose site
+  // was never recorded (stored before HS2-16MYXN and unreadable since), so its host is unknown.
   let unusedAccounts = ['github-app-abandoned'];
   const credentialOf = (connection: { settings: Record<string, unknown> }) =>
     (connection.settings as { credential?: { secret?: string } }).credential?.secret;
   const projectOwners = (id: string) => (linkedConnectionIds.includes(id) ? [{ id: project.id, alias: 'demo' }] : []);
-  // The real server's `GET /accounts` shape, derived from the records and checkout links.
+  // The real server's `GET /accounts` shape, derived from the records and checkout links: the host
+  // and `base_url` come from the endpoint setting (Jira `base_url`, otherwise `api_base`), and a Jira
+  // account's `identity` from its email (HS2-16MYXN, HS2-F5HNJN).
   const accountRecords = () => {
     const accounts = new Map<string, Record<string, unknown> & { sources: unknown[]; projects: unknown[] }>();
     for (const connection of providerConnectionRecords) {
       const credential = credentialOf(connection);
       if (!credential) continue;
-      const apiBase = (connection.settings as { api_base?: string }).api_base,
+      const settings = connection.settings as { api_base?: string; base_url?: string; email?: string },
+        endpoint = connection.provider === 'jira' ? settings.base_url : settings.api_base,
+        fallbackHost = { github: 'github.com', gitlab: 'gitlab.com' }[connection.provider] ?? '',
         account = accounts.get(credential) ?? {
           id: credential,
           provider: connection.provider,
-          host: apiBase ? new URL(apiBase).host : 'github.com',
+          host: endpoint
+            ? new URL(endpoint).host.replace(connection.provider === 'github' ? /^api\./ : /^$/, '')
+            : fallbackHost,
+          ...(endpoint ? { base_url: endpoint } : {}),
+          ...(settings.email ? { identity: settings.email } : {}),
           managed: credential.startsWith('github-app-'),
           sources: [],
           projects: [],
@@ -2373,6 +2382,86 @@ for (const width of [1280, 390])
     await page.screenshot({ path: test.info().outputPath(`accounts-${width}.png`) });
     await expect(page.locator('.app-error')).toHaveCount(0);
   });
+
+test('names an unused GitHub Enterprise sign-in by its host and reuses its server (HS2-16MYXN)', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await mockProject(page, true, false, 0, 0, 0, true);
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
+  );
+  // The server's shape for sign-ins no source uses yet: the host and endpoint of the site each
+  // signed in to, recorded beside keys.json.
+  await page.route('**/accounts', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: [
+            {
+              id: 'github-app-ghe',
+              provider: 'github',
+              host: 'ghe.test',
+              base_url: 'https://ghe.test/api/v3',
+              managed: true,
+              sources: [],
+              projects: [],
+            },
+            {
+              id: 'github-app-dotcom',
+              provider: 'github',
+              host: 'github.com',
+              managed: true,
+              sources: [],
+              projects: [],
+            },
+          ],
+        })
+      : route.fallback(),
+  );
+  const creates: Array<Record<string, unknown>> = [],
+    signIns: unknown[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'POST' && path.endsWith('/github-auth/device')) signIns.push(request.postDataJSON());
+    if (request.method() === 'POST' && path.endsWith('/provider-connections')) creates.push(request.postDataJSON());
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const setup = page.locator('[data-ticket-source-setup-dialog]'),
+    form = setup.locator('[data-action="save-provider-connection"]');
+  await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
+  const enterprise = form.getByRole('button', {
+    name: 'Use the GitHub account on ghe.test, not used by any project yet',
+  });
+  await expect(enterprise).toContainText('ghe.test');
+  await expect(
+    form.getByRole('button', { name: 'Use the GitHub account on github.com, not used by any project yet' }),
+  ).toContainText('github.com');
+  await expect(form).not.toContainText('Earlier GitHub sign-in');
+  // Visual QA evidence: the picker at a wide and a phone width.
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 860 });
+    await setup.evaluate(async (node) => {
+      const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
+      await Promise.all(animations.map((animation) => animation.finished));
+    });
+    await page.screenshot({ path: test.info().outputPath(`enterprise-account-picker-${width}.png`) });
+  }
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await enterprise.click();
+  await expect(form.getByText('Using your GitHub account on ghe.test.')).toBeVisible();
+  await form.locator('input[name="connection-locator"]').fill('small-tale/reused');
+  await setup.getByRole('button', { name: 'Connect provider' }).click();
+  await expect(setup).toHaveJSProperty('open', false);
+  expect(signIns).toEqual([]);
+  // The new source talks to the Enterprise server it signed in to, not github.com.
+  expect(creates).toEqual([
+    expect.objectContaining({
+      locator: 'small-tale/reused',
+      settings: { credential: { secret: 'github-app-ghe' }, api_base: 'https://ghe.test/api/v3' },
+    }),
+  ]);
+  await expect(page.locator('.app-error')).toHaveCount(0);
+});
 
 test('signs in to GitHub Enterprise from its server address before connecting (HS2-1JT25R)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });

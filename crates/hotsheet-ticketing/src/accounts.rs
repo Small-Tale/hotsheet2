@@ -21,7 +21,7 @@ use thiserror::Error;
 use crate::checkouts::{Checkout, CheckoutError};
 use crate::connection_removal::{MANAGED_CREDENTIAL_PREFIX, credential_of};
 use crate::provider::{ProviderConnection, ProviderError};
-use crate::secrets::{KeyRegistry, SecretError, SecretStore};
+use crate::secrets::{KeyMetadata, KeyRegistry, SecretError, SecretStore};
 
 /// A project (checkout) that uses a connection.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -48,9 +48,15 @@ pub struct Account {
     /// The credential reference (OS-keychain entry name). Never the secret itself.
     pub id: String,
     pub provider: String,
-    /// The provider host signed in to (`github.com`, a GitHub Enterprise or Jira site).
-    /// Empty when unknown, as for a Hot Sheet GitHub sign-in no source uses yet.
+    /// The provider host signed in to (`github.com`, a GitHub Enterprise or Jira site). For a
+    /// Hot Sheet GitHub sign-in no source uses yet it comes from the site recorded in
+    /// `keys.json` (HS2-16MYXN); empty only when no site is known at all.
     pub host: String,
+    /// The endpoint setting a new source reusing this account needs (HS2-16MYXN,
+    /// HS2-F5HNJN): GitHub Enterprise or self-managed GitLab `api_base`, or the Jira site
+    /// `base_url`. Absent for the provider's public default (github.com, gitlab.com).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
     /// The account's own identity when the connection records one (a Jira email).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<String>,
@@ -109,14 +115,65 @@ pub fn connection_host(connection: &ProviderConnection) -> String {
     }
 }
 
-/// Derive every account from the connection records, the checkout links, and the credential
-/// names the key registry knows (`keys.json`). A Hot Sheet GitHub sign-in no connection uses
-/// yet is listed too, so it can be reused or signed out; other unused keys (AI provider keys,
-/// unrelated tokens) are not accounts and are left out.
+/// The endpoint setting a connection carries: `api_base` (GitHub, GitLab) or the Jira site.
+fn connection_base_url(connection: &ProviderConnection) -> Option<String> {
+    let key = if connection.provider == "jira" {
+        "base_url"
+    } else {
+        "api_base"
+    };
+    setting(connection, key)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
+/// The GitHub `api_base` for a sign-in's web origin: none for github.com, `{site}/api/v3`
+/// for GitHub Enterprise Server.
+pub fn github_api_base_for_site(site: &str) -> Option<String> {
+    let site = site.trim().trim_end_matches('/');
+    (!site.is_empty() && host_of(site) != "github.com").then(|| format!("{site}/api/v3"))
+}
+
+/// The `api_base` a new GitHub source reusing `credential` needs, from the sign-in site
+/// recorded in `keys.json` (HS2-16MYXN). `None` for github.com or an unknown site.
+pub fn reused_github_api_base(credential: &str, credentials: &[KeyMetadata]) -> Option<String> {
+    credentials
+        .iter()
+        .find(|key| key.provider == credential)
+        .and_then(|key| key.site.as_deref())
+        .and_then(github_api_base_for_site)
+}
+
+/// Fill a new GitHub connection's missing `api_base` from the reused sign-in's recorded site,
+/// so a GitHub Enterprise account reused by another project never falls back to github.com
+/// (HS2-16MYXN). Connections that already carry an `api_base`, other providers, and
+/// github.com sign-ins are left unchanged.
+pub fn fill_reused_github_api_base(
+    connection: &mut ProviderConnection,
+    credentials: &[KeyMetadata],
+) {
+    if connection.provider != "github" || connection_base_url(connection).is_some() {
+        return;
+    }
+    let Some(api_base) = credential_of(connection)
+        .and_then(|credential| reused_github_api_base(credential, credentials))
+    else {
+        return;
+    };
+    if let serde_json::Value::Object(settings) = &mut connection.settings {
+        settings.insert("api_base".into(), api_base.into());
+    }
+}
+
+/// Derive every account from the connection records, the checkout links, and the credentials
+/// the key registry knows (`keys.json`). A Hot Sheet GitHub sign-in no connection uses yet is
+/// listed too, with the host of its recorded site, so it can be reused or signed out; other
+/// unused keys (AI provider keys, unrelated tokens) are not accounts and are left out.
 pub fn list_accounts(
     connections: &[ProviderConnection],
     checkouts: &[Checkout],
-    credential_names: &[String],
+    credentials: &[KeyMetadata],
 ) -> Vec<Account> {
     let mut accounts: BTreeMap<String, Account> = BTreeMap::new();
     for connection in connections {
@@ -133,6 +190,7 @@ pub fn list_accounts(
                 id: credential.to_owned(),
                 provider: connection.provider.clone(),
                 host: connection_host(connection),
+                base_url: None,
                 identity: None,
                 managed: credential.starts_with(MANAGED_CREDENTIAL_PREFIX),
                 sources: Vec::new(),
@@ -140,6 +198,9 @@ pub fn list_accounts(
             });
         if account.identity.is_none() {
             account.identity = setting(connection, "email").map(str::to_owned);
+        }
+        if account.base_url.is_none() {
+            account.base_url = connection_base_url(connection);
         }
         account.sources.push(AccountSource {
             connection_id: connection.id.clone(),
@@ -153,14 +214,17 @@ pub fn list_accounts(
         });
         account.projects.extend(projects);
     }
-    for name in credential_names {
+    for credential in credentials {
+        let name = &credential.provider;
         if name.starts_with(MANAGED_CREDENTIAL_PREFIX) && !accounts.contains_key(name) {
+            let site = credential.site.as_deref().unwrap_or_default();
             accounts.insert(
                 name.clone(),
                 Account {
                     id: name.clone(),
                     provider: "github".into(),
-                    host: String::new(),
+                    host: host_of(site),
+                    base_url: github_api_base_for_site(site),
                     identity: None,
                     managed: true,
                     sources: Vec::new(),
@@ -305,6 +369,14 @@ mod tests {
         }
     }
 
+    fn key(name: &str, site: Option<&str>) -> KeyMetadata {
+        KeyMetadata {
+            provider: name.into(),
+            env: crate::secrets::env_name(name),
+            site: site.map(str::to_owned),
+        }
+    }
+
     fn link(id: &str, provider: &str, locator: &str) -> TicketSource {
         TicketSource {
             connection_id: id.into(),
@@ -385,9 +457,9 @@ mod tests {
             &connections,
             &checkouts,
             &[
-                "github-app-01aaa".into(),
-                "github-app-01ccc".into(),
-                "anthropic".into(),
+                key("github-app-01aaa", None),
+                key("github-app-01ccc", None),
+                key("anthropic", None),
             ],
         );
         // Reading is migration: nothing was rewritten.
@@ -475,6 +547,142 @@ mod tests {
             .map(|account| account.host.as_str())
             .collect::<Vec<_>>();
         assert_eq!(hosts, ["ghe.corp.test", "gitlab.com"]);
+        let bases = accounts
+            .iter()
+            .map(|account| account.base_url.as_deref())
+            .collect::<Vec<_>>();
+        assert_eq!(bases, [Some("https://ghe.corp.test/api/v3"), None]);
+    }
+
+    #[test]
+    fn reusable_accounts_report_the_endpoint_a_new_source_needs() {
+        let accounts = list_accounts(
+            &[
+                external(
+                    "gl-corp",
+                    "gitlab",
+                    "team/app",
+                    "gl-corp-token",
+                    serde_json::json!({"api_base": "https://gitlab.corp.test/api/v4"}),
+                ),
+                external(
+                    "jira-eng",
+                    "jira",
+                    "ENG",
+                    "jira-token",
+                    serde_json::json!({"email": "dev@acme.test", "base_url": "https://acme.atlassian.net"}),
+                ),
+            ],
+            &[],
+            &[],
+        );
+        let summary = accounts
+            .iter()
+            .map(|account| {
+                (
+                    account.id.as_str(),
+                    account.host.as_str(),
+                    account.base_url.as_deref(),
+                    account.identity.as_deref(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            summary,
+            [
+                (
+                    "gl-corp-token",
+                    "gitlab.corp.test",
+                    Some("https://gitlab.corp.test/api/v4"),
+                    None
+                ),
+                (
+                    "jira-token",
+                    "acme.atlassian.net",
+                    Some("https://acme.atlassian.net"),
+                    Some("dev@acme.test")
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_unused_sign_in_reports_the_host_of_its_recorded_site() {
+        let accounts = list_accounts(
+            &[],
+            &[],
+            &[
+                key("github-app-01dot", Some("https://github.com")),
+                key("github-app-01ghe", Some("https://ghe.corp.test")),
+                key("github-app-01old", None),
+            ],
+        );
+        let summary = accounts
+            .iter()
+            .map(|account| {
+                (
+                    account.id.as_str(),
+                    account.host.as_str(),
+                    account.base_url.as_deref(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            summary,
+            [
+                // Only a sign-in recorded before sites existed (and never backfilled) is unknown.
+                ("github-app-01old", "", None),
+                (
+                    "github-app-01ghe",
+                    "ghe.corp.test",
+                    Some("https://ghe.corp.test/api/v3")
+                ),
+                ("github-app-01dot", "github.com", None),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_reused_enterprise_sign_in_fills_the_new_sources_api_base() {
+        let credentials = [
+            key("github-app-01ghe", Some("https://ghe.corp.test/")),
+            key("github-app-01dot", Some("https://github.com")),
+        ];
+        let mut reused = external(
+            "",
+            "github",
+            "corp/app",
+            "github-app-01ghe",
+            serde_json::json!({}),
+        );
+        fill_reused_github_api_base(&mut reused, &credentials);
+        assert_eq!(reused.settings["api_base"], "https://ghe.corp.test/api/v3");
+        // An explicit api_base, a github.com sign-in, an unknown credential, and another
+        // provider are left alone.
+        let mut explicit = external(
+            "",
+            "github",
+            "corp/app",
+            "github-app-01ghe",
+            serde_json::json!({"api_base": "https://proxy.corp.test/api/v3"}),
+        );
+        fill_reused_github_api_base(&mut explicit, &credentials);
+        assert_eq!(
+            explicit.settings["api_base"],
+            "https://proxy.corp.test/api/v3"
+        );
+        for (provider, credential) in [
+            ("github", "github-app-01dot"),
+            ("github", "github-app-unknown"),
+            ("gitlab", "github-app-01ghe"),
+        ] {
+            let mut untouched = external("", provider, "a/b", credential, serde_json::json!({}));
+            fill_reused_github_api_base(&mut untouched, &credentials);
+            assert!(
+                untouched.settings.get("api_base").is_none(),
+                "{provider} {credential}"
+            );
+        }
     }
 
     #[test]

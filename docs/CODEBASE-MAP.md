@@ -378,7 +378,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   version-guarded flat key→JSON maps (unversioned legacy remains readable), effective
   precedence global<shared<local. Old `hotsheet-settings*.json` files beside linked git
   stores are read-through migration inputs. See `settings.rs::Settings`.
-- **Provider keys:** `${HOTSHEET_HOME}/keys.json` contains non-secret provider metadata;
+- **Provider keys:** `${HOTSHEET_HOME}/keys.json` contains non-secret provider metadata
+  (name, env fallback, and a sign-in's optional `site` web origin, HS2-16MYXN);
   values live behind native macOS Security.framework, Linux Secret Service, or Windows
   Credential Manager adapters.
   `key set` uses a hidden terminal prompt or piped stdin. Settings carry only `{ "secret": "provider" }`.

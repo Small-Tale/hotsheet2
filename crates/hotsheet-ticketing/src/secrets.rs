@@ -269,6 +269,12 @@ fn status(output: std::process::Output) -> Result<(), SecretError> {
 pub struct KeyMetadata {
     pub provider: String,
     pub env: String,
+    /// The non-secret web origin a sign-in authenticates against (for example
+    /// `https://github.example.com` for a GitHub Enterprise sign-in), so an account no source
+    /// uses yet can still report its host without reading the keychain (HS2-16MYXN). Absent
+    /// for plain keys and for sign-ins recorded before it existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site: Option<String>,
 }
 
 /// Global provider registry. The registry file contains names only, never values.
@@ -289,11 +295,14 @@ impl<S: SecretStore> KeyRegistry<S> {
         validate(provider)?;
         self.store.set(provider, secret)?;
         let mut map = self.metadata()?;
+        // Replacing a value (a refreshed token) keeps the sign-in's recorded site.
+        let site = map.get(provider).and_then(|existing| existing.site.clone());
         map.insert(
             provider.into(),
             KeyMetadata {
                 provider: provider.into(),
                 env: env_name(provider),
+                site,
             },
         );
         if let Err(error) = self.write_metadata(&map) {
@@ -301,6 +310,22 @@ impl<S: SecretStore> KeyRegistry<S> {
             return Err(error);
         }
         Ok(())
+    }
+
+    /// Record the non-secret web origin a registered credential signs in to (HS2-16MYXN).
+    /// Idempotent; refused for a name the registry does not know.
+    pub fn record_site(&self, provider: &str, site: &str) -> Result<(), SecretError> {
+        validate(provider)?;
+        let mut map = self.metadata()?;
+        let Some(entry) = map.get_mut(provider) else {
+            return Err(SecretError::NotFound(provider.into()));
+        };
+        let site = site.trim().trim_end_matches('/');
+        if entry.site.as_deref() == Some(site) {
+            return Ok(());
+        }
+        entry.site = Some(site.to_owned());
+        self.write_metadata(&map)
     }
 
     pub fn get(&self, provider: &str) -> Result<String, SecretError> {
@@ -451,6 +476,40 @@ mod tests {
             registry.get("openai"),
             Err(SecretError::NotFound(_))
         ));
+    }
+
+    #[test]
+    fn a_recorded_site_survives_a_value_replacement_and_older_files_parse() {
+        let dir = tempfile::tempdir().unwrap();
+        // A keys.json written before sites existed parses unchanged.
+        std::fs::write(
+            dir.path().join("keys.json"),
+            r#"{"github-app-01a":{"provider":"github-app-01a","env":"HOTSHEET_API_KEY_GITHUB_APP_01A"}}"#,
+        )
+        .unwrap();
+        let registry = KeyRegistry::new(dir.path(), Memory::default());
+        assert_eq!(registry.list().unwrap()[0].site, None);
+        assert!(matches!(
+            registry.record_site("missing", "https://github.com"),
+            Err(SecretError::NotFound(_))
+        ));
+        registry.set("github-app-01a", "bundle-1").unwrap();
+        registry
+            .record_site("github-app-01a", "https://ghe.corp.test/")
+            .unwrap();
+        // Idempotent, and a token refresh (set) keeps the site.
+        registry
+            .record_site("github-app-01a", "https://ghe.corp.test")
+            .unwrap();
+        registry.set("github-app-01a", "bundle-2").unwrap();
+        let listed = registry.list().unwrap();
+        assert_eq!(listed[0].site.as_deref(), Some("https://ghe.corp.test"));
+        let disk = std::fs::read_to_string(dir.path().join("keys.json")).unwrap();
+        assert!(disk.contains(r#""site": "https://ghe.corp.test""#));
+        assert!(!disk.contains("bundle-2"));
+        // Deleting the credential drops its site with it.
+        assert!(registry.delete("github-app-01a").unwrap());
+        assert!(registry.list().unwrap().is_empty());
     }
 
     #[test]
