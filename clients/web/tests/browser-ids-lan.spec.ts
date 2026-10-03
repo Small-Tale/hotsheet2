@@ -269,28 +269,24 @@ for (const width of [390, 1280]) {
         'Focus two',
       );
       await expect(page.getByRole('button', { name: 'Workspace grid' })).toBeVisible();
-      // A continuous layout loop must still fail. Let the final surface settle first:
-      // Kerf TabBar snapTabs writes its end-extra inset from its own ResizeObserver,
-      // which WebKit reports as one native deferral (HS2-G4D6JC, KF-BJD03Y). After
-      // that, native resize deferrals must stop instead of recurring on later paints.
-      const nextFrames = (count: number) =>
-        page.evaluate(
-          (frames) =>
-            new Promise<void>((resolve) => {
-              const step = (left: number) => {
-                if (left === 0) resolve();
-                else
-                  requestAnimationFrame(() => {
-                    step(left - 1);
-                  });
-              };
-              step(frames);
-            }),
-          count,
-        );
-      await nextFrames(3);
+      // A continuous layout loop must still fail. At the final stable surface, native resize
+      // deferrals must stop instead of recurring on later paints. Kerf 5.0.0-beta.72 applies
+      // TabBar snapTabs insets outside its ResizeObserver delivery (KF-BJD03Y), so the baseline
+      // is taken as soon as the surface is visible (HS2-XQAQMQ).
       const deferralsBeforePaint = resizeDeferrals.length;
-      await nextFrames(10);
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            const step = (left: number) => {
+              if (left === 0) resolve();
+              else
+                requestAnimationFrame(() => {
+                  step(left - 1);
+                });
+            };
+            step(10);
+          }),
+      );
       await testInfo.attach('native-resize-deferrals', {
         body: JSON.stringify(resizeDeferrals),
         contentType: 'application/json',
