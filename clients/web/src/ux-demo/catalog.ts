@@ -622,6 +622,13 @@ export const demoCatalog: DemoCategory[] = [
         true,
       ),
       demo(
+        'terminal-edit-menu',
+        'TerminalEditMenu',
+        'Touch terminal edit menu opened by a long-press at the touch point: Copy Text… opens the Copy sheet and Paste sends the clipboard.',
+        'feature-floor',
+        true,
+      ),
+      demo(
         'terminal-rename-dialog',
         'TerminalRenameDialog',
         'Rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores.',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TerminalCopyDialog, TerminalPasteDialog } from './terminal-clipboard-dialogs';
+import { TerminalCopyDialog, TerminalEditMenu, TerminalPasteDialog } from './terminal-clipboard-dialogs';
 
 describe('TerminalCopyDialog', () => {
   it('renders a closed dialog with no state', () => {
@@ -51,5 +51,26 @@ describe('TerminalPasteDialog', () => {
     );
     expect(markup).toContain('This browser does not let Hot Sheet read the clipboard.');
     expect(String(TerminalPasteDialog({}))).toContain('data-controlled-open="false"');
+  });
+});
+
+describe('TerminalEditMenu (HS2-KKP8YJ)', () => {
+  it('renders nothing until a long-press opens it', () => {
+    expect(TerminalEditMenu({})).toBeNull();
+  });
+
+  it('anchors a context PopupMenu at the press with Copy Text… and Paste reusing the clipboard actions', () => {
+    const markup = String(TerminalEditMenu({ state: { x: 120, y: 340 } }));
+    expect(markup).toContain('data-component="terminal-edit-menu"');
+    expect(markup).toContain('aria-label="Terminal edit actions"');
+    expect(markup).toContain('data-context-anchor-x="120"');
+    expect(markup).toContain('data-context-anchor-y="340"');
+    expect(markup).toContain('data-context-menu="terminal-edit"');
+    expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(2);
+    expect(markup).toContain('data-action="copy-terminal-text"');
+    expect(markup).toContain('data-action="paste-terminal-text"');
+    expect(markup).toContain('Copy Text…');
+    expect(markup).toContain('data-lucide="copy"');
+    expect(markup).toContain('data-lucide="clipboard-paste"');
   });
 });

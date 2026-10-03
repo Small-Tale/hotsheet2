@@ -11,9 +11,11 @@ import {
   normalizeMobileTerminalColumns,
 } from './mobile-terminal-columns';
 import {
+  TERMINAL_EDIT_MENU_EVENT,
   TERMINAL_PASTE_EVENT,
   TERMINAL_READ_TEXT_EVENT,
   terminalBufferText,
+  type TerminalEditMenuDetail,
   type TerminalPasteDetail,
   type TerminalReadTextDetail,
 } from './terminal-clipboard';
@@ -26,6 +28,7 @@ import {
   terminalModifiersActive,
   type TerminalSpecialKey,
 } from './terminal-keys';
+import { createLongPressController } from './terminal-long-press';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
 import {
@@ -769,36 +772,71 @@ function initializeTerminalViewport(
           };
         },
       }),
+      // A still one-finger hold asks for the terminal edit menu (HS2-KKP8YJ).
+      longPress = createLongPressController({
+        onLongPress: (point) => {
+          element.dispatchEvent(
+            new CustomEvent<TerminalEditMenuDetail>(TERMINAL_EDIT_MENU_EVENT, { bubbles: true, detail: point }),
+          );
+        },
+        schedule: (callback, delay) => {
+          const handle = window.setTimeout(callback, delay);
+          return () => {
+            window.clearTimeout(handle);
+          };
+        },
+      }),
       touchStart = (event: TouchEvent) => {
         if (event.touches.length !== 1) {
           touchScroll.cancel();
+          longPress.cancel();
           return;
         }
         const touch = event.touches[0];
         touchScroll.start({ y: touch.clientY, time: event.timeStamp });
+        longPress.start({ x: touch.clientX, y: touch.clientY });
       },
       touchMove = (event: TouchEvent) => {
         if (event.touches.length !== 1) return;
         const touch = event.touches[0];
-        if (touchScroll.move({ y: touch.clientY, time: event.timeStamp })) event.preventDefault();
+        longPress.move({ x: touch.clientX, y: touch.clientY });
+        // A finger that already opened the edit menu never also scrolls the terminal.
+        if (longPress.fired) {
+          event.preventDefault();
+          return;
+        }
+        if (touchScroll.move({ y: touch.clientY, time: event.timeStamp })) {
+          longPress.cancel();
+          event.preventDefault();
+        }
       },
       touchEnd = (event: TouchEvent) => {
         const touch = event.changedTouches[0] as Touch | undefined;
         touchScroll.end(touch ? { y: touch.clientY, time: event.timeStamp } : undefined);
+        // The lift that ends a long press must not also tap-focus the terminal and raise the keyboard.
+        if (longPress.end()) event.preventDefault();
       },
       touchCancel = () => {
         touchScroll.cancel();
+        longPress.cancel();
+      },
+      // Android raises a native context menu for a long press; the terminal's own edit menu replaces it.
+      suppressTouchContextMenu = (event: Event) => {
+        if (longPress.active) event.preventDefault();
       };
     element.addEventListener('touchstart', touchStart, { passive: true });
     element.addEventListener('touchmove', touchMove, { passive: false });
     element.addEventListener('touchend', touchEnd);
     element.addEventListener('touchcancel', touchCancel);
+    element.addEventListener('contextmenu', suppressTouchContextMenu);
     own(() => {
       touchScroll.cancel();
+      longPress.cancel();
       element.removeEventListener('touchstart', touchStart);
       element.removeEventListener('touchmove', touchMove);
       element.removeEventListener('touchend', touchEnd);
       element.removeEventListener('touchcancel', touchCancel);
+      element.removeEventListener('contextmenu', suppressTouchContextMenu);
     });
     element.addEventListener('click', focusTerminal);
     element.addEventListener('focusin', focus);

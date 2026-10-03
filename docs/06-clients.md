@@ -2669,6 +2669,29 @@ modifiers (the main row stays unchanged and fits 390px).
 - Desktop layouts render none of these controls; xterm's own mouse selection and keyboard copy/paste
   shortcuts are unchanged.
 
+**Long-press terminal edit menu (HS2-KKP8YJ).** Holding one finger still on any interactive
+terminal for 500 ms opens a small edit menu at the touch point. This covers a drawer terminal in or
+out of focus mode and a magnified terminal. The menu is a context-mode Kerf `PopupMenu` with two
+items:
+
+- **Copy Text…** (Lucide `copy`) opens the Copy sheet above.
+- **Paste** (Lucide `clipboard-paste`) runs the Paste path above, including its denied/unavailable sheet.
+
+The menu acts on the terminal it was opened over. An outside touch, Escape, or choosing an item
+dismisses it.
+
+The gesture coexists with finger-drag scrolling (HS2-KFBRSB):
+
+- Drifting more than 10px cancels the hold, so a drag scrolls and never opens the menu.
+- A second finger or an early lift also cancels it, so a quick tap still focuses the terminal.
+- After the menu opens, the rest of that touch never scrolls.
+- The lift that ends the hold is cancelled, so it does not also tap-focus the terminal, enter
+  focus mode, or raise the keyboard.
+- Android's native long-press context menu is suppressed while the finger is down.
+- Interactive viewports set `-webkit-touch-callout: none` so iOS does not add its own callout.
+
+Read-only grid previews never open the menu.
+
 **Phone magnified terminal chrome (HS2-WMN626).** On a phone the magnified terminal overlay is
 positioned from the live `VisualViewport` (offset and size), so presenting the virtual keyboard
 shrinks it — and its M rows — to the visible area above the keyboard instead of leaving the

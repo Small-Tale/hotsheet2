@@ -2632,6 +2632,13 @@ text-size control, and the magnified terminal toolbar adds the same two buttons.
 `TerminalPasteDialog` (the denied/unavailable fallback with an editable native field) are cataloged
 as `terminal-copy-dialog` and `terminal-paste-dialog`, with both paste reasons exposed in the demo.
 
+HS2-KKP8YJ adds `TerminalEditMenu` (cataloged as `terminal-edit-menu`, composing Kerf
+`popup-menu`). It is an app-owned, zero-size fixed anchor (`terminal-edit-menu`) around a
+context-mode `PopupMenu` (`data-context-menu="terminal-edit"`). The menu opens at a touch
+long-press point and has two items: **Copy Text…** (`copy-terminal-text`, Lucide `copy`) and
+**Paste** (`paste-terminal-text`, Lucide `clipboard-paste`). They reuse the HS2-FRB545 actions. The
+demo opens it from a stage button and reports the action production would take.
+
 HS2-8NQRJB gives the phone magnified terminal toolbar more identity room. In mobile chrome the
 identity shows the terminal name with the project as a subtitle (`terminal-tile__identity-project`).
 The separate open-in-drawer button is omitted there because More actions → Open and the identity

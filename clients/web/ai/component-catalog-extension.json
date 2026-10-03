@@ -1497,6 +1497,28 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "terminal-edit-menu",
+      "name": "TerminalEditMenu",
+      "kind": "component",
+      "purpose": "Touch terminal edit menu opened by a long-press at the touch point: Copy Text… opens the Copy sheet and Paste sends the clipboard.",
+      "useWhen": [
+        "Hot Sheet needs touch terminal edit menu opened by a long-press at the touch point: Copy Text… opens the Copy sheet and Paste sends the clipboard."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TerminalEditMenu behavior."
+      ],
+      "publicClasses": [
+        "terminal-edit-menu"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "terminal-rename-dialog",
       "name": "TerminalRenameDialog",
       "kind": "component",

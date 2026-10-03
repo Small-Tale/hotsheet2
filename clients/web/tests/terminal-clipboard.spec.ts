@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 import { installTerminalFixture } from './terminal-feedback-fixture';
 
@@ -254,6 +254,123 @@ test('copies and pastes from the phone magnified terminal toolbar', async ({ pag
   const before = (await sentInput(page, 'nano')).length;
   await footer.getByRole('button', { name: 'Paste' }).tap();
   await expect.poll(async () => (await sentInput(page, 'nano')).slice(before)).toEqual(['q']);
+});
+
+/** Hold one finger still on `target` (DevTools touch events) for `ms`, or drag it by `dragY` px first. */
+async function touchHold(page: Page, target: Locator, ms: number, dragY = 0) {
+  const cdp = await page.context().newCDPSession(page),
+    box = (await target.boundingBox())!,
+    x = box.x + box.width / 2,
+    y = box.y + box.height / 2;
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let step = 1; step <= 5 && dragY; step += 1)
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + (dragY * step) / 5 }] });
+  await page.waitForTimeout(ms);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  return { x, y };
+}
+
+const editMenu = (page: Page) => page.locator('[data-context-menu="terminal-edit"]');
+
+// HS2-KKP8YJ: a still long-press on a touch terminal opens Copy Text… / Paste at the touch point.
+test('opens the terminal edit menu on a long-press and copies and pastes through it', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await installPhone(page);
+  await openProject(page);
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
+  const viewport = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+  await expect(viewport).toHaveAttribute('data-connection', 'connected');
+  await expect(viewport.locator('.xterm-rows')).toContainText('GNU nano 8.4');
+
+  // Before focus mode, a long-press opens the menu and its lift does not also tap the terminal into focus.
+  await touchHold(page, viewport, 700);
+  await expect(editMenu(page).getByRole('menuitem', { name: 'Paste' })).toBeVisible();
+  await expect(drawer).not.toHaveAttribute('data-focus-mode', 'true');
+  await page.keyboard.press('Escape');
+  await expect(editMenu(page)).toHaveCount(0);
+
+  // A quick tap is still a tap (focus mode), and a drag scrolls rather than opening the menu.
+  await touchHold(page, viewport, 100);
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  await expect(editMenu(page)).toHaveCount(0);
+  await touchHold(page, viewport, 700, 120);
+  await expect(editMenu(page)).toHaveCount(0);
+
+  // A still hold opens the menu at the touch point, with a Lucide icon on each action.
+  const point = await touchHold(page, viewport, 700);
+  const menu = editMenu(page),
+    copyItem = menu.getByRole('menuitem', { name: 'Copy Text…' }),
+    pasteItem = menu.getByRole('menuitem', { name: 'Paste' });
+  await expect(copyItem).toBeVisible();
+  await expect(pasteItem).toBeVisible();
+  await expect(copyItem.locator('[data-lucide="copy"]')).toHaveCount(1);
+  await expect(pasteItem.locator('[data-lucide="clipboard-paste"]')).toHaveCount(1);
+  const itemBox = (await copyItem.boundingBox())!;
+  expect(Math.abs(itemBox.y - point.y)).toBeLessThan(80);
+  // The popup is painted in front of the focused terminal, not merely present.
+  expect(
+    await copyItem.evaluate((node) => {
+      const box = node.getBoundingClientRect(),
+        hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return Boolean(hit && (hit === node || node.contains(hit) || hit.closest('[data-context-menu="terminal-edit"]')));
+    }),
+  ).toBe(true);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: test.info().outputPath('hs2-kkp8yj-edit-menu-390.png') });
+
+  // Copy Text… opens the HS2-FRB545 copy sheet for this terminal.
+  await copyItem.tap();
+  await expect(menu).toHaveCount(0);
+  const sheet = page.locator('[data-component="terminal-copy-dialog"]');
+  await expect(sheet).toHaveJSProperty('open', true);
+  await expect(sheet.getByRole('textbox', { name: 'Terminal text' })).toHaveValue(/GNU nano 8\.4/);
+  await sheet.getByRole('button', { name: 'Done' }).tap();
+  await expect(sheet).toHaveJSProperty('open', false);
+
+  // Paste sends the clipboard to the terminal the menu was opened over.
+  await page.evaluate(() => navigator.clipboard.writeText('echo menu'));
+  await touchHold(page, viewport, 700);
+  await expect(pasteItem).toBeVisible();
+  const before = (await sentInput(page)).length;
+  await pasteItem.tap();
+  await expect(menu).toHaveCount(0);
+  await expect.poll(async () => (await sentInput(page)).slice(before)).toEqual(['echo menu']);
+
+  // Touching elsewhere dismisses the menu without acting.
+  await touchHold(page, viewport, 700);
+  await expect(copyItem).toBeVisible();
+  await page.getByRole('button', { name: 'Exit terminal focus' }).tap();
+  await expect(menu).toHaveCount(0);
+  await expect(sheet).toHaveJSProperty('open', false);
+});
+
+test('long-press on a magnified phone terminal opens the edit menu without tap-focusing it', async ({ page }) => {
+  await installPhone(page);
+  await openProject(page);
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+    tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
+  await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-geometry-ready', 'true');
+  // Preview tiles are not interactive terminals: a long-press there never opens the edit menu.
+  await touchHold(page, tile.locator('.terminal-tile__preview'), 700);
+  await expect(editMenu(page)).toHaveCount(0);
+  const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' });
+  if (!(await magnified.isVisible())) await tile.click();
+  const interactive = magnified.locator('[data-display-mode="interactive"]');
+  await expect(interactive.locator('.xterm-rows')).toContainText('GNU nano 8.4');
+  await page.locator('body').evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  await touchHold(page, interactive, 700);
+  await expect(editMenu(page).getByRole('menuitem', { name: 'Paste' })).toBeVisible();
+  // The lift that ended the long press did not also tap-focus the terminal (no keyboard).
+  await expect(interactive.locator('.xterm-helper-textarea')).not.toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(editMenu(page)).toHaveCount(0);
 });
 
 test.describe('desktop', () => {

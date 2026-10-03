@@ -10,11 +10,13 @@ import { type AppRegionId, normalizeAppRegionSize, terminalDrawerDragDecision } 
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabKind } from '../components/project-tab-context-menu';
 import { type RepositoryFileMenu } from '../components/repository-status-popover';
+import { type TerminalEditMenuState } from '../components/terminal-clipboard-dialogs';
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { createDisposerScope } from '../disposer-scope';
 import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
+import { TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { cycleTabId } from '../tab-cycle';
@@ -91,6 +93,8 @@ export interface ShellAndGlobalInteractionsDependencies {
     { x: number; y: number; kind: AppTabKind; id: string; direction: 'left' | 'right' } | undefined
   >;
   readonly terminalContextMenu: Signal<{ key: string; x: number; y: number } | undefined>;
+  /** Long-press terminal edit menu (HS2-KKP8YJ). */
+  readonly terminalEditMenu: Signal<TerminalEditMenuState | undefined>;
   readonly terminalVisibilityContextMenu: Signal<{ id: string; x: number; y: number } | undefined>;
   readonly repositoryFileMenu: Signal<RepositoryFileMenu | undefined>;
   readonly attachmentMenu: Signal<AttachmentMenu | undefined>;
@@ -151,6 +155,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     ticketContextMenu,
     appTabContextMenu,
     terminalContextMenu,
+    terminalEditMenu,
     terminalVisibilityContextMenu,
     repositoryFileMenu,
     attachmentMenu,
@@ -534,6 +539,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     ['ticket', ticketContextMenu],
     ['app-tab', appTabContextMenu],
     ['terminal', terminalContextMenu],
+    ['terminal-edit', terminalEditMenu],
     ['attachment', attachmentMenu],
   ] as const)
     effect(() => {
@@ -549,6 +555,8 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         appTabContextMenu.value = undefined;
       if (terminalContextMenu.value && !(event.target as Element).closest('[data-component="terminal-context-menu"]'))
         terminalContextMenu.value = undefined;
+      if (terminalEditMenu.value && !(event.target as Element).closest(TERMINALS_TARGETS.terminalEditMenu.selector))
+        terminalEditMenu.value = undefined;
       if (
         terminalVisibilityContextMenu.value &&
         !(event.target as Element).closest('.terminal-visibility-dialog__context-menu')
@@ -608,6 +616,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         ticketContextMenu.value = undefined;
         appTabContextMenu.value = undefined;
         terminalContextMenu.value = undefined;
+        terminalEditMenu.value = undefined;
         repositoryFileMenu.value = undefined;
         attachmentMenu.value = undefined;
         resetAttachmentGallery();

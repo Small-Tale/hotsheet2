@@ -7038,6 +7038,41 @@ test('catalogs the TerminalKeyBar rows, sticky modifiers, and sent bytes (HS2-CK
   await expect(output).toHaveText('Copy → opens the terminal Copy sheet');
 });
 
+test('catalogs the long-press terminal edit menu and its actions (HS2-KKP8YJ)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=terminal-edit-menu');
+    const demo = page.getByRole('region', { name: 'Terminal edit menu' }),
+      output = demo.locator('[data-edit-menu-demo-output]'),
+      menu = page.locator('[data-context-menu="terminal-edit"]');
+    await expect(output).toHaveText('Open the menu, then choose an action.');
+    await demo.getByRole('button', { name: 'Long-press here' }).click();
+    const copy = menu.getByRole('menuitem', { name: 'Copy Text…' });
+    await expect(copy).toBeVisible();
+    await expect(copy.locator('[data-lucide="copy"]')).toHaveCount(1);
+    await expect(menu.getByRole('menuitem', { name: 'Paste' }).locator('[data-lucide="clipboard-paste"]')).toHaveCount(
+      1,
+    );
+    await expect(copy).toHaveCSS('cursor', 'pointer');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: test.info().outputPath(`hs2-kkp8yj-demo-${width}.png`) });
+    await copy.click();
+    await expect(output).toHaveText('Copy Text… → opens the terminal Copy sheet');
+    await expect(menu).toHaveCount(0);
+    // Reopen after an action, then choose the other item.
+    await demo.getByRole('button', { name: 'Long-press here' }).click();
+    await menu.getByRole('menuitem', { name: 'Paste' }).click();
+    await expect(output).toHaveText('Paste → sends the clipboard to the terminal');
+    await expect(menu).toHaveCount(0);
+    // Escape dismisses without acting.
+    await demo.getByRole('button', { name: 'Long-press here' }).click();
+    await expect(copy).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(output).toHaveText('Paste → sends the clipboard to the terminal');
+  }
+});
+
 test('catalogs the terminal Copy and Paste sheets with every variant (HS2-FRB545)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });

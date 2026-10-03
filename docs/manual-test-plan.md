@@ -83,6 +83,14 @@ When automation lands, remove the manual-only step and record it below.
     terminal. With the keyboard up, confirm Fn shows the Clipboard group and using it keeps the
     keyboard up. Automated Chromium coverage grants or stubs clipboard permissions; only a device
     proves native selection handles, the iOS paste prompt, and the legacy copy fallback.
+12. HS2-KKP8YJ — on a **physical phone** (iOS Safari and Android Chrome), hold one finger still on
+    a drawer terminal (before and in focus mode) and on a magnified terminal. Confirm the
+    Copy Text… / Paste menu opens under the finger after about half a second, with no iOS callout,
+    loupe, or text selection and no Android system menu. Lifting must not raise the keyboard. Choose
+    **Copy Text…** and confirm the Copy sheet opens. Long-press again, choose **Paste**, and confirm
+    the clipboard reaches the shell. Confirm a slow drag still scrolls without opening the menu, and
+    a quick tap still focuses the terminal. Automated Chromium coverage drives DevTools touch
+    events, which cannot prove WebKit's callout suppression or the gesture's feel.
 
 ### Local production host over the LAN
 

@@ -2,9 +2,11 @@ import './terminal-clipboard-dialogs.css';
 
 import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { ClipboardPaste, Copy } from 'lucide';
 
+import { contextPopupMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 
 /** The terminal a clipboard sheet acts on, plus a generation that gives every opening a fresh field. */
@@ -21,6 +23,48 @@ export interface TerminalCopyState extends TerminalClipboardTarget {
 export interface TerminalPasteState extends TerminalClipboardTarget {
   open: boolean;
   reason: 'unavailable' | 'denied';
+}
+
+/** Where a touch long-press opened the terminal edit menu, in viewport coordinates (HS2-KKP8YJ). */
+export interface TerminalEditMenuState {
+  x: number;
+  y: number;
+}
+
+/**
+ * Terminal edit menu (HS2-KKP8YJ): a context-mode Kerf PopupMenu at the long-press point that reuses
+ * the HS2-FRB545 Copy and Paste actions. The interaction layer remembers which terminal it was opened
+ * on, so the chosen action lands there.
+ */
+export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
+  if (!state) return null;
+  return (
+    <div
+      class="terminal-edit-menu"
+      {...TERMINALS_TARGETS.terminalEditMenu.attrs}
+      role="menu"
+      aria-label="Terminal edit actions"
+      {...contextPopupMenuAnchor(state.x, state.y)}
+    >
+      <PopupMenu
+        context
+        label="Terminal edit actions"
+        rootAttributes={{ 'data-context-menu': 'terminal-edit' }}
+        items={[
+          {
+            label: 'Copy Text…',
+            action: TERMINALS_ACTIONS.copyTerminalText.value,
+            icon: <LucideIcon icon={Copy} name="copy" />,
+          },
+          {
+            label: 'Paste',
+            action: TERMINALS_ACTIONS.pasteTerminalText.value,
+            icon: <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />,
+          },
+        ]}
+      />
+    </div>
+  );
 }
 
 /**

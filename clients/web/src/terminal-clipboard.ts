@@ -13,6 +13,17 @@ export const TERMINAL_READ_TEXT_EVENT = 'hotsheet-terminal-read-text';
 /** Event dispatched on an interactive viewport to paste `detail.text` as terminal input. */
 export const TERMINAL_PASTE_EVENT = 'hotsheet-terminal-paste';
 
+/**
+ * Bubbling event an interactive viewport dispatches when a touch long-press asks for the terminal
+ * edit menu at `detail` (viewport coordinates) (HS2-KKP8YJ).
+ */
+export const TERMINAL_EDIT_MENU_EVENT = 'hotsheet-terminal-edit-menu';
+
+export interface TerminalEditMenuDetail {
+  x: number;
+  y: number;
+}
+
 export interface TerminalReadTextDetail {
   text?: string;
 }

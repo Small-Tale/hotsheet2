@@ -60,6 +60,8 @@ import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import {
   TerminalCopyDialog,
   type TerminalCopyState,
+  TerminalEditMenu,
+  type TerminalEditMenuState,
   TerminalPasteDialog,
   type TerminalPasteState,
 } from '../components/terminal-clipboard-dialogs';
@@ -545,6 +547,9 @@ const renameDemoTargets = {
   renameDemoSession = signal(1),
   renameDemoTarget = signal<TerminalRenameTarget | undefined>({ ...renameDemoTargets.renamed, session: 1 }),
   renameDemoOutput = signal('');
+// HS2-KKP8YJ long-press edit menu: the stage opens it at a point; items report what production would do.
+const editMenuDemo = signal<TerminalEditMenuState | undefined>(undefined),
+  editMenuDemoOutput = signal('');
 const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
 const markdownAutosave = createDebouncedAutosave((value: string) => {
   markdownSavedValue.value = value;
@@ -1139,6 +1144,18 @@ function demoContent(item: DemoDefinition) {
     );
   }
   if (item.id === 'terminal-visibility-dialog') return <TerminalVisibilityDialogDemo />;
+  if (item.id === 'terminal-edit-menu')
+    return (
+      <section class="terminal-edit-menu-demo" aria-label="Terminal edit menu">
+        <Row gap="xs">
+          <wa-button data-edit-menu-demo-open>Long-press here</wa-button>
+        </Row>
+        <p class="component-stage__event" data-edit-menu-demo-output>
+          {editMenuDemoOutput.value || 'Open the menu, then choose an action.'}
+        </p>
+        <TerminalEditMenu state={editMenuDemo.value} />
+      </section>
+    );
   if (item.id === 'terminal-copy-dialog' || item.id === 'terminal-paste-dialog') {
     const copy = item.id === 'terminal-copy-dialog';
     return (
@@ -1386,6 +1403,7 @@ demoListeners.add(
       if (surface === 'ticket') contextMenu.value = undefined;
       else if (surface === 'app-tab') tabContextMenu.value = undefined;
       else if (surface === 'terminal') terminalDashboardContextMenu.value = undefined;
+      else if (surface === 'terminal-edit') editMenuDemo.value = undefined;
       else if (surface === 'attachment') closeAttachmentDemoMenu();
       else if (surface === 'terminal-visibility-group') closeTerminalVisibilityDemoContextMenu();
     }, 0);
@@ -1886,6 +1904,36 @@ demoListeners.add(
   ),
 );
 demoListeners.add(delegate(root, 'wa-hide', '.terminal-clipboard-demo wa-dialog', closeClipboardDemo));
+// The edit menu demo opens where the stage was pressed and reports the production action (HS2-KKP8YJ).
+demoListeners.add(
+  delegate(root, 'click', '[data-edit-menu-demo-open]', (_event, target) => {
+    const box = target.getBoundingClientRect();
+    editMenuDemo.value = viewportSafeContextMenuPosition(
+      box.left + box.width / 2,
+      box.bottom,
+      innerWidth,
+      innerHeight,
+      {
+        width: 192,
+        height: 96,
+      },
+    );
+  }),
+);
+demoListeners.add(
+  delegate(
+    root,
+    'click',
+    '.terminal-edit-menu-demo [data-action="copy-terminal-text"], .terminal-edit-menu-demo [data-action="paste-terminal-text"]',
+    (_event, target) => {
+      editMenuDemoOutput.value =
+        (target as HTMLElement).dataset.action === 'copy-terminal-text'
+          ? 'Copy Text… → opens the terminal Copy sheet'
+          : 'Paste → sends the clipboard to the terminal';
+      editMenuDemo.value = undefined;
+    },
+  ),
+);
 demoListeners.add(
   delegate(
     root,

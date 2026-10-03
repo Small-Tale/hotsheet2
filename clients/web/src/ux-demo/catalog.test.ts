@@ -115,6 +115,7 @@ describe('UX demo catalog', () => {
       'terminal-visibility-dialog',
       'terminal-copy-dialog',
       'terminal-paste-dialog',
+      'terminal-edit-menu',
       'terminal-rename-dialog',
       'app-empty-state',
       'content-transition',

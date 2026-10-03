@@ -4,7 +4,11 @@ import { type AiToolDefaults } from '../api';
 import { browserRandomId } from '../browser-id';
 import { type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { type AppTabKind } from '../components/project-tab-context-menu';
-import { type TerminalCopyState, type TerminalPasteState } from '../components/terminal-clipboard-dialogs';
+import {
+  type TerminalCopyState,
+  type TerminalEditMenuState,
+  type TerminalPasteState,
+} from '../components/terminal-clipboard-dialogs';
 import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../components/terminal-dashboard';
 import { type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
@@ -17,8 +21,10 @@ import {
   pasteIntoTerminalViewport,
   readClipboardText,
   readTerminalViewportText,
+  TERMINAL_EDIT_MENU_EVENT,
   terminalCopyMessage,
   terminalCopySelection,
+  type TerminalEditMenuDetail,
   writeClipboardText,
 } from '../terminal-clipboard';
 import { adjustTerminalFit, terminalGridBasis } from '../terminal-grid-layout';
@@ -87,6 +93,8 @@ export interface TerminalInteractionsDependencies {
   /** Phone terminal Copy and Paste-fallback sheets (HS2-FRB545). */
   readonly terminalCopy: Signal<TerminalCopyState | undefined>;
   readonly terminalPaste: Signal<TerminalPasteState | undefined>;
+  /** Long-press terminal edit menu (HS2-KKP8YJ). */
+  readonly terminalEditMenu: Signal<TerminalEditMenuState | undefined>;
   readonly showToast: (message: string) => void;
   readonly focusDrawerTab: (projectId: string, id: string) => void;
   readonly createProjectTerminal: (selection?: AiToolDefaults) => Promise<void>;
@@ -168,6 +176,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalFunctionRow,
     terminalCopy,
     terminalPaste,
+    terminalEditMenu,
     showToast,
     focusDrawerTab,
     createProjectTerminal,
@@ -368,6 +377,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   // Phone terminal clipboard (HS2-FRB545). The sheet keeps the viewport it was opened from, so a paste
   // lands in that terminal even if the drawer selection changed underneath the dialog.
   let clipboardViewport: HTMLElement | undefined,
+    editMenuViewport: HTMLElement | undefined,
     refocusAfterPaste: HTMLElement | undefined,
     clipboardGeneration = 0;
   const viewportTitle = (viewport: HTMLElement) =>
@@ -387,9 +397,29 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     const current = terminalPaste.peek();
     if (current?.open) terminalPaste.value = { ...current, open: false };
   };
+  // The long-press edit menu (HS2-KKP8YJ) acts on the terminal it was opened over; toolbar, pill, and key-bar
+  // buttons act on the terminal of the drawer or tile that holds them.
+  const clipboardTarget = (target: Element) => {
+    if (!target.closest(TERMINALS_TARGETS.terminalEditMenu.selector)) return keyBarViewport(target);
+    const viewport = editMenuViewport;
+    editMenuViewport = undefined;
+    terminalEditMenu.value = undefined;
+    return viewport?.isConnected ? viewport : undefined;
+  };
+  lifetime.add(
+    delegate(document.body, TERMINAL_EDIT_MENU_EVENT, TERMINALS_TARGETS.terminalViewport.selector, (event, target) => {
+      const viewport = target as HTMLElement,
+        { x, y } = (event as CustomEvent<TerminalEditMenuDetail>).detail;
+      editMenuViewport = viewport;
+      terminalEditMenu.value = viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, {
+        width: 192,
+        height: 96,
+      });
+    }),
+  );
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.copyTerminalText.selector, (_event, target) => {
-      const viewport = keyBarViewport(target);
+      const viewport = clipboardTarget(target);
       if (!viewport) return;
       clipboardViewport = viewport;
       terminalCopy.value = {
@@ -434,7 +464,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   lifetime.add(delegate(document.body, 'wa-hide', TERMINALS_TARGETS.terminalCopyDialog.selector, closeCopySheet));
   lifetime.add(
     delegate(document.body, 'click', TERMINALS_ACTIONS.pasteTerminalText.selector, (_event, target) => {
-      const viewport = keyBarViewport(target);
+      const viewport = clipboardTarget(target);
       if (!viewport) return;
       clipboardViewport = viewport;
       void readClipboardText(navigator.clipboard as Clipboard | undefined).then((result) => {

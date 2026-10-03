@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT } from './mobile-terminal-columns';
+import { TERMINAL_EDIT_MENU_EVENT } from './terminal-clipboard';
 import {
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_VIEWPORT_PARK_EVENT,
@@ -197,6 +198,8 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     expect(removed.mock.calls.map(([name]) => name as string).sort()).toEqual(
       [
         'click',
+        // HS2-KKP8YJ: the long-press suppresses the native touch context menu.
+        'contextmenu',
         'focusin',
         'focusin',
         'focusout',
@@ -220,6 +223,66 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     expect(resize[1].disconnect).toHaveBeenCalledTimes(1);
     expect(intersections[1].disconnect).toHaveBeenCalledTimes(1);
     expect(sockets[0].close).toHaveBeenCalledTimes(1);
+  });
+
+  it('turns a still touch hold into a bubbling edit-menu request and suppresses its tap (HS2-KKP8YJ)', () => {
+    const { viewport, listeners } = element(),
+      dispatched: Event[] = [];
+    (viewport as unknown as { dispatchEvent: (event: Event) => boolean }).dispatchEvent = (event) => {
+      dispatched.push(event);
+      return true;
+    };
+    const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'press' });
+    const handler = (name: string) =>
+        listeners.mock.calls.find(([type]) => type === name)![1] as (event: unknown) => void,
+      touch = (x: number, y: number) => ({ clientX: x, clientY: y }),
+      prevented = () => vi.fn();
+    const editRequests = () => dispatched.filter((event) => event.type === TERMINAL_EDIT_MENU_EVENT);
+
+    // Hold still: the timer fires an edit-menu request at the touch point; the native menu and the lift's tap are suppressed.
+    handler('touchstart')({ touches: [touch(30, 60)], timeStamp: 0 });
+    const contextMenu = { preventDefault: prevented() };
+    handler('contextmenu')(contextMenu);
+    expect(contextMenu.preventDefault).toHaveBeenCalledTimes(1);
+    scheduledTimeouts.at(-1)!();
+    expect(editRequests()).toHaveLength(1);
+    const request = editRequests()[0] as CustomEvent<{ x: number; y: number }>;
+    expect(request.bubbles).toBe(true);
+    expect(request.detail).toEqual({ x: 30, y: 60 });
+    const afterFire = { touches: [touch(30, 140)], timeStamp: 50, preventDefault: prevented() };
+    handler('touchmove')(afterFire);
+    expect(afterFire.preventDefault).toHaveBeenCalledTimes(1);
+    const lift = { changedTouches: [touch(30, 140)], timeStamp: 60, preventDefault: prevented() };
+    handler('touchend')(lift);
+    expect(lift.preventDefault).toHaveBeenCalledTimes(1);
+
+    // A quick tap keeps its default (focus) and leaves the desktop right-click menu alone afterwards.
+    handler('touchstart')({ touches: [touch(10, 10)], timeStamp: 100 });
+    const tap = { changedTouches: [touch(10, 10)], timeStamp: 120, preventDefault: prevented() };
+    handler('touchend')(tap);
+    expect(tap.preventDefault).not.toHaveBeenCalled();
+    expect(windowMock.clearTimeout).toHaveBeenCalled();
+    const rightClick = { preventDefault: prevented() };
+    handler('contextmenu')(rightClick);
+    expect(rightClick.preventDefault).not.toHaveBeenCalled();
+
+    // A drag scrolls instead: the hold is abandoned and never fires.
+    handler('touchstart')({ touches: [touch(10, 10)], timeStamp: 200 });
+    const timer = scheduledTimeouts.length;
+    const drag = { touches: [touch(10, 60)], timeStamp: 230, preventDefault: prevented() };
+    handler('touchmove')(drag);
+    expect(drag.preventDefault).toHaveBeenCalledTimes(1);
+    handler('touchend')({ changedTouches: [touch(10, 60)], timeStamp: 240, preventDefault: prevented() });
+    expect(scheduledTimeouts).toHaveLength(timer);
+    expect(editRequests()).toHaveLength(1);
+
+    // A second finger cancels a pending hold.
+    handler('touchstart')({ touches: [touch(10, 10)], timeStamp: 300 });
+    handler('touchstart')({ touches: [touch(10, 10), touch(80, 80)], timeStamp: 310 });
+    const pinchEnd = { changedTouches: [touch(10, 10)], timeStamp: 320, preventDefault: prevented() };
+    handler('touchend')(pinchEnd);
+    expect(pinchEnd.preventDefault).not.toHaveBeenCalled();
+    dispose();
   });
 
   it('cleans a static mount when observation fails after terminal/render allocation, then supports refill', () => {

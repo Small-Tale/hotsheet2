@@ -293,6 +293,11 @@
   display: none;
   overflow: auto;
 }
+/* A touch long-press opens the terminal's own edit menu (HS2-KKP8YJ), so iOS must not also raise its
+   link/image callout over the terminal. */
+.terminal-viewport[data-display-mode='interactive'] {
+  -webkit-touch-callout: none;
+}
 /* Both the tile frame and TerminalPreview host the scaled preview at its fixed 1280×768 canvas. */
 .terminal-viewport.terminal-viewport--scaled-preview {
   inset: 0 auto auto 0;

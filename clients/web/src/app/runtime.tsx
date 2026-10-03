@@ -123,6 +123,8 @@ import type { TicketStatus } from '../components/status-badge';
 import {
   TerminalCopyDialog,
   type TerminalCopyState,
+  TerminalEditMenu,
+  type TerminalEditMenuState,
   TerminalPasteDialog,
   type TerminalPasteState,
 } from '../components/terminal-clipboard-dialogs';
@@ -516,7 +518,9 @@ export async function startHotSheetWebClient() {
     terminalRename = signal<TerminalRenameTarget | undefined>(undefined),
     // Phone terminal Copy and Paste-fallback sheets (HS2-FRB545).
     terminalCopy = signal<TerminalCopyState | undefined>(undefined),
-    terminalPaste = signal<TerminalPasteState | undefined>(undefined);
+    terminalPaste = signal<TerminalPasteState | undefined>(undefined),
+    // Long-press terminal edit menu (HS2-KKP8YJ).
+    terminalEditMenu = signal<TerminalEditMenuState | undefined>(undefined);
   /** Project-scoped keys of renames whose server write is still in flight (HS2-89FPV1). */
   const pendingTerminalRenames = new Set<string>();
   let terminalDashboardGeneration = 0,
@@ -4993,6 +4997,7 @@ export async function startHotSheetWebClient() {
         <TerminalRenameDialog target={terminalRename.value} />
         <TerminalCopyDialog state={terminalCopy.value} />
         <TerminalPasteDialog state={terminalPaste.value} />
+        <TerminalEditMenu state={terminalEditMenu.value} />
         <TerminalVisibilityDialog
           open={Boolean(visibilityScope)}
           state={terminalVisibility.value}
@@ -5215,7 +5220,7 @@ export async function startHotSheetWebClient() {
     selectTerminalRailProject, selectTicketView, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
     terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
-    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, terminalCopy, terminalPaste, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
+    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, terminalCopy, terminalPaste, terminalEditMenu, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
     closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, resetTerminalName, viewportMobile, sidebarCollapsed, inspectorCollapsed, revealInspectorOverlay,
     selectTickets, selectionOrder, visibleTickets, selectedView, hideVerifiedColumn, cancelTicketDrafts, openTicketReader, ticketContextMenu,

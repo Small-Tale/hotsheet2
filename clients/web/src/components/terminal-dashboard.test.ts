@@ -302,6 +302,8 @@ describe('TerminalDashboard', () => {
       "/* Temporary until KF-FTADQT: ToolbarControlGroup's native-button rule keeps a pointer cursor on a",
     );
     expect(css).toContainSource('.terminal-dashboard__zoom button:disabled { cursor: not-allowed; }');
+    // HS2-KKP8YJ: iOS must not raise its own callout over a long-pressed interactive terminal.
+    expect(css).toContainSource(".terminal-viewport[data-display-mode='interactive'] { -webkit-touch-callout: none; }");
     expect(css).toMatchSource(
       /:is\( \.terminal-tile__identity, \.terminal-tile__menu, \.terminal-tile__open, \.terminal-tile__close, \.terminal-tile__text-size, \.terminal-tile__clipboard \) \{ border: 0; color: var\(--wa-color-neutral-on-quiet\); background: transparent; \}/,
     );
