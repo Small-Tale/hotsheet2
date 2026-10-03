@@ -7,12 +7,13 @@
 // component's class block (or a Kerf class) in its own markup, which would borrow that
 // component's styles without any cross-component selector (HS2-TM6K9V).
 //
-// Kerf's doctor runs with `ownership: "component"` (KF-5X1TWD, HS2-HGAH8E), but it judges only
-// the selector subject against composition-cataloged entries' exact public classes. This check
-// still owns everything else: element/modifier classes and uncataloged components (KF-GMM06Q),
-// hook descendants and composed-child element subjects (KF-1MRZ86), and another component's class
-// used as context or inside `:has()` (KF-WMMDDW), and markup borrowing (KF-GNQ124). HS2-1GWX47
-// retires it when those ship.
+// Kerf's doctor runs with `ownership: "component"` and `ownershipContext: "any"` (HS2-HGAH8E,
+// HS2-1GWX47). As of @kerfjs/ui 5.0.0-beta.70 it still misses cases this check enforces, so the
+// check stays until these ship (retirement: HS2-R9GQJE): co-owned classes of a shared stylesheet
+// (KF-PPY02K, which blocks declaring `source` on every catalog entry), whole-block ownership of
+// dynamic element/modifier classes (KF-J434YD), LucideIcon roots and descendant reach into composed
+// children (KF-SV30NV), raw HTML in template literals (KF-ARFBQS), shell-stylesheet ownership groups
+// (KF-R0Q54A), Kerf classes as selector context (KF-9CRK6W), and local components (KF-MQJEHW).
 //
 // Ownership comes from the TSX sources, not from file names: each stylesheet is owned by the
 // modules that import it, and each class block is owned by the module(s) that render it.

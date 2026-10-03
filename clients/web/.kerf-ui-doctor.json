@@ -3,6 +3,7 @@
   "schemaVersion": 1,
   "mode": "full",
   "ownership": "component",
+  "ownershipContext": "any",
   "stages": {
     "catalog": true,
     "typescript": true,

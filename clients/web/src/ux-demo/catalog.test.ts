@@ -438,8 +438,13 @@ describe('UX demo catalog', () => {
     const profile = JSON.parse(readFileSync(`${root}.kerf-ui-profile.json`, 'utf8')) as {
       catalogs?: Array<{ package: string; selection?: { path: string }; composition: { path: string } }>;
     };
-    const doctor = JSON.parse(readFileSync(`${root}.kerf-ui-doctor.json`, 'utf8')) as { ownership?: string };
+    const doctor = JSON.parse(readFileSync(`${root}.kerf-ui-doctor.json`, 'utf8')) as {
+      ownership?: string;
+      ownershipContext?: string;
+    };
     expect(doctor.ownership).toBe('component');
+    // A sibling component's class as selector context or inside :has() fails the doctor too (HS2-1GWX47).
+    expect(doctor.ownershipContext).toBe('any');
     expect(composition.package).toBe('hotsheet-web');
     expect(composition.compatibility).toEqual({
       componentCatalog: './component-catalog-extension.json',

@@ -2315,29 +2315,50 @@ budget that only ever decreased; HS2-9ME409 and HS2-TF76Z2 drove it to zero.
 
 Since Kerf 5.0.0-beta.69 (`KF-5X1TWD`) the doctor runs with `"ownership": "component"` in
 `.kerf-ui-doctor.json` (HS2-HGAH8E). In that mode a catalog entry owns only the stylesheets in its
-`styleSources` and its `source` module, so the doctor's ownership rules (`KUI-L019`–`KUI-L022`) now
+`styleSources` and its `source` module, so the doctor's ownership rules (`KUI-L019`–`KUI-L023`)
 also apply between Hot Sheet's own cataloged components. The three composition entries in
-`ai/component-composition-extension.json` declare their `styleSources`.
+`ai/component-composition-extension.json` declare their `styleSources`. Since HS2-1GWX47 the config
+also sets `"ownershipContext": "any"` (`KF-WMMDDW`), so a cataloged sibling's class used as selector
+context or inside `:has()` fails the doctor too.
 
-The doctor's coverage is still partial. HS2-HGAH8E ran the same probe rules through both checks:
+The doctor's coverage is still partial. HS2-1GWX47 reran the probe matrix on Kerf 5.0.0-beta.70,
+which ships `KF-1MRZ86`, `KF-GMM06Q`, `KF-WMMDDW` and `KF-GNQ124`. The doctor columns assume every
+selection entry declares its `source` module, which beta.70 needs before it judges an app component.
+"Strict" adds `ownershipContext: "any"` and `implicitComponentOwnership: true`.
 
-| Probe rule (in an unrelated component stylesheet)             | Doctor (component mode) | App check         |
-| ------------------------------------------------------------- | ----------------------- | ----------------- |
-| `.own .ticket-search-field` (sibling entry's root as subject) | `KUI-L019`              | `foreign-class`   |
-| `.workspace-header__identity > span` (cataloged anatomy)      | `KUI-L019` (descendant) | `foreign-class`   |
-| `.kui-button`, `[data-component="toolbar"]`                   | `KUI-L001`, `KUI-L019`  | `kerf`            |
-| `.ticket-search-field .own`, `.own:has(.ticket-search-field)` | allowed by design       | `foreign-class`   |
-| `.ticket-search-field svg` (descendant of a sibling's root)   | not reported            | `foreign-class`   |
-| `.ticket-row__title` (no composition entry, unlisted class)   | not reported            | `foreign-class`   |
-| `.terminal-ticket-rail__view-select svg` (hook descendant)    | not reported            | `hook-descendant` |
-| `.active-claim-spinner > svg` (`LoadingSpinner` root)         | not reported            | `foreign-element` |
+| Probe (rule in an unrelated component stylesheet, or markup in an unrelated module) | Doctor (component) | Doctor (strict)    | App check         |
+| ----------------------------------------------------------------------------------- | ------------------ | ------------------ | ----------------- |
+| `.ticket-search-field .own`, `.own:has(.ticket-search-field)`                       | not reported       | `KUI-L019` context | `foreign-class`   |
+| `.ticket-search-field svg` (descendant of a sibling's root)                         | `KUI-L019`         | `KUI-L019`         | `foreign-class`   |
+| `.ticket-list-row__category` (literal element class of a selection entry)           | `KUI-L019`         | `KUI-L019`         | `foreign-class`   |
+| `.ticket-list-row--list` (modifier the owner builds dynamically)                    | not reported       | not reported       | `foreign-class`   |
+| `.terminal-ticket-rail__project svg` (hook descendant)                              | `KUI-L019`         | `KUI-L019`         | `hook-descendant` |
+| `.ticket-page-more` (class owned through the `src/style.css` shell)                 | not reported       | not reported       | `foreign-class`   |
+| `.active-claim-spinner > svg` (`LoadingSpinner` root, uncataloged owner)            | not reported       | `KUI-L019`         | `foreign-element` |
+| `.x > svg`, `.x svg` over a composed `LucideIcon`                                   | not reported       | not reported       | `foreign-element` |
+| `.x svg` over a local component that renders a `LucideIcon`                         | not reported       | not reported       | `foreign-element` |
+| `.kui-toolbar > .own` (Kerf class as context)                                       | allowed by design  | allowed by design  | `kerf`            |
+| JSX `<span class="ticket-list-row__body">`, plain raw HTML, `className =`           | `KUI-L023`         | `KUI-L023`         | `borrowed-markup` |
+| raw HTML in a template literal with `${…}`                                          | not reported       | not reported       | `borrowed-markup` |
+| `className =` with a dynamic modifier (`ticket-list-row--list`)                     | not reported       | not reported       | `borrowed-markup` |
 
-The doctor judges only the selector subject, and only against the exact `publicClasses` of
-composition entries. Kerf tickets cover the gaps: `KF-1MRZ86` (element subjects inside a hook
-target, a sibling root, or a composed child), `KF-GMM06Q` (class ownership derived from source
-and selection entries), `KF-WMMDDW` (opt-in strictness for a sibling's class used as context), and `KF-GNQ124` (markup
-borrowing).
-HS2-1GWX47 retires the app check once they ship.
+Declaring `source` on every selection entry also adds about 120 false `KUI-L023` findings. They
+come from classes several modules share through one stylesheet (`.app-heading`, `.dialog-surface`,
+`.settings-navigation__content`). The doctor treats each importer as the sole owner and reports the
+others, so `scripts/sync-component-catalog-extension.mjs` does not emit `source` yet.
+
+No app-check finding kind is fully covered, so the app check stays whole. Kerf tickets cover the
+gaps:
+
+- `KF-PPY02K`: co-owned classes of a shared stylesheet.
+- `KF-J434YD`: whole-block ownership, including dynamic element and modifier classes.
+- `KF-SV30NV`: the `LucideIcon` root and descendant reach into composed children.
+- `KF-ARFBQS`: raw HTML in template literals.
+- `KF-R0Q54A`: ownership groups for shell stylesheets.
+- `KF-9CRK6W`: Kerf classes as selector context.
+- `KF-MQJEHW`: local components.
+
+HS2-R9GQJE retires the app check once they ship.
 
 Until then, `npm run css:ownership` runs as the last step of `npm run lint`. It is
 `clients/web/scripts/check-css-ownership.mjs`, unit-tested in `check-css-ownership.test.mjs`, and
