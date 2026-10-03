@@ -115,11 +115,16 @@ function geometry(id) {
 
 export async function expectedCatalogExtension() {
   const [source, components] = await Promise.all([readFile(catalogPath, 'utf8'), componentExports()]);
+  const owner = (demo) =>
+    components.find((component) => component.base === demo.id) ??
+    components.find((component) => component.names.includes(demo.name));
   const entries = demos(source)
-    .filter((demo) => components.some((component) => component.base === demo.id || component.names.includes(demo.name)))
+    .filter((demo) => owner(demo))
     .map((demo) => ({
       id: demo.id,
       name: demo.name,
+      // The rendering module, so Kerf's doctor judges every app component's ownership (HS2-R9GQJE).
+      source: `src/components/${owner(demo).base}.tsx`,
       kind: compositionIds.has(demo.id) ? 'composition' : 'component',
       purpose: demo.purpose,
       useWhen: [`Hot Sheet needs ${demo.purpose.charAt(0).toLowerCase()}${demo.purpose.slice(1)}`],

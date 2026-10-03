@@ -416,6 +416,15 @@ describe('UX demo catalog', () => {
     }
   });
 
+  it('declares the rendering source module on every selection catalog entry (HS2-R9GQJE)', () => {
+    // Kerf's doctor judges an app component's CSS and markup ownership only through its `source`.
+    const root = fileURLToPath(new URL('../../', import.meta.url));
+    for (const entry of componentCatalogExtension.entries as Array<{ id: string; source?: string }>) {
+      expect(entry.source, entry.id).toMatch(/^src\/components\/[a-z0-9-]+\.tsx$/);
+      expect(existsSync(join(root, entry.source!)), `${entry.id} source ${entry.source}`).toBe(true);
+    }
+  });
+
   // Modules that exist only as zone content of a cataloged composition (declared in the composition extension).
   const COMPOSITION_ONLY_MODULES = new Set(['workspace-controls', 'project-strip-actions']);
 
@@ -447,8 +456,9 @@ describe('UX demo catalog', () => {
       ownershipContext?: string;
     };
     expect(doctor.ownership).toBe('component');
-    // A sibling component's class as selector context or inside :has() fails the doctor too (HS2-1GWX47).
-    expect(doctor.ownershipContext).toBe('any');
+    // A sibling component's, or another package's, class as selector context or inside :has() fails
+    // the doctor too (HS2-1GWX47, HS2-R9GQJE).
+    expect(doctor.ownershipContext).toBe('any-package');
     expect(composition.package).toBe('hotsheet-web');
     expect(composition.compatibility).toEqual({
       componentCatalog: './component-catalog-extension.json',

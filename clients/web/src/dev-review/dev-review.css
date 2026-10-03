@@ -1,5 +1,3 @@
-@import '../components/native-popover-dialog.css';
-
 .hs-dev-review {
   position: fixed;
   z-index: 2147483647;
@@ -262,13 +260,9 @@ html.hs-dev-review--delete body *:not(.hs-dev-review__rect):not(.hs-dev-review__
   width: 100%;
   max-height: calc(100vh - 48px);
   box-sizing: border-box;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-}
-.hs-dev-review__dialog .app-heading {
-  min-height: remify(78.4px);
-}
-.hs-dev-review__dialog .app-heading__summary {
-  font-size: var(--wa-font-size-xs);
+  /* The form's own first row reserves the heading's two-line height; the heading itself is
+     configured through its `data-summary-size` variant, never restyled here (HS2-R9GQJE). */
+  grid-template-rows: minmax(remify(78.4px), auto) minmax(0, 1fr) auto;
 }
 .hs-dev-review__close {
   position: relative;

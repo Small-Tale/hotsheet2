@@ -7,6 +7,7 @@
     {
       "id": "app-shell",
       "name": "AppShell",
+      "source": "src/components/app-shell.tsx",
       "kind": "composition",
       "purpose": "Responsive application regions with a stationary clipped shell, independent child scrolling, and a main-column-relative terminal restore action.",
       "useWhen": [
@@ -32,6 +33,7 @@
     {
       "id": "project-sidebar",
       "name": "ProjectSidebar",
+      "source": "src/components/project-sidebar.tsx",
       "kind": "composition",
       "purpose": "Project summary, repository state, views, commands, and drive controls.",
       "useWhen": [
@@ -57,6 +59,7 @@
     {
       "id": "project-summary",
       "name": "ProjectSummary",
+      "source": "src/components/project-summary.tsx",
       "kind": "component",
       "purpose": "Seven-day completion history and current ticket counts.",
       "useWhen": [
@@ -79,6 +82,7 @@
     {
       "id": "repository-summary",
       "name": "RepositorySummary",
+      "source": "src/components/repository-summary.tsx",
       "kind": "component",
       "purpose": "Branch and working-copy status action.",
       "useWhen": [
@@ -101,6 +105,7 @@
     {
       "id": "repository-status-popover",
       "name": "RepositoryStatusPopover",
+      "source": "src/components/repository-status-popover.tsx",
       "kind": "composition",
       "purpose": "Master/detail repository files, commits, and host actions.",
       "useWhen": [
@@ -126,6 +131,7 @@
     {
       "id": "change-evidence-dialog",
       "name": "ChangeEvidenceDialog",
+      "source": "src/components/repository-status-popover.tsx",
       "kind": "component",
       "purpose": "Ticket commit-range files grouped by evidence type.",
       "useWhen": [
@@ -148,6 +154,7 @@
     {
       "id": "view-navigation",
       "name": "ViewNavigation",
+      "source": "src/components/view-navigation.tsx",
       "kind": "component",
       "purpose": "Selectable built-in and custom ticket views.",
       "useWhen": [
@@ -170,6 +177,7 @@
     {
       "id": "command-navigation",
       "name": "CommandNavigation",
+      "source": "src/components/command-navigation.tsx",
       "kind": "component",
       "purpose": "Grouped colored project command actions arranged by Kerf List.",
       "useWhen": [
@@ -192,6 +200,7 @@
     {
       "id": "command-settings-editor",
       "name": "CommandSettingsEditor",
+      "source": "src/components/command-settings-editor.tsx",
       "kind": "composition",
       "purpose": "Master-detail editor for custom command buttons, incl. color and icon pickers.",
       "useWhen": [
@@ -217,6 +226,7 @@
     {
       "id": "drive-control",
       "name": "DriveControl",
+      "source": "src/components/drive-control.tsx",
       "kind": "component",
       "purpose": "Split AI workflow action and provider override trigger.",
       "useWhen": [
@@ -239,6 +249,7 @@
     {
       "id": "drive-options-menu",
       "name": "DriveOptionsMenu",
+      "source": "src/components/drive-options-menu.tsx",
       "kind": "component",
       "purpose": "Provider, model, and effort overrides for a driven session.",
       "useWhen": [
@@ -261,6 +272,7 @@
     {
       "id": "workspace-header",
       "name": "WorkspaceHeader",
+      "source": "src/components/workspace-header.tsx",
       "kind": "composition",
       "purpose": "Project identity, canonical toolbar view segments, native selection actions with none/mixed/all Up Next stars, sorting, settings, search, and a connected notification inbox with live counts and local request decisions.",
       "useWhen": [
@@ -286,6 +298,7 @@
     {
       "id": "project-tab",
       "name": "ProjectTab",
+      "source": "src/components/project-tab.tsx",
       "kind": "component",
       "purpose": "One local or remote project connection tab.",
       "useWhen": [
@@ -308,6 +321,7 @@
     {
       "id": "project-tabs",
       "name": "ProjectTabBar",
+      "source": "src/components/project-tab-bar.tsx",
       "kind": "component",
       "purpose": "Local and remote project connection tabs.",
       "useWhen": [
@@ -330,6 +344,7 @@
     {
       "id": "connection-state-banner",
       "name": "ConnectionStateBanner",
+      "source": "src/components/connection-state-banner.tsx",
       "kind": "component",
       "purpose": "Connection progress, interruption, compatibility, and authentication states.",
       "useWhen": [
@@ -352,6 +367,7 @@
     {
       "id": "connection-details-dialog",
       "name": "ConnectionDetailsDialog",
+      "source": "src/components/connection-details-dialog.tsx",
       "kind": "component",
       "purpose": "Dismissible client/server compatibility metadata and recovery guidance.",
       "useWhen": [
@@ -374,6 +390,7 @@
     {
       "id": "settings-navigation",
       "name": "SettingsNavigation",
+      "source": "src/components/settings-navigation.tsx",
       "kind": "component",
       "purpose": "Grouped settings categories arranged by Kerf List in an unpadded sidebar pane.",
       "useWhen": [
@@ -396,6 +413,7 @@
     {
       "id": "notification-navigation",
       "name": "NotificationNavigation",
+      "source": "src/components/notification-navigation.tsx",
       "kind": "component",
       "purpose": "Notification views with attention counts arranged by Kerf List in an unpadded sidebar pane.",
       "useWhen": [
@@ -418,6 +436,7 @@
     {
       "id": "quick-ticket-composer",
       "name": "QuickTicketComposer",
+      "source": "src/components/quick-ticket-composer.tsx",
       "kind": "component",
       "purpose": "Compact ticket creation that expands in place.",
       "useWhen": [
@@ -440,6 +459,7 @@
     {
       "id": "ticket-list",
       "name": "TicketList",
+      "source": "src/components/ticket-list.tsx",
       "kind": "composition",
       "purpose": "Responsive, keyboard-navigable ticket collection.",
       "useWhen": [
@@ -465,6 +485,7 @@
     {
       "id": "ticket-page-more",
       "name": "TicketPageMore",
+      "source": "src/components/ticket-page-more.tsx",
       "kind": "component",
       "purpose": "Load-more continuation below a paged ticket list or board column, idle and loading.",
       "useWhen": [
@@ -490,6 +511,7 @@
     {
       "id": "ticket-row",
       "name": "TicketRow",
+      "source": "src/components/ticket-row.tsx",
       "kind": "component",
       "purpose": "Dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets.",
       "useWhen": [
@@ -512,6 +534,7 @@
     {
       "id": "ticket-board",
       "name": "TicketBoard",
+      "source": "src/components/ticket-board.tsx",
       "kind": "composition",
       "purpose": "Status/category column workspace.",
       "useWhen": [
@@ -537,6 +560,7 @@
     {
       "id": "ticket-board-column",
       "name": "TicketBoardColumn",
+      "source": "src/components/ticket-board-column.tsx",
       "kind": "component",
       "purpose": "One titled, independently scrollable ticket column.",
       "useWhen": [
@@ -559,6 +583,7 @@
     {
       "id": "ticket-inspector",
       "name": "TicketInspector",
+      "source": "src/components/ticket-inspector.tsx",
       "kind": "composition",
       "purpose": "Trailing ticket detail and editing surface with contained, centered section tabs.",
       "useWhen": [
@@ -584,6 +609,7 @@
     {
       "id": "ticket-inspector-skeleton",
       "name": "TicketInspectorSkeleton",
+      "source": "src/components/ticket-inspector.tsx",
       "kind": "component",
       "purpose": "Shape-preserving loading placeholder shown while the next ticket loads.",
       "useWhen": [
@@ -606,6 +632,7 @@
     {
       "id": "ticket-info-panel",
       "name": "TicketInfoPanel",
+      "source": "src/components/ticket-info-panel.tsx",
       "kind": "composition",
       "purpose": "Ticket metadata and details with compact headings, inset status controls and empty notes, tags, and provenance.",
       "useWhen": [
@@ -631,6 +658,7 @@
     {
       "id": "ticket-timeline",
       "name": "TicketTimeline",
+      "source": "src/components/ticket-timeline.tsx",
       "kind": "component",
       "purpose": "Chronological ticket activity inspector section.",
       "useWhen": [
@@ -653,6 +681,7 @@
     {
       "id": "ticket-code-review",
       "name": "TicketCodeReview",
+      "source": "src/components/ticket-code-review.tsx",
       "kind": "component",
       "purpose": "Ticket-associated commits and configured diff-tool actions.",
       "useWhen": [
@@ -675,6 +704,7 @@
     {
       "id": "ticket-attachments",
       "name": "TicketAttachments",
+      "source": "src/components/ticket-attachments.tsx",
       "kind": "component",
       "purpose": "Ticket attachment inspector section.",
       "useWhen": [
@@ -697,6 +727,7 @@
     {
       "id": "ticket-category-select",
       "name": "TicketCategorySelect",
+      "source": "src/components/ticket-category-select.tsx",
       "kind": "component",
       "purpose": "Category chooser with configured icons and colors.",
       "useWhen": [
@@ -719,6 +750,7 @@
     {
       "id": "ticket-priority-select",
       "name": "TicketPrioritySelect",
+      "source": "src/components/ticket-priority-select.tsx",
       "kind": "component",
       "purpose": "Priority chooser with semantic icons.",
       "useWhen": [
@@ -741,6 +773,7 @@
     {
       "id": "ticket-status-menu",
       "name": "TicketStatusMenu",
+      "source": "src/components/ticket-status-menu.tsx",
       "kind": "component",
       "purpose": "Badge-triggered status chooser with semantic icons.",
       "useWhen": [
@@ -763,6 +796,7 @@
     {
       "id": "status-badge",
       "name": "StatusBadge",
+      "source": "src/components/status-badge.tsx",
       "kind": "component",
       "purpose": "Readable ticket state with reinforcing iconography.",
       "useWhen": [
@@ -785,6 +819,7 @@
     {
       "id": "confidence-badge",
       "name": "ConfidenceBadge",
+      "source": "src/components/confidence-badge.tsx",
       "kind": "component",
       "purpose": "Banded AI completion confidence: compact pill for notes and ticket summaries, labeled for the inspector header.",
       "useWhen": [
@@ -807,6 +842,7 @@
     {
       "id": "confidence-calibration",
       "name": "ConfidenceCalibration",
+      "source": "src/components/confidence-calibration.tsx",
       "kind": "component",
       "purpose": "A project's completion-confidence calibration: per-band reopen versus verified outcomes and recent completions.",
       "useWhen": [
@@ -829,6 +865,7 @@
     {
       "id": "tag-chip",
       "name": "TagChip",
+      "source": "src/components/tag-chip.tsx",
       "kind": "component",
       "purpose": "Compact tag label with optional removal behavior.",
       "useWhen": [
@@ -849,6 +886,7 @@
     {
       "id": "ticket-reader",
       "name": "TicketReader",
+      "source": "src/components/ticket-reader.tsx",
       "kind": "composition",
       "purpose": "Large dialog presentation of the complete ticket inspector.",
       "useWhen": [
@@ -874,6 +912,7 @@
     {
       "id": "markdown-editor",
       "name": "MarkdownEditor",
+      "source": "src/components/markdown-editor.tsx",
       "kind": "component",
       "purpose": "Inline and expanded Markdown editing.",
       "useWhen": [
@@ -896,6 +935,7 @@
     {
       "id": "markdown-preview",
       "name": "MarkdownPreview",
+      "source": "src/components/markdown-preview.tsx",
       "kind": "component",
       "purpose": "Sanitized Markdown rendering with tone, size, density, and attachment-media presentation variants.",
       "useWhen": [
@@ -918,6 +958,7 @@
     {
       "id": "attachment-gallery",
       "name": "AttachmentGallery",
+      "source": "src/components/attachment-gallery.tsx",
       "kind": "component",
       "purpose": "Always-dark full-screen media viewer with keyboard, arrow, and swipe navigation; unchanged by device or app theme.",
       "useWhen": [
@@ -940,6 +981,7 @@
     {
       "id": "ticket-close-dialog",
       "name": "TicketCloseDialog",
+      "source": "src/components/ticket-close-dialog.tsx",
       "kind": "component",
       "purpose": "Structured close outcomes with duplicate-target search and validation.",
       "useWhen": [
@@ -962,6 +1004,7 @@
     {
       "id": "not-working-dialog",
       "name": "NotWorkingDialog",
+      "source": "src/components/not-working-dialog.tsx",
       "kind": "component",
       "purpose": "Completed-ticket verification failure report with notes and evidence.",
       "useWhen": [
@@ -984,6 +1027,7 @@
     {
       "id": "bulk-ticket-dialog",
       "name": "BulkTicketDialog",
+      "source": "src/components/bulk-ticket-dialog.tsx",
       "kind": "component",
       "purpose": "Confirm bulk tag, delete, and empty-trash actions across selected tickets.",
       "useWhen": [
@@ -1006,6 +1050,7 @@
     {
       "id": "saved-view-dialog",
       "name": "SavedViewDialog",
+      "source": "src/components/saved-view-dialog.tsx",
       "kind": "component",
       "purpose": "Create or edit a saved ticket view with a full-width responsive query editor.",
       "useWhen": [
@@ -1028,6 +1073,7 @@
     {
       "id": "ticket-link-choice-dialog",
       "name": "TicketLinkChoiceDialog",
+      "source": "src/components/ticket-link-choice-dialog.tsx",
       "kind": "component",
       "purpose": "Disambiguate a ticket reference that matches more than one ticket.",
       "useWhen": [
@@ -1050,6 +1096,7 @@
     {
       "id": "project-dialog",
       "name": "ProjectDialog",
+      "source": "src/components/project-dialog.tsx",
       "kind": "component",
       "purpose": "Open a local checkout or choose a checkout already known to a remote server.",
       "useWhen": [
@@ -1072,6 +1119,7 @@
     {
       "id": "project-close-dialog",
       "name": "ProjectCloseDialog",
+      "source": "src/components/project-close-dialog.tsx",
       "kind": "component",
       "purpose": "Warn about running terminals and AI chats before closing a project, with a live resource preview.",
       "useWhen": [
@@ -1094,6 +1142,7 @@
     {
       "id": "conversation-export-dialog",
       "name": "ConversationExportDialog",
+      "source": "src/components/conversation-export-dialog.tsx",
       "kind": "component",
       "purpose": "Two-step wizard to choose a message scope then a destination, format, and bundle options.",
       "useWhen": [
@@ -1116,6 +1165,7 @@
     {
       "id": "command-run-dialog",
       "name": "CommandRunDialog",
+      "source": "src/components/command-run-dialog.tsx",
       "kind": "component",
       "purpose": "Native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one.",
       "useWhen": [
@@ -1138,6 +1188,7 @@
     {
       "id": "note-composer",
       "name": "NoteComposer",
+      "source": "src/components/note-composer.tsx",
       "kind": "component",
       "purpose": "Create or cancel a provider-backed ticket note.",
       "useWhen": [
@@ -1160,6 +1211,7 @@
     {
       "id": "note-card",
       "name": "NoteCard",
+      "source": "src/components/note-card.tsx",
       "kind": "component",
       "purpose": "Kind-specific note presentation with an optional banded AI completion confidence badge.",
       "useWhen": [
@@ -1182,6 +1234,7 @@
     {
       "id": "ai-conversation",
       "name": "AIConversation",
+      "source": "src/components/ai-conversation.tsx",
       "kind": "component",
       "purpose": "Dialog and embedded AI conversation with native Save/Stop toolbar controls, inline permissions, and interruption.",
       "useWhen": [
@@ -1204,6 +1257,7 @@
     {
       "id": "ai-content-label",
       "name": "AIContentLabel",
+      "source": "src/components/ai-content-label.tsx",
       "kind": "component",
       "purpose": "Persistent AI attribution with the limitations cue, optional feedback, and quiet or inherited tone.",
       "useWhen": [
@@ -1226,6 +1280,7 @@
     {
       "id": "ai-tool-settings",
       "name": "AiToolSettings",
+      "source": "src/components/ai-tool-settings.tsx",
       "kind": "component",
       "purpose": "Machine-local default AI provider, model, and effort discovered from plugins.",
       "useWhen": [
@@ -1248,6 +1303,7 @@
     {
       "id": "manual-model-dialog",
       "name": "ManualModelDialog",
+      "source": "src/components/manual-model-dialog.tsx",
       "kind": "component",
       "purpose": "Enter an exact model identifier a provider accepts.",
       "useWhen": [
@@ -1270,6 +1326,7 @@
     {
       "id": "permission-request",
       "name": "PermissionRequestCard",
+      "source": "src/components/permission-request-card.tsx",
       "kind": "component",
       "purpose": "Human approval with timeout, project identity, and supported decision scopes.",
       "useWhen": [
@@ -1292,6 +1349,7 @@
     {
       "id": "notification-center",
       "name": "NotificationCenter",
+      "source": "src/components/notification-center.tsx",
       "kind": "component",
       "purpose": "Pending permission requests and newest-first decision history with consistent 12px card spacing across both groups.",
       "useWhen": [
@@ -1314,6 +1372,7 @@
     {
       "id": "terminal-drawer",
       "name": "TerminalDrawer",
+      "source": "src/components/terminal-drawer.tsx",
       "kind": "composition",
       "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu.",
       "useWhen": [
@@ -1339,6 +1398,7 @@
     {
       "id": "terminal-dashboard",
       "name": "TerminalDashboard",
+      "source": "src/components/terminal-dashboard.tsx",
       "kind": "composition",
       "purpose": "Responsive workspace grid with a stable scroll owner for terminals, AI chats, and future cross-project tools.",
       "useWhen": [
@@ -1364,6 +1424,7 @@
     {
       "id": "terminal-operations-sidebar",
       "name": "TerminalOperationsSidebar",
+      "source": "src/components/terminal-operations-sidebar.tsx",
       "kind": "composition",
       "purpose": "Per-project and aggregate completion and in-progress summaries beside the workspace grid.",
       "useWhen": [
@@ -1389,6 +1450,7 @@
     {
       "id": "terminal-ticket-rail",
       "name": "TerminalTicketRail",
+      "source": "src/components/terminal-ticket-rail.tsx",
       "kind": "composition",
       "purpose": "Compact navigation rail (a Kerf NavStack) with equal-width List/Notifications segments, bordered collapsible search, a sunken scrolling list, ticket launcher, and push navigation into ticket detail on one toolbar row.",
       "useWhen": [
@@ -1414,6 +1476,7 @@
     {
       "id": "fixed-aspect-terminal-card",
       "name": "FixedAspectTerminalCard",
+      "source": "src/components/terminal-dashboard.tsx",
       "kind": "component",
       "purpose": "Shared 5:3 terminal viewport card in preview, magnified, and phone magnified (toolbar / keyboard) variants.",
       "useWhen": [
@@ -1436,6 +1499,7 @@
     {
       "id": "terminal-key-bar",
       "name": "TerminalKeyBar",
+      "source": "src/components/terminal-key-bar.tsx",
       "kind": "component",
       "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.",
       "useWhen": [
@@ -1458,6 +1522,7 @@
     {
       "id": "terminal-visibility-dialog",
       "name": "TerminalVisibilityDialog",
+      "source": "src/components/terminal-visibility-dialog.tsx",
       "kind": "component",
       "purpose": "Named visibility groups, persistent shell/AI/chat visibility, and a Kerf multiple-Select type filter.",
       "useWhen": [
@@ -1480,6 +1545,7 @@
     {
       "id": "terminal-copy-dialog",
       "name": "TerminalCopyDialog",
+      "source": "src/components/terminal-clipboard-dialogs.tsx",
       "kind": "component",
       "purpose": "Phone terminal Copy sheet: the buffer as native, long-press-selectable text; Copy takes the selection or everything.",
       "useWhen": [
@@ -1502,6 +1568,7 @@
     {
       "id": "terminal-paste-dialog",
       "name": "TerminalPasteDialog",
+      "source": "src/components/terminal-clipboard-dialogs.tsx",
       "kind": "component",
       "purpose": "Phone terminal Paste fallback when the clipboard cannot be read (denied or unavailable): paste natively, then send.",
       "useWhen": [
@@ -1524,6 +1591,7 @@
     {
       "id": "terminal-edit-menu",
       "name": "TerminalEditMenu",
+      "source": "src/components/terminal-clipboard-dialogs.tsx",
       "kind": "component",
       "purpose": "Touch terminal edit menu opened by a long-press at the touch point: Copy Text… opens the Copy sheet and Paste sends the clipboard.",
       "useWhen": [
@@ -1546,6 +1614,7 @@
     {
       "id": "terminal-rename-dialog",
       "name": "TerminalRenameDialog",
+      "source": "src/components/terminal-rename-dialog.tsx",
       "kind": "component",
       "purpose": "Rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores.",
       "useWhen": [
@@ -1568,6 +1637,7 @@
     {
       "id": "app-empty-state",
       "name": "AppEmptyState",
+      "source": "src/components/app-empty-state.tsx",
       "kind": "component",
       "purpose": "Initial project-opening and remembered-project restoration states.",
       "useWhen": [
@@ -1590,6 +1660,7 @@
     {
       "id": "content-transition",
       "name": "ContentTransition",
+      "source": "src/components/content-transition.tsx",
       "kind": "component",
       "purpose": "Reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts.",
       "useWhen": [
@@ -1612,6 +1683,7 @@
     {
       "id": "ticket-search-field",
       "name": "TicketSearchField",
+      "source": "src/components/ticket-search-field.tsx",
       "kind": "component",
       "purpose": "Ticket search query editor with inline filter chips, in-place tag completion, a lifecycle date helper, and syntax help.",
       "useWhen": [
@@ -1634,6 +1706,7 @@
     {
       "id": "pending-attachment-picker",
       "name": "PendingAttachmentPicker",
+      "source": "src/components/pending-attachment-picker.tsx",
       "kind": "component",
       "purpose": "Drop, browse, review, and remove evidence before submission.",
       "useWhen": [
@@ -1656,6 +1729,7 @@
     {
       "id": "hs1-migration-dialog",
       "name": "Hs1MigrationDialog",
+      "source": "src/components/hs1-migration.tsx",
       "kind": "component",
       "purpose": "Detected Hot Sheet 1 source details and destination-only import flow.",
       "useWhen": [
@@ -1678,6 +1752,7 @@
     {
       "id": "hs1-migration-banner",
       "name": "Hs1MigrationBanner",
+      "source": "src/components/hs1-migration.tsx",
       "kind": "component",
       "purpose": "Project-owned measured, unknown, retry, imported, and verified-backup states for Hot Sheet 1.",
       "useWhen": [
@@ -1700,6 +1775,7 @@
     {
       "id": "project-setup-warning-banner",
       "name": "ProjectSetupWarningBanner",
+      "source": "src/components/project-setup-warning-banner.tsx",
       "kind": "component",
       "purpose": "Dismissible warning that a project opened but skipped its setup refresh, with the reason and fix.",
       "useWhen": [
@@ -1722,6 +1798,7 @@
     {
       "id": "provider-icon",
       "name": "ProviderIcon",
+      "source": "src/components/provider-icon.tsx",
       "kind": "component",
       "purpose": "Provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes.",
       "useWhen": [
@@ -1744,6 +1821,7 @@
     {
       "id": "ticket-source-setup-dialog",
       "name": "TicketSourceSetupDialog",
+      "source": "src/components/ticket-source-setup-dialog.tsx",
       "kind": "component",
       "purpose": "Choose and configure a git or external ticket source.",
       "useWhen": [
@@ -1766,6 +1844,7 @@
     {
       "id": "provider-setup-form",
       "name": "ProviderSetupForm",
+      "source": "src/components/provider-setup-form.tsx",
       "kind": "component",
       "purpose": "Provider credentials, repository locator, and default-source settings.",
       "useWhen": [
@@ -1788,6 +1867,7 @@
     {
       "id": "ticket-sources-settings",
       "name": "TicketSourcesSettings",
+      "source": "src/components/ticket-sources-settings.tsx",
       "kind": "component",
       "purpose": "One project's own ticket sources: default-source choice, editable rows with a remove-from-this-project action, and a note for a source another project shares.",
       "useWhen": [
@@ -1810,6 +1890,7 @@
     {
       "id": "accounts-settings",
       "name": "AccountsSettings",
+      "source": "src/components/ticket-sources-settings.tsx",
       "kind": "component",
       "purpose": "Machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts).",
       "useWhen": [
@@ -1832,6 +1913,7 @@
     {
       "id": "settings-workspace",
       "name": "SettingsWorkspace",
+      "source": "src/components/settings-workspace.tsx",
       "kind": "component",
       "purpose": "One category-selected project or app settings surface.",
       "useWhen": [
@@ -1854,6 +1936,7 @@
     {
       "id": "keyboard-settings",
       "name": "KeyboardSettings",
+      "source": "src/components/keyboard-settings.tsx",
       "kind": "component",
       "purpose": "Grouped reference and rebinding of documented keyboard shortcuts.",
       "useWhen": [
@@ -1876,6 +1959,7 @@
     {
       "id": "trash-settings",
       "name": "TrashSettings",
+      "source": "src/components/trash-settings.tsx",
       "kind": "component",
       "purpose": "Trash retention window and empty-trash entry point.",
       "useWhen": [

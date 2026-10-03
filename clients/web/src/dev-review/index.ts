@@ -2,6 +2,9 @@ import '../components/heading.css';
 import '@kerfjs/ui/toolbar.css';
 import '@kerfjs/ui/toolbar-text.css';
 import '@kerfjs/ui/toolbar-control-group.css';
+// Imported here (not through a CSS @import) so this module co-owns the shared dialog surface
+// classes it renders (HS2-R9GQJE).
+import '../components/native-popover-dialog.css';
 import './dev-review.css';
 
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -358,7 +361,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     dialog.setAttribute('aria-labelledby', 'hs-dev-review-dialog-title');
     let captures: ReviewCapture[] = [];
     const attachments: ReviewAttachment[] = [];
-    dialog.innerHTML = `<form method="dialog" class="hs-dev-review__form"><div class="app-heading" data-component="heading" data-has-icon="false" data-has-actions="true" data-has-summary="true">${devReviewDialogToolbar()}<p class="app-heading__summary" id="hs-dev-review-dialog-summary">Attach visual context and describe the change you need.</p></div><div class="hs-dev-review__dialog-body"><section class="hs-dev-review__evidence" aria-label="Visual evidence"><div class="hs-dev-review__thumbnails" aria-label="Captured regions"></div><div class="hs-dev-review__preview" aria-label="Selected capture preview"></div><label class="hs-dev-review__dropzone">Drop attachments here or <span>browse</span><input type="file" multiple aria-label="Add attachments"></label><div class="hs-dev-review__attachments" aria-label="Added attachments"></div></section><label class="hs-dev-review__notes">Feedback notes<textarea name="notes" required placeholder="Describe the issue or requested change…"></textarea></label>${options.diagnostics ? '<label class="hs-dev-review__diagnostics"><input type="checkbox" checked><span>Attach diagnostic logs</span></label>' : ''}<p class="hs-dev-review__status" role="status"></p></div><footer><button type="button" data-action="close-dialog">Cancel</button><button class="hs-dev-review__submit" type="submit">Create Ticket</button></footer></form>`;
+    dialog.innerHTML = `<form method="dialog" class="hs-dev-review__form"><div class="app-heading" data-component="heading" data-has-icon="false" data-has-actions="true" data-has-summary="true" data-summary-size="small">${devReviewDialogToolbar()}<p class="app-heading__summary" id="hs-dev-review-dialog-summary">Attach visual context and describe the change you need.</p></div><div class="hs-dev-review__dialog-body"><section class="hs-dev-review__evidence" aria-label="Visual evidence"><div class="hs-dev-review__thumbnails" aria-label="Captured regions"></div><div class="hs-dev-review__preview" aria-label="Selected capture preview"></div><label class="hs-dev-review__dropzone">Drop attachments here or <span>browse</span><input type="file" multiple aria-label="Add attachments"></label><div class="hs-dev-review__attachments" aria-label="Added attachments"></div></section><label class="hs-dev-review__notes">Feedback notes<textarea name="notes" required placeholder="Describe the issue or requested change…"></textarea></label>${options.diagnostics ? '<label class="hs-dev-review__diagnostics"><input type="checkbox" checked><span>Attach diagnostic logs</span></label>' : ''}<p class="hs-dev-review__status" role="status"></p></div><footer><button type="button" data-action="close-dialog">Cancel</button><button class="hs-dev-review__submit" type="submit">Create Ticket</button></footer></form>`;
     doc.body.append(dialog);
     const thumbnails = dialog.querySelector<HTMLElement>('.hs-dev-review__thumbnails')!;
     const preview = dialog.querySelector<HTMLElement>('.hs-dev-review__preview')!;

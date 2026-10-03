@@ -44,7 +44,9 @@ describe('dev review tool', () => {
     const css = await readFile(resolve(import.meta.dirname, 'dev-review.css'), 'utf8');
     const sharedDialogCss = await readFile(resolve(import.meta.dirname, '../components/heading.css'), 'utf8');
     expect(sharedDialogCss).not.toContain('border-bottom');
-    expect(css.match(/\.hs-dev-review__dialog .app-heading \{([^}]*)\}/)?.[1]).not.toContain('border-bottom');
+    // The dialog configures the shared heading through its `data-summary-size` variant and reserves
+    // the heading row on its own form grid; it never restyles `.app-heading` (HS2-R9GQJE).
+    expect(css).not.toContain('.app-heading');
     expect(css.match(/\.hs-dev-review__dialog footer \{([^}]*)\}/)?.[1]).not.toContain('border-top');
   });
 

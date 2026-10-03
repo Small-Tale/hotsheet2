@@ -22,6 +22,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.app-heading[data-summary-size='small'] .app-heading__summary {
+  font-size: var(--wa-font-size-xs);
+}
 .app-heading[data-has-icon='false'] {
   --app-heading-title-inset: calc(var(--kui-toolbar-gap, remify(8px)) + var(--kui-layout-item-padding, remify(8px)));
 }

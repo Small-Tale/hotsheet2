@@ -130,12 +130,11 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   ownership between the app's own components. A stylesheet may style only the class blocks
   its component renders, plus the native and raw Web Awesome elements it authors; a module renders
   only its own class blocks (HS2-TM6K9V); and owners
-  are derived from the TSX sources. The Kerf doctor runs in `ownership: "component"` mode with
-  `ownershipContext: "any"` (`KF-5X1TWD`, HS2-HGAH8E, HS2-1GWX47). As of Kerf 5.0.0-beta.70 it
-  still misses cases this check enforces: shared-stylesheet co-ownership, dynamic BEM classes,
-  `LucideIcon` and local-component element subjects, template-literal markup, shell stylesheets,
-  and Kerf classes as context. The check stays until `KF-PPY02K`, `KF-J434YD`, `KF-SV30NV`,
-  `KF-ARFBQS`, `KF-R0Q54A`, `KF-9CRK6W`, and `KF-MQJEHW` ship (HS2-R9GQJE). Known residue is a ticketed, count-exact allowlist
+  are derived from the TSX sources. The Kerf doctor runs strict component ownership: `source` on every catalog entry,
+  `implicitComponentOwnership`, shell-stylesheet `ownershipGroups`, and
+  `ownershipContext: "any-package"` (HS2-R9GQJE). As of Kerf 5.0.0-beta.72 it misses only
+  restyles of a co-owned class (`KF-D5EY24`), and misattributes the UX demo group's stage class
+  (`KF-303MPV`, suppressed per file). The check stays until both ship (HS2-R9GQJE). Known residue is a ticketed, count-exact allowlist
   (`clients/web/css-ownership-allowlist.json`) that can only shrink: a new finding or a stale
   entry fails lint. See [ux-components.md](ux-components.md) for the rule set.
   Both commands require the tracked web, migrator, compatibility-spike, docs, and

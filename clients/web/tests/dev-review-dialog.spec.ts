@@ -22,13 +22,29 @@ test('dev-review new-ticket dialog uses the canonical Toolbar heading anatomy', 
     'Attach visual context and describe the change you need.',
   );
   expect(await header.locator('.kui-toolbar .app-heading__summary').count()).toBe(0);
-  await header.screenshot({ path: '/private/tmp/hs2-agdj6e-devreview-heading-wide.png' });
+  // The heading's small-summary variant and the form's reserved first row replace the former
+  // `.hs-dev-review__dialog .app-heading` restyle (HS2-R9GQJE).
+  await expect(header).toHaveAttribute('data-summary-size', 'small');
+  const sizes = await header.evaluate((element) => {
+    const probe = document.createElement('span');
+    probe.style.fontSize = 'var(--wa-font-size-xs)';
+    element.append(probe);
+    const result = {
+      summary: getComputedStyle(element.querySelector('.app-heading__summary')!).fontSize,
+      xs: getComputedStyle(probe).fontSize,
+    };
+    probe.remove();
+    return result;
+  });
+  expect(sizes.summary).toBe(sizes.xs);
+  expect((await header.boundingBox())!.height).toBeGreaterThanOrEqual(78);
+  await header.screenshot({ path: test.info().outputPath('devreview-heading-wide.png') });
   await page.setViewportSize({ width: 390, height: 900 });
   await expect(header.getByRole('button', { name: 'Close new ticket dialog' })).toBeInViewport();
-  await header.screenshot({ path: '/private/tmp/hs2-agdj6e-devreview-heading-narrow.png' });
+  await header.screenshot({ path: test.info().outputPath('devreview-heading-narrow.png') });
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('.hs-dev-review__dialog')).toHaveCSS('background-color', 'rgb(28, 28, 30)');
-  await header.screenshot({ path: '/private/tmp/hs2-agdj6e-devreview-heading-dark.png' });
+  await header.screenshot({ path: test.info().outputPath('devreview-heading-dark.png') });
   await header.getByRole('button', { name: 'Close new ticket dialog' }).click();
   await expect(header).toBeHidden();
 });

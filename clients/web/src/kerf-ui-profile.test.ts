@@ -80,12 +80,30 @@ describe('Kerf application UI profile', () => {
     // The doctor itself is the CI gate: any active error, review finding, or warning fails it
     // (beta.69 `failOn`, KF-6S5EKX; HS2-Z44YPD retired the wrapper script).
     expect(config.failOn).toBe('warning');
-    // Known Kerf gaps are documented suppressions, never budgets. HS2-DAMHD1 adopted Kerf's toolbar
-    // yield, fill, placement, tiny-visibility, and Select title APIs, and HS2-AEK8GK adopted
-    // `sizing="grow"` once its basis floor shipped (KF-K4VBTS), so production code carries none.
-    // Kerf 5.0.0-beta.72 skips test modules for KUI-L023 (KF-GESM24), so HS2-DF9N3D removed the
-    // per-file test suppressions too (HS2-51MB3F). A new suppression must cite its KF ticket.
-    expect(config.suppressions.map(({ rules, target }) => `${rules.join(',')} ${target}`)).toEqual([]);
+    // Strict component ownership replaces the app CSS ownership check (HS2-R9GQJE): Kerf judges
+    // uncataloged CSS-importing modules, the three shell stylesheets as ownership groups, and other
+    // packages' classes used as selector context.
+    expect(config).toEqual(
+      expect.objectContaining({
+        ownership: 'component',
+        ownershipContext: 'any-package',
+        implicitComponentOwnership: true,
+        ownershipGroups: [
+          { styleSources: ['src/style.css'], sources: ['src/main.tsx', 'src/app/'] },
+          { styleSources: ['src/ux-demo/style.css'], sources: ['src/ux-demo/'] },
+          { styleSources: ['src/dev-review/dev-review.css'], sources: ['src/dev-review/'] },
+        ],
+      }),
+    );
+    // Known Kerf gaps are documented suppressions, never budgets. Production components carry none
+    // (HS2-DAMHD1, HS2-AEK8GK), and beta.72 skips test modules for KUI-L023 (KF-GESM24, HS2-51MB3F).
+    // The only suppressions are UX demo modules that render the demo group's own stage class, which
+    // implicit ownership of `src/ux-demo/main.tsx` misattributes (KF-303MPV).
+    for (const suppression of config.suppressions) {
+      expect(suppression.rules).toEqual(['KUI-L023']);
+      expect(suppression.target).toMatch(/^src\/ux-demo\/[a-z-]+-demo\.tsx$/);
+      expect(suppression.rationale).toContain('KF-303MPV');
+    }
     for (const suppression of config.suppressions) expect(suppression.rationale).toMatch(/KF-[0-9A-Z]{6}/);
   });
 });

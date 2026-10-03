@@ -2353,44 +2353,41 @@ also apply between Hot Sheet's own cataloged components. The three composition e
 also sets `"ownershipContext": "any"` (`KF-WMMDDW`), so a cataloged sibling's class used as selector
 context or inside `:has()` fails the doctor too.
 
-The doctor's coverage is still partial. HS2-1GWX47 reran the probe matrix on Kerf 5.0.0-beta.70,
-which ships `KF-1MRZ86`, `KF-GMM06Q`, `KF-WMMDDW` and `KF-GNQ124`. The doctor columns assume every
-selection entry declares its `source` module, which beta.70 needs before it judges an app component.
-"Strict" adds `ownershipContext: "any"` and `implicitComponentOwnership: true`.
+Since Kerf 5.0.0-beta.72 (HS2-R9GQJE) the doctor runs strict:
 
-| Probe (rule in an unrelated component stylesheet, or markup in an unrelated module) | Doctor (component) | Doctor (strict)    | App check         |
-| ----------------------------------------------------------------------------------- | ------------------ | ------------------ | ----------------- |
-| `.ticket-search-field .own`, `.own:has(.ticket-search-field)`                       | not reported       | `KUI-L019` context | `foreign-class`   |
-| `.ticket-search-field svg` (descendant of a sibling's root)                         | `KUI-L019`         | `KUI-L019`         | `foreign-class`   |
-| `.ticket-list-row__category` (literal element class of a selection entry)           | `KUI-L019`         | `KUI-L019`         | `foreign-class`   |
-| `.ticket-list-row--list` (modifier the owner builds dynamically)                    | not reported       | not reported       | `foreign-class`   |
-| `.terminal-ticket-rail__project svg` (hook descendant)                              | `KUI-L019`         | `KUI-L019`         | `hook-descendant` |
-| `.ticket-page-more` (shell-owned in `src/style.css` when probed; HS2-WP69TD)        | not reported       | not reported       | `foreign-class`   |
-| `.active-claim-spinner > svg` (`LoadingSpinner` root, uncataloged owner)            | not reported       | `KUI-L019`         | `foreign-element` |
-| `.x > svg`, `.x svg` over a composed `LucideIcon`                                   | not reported       | not reported       | `foreign-element` |
-| `.x svg` over a local component that renders a `LucideIcon`                         | not reported       | not reported       | `foreign-element` |
-| `.kui-toolbar > .own` (Kerf class as context)                                       | allowed by design  | allowed by design  | `kerf`            |
-| JSX `<span class="ticket-list-row__body">`, plain raw HTML, `className =`           | `KUI-L023`         | `KUI-L023`         | `borrowed-markup` |
-| raw HTML in a template literal with `${…}`                                          | not reported       | not reported       | `borrowed-markup` |
-| `className =` with a dynamic modifier (`ticket-list-row--list`)                     | not reported       | not reported       | `borrowed-markup` |
+- `scripts/sync-component-catalog-extension.mjs` emits `source` on every selection entry, and
+  `src/ux-demo/catalog.test.ts` requires it to name an existing module.
+- `"implicitComponentOwnership": true` judges uncataloged modules that import CSS, such as
+  `LoadingSpinner`'s `active-claim.tsx`.
+- `"ownershipGroups"` declares the three shell stylesheets (`src/style.css`,
+  `src/ux-demo/style.css`, `src/dev-review/dev-review.css`) with the modules they serve.
+- `"ownershipContext": "any-package"` also reports Kerf classes used as selector context.
 
-Declaring `source` on every selection entry also adds about 120 false `KUI-L023` findings. They
-come from classes several modules share through one stylesheet (`.app-heading`, `.dialog-surface`,
-`.settings-navigation__content`). The doctor treats each importer as the sole owner and reports the
-others, so `scripts/sync-component-catalog-extension.mjs` does not emit `source` yet.
+Two app findings were real. The dev-review dialog restyled the shared `.app-heading`; it now uses
+the heading's `data-summary-size="small"` variant and reserves the row on its own form grid. Its
+module also imports `native-popover-dialog.css` directly instead of through a CSS `@import`, so it
+co-owns the `.dialog-surface` it renders.
 
-No app-check finding kind is fully covered, so the app check stays whole. Kerf tickets cover the
-gaps:
+HS2-R9GQJE reran the probe matrix on beta.72 (rule in an unrelated component stylesheet, or markup
+in an unrelated module):
 
-- `KF-PPY02K`: co-owned classes of a shared stylesheet.
-- `KF-J434YD`: whole-block ownership, including dynamic element and modifier classes.
-- `KF-SV30NV`: the `LucideIcon` root and descendant reach into composed children.
-- `KF-ARFBQS`: raw HTML in template literals.
-- `KF-R0Q54A`: ownership groups for shell stylesheets.
-- `KF-9CRK6W`: Kerf classes as selector context.
-- `KF-MQJEHW`: local components.
+| Probe                                                                   | Doctor (strict)    | App check         |
+| ----------------------------------------------------------------------- | ------------------ | ----------------- |
+| `.ticket-search-field .own`, `.own:has(.ticket-search-field)`           | `KUI-L019` context | `foreign-class`   |
+| `.ticket-search-field svg` (descendant of a sibling's root)             | `KUI-L019`         | `foreign-class`   |
+| `.ticket-list-row__category` (literal element class)                    | `KUI-L019`         | `foreign-class`   |
+| `.ticket-list-row--list` (dynamic modifier of a co-owned block)         | not reported       | `foreign-class`   |
+| `.terminal-ticket-rail__project svg` (hook descendant)                  | `KUI-L019`         | `hook-descendant` |
+| `.active-claim-spinner > svg` (uncataloged owner)                       | `KUI-L019`         | `foreign-element` |
+| `.own > svg` over a composed `LucideIcon`                               | `KUI-L019`         | `foreign-element` |
+| `.kui-toolbar > .own` (Kerf class as context)                           | `KUI-L019` context | `kerf`            |
+| JSX `class=`, raw HTML in a template literal with `${…}`, `className =` | `KUI-L023`         | `borrowed-markup` |
 
-HS2-R9GQJE retires the app check once they ship.
+One gap remains. `ticket-row.tsx` and `corrupt-ticket-row.tsx` both import `ticket-row.css`, so the
+doctor treats `ticket-list-row` as co-owned and skips CSS-subject diagnostics for it (`KF-D5EY24`).
+The doctor also misattributes the UX demo group's `.component-stage__event` to the importing
+`src/ux-demo/main.tsx` (`KF-303MPV`); the affected demo modules carry exact `KUI-L023` suppressions
+citing it. The app check stays until both ship; HS2-R9GQJE then deletes it.
 
 Until then, `npm run css:ownership` runs as the last step of `npm run lint`. It is
 `clients/web/scripts/check-css-ownership.mjs`, unit-tested in `check-css-ownership.test.mjs`, and
