@@ -91,6 +91,12 @@ When automation lands, remove the manual-only step and record it below.
     the clipboard reaches the shell. Confirm a slow drag still scrolls without opening the menu, and
     a quick tap still focuses the terminal. Automated Chromium coverage drives DevTools touch
     events, which cannot prove WebKit's callout suppression or the gesture's feel.
+13. HS2-5DHHPV — on a **physical touch tablet** in landscape (an iPad without a trackpad, and an
+    Android tablet), open a project terminal in the drawer and confirm Copy and Paste appear in the
+    rail beside Hide drawer. Copy opens the sheet; Paste reaches the shell after the iOS paste
+    prompt. Magnify a grid terminal and confirm its footer carries the same pair. Attach a trackpad
+    or mouse to the iPad and confirm the pair disappears. Automated coverage emulates a coarse
+    pointer in Chromium at 1180x820, which cannot prove Safari's pointer media reporting.
 
 ### Local production host over the LAN
 

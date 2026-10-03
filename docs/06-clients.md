@@ -2678,6 +2678,19 @@ modifiers (the main row stays unchanged and fits 390px).
 - Desktop layouts render none of these controls; xterm's own mouse selection and keyboard copy/paste
   shortcuts are unchanged.
 
+**Touch tablets at desktop widths (HS2-5DHHPV).** A touch tablet in landscape (1024px or wider)
+uses the desktop layout, where xterm offers no touch selection or Paste callout. When the primary
+pointer is coarse (`(pointer: coarse)`, tracked live), the desktop chrome gains the same Copy and
+Paste actions:
+
+- The terminal drawer rail shows native **Copy** and **Paste** buttons in its end group, before
+  Hide drawer, while a terminal tab is selected.
+- The magnified terminal's footer adds them beside More actions. It keeps the desktop identity and
+  the open-in-drawer button.
+
+The long-press edit menu below works at every width. A mouse or trackpad desktop, including a
+tablet with a trackpad attached (fine primary pointer), is unchanged.
+
 **Long-press terminal edit menu (HS2-KKP8YJ).** Holding one finger still on any interactive
 terminal for 500 ms opens a small edit menu at the touch point. This covers a drawer terminal in or
 out of focus mode and a magnified terminal. The menu is a context-mode Kerf `PopupMenu` with two

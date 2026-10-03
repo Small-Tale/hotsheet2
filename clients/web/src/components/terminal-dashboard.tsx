@@ -95,6 +95,11 @@ export interface TerminalDashboardProps {
   visibilityScope?: string;
   magnifiedKey?: string;
   mobileMagnified?: MobileMagnifiedTerminal;
+  /**
+   * Touch-first device at a desktop width (coarse primary pointer, HS2-5DHHPV): the magnified terminal's
+   * toolbar carries the same Copy and Paste actions as the phone toolbar.
+   */
+  touchClipboard?: boolean;
   hiddenKeys?: readonly string[];
   loading?: boolean;
   message?: string;
@@ -201,17 +206,21 @@ function TerminalCard({
   mode = 'preview',
   previewPaused = false,
   mobile,
+  touchClipboard = false,
   fit = 'grid',
 }: {
   session: TerminalDashboardSession;
   mode?: 'preview' | 'magnified';
   previewPaused?: boolean;
   mobile?: MobileMagnifiedTerminal;
+  touchClipboard?: boolean;
   fit?: TerminalCardFit;
 }) {
   const key = keyFor(session);
   const dashboardPreview = mode === 'preview',
-    magnified = mode === 'magnified';
+    magnified = mode === 'magnified',
+    // Phone chrome and touch-first desktops (HS2-FRB545, HS2-5DHHPV) put Copy and Paste in the toolbar.
+    clipboardActions = magnified && (Boolean(mobile) || touchClipboard);
   const preview = terminalPreviewText(session.scrollback) || 'Terminal is ready.';
   const viewport =
     dashboardPreview && previewPaused ? (
@@ -315,7 +324,7 @@ function TerminalCard({
             <LucideIcon icon={ALargeSmall} name="a-large-small" />
           </button>
         )}
-        {magnified && mobile && (
+        {clipboardActions && (
           <button
             type="button"
             class="terminal-tile__clipboard"
@@ -326,7 +335,7 @@ function TerminalCard({
             <LucideIcon icon={Copy} name="copy" />
           </button>
         )}
-        {magnified && mobile && (
+        {clipboardActions && (
           <button
             type="button"
             class="terminal-tile__clipboard"
@@ -370,15 +379,18 @@ export function FixedAspectTerminalCard({
   session,
   mode = 'preview',
   mobile,
+  touchClipboard,
   fit = 'grid',
 }: {
   session: TerminalDashboardSession;
   mode?: 'preview' | 'magnified';
   mobile?: MobileMagnifiedTerminal;
+  /** Touch-first desktop: show the Copy and Paste toolbar actions (HS2-5DHHPV). */
+  touchClipboard?: boolean;
   /** `grid` (default) sizes from the enclosing grid; `aspect` fills the container's width at 5:3. */
   fit?: TerminalCardFit;
 }) {
-  return <TerminalCard session={session} mode={mode} mobile={mobile} fit={fit} />;
+  return <TerminalCard session={session} mode={mode} mobile={mobile} touchClipboard={touchClipboard} fit={fit} />;
 }
 
 /**
@@ -575,6 +587,7 @@ export function TerminalDashboard({
   layoutMode = 'responsive',
   magnifiedKey,
   mobileMagnified,
+  touchClipboard = false,
   hiddenKeys = [],
   loading = false,
   message = '',
@@ -699,7 +712,12 @@ export function TerminalDashboard({
               : undefined
           }
         >
-          <FixedAspectTerminalCard session={magnified} mode="magnified" mobile={mobileMagnified} />
+          <FixedAspectTerminalCard
+            session={magnified}
+            mode="magnified"
+            mobile={mobileMagnified}
+            touchClipboard={touchClipboard}
+          />
         </div>
       )}
       {contextMenu && menuTargetsThisGrid && (

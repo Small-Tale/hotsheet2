@@ -259,6 +259,37 @@ describe('TerminalDrawer', () => {
     expect(markup).not.toContain('data-component="terminal-tile"');
     expect(markup).not.toContain('Workspace tile zoom');
   });
+  it('offers rail Copy and Paste for a selected terminal on a touch-first desktop only (HS2-5DHHPV)', () => {
+    const drawer = (selectedId: string, touchClipboard: boolean, focusMode = false) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions,
+          width: 1180,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId,
+          touchClipboard,
+          focusMode,
+          magnifiedKey: selectedId === 'grid' ? 'project:one' : undefined,
+        }),
+      );
+    const touch = drawer('one', true);
+    // Native buttons in the existing end group, before Hide drawer, each with a Lucide icon and a name.
+    expect(touch).toMatch(
+      /data-action="copy-terminal-text" aria-label="Copy terminal text"[^>]*>.*data-lucide="copy".*data-action="paste-terminal-text" aria-label="Paste"[^>]*>.*data-lucide="clipboard-paste".*data-action="toggle-terminal-drawer"/s,
+    );
+    // A fine pointer, the grid, and phone focus mode (which has its own pill) never show the rail pair.
+    expect(drawer('one', false)).not.toContain('copy-terminal-text');
+    const grid = drawer('grid', true);
+    expect(grid).not.toMatch(/<header class="terminal-drawer__rail"[^]*copy-terminal-text[^]*<\/header>/);
+    expect(drawer('one', true, true)).not.toContain('data-action="toggle-terminal-drawer"');
+    // A magnified drawer-grid tile on a touch-first desktop carries the toolbar pair.
+    expect(grid.match(/class="terminal-tile__clipboard"/g)).toHaveLength(2);
+    expect(drawer('grid', false)).not.toContain('terminal-tile__clipboard');
+  });
   it('replaces every drawer chrome control with one exit action in mobile terminal focus mode (HS2-GMTQZM)', () => {
     const markup = String(
         TerminalDrawer({

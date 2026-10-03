@@ -2673,6 +2673,11 @@ long-press point and has two items: **Copy Text…** (`copy-terminal-text`, Luci
 **Paste** (`paste-terminal-text`, Lucide `clipboard-paste`). They reuse the HS2-FRB545 actions. The
 demo opens it from a stage button and reports the action production would take.
 
+HS2-5DHHPV adds a `touchClipboard` prop to `TerminalDashboard`, `FixedAspectTerminalCard`, and
+`TerminalDrawer` for touch-first devices at desktop widths. With it, the magnified card's toolbar
+shows the Copy/Paste pair, and the drawer rail adds native Copy and Paste buttons to its existing
+end `ToolbarControlGroup` (no longer `single`) while a terminal is selected.
+
 HS2-8NQRJB gives the phone magnified terminal toolbar more identity room. In mobile chrome the
 identity shows the terminal name with the project as a subtitle (`terminal-tile__identity-project`).
 The separate open-in-drawer button is omitted there because More actions → Open and the identity

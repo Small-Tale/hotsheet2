@@ -294,7 +294,7 @@ test('styles demo captions through demo-owned classes, not the demoed components
     ['ticket-code-review', '.code-review-demo__caption', 4],
     ['list-item', '.list-item-demo__caption', 5],
     ['terminal-key-bar', '.terminal-key-bar-demo__caption', 2],
-    ['fixed-aspect-terminal-card', '.fixed-aspect-terminal-card-demo__caption', 4],
+    ['fixed-aspect-terminal-card', '.fixed-aspect-terminal-card-demo__caption', 5],
   ];
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -1215,7 +1215,7 @@ test('catalogs every FixedAspectTerminalCard variant and its dashboard relations
   await page.goto('/ux-demo?component=fixed-aspect-terminal-card');
   const stage = page.getByRole('region', { name: 'Fixed aspect terminal card variants' }),
     preview = stage.locator('[data-fixed-aspect-terminal-card="preview"]'),
-    magnified = stage.locator('[data-fixed-aspect-terminal-card="magnified"]:not([data-mobile-chrome])'),
+    magnified = stage.locator('[data-fixed-aspect-terminal-card="magnified"]:not([data-mobile-chrome])').first(),
     phone = stage.locator('[data-mobile-chrome="true"]'),
     previewViewport = preview.locator('[data-display-mode="scaled-preview"]'),
     magnifiedViewport = magnified.locator('[data-display-mode="interactive"]');
@@ -1241,7 +1241,7 @@ test('catalogs every FixedAspectTerminalCard variant and its dashboard relations
   // The stage styles only its own grid shell; every card sizes itself through `fit="aspect"` with no
   // TerminalDashboard ancestor supplying its tokens (HS2-0X36TX).
   await expect(stage).not.toHaveClass(/terminal-dashboard/);
-  await expect(stage.locator('[data-fixed-aspect-terminal-card]')).toHaveCount(4);
+  await expect(stage.locator('[data-fixed-aspect-terminal-card]')).toHaveCount(5);
   for (const card of await stage.locator('[data-fixed-aspect-terminal-card]').all())
     await expect(card).toHaveAttribute('data-fit', 'aspect');
   const frameAspect = await preview.evaluate((card) => {
@@ -7181,6 +7181,29 @@ test('catalogs the TerminalKeyBar rows, sticky modifiers, and sent bytes (HS2-CK
   await expect(output).toHaveText('Paste → sends the clipboard to the terminal');
   await keys.getByRole('button', { name: 'Copy terminal text' }).click();
   await expect(output).toHaveText('Copy → opens the terminal Copy sheet');
+});
+
+test('catalogs the touch-first desktop Copy and Paste variants (HS2-5DHHPV)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=terminal-drawer');
+  const touchDrawer = page.getByRole('region', { name: 'Touch-first desktop' }),
+    rail = touchDrawer.locator('.terminal-drawer__rail');
+  await expect(rail.getByRole('button', { name: 'Copy terminal text' })).toBeVisible();
+  await expect(rail.getByRole('button', { name: 'Paste', exact: true })).toBeVisible();
+  await expect(rail.getByRole('button', { name: 'Hide terminal drawer' })).toBeVisible();
+  // The ordinary drawer variant keeps its single Hide action.
+  await expect(
+    page.locator('.terminal-drawer-demo .terminal-drawer__rail').getByRole('button', { name: 'Copy terminal text' }),
+  ).toHaveCount(0);
+  await touchDrawer.screenshot({ path: test.info().outputPath('hs2-5dhhpv-drawer-demo.png') });
+  await page.goto('/ux-demo?component=fixed-aspect-terminal-card');
+  const cards = page.getByRole('region', { name: 'Fixed aspect terminal card variants' }),
+    tablet = cards
+      .locator('div', { has: page.getByRole('heading', { name: 'Magnified, touch-first desktop' }) })
+      .last();
+  await expect(tablet.getByRole('button', { name: 'Copy terminal text' })).toBeVisible();
+  await expect(tablet.getByRole('button', { name: 'Paste', exact: true })).toBeVisible();
+  await expect(tablet.getByRole('button', { name: 'Open Development in project terminal drawer' })).toBeVisible();
 });
 
 test('catalogs the long-press terminal edit menu and its actions (HS2-KKP8YJ)', async ({ page }) => {

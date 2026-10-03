@@ -1013,7 +1013,8 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
   const permissions = createPermissionsController({ projects, selectedProjectId: state.selectedProjectId });
   const magnified = signal<string | undefined>(undefined),
     mobileMagnified = signal<MobileMagnifiedTerminal | undefined>(undefined),
-    viewportMobile = signal(false);
+    viewportMobile = signal(false),
+    coarsePointer = signal(false);
   const presentation = createTerminalPresentation({
     projects,
     project: state.project,
@@ -1042,6 +1043,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
       mobileTerminalFocus: signal(INACTIVE_MOBILE_TERMINAL_FOCUS),
       mobileMagnifiedTerminal: () => mobileMagnified.value,
       viewportMobile,
+      coarsePointer,
     },
     conversations: {
       conversationStates: state.conversationStates,
@@ -1097,6 +1099,18 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
   expect(presentation.projectTerminalDrawerProps()?.mobile).toBe(true);
   viewportMobile.value = false;
   expect(presentation.projectTerminalDrawerProps()?.mobile).toBe(false);
+  // HS2-5DHHPV: a coarse primary pointer adds desktop Copy/Paste; phones keep their own chrome; both ways.
+  expect(presentation.projectTerminalDrawerProps()?.touchClipboard).toBe(false);
+  coarsePointer.value = true;
+  expect(presentation.projectTerminalDrawerProps()?.touchClipboard).toBe(true);
+  viewportMobile.value = true;
+  expect(presentation.projectTerminalDrawerProps()?.touchClipboard).toBe(false);
+  viewportMobile.value = false;
+  shellMode.value = 'terminals';
+  expect(presentation.globalWorkspaceSurfaceProps()).toMatchObject({ dashboard: { touchClipboard: true } });
+  coarsePointer.value = false;
+  expect(presentation.globalWorkspaceSurfaceProps()).toMatchObject({ dashboard: { touchClipboard: false } });
+  expect(presentation.projectTerminalDrawerProps()?.touchClipboard).toBe(false);
   expect(presentation.workspaceTerminalGroups()[0].chats?.[0].summary).toBe('Replacement');
 });
 

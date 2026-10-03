@@ -50,6 +50,8 @@ export interface TerminalPresentationDependencies {
     mobileMagnifiedTerminal: () => MobileMagnifiedTerminal | undefined;
     /** The app's phone layout, which the drawer's dedicated terminals present for (HS2-DR549A). */
     viewportMobile: Signal<boolean>;
+    /** Whether the primary pointer is coarse (touch-first device), for desktop-width Copy/Paste (HS2-5DHHPV). */
+    coarsePointer: Signal<boolean>;
   };
   conversations: {
     conversationStates: Signal<Record<string, ConversationState>>;
@@ -91,7 +93,10 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
     mobileTerminalFocus,
     mobileMagnifiedTerminal,
     viewportMobile,
+    coarsePointer,
   } = dependencies.terminals;
+  // Phones already carry Copy/Paste in their own chrome; a touch-first desktop layout adds them (HS2-5DHHPV).
+  const touchClipboard = () => coarsePointer.value && !viewportMobile.value;
   const {
     conversationStates,
     driveConnectionsByProject,
@@ -139,6 +144,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           grouping: 'flow',
           magnifiedKey: magnifiedTerminalKey.value,
           mobileMagnified: magnifiedTerminalKey.value ? mobileMagnifiedTerminal() : undefined,
+          touchClipboard: touchClipboard(),
           hiddenKeys: terminalHiddenKeys(TERMINAL_DASHBOARD_VISIBILITY_SCOPE),
           loading: terminalDashboardLoading.value,
           message: terminalDashboardMessage.value,
@@ -238,6 +244,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
       aiProviders: aiToolOptions().map((tool) => ({ id: tool.id, name: tool.label })),
       defaultAiProvider: effectiveDriveSelection(current.id).tool,
       mobile: viewportMobile.value,
+      touchClipboard: touchClipboard(),
     };
   }
 

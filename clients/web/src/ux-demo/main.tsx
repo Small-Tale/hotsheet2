@@ -1024,6 +1024,23 @@ function demoContent(item: DemoDefinition) {
             />
           </div>
         </section>
+        {/* A touch-first desktop (coarse primary pointer) adds rail Copy and Paste (HS2-5DHHPV). */}
+        <section class="terminal-drawer-provider-demo" aria-label="Touch-first desktop">
+          <h2 class="terminal-drawer-provider-demo__caption">Touch-first desktop</h2>
+          <div class="terminal-drawer-provider-demo__stage">
+            <TerminalDrawer
+              projectId="demo-touch"
+              projectName="Demo project"
+              sessions={[{ ...shell, projectId: 'demo-touch' }]}
+              width={900}
+              height={96}
+              fitAcross={2}
+              fitHigh={2}
+              selectedId="shell"
+              touchClipboard
+            />
+          </div>
+        </section>
         <section class="terminal-drawer-focus-demo" aria-label="Phone focus mode variants">
           {focusVariant('Phone focus mode', false, 560)}
           {focusVariant('Phone focus mode, keyboard presented', true, 360)}
@@ -1126,6 +1143,10 @@ function demoContent(item: DemoDefinition) {
         <div class="fixed-aspect-terminal-card-demo__magnified">
           <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified interactive</h2>
           <FixedAspectTerminalCard session={session} mode="magnified" fit="aspect" />
+        </div>
+        <div class="fixed-aspect-terminal-card-demo__magnified">
+          <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified, touch-first desktop</h2>
+          <FixedAspectTerminalCard session={session} mode="magnified" fit="aspect" touchClipboard />
         </div>
         <div class="fixed-aspect-terminal-card-demo__magnified fixed-aspect-terminal-card-demo__phone">
           <h2 class="fixed-aspect-terminal-card-demo__caption">Magnified phone toolbar</h2>

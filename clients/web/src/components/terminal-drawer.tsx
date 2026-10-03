@@ -75,6 +75,11 @@ export interface TerminalDrawerProps {
   defaultAiProvider?: string;
   /** Phone presentation (the app's mobile layout): dedicated terminals clip their scaled xterm. */
   mobile?: boolean;
+  /**
+   * Touch-first device at a desktop width (coarse primary pointer, HS2-5DHHPV): the rail offers Copy and
+   * Paste for the selected terminal, and a magnified grid tile's toolbar carries them too.
+   */
+  touchClipboard?: boolean;
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 // Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
@@ -137,6 +142,7 @@ export function TerminalDrawer({
   aiProviders = [],
   defaultAiProvider,
   mobile = false,
+  touchClipboard = false,
 }: TerminalDrawerProps) {
   const selected =
       sessions.some((session) => session.id === selectedId) || chatTabs.some((chat) => chat.id === selectedId)
@@ -144,6 +150,8 @@ export function TerminalDrawer({
         : 'grid',
     selectedSession = sessions.find((session) => session.id === selected),
     selectedChat = chatTabs.find((chat) => chat.id === selected),
+    // HS2-5DHHPV: a touch-first desktop gets rail Copy/Paste for the selected terminal (phones use focus mode).
+    railClipboard = touchClipboard && Boolean(selectedSession) && !focusMode,
     gridSize = terminalGridContentSize(width, height),
     sessionsById = new Map(sessions.map((session) => [session.id, session])),
     chatsById = new Map(chatTabs.map((chat) => [chat.id, chat])),
@@ -282,7 +290,31 @@ export function TerminalDrawer({
                 </ToolbarControlGroup>
               }
               end={
-                <ToolbarControlGroup className="terminal-drawer__actions" appearance="borderless" single>
+                <ToolbarControlGroup
+                  className="terminal-drawer__actions"
+                  appearance="borderless"
+                  single={!railClipboard}
+                >
+                  {railClipboard && (
+                    <button
+                      type="button"
+                      {...TERMINALS_ACTIONS.copyTerminalText.attrs}
+                      aria-label="Copy terminal text"
+                      title="Copy terminal text"
+                    >
+                      <LucideIcon icon={Copy} name="copy" />
+                    </button>
+                  )}
+                  {railClipboard && (
+                    <button
+                      type="button"
+                      {...TERMINALS_ACTIONS.pasteTerminalText.attrs}
+                      aria-label="Paste"
+                      title="Paste"
+                    >
+                      <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
@@ -322,6 +354,7 @@ export function TerminalDrawer({
             layoutMode="drawer"
             magnifiedKey={magnifiedKey}
             mobileMagnified={mobileMagnified}
+            touchClipboard={touchClipboard}
             loading={loading}
             message={message}
             contextMenu={contextMenu}

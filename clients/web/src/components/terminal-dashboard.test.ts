@@ -141,6 +141,27 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('data-action="copy-terminal-text"');
     expect(markup).toContain('data-action="paste-terminal-text"');
     expect(String(FixedAspectTerminalCard({ session, mode: 'magnified' }))).not.toContain('copy-terminal-text');
+    // HS2-5DHHPV: a touch-first desktop's magnified toolbar adds Copy and Paste but keeps the desktop
+    // identity and open-in-drawer button; previews never carry them.
+    const tablet = String(FixedAspectTerminalCard({ session, mode: 'magnified', touchClipboard: true }));
+    expect(tablet.match(/class="terminal-tile__clipboard"/g)).toHaveLength(2);
+    expect(tablet).toContain('Open Codex in project terminal drawer');
+    expect(tablet).not.toContain('terminal-tile__identity-project');
+    expect(tablet).not.toContain('cycle-mobile-terminal-columns');
+    expect(String(FixedAspectTerminalCard({ session, touchClipboard: true }))).not.toContain('copy-terminal-text');
+    expect(
+      String(
+        TerminalDashboard({
+          groups,
+          width: 1180,
+          height: 700,
+          fitAcross: 4,
+          fitHigh: 2,
+          magnifiedKey: 'one:term-1',
+          touchClipboard: true,
+        }),
+      ).match(/data-action="paste-terminal-text"/g),
+    ).toHaveLength(1);
     // HS2-8NQRJB: the phone toolbar drops the separate open-in-drawer button (More actions → Open and the
     // identity keep that action) so the identity is not truncated; the desktop toolbar keeps it.
     expect(markup).not.toContain('in project terminal drawer');

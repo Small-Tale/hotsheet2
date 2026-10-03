@@ -2266,6 +2266,14 @@ export async function startHotSheetWebClient() {
   // traps Tab inside the open one, and returns focus to its opener; the persisted desktop
   // sidebar/inspector preferences are untouched by that ephemeral state and come back with the
   // side-by-side layout.
+  // A touch-first device (coarse primary pointer) gets terminal Copy/Paste even at desktop widths, where
+  // xterm offers no touch selection or Paste callout (HS2-5DHHPV). A trackpad-equipped tablet reports a
+  // fine pointer and keeps the plain desktop chrome.
+  const coarsePointerQuery = window.matchMedia('(pointer: coarse)'),
+    coarsePointer = signal(coarsePointerQuery.matches);
+  coarsePointerQuery.addEventListener('change', (event) => {
+    coarsePointer.value = event.matches;
+  });
   const viewportMobile = signal(isMobileViewport(window.innerWidth)),
     sidebarCollapsed = signal(viewportMobile.value || !sidebarVisible.value),
     inspectorCollapsed = signal(viewportMobile.value || !inspectorVisible.value);
@@ -4426,6 +4434,7 @@ export async function startHotSheetWebClient() {
         mobileTerminalFocus,
         mobileMagnifiedTerminal,
         viewportMobile,
+        coarsePointer,
       },
       conversations: {
         conversationStates,

@@ -394,3 +394,84 @@ test.describe('desktop', () => {
     await page.screenshot({ path: test.info().outputPath('hs2-frb545-desktop-1280.png') });
   });
 });
+
+// HS2-5DHHPV: a touch tablet in landscape uses the desktop layout but still needs Copy and Paste.
+test.describe('touch tablet at a desktop width', () => {
+  test.use({ viewport: { width: 1180, height: 820 }, hasTouch: true, isMobile: false, deviceScaleFactor: 2 });
+
+  test('copies and pastes from the drawer rail, the magnified toolbar, and a long-press', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await installTerminalFixture(page);
+    await openProject(page);
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.getByRole('button', { name: 'New drawer item' }).click();
+    await drawer.getByRole('menuitem', { name: 'Terminal' }).click();
+    const viewport = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
+    await expect(viewport).toHaveAttribute('data-connection', 'connected');
+    // Desktop chrome: no phone focus mode, but the rail carries Copy and Paste beside Hide drawer.
+    const rail = drawer.locator('.terminal-drawer__rail'),
+      railCopy = rail.getByRole('button', { name: 'Copy terminal text' }),
+      railPaste = rail.getByRole('button', { name: 'Paste', exact: true });
+    await expect(railCopy).toBeVisible();
+    await expect(railPaste).toBeVisible();
+    await expect(railCopy).toHaveCSS('cursor', 'pointer');
+    await expect(railCopy.locator('[data-lucide="copy"]')).toHaveCount(1);
+    await expect(railPaste.locator('[data-lucide="clipboard-paste"]')).toHaveCount(1);
+    const [copyBox, hideBox] = await Promise.all([
+      railCopy.boundingBox(),
+      rail.getByRole('button', { name: 'Hide terminal drawer' }).boundingBox(),
+    ]);
+    expect(copyBox!.x).toBeLessThan(hideBox!.x);
+    expect(Math.abs(copyBox!.y - hideBox!.y)).toBeLessThan(2);
+    await viewport.tap();
+    await expect(drawer).not.toHaveAttribute('data-focus-mode', 'true');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: test.info().outputPath('hs2-5dhhpv-drawer-rail-1180.png') });
+
+    await railCopy.tap();
+    const sheet = page.locator('[data-component="terminal-copy-dialog"]');
+    await expect(sheet).toHaveJSProperty('open', true);
+    await expect(sheet.getByRole('textbox', { name: 'Terminal text' })).toHaveValue(/GNU nano 8\.4/);
+    await sheet.getByRole('button', { name: 'Copy', exact: true }).tap();
+    await expect(sheet).toHaveJSProperty('open', false);
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('GNU nano 8.4');
+    await page.evaluate(() => navigator.clipboard.writeText('echo tablet'));
+    let before = (await sentInput(page)).length;
+    await railPaste.tap();
+    await expect.poll(async () => (await sentInput(page)).slice(before)).toEqual(['echo tablet']);
+
+    // The long-press edit menu works at desktop widths too (HS2-KKP8YJ).
+    await touchHold(page, viewport, 700);
+    const menuPaste = editMenu(page).getByRole('menuitem', { name: 'Paste' });
+    await expect(menuPaste).toBeVisible();
+    before = (await sentInput(page)).length;
+    await menuPaste.tap();
+    await expect.poll(async () => (await sentInput(page)).slice(before)).toEqual(['echo tablet']);
+
+    // Selecting the grid drops the rail pair; a magnified tile's desktop toolbar carries it instead.
+    await drawer.getByRole('tab', { name: 'Project grid' }).tap();
+    await expect(railCopy).toHaveCount(0);
+    await page.getByRole('button', { name: 'Workspace grid' }).click();
+    const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
+      tile = dashboard.locator('[data-terminal-key="terminal-feedback:nano"]');
+    await expect(tile.locator('[data-display-mode="scaled-preview"]')).toHaveAttribute('data-geometry-ready', 'true');
+    await expect(tile.getByRole('button', { name: 'Copy terminal text' })).toHaveCount(0);
+    await tile.click();
+    const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
+      footer = magnified.locator('.terminal-tile__footer');
+    await expect(magnified.locator('[data-display-mode="interactive"]')).toHaveAttribute('data-geometry-ready', 'true');
+    await expect(footer.getByRole('button', { name: 'Copy terminal text' })).toBeVisible();
+    await expect(footer.getByRole('button', { name: 'Open nano in project terminal drawer' })).toBeVisible();
+    expect(await footer.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+    await magnified.evaluate(async (node) => {
+      await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => 0)));
+    });
+    await page.screenshot({ path: test.info().outputPath('hs2-5dhhpv-magnified-1180.png') });
+    await page.evaluate(() => navigator.clipboard.writeText('q'));
+    before = (await sentInput(page, 'nano')).length;
+    await footer.getByRole('button', { name: 'Paste' }).tap();
+    await expect.poll(async () => (await sentInput(page, 'nano')).slice(before)).toEqual(['q']);
+  });
+});
