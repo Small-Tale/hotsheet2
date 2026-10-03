@@ -548,6 +548,11 @@ never stored, so there is nothing to migrate:
   can reach (refreshing its token server-side), so adding a source in another project
   reuses the sign-in and picks that project's own repository. **App Settings → Accounts**
   shows the same listing.
+- **GitLab and Jira reuse (HS2-F5HNJN).** Adding a GitLab or Jira source offers that
+  provider's accounts and prefills the new source from the chosen one: the credential
+  reference (`id`), the Jira email (`identity`), and the GitLab API base or Jira site
+  (`base_url`). The project enters its own project path or key. Headless, `hotsheet account
+list` prints the same `account:` and `endpoint:` values for each account.
 
 **Existing installs.** Nothing is rewritten. Every pre-existing connection is owned by the
 checkouts already linking it, and every credential a connection references becomes an

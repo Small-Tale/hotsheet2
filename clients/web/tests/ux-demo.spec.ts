@@ -12,6 +12,7 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
       ['root', 'Set up ticket support'],
       ['signed-out', 'Sign in with GitHub'],
       ['accounts', 'Use a GitHub account already signed in on this computer'],
+      ['jira-account', 'This project still enters its own project key.'],
       ['waiting', 'ABCD-EFGH'],
       ['authorized', 'Signed in to GitHub.'],
       ['editing', 'Save changes'],

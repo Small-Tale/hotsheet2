@@ -12,7 +12,8 @@
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
 }
-.provider-setup-form__github-auth {
+.provider-setup-form__github-auth,
+.provider-setup-form__account-reuse {
   --kui-sunken-panel-gap: var(--wa-space-s);
 }
 .provider-setup-form__auth-copy {

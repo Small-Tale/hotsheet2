@@ -194,4 +194,58 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     expect(((await created.json()) as ProviderConnection).settings.api_base).toBe('https://ghe.corp.test/api/v3');
     await writeFile(join(home, 'keys.json'), '{}');
   }, 120_000);
+
+  it('reports what a reusing GitLab or Jira source needs (HS2-F5HNJN)', async () => {
+    const app = createDevApp(),
+      root = await mkdtemp(join(workspace, 'jira-')),
+      opened = await openLocalProject(root, await createLocalGitTicketStore(root)),
+      api = (path: string, init?: RequestInit) =>
+        app.request(`/__hotsheet/project-api/${encodeURIComponent(opened.id)}${path}`, init),
+      create = (connection: Record<string, unknown>) =>
+        api('/provider-connections', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: '', name: null, default: false, ...connection }),
+        });
+    expect(
+      (
+        await create({
+          provider: 'jira',
+          locator: 'ENG',
+          settings: {
+            credential: { secret: 'jira-live-token' },
+            email: 'dev@acme.test',
+            base_url: 'https://acme.atlassian.net',
+          },
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await create({
+          provider: 'gitlab',
+          locator: 'team/app',
+          settings: { credential: { secret: 'gitlab-live-token' }, api_base: 'https://gitlab.corp.test/api/v4' },
+        })
+      ).status,
+    ).toBe(201);
+    const accounts = (await (await api('/accounts')).json()) as ProviderAccount[];
+    expect(accounts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'gitlab-live-token',
+          provider: 'gitlab',
+          host: 'gitlab.corp.test',
+          base_url: 'https://gitlab.corp.test/api/v4',
+        }),
+        expect.objectContaining({
+          id: 'jira-live-token',
+          provider: 'jira',
+          host: 'acme.atlassian.net',
+          base_url: 'https://acme.atlassian.net',
+          identity: 'dev@acme.test',
+        }),
+      ]),
+    );
+  }, 120_000);
 });

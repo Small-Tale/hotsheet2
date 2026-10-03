@@ -455,6 +455,91 @@ describe('ticket source surfaces', () => {
     expect(reused).not.toContain('use-github-account');
   });
 
+  it('offers signed-in GitLab and Jira accounts and prefills a new source from the chosen one (HS2-F5HNJN)', () => {
+    const accounts = [
+        {
+          id: 'jira-token',
+          provider: 'jira',
+          host: 'acme.atlassian.net',
+          base_url: 'https://acme.atlassian.net',
+          identity: 'dev@acme.test',
+          managed: false,
+          sources: [],
+          projects: [{ id: 'a', alias: 'procurement' }],
+        },
+        {
+          id: 'gitlab-corp',
+          provider: 'gitlab',
+          host: 'gitlab.corp.test',
+          base_url: 'https://gitlab.corp.test/api/v4',
+          managed: false,
+          sources: [],
+          projects: [],
+        },
+        { id: 'gitlab-dotcom', provider: 'gitlab', host: 'gitlab.com', managed: false, sources: [], projects: [] },
+      ],
+      inputValue = (markup: string, name: string) =>
+        new RegExp(`<wa-input[^>]*name="${name}"[^>]*>`).exec(markup)?.[0].match(/ value="([^"]*)"/)?.[1] ?? '';
+    // Before a choice: only this provider's accounts are offered and every field is blank.
+    const jira = String(ProviderSetupForm({ kind: 'jira', accounts }));
+    expect(jira.match(/data-action="use-provider-account"/g)).toHaveLength(1);
+    expect(jira).toContain('data-item-id="jira-token"');
+    expect(jira).toContain(
+      'aria-label="Use the Jira Cloud account dev@acme.test on acme.atlassian.net, used by procurement"',
+    );
+    expect(jira).toContain('This project still enters its own project key.');
+    expect(jira).not.toContain('aria-pressed="true"');
+    for (const field of ['credential-reference', 'jira-email', 'api-base']) expect(inputValue(jira, field)).toBe('');
+    // The chosen account prefills its credential, email, and site; the project key stays empty.
+    const chosen = String(ProviderSetupForm({ kind: 'jira', accounts, chosenAccount: 'jira-token' }));
+    expect(chosen).toContain('aria-pressed="true"');
+    expect(inputValue(chosen, 'credential-reference')).toBe('jira-token');
+    expect(inputValue(chosen, 'jira-email')).toBe('dev@acme.test');
+    expect(inputValue(chosen, 'api-base')).toBe('https://acme.atlassian.net');
+    expect(inputValue(chosen, 'connection-locator')).toBe('');
+    expect(chosen).toContain('data-key="credential-jira-token"');
+    // GitLab: a self-managed account fills its API base; a gitlab.com one leaves the default.
+    const gitlab = String(ProviderSetupForm({ kind: 'gitlab', accounts, chosenAccount: 'gitlab-corp' }));
+    expect(gitlab.match(/data-action="use-provider-account"/g)).toHaveLength(2);
+    expect(gitlab).toContain('This project still enters its own project path.');
+    expect(inputValue(gitlab, 'credential-reference')).toBe('gitlab-corp');
+    expect(inputValue(gitlab, 'api-base')).toBe('https://gitlab.corp.test/api/v4');
+    const dotcom = String(ProviderSetupForm({ kind: 'gitlab', accounts, chosenAccount: 'gitlab-dotcom' }));
+    expect(inputValue(dotcom, 'credential-reference')).toBe('gitlab-dotcom');
+    expect(inputValue(dotcom, 'api-base')).toBe('');
+    // A choice for another provider is ignored, and editing never offers or applies accounts.
+    expect(
+      inputValue(
+        String(ProviderSetupForm({ kind: 'gitlab', accounts, chosenAccount: 'jira-token' })),
+        'credential-reference',
+      ),
+    ).toBe('');
+    const editing = String(
+      ProviderSetupForm({
+        kind: 'jira',
+        accounts,
+        chosenAccount: 'jira-token',
+        connection: {
+          id: 'jira-eng',
+          provider: 'jira',
+          locator: 'ENG',
+          name: 'Eng',
+          default: false,
+          settings: {
+            credential: { secret: 'other-token' },
+            email: 'ops@acme.test',
+            base_url: 'https://ops.atlassian.net',
+          },
+        },
+      }),
+    );
+    expect(editing).not.toContain('use-provider-account');
+    expect(inputValue(editing, 'credential-reference')).toBe('other-token');
+    expect(inputValue(editing, 'jira-email')).toBe('ops@acme.test');
+    // Without accounts there is no picker.
+    expect(String(ProviderSetupForm({ kind: 'gitlab' }))).not.toContain('use-provider-account');
+  });
+
   it('owns source and provider styles outside the global stylesheet', () => {
     const global = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
     const provider = readFileSync(new URL('./provider-setup-form.css', import.meta.url), 'utf8');

@@ -2463,6 +2463,147 @@ test('names an unused GitHub Enterprise sign-in by its host and reuses its serve
   await expect(page.locator('.app-error')).toHaveCount(0);
 });
 
+for (const width of [1280, 390])
+  test(`reuses a signed-in GitLab or Jira account to prefill a new source at ${width}px (HS2-F5HNJN)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockProject(page, true, false, 0, 0, 0, true);
+    await page.route('**/__hotsheet/projects/open', (route) =>
+      route.fulfill({ status: 201, json: { ...project, stores: [], needsTicketSetup: true } }),
+    );
+    // The server's `GET /accounts` shape for GitLab and Jira sign-ins other projects already use.
+    await page.route('**/accounts', (route) =>
+      route.request().method() === 'GET'
+        ? route.fulfill({
+            json: [
+              {
+                id: 'gitlab-corp',
+                provider: 'gitlab',
+                host: 'gitlab.corp.test',
+                base_url: 'https://gitlab.corp.test/api/v4',
+                managed: false,
+                sources: [],
+                projects: [{ id: 'other', alias: 'marketing-site' }],
+              },
+              {
+                id: 'jira-token',
+                provider: 'jira',
+                host: 'acme.atlassian.net',
+                base_url: 'https://acme.atlassian.net',
+                identity: 'dev@acme.test',
+                managed: false,
+                sources: [],
+                projects: [{ id: 'other', alias: 'marketing-site' }],
+              },
+              {
+                id: 'jira-ops',
+                provider: 'jira',
+                host: 'ops.atlassian.net',
+                base_url: 'https://ops.atlassian.net',
+                identity: 'ops@acme.test',
+                managed: false,
+                sources: [],
+                projects: [],
+              },
+            ],
+          })
+        : route.fallback(),
+    );
+    const creates: Array<Record<string, unknown>> = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/provider-connections'))
+        creates.push(request.postDataJSON());
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const setup = page.locator('[data-ticket-source-setup-dialog]'),
+      form = setup.locator('[data-action="save-provider-connection"]'),
+      field = (name: string) => form.locator(`wa-input[name="${name}"]`),
+      values = () =>
+        form.evaluate((node) =>
+          Object.fromEntries(
+            ['credential-reference', 'jira-email', 'api-base', 'connection-locator'].map((name) => [
+              name,
+              node.querySelector<HTMLInputElement>(`wa-input[name="${name}"]`)?.value ?? null,
+            ]),
+          ),
+        ),
+      settle = () =>
+        setup.evaluate(async (node) => {
+          const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
+          await Promise.all(animations.map((animation) => animation.finished));
+        });
+    await setup.getByRole('button', { name: 'Connect Jira Cloud' }).click();
+    const jiraAccount = form.getByRole('button', {
+        name: 'Use the Jira Cloud account dev@acme.test on acme.atlassian.net, used by marketing-site',
+      }),
+      opsAccount = form.getByRole('button', {
+        name: 'Use the Jira Cloud account ops@acme.test on ops.atlassian.net, not used by any project yet',
+      });
+    await expect(jiraAccount).toBeVisible();
+    // Only Jira accounts are offered for Jira, and nothing is prefilled before a choice.
+    await expect(form.locator('[data-action="use-provider-account"]')).toHaveCount(2);
+    expect(await values()).toEqual({
+      'credential-reference': '',
+      'jira-email': '',
+      'api-base': '',
+      'connection-locator': '',
+    });
+    await settle();
+    await page.screenshot({ path: test.info().outputPath(`jira-accounts-${width}.png`) });
+    // Choosing an account fills its credential, email, and site into the live controls.
+    await jiraAccount.click();
+    await expect(jiraAccount).toHaveAttribute('aria-pressed', 'true');
+    await expect(field('credential-reference')).toHaveJSProperty('value', 'jira-token');
+    expect(await values()).toEqual({
+      'credential-reference': 'jira-token',
+      'jira-email': 'dev@acme.test',
+      'api-base': 'https://acme.atlassian.net',
+      'connection-locator': '',
+    });
+    // Switching accounts replaces every prefilled value.
+    await opsAccount.click();
+    await expect(field('jira-email')).toHaveJSProperty('value', 'ops@acme.test');
+    await expect(opsAccount).toHaveAttribute('aria-pressed', 'true');
+    await expect(jiraAccount).toHaveAttribute('aria-pressed', 'false');
+    expect(await values()).toMatchObject({
+      'credential-reference': 'jira-ops',
+      'api-base': 'https://ops.atlassian.net',
+    });
+    await settle();
+    await page.screenshot({ path: test.info().outputPath(`jira-account-chosen-${width}.png`) });
+    // Going back resets the choice; GitLab offers only its own account.
+    await form.getByRole('button', { name: 'Ticket source types' }).click();
+    await setup.getByRole('button', { name: 'Connect GitLab Issues' }).click();
+    const gitlabAccount = form.getByRole('button', {
+      name: 'Use the GitLab Issues account gitlab.corp.test, used by marketing-site',
+    });
+    await expect(gitlabAccount).toBeVisible();
+    await expect(form.locator('[data-action="use-provider-account"]')).toHaveCount(1);
+    await expect(field('credential-reference')).toHaveJSProperty('value', '');
+    await gitlabAccount.click();
+    await expect(field('api-base')).toHaveJSProperty('value', 'https://gitlab.corp.test/api/v4');
+    // The project's own path is entered by hand, and a prefilled value stays editable.
+    await field('connection-locator').locator('input').fill('team/app');
+    await field('connection-locator').dispatchEvent('input');
+    await setup.getByRole('button', { name: 'Connect provider' }).click();
+    await expect(setup).toHaveJSProperty('open', false);
+    expect(creates).toEqual([
+      expect.objectContaining({
+        provider: 'gitlab',
+        locator: 'team/app',
+        settings: { credential: { secret: 'gitlab-corp' }, api_base: 'https://gitlab.corp.test/api/v4' },
+      }),
+    ]);
+    const noHorizontalScroll = await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    );
+    expect(noHorizontalScroll).toBe(true);
+    await expect(page.locator('.app-error')).toHaveCount(0);
+  });
+
 test('signs in to GitHub Enterprise from its server address before connecting (HS2-1JT25R)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page, true, false, 0, 0, 0, true);

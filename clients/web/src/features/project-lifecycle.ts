@@ -102,6 +102,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerAccountsError = signal(''),
     /** The account whose sign-out is in flight. */
     signingOutAccount = signal<string | undefined>(undefined),
+    /** The GitLab or Jira account whose details prefill a new source's form (HS2-F5HNJN). */
+    providerAccountChoice = signal<string | undefined>(undefined),
     providerSettingsBusy = signal(false),
     providerSettingsError = signal(''),
     providerRemovingId = signal<string | undefined>(undefined),
@@ -926,6 +928,19 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     await loadGitHubRepositories(new Api(target.apiPath), session, id);
   }
 
+  /**
+   * Add a GitLab or Jira source with an account already signed in on this machine (HS2-F5HNJN): its
+   * credential reference, Jira email, and site or API base prefill the form, while this project still
+   * enters its own project path or key.
+   */
+  function useProviderAccount(id: string) {
+    const kind = providerSetupKind.value;
+    if (!kind || kind === 'github' || providerEditingId.value) return;
+    if (!providerAccounts.value.some((item) => item.id === id && item.provider === kind)) return;
+    providerSettingsError.value = '';
+    providerAccountChoice.value = id;
+  }
+
   /** Machine-wide sign-ins and the projects using each (HS2-SM9PM8). */
   async function refreshProviderAccounts(current = dependencies.project()) {
     if (!current) return;
@@ -1062,6 +1077,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     refreshProviderAccounts,
     signOutProviderAccount,
     useGithubAccount,
+    providerAccountChoice,
+    useProviderAccount,
     providerSettingsBusy,
     providerRemovingId,
     requestProjectSourceRemoval,

@@ -126,6 +126,9 @@ export interface CommandAndAiInteractionsDependencies {
   readonly refreshProviderAccounts: (current?: Project) => Promise<void>;
   readonly signOutProviderAccount: (id: string) => Promise<void>;
   readonly useGithubAccount: (id: string) => Promise<void>;
+  /** The GitLab or Jira account prefilling a new source's form (HS2-F5HNJN). */
+  readonly providerAccountChoice: Signal<string | undefined>;
+  readonly useProviderAccount: (id: string) => void;
   readonly setProjectDefaultSource: (id: string) => Promise<void>;
   readonly providerSettingsError: Signal<string>;
   readonly createdGitTicketStore: Signal<string>;
@@ -233,6 +236,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     refreshProviderAccounts,
     signOutProviderAccount,
     useGithubAccount,
+    providerAccountChoice,
+    useProviderAccount,
     setProjectDefaultSource,
     providerSettingsError,
     createdGitTicketStore,
@@ -1030,6 +1035,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       providerSettingsError.value = '';
       createdGitTicketStore.value = '';
       ticketSourceSetupNavigation.value = 'none';
+      providerAccountChoice.value = undefined;
       void refreshProviderConnections(current);
       // Signed-in accounts a new source can reuse (HS2-SM9PM8).
       void refreshProviderAccounts(current);
@@ -1058,6 +1064,12 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.useGithubAccount.selector, (_event, target) => {
       const id = data(target).itemId;
       if (id) void useGithubAccount(id);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.useProviderAccount.selector, (_event, target) => {
+      const id = data(target).itemId;
+      if (id) useProviderAccount(id);
     }),
   );
   lifetime.add(
@@ -1124,8 +1136,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       providerEditingId.value = undefined;
       providerSettingsError.value = '';
       githubAuth.value = undefined;
-      // Signed-in accounts a new source can reuse, also when onboarding opened this dialog (HS2-SM9PM8).
-      if (providerSetupKind.value === 'github') void refreshProviderAccounts(ticketSourceSetupProject.value);
+      providerAccountChoice.value = undefined;
+      // Signed-in accounts a new source can reuse, also when onboarding opened this dialog (HS2-SM9PM8),
+      // for every provider kind (HS2-F5HNJN).
+      void refreshProviderAccounts(ticketSourceSetupProject.value);
     }),
   );
   lifetime.add(
@@ -1136,6 +1150,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       providerEditingId.value = undefined;
       providerSettingsError.value = '';
       githubAuth.value = undefined;
+      providerAccountChoice.value = undefined;
     }),
   );
   lifetime.add(

@@ -24,6 +24,7 @@ const previewScenarioChoices: readonly SelectChoice[] = [
   { value: 'signed-out', label: 'GitHub signed out' },
   { value: 'waiting', label: 'Waiting for GitHub' },
   { value: 'accounts', label: 'Reuse a signed-in account' },
+  { value: 'jira-account', label: 'Reuse a Jira account' },
   { value: 'authorized', label: 'GitHub authorized' },
   { value: 'editing', label: "Editing this project's source" },
   { value: 'editing-shared', label: 'Editing a shared source' },
@@ -60,6 +61,8 @@ export interface TicketSourceSetupDialogProps {
   projectDefault?: boolean;
   /** Machine-wide sign-ins a new source can reuse (HS2-SM9PM8). */
   accounts?: readonly ProviderAccount[];
+  /** The GitLab or Jira account whose details prefill a new source (HS2-F5HNJN). */
+  chosenAccount?: string;
   /** Demo-only state picker, rendered within the modal so its controls remain reachable. */
   previewScenario?: string;
 }
@@ -80,6 +83,7 @@ export function TicketSourceSetupDialog({
   removingProviderId,
   projectDefault = false,
   accounts = [],
+  chosenAccount,
   previewScenario,
 }: TicketSourceSetupDialogProps) {
   const editing = providerConnections.find((item) => item.id === editingProviderId),
@@ -255,6 +259,7 @@ export function TicketSourceSetupDialog({
         error={providerError}
         defaultChoice={editing ? projectDefault : true}
         accounts={accounts}
+        chosenAccount={chosenAccount}
       />
       {editing && sharedWith.length > 0 && (
         <p class="ticket-source-setup__scope-hint" data-shared-with={sharedWith.join(',')}>

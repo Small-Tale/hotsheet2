@@ -1007,6 +1007,8 @@ export async function startHotSheetWebClient() {
     refreshProviderAccounts,
     signOutProviderAccount,
     useGithubAccount,
+    providerAccountChoice,
+    useProviderAccount,
     requestProjectSourceRemoval,
     setProjectDefaultSource,
     providerSettingsBusy,
@@ -4979,6 +4981,7 @@ export async function startHotSheetWebClient() {
           providerConnections={providerConnections.value}
           editingProviderId={providerEditingId.value}
           accounts={providerAccounts.value}
+          chosenAccount={providerAccountChoice.value}
           projectDefault={Boolean(
             defaultProviders.value[project()?.id ?? '']?.sources.some(
               (source) => source.connectionId === providerEditingId.value && source.default,
@@ -5211,7 +5214,7 @@ export async function startHotSheetWebClient() {
   const interactionBindingsPort: InteractionBindingsPort = {
     openProjectPicker, openRemoteProjectDialog, chooseAndOpenProject, unhealthyServerRecovery, projectDialogOpen, openRemoteCheckout, remoteProjectDialogOpen, importHs1Project,
     chooseHs1TicketStore, hs1MigrationProject, hs1MigrationBusy, hs1SourceIdentity, project, migrationJobDetails, migrationJobs, migrationConnectionErrors,
-    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, signOutProviderAccount, useGithubAccount, setProjectDefaultSource,
+    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, signOutProviderAccount, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource,
     providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView,
     repositorySetupStep, repositorySetupError, repositoryFileMenu, repositorySelectedFiles, repositoryComparison, expandedCodeReviewCommits, loadRepositoryDetail, refreshRepositoryStatus,
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,

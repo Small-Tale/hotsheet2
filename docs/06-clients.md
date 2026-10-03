@@ -598,7 +598,13 @@ and identity-less legacy entries remain conservatively blocking.
   the projects using them, and offers **Sign out** only for a sign-in no source uses. When
   adding a GitHub source, the setup form first offers the GitHub accounts already signed in
   on this computer; choosing one lists that account's repositories so the project picks its
-  own repository without signing in again.
+  own repository without signing in again. Adding a GitLab or Jira source likewise lists that
+  provider's signed-in accounts above the form (HS2-F5HNJN). Choosing one, which marks it
+  pressed with a check, prefills the credential reference, the Jira account email
+  (`identity`), and the self-managed GitLab API base or Jira site (`base_url`). Each project
+  still enters its own project path or key, and prefilled values stay editable. The choice
+  is a lifecycle signal (`providerAccountChoice`) cleared when the dialog opens, the kind
+  changes, or the user goes back. Editing a source never offers accounts.
   A category's group states what its controls affect (HS2-S1184P). `SETTINGS_STORAGE` in
   `components/settings-navigation.tsx` declares each control's storage, and
   `settings-storage-scope.test.ts` resolves it through the project bridge, so a setting

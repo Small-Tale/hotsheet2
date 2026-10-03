@@ -7,7 +7,7 @@ import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
-import { ChevronLeft, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
+import { Check, ChevronLeft, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
 import type { ProviderAccount, ProviderConnection } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -63,8 +63,18 @@ export interface ProviderSetupFormProps {
    * demo does for a bare form).
    */
   defaultChoice?: boolean;
-  /** Machine-wide sign-ins a new GitHub source can reuse instead of signing in again (HS2-SM9PM8). */
+  /**
+   * Machine-wide sign-ins a new source can reuse instead of signing in again: GitHub accounts before a
+   * new sign-in (HS2-SM9PM8), GitLab and Jira accounts above the form (HS2-F5HNJN).
+   */
   accounts?: readonly ProviderAccount[];
+  /** The GitLab or Jira account whose credential, email, and site prefill a new source (HS2-F5HNJN). */
+  chosenAccount?: string;
+}
+
+/** What identifies a GitLab or Jira account in the picker: its host, plus the Jira email. */
+function accountTitle(account: ProviderAccount) {
+  return account.identity ? `${account.identity} on ${account.host || account.id}` : account.host || account.id;
 }
 
 function accountUsage(account: ProviderAccount, capitalized = true) {
@@ -81,6 +91,7 @@ export function ProviderSetupForm({
   error = '',
   defaultChoice,
   accounts = [],
+  chosenAccount,
 }: ProviderSetupFormProps) {
   const labels = {
       github: ['GitHub Issues', 'owner/repository', 'GitHub credential reference'],
@@ -95,7 +106,15 @@ export function ProviderSetupForm({
     showFields = kind !== 'github' || editing || signedIn,
     choosing = kind === 'github' && !editing && signedIn && auth.repositories !== undefined,
     limited = (auth?.installations ?? []).filter((installation) => installation.selection !== 'all'),
-    githubAccounts = accounts.filter((account) => account.provider === 'github');
+    githubAccounts = accounts.filter((account) => account.provider === 'github'),
+    // A new GitLab or Jira source can start from an account signed in on this computer (HS2-F5HNJN).
+    reusable = kind !== 'github' && !editing ? accounts.filter((account) => account.provider === kind) : [],
+    chosen = reusable.find((account) => account.id === chosenAccount),
+    // Prefilled controls are keyed by the chosen account so a choice replaces them with its values.
+    prefillKey = chosen?.id ?? 'manual',
+    credentialValue = chosen ? chosen.id : connectionCredential(connection),
+    emailValue = chosen ? (chosen.identity ?? '') : connectionSetting(connection, 'email'),
+    apiBaseValue = chosen ? (chosen.base_url ?? '') : apiBase;
   return (
     <form
       id="provider-setup-form"
@@ -259,6 +278,46 @@ export function ProviderSetupForm({
           )}
         </SunkenPanel>
       )}
+      {reusable.length > 0 && (
+        <SunkenPanel
+          className="provider-setup-form__account-reuse"
+          ariaLabel={`Signed-in ${providerName(kind)} accounts`}
+        >
+          <p class="provider-setup-form__auth-copy">
+            Use an account already signed in on this computer to fill in its credential
+            {kind === 'jira' ? ', email, and site' : ' and server'}. This project still enters its own{' '}
+            {kind === 'jira' ? 'project key' : 'project path'}.
+          </p>
+          <div class="provider-setup-form__accounts">
+            <List>
+              {reusable.map((account, index) => (
+                <ListItem
+                  action="use-provider-account"
+                  itemId={account.id}
+                  multiline
+                  pressed={account.id === chosen?.id}
+                  divider={index > 0 ? 'before' : 'none'}
+                  accessibleLabel={`Use the ${providerName(kind)} account ${accountTitle(account)}, ${accountUsage(account, false)}`}
+                  icon={<ProviderIcon kind={kind} />}
+                  trailing={
+                    account.id === chosen?.id ? (
+                      <LucideIcon icon={Check} name="check" size={16} />
+                    ) : (
+                      <LucideIcon icon={ChevronRight} name="chevron-right" size={16} />
+                    )
+                  }
+                  label={
+                    <span class="provider-setup-form__account-copy">
+                      <strong>{accountTitle(account)}</strong>
+                      <small class="provider-setup-form__account-usage">{accountUsage(account)}</small>
+                    </span>
+                  }
+                />
+              ))}
+            </List>
+          </div>
+        </SunkenPanel>
+      )}
       {/* Two 15rem-minimum columns that collapse to one when the form is narrower (Kerf beta.62
           responsive Grid, HS2-7XX356); the form's max width keeps a third column from appearing. */}
       {showFields && (
@@ -365,7 +424,8 @@ export function ProviderSetupForm({
               label="Credential reference"
               required
               placeholder={labels[2]}
-              value={connectionCredential(connection)}
+              value={credentialValue}
+              data-key={`credential-${prefillKey}`}
             >
               <span slot="hint">
                 Create this reference first with <code>hotsheet key set</code>; the token is never returned to the
@@ -380,7 +440,8 @@ export function ProviderSetupForm({
                 type="email"
                 label="Account email"
                 required
-                value={connectionSetting(connection, 'email')}
+                value={emailValue}
+                data-key={`email-${prefillKey}`}
               ></wa-input>
               <wa-input
                 name="api-base"
@@ -388,7 +449,8 @@ export function ProviderSetupForm({
                 label="Jira site URL"
                 required
                 placeholder="https://company.atlassian.net"
-                value={apiBase}
+                value={apiBaseValue}
+                data-key={`api-base-${prefillKey}`}
               ></wa-input>
             </>
           )}
@@ -399,7 +461,8 @@ export function ProviderSetupForm({
               type="url"
               label="API base URL (optional)"
               placeholder="https://gitlab.com/api/v4"
-              value={apiBase}
+              value={apiBaseValue}
+              data-key={`api-base-${prefillKey}`}
             ></wa-input>
           )}
           {defaultChoice !== undefined && (

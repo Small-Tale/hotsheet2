@@ -477,6 +477,7 @@ const DEMO_ACCOUNTS: ProviderAccount[] = [
     id: 'jira-token',
     provider: 'jira',
     host: 'acme.atlassian.net',
+    base_url: 'https://acme.atlassian.net',
     identity: 'dev@acme.test',
     managed: false,
     sources: [
@@ -503,6 +504,7 @@ type TicketSourceScenario =
   | 'root'
   | 'signed-out'
   | 'accounts'
+  | 'jira-account'
   | 'waiting'
   | 'authorized'
   | 'editing'
@@ -829,11 +831,14 @@ function demoContent(item: DemoDefinition) {
     return (
       <TicketSourceSetupDialog
         project={{ id: 'demo', root: '/work/demo', name: 'Demo project', stores: [], needsTicketSetup: true }}
-        providerKind={scenario === 'root' || scenario === 'remote' ? undefined : 'github'}
+        providerKind={
+          scenario === 'root' || scenario === 'remote' ? undefined : scenario === 'jira-account' ? 'jira' : 'github'
+        }
         providerConnections={editing ? [connection] : []}
         editingProviderId={editing ? connection.id : undefined}
         removingProviderId={scenario === 'removing' ? connection.id : undefined}
-        accounts={scenario === 'accounts' ? DEMO_ACCOUNTS : []}
+        accounts={scenario === 'accounts' || scenario === 'jira-account' ? DEMO_ACCOUNTS : []}
+        chosenAccount={scenario === 'jira-account' ? 'jira-token' : undefined}
         projectDefault
         providerBusy={scenario === 'busy'}
         githubAuth={
