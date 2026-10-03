@@ -78,6 +78,12 @@ describe('CorruptTicketRow', () => {
       /corrupt-ticket-row::before[^}]*width: remify\(4px\)[^}]*background: var\(--wa-color-danger-fill-loud\)/,
     );
     expect(css).not.toContain('border-left-width');
+    // The warning icon has its own column beside the identity and message (HS2-SJVM8C), and the select
+    // button sizes to that stack instead of Web Awesome's native form-control height.
+    expect(css).toMatch(
+      /\.corrupt-ticket-row \{[^}]*display: grid;\s*grid-template-columns: remify\(32px\) minmax\(0, 1fr\);\s*align-items: start;/,
+    );
+    expect(css).toMatch(/\.corrupt-ticket-row__select \{[^}]*height: auto;/);
     expect(css).toContain('cursor: pointer');
     expect(revealFileLabel('MacIntel')).toBe('Reveal in Finder');
     expect(revealFileLabel('Win32')).toBe('Show in File Explorer');

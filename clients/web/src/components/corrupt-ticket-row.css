@@ -1,8 +1,12 @@
 /* The row owns its list-row shell instead of borrowing TicketRow's `ticket-list-row` block (HS2-QSR1TG):
-   the same surface, divider, list-edge rounding, hover, and selected presentation as a list TicketRow. */
+   the same surface, divider, list-edge rounding, hover, and selected presentation as a list TicketRow.
+   The warning icon sits in its own column beside the identity and message (HS2-SJVM8C). */
 .corrupt-ticket-row {
   position: relative;
-  display: block;
+  display: grid;
+  grid-template-columns: remify(32px) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--kui-space-xs);
   width: 100%;
   overflow: hidden;
   padding: var(--kui-space-xs) var(--kui-space-m);
@@ -62,9 +66,12 @@
   min-width: 0;
   gap: var(--kui-space-2xs);
 }
+/* Web Awesome's native button styles give every button the form-control height; the identity and
+   message stack is taller than that, so the button sizes to its content (HS2-SJVM8C). */
 .corrupt-ticket-row__select {
   display: grid;
   width: 100%;
+  height: auto;
   min-width: 0;
   align-items: start;
   justify-content: start;

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
@@ -11015,9 +11015,34 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(corrupt).toHaveCSS('padding', '8px 16px');
   // The row owns its list-row shell rather than TicketRow's `ticket-list-row` block (HS2-QSR1TG).
   await expect(corrupt).not.toHaveClass(/ticket-list-row/);
-  await expect(corrupt).toHaveCSS('display', 'block');
+  // The warning icon sits in its own 32px column beside the identity and message (HS2-SJVM8C).
+  await expect(corrupt).toHaveCSS('display', 'grid');
+  await expect(corrupt).toHaveCSS('grid-template-columns', /^32px \d/);
   await expect(corrupt).toHaveCSS('border-top-left-radius', '10.4px');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
+  const corruptLayout = await corrupt.evaluate((node) => {
+    const icon = node.querySelector('.corrupt-ticket-row__icon')!.getBoundingClientRect(),
+      content = node.querySelector('.corrupt-ticket-row__content')!.getBoundingClientRect(),
+      identity = node.querySelector('.corrupt-ticket-row__select strong')!.getBoundingClientRect(),
+      row = node.getBoundingClientRect();
+    return {
+      iconRight: icon.right,
+      contentLeft: content.left,
+      iconTop: icon.top,
+      identityTop: identity.top,
+      iconBottom: icon.bottom,
+      rowBottom: row.bottom,
+      contentBottom: content.bottom,
+      messageBottom: node.querySelector('.corrupt-ticket-row__select span')!.getBoundingClientRect().bottom,
+      selectBottom: node.querySelector('.corrupt-ticket-row__select')!.getBoundingClientRect().bottom,
+    };
+  });
+  expect(corruptLayout.contentLeft).toBeGreaterThan(corruptLayout.iconRight);
+  expect(Math.abs(corruptLayout.iconTop - corruptLayout.identityTop)).toBeLessThan(8);
+  // The select button sizes to its identity and message rather than Web Awesome's form-control height,
+  // so the message stays inside the row's bottom padding.
+  expect(corruptLayout.messageBottom).toBeLessThanOrEqual(corruptLayout.selectBottom);
+  expect(corruptLayout.rowBottom - corruptLayout.contentBottom).toBeGreaterThanOrEqual(8);
   const errorRowBefore = await corrupt.evaluate((node) => {
     const icon = node.querySelector('[data-lucide="file-warning"]')!.getBoundingClientRect(),
       rail = getComputedStyle(node, '::before');
@@ -11134,6 +11159,83 @@ test('identifies a ticket from newer HS2 as upgrade-required instead of corrupt'
   await expect(inspector).toContainText('created by a newer version');
   await expect(inspector.getByRole('button', { name: 'Reveal in Finder' })).toBeVisible();
   await expect(inspector.getByRole('button', { name: 'Attempt AI repair' })).toHaveCount(0);
+});
+
+test('lays the corrupt row icon beside its text for a real server diagnostic (HS2-SJVM8C)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  try {
+    const created = await server.request<{ id: string; slug: string }>(
+        `/checkouts/${server.checkoutId}/tickets`,
+        'POST',
+        { title: 'Damaged on disk' },
+      ),
+      listed = await server.request<Array<{ path: string }>>(`/checkouts/${server.checkoutId}/corrupt-tickets`);
+    expect(listed).toEqual([]);
+    const file = readdirSync(`${server.store}/tickets`, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.startsWith(created.id))
+      .map((entry) => `${entry.parentPath}/${entry.name}`)[0];
+    writeFileSync(file, `${readFileSync(file, 'utf8')}\nunsupported trailing content\n`);
+    await expect
+      .poll(async () =>
+        (await server.request<Array<{ slug?: string }>>(`/checkouts/${server.checkoutId}/corrupt-tickets`)).map(
+          (entry) => entry.slug,
+        ),
+      )
+      .toEqual([created.slug]);
+    // Only project discovery is a fixture; the diagnostic is the real server's corrupt-ticket listing.
+    await mockProject(page);
+    await page.route(/\/corrupt-tickets$/, async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      const response = await route.fetch({
+        url: `${server.url}/checkouts/${server.checkoutId}/corrupt-tickets`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: /Ticket errors/ }).click();
+    const corrupt = page.locator('[data-component="corrupt-ticket-row"]');
+    await expect(corrupt).toContainText(created.slug);
+    await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(0);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      if (width < 1024) await expect(page.getByRole('button', { name: 'Show project sidebar' })).toBeVisible();
+      await expect(corrupt).toBeInViewport({ ratio: 1 });
+      // The narrow layout slides the sidebar away; measure once the row has stopped moving.
+      await expect
+        .poll(() =>
+          corrupt.evaluate(async (node) => {
+            const before = node.getBoundingClientRect().left;
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return node.getBoundingClientRect().left === before;
+          }),
+        )
+        .toBe(true);
+      await expect(corrupt).toHaveCSS('display', 'grid');
+      const layout = await corrupt.evaluate((node) => {
+        const icon = node.querySelector('.corrupt-ticket-row__icon')!.getBoundingClientRect(),
+          identity = node.querySelector('.corrupt-ticket-row__select strong')!.getBoundingClientRect(),
+          message = node.querySelector('.corrupt-ticket-row__select span')!.getBoundingClientRect(),
+          row = node.getBoundingClientRect();
+        return { icon, identity, message, row };
+      });
+      expect(layout.identity.left).toBeGreaterThan(layout.icon.right);
+      expect(Math.abs(layout.identity.top - layout.icon.top)).toBeLessThan(8);
+      expect(layout.message.bottom).toBeLessThanOrEqual(layout.row.bottom - 8);
+      expect(layout.row.right).toBeLessThanOrEqual(width);
+      // Let the narrow layout's sidebar slide finish before capturing the visual QA evidence.
+      await page.waitForTimeout(1000);
+      await page.screenshot({ path: test.info().outputPath(`hs2-sjvm8c-real-corrupt-row-${width}.png`) });
+    }
+    await corrupt.getByRole('button', { name: `Open recovery for ${created.slug}` }).click();
+    await expect(page.locator('[data-component="corrupt-ticket-inspector"]')).toContainText(`${created.id}.md`);
+  } finally {
+    await server.stop();
+  }
 });
 
 test('updates the open project after external ticket additions edits and deletion', async ({ page }) => {
