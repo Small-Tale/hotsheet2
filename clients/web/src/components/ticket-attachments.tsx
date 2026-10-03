@@ -101,6 +101,7 @@ export function TicketAttachments({
   editable = enabled,
   message = '',
   presentation = 'sidebar',
+  editingLabelBatch,
 }: {
   attachments?: readonly TicketAttachmentItem[];
   /** New files can be added (the provider reports `attachments`). */
@@ -113,6 +114,11 @@ export function TicketAttachments({
   editable?: boolean;
   message?: string;
   presentation?: TicketInspectorPanelPresentation;
+  /**
+   * The `AttachmentBatch.key` whose label editor is open. Application state owns it so a rerender
+   * keeps the editor open (HS2-SG0AZY); see `attachment-label-editing.ts`.
+   */
+  editingLabelBatch?: string;
 }) {
   const manageable = enabled && editable;
   const groups = groupAttachments(attachments);
@@ -154,6 +160,8 @@ export function TicketAttachments({
                 // Regroup targets exist only where attachments are editable (HS2-0RTH3J).
                 data-attachment-group-drop-target={manageable ? 'true' : undefined}
                 data-attachment-batch={group.id ?? ''}
+                data-attachment-batch-key={group.key}
+                data-editing-label={manageable && group.key === editingLabelBatch ? 'true' : undefined}
                 data-attachment-ids={group.items.map((item) => item.id).join(',')}
                 data-attachment-purpose={group.purpose ?? ''}
                 data-attachment-actor-role={group.actor?.role ?? ''}

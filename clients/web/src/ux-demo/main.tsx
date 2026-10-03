@@ -41,6 +41,11 @@ import { createScope } from 'kerfjs/scope';
 import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from 'lucide';
 
 import type { ProviderAccount } from '../api';
+import {
+  beginAttachmentLabelEdit,
+  endAttachmentLabelEdit,
+  restoreAttachmentLabelEdit,
+} from '../attachment-label-editing';
 import type { CommandDropTarget } from '../command-order';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
@@ -342,6 +347,7 @@ import {
   toggleCollectionTicketUpNext,
 } from './ticket-collections-demo';
 import {
+  attachmentDemoLabelEditing,
   attachmentDemoMenu,
   AttachmentGalleryDemo,
   closeAttachmentDemoMenu,
@@ -3780,11 +3786,8 @@ demoListeners.add(
 );
 demoListeners.add(
   delegate(root, 'dblclick', DEMO_ACTIONS.editAttachmentBatchLabel.selector, (_event, target) => {
-    const batch = target.closest<HTMLElement>('[data-attachment-ids]');
-    const input = batch?.querySelector<HTMLInputElement>('[name="attachment-batch-label"]');
-    if (!batch || !input || input.disabled) return;
-    batch.dataset.editingLabel = 'true';
-    input.dataset.originalValue = input.value;
+    const input = beginAttachmentLabelEdit(target, attachmentDemoLabelEditing);
+    if (!input) return;
     queueMicrotask(() => {
       input.focus();
       input.select();
@@ -3797,7 +3800,7 @@ demoListeners.add(
     const key = (event as KeyboardEvent).key;
     if (key !== 'Escape' && key !== 'Enter') return;
     const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
-    if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
+    if (key === 'Escape') restoreAttachmentLabelEdit(input, attachmentDemoLabelEditing);
     input.blur();
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
@@ -3819,8 +3822,7 @@ demoListeners.add(
 );
 demoListeners.add(
   delegateCapture(root, 'blur', DEMO_FIELDS.attachmentBatchLabel.selector, (_event, target) => {
-    delete target.closest<HTMLElement>('[data-attachment-ids]')?.dataset.editingLabel;
-    delete (target as HTMLInputElement).dataset.originalValue;
+    endAttachmentLabelEdit(target, attachmentDemoLabelEditing);
   }),
 );
 let draggedDemoAttachment: string | undefined;

@@ -1365,7 +1365,9 @@ and identity-less legacy entries remain conservatively blocking.
   without persisting round numbers, and labels missing provider/legacy metadata as Legacy /
   Uncategorized. Each transparent group reads as a titled section: its label switches to an
   inline editor on double-click; Enter saves, Escape cancels, and focus returns to the title
-  control after the updated group renders (HS2-34SE3Z). Its purpose remains a compact tag-sized control. Files
+  control after the updated group renders (HS2-34SE3Z). Application state owns which label is
+  being edited, per surface (the inspector or each reader frame), so a live ticket update that
+  rerenders the panel keeps the editor open with its typed draft (HS2-SG0AZY). Its purpose remains a compact tag-sized control. Files
   move between groups by dragging either the file row or its media-grid preview (without a
   separate handle glyph). Preview drags use the existing attachment identity and never fall
   through to the upload path or create a copied attachment; only

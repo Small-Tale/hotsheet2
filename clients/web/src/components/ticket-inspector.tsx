@@ -91,6 +91,8 @@ export interface TicketInspectorProps {
   /** Existing attachments can be edited (the provider reports `attachment_edit`, HS2-HSA64D). */
   attachmentsEditable?: boolean;
   attachmentMessage?: string;
+  /** The attachment batch key whose label editor is open (HS2-SG0AZY). */
+  attachmentLabelEditing?: string;
   attachmentContext?: AttachmentReferenceContext;
   notes?: readonly NoteCardProps[];
   editingNoteId?: string;
@@ -161,6 +163,7 @@ export function ticketInspectorPanel({
   attachmentsEnabled = true,
   attachmentsEditable = attachmentsEnabled,
   attachmentMessage = '',
+  attachmentLabelEditing,
   attachmentContext,
   notes,
   editingNoteId,
@@ -410,6 +413,7 @@ export function ticketInspectorPanel({
           enabled={attachmentsEnabled}
           editable={attachmentsEditable}
           message={attachmentMessage}
+          editingLabelBatch={attachmentLabelEditing}
           presentation={presentation}
         />
       )}

@@ -1,5 +1,10 @@
 import { signal } from 'kerfjs';
 
+import {
+  type AttachmentLabelEditing,
+  attachmentLabelEditingKey,
+  INSPECTOR_ATTACHMENT_LABEL_SCOPE,
+} from '../attachment-label-editing';
 import { browserRandomId } from '../browser-id';
 import { AttachmentContextMenu } from '../components/attachment-context-menu';
 import { AttachmentGallery, attachmentGalleryZoomModel } from '../components/attachment-gallery';
@@ -174,6 +179,8 @@ export function setGalleryDemoAnnotationEndpoint(endpoint: 'start' | 'end', mill
   });
 }
 export const attachmentDemoMenu = signal<{ x: number; y: number } | undefined>(undefined);
+/** The demo's open batch label editor, owned by state like production's (HS2-SG0AZY). */
+export const attachmentDemoLabelEditing = signal<AttachmentLabelEditing | undefined>(undefined);
 const attachmentDemoItems = signal<TicketAttachmentItem[]>([
   ...demoImages,
   {
@@ -230,7 +237,13 @@ export function TicketAttachmentsDemo() {
   return (
     <div class="ticket-attachments-demo">
       <section class="inspector-panel-demo" aria-label="TicketAttachments demo">
-        <TicketAttachments attachments={attachmentDemoItems.value} />
+        <TicketAttachments
+          attachments={attachmentDemoItems.value}
+          editingLabelBatch={attachmentLabelEditingKey(
+            attachmentDemoLabelEditing.value,
+            INSPECTOR_ATTACHMENT_LABEL_SCOPE,
+          )}
+        />
         {menu && <AttachmentContextMenu x={menu.x} y={menu.y} />}
       </section>
       <h2>Append-only provider (GitHub assets repository)</h2>

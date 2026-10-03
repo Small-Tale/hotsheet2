@@ -65,6 +65,11 @@ import {
 } from '../app-region-resize';
 import { attachmentRoundNumbers } from '../attachment-grouping';
 import {
+  type AttachmentLabelEditing,
+  attachmentLabelEditingKey,
+  INSPECTOR_ATTACHMENT_LABEL_SCOPE,
+} from '../attachment-label-editing';
+import {
   applyBoardColumnFetch,
   boardColumnHasMore,
   type BoardColumnPage,
@@ -774,6 +779,9 @@ export async function startHotSheetWebClient() {
     readerDetailsDraft = signal('');
   let readerDetailsEditGeneration = 0;
   const attachmentMessage = signal('');
+  // The open attachment batch label editor lives in application state so a live rerender keeps it
+  // open (HS2-SG0AZY).
+  const attachmentLabelEditing = signal<AttachmentLabelEditing | undefined>(undefined);
 
   const editingNoteId = signal<string | undefined>(undefined),
     noteDraft = signal('');
@@ -3991,6 +3999,7 @@ export async function startHotSheetWebClient() {
       attachmentsEnabled: canUseAttachments(),
       attachmentsEditable: canEditAttachments(),
       attachmentMessage: attachmentMessage.value,
+      attachmentLabelEditing: attachmentLabelEditingKey(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
       fieldConflict: readerOpen.value ? undefined : fieldConflict.value,
       fieldConflictResolution: fieldConflictResolution.value,
     };
@@ -4080,6 +4089,7 @@ export async function startHotSheetWebClient() {
         attachmentsEnabled={editable && canUseAttachments()}
         attachmentsEditable={editable && canEditAttachments()}
         attachmentMessage={editable ? attachmentMessage.value : ''}
+        attachmentLabelEditing={attachmentLabelEditingKey(attachmentLabelEditing.value, readerScope)}
         largeText={readerLargeText.value}
         fieldConflict={editable ? fieldConflict.value : undefined}
         fieldConflictResolution={editable ? fieldConflictResolution.value : ''}
@@ -5261,7 +5271,7 @@ export async function startHotSheetWebClient() {
     workspaceSearchModel, workspaceSearchTokenOffset, searchHelpOpen,
     focusWorkspaceSearch, searchQuery, searchTokens, scheduleTicketSearch, sort, sortDirection, openTicketComposer, composerSubmitting,
     composerExpanded, resetTicketComposer, composerTitle, composerDetails, composerCategory, composerUpNext, composerSource, addNewTicketFiles, composerAttachments,
-    composerAttachmentMessage, composerAttachmentError, submitNewTicket, history, addAttachments, api, attachmentMessage, refreshProject,
+    composerAttachmentMessage, composerAttachmentError, submitNewTicket, history, addAttachments, api, attachmentMessage, attachmentLabelEditing, refreshProject,
     galleryImages, resetAttachmentGallery, gallerySourceFor, shiftGallery, attachmentGalleryGeometry, attachmentGalleryScale, attachmentGalleryUrl, attachmentMenu, syncAttachmentGalleryMeasurement,
     activeAttachmentGalleryVideo, attachmentGalleryDuration, attachmentGalleryMarkup, finishGalleryAnnotationSession, beginGalleryAnnotationSession, attachmentGalleryDrawMode, attachmentGallerySelectedAnnotation, attachmentGalleryAnnotations,
     updateGalleryPlaybackPresentation, attachmentGalleryPlayhead, attachmentGalleryPlaying, gallerySvgClock, stopGallerySvgClock, attachmentGalleryVolumeOpen, attachmentGalleryMuted, attachmentGalleryVolume,

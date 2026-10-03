@@ -1197,6 +1197,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     append-only variant for providers without `attachment_edit` (HS2-HSA64D): browse/drop stay,
     names become links, and the menus, dragging, and batch label/purpose editing are omitted;
     `enabled={false}` shows the unsupported notice. The demo shows all three variants.
+    `editingLabelBatch` names the batch (`AttachmentBatch.key`) whose label editor is open; the
+    caller owns that state through `attachment-label-editing.ts`, so a rerender never closes the
+    editor (HS2-SG0AZY). `TicketInspector` forwards it as `attachmentLabelEditing`.
 - `TicketMetadataEditor`
   - `Select` — **demo built**: compact, icon-bearing Web Awesome select foundation
     shared by ticket category and priority controls, including selected-value and

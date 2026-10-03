@@ -4611,6 +4611,49 @@ test('styles and edits attachment group labels while preserving drag regrouping'
   await surface.screenshot({ path: '/private/tmp/hs2-c0r4mx-feedback-narrow.png' });
 });
 
+test('keeps a demo attachment label edit open across a late catalog rerender (HS2-SG0AZY)', async ({ page }) => {
+  // The demo's startup catalog metadata response rerenders the whole demo. Hold it until the editor is
+  // open and typed into, so the rerender deterministically lands mid-edit.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/__hotsheet/demo-modified', async (route) => {
+    await held;
+    await route.fulfill({ json: { 'ticket-attachments': '2026-10-03T00:00:00Z' } });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-attachments');
+  const surface = page
+      .getByRole('region', { name: 'TicketAttachments demo', exact: true })
+      .locator('[data-component="ticket-attachments"]'),
+    first = surface.locator('[data-attachment-group-drop-target]').first();
+  await first.getByRole('button', { name: /Edit batch label/ }).dblclick();
+  const editor = first.getByRole('textbox', { name: /Batch label/ });
+  await expect(editor).toBeFocused();
+  await editor.fill('Typed before the rerender');
+  const responded = page.waitForResponse('**/__hotsheet/demo-modified');
+  release();
+  await responded;
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            resolve();
+          }),
+        ),
+      ),
+  );
+  await expect(editor).toBeVisible();
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue('Typed before the rerender');
+  await expect(first).toHaveAttribute('data-editing-label', 'true');
+  await editor.press('Escape');
+  await expect(first.getByRole('button', { name: /Brian · Round 1 · Problem evidence/ })).toBeFocused();
+  await expect(first).not.toHaveAttribute('data-editing-label', /.*/);
+});
+
 test('shows append-only and unsupported attachment variants in the TicketAttachments demo (HS2-HSA64D)', async ({
   page,
 }) => {

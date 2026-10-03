@@ -9,6 +9,12 @@ import {
   type MediaAnnotation,
   type TicketRow,
 } from '../api';
+import {
+  type AttachmentLabelEditing,
+  beginAttachmentLabelEdit,
+  endAttachmentLabelEdit,
+  restoreAttachmentLabelEdit,
+} from '../attachment-label-editing';
 import { browserRandomId } from '../browser-id';
 import { ATTACHMENT_CONTEXT_MENU_HEIGHT, type AttachmentContextMenuKind } from '../components/attachment-context-menu';
 import {
@@ -51,6 +57,8 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly project: () => Project | undefined;
   readonly api: () => Api;
   readonly attachmentMessage: Signal<string>;
+  /** The open batch label editor, owned by application state (HS2-SG0AZY). */
+  readonly attachmentLabelEditing: Signal<AttachmentLabelEditing | undefined>;
   readonly showToast: (message: string) => void;
   readonly refreshProject: ({ showLoading }?: { showLoading?: boolean }) => Promise<void>;
   draggedGroupedAttachmentId: string | undefined;
@@ -112,6 +120,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     project,
     api,
     attachmentMessage,
+    attachmentLabelEditing,
     showToast,
     refreshProject,
     galleryImages,
@@ -238,11 +247,8 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       'dblclick',
       ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.selector,
       (_event, target) => {
-        const batch = target.closest<HTMLElement>('[data-attachment-ids]'),
-          input = batch?.querySelector<HTMLInputElement>('[name="attachment-batch-label"]');
-        if (!batch || !input || input.disabled) return;
-        batch.dataset.editingLabel = 'true';
-        input.dataset.originalValue = input.value;
+        const input = beginAttachmentLabelEdit(target, attachmentLabelEditing);
+        if (!input) return;
         queueMicrotask(() => {
           input.focus();
           input.select();
@@ -260,7 +266,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
           key = (event as KeyboardEvent).key;
         if (key !== 'Escape' && key !== 'Enter') return;
         const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
-        if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
+        if (key === 'Escape') restoreAttachmentLabelEdit(input, attachmentLabelEditing);
         input.blur();
         requestAnimationFrame(() =>
           requestAnimationFrame(() => {
@@ -281,8 +287,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       'blur',
       ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
       (_event, target) => {
-        delete target.closest<HTMLElement>('[data-attachment-ids]')?.dataset.editingLabel;
-        delete (target as HTMLInputElement).dataset.originalValue;
+        endAttachmentLabelEdit(target, attachmentLabelEditing);
       },
     ),
   );

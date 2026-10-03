@@ -19781,6 +19781,99 @@ test('edits and contains a wrapping attachment group title through the productio
   await page.screenshot({ path: '/private/tmp/hs2-yctqcz-attachment-group-title-narrow.png', fullPage: true });
 });
 
+test('keeps a production attachment label edit open while a live ticket update rerenders the inspector (HS2-SG0AZY)', async ({
+  page,
+}) => {
+  const writes: Record<string, unknown>[] = [];
+  let ticketReads = 0,
+    liveFull = {
+      ...full,
+      attachments: full.attachments.map((item) => ({
+        ...item,
+        batch_id: undefined as string | undefined,
+        batch_label: undefined as string | undefined,
+      })),
+    };
+  await mockProject(page);
+  await page.route('**/tickets/*01', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    ticketReads += 1;
+    return route.fulfill({ json: { store: 'git-local', ...liveFull } });
+  });
+  await page.route('**/tickets/*01/attachments', (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    writes.push(route.request().postDataJSON() as Record<string, unknown>);
+    return route.fulfill({ json: { store: 'git-local', ...liveFull } });
+  });
+  const polls: import('@playwright/test').Route[] = [];
+  await page.route('**/ws/poll*', (route) => {
+    if (new URL(route.request().url()).searchParams.get('since') === null)
+      return route.fulfill({ json: { cursor: 1, events: [], overflow: false } });
+    polls.push(route);
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  const batch = page.locator('[data-attachment-group-drop-target]').first();
+  await batch.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' }).dblclick();
+  const editor = batch.getByRole('textbox', { name: 'Batch label for Legacy / Uncategorized' });
+  await expect(editor).toBeFocused();
+  await editor.fill('Half-typed label');
+
+  // Another collaborator retitles the ticket; the change stream refreshes and rerenders the inspector.
+  const readsBefore = ticketReads;
+  liveFull = { ...liveFull, title: 'Retitled while a label is being edited' };
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  await polls.shift()!.fulfill({
+    json: {
+      cursor: 2,
+      events: [{ store: 'demo-checkout', kind: 'updated', id: '01', slug: 'HS2-DEMO01' }],
+      overflow: false,
+    },
+  });
+  await expect.poll(() => ticketReads).toBeGreaterThan(readsBefore);
+  await expect(page.getByRole('heading', { name: 'Retitled while a label is being edited' })).toBeVisible();
+  // The editor stays open, focused, and keeps the typed draft across that rerender.
+  await expect(editor).toBeVisible();
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue('Half-typed label');
+  await expect(batch).toHaveAttribute('data-editing-label', 'true');
+
+  // Escape restores the edit-start label from application state and writes nothing.
+  await editor.press('Escape');
+  await expect(batch.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' })).toBeFocused();
+  await expect(batch).not.toHaveAttribute('data-editing-label', /.*/);
+  expect(writes).toHaveLength(0);
+
+  // A second edit commits through Enter.
+  await batch.getByRole('button', { name: 'Edit batch label Legacy / Uncategorized' }).dblclick();
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue('');
+  await editor.fill('Committed label');
+  await editor.press('Enter');
+  await expect.poll(() => writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({ batch_label: 'Committed label' });
+  await expect(page.locator('[data-editing-label]')).toHaveCount(0);
+
+  // The ticket reader composes the same editor in its own scope: editing there leaves the inspector
+  // behind it closed.
+  await page.getByRole('button', { name: 'Open ticket reader' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
+  await reader.getByRole('tab', { name: /Attachments/ }).click();
+  const readerBatch = reader.locator('[data-attachment-group-drop-target]').first();
+  await readerBatch.getByRole('button', { name: /^Edit batch label/ }).dblclick();
+  const readerEditor = readerBatch.getByRole('textbox', { name: /^Batch label for/ });
+  await expect(readerEditor).toBeVisible();
+  await expect(readerEditor).toBeFocused();
+  await expect(readerBatch).toHaveAttribute('data-editing-label', 'true');
+  await expect(page.locator('[data-editing-label]')).toHaveCount(1);
+  await readerEditor.press('Escape');
+  await expect(page.locator('[data-editing-label]')).toHaveCount(0);
+  expect(writes).toHaveLength(1);
+});
+
 test('moves a media thumbnail between batches and removes active media from its gallery menu (HS2-9PA2KD, HS2-EDX5J3)', async ({
   page,
 }) => {
