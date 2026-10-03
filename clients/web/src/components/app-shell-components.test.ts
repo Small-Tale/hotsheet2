@@ -19,7 +19,12 @@ import {
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
 import { MainShell } from './main-shell';
-import { ProjectTab, projectTabActivityDash, projectTabActivitySegments } from './project-tab';
+import {
+  PROJECT_TAB_SPINNER_SIZE,
+  ProjectTab,
+  projectTabActivityDash,
+  projectTabActivitySegments,
+} from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
 import type { SidebarPanelParts } from './sidebar-panel';
@@ -275,6 +280,12 @@ describe('application shell components', () => {
     expect(pendingTab).toContain('draggable="false"');
     expect(pendingTab).toMatch(/role="tab"[^>]*disabled/);
     expect(pendingTab).toContain('aria-label="Opening alpha"');
+    // Both tab spinners are sized by Kerf LoadingSpinner `size`, not app CSS on its svg (HS2-JVPPVV).
+    for (const tab of [markup, pendingTab]) expect(tab).toMatch(/<svg[^>]*class="kui-loading-spinner"[^>]*data-size/);
+    expect(PROJECT_TAB_SPINNER_SIZE).toBe(12.8);
+    expect(readFileSync(new URL('./project-tab.css', import.meta.url), 'utf8')).not.toContain(
+      '.project-tab__busy-spinner',
+    );
     expect(pendingTab).not.toContain('data-action="close-project-tab"');
     // Pending tabs are left out of the mobile project Select until they register.
     const mobileBar = String(

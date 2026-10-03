@@ -1928,6 +1928,10 @@ test('switches the TicketInspector live-claim header through every claim state (
     'Claude is actively working on this ticket',
   );
   await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
+  // Kerf LoadingSpinner `size` gives the live-claim spinner its 16.8px box (HS2-JVPPVV).
+  const claimSpinner = await notice.locator('[data-component="loading-spinner"]').boundingBox();
+  expect(claimSpinner!.width).toBeCloseTo(16.8, 1);
+  expect(claimSpinner!.height).toBeCloseTo(16.8, 1);
   await expect(eta).toHaveText('~45m left');
   await expect(eta.locator('wa-progress-ring')).toHaveJSProperty('value', 25);
   // The notice leads the header notices and sits inside the inspector's width.
@@ -5275,6 +5279,16 @@ test('catalogs project-tab states, progress, activity, and responsive geometry',
   await expect(
     tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .kui-loading-spinner'),
   ).toHaveCount(1);
+  // Kerf LoadingSpinner `size` gives the busy spinner its 12.8px box, centered in the 16px slot (HS2-JVPPVV).
+  const busySpinner = await tabStates
+    .filter({ hasText: 'Busy project' })
+    .locator('.project-tab__busy .kui-loading-spinner')
+    .evaluate((node) => {
+      const box = node.getBoundingClientRect(),
+        slot = node.parentElement!.getBoundingClientRect();
+      return [box.width, box.height, box.left - slot.left, box.top - slot.top].map((n) => Math.round(n * 10) / 10);
+    });
+  expect(busySpinner).toEqual([12.8, 12.8, 1.6, 1.6]);
   const activeQueue = tabStates.filter({ hasText: 'Active queue' });
   await expect(activeQueue.locator('.project-tab__work')).toHaveAttribute(
     'aria-label',

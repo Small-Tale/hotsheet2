@@ -7,6 +7,9 @@ import { ArchiveRestore, Bell, CircleAlert, Cloud, WifiOff, X } from 'lucide';
 
 export type ProjectTabLocation = 'local' | 'remote';
 
+/** The busy/opening spinner's pixel size in the tab's 16px trailing slot, sized by Kerf's LoadingSpinner `size` (HS2-JVPPVV). */
+export const PROJECT_TAB_SPINNER_SIZE = 12.8;
+
 export interface ProjectTabProps {
   id: string;
   name: string;
@@ -122,9 +125,7 @@ export function ProjectTab({
     ) : undefined;
   const trailing = pending ? (
     <span class="project-tab__busy">
-      <span class="project-tab__busy-spinner">
-        <LoadingSpinner label={`Opening ${name}`} />
-      </span>
+      <LoadingSpinner label={`Opening ${name}`} size={PROJECT_TAB_SPINNER_SIZE} />
     </span>
   ) : work || notification ? (
     <span class="project-tab__indicators">
@@ -133,9 +134,7 @@ export function ProjectTab({
     </span>
   ) : busy ? (
     <span class="project-tab__busy">
-      <span class="project-tab__busy-spinner">
-        <LoadingSpinner label="Project busy" />
-      </span>
+      <LoadingSpinner label="Project busy" size={PROJECT_TAB_SPINNER_SIZE} />
     </span>
   ) : disconnected ? (
     <span class="project-tab__state">

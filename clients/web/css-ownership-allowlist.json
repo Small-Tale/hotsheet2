@@ -2,18 +2,6 @@
   "$comment": "Known cross-component CSS residue for scripts/check-css-ownership.mjs (HS2-EWYDH7). Every entry names its tracking ticket and covers exactly `count` (default 1) findings of that selector in that file. Never add entries for new code; fix the selector instead. Delete or lower an entry when its ticket fixes it; a stale entry fails npm run lint.",
   "entries": [
     {
-      "file": "src/components/active-claim.css",
-      "selector": ".active-claim-spinner > svg",
-      "ticket": "HS2-JVPPVV",
-      "reason": "foreign-element: <svg> below .active-claim-spinner is not authored by src/components/active-claim.tsx; it can only be the root of <LoadingSpinner>. Kept until a published @kerfjs/ui ships a LoadingSpinner size prop (KF-PA81HY); a pixel wrapper font-size would break the typography-scale rule"
-    },
-    {
-      "file": "src/components/project-tab.css",
-      "selector": ".project-tab__busy-spinner > svg",
-      "ticket": "HS2-JVPPVV",
-      "reason": "foreign-element: <svg> below .project-tab__busy-spinner is not authored by src/components/project-tab.tsx; it can only be the root of <LoadingSpinner>. Kept until a published @kerfjs/ui ships a LoadingSpinner size prop (KF-PA81HY); a pixel wrapper font-size would break the typography-scale rule"
-    },
-    {
       "file": "src/components/terminal-dashboard.css",
       "selector": ".terminal-dashboard__zoom button:disabled",
       "ticket": "KF-FTADQT",

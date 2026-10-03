@@ -5,11 +5,17 @@ import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
 
-/** The live-claim activity spinner shared by ticket rows and the inspector/reader header (HS2-XQMDQB, HS2-QKNQXC). */
+/** The live-claim spinner's pixel size, converted to rem by Kerf. */
+export const ACTIVE_CLAIM_SPINNER_SIZE = 16.8;
+
+/**
+ * The live-claim activity spinner shared by ticket rows and the inspector/reader header (HS2-XQMDQB,
+ * HS2-QKNQXC). Kerf sizes it through LoadingSpinner `size` (HS2-JVPPVV); the wrapper only tints it.
+ */
 export function ActiveClaimSpinner({ label }: { label: string }) {
   return (
     <span class="active-claim-spinner">
-      <LoadingSpinner label={label} />
+      <LoadingSpinner label={label} size={ACTIVE_CLAIM_SPINNER_SIZE} />
     </span>
   );
 }

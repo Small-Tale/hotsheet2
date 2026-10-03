@@ -3,13 +3,18 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ActiveClaimSpinner, ClaimEta, LiveClaimNotice } from './active-claim';
+import { ACTIVE_CLAIM_SPINNER_SIZE, ActiveClaimSpinner, ClaimEta, LiveClaimNotice } from './active-claim';
 
 describe('active claim presentation (HS2-QKNQXC)', () => {
   it('renders a labeled spinner the row and header share', () => {
     const markup = String(ActiveClaimSpinner({ label: 'Codex is actively working on this ticket' }));
     expect(markup).toContain('class="active-claim-spinner"');
     expect(markup).toContain('Codex is actively working on this ticket');
+    // Kerf sizes the spinner through LoadingSpinner `size`; the app no longer reaches into its svg (HS2-JVPPVV).
+    expect(ACTIVE_CLAIM_SPINNER_SIZE).toBe(16.8);
+    expect(markup).toMatch(/<svg[^>]*class="kui-loading-spinner"[^>]*data-size/);
+    const css = readFileSync(resolve(import.meta.dirname, 'active-claim.css'), 'utf8');
+    expect(css).not.toContain('svg');
   });
 
   it('renders the ETA ring only for an estimate and the overrun as Soon', () => {

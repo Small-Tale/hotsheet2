@@ -2378,17 +2378,15 @@ findings) without changing a rendered pixel or computed style. Each fix gives ap
   `listEdge` rounding, hover, and selected presentation) in `corrupt-ticket-row.css` instead of
   rendering TicketRow's `ticket-list-row` classes; the rendered row is pixel-identical.
 
-Three entries remain, waiting on Kerf releases:
+Besides the terminal zoom entry (`KF-FTADQT`, see TerminalDashboard), one entry remains:
 
 | Entry                                             | Waits for                                    | Adoption ticket |
 | ------------------------------------------------- | -------------------------------------------- | --------------- |
-| `.active-claim-spinner > svg`                     | `LoadingSpinner` `size` prop (`KF-PA81HY`)   | `HS2-JVPPVV`    |
-| `.project-tab__busy-spinner > svg`                | `LoadingSpinner` `size` prop (`KF-PA81HY`)   | `HS2-JVPPVV`    |
 | `.ticket-status-menu > wa-select::part(combobox)` | Select `presentation="inline"` (`KF-V2Y51V`) | `HS2-WQ8T6B`    |
 
-A pixel `font-size` on the spinner wrappers would size the 1em spinner without reaching into it,
-but it breaks the typography-scale rule in `theme.test.ts`. `KF-V2Y51V` is done in Kerf but not
-yet in a published `@kerfjs/ui`.
+HS2-JVPPVV removed the two spinner entries. `ActiveClaimSpinner` and the project tab busy/opening
+spinner pass Kerf `LoadingSpinner` `size` (`KF-PA81HY`) of 16.8 and 12.8 px. Their wrappers no
+longer size or reach into the spinner svg, and the rendered spinners are pixel-identical.
 
 HS2-PK1C1X and HS2-M2W2DP cleared the content components' 22 entries. Each fix gives the element
 an own class or configures the child through its props:

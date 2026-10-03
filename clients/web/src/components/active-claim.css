@@ -1,14 +1,8 @@
 /* Live-claim presentation shared by ticket rows and the inspector/reader header (HS2-XQMDQB, HS2-QKNQXC). */
 .active-claim-spinner {
   display: inline-flex;
-  width: remify(16.8px);
-  height: remify(16.8px);
   color: var(--hs-ticket-state-up-next);
   flex: none;
-}
-.active-claim-spinner > svg {
-  width: 100%;
-  height: 100%;
 }
 .claim-eta {
   display: inline-flex;
