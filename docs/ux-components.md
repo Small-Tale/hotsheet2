@@ -1209,9 +1209,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     selected-value and popup-option presentations
   - `TicketStatusMenu` — **demo built**: a shared `Select` whose custom selected-value
     renderer retains the `StatusBadge` presentation at its `semibold` weight. Kerf's
-    `presentation="toolbar-borderless"` and `caret={false}` remove the trigger chrome and caret.
-    One temporary trigger-geometry rule (zero min-height, padding, and border width) remains
-    until Kerf ships a bare inline trigger (KF-V2Y51V, HS2-4APEJP);
+    `presentation="inline"` (KF-V2Y51V, adopted in HS2-WQ8T6B) and `caret={false}` fit the closed
+    trigger exactly to the badge box, with no chrome, caret, or trailing slack, and keep its focus
+    ring; the app overrides no Select part;
     every normally weighted popup option carries its semantic Lucide icon, and the
     selected control intentionally hides the redundant dropdown caret. Inspector and
     row-context status menus share one canonical order: Not started, Started,
@@ -2389,15 +2389,12 @@ findings) without changing a rendered pixel or computed style. Each fix gives ap
   `listEdge` rounding, hover, and selected presentation) in `corrupt-ticket-row.css` instead of
   rendering TicketRow's `ticket-list-row` classes; the rendered row is pixel-identical.
 
-Besides the terminal zoom entry (`KF-FTADQT`, see TerminalDashboard), one entry remains:
-
-| Entry                                             | Waits for                                    | Adoption ticket |
-| ------------------------------------------------- | -------------------------------------------- | --------------- |
-| `.ticket-status-menu > wa-select::part(combobox)` | Select `presentation="inline"` (`KF-V2Y51V`) | `HS2-WQ8T6B`    |
+Only the terminal zoom entry (`KF-FTADQT`, see TerminalDashboard) remains.
 
 HS2-JVPPVV removed the two spinner entries. `ActiveClaimSpinner` and the project tab busy/opening
 spinner pass Kerf `LoadingSpinner` `size` (`KF-PA81HY`) of 16.8 and 12.8 px. Their wrappers no
-longer size or reach into the spinner svg, and the rendered spinners are pixel-identical.
+longer size or reach into the spinner svg, and the rendered spinners are pixel-identical. HS2-WQ8T6B removed the status trigger's
+`::part(combobox)` entry by adopting Kerf Select `presentation="inline"` (`KF-V2Y51V`).
 
 HS2-PK1C1X and HS2-M2W2DP cleared the content components' 22 entries. Each fix gives the element
 an own class or configures the child through its props:

@@ -4135,8 +4135,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     'data-status',
     'started',
   );
-  // The closed trigger is exactly the semibold badge: Kerf's borderless, caret-free Select plus the
-  // temporary KF-V2Y51V geometry rule leave no chrome around it (HS2-4APEJP).
+  // The closed trigger is exactly the semibold badge: Kerf's caret-free inline Select (KF-V2Y51V)
+  // leaves no chrome or trailing slack around it, with no app part override (HS2-4APEJP, HS2-WQ8T6B).
   const triggerFit = await statusTrigger.evaluate((node) => {
     const combobox = node.shadowRoot!.querySelector('[part~="combobox"]')!,
       badge = node.querySelector<HTMLElement>('[data-component="status-badge"]')!,
@@ -4145,12 +4145,36 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
       style = getComputedStyle(combobox);
     return {
       height: Math.round(box.height - badgeBox.height),
+      width: Math.round(box.width - badgeBox.width),
+      presentation: node.dataset.presentation,
       background: style.backgroundColor,
       border: style.borderTopWidth,
       weight: getComputedStyle(badge).fontWeight,
     };
   });
-  expect(triggerFit).toEqual({ height: 0, background: 'rgba(0, 0, 0, 0)', border: '0px', weight: '600' });
+  expect(triggerFit).toEqual({
+    height: 0,
+    width: 0,
+    presentation: 'inline',
+    background: 'rgba(0, 0, 0, 0)',
+    border: '0px',
+    weight: '600',
+  });
+  // The inline trigger keeps its keyboard focus ring, drawn around the badge box.
+  await statusTrigger.evaluate((node: HTMLElement) => {
+    node.focus({ focusVisible: true } as FocusOptions);
+  });
+  await expect
+    .poll(() =>
+      statusTrigger.evaluate((node) => {
+        const style = getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!);
+        return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0;
+      }),
+    )
+    .toBe(true);
+  await statusTrigger.evaluate((node: HTMLElement) => {
+    node.blur();
+  });
   await statusTrigger.click();
   await expect(statusTrigger.locator('wa-option [data-lucide]')).toHaveCount(6);
   await expect(statusTrigger.locator('wa-divider')).toHaveCount(1);

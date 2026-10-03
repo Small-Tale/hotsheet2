@@ -2,11 +2,3 @@
   display: inline-grid;
   width: max-content;
 }
-/* Kerf Select's borderless presentation and caret={false} drop the trigger's background, shadow, and
-   disclosure icon. Temporary (KF-V2Y51V): Select has no bare inline trigger that also removes the
-   control's min-height, inline padding, and border width around a renderSelected badge. */
-.ticket-status-menu > wa-select::part(combobox) {
-  min-height: 0;
-  padding: 0;
-  border: 0;
-}
