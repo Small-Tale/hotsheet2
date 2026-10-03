@@ -463,6 +463,31 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "ticket-page-more",
+      "name": "TicketPageMore",
+      "kind": "component",
+      "purpose": "Load-more continuation below a paged ticket list or board column, idle and loading.",
+      "useWhen": [
+        "Hot Sheet needs load-more continuation below a paged ticket list or board column, idle and loading."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific TicketPageMore behavior."
+      ],
+      "publicClasses": [
+        "ticket-page-more"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "self",
+        "border": "self",
+        "padding": "self",
+        "notes": [
+          "Centers itself below the list or column rows with its own block margin (HS2-WP69TD)."
+        ]
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "ticket-row",
       "name": "TicketRow",
       "kind": "component",

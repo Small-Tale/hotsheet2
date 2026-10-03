@@ -154,6 +154,7 @@ import {
 } from '../components/ticket-inspector-surface';
 import { type TicketLinkChoice, TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { TicketList } from '../components/ticket-list';
+import { TicketPageMore } from '../components/ticket-page-more';
 import { showTicketReaderDialog, type TicketReaderDialogElement } from '../components/ticket-reader';
 import type { TicketPriority, TicketRowProps } from '../components/ticket-row';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
@@ -215,7 +216,6 @@ import {
   tokenQuery,
 } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
-import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { beginInteractionTiming } from '../interaction-performance';
 import type {
   Control,
@@ -4252,16 +4252,7 @@ export async function startHotSheetWebClient() {
       emptyState = workspaceEmptyState(),
       collectionLoading = emptyState?.kind === 'view-loading',
       hasMore = Boolean(ticketNextCursor.value) && !collectionLoading,
-      more = hasMore ? (
-        <button
-          type="button"
-          class="ticket-page-more"
-          {...INSPECTOR_AND_EDITOR_ACTIONS.loadNextTicketPage.attrs}
-          disabled={ticketPageLoading.value}
-        >
-          {ticketPageLoading.value ? 'Loading…' : 'Load more tickets'}
-        </button>
-      ) : undefined;
+      more = hasMore ? <TicketPageMore loading={ticketPageLoading.value} /> : undefined;
     if (viewMode.value === 'notifications') {
       const history = projectPermissionHistory(),
         cutoff = Date.now() - 24 * 60 * 60 * 1000,

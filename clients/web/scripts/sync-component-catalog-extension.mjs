@@ -40,6 +40,15 @@ const selfGeometryIds = new Set([
 ]);
 // Intrinsically sized marks with no box chrome: the embedding layout places them, nothing else applies.
 const intrinsicGeometryIds = new Set(['provider-icon']);
+// Components whose geometry fits none of the shared groups above.
+const geometryOverrides = {
+  'ticket-page-more': {
+    margin: 'self',
+    border: 'self',
+    padding: 'self',
+    notes: ['Centers itself below the list or column rows with its own block margin (HS2-WP69TD).'],
+  },
+};
 const publicClassOverrides = {
   'app-empty-state': ['app-empty'],
   'fixed-aspect-terminal-card': ['terminal-tile'],
@@ -89,6 +98,7 @@ async function componentExports() {
 }
 
 function geometry(id) {
+  if (geometryOverrides[id]) return geometryOverrides[id];
   if (compositionIds.has(id))
     return {
       margin: 'parent',

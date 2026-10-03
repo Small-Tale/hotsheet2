@@ -7,6 +7,7 @@ const sourceRoot = import.meta.dirname;
 const tokenPath = resolve(sourceRoot, 'hot-sheet-tokens.css');
 const productionCss = [
   resolve(sourceRoot, 'style.css'),
+  resolve(sourceRoot, 'terminal-viewport-error.css'),
   ...readdirSync(resolve(sourceRoot, 'components'))
     .filter((file) => file.endsWith('.css'))
     .map((file) => resolve(sourceRoot, 'components', file)),
@@ -126,8 +127,8 @@ describe('shared client theme', () => {
   it('keeps terminal initialization errors readable on the fixed dark terminal surface', () => {
     expect(css(tokenPath)).toContain('--hs-terminal-background: #000;');
     expect(css(tokenPath)).toContain('--hs-terminal-foreground: #fff;');
-    const dashboard = css(resolve(sourceRoot, 'components/terminal-dashboard.css'));
-    expect(dashboard).toMatch(/\.terminal-viewport__error\s*\{[^}]*color: var\(--hs-terminal-foreground\)/);
+    const viewport = css(resolve(sourceRoot, 'terminal-viewport-error.css'));
+    expect(viewport).toMatch(/\.terminal-viewport-error\s*\{[^}]*color: var\(--hs-terminal-foreground\)/);
   });
 
   it('keeps every client-owned stylesheet on the shared semantic color palette', () => {

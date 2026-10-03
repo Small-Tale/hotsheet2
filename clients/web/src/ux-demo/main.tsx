@@ -72,6 +72,7 @@ import { TerminalKeyBar } from '../components/terminal-key-bar';
 import { TerminalRenameDialog, type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
+import { TicketPageMore } from '../components/ticket-page-more';
 import { showTicketReaderDialog } from '../components/ticket-reader';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
@@ -1238,6 +1239,13 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner') return <ConnectionStateBannerDemo />;
   if (item.id === 'app-shell') return <AppShellDemo />;
+  if (item.id === 'ticket-page-more')
+    return (
+      <section aria-label="Ticket page continuation states">
+        <TicketPageMore />
+        <TicketPageMore loading />
+      </section>
+    );
   if (item.id === 'app-empty-state')
     return (
       <section class="empty-state-demo-stack" aria-label="Application empty state variants">

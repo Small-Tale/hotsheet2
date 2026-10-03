@@ -36,7 +36,7 @@ import {
 import type { CodeReview, CodeReviewFile, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { RepositorySetup, type RepositorySetupStep } from './repository-setup';
-import { type CodeReviewComparison, TicketCodeReview } from './ticket-code-review';
+import { type CodeReviewComparison, DiffToolMissingNotice, TicketCodeReview } from './ticket-code-review';
 
 export type RepositoryStatusState =
   'clean' | 'dirty' | 'ahead' | 'behind' | 'diverged' | 'conflicted' | 'uninitialized' | 'error';
@@ -478,11 +478,7 @@ export function ChangeEvidenceDialog({
           </nav>
         </aside>
         <main class="repository-status-popover__detail" aria-live="polite">
-          {review && !review.difftool && (
-            <p class="ticket-code-review__notice" role="status">
-              No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.
-            </p>
-          )}
+          {review && !review.difftool && <DiffToolMissingNotice />}
           <CodeReviewFileList files={visible} view={view} selectedFiles={selectedFiles} />
         </main>
       </div>

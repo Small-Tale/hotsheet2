@@ -99,6 +99,7 @@ describe('UX demo catalog', () => {
       'notification-navigation',
       'quick-ticket-composer',
       'ticket-list',
+      'ticket-page-more',
       'ticket-row',
       'ticket-board',
       'ticket-board-column',
@@ -260,6 +261,7 @@ describe('UX demo catalog', () => {
     expect(ticketList?.entries.map((entry) => entry.id)).toEqual([
       'quick-ticket-composer',
       'ticket-list',
+      'ticket-page-more',
       'ticket-row',
     ]);
     expect(ticketRow?.tags).toEqual(expect.arrayContaining(['Feature floor']));

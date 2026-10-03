@@ -2359,7 +2359,7 @@ selection entry declares its `source` module, which beta.70 needs before it judg
 | `.ticket-list-row__category` (literal element class of a selection entry)           | `KUI-L019`         | `KUI-L019`         | `foreign-class`   |
 | `.ticket-list-row--list` (modifier the owner builds dynamically)                    | not reported       | not reported       | `foreign-class`   |
 | `.terminal-ticket-rail__project svg` (hook descendant)                              | `KUI-L019`         | `KUI-L019`         | `hook-descendant` |
-| `.ticket-page-more` (class owned through the `src/style.css` shell)                 | not reported       | not reported       | `foreign-class`   |
+| `.ticket-page-more` (shell-owned in `src/style.css` when probed; HS2-WP69TD)        | not reported       | not reported       | `foreign-class`   |
 | `.active-claim-spinner > svg` (`LoadingSpinner` root, uncataloged owner)            | not reported       | `KUI-L019`         | `foreign-element` |
 | `.x > svg`, `.x svg` over a composed `LucideIcon`                                   | not reported       | not reported       | `foreign-element` |
 | `.x svg` over a local component that renders a `LucideIcon`                         | not reported       | not reported       | `foreign-element` |
@@ -2450,6 +2450,22 @@ The markup rule's residue at introduction was 15 findings: shell markup in `runt
 page's raw copy of Kerf Toolbar markup (`HS2-PX4JNP`). `CorruptTicketRow` was fixed first
 (HS2-QSR1TG). `WorkspaceHeader` and the app runtime now import the header and heading stylesheets
 whose root blocks they render.
+
+HS2-WP69TD removed the four sibling-class entries by composing the owner instead:
+
+- **`TicketPageMore`** (`ticket-page-more.tsx`) is the Load more continuation. The list workspace
+  and `TicketBoardColumn` both compose it, and its rule moved out of `style.css`. Its UX demo
+  shows the idle and loading states.
+- **`DiffToolMissingNotice`** is exported by `TicketCodeReview`, which owns
+  `.ticket-code-review__notice`. The change-evidence dialog composes it.
+- **`ProviderSetupBackButton`** is exported by `ProviderSetupForm`. It takes the screen's back
+  `action`, so the remote-backup screen composes it with its own action.
+- **The terminal initialization error** is created by the imperative runtime in
+  `terminal-viewport.ts`. It renders its own `.terminal-viewport-error` block from
+  `terminal-viewport-error.css`, and TerminalDashboard's error viewport still centers it.
+
+Before/after captures of every affected state at 1280 and 390 have identical geometry, computed
+styles, and element pixels.
 
 Known residue is listed in `clients/web/css-ownership-allowlist.json`. Each entry has `file`,
 `selector` (with whitespace normalized), an exact `count` when the selector occurs more than once,

@@ -1,3 +1,5 @@
+import './terminal-viewport-error.css';
+
 import { browserRandomId } from './browser-id';
 import type { TerminalModifiers } from './terminal-keys';
 
@@ -191,7 +193,7 @@ function mountTerminalRuntime(element: HTMLElement, load: () => Promise<() => ()
   let disposed = false,
     disposeRuntime: (() => void) | undefined;
   if (element.dataset.connection === 'error') {
-    element.querySelector('.terminal-viewport__error')?.remove();
+    element.querySelector('.terminal-viewport-error')?.remove();
     if (element.dataset.displayMode === 'scaled-preview') element.setAttribute('aria-hidden', 'true');
   }
   element.dataset.connection = 'loading';
@@ -207,7 +209,7 @@ function mountTerminalRuntime(element: HTMLElement, load: () => Promise<() => ()
       element.style.height = '';
       element.style.transform = '';
       const message = element.ownerDocument.createElement('p');
-      message.className = 'terminal-viewport__error';
+      message.className = 'terminal-viewport-error';
       message.setAttribute('role', 'alert');
       message.textContent = 'Terminal could not start. Reload the page to try again.';
       element.replaceChildren(message);

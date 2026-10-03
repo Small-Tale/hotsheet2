@@ -4,7 +4,7 @@ import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
-import { ChevronLeft, ChevronRight, GitBranch, Power, PowerOff, Trash2 } from 'lucide';
+import { ChevronRight, GitBranch, Power, PowerOff, Trash2 } from 'lucide';
 
 import type { ProviderAccount, ProviderConnection } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -15,6 +15,7 @@ import {
   type ExternalProviderKind,
   type GithubAuthState,
   providerName,
+  ProviderSetupBackButton,
   ProviderSetupForm,
 } from './provider-setup-form';
 
@@ -204,14 +205,7 @@ export function TicketSourceSetupDialog({
       class="ticket-source-setup ticket-source-setup__screen ticket-source-setup__complete ticket-source-setup__remote-form"
       {...PROJECT_LIFECYCLE_ACTIONS.connectTicketStoreRemote.attrs}
     >
-      <wa-button
-        class="provider-setup-form__back"
-        appearance="plain"
-        type="button"
-        {...PROJECT_LIFECYCLE_ACTIONS.backTicketStoreRemote.attrs}
-      >
-        <LucideIcon slot="start" icon={ChevronLeft} name="chevron-left" /> Ticket source types
-      </wa-button>
+      <ProviderSetupBackButton action={PROJECT_LIFECYCLE_ACTIONS.backTicketStoreRemote} />
       <div class="ticket-source-setup__remote">
         <span class="ticket-source-setup__remote-icon">
           <LucideIcon icon={GitBranch} name="git-branch" size="s" />

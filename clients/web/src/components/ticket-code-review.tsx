@@ -113,11 +113,7 @@ export function TicketCodeReview({
               </p>
             </button>
           )}
-          {!enabled && (
-            <p class="ticket-code-review__notice" role="status">
-              No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.
-            </p>
-          )}
+          {!enabled && <DiffToolMissingNotice />}
           {comparison?.active && (
             <div class="ticket-code-review__compare-banner" role="status">
               <div class="ticket-code-review__compare-prompt">
@@ -280,6 +276,18 @@ export function TicketCodeReview({
     >
       {body}
     </TicketInspectorPanel>
+  );
+}
+
+/**
+ * The notice shown where review actions need a configured Git diff tool. Code review owns it, and
+ * the change-evidence dialog composes it rather than rendering this component's class (HS2-WP69TD).
+ */
+export function DiffToolMissingNotice() {
+  return (
+    <p class="ticket-code-review__notice" role="status">
+      No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.
+    </p>
   );
 }
 

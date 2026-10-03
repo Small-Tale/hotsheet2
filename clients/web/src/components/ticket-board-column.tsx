@@ -1,7 +1,7 @@
 import './ticket-board-column.css';
 
-import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
+import { TicketPageMore } from './ticket-page-more';
 import { TicketRow, type TicketRowProps } from './ticket-row';
 
 export interface TicketBoardColumnProps {
@@ -61,14 +61,7 @@ export function TicketBoardColumn({
           <TicketRow {...ticket} presentation="column" />
         ))}
         {continuation ? (
-          <button
-            type="button"
-            class="ticket-page-more ticket-board-column__more"
-            {...INSPECTOR_AND_EDITOR_ACTIONS.loadNextTicketPage.attrs}
-            disabled={continuation.loading}
-          >
-            {continuation.loading ? 'Loading…' : 'Load more tickets'}
-          </button>
+          <TicketPageMore loading={continuation.loading} />
         ) : (
           totalCount > tickets.length && (
             <div class="ticket-board-column__progress" data-ticket-progressive-loading="true" role="status">

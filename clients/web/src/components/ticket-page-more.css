@@ -1,0 +1,16 @@
+/* The paged list/column continuation button (HS2-WP69TD; formerly a global style.css rule). */
+.ticket-page-more {
+  display: block;
+  min-height: remify(40px);
+  margin: var(--wa-space-m) auto;
+  padding: 0 var(--wa-space-l);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-pill);
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+  cursor: pointer;
+}
+.ticket-page-more:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}

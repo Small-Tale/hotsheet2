@@ -7,6 +7,7 @@ import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
+import type { AttrSpec } from 'kerfjs';
 import { Check, ChevronLeft, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
 import type { ProviderAccount, ProviderConnection } from '../api';
@@ -84,6 +85,19 @@ function accountUsage(account: ProviderAccount, capitalized = true) {
   return capitalized ? usage.charAt(0).toUpperCase() + usage.slice(1) : usage;
 }
 
+/**
+ * The "Ticket source types" back control at the top of a ticket-source setup screen. The provider
+ * form and the ticket-source setup dialog's other screens (the remote backup form) compose it
+ * with their own back action (HS2-WP69TD).
+ */
+export function ProviderSetupBackButton({ action }: { action: AttrSpec<'data-action'> }) {
+  return (
+    <wa-button class="provider-setup-form__back" appearance="plain" type="button" {...action.attrs}>
+      <LucideIcon slot="start" icon={ChevronLeft} name="chevron-left" /> Ticket source types
+    </wa-button>
+  );
+}
+
 export function ProviderSetupForm({
   kind,
   connection,
@@ -122,14 +136,7 @@ export function ProviderSetupForm({
       data-component="provider-setup-form"
       {...COMMANDS_AND_AI_ACTIONS.saveProviderConnection.attrs}
     >
-      <wa-button
-        class="provider-setup-form__back"
-        appearance="plain"
-        type="button"
-        {...COMMANDS_AND_AI_ACTIONS.backProviderKind.attrs}
-      >
-        <LucideIcon slot="start" icon={ChevronLeft} name="chevron-left" /> Ticket source types
-      </wa-button>
+      <ProviderSetupBackButton action={COMMANDS_AND_AI_ACTIONS.backProviderKind} />
       {/* Buttons carry `data-key` so a re-render never recycles the clicked control into a different
           action while that click is still dispatching (for example Enterprise ↔ GitHub.com; KF-HK7WE8). */}
       {kind === 'github' && !editing && (

@@ -14,24 +14,6 @@
       "reason": "borrowed-markup: <Toolbar> class renders .app-shell, which belongs to src/components/app-shell.tsx; compose that component or give this element an own class"
     },
     {
-      "file": "src/components/repository-status-popover.tsx",
-      "selector": ".ticket-code-review__notice",
-      "ticket": "HS2-WP69TD",
-      "reason": "borrowed-markup: <p> class renders .ticket-code-review, which belongs to src/components/ticket-code-review.tsx; compose that component or give this element an own class"
-    },
-    {
-      "file": "src/components/ticket-board-column.tsx",
-      "selector": ".ticket-page-more",
-      "ticket": "HS2-WP69TD",
-      "reason": "borrowed-markup: <button> class renders .ticket-page-more, which belongs to src/app/runtime.tsx; compose that component or give this element an own class"
-    },
-    {
-      "file": "src/components/ticket-source-setup-dialog.tsx",
-      "selector": ".provider-setup-form__back",
-      "ticket": "HS2-WP69TD",
-      "reason": "borrowed-markup: <wa-button> class renders .provider-setup-form, which belongs to src/components/provider-setup-form.tsx; compose that component or give this element an own class"
-    },
-    {
       "file": "src/dev-review/index.ts",
       "selector": ".kui-toolbar",
       "ticket": "HS2-PX4JNP",
@@ -72,12 +54,6 @@
       "selector": ".kui-toolbar-text__text",
       "ticket": "HS2-PX4JNP",
       "reason": "borrowed-markup: raw HTML class attribute renders a Kerf component class; compose the Kerf component and configure it through its props"
-    },
-    {
-      "file": "src/terminal-viewport.ts",
-      "selector": ".terminal-viewport__error",
-      "ticket": "HS2-WP69TD",
-      "reason": "borrowed-markup: className assignment renders .terminal-viewport, which belongs to src/components/terminal-dashboard.tsx; compose that component or give this element an own class"
     }
   ]
 }

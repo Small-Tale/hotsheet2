@@ -60,18 +60,3 @@ select {
 /* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
    (owned by ticket-inspector.tsx since HS2-XBHADT), which replaced the earlier dimmed-stale-inspector overlay
    (.ticket-inspector-transition) — that dead rule was removed with HS2-YSHZQK. */
-.ticket-page-more {
-  display: block;
-  min-height: remify(40px);
-  margin: var(--wa-space-m) auto;
-  padding: 0 var(--wa-space-l);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-surface-default);
-  cursor: pointer;
-}
-.ticket-page-more:disabled {
-  opacity: 0.55;
-  cursor: wait;
-}

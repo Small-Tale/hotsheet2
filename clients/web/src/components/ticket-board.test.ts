@@ -124,10 +124,10 @@ describe('TicketBoard', () => {
         ],
       }),
     );
-    expect(markup).toContain('ticket-board-column__more');
+    expect(markup).toContain('ticket-page-more');
     expect(markup).toContain('data-action="load-next-ticket-page"');
     expect(markup).toContain('Load more tickets');
-    expect(markup.indexOf('data-key="ticket:HS2-BOARD"')).toBeLessThan(markup.indexOf('ticket-board-column__more'));
+    expect(markup.indexOf('data-key="ticket:HS2-BOARD"')).toBeLessThan(markup.indexOf('ticket-page-more'));
     expect(
       String(
         TicketBoard({ columns: [{ id: 'active', title: 'Active', tickets: [], continuation: { loading: true } }] }),
@@ -151,12 +151,12 @@ describe('TicketBoard', () => {
       }),
     );
     // The short Not Started column gets its own Load more; the fully-loaded Completed column does not.
-    expect(markup.match(/ticket-board-column__more/g)).toHaveLength(1);
+    expect(markup.match(/ticket-page-more/g)).toHaveLength(1);
     const notStarted = markup.slice(
       markup.indexOf('data-column-id="not-started"'),
       markup.indexOf('data-column-id="completed"'),
     );
-    expect(notStarted).toContain('ticket-board-column__more');
+    expect(notStarted).toContain('ticket-page-more');
   });
 
   it('maps the Not Started column id to the wire status used by ticket drops', () => {

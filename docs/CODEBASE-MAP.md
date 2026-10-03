@@ -88,6 +88,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
     src/browser-id.ts       #   Secure/ordinary-LAN browser identities using UUID/getRandomValues, legacy no-Crypto fallback
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and guarded lazy runtime loader with visible startup errors
+    src/terminal-viewport-error.css # The loader's own initialization-error message block (HS2-WP69TD)
     src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
     src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, input, leased claims, server-size scaling, and reconnect lifecycle
     src/terminal-touch-scroll.ts # Phone finger-drag scrolling: gesture/momentum controller and pixel-to-row scrollback/arrow-key conversion (HS2-KFBRSB)
