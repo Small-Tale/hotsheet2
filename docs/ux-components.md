@@ -1644,6 +1644,11 @@ splitter resists below 228 px and treats a continued 48 px overshoot as an inten
 The rail follows Kerf's canonical spacing relationships: 8 px within its toolbar groups and
 terminal inset, 4 px for the tab-strip focus gutter and icon-label air, and no gap between the
 connected rows in its create menu (HS2-4Y6SM9).
+When the tab strip overflows (for example at a 390 px phone width), its Kerf `TabBar` uses
+`snapTabs`, so the strip settles at whole-tab starts past the pinned Project grid tab. A reveal of
+the trailing tab, a later grid selection, or a swipe that ends mid-tab never leaves a peer tab
+clipped to a sliver beside the grid tab; only the far edge may show a partial tab as the overflow
+affordance (HS2-6Y8HSH, Kerf `KF-4ESG02`).
 On mobile, focusing the active dedicated xterm temporarily replaces that drawer chrome with a
 full visual-viewport terminal and one Exit pill. The terminal tracks the visual viewport's
 offset and height while the software keyboard opens, so it never extends underneath the keyboard.

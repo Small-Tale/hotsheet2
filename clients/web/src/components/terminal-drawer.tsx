@@ -252,6 +252,9 @@ export function TerminalDrawer({
               // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
               activation="manual"
               trailingPlacement="adjacent"
+              // The pinned Project grid tab overlaps the scrolling peers; settle the strip at whole-tab
+              // starts so a reveal or swipe never leaves a peer as a sliver beside it (HS2-6Y8HSH).
+              snapTabs
               trailing={
                 <ToolbarControlGroup
                   className="terminal-drawer__create-wrap"

@@ -91,6 +91,10 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('data-tab-bar-id="terminal-drawer"');
     expect(markup).toContain('data-tab-activation="manual"');
     expect(markup).toContain('data-trailing-placement="adjacent"');
+    // Peers settle at whole-tab starts beside the pinned grid tab, never as a sliver (HS2-6Y8HSH).
+    expect(markup).toMatch(
+      /class="kui-tab-bar__tabs"[^>]*data-snap-tabs="true"|data-snap-tabs="true"[^>]*class="kui-tab-bar__tabs"/,
+    );
     expect(markup).toContain('>Project grid</span>');
     expect(markup).toContain('data-lucide="layout-grid"');
     expect(markup).not.toContain('data-lucide="grid-3x3"');
