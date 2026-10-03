@@ -1925,6 +1925,45 @@ test('round-trips AppShell presentation and work-area focus-ring settings (HS2-8
   }
 });
 
+test('round-trips the AppShell phone view header and its Empty Trash action (HS2-T35VN7)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=app-shell');
+  const shell = page.locator('[data-component="app-shell"]'),
+    demo = page.getByRole('region', { name: 'AppShell demo' }),
+    header = shell.locator('.app-shell__mobile-view-header'),
+    viewSelect = header.locator('wa-select[name="mobile-view"]'),
+    emptyTrash = header.getByRole('button', { name: 'Empty Trash' });
+  await expect(header).toHaveCount(0);
+  await page.locator('[data-action="toggle-settings"]').first().click();
+  const inspector = page.getByRole('complementary', { name: 'AppShell settings' }),
+    toggle = inspector.locator('wa-checkbox[name="mobile-view-header"]');
+  await expect(toggle).toHaveJSProperty('checked', false);
+  // Control → render: the header replaces the page header with the view Select and launcher.
+  await toggle.click();
+  await expect(toggle).toHaveJSProperty('checked', true);
+  await expect(viewSelect).toHaveJSProperty('value', 'all');
+  await expect(header.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(1);
+  // Choosing Trash swaps the trailing action, and the action is wired.
+  await viewSelect.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'trash';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(viewSelect).toHaveJSProperty('value', 'trash');
+  await expect(emptyTrash).toBeVisible();
+  await expect(header.locator('[data-component="quick-ticket-composer-launcher"]')).toHaveCount(0);
+  await emptyTrash.click();
+  await expect(demo.locator('.component-stage__event')).toHaveText('Empty Trash confirmation requested.');
+  await header.screenshot({ path: '/private/tmp/hs2-t35vn7-app-shell-phone-header-trash.png' });
+  // Reset → the toggle, the selected view, and the render return to the defaults.
+  await inspector.getByRole('button', { name: 'Reset' }).click();
+  await expect(toggle).toHaveJSProperty('checked', false);
+  await expect(header).toHaveCount(0);
+  // Edit again after the reset: the view selection was reset to Queue too.
+  await toggle.click();
+  await expect(viewSelect).toHaveJSProperty('value', 'all');
+  await expect(emptyTrash).toHaveCount(0);
+});
+
 test('round-trips StatusBadge controls through reset and a post-reset edit', async ({ page }) => {
   await page.goto('/ux-demo?component=status-badge');
   const badge = page.locator('[data-component="status-badge"]');

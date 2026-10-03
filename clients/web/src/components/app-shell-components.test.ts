@@ -145,6 +145,29 @@ describe('application shell components', () => {
       expect(strip('stats', mobile)).toContain('data-surface="default" data-divider="false"');
     }
   });
+  it('renders the phone view-switcher page header in place of pageHeader (HS2-T35VN7)', () => {
+    const render = (props: Partial<Parameters<typeof AppShell>[0]>) =>
+      String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never, ...props }));
+    const choices = [
+      { value: 'all', label: 'Queue' },
+      { value: 'trash', label: 'Trash' },
+    ];
+    const markup = render({
+      mobile: true,
+      pageHeader: '<p class="desktop-only">Page</p>' as never,
+      mobileView: { value: 'trash', choices, action: { kind: 'empty-trash' } },
+    });
+    expect(markup).toContain('app-shell__mobile-view-header');
+    const select = /<wa-select\b[^>]*>/.exec(markup)?.[0] ?? '';
+    expect(select).toMatch(/class="[^"]*\bapp-shell__mobile-view\b/);
+    expect(select).toContain('name="mobile-view"');
+    expect(select).toContain('aria-label="Ticket view"');
+    expect(markup).toContain('data-action="open-empty-trash"');
+    expect(markup).not.toContain('desktop-only');
+    const without = render({ pageHeader: '<p class="desktop-only">Page</p>' as never });
+    expect(without).toContain('desktop-only');
+    expect(without).not.toContain('app-shell__mobile-view');
+  });
   it('fills the window only in the viewport presentation the application root uses (HS2-DR549A)', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     expect(css).toContainSource(

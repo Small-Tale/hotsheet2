@@ -4,6 +4,8 @@ import './app-shell.css';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import type { ResizableRegionContentOverflow, ResizableRegionSeparator } from '@kerfjs/ui/resizable-region';
+import { Select, type SelectChoice } from '@kerfjs/ui/select';
+import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Workbench, type WorkbenchPanel, type WorkbenchStaticPanel } from '@kerfjs/ui/workbench';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
@@ -20,10 +22,19 @@ import {
   workbenchRailPanel,
   workbenchSidebarPanel,
 } from './sidebar-panel';
-import type { TicketViewActionSpec } from './workspace-controls';
+import { TicketViewAction, type TicketViewActionSpec } from './workspace-controls';
 
 /** The Workbench id; Kerf derives the panel ids `app-left-rail`, `app-right-rail`, and `app-bottom-drawer`. */
 export const APP_WORKBENCH_ID = 'app';
+
+/** The phone page header's ticket-view switcher (HS2-0SARDD, HS2-T35VN7). */
+export interface AppShellMobileView {
+  /** The selected ticket view id; the Select is named `mobile-view`. */
+  value: string;
+  choices: readonly SelectChoice[];
+  /** The selected view's action (new ticket or Empty Trash) at the trailing edge (HS2-PNCDAE spec). */
+  action?: TicketViewActionSpec;
+}
 
 export interface AppShellProps {
   tabs: ProjectTabProps[];
@@ -34,6 +45,8 @@ export interface AppShellProps {
   /** The current ticket view's primary action, rendered in the project strip's far-edge zone (HS2-PNCDAE). */
   projectTabAction?: TicketViewActionSpec;
   pageHeader?: SafeHtml;
+  /** On a phone, a compact view-switcher page header that replaces `pageHeader`. */
+  mobileView?: AppShellMobileView;
   workspace: SafeHtml;
   composer?: SafeHtml;
   /** The right rail's panel parts; the Workbench composes its toolbar, header, and collapse toggle and
@@ -89,6 +102,7 @@ export function AppShell({
   headerActions,
   projectTabAction,
   pageHeader,
+  mobileView,
   workspace,
   composer,
   inspector,
@@ -236,7 +250,7 @@ export function AppShell({
             />
             {overlay}
             {banner}
-            {pageHeader}
+            {mobileView ? <AppShellMobileViewHeader {...mobileView} /> : pageHeader}
             {/* Stable data-keys so the morph matches the scroll container by identity, not position.
           The overlay/banner/pageHeader siblings above are conditional (HS2-H4MWDB: opening the
           ticket context menu toggles the overlay); without a key the shift rebuilds this subtree
@@ -273,5 +287,37 @@ export function AppShell({
       />
       {viewportOverlay}
     </section>
+  );
+}
+
+/**
+ * The phone page header: Kerf's compact borderless toolbar Select switches the ticket view, sized to
+ * the selected view name, beside the view's action (HS2-0SARDD). AppShell owns its markup and the
+ * `.app-shell__mobile-view` placement (HS2-T35VN7).
+ */
+function AppShellMobileViewHeader({ value, choices, action }: AppShellMobileView) {
+  // Kerf's catalog does not accept a standalone wa-button in a Toolbar zone yet (KF-9N7K8S), so the
+  // view action stays a variable like the page heading's until HS2-F4P7ZA adopts the fix.
+  const trailing = action && <TicketViewAction action={action} />;
+  return (
+    <Toolbar
+      className="app-shell__mobile-view-header"
+      dividerSides=""
+      leading={
+        <ToolbarControlGroup single appearance="borderless">
+          <Select
+            className="app-shell__mobile-view"
+            presentation="toolbar-borderless"
+            size="compact"
+            name="mobile-view"
+            value={value}
+            ariaLabel="Ticket view"
+            choices={choices}
+            renderSelected={(choice) => <span>{choice.label}</span>}
+          />
+        </ToolbarControlGroup>
+      }
+      trailing={trailing}
+    />
   );
 }

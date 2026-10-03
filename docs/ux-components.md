@@ -79,6 +79,14 @@ AppShell configures the components it composes through props rather than cross-c
 - **Demo settings (HS2-8ZJMCE).** The AppShell UX demo's settings expose both props: a
   Presentation select (Framed / Viewport) and a "Top-layer overlay open" checkbox that turns the
   work-area focus ring off, with Reset restoring the framed, ring-on defaults.
+- **`mobileView` (HS2-T35VN7).** On a phone, this prop replaces `pageHeader` with AppShell's own
+  view-switcher header. The header is Kerf's compact borderless toolbar `Select` (named
+  `mobile-view`, placed by `.app-shell__mobile-view`, HS2-0SARDD) beside the view's `action`.
+  The app runtime passes the view `value`, the `choices`, and the action as a
+  `TicketViewActionSpec`, the same spec `projectTabAction` takes (HS2-PNCDAE). AppShell renders it
+  with `TicketViewAction`: the new-ticket launcher, or `EmptyTrashAction` in Trash. The runtime no
+  longer renders either component's classes. The demo's "Phone view header" setting shows the header. Switching
+  its Select to Trash swaps in Empty Trash, and Reset turns the header off.
 - **Project strip.** AppShell renders `ProjectTabBar` with `surface="default"`. It sets
   `divider` only in terminals mode, where no page header sits between the strip and the work area.
 - **`--hotsheet-scroll-end-inset`.** The workspace sets `data-bottom-edge` from its own `mobile`
@@ -2466,6 +2474,11 @@ HS2-WP69TD removed the four sibling-class entries by composing the owner instead
 
 Before/after captures of every affected state at 1280 and 390 have identical geometry, computed
 styles, and element pixels.
+
+HS2-PNCDAE moved the Empty Trash text action into `WorkspaceHeader` (`EmptyTrashAction`).
+HS2-T35VN7 removed the last two runtime shell entries: AppShell now renders the phone view header
+through its `mobileView` prop. The Trash action at 1280 and the Queue and Trash phone headers at
+390 are identical before and after.
 
 Known residue is listed in `clients/web/css-ownership-allowlist.json`. Each entry has `file`,
 `selector` (with whitespace normalized), an exact `count` when the selector occurs more than once,

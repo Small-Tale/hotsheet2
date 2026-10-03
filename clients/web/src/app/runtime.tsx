@@ -2,9 +2,7 @@
 import '../components/heading.css';
 
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
-import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
@@ -81,7 +79,7 @@ import { browserRandomId } from '../browser-id';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { AppError } from '../components/app-error';
-import { APP_WORKBENCH_ID } from '../components/app-shell';
+import { APP_WORKBENCH_ID, type AppShellMobileView } from '../components/app-shell';
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
@@ -4699,31 +4697,11 @@ export async function startHotSheetWebClient() {
         />
       </div>
     );
-    const pageHeader = viewportMobile.value ? (
-      !['settings', 'notifications'].includes(viewMode.value) ? (
-        <Toolbar
-          className="app-shell__mobile-view-header"
-          dividerSides=""
-          leading={
-            <ToolbarControlGroup single appearance="borderless">
-              <Select
-                className="app-shell__mobile-view"
-                presentation="toolbar-borderless"
-                size="compact"
-                name="mobile-view"
-                value={railView}
-                ariaLabel="Ticket view"
-                choices={mobileViewChoices}
-                renderSelected={(choice) => <span>{choice.label}</span>}
-              />
-            </ToolbarControlGroup>
-          }
-          trailing={ticketViewAction(selectedView.value, canCreate)}
-        />
-      ) : (
-        secondaryPageHeader
-      )
-    ) : undefined;
+    const mobileView: AppShellMobileView | undefined =
+        viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value)
+          ? { value: railView, choices: mobileViewChoices, action: ticketViewActionSpec(selectedView.value, canCreate) }
+          : undefined,
+      pageHeader = viewportMobile.value && !mobileView ? secondaryPageHeader : undefined;
     const drawerViewAllowed = !['settings', 'notifications'].includes(viewMode.value);
     return (
       <MainShell
@@ -4789,6 +4767,7 @@ export async function startHotSheetWebClient() {
           </>
         }
         pageHeader={pageHeader}
+        mobileView={mobileView}
         workspace={<WorkspaceSurface {...workspaceSurfaceProps()} />}
         workspacePresentation={viewMode.value === 'board' && selectedView.value !== 'errors' ? 'edge-to-edge' : 'inset'}
         terminalDrawer={

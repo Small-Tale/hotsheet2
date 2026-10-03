@@ -2627,6 +2627,19 @@ demoListeners.add(
     if (control.getAttribute('name') === 'presentation')
       appShellSettings.presentation.value = control.value as typeof appShellSettings.presentation.value;
     if (control.getAttribute('name') === 'overlay-open') appShellSettings.overlayOpen.value = control.checked;
+    if (control.getAttribute('name') === 'mobile-view-header') appShellSettings.mobileView.value = control.checked;
+  }),
+);
+demoListeners.add(
+  delegate(root, 'change', '[aria-label="AppShell demo"] wa-select[name="mobile-view"]', (_event, target) => {
+    const value = (target as FormControl).value;
+    appShellSettings.mobileViewValue.value = value;
+    shellEvent.value = `${value === 'all' ? 'Queue' : value.charAt(0).toUpperCase() + value.slice(1)} view selected.`;
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', '[aria-label="AppShell demo"] [data-action="open-empty-trash"]', () => {
+    shellEvent.value = 'Empty Trash confirmation requested.';
   }),
 );
 demoListeners.add(

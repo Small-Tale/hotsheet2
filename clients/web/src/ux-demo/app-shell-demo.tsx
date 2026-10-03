@@ -77,15 +77,30 @@ export const appShellSettings = {
   presentation: signal<'framed' | 'viewport'>('framed'),
   /** Simulates a top-layer overlay hosted by the work area owning focus: the work-area ring turns off. */
   overlayOpen: signal(false),
+  /** The phone page header (`mobileView`): a ticket-view Select beside the view's action (HS2-T35VN7). */
+  mobileView: signal(false),
+  mobileViewValue: signal('all'),
 };
+
+const mobileViewChoices = [
+  { value: 'all', label: 'Queue' },
+  { value: 'backlog', label: 'Backlog' },
+  { value: 'archive', label: 'Archive' },
+  { value: 'trash', label: 'Trash' },
+];
 
 export function resetAppShellDemo(root?: ParentNode): void {
   appShellSettings.presentation.value = 'framed';
   appShellSettings.overlayOpen.value = false;
+  appShellSettings.mobileView.value = false;
+  appShellSettings.mobileViewValue.value = 'all';
   if (root)
     syncSettingsControls(root, 'app-shell', {
       values: { presentation: appShellSettings.presentation.value },
-      checked: { 'overlay-open': appShellSettings.overlayOpen.value },
+      checked: {
+        'overlay-open': appShellSettings.overlayOpen.value,
+        'mobile-view-header': appShellSettings.mobileView.value,
+      },
     });
 }
 
@@ -103,6 +118,9 @@ export function AppShellSettings() {
       />
       <wa-checkbox name="overlay-open" checked={appShellSettings.overlayOpen.value}>
         Top-layer overlay open (work-area focus ring off)
+      </wa-checkbox>
+      <wa-checkbox name="mobile-view-header" checked={appShellSettings.mobileView.value}>
+        Phone view header (view Select and action)
       </wa-checkbox>
       <wa-button type="button" data-action="reset-settings">
         Reset
@@ -437,6 +455,16 @@ export function AppShellDemo() {
           ) : undefined
         }
         projectTabAction={!globalMode && !projectSettings ? { kind: 'new-ticket' } : undefined}
+        mobileView={
+          appShellSettings.mobileView.value && !globalMode
+            ? {
+                value: appShellSettings.mobileViewValue.value,
+                choices: mobileViewChoices,
+                action:
+                  appShellSettings.mobileViewValue.value === 'trash' ? { kind: 'empty-trash' } : { kind: 'new-ticket' },
+              }
+            : undefined
+        }
         workspace={workspace}
         workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'}
         terminalDrawer={

@@ -2,18 +2,6 @@
   "$comment": "Known cross-component CSS residue for scripts/check-css-ownership.mjs (HS2-EWYDH7): stylesheet selectors, and (in .tsx/.ts files, selector `.class`) classes a module renders from another component's block (HS2-TM6K9V). Every entry names its tracking ticket and covers exactly `count` (default 1) findings of that selector in that file. Never add entries for new code; fix the selector instead. Delete or lower an entry when its ticket fixes it; a stale entry fails npm run lint.",
   "entries": [
     {
-      "file": "src/app/runtime.tsx",
-      "selector": ".app-shell__mobile-view",
-      "ticket": "HS2-T35VN7",
-      "reason": "borrowed-markup: <Select> class renders .app-shell, which belongs to src/components/app-shell.tsx; compose that component or give this element an own class"
-    },
-    {
-      "file": "src/app/runtime.tsx",
-      "selector": ".app-shell__mobile-view-header",
-      "ticket": "HS2-T35VN7",
-      "reason": "borrowed-markup: <Toolbar> class renders .app-shell, which belongs to src/components/app-shell.tsx; compose that component or give this element an own class"
-    },
-    {
       "file": "src/dev-review/index.ts",
       "selector": ".kui-toolbar",
       "ticket": "HS2-PX4JNP",

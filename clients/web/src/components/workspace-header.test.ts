@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createTicketSearchModel } from '../ticket-search-model';
 import {
   applyWorkspaceSortDirection,
+  EmptyTrashAction,
   nextWorkspaceSort,
   WorkspaceControls,
   WorkspaceHeader,
@@ -189,6 +190,14 @@ describe('WorkspaceHeader', () => {
     expect(String(WorkspaceControls({ mode: 'list', searchOpen: true }))).toMatch(
       /class="kui-toolbar-control-group workspace-header__overflow-group"[^>]*data-visibility="yield-to-expanded-sibling"/,
     );
+    // The header module owns the Empty Trash text action that the page header places (HS2-T35VN7).
+    const emptyTrash = String(EmptyTrashAction());
+    expect(emptyTrash).toMatch(/<wa-button[^>]*class="workspace-header__text-action"/);
+    expect(emptyTrash).toContain('variant="danger"');
+    expect(emptyTrash).toContain('data-action="open-empty-trash"');
+    expect(emptyTrash).toContain('class="workspace-header__text-action-label"');
+    expect(emptyTrash).toContain('data-lucide="trash-2"');
+    expect(emptyTrash).toContain('<span>Empty Trash</span>');
     expect(headerCss).toContainSource('wa-button.workspace-header__text-action::part(base) { width: auto;');
     expect(headerCss).toContainSource(
       '.workspace-header__text-action-label { display: inline-flex; align-items: center;',
