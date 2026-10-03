@@ -1,9 +1,9 @@
 import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { type FullTicket } from '../api';
 import { type SavedViewContextMenuState } from '../components/view-navigation';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
-import { createDisposerScope } from '../disposer-scope';
 import {
   VIEWS_AND_SAVED_VIEWS_ACTIONS,
   VIEWS_AND_SAVED_VIEWS_TARGETS,
@@ -36,7 +36,7 @@ export interface ViewAndSavedViewInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     selectedCorruptKey,
     selectedTicketSlugs,
@@ -181,5 +181,7 @@ export function wireViewAndSavedViewInteractions(dependencies: ViewAndSavedViewI
       closeSavedViewDelete();
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

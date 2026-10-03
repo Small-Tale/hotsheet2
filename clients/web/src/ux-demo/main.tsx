@@ -37,6 +37,7 @@ import { reorderTabs, wireTabBars } from '@kerfjs/ui/wire-tab-bars';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from 'lucide';
 
 import type { ProviderAccount } from '../api';
@@ -83,7 +84,6 @@ import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { withControlledOpen } from '../controlled-open';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
-import { createDisposerScope } from '../disposer-scope';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -1398,7 +1398,7 @@ function DemoApp() {
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 // Every delegated demo listener on `root` registers its disposer here, so the catalog's wiring has one
 // teardown (`demoListeners.dispose()`) instead of hundreds of discarded disposers (HS2-G838PZ).
-const demoListeners = createDisposerScope();
+const demoListeners = createScope();
 const applyCatalogTheme = () => {
   document.documentElement.classList.toggle('wa-dark', catalogTheme.value === 'dark');
   document.documentElement.dataset.theme = catalogTheme.value;

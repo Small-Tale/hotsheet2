@@ -1,4 +1,5 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import {
   type Api,
@@ -24,7 +25,6 @@ import {
 } from '../components/attachment-gallery';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
-import { createDisposerScope } from '../disposer-scope';
 import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
@@ -104,7 +104,7 @@ export interface AttachmentAndGalleryInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAndGalleryInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     selectedTicket,
     tickets,
@@ -1092,5 +1092,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       attachmentMessage.value = `Remove failed: ${reason instanceof Error ? reason.message : String(reason)}`;
     }
   }
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

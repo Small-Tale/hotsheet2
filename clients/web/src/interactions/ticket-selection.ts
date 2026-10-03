@@ -1,4 +1,5 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { type FullTicket, type TicketCloseReason, type TicketRow as WireTicketRow } from '../api';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
@@ -6,7 +7,6 @@ import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { adjacentTicketSlug, isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
 import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from '../context-menu-position';
-import { createDisposerScope } from '../disposer-scope';
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { shouldAutoOpenInspectorOnTap } from '../mobile-layout';
@@ -77,7 +77,7 @@ export interface TicketSelectionInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireTicketSelectionInteractions(dependencies: TicketSelectionInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     viewportMobile,
     revealInspectorOverlay,
@@ -542,5 +542,7 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       }
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

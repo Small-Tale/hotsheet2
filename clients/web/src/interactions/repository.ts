@@ -1,4 +1,5 @@
 import { delegate, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { Api, type CodeReview, type FullTicket, type RepositoryStatus } from '../api';
 import { type RepositorySetupStep } from '../components/repository-setup';
@@ -11,7 +12,6 @@ import {
 import { type CodeReviewComparison, codeReviewTarget } from '../components/ticket-code-review';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
-import { createDisposerScope } from '../disposer-scope';
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
 import { updateRepositoryFileSelection } from '../repository-file-selection';
 import { data } from './dom';
@@ -53,7 +53,7 @@ export interface RepositoryInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireRepositoryInteractions(dependencies: RepositoryInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     repository,
     repositoryView,
@@ -383,5 +383,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
       void openProject(root, store || undefined);
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

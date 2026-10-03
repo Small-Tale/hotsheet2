@@ -1,8 +1,8 @@
 import { delegate, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { isRemoteClient } from '../client-origin';
 import { type ExternalProviderKind } from '../components/provider-setup-form';
-import { createDisposerScope } from '../disposer-scope';
 import { PROJECT_LIFECYCLE_ACTIONS, PROJECT_LIFECYCLE_TARGETS } from '../interaction-attrs/project-lifecycle';
 import { type MigrationJobClient } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
@@ -46,7 +46,7 @@ export interface ProjectLifecycleInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     openProjectPicker,
     openRemoteProjectDialog,
@@ -291,5 +291,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
       window.location.reload();
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

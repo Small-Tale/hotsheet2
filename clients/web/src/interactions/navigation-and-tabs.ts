@@ -1,11 +1,11 @@
 import { wireTabBars } from '@kerfjs/ui/wire-tab-bars';
 import { delegate, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { type CorruptTicket, type FullTicket } from '../api';
 import { corruptTicketKey } from '../components/corrupt-ticket-row';
 import { PROJECT_TAB_BAR_ID, type ProjectTabBarMode } from '../components/project-tab-bar';
 import { TERMINAL_DRAWER_TAB_BAR_ID } from '../components/terminal-drawer';
-import { createDisposerScope } from '../disposer-scope';
 import { reorderDrawerTabIds } from '../drawer-tab-order';
 import { NAVIGATION_AND_TABS_ACTIONS, NAVIGATION_AND_TABS_TARGETS } from '../interaction-attrs/navigation-and-tabs';
 import { reorderTabs } from '../tab-order';
@@ -40,7 +40,7 @@ export interface NavigationAndTabInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     projects,
     currentRememberedProjectRoots,
@@ -185,5 +185,7 @@ export function wireNavigationAndTabInteractions(dependencies: NavigationAndTabI
       if (root) void retryProjectRestore(root);
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

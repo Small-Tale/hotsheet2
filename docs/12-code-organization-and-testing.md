@@ -201,12 +201,14 @@ order; each retains its original delegation root, capture/bubble phase, event na
 selector, cancellation behavior, and shared Kerf adapter. Modules import pure helpers
 directly and never import main or create replacement application signals.
 
-Every wiring function returns one teardown built from a `DisposerScope`
-(`src/disposer-scope.ts`, `createDisposerScope()`): Kerf `delegate()`/`delegateCapture()`
+Every wiring function returns one teardown built from a Kerf `DisposerScope`
+(`createScope()` from `kerfjs/scope`, adopted in HS2-PNFYCV): Kerf `delegate()`/`delegateCapture()`
 disposers and Kerf UI wiring handles are retained through `lifetime.add(...)`, and native
 `addEventListener` registrations pass `lifetime.signal`. Teardown runs the disposers newest
-first, then aborts the signal, and repeating it is a no-op. The UX demo catalog uses the same
-helper for its delegated listeners (HS2-J26QXQ). `wireHotSheetInteractions` composes the twelve
+first and best-effort (a throwing disposer cannot strand the rest), then aborts the signal;
+repeating it is a no-op, and the scope is refillable with a fresh signal. Groups return
+`() => { lifetime.dispose(); }` because Kerf types `dispose` as an unbound method (KF-9AH3G8).
+The UX demo catalog uses the same scope for its delegated listeners (HS2-J26QXQ). `wireHotSheetInteractions` composes the twelve
 group teardowns into one page-lifetime teardown that the runtime returns as
 `disposeInteractions`, so no delegate disposer is discarded (HS2-NZT3MT).
 

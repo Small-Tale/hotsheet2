@@ -1,7 +1,7 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { type NotificationView } from '../components/notification-navigation';
-import { createDisposerScope } from '../disposer-scope';
 import {
   NOTIFICATIONS_AND_LINKS_ACTIONS,
   NOTIFICATIONS_AND_LINKS_TARGETS,
@@ -50,7 +50,7 @@ export interface NotificationAndLinkInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireNotificationAndLinkInteractions(dependencies: NotificationAndLinkInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     notificationView,
     project,
@@ -189,5 +189,7 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
       if (ticketLinkChoice.value) cancelTicketLinkChoice();
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

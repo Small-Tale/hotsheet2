@@ -4,6 +4,7 @@ import {
   resizeRegionFromPointer,
 } from '@kerfjs/ui/resizable-region';
 import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { type TicketRow as WireTicketRow } from '../api';
 import { type AppRegionId, normalizeAppRegionSize, terminalDrawerDragDecision } from '../app-region-resize';
@@ -14,7 +15,6 @@ import { type TerminalEditMenuState } from '../components/terminal-clipboard-dia
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
-import { createDisposerScope } from '../disposer-scope';
 import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
@@ -111,7 +111,7 @@ export interface ShellAndGlobalInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     sidebarCollapsed,
     inspectorCollapsed,
@@ -632,5 +632,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   lifetime.add(delegate(document.body, 'click', '*', completePointerDetailsFinish));
   lifetime.add(delegateCapture(document.body, 'pointerup', '*', schedulePointerDetailsFinish));
   lifetime.add(delegateCapture(document.body, 'pointercancel', '*', schedulePointerDetailsFinish));
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

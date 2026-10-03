@@ -1,5 +1,6 @@
 import { placeTokenSearchCaret } from '@kerfjs/ui/token-search-field';
 import { delegate } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import {
   TICKET_SEARCH_ACTIONS,
@@ -7,7 +8,6 @@ import {
   TICKET_SEARCH_TIME_INPUT,
   ticketSearchFieldId,
 } from '../components/ticket-search-field';
-import { createDisposerScope } from '../disposer-scope';
 import { dateTokenFromInput, type SearchDatePrefix } from '../inline-search';
 import { data } from './dom';
 import { type InteractionTeardown } from './lifetime';
@@ -62,7 +62,7 @@ function applyDate(root: HTMLElement, target: Element, handlers: TicketSearchFie
  * focus handlers can read a chip's position before Kerf removes or expands it.
  */
 export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearchFieldHandlers): InteractionTeardown {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   lifetime.add(
     delegate(
       root,
@@ -127,5 +127,7 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
       });
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

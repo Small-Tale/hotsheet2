@@ -1,4 +1,5 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { Api, type CodeReview, type FullTicket } from '../api';
 import { boardColumnStatus, isPerColumnBoardView } from '../board-pagination';
@@ -10,7 +11,6 @@ import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { copyText } from '../copy-text';
 import { type DebouncedAutosave } from '../debounced-autosave';
-import { createDisposerScope } from '../disposer-scope';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
@@ -119,7 +119,7 @@ export interface InspectorAndEditorInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEditorInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     selectedTicket,
     updateSelectedTracked,
@@ -1001,5 +1001,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
         });
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

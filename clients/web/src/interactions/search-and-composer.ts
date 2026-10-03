@@ -1,6 +1,7 @@
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { type TicketRow as WireTicketRow } from '../api';
 import { STRANDED_ATTACHMENTS_MESSAGE } from '../components/quick-ticket-composer';
@@ -11,7 +12,6 @@ import {
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
-import { createDisposerScope } from '../disposer-scope';
 import { type InlineSearchToken } from '../inline-search';
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
@@ -70,7 +70,7 @@ export interface SearchAndComposerInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireSearchAndComposerInteractions(dependencies: SearchAndComposerInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     searchOpen,
     workspaceSearchModel,
@@ -163,16 +163,15 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   // caller-owned date/help surfaces.
   // An empty search blurred by a pointer press collapses only after that press's click, so the
   // collapsing row never shifts the control the user pressed (Kerf KF-64W0RN, HS2-YVBGW3).
-  const tokenSearchFields = lifetime.add(
-    wireTokenSearchFields(document.body, {
-      models: { 'workspace-search': workspaceSearchModel, 'saved-view-query': savedViewSearchModel },
-      collapsible: { signals: { 'workspace-search': searchOpen } },
-      // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
-      onSubmit: ({ id }) => {
-        focusField(id);
-      },
-    }),
-  );
+  const tokenSearchFields = wireTokenSearchFields(document.body, {
+    models: { 'workspace-search': workspaceSearchModel, 'saved-view-query': savedViewSearchModel },
+    collapsible: { signals: { 'workspace-search': searchOpen } },
+    // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
+    onSubmit: ({ id }) => {
+      focusField(id);
+    },
+  });
+  lifetime.add(tokenSearchFields);
   lifetime.add(
     delegate(document.body, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
       const next = nextWorkspaceSort(sort.value, sortDirection.value, (target as Control).value as WorkspaceSort);
@@ -369,5 +368,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       if (ticket) void history().execute(ticket.slug, { up_next: !ticket.up_next });
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

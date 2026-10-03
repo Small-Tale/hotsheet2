@@ -1,11 +1,11 @@
+import { createScope } from 'kerfjs/scope';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createDisposerScope } from './disposer-scope';
-import { combineInteractionTeardowns } from './interactions/lifetime';
+import { combineInteractionTeardowns } from './lifetime';
 
-describe('createDisposerScope', () => {
+describe('kerfjs/scope createScope (the interaction lifetime contract)', () => {
   it('releases every tracked disposer once, newest first', () => {
-    const scope = createDisposerScope();
+    const scope = createScope();
     const order: string[] = [];
     scope.add(() => order.push('a'));
     scope.add(() => order.push('b'));
@@ -18,7 +18,7 @@ describe('createDisposerScope', () => {
   });
 
   it('returns the added disposer and can be refilled after teardown', () => {
-    const scope = createDisposerScope();
+    const scope = createScope();
     const first = vi.fn();
     expect(scope.add(first)).toBe(first);
     scope.dispose();
@@ -30,7 +30,7 @@ describe('createDisposerScope', () => {
   });
 
   it('keeps a disposer registered during teardown for the next generation', () => {
-    const scope = createDisposerScope();
+    const scope = createScope();
     const late = vi.fn();
     scope.add(() => scope.add(late));
     scope.dispose();
@@ -49,7 +49,7 @@ describe('createDisposerScope', () => {
         target.removeEventListener('ping', handler);
       };
     };
-    const scope = createDisposerScope();
+    const scope = createScope();
     scope.add(listen());
     target.dispatchEvent(new Event('ping'));
     scope.dispose();
@@ -61,8 +61,24 @@ describe('createDisposerScope', () => {
     scope.dispose();
   });
 
+  it('keeps tearing down past a throwing disposer and still aborts the signal', () => {
+    const scope = createScope();
+    const signal = scope.signal;
+    const first = vi.fn();
+    scope.add(first);
+    scope.add(() => {
+      throw new Error('broken teardown');
+    });
+    expect(() => {
+      scope.dispose();
+    }).not.toThrow();
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(signal.aborted).toBe(true);
+    expect(scope.size).toBe(0);
+  });
+
   it('aborts the signal only after every disposer ran', () => {
-    const scope = createDisposerScope();
+    const scope = createScope();
     const signal = scope.signal;
     const seen: boolean[] = [];
     scope.add(() => seen.push(signal.aborted));
@@ -77,7 +93,7 @@ describe('createDisposerScope', () => {
     const target = new EventTarget();
     const native = vi.fn();
     const delegated = vi.fn();
-    const scope = createDisposerScope();
+    const scope = createScope();
     // Empty teardown: nothing to run, and the scope still works afterwards.
     scope.dispose();
     const first = scope.signal;
@@ -106,9 +122,11 @@ describe('createDisposerScope', () => {
   });
 
   it('returns a bound teardown that stays idempotent when detached from the scope', () => {
-    const scope = createDisposerScope();
+    const scope = createScope();
     const dispose = vi.fn();
     scope.add(dispose);
+    // Kerf implements dispose as a closure but types it as a method (KF-9AH3G8).
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- external Kerf typing boundary
     const teardown = scope.dispose;
     teardown();
     teardown();

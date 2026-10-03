@@ -1,9 +1,9 @@
 import './project-dialog-demo.css';
 
 import { delegate, signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { ProjectDialog, RemoteProjectDialog } from '../components/project-dialog';
-import { createDisposerScope } from '../disposer-scope';
 
 const variants = {
   projects: 'Remote projects',
@@ -79,7 +79,7 @@ export function ProjectDialogDemo() {
  */
 export function wireProjectDialogDemo(root: HTMLElement): () => void {
   const scope = '[aria-label="Project dialog variants"]';
-  const listeners = createDisposerScope();
+  const listeners = createScope();
   listeners.add(
     delegate(root, 'click', `${scope} [data-action="show-project-dialog-demo"]`, (_event, target) => {
       const next = (target as HTMLElement).dataset.variant;

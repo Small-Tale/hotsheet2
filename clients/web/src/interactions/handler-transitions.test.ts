@@ -1,10 +1,10 @@
 import { signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MediaAnnotation } from '../api';
 import { wireHotSheetInteractions } from '../app/wire-interactions';
 import type { TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
-import { createDisposerScope } from '../disposer-scope';
 import { KEYBOARD_SHORTCUT_STORAGE_KEY, type ShortcutChord } from '../keyboard-shortcuts';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
 import {
@@ -441,7 +441,7 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
   });
 
   it('aborts native listeners so events dispatched after disposal no longer reach them', () => {
-    const lifetime = createDisposerScope(),
+    const lifetime = createScope(),
       root = new EventTarget(),
       handle = vi.fn(),
       dispose = vi.fn();
@@ -451,6 +451,8 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
     root.dispatchEvent(new Event('pointerup'));
     expect(handle).toHaveBeenCalledTimes(1);
     // Groups return the bound `dispose` itself as their teardown.
+    // Kerf implements dispose as a closure but types it as a method (KF-9AH3G8).
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- external Kerf typing boundary
     const teardown = lifetime.dispose;
     teardown();
     root.dispatchEvent(new Event('pointerup'));

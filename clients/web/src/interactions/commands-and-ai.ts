@@ -1,4 +1,5 @@
 import { delegate, delegateCapture, effect, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import {
   type AiToolDefaults,
@@ -19,7 +20,6 @@ import { type SettingsCategory } from '../components/settings-navigation';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
-import { createDisposerScope } from '../disposer-scope';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
@@ -151,7 +151,7 @@ export interface CommandAndAiInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   const {
     commandGroupExpanded,
     persistWorkspacePreferences,
@@ -1175,5 +1175,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       void saveExternalProvider(target as HTMLFormElement);
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }

@@ -1,4 +1,5 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { type AiToolDefaults } from '../api';
 import { browserRandomId } from '../browser-id';
@@ -13,7 +14,6 @@ import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../c
 import { type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
-import { createDisposerScope } from '../disposer-scope';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { type DrawerAIChat } from '../project-drive';
@@ -144,7 +144,7 @@ export interface TerminalInteractionsDependencies {
 
 /** Register this group only when the application wiring owner invokes it. */
 export function wireTerminalInteractions(dependencies: TerminalInteractionsDependencies) {
-  const lifetime = createDisposerScope();
+  const lifetime = createScope();
   let terminalRenameSession = 0;
   const {
     terminalDrawerBounds,
@@ -863,5 +863,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
       terminalRename.value = undefined;
     }),
   );
-  return lifetime.dispose;
+  return () => {
+    lifetime.dispose();
+  };
 }
