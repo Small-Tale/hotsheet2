@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { basename } from 'node:path';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
+import WebSocket from 'ws';
 
 import type { ConversationMessage } from '../src/ai-conversation';
 import type { FullTicket, MediaAnnotation, TicketRow } from '../src/api';
@@ -5233,6 +5234,150 @@ test('previews running project resources with shared menus and explicit keep-run
   await dialog.getByRole('button', { name: 'Keep Running' }).click();
   await expect(projectTab).toHaveCount(0);
   expect(deletes).toEqual([]);
+});
+
+/** Wait until no animation runs in `surface` or its shadow root, so a capture shows the final frame. */
+async function settledAnimations(surface: Locator) {
+  await expect
+    .poll(() =>
+      surface.evaluate((node) =>
+        [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])].every(
+          (animation) => animation.playState !== 'running',
+        ),
+      ),
+    )
+    .toBe(true);
+}
+
+test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through the real server (HS2-7Y1BQ2)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer(),
+    wideLine = `WIDE-PTY-${'0123456789'.repeat(11)}`,
+    connections: Array<{ claims: Array<{ focus?: boolean; interacting?: boolean }>; sizes: unknown[] }> = [],
+    upstreams: WebSocket[] = [];
+  const attachUrl = (id: string) =>
+    `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(id)}/attach?secret=${server.secret}`;
+  try {
+    // A real shell scoped to the fixture project (OSC 7) prints one 119-column line at its 80x24
+    // spawn size. The replay wraps that line at whatever grid the viewer renders.
+    await server.request('/terminals', 'POST', {
+      id: 'wide-shell',
+      command: '/bin/sh',
+      args: ['-c', `printf "\\033]7;file://localhost/work/demo\\007${wideLine}\\r\\n"; exec cat`],
+      cwd: server.root,
+    });
+    await expect
+      .poll(async () => (await server.request<Array<{ id: string; cwd?: string }>>('/terminals'))[0]?.cwd)
+      .toBe('/work/demo');
+
+    // Only project discovery is a fixture; the terminal list, the PTY, its size arbiter, and every
+    // attach stream are the real server's.
+    await mockProject(page);
+    for (const pattern of [
+      '**/__hotsheet/project-api/demo-checkout/terminals**',
+      '**/__hotsheet/project-api/demo-checkout/ws/poll*',
+    ])
+      await page.route(pattern, async (route) => {
+        const incoming = new URL(route.request().url()),
+          path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
+        try {
+          const response = await route.fetch({
+            url: `${server.url}${path}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          await route.fulfill({ response });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      });
+    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+      const id = decodeURIComponent(new URL(route.url()).pathname.split('/').at(-2)!),
+        upstream = new WebSocket(attachUrl(id)),
+        pending: Array<string | Buffer> = [],
+        connection: (typeof connections)[number] = { claims: [], sizes: [] };
+      connections.push(connection);
+      upstreams.push(upstream);
+      route.onMessage((message) => {
+        if (typeof message === 'string' && message.startsWith('{"resize"'))
+          connection.claims.push((JSON.parse(message) as { resize: (typeof connection.claims)[number] }).resize);
+        if (upstream.readyState === WebSocket.OPEN) upstream.send(message);
+        else pending.push(message);
+      });
+      upstream.on('open', () => {
+        for (const message of pending.splice(0)) upstream.send(message);
+      });
+      upstream.on('message', (data, binary) => {
+        if (binary) {
+          route.send(Buffer.from(data as Buffer));
+          return;
+        }
+        const text = (data as Buffer).toString();
+        if (text.includes('"pty_size"')) connection.sizes.push(JSON.parse(text));
+        route.send(text);
+      });
+      upstream.on('close', () => {
+        void route.close().catch(() => undefined);
+      });
+      route.onClose(() => {
+        upstream.close();
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    // The drawer terminal fits the wide drawer and drives the PTY off its 80x24 spawn size.
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.getByRole('tab', { name: /Wide Shell/ }).click();
+    const drawerViewport = drawer.locator('[data-component="terminal-viewport"]');
+    await expect(drawerViewport).toHaveAttribute('data-driving', 'true');
+    const ptySize = (await drawerViewport.getAttribute('data-pty-size'))!,
+      [cols] = ptySize.split('x').map(Number);
+    expect(ptySize).toMatch(/^\d+x\d+$/);
+    expect(ptySize).not.toBe('80x24');
+    const attachesBeforeClose = connections.length;
+
+    const projectTab = page.locator('[data-tab-kind="project"]');
+    await projectTab.hover();
+    await page.getByRole('button', { name: 'Close demo' }).click();
+    const dialog = page.locator('[data-component="project-close-dialog"]');
+    await expect(dialog).toHaveJSProperty('open', true);
+    const viewport = dialog.locator('[data-component="terminal-viewport"]');
+    await expect(viewport).toHaveAttribute('data-connection', 'connected');
+    // The attach alone reports the PTY grid, so the preview leaves its 80x24 fallback without any
+    // resize, and the replayed line wraps exactly where the drawer terminal's grid wraps it.
+    await expect(viewport).toHaveAttribute('data-pty-size', ptySize);
+    await expect(viewport).toHaveAttribute('data-grid-size', ptySize);
+    const firstRow = viewport.locator('.xterm-rows > div').filter({ hasText: 'WIDE-PTY-' });
+    await expect(firstRow).toHaveCount(1);
+    await expect.poll(async () => (await firstRow.textContent())?.trimEnd()).toBe(wideLine.slice(0, cols));
+    const preview = connections[attachesBeforeClose];
+    expect(preview, 'the preview opened its own attach').toBeDefined();
+    expect(preview.sizes, 'exactly one size frame: the attach report, not a resize').toEqual([
+      { pty_size: { cols, rows: Number(ptySize.split('x')[1]) }, driven_by: expect.any(String) as unknown },
+    ]);
+    expect(preview.claims.every((claim) => !claim.focus && !claim.interacting)).toBe(true);
+    await settledAnimations(dialog);
+    await page.screenshot({ path: test.info().outputPath('hs2-7y1bq2-close-preview-1280.png'), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(dialog).toHaveJSProperty('open', true);
+    // At phone width the preview still mirrors whatever grid the PTY reports, never its own fit.
+    await expect
+      .poll(() => viewport.evaluate((node) => [node.dataset.gridSize, node.dataset.ptySize]))
+      .toEqual([expect.stringMatching(/^\d+x\d+$/), expect.stringMatching(/^\d+x\d+$/)]);
+    await expect.poll(() => viewport.evaluate((node) => node.dataset.gridSize === node.dataset.ptySize)).toBe(true);
+    await settledAnimations(dialog);
+    await page.screenshot({ path: test.info().outputPath('hs2-7y1bq2-close-preview-390.png'), fullPage: true });
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+  } finally {
+    for (const upstream of upstreams) upstream.close();
+    await server.stop();
+  }
 });
 
 test('reuses the read-only conversation and restores borrowed terminal geometry without ghosting', async ({ page }) => {

@@ -76,6 +76,9 @@ pub struct SizeArbiter {
     claims: HashMap<String, ViewportClaim>,
     /// The last size actually applied to the PTY (guards min-delta + min-interval).
     applied: Option<(u16, u16)>,
+    /// The viewport whose claim produced `applied` (`None` for a seeded spawn size or a
+    /// pinned/hold decision), so a newly attached viewer learns the driver too (HS2-7Y1BQ2).
+    applied_by: Option<String>,
     applied_at_ms: u64,
     /// The viewport currently driving under focus-follows.
     driver: Option<String>,
@@ -100,6 +103,7 @@ impl SizeArbiter {
             policy,
             claims: HashMap::new(),
             applied: None,
+            applied_by: None,
             applied_at_ms: 0,
             driver: None,
             focus_changed_at_ms: 0,
@@ -115,6 +119,18 @@ impl SizeArbiter {
     /// guard has a baseline and "nothing focused" holds something sensible.
     pub fn set_applied(&mut self, cols: u16, rows: u16) {
         self.applied = Some((cols, rows));
+        self.applied_by = None;
+    }
+
+    /// The size currently applied to the PTY and the viewport that drove it, or `None` before
+    /// any size was seeded or decided. A newly attached viewer receives this immediately, so a
+    /// terminal whose size is stable still reports its real grid (HS2-7Y1BQ2).
+    pub fn applied(&self) -> Option<Decision> {
+        self.applied.map(|(cols, rows)| Decision {
+            cols,
+            rows,
+            driven_by: self.applied_by.clone(),
+        })
     }
 
     pub fn viewer_count(&self) -> usize {
@@ -157,6 +173,10 @@ impl SizeArbiter {
         if self.driver.as_deref() == Some(viewer_id) {
             self.driver = None;
         }
+        // A held size outlives the viewport that drove it; report it as undriven from now on.
+        if self.applied_by.as_deref() == Some(viewer_id) {
+            self.applied_by = None;
+        }
     }
 
     /// Drop viewports whose last claim is older than `lease_ms` (missed heartbeats). Returns
@@ -198,6 +218,7 @@ impl SizeArbiter {
             return None;
         }
         self.applied = Some((target.cols, target.rows));
+        self.applied_by = target.driven_by.clone();
         self.applied_at_ms = now_ms;
         Some(target)
     }
@@ -317,6 +338,71 @@ mod tests {
             interacting: false,
             activity_at_ms: at,
         }
+    }
+
+    /// `applied` reports the size on the PTY and who drove it across seed, decide, a
+    /// suppressed change, a deferred change, a driver disconnect, and a re-seed (HS2-7Y1BQ2).
+    #[test]
+    fn applied_tracks_the_size_on_the_pty_and_its_driver() {
+        let mut a = SizeArbiter::default();
+        assert_eq!(a.applied(), None, "nothing seeded or decided yet");
+        a.set_applied(80, 24);
+        assert_eq!(
+            a.applied(),
+            Some(Decision {
+                cols: 80,
+                rows: 24,
+                driven_by: None
+            })
+        );
+        // Past the seed's min-interval, so the first claim applies immediately.
+        a.upsert(claim("v1", 132, 40, true, 0), 0);
+        assert!(a.decide(SIZE_RESIZE_MIN_INTERVAL_MS).is_some());
+        assert_eq!(
+            a.applied(),
+            Some(Decision {
+                cols: 132,
+                rows: 40,
+                driven_by: Some("v1".into())
+            })
+        );
+        // A rate-limited change is deferred, not applied, until the interval passes.
+        a.upsert(claim("v1", 100, 30, true, 150), 150);
+        assert!(a.decide(150).is_none());
+        assert_eq!(a.applied().map(|d| d.cols), Some(132));
+        assert!(a.decide(250).is_some());
+        assert_eq!(a.applied().map(|d| (d.cols, d.rows)), Some((100, 30)));
+        // A sub-min-delta change is suppressed, so the applied size and driver stay put.
+        a.upsert(claim("v1", 101, 30, true, 1_000), 1_000);
+        assert!(a.decide(1_000).is_none());
+        assert_eq!(
+            a.applied().map(|d| (d.cols, d.driven_by)),
+            Some((100, Some("v1".into())))
+        );
+        // The driver leaves: nothing focused holds the applied size, now undriven.
+        a.remove("v1");
+        assert!(
+            a.decide(2_000).is_none(),
+            "holding the same size is not a change"
+        );
+        assert_eq!(
+            a.applied(),
+            Some(Decision {
+                cols: 100,
+                rows: 30,
+                driven_by: None
+            })
+        );
+        // A re-seed (e.g. a respawn) clears the stale driver.
+        a.set_applied(90, 30);
+        assert_eq!(
+            a.applied(),
+            Some(Decision {
+                cols: 90,
+                rows: 30,
+                driven_by: None
+            })
+        );
     }
 
     /// A claim carrying a genuine user interaction (tap/keystroke), which advances the recency

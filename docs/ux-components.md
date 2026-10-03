@@ -1715,8 +1715,9 @@ Styling ownership (HS2-DR549A):
   Its local grid mirrors that geometry at a legible density (HS2-XHBDRV): a viewport without a
   grid policy renders at the dashboard font (`data-font-size="24"`), starts on the dashboard
   tile's 80×24 grid, and adopts each `pty_size` the server reports, so the borrowed terminal's
-  output never rewraps. The server sends `pty_size` only when the size changes, so a preview of a
-  stable PTY stays on the 80×24 fallback until HS2-7Y1BQ2 sends the size on attach. The grid is physically scaled, top-left anchored, to fill the 1280×768
+  output never rewraps. The server reports the applied `pty_size` right after the attach replay
+  (HS2-7Y1BQ2), so a preview of a stable-size PTY adopts its real grid without any resize; the
+  80×24 fallback shows only until that first frame arrives. The grid is physically scaled, top-left anchored, to fill the 1280×768
   canvas before the canvas takes the frame's preview scale. Its heartbeat claims report only that
   mirrored size, without focus or interaction. Rendered rows are about 12 px at a 1280 px
   viewport and about 7 px at 390 px (previously about 3 px), which matches the mobile drawer

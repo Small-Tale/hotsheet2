@@ -2376,7 +2376,8 @@ temporary viewer over the same PTY.
 > never designed for remotes. `hotsheet-terminals::SizeArbiter` implements the model below —
 > leased viewport claims, focus-follows (default) + smallest/largest/pinned, the
 > `SIZE_FOCUS_HOLD`/`MIN_DELTA`/`RESIZE_MIN_INTERVAL` guards, and disconnect self-heal — wired
-> into the WS attach (Text `{resize}` claims in, `{pty_size, driven_by}` decisions out). The
+> into the WS attach (Text `{resize}` claims in, `{pty_size, driven_by}` decisions out, plus the
+> applied size right after each attach replay — HS2-7Y1BQ2). The
 > client consumes those decisions through the credential-hiding local bridge described
 > below.
 
@@ -2534,8 +2535,16 @@ the terminal WebSocket and keeps it alive with a heartbeat:
 
 ```
 viewer → server:  { viewerId, cols, rows, focus: bool, visible: bool, interacting: bool }
-server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // broadcast on change
+server → viewers: { ptySize: {cols, rows}, drivenBy: viewerId }   // on attach + broadcast on change
 ```
+
+- On every attach, the server sends the **applied** size and its driver (`drivenBy` is null for
+  the spawn size or a held size) as a size frame right after the initial binary replay, in both
+  the in-process and the detached-broker paths. The decision channel reports only changes, so
+  without this a viewer of a stable-size terminal (for example the non-claiming project-close
+  preview) never learned the real grid and rendered the replay on an 80×24 fallback
+  (**HS2-7Y1BQ2**). The frame shape is unchanged, so clients need no protocol change; an older
+  broker that omits it only delays the size until the next change.
 
 - `interacting` distinguishes a **genuine user interaction** (a tap/click, a focus gain, or a
   keystroke) from the steady heartbeat/geometry claim every viewport streams. Only an

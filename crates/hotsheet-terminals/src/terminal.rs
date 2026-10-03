@@ -478,6 +478,13 @@ impl Terminal {
         }
     }
 
+    /// The PTY size currently applied and the viewport that drove it (HS2-7Y1BQ2). Attach
+    /// paths send this right after the replay, because [`Self::subscribe_size`] only reports
+    /// later changes and a viewer of a stable-size terminal would otherwise never learn it.
+    pub fn current_size(&self) -> Option<Decision> {
+        self.sizer.lock().ok().and_then(|s| s.applied())
+    }
+
     /// Subscribe to reconciled-size changes (each viewer forwards these to its client).
     pub fn subscribe_size(&self) -> broadcast::Receiver<Decision> {
         self.size_tx.subscribe()

@@ -9596,7 +9596,7 @@ mod terminal_text_tests {
     }
 }
 
-/// The size the server chose, pushed to every viewer when it changes.
+/// The size the server chose, pushed to every viewer on attach and whenever it changes.
 #[derive(Serialize)]
 struct SizeMsg<'a> {
     pty_size: PtySizeMsg,
@@ -9606,6 +9606,16 @@ struct SizeMsg<'a> {
 struct PtySizeMsg {
     cols: u16,
     rows: u16,
+}
+
+/// The `{pty_size, driven_by}` text frame a viewer receives on attach and on every change.
+fn terminal_size_message(cols: u16, rows: u16, driven_by: Option<&str>) -> Message {
+    let msg = SizeMsg {
+        pty_size: PtySizeMsg { cols, rows },
+        driven_by,
+    };
+    // Serializing two integers and an optional string cannot fail.
+    Message::Text(serde_json::to_string(&msg).unwrap_or_default().into())
 }
 
 /// A replay after initial attach replaces the viewer's emulator state rather than appending.
@@ -9642,6 +9652,22 @@ async fn terminal_attach_loop(
     if socket.send(Message::Binary(snapshot.into())).await.is_err() {
         return;
     }
+    // The size channel only reports changes, so a viewer of a stable-size terminal would never
+    // learn the PTY grid. Report the applied size right after the replay (HS2-7Y1BQ2); the size
+    // receiver is already subscribed, so a concurrent change still arrives after this frame.
+    if let Some(current) = term.current_size() {
+        if socket
+            .send(terminal_size_message(
+                current.cols,
+                current.rows,
+                current.driven_by.as_deref(),
+            ))
+            .await
+            .is_err()
+        {
+            return;
+        }
+    }
 
     loop {
         tokio::select! {
@@ -9666,14 +9692,8 @@ async fn terminal_attach_loop(
             },
             size = size_rx.recv() => match size {
                 Ok(d) => {
-                    let msg = SizeMsg {
-                        pty_size: PtySizeMsg { cols: d.cols, rows: d.rows },
-                        driven_by: d.driven_by.as_deref(),
-                    };
-                    if let Ok(txt) = serde_json::to_string(&msg) {
-                        if socket.send(Message::Text(txt.into())).await.is_err() {
-                            break;
-                        }
+                    if socket.send(terminal_size_message(d.cols, d.rows, d.driven_by.as_deref())).await.is_err() {
+                        break;
                     }
                 }
                 Err(RecvError::Lagged(_)) => {} // a missed size update self-corrects on the next claim
@@ -9754,14 +9774,8 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                             }
                         }
                         S::Size { cols, rows, driven_by } => {
-                            let msg = SizeMsg {
-                                pty_size: PtySizeMsg { cols, rows },
-                                driven_by: driven_by.as_deref(),
-                            };
-                            if let Ok(txt) = serde_json::to_string(&msg) {
-                                if socket.send(Message::Text(txt.into())).await.is_err() {
-                                    break;
-                                }
+                            if socket.send(terminal_size_message(cols, rows, driven_by.as_deref())).await.is_err() {
+                                break;
                             }
                         }
                         // The terminal's gone (or the attach failed) — end the viewer session.

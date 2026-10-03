@@ -395,7 +395,24 @@ async fn a_size_claim_resizes_the_pty_and_broadcasts_the_decision() {
     .await
     .unwrap();
 
-    let got = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+    // The attach reports the spawn size first (HS2-7Y1BQ2), then the claim's decision.
+    assert_eq!(
+        next_size_frame(&mut ws).await,
+        Some((80, 24, String::new()))
+    );
+    assert_eq!(
+        next_size_frame(&mut ws).await,
+        Some((100, 40, "v1".to_string())),
+        "the size claim should resize the PTY and broadcast {{pty_size, driven_by}}"
+    );
+}
+
+type TestWs =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// The next `{pty_size, driven_by}` frame as (cols, rows, driver or ""), skipping output.
+async fn next_size_frame(ws: &mut TestWs) -> Option<(u64, u64, String)> {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
         while let Some(Ok(msg)) = ws.next().await {
             if let WsMessage::Text(t) = msg {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&t) {
@@ -412,13 +429,131 @@ async fn a_size_claim_resizes_the_pty_and_broadcasts_the_decision() {
         None
     })
     .await
-    .unwrap_or(None);
+    .unwrap_or(None)
+}
 
-    assert_eq!(
-        got,
-        Some((100, 40, "v1".to_string())),
-        "the size claim should resize the PTY and broadcast {{pty_size, driven_by}}"
+/// The first two frames of an attach: the binary replay boundary, then the applied size as
+/// text, before any claim from this viewer (HS2-7Y1BQ2).
+async fn expect_replay_then_size(ws: &mut TestWs) -> (u64, u64, String) {
+    let first = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+        .await
+        .expect("replay in time")
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(first, WsMessage::Binary(_)),
+        "the binary replay stays the first attach frame, got {first:?}"
     );
+    let second = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+        .await
+        .expect("size in time")
+        .unwrap()
+        .unwrap();
+    let WsMessage::Text(text) = second else {
+        panic!("the applied size follows the replay, got {second:?}");
+    };
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    (
+        v["pty_size"]["cols"].as_u64().unwrap(),
+        v["pty_size"]["rows"].as_u64().unwrap(),
+        v["driven_by"].as_str().unwrap_or("").to_string(),
+    )
+}
+
+/// Drive a terminal to 132x40 from one viewer, then attach a second, non-claiming viewer: it
+/// learns the PTY grid and its driver from the attach alone (HS2-7Y1BQ2).
+async fn second_viewer_learns_the_driven_size(addr: std::net::SocketAddr, id: &str) {
+    let url = format!("ws://{addr}/terminals/{id}/attach?secret={SECRET}");
+    let (mut driver, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    assert_eq!(
+        expect_replay_then_size(&mut driver).await,
+        (80, 24, String::new()),
+        "a fresh terminal reports its spawn size with no driver"
+    );
+    driver
+        .send(WsMessage::Text(
+            r#"{"resize":{"viewer_id":"wide","cols":132,"rows":40,"focus":true,"interacting":true}}"#
+                .into(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        next_size_frame(&mut driver).await,
+        Some((132, 40, "wide".to_string()))
+    );
+
+    let (mut preview, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    assert_eq!(
+        expect_replay_then_size(&mut preview).await,
+        (132, 40, "wide".to_string()),
+        "a viewer of a stable-size terminal learns the grid without claiming"
+    );
+
+    // The driver leaves: the PTY holds 132x40, and later viewers see it as undriven.
+    driver.close(None).await.unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let (mut late, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+        let report = expect_replay_then_size(&mut late).await;
+        if report == (132, 40, String::new()) {
+            break;
+        }
+        assert_eq!(
+            report,
+            (132, 40, "wide".to_string()),
+            "only the driver may change"
+        );
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the held size never dropped its departed driver"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
+
+#[tokio::test]
+async fn a_new_viewer_receives_the_applied_size_without_claiming() {
+    let (_d, addr, id) = boot_with_cat().await;
+    second_viewer_learns_the_driven_size(addr, &id).await;
+}
+
+#[tokio::test]
+async fn a_new_broker_viewer_receives_the_applied_size_without_claiming() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    let bdir = tempfile::tempdir().unwrap();
+    let sock = bdir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_terminal_broker_at(TerminalBroker::at(&sock, "proj"));
+    let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = tcp.local_addr().unwrap();
+    let app = app(state);
+    tokio::spawn(async move {
+        axum::serve(tcp, app).await.unwrap();
+    });
+    let base = format!("http://{addr}");
+    let id = tokio::task::spawn_blocking(move || {
+        let resp = ureq::post(&format!("{base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(r#"{"command":"cat","id":"bsized"}"#)
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&resp.into_string().unwrap()).unwrap();
+        v["id"].as_str().unwrap().to_string()
+    })
+    .await
+    .unwrap();
+    second_viewer_learns_the_driven_size(addr, &id).await;
 }
 
 /// The live WS attach must also work when terminals live in the **detached broker**

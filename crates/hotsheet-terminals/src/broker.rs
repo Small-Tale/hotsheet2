@@ -79,7 +79,8 @@ pub enum StreamOut {
     Scrollback { data: Vec<u8> },
     /// A live PTY output chunk as it arrives.
     Output { data: Vec<u8> },
-    /// The size arbiter's chosen PTY size changed.
+    /// The size arbiter's applied PTY size: sent once right after the initial replay
+    /// (HS2-7Y1BQ2) and again whenever it changes.
     Size {
         cols: u16,
         rows: u16,
@@ -309,6 +310,19 @@ async fn stream_terminal(
     let mut my_viewer: Option<String> = None;
 
     write_line(&mut write, &StreamOut::Scrollback { data: snapshot }).await?;
+    // Size frames only report changes, so tell a new viewer the applied size right after the
+    // replay; otherwise a stable-size terminal never reports its grid (HS2-7Y1BQ2).
+    if let Some(current) = term.current_size() {
+        write_line(
+            &mut write,
+            &StreamOut::Size {
+                cols: current.cols,
+                rows: current.rows,
+                driven_by: current.driven_by,
+            },
+        )
+        .await?;
+    }
 
     loop {
         tokio::select! {
@@ -694,6 +708,93 @@ mod tests {
             saw_live,
             "input sent over the attach reaches the PTY and streams back as live output"
         );
+    }
+
+    /// A viewer that attaches to a terminal whose size is stable still learns the applied PTY
+    /// size: the stream sends it right after the replay, and a second viewer sees the size the
+    /// first viewer's claim drove without making a claim of its own (HS2-7Y1BQ2).
+    #[tokio::test]
+    async fn attach_reports_the_applied_size_right_after_the_replay() {
+        async fn next(stream: &mut BrokerStream) -> StreamOut {
+            tokio::time::timeout(Duration::from_secs(5), stream.next())
+                .await
+                .expect("frame in time")
+                .expect("stream read")
+                .expect("stream open")
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        tokio::spawn(serve_broker(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+        ));
+        let mut client = BrokerClient::connect(&sock).await.unwrap();
+        client
+            .request(&Request::Open {
+                id: "sized".into(),
+                kind: TerminalKind::Shell,
+                command: "cat".into(),
+                args: vec![],
+                cwd: None,
+                env: vec![],
+            })
+            .await
+            .unwrap();
+
+        // First viewer: the replay, then the spawn size with no driver.
+        let mut first = BrokerStream::open(&sock, "sized").await.unwrap();
+        assert!(matches!(
+            next(&mut first).await,
+            StreamOut::Scrollback { .. }
+        ));
+        match next(&mut first).await {
+            StreamOut::Size {
+                cols,
+                rows,
+                driven_by,
+            } => {
+                assert_eq!((cols, rows, driven_by), (80, 24, None))
+            }
+            other => panic!("expected the applied size after the replay, got {other:?}"),
+        }
+
+        // The first viewer drives the PTY to 132x40 and sees the change.
+        first
+            .send(&StreamIn::Resize {
+                viewer_id: "wide".into(),
+                cols: 132,
+                rows: 40,
+                focus: true,
+                visible: true,
+                interacting: true,
+            })
+            .await
+            .unwrap();
+        loop {
+            if let StreamOut::Size { cols, .. } = next(&mut first).await {
+                assert_eq!(cols, 132);
+                break;
+            }
+        }
+
+        // A second, non-claiming viewer gets the driven size and its driver on attach.
+        let mut second = BrokerStream::open(&sock, "sized").await.unwrap();
+        assert!(matches!(
+            next(&mut second).await,
+            StreamOut::Scrollback { .. }
+        ));
+        match next(&mut second).await {
+            StreamOut::Size {
+                cols,
+                rows,
+                driven_by,
+            } => {
+                assert_eq!((cols, rows, driven_by.as_deref()), (132, 40, Some("wide")))
+            }
+            other => panic!("expected the applied size after the replay, got {other:?}"),
+        }
     }
 
     #[tokio::test]
