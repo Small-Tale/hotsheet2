@@ -264,16 +264,31 @@ export function ticketInspectorPanel({
   const header = (
     <div class="ticket-inspector__header" data-component="ticket-inspector-header" {...identity}>
       {titleEditing ? (
-        <input
+        // A one-row textarea wraps a long title the way the static heading does (HS2-98ZVPE). The frame
+        // mirrors the controlled draft in a hidden grid twin, so the editor grows with its wrapped lines
+        // in every engine; Enter and pasted line breaks keep the title on one logical line.
+        <div
           class={
             presentation === 'reader'
-              ? 'ticket-inspector__title-input ticket-inspector__title-input--reader'
-              : 'ticket-inspector__title-input'
+              ? 'ticket-inspector__title-frame ticket-inspector__title-frame--reader'
+              : 'ticket-inspector__title-frame'
           }
-          name="ticket-title"
-          aria-label="Ticket title"
-          value={titleDraft}
-        />
+          data-title-mirror={titleDraft}
+        >
+          <textarea
+            class={
+              presentation === 'reader'
+                ? 'ticket-inspector__title-input ticket-inspector__title-input--reader'
+                : 'ticket-inspector__title-input'
+            }
+            name="ticket-title"
+            aria-label="Ticket title"
+            rows={1}
+            spellcheck="true"
+          >
+            {titleDraft}
+          </textarea>
+        </div>
       ) : (
         <h1
           class={

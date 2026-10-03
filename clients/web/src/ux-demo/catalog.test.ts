@@ -573,7 +573,8 @@ describe('UX demo catalog', () => {
     try {
       const editing = String(TicketReaderDemo());
       expect(editing).toContain('class="ticket-inspector__title-input ticket-inspector__title-input--reader"');
-      expect(editing).toContain('value="Draft reader title"');
+      expect(editing).toContain('data-title-mirror="Draft reader title"');
+      expect(editing).toContain('>Draft reader title</textarea>');
     } finally {
       readerTitleEditing.value = false;
       readerTitleDraft.value = READER_TITLE_INITIAL;

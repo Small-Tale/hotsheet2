@@ -108,6 +108,7 @@ import {
   toggleTerminalModifier,
 } from '../terminal-keys';
 import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
+import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
 import { wireTopLayerOverlays } from '../top-layer-overlay';
 import {
   AIConversationDemo,
@@ -2989,8 +2990,16 @@ demoListeners.add(
 demoListeners.add(
   delegate(root, 'input', DEMO_FIELDS.ticketTitle.selector, (_event, target) => {
     const surface = titleSurface(target);
-    surface.draft.value = (target as FormControl).value;
+    // The wrapping title editor keeps a title on one line: pasted breaks collapse (HS2-98ZVPE).
+    surface.draft.value = normalizeTicketTitleField(target as HTMLTextAreaElement);
     if (surface.draft.value.trim()) surface.autosave.schedule(surface.draft.value);
+  }),
+);
+demoListeners.add(
+  delegate(root, 'keydown', DEMO_FIELDS.ticketTitle.selector, (event, target) => {
+    if (!ticketTitleKeyFinishesEdit(event as KeyboardEvent)) return;
+    event.preventDefault();
+    (target as HTMLTextAreaElement).blur();
   }),
 );
 demoListeners.add(

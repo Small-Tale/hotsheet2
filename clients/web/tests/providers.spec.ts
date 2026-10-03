@@ -8,6 +8,7 @@ import type { FullTicket, MediaAnnotation, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 import { realTicketServer } from './real-ticket-server';
+import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 test.use({ video: process.env.HOTSHEET_MEDIA_RECORD_VIDEO === '1' ? 'on' : 'off' });
 
@@ -12332,6 +12333,48 @@ test('edits title and tags through controlled capability-aware inspector state',
   await page.mouse.move(10, 10);
   await expect(tagsHeader).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-9zpyr8-tags-production-narrow.png', fullPage: true });
+});
+
+test('wraps long titles while editing in the sidebar and reader at 1280 and 390 (HS2-98ZVPE)', async ({ page }) => {
+  const patches = await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
+    const inspector = page.locator('#app-right-rail');
+    const before = patches.length;
+    const sidebarTitle = await editLongTitleThroughWrappingEditor(
+      page,
+      inspector,
+      () => inspector.locator('[data-action="edit-ticket-title"]').dblclick(),
+      `Sidebar at ${width}: the ticket title editor wraps a long title onto every line the heading shows`,
+      test.info().outputPath(`hs2-98zvpe-app-sidebar-editing-${width}.png`),
+    );
+    // One server write per finished edit, each with a single-line title.
+    await expect.poll(() => patches.slice(before).filter((patch) => typeof patch.title === 'string').length).toBe(2);
+    const titles = patches.slice(before).flatMap((patch) => (typeof patch.title === 'string' ? [patch.title] : []));
+    expect(titles.at(-1)).toBe(sidebarTitle);
+    expect(titles.some((title) => /[\r\n]/.test(title))).toBe(false);
+
+    await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+    const reader = page.getByRole('dialog').locator('[data-component="ticket-inspector-header"]');
+    const readerBefore = patches.length;
+    const readerTitle = await editLongTitleThroughWrappingEditor(
+      page,
+      reader,
+      () => reader.locator('[data-action="edit-ticket-title"]').dblclick(),
+      `Reader at ${width}: the ticket title editor wraps a long title onto every line the heading shows`,
+      test.info().outputPath(`hs2-98zvpe-app-reader-editing-${width}.png`),
+    );
+    await expect
+      .poll(() => patches.slice(readerBefore).filter((patch) => typeof patch.title === 'string').length)
+      .toBe(2);
+    expect(patches.at(-1)?.title).toBe(readerTitle);
+    await page.getByRole('button', { name: 'Close ticket reader' }).click();
+  }
 });
 
 test('hides title and tag mutation affordances when the provider cannot update', async ({ page }) => {

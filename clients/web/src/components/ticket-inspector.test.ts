@@ -65,10 +65,10 @@ describe('TicketInspector', () => {
   it('keeps the reader title typography while the title is being edited (HS2-R8M8HB)', () => {
     const editing = { ...base, canUpdate: true, titleEditing: true, titleDraft: 'Draft' };
     expect(String(TicketInspector(editing))).toContain(
-      '<input class="ticket-inspector__title-input" name="ticket-title"',
+      '<textarea class="ticket-inspector__title-input" name="ticket-title"',
     );
     expect(String(TicketInspector({ ...editing, presentation: 'reader' }))).toContain(
-      '<input class="ticket-inspector__title-input ticket-inspector__title-input--reader" name="ticket-title"',
+      '<textarea class="ticket-inspector__title-input ticket-inspector__title-input--reader" name="ticket-title"',
     );
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const rule = (selector: string) =>
@@ -76,7 +76,37 @@ describe('TicketInspector', () => {
     for (const declaration of ['max-width: remify(864px);', 'font-size: var(--wa-font-size-l);'])
       expect(rule('.ticket-inspector__title-input--reader')).toContain(declaration);
     expect(rule('.ticket-inspector__title--reader')).toContain('font-size: var(--wa-font-size-l);');
-    expect(rule('.ticket-inspector__title-input')).toContain('font-weight: var(--wa-font-weight-heading);');
+    expect(rule('.ticket-inspector__title-frame::after,\n.ticket-inspector__title-input')).toContain(
+      'font-weight: var(--wa-font-weight-heading);',
+    );
+  });
+
+  it('wraps and grows the title editor with its controlled draft instead of clipping one line (HS2-98ZVPE)', () => {
+    const title = 'A long ticket title that wraps onto several lines in a narrow reader';
+    for (const presentation of ['sidebar', 'reader'] as const) {
+      const markup = String(
+        TicketInspector({ ...base, canUpdate: true, titleEditing: true, titleDraft: title, presentation }),
+      );
+      const frame =
+        presentation === 'reader'
+          ? 'ticket-inspector__title-frame ticket-inspector__title-frame--reader'
+          : 'ticket-inspector__title-frame';
+      expect(markup).toContain(`<div class="${frame}" data-title-mirror="${title}">`);
+      expect(markup).toMatch(
+        new RegExp(`name="ticket-title" aria-label="Ticket title" rows="1"[^>]*>${title}</textarea>`),
+      );
+      expect(markup).not.toContain('<input class="ticket-inspector__title-input"');
+    }
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
+    const rule = (selector: string) =>
+      css.match(new RegExp(`\\n${selector.replace(/[.-]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+    expect(rule('.ticket-inspector__title-frame')).toContain('display: grid;');
+    expect(rule('.ticket-inspector__title-frame::after')).toContain("content: attr(data-title-mirror) ' ';");
+    const shared = rule('.ticket-inspector__title-frame::after,\n.ticket-inspector__title-input');
+    for (const declaration of ['grid-area: 1 / 1;', 'overflow-wrap: anywhere;', 'text-wrap-style: balance;'])
+      expect(shared).toContain(declaration);
+    const editorRule = css.match(/\n\.ticket-inspector__title-input \{([^}]*resize: none;[^}]*)\}/)?.[1] ?? '';
+    for (const declaration of ['overflow: hidden;', 'height: 100%;']) expect(editorRule).toContain(declaration);
   });
 
   it('renders each public tab without changing ticket identity', () => {

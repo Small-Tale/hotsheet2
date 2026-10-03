@@ -1103,7 +1103,12 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
 - `InspectorHeader`
   - ticket identifier
   - full multi-line title with no line-count cap in the inspector sidebar
-  - capability-aware inline title editing with debounced persistence
+  - capability-aware inline title editing with debounced persistence; the editor is a
+    one-row textarea that wraps a long title onto the same lines as the static heading and
+    grows with its content in the sidebar and the reader, at wide and narrow widths, without
+    depending on `field-sizing`. A title stays one line: Enter finishes the edit through the
+    blur autosave instead of inserting a newline, and pasted line breaks collapse to spaces
+    (HS2-98ZVPE)
   - up-next/star toggle
   - close/collapse action
 - `InspectorTabBar`

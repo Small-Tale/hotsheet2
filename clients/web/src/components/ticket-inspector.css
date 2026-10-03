@@ -88,23 +88,55 @@
   margin: remify(6.4px) remify(16px) var(--kui-space-m);
   gap: remify(6.4px);
 }
-.ticket-inspector__title-input {
+/* The title editor wraps like the static title and grows with its wrapped lines (HS2-98ZVPE): the
+   textarea and a hidden copy of the draft share one grid cell, so the copy's height sizes the editor in
+   every engine, with or without `field-sizing`. */
+.ticket-inspector__title-frame {
+  display: grid;
   width: calc(100% - var(--kui-space-m));
   margin: var(--kui-space-2xs) var(--kui-space-xs) var(--kui-space-m);
+}
+.ticket-inspector__title-frame::after {
+  content: attr(data-title-mirror) ' ';
+  visibility: hidden;
+  border: 1px solid transparent;
+  white-space: pre-wrap;
+}
+.ticket-inspector__title-frame::after,
+.ticket-inspector__title-input {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  min-width: 0;
   padding: var(--kui-space-2xs) var(--kui-space-xs);
-  border: 1px solid var(--wa-color-brand-border-quiet);
-  border-radius: remify(6.4px);
-  background: var(--wa-color-surface-default);
-  outline: var(--wa-focus-ring);
-  outline-offset: 1px;
   font: inherit;
   font-size: var(--wa-font-size-m);
   /* The static title is a native h1, so the editor takes the heading weight it renders with (HS2-R8M8HB). */
   font-weight: var(--wa-font-weight-heading);
   line-height: 1.3;
+  overflow-wrap: anywhere;
+  /* Web Awesome balances native headings, so the editor breaks lines where the static title does.
+     Balancing never adds a line, so the mirror's height still fits the textarea. */
+  text-wrap-style: balance;
+}
+.ticket-inspector__title-input {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--wa-color-brand-border-quiet);
+  border-radius: remify(6.4px);
+  background: var(--wa-color-surface-default);
+  color: inherit;
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+  resize: none;
 }
 /* The reader's title editor keeps the reader title's size and reading width while editing (HS2-R8M8HB),
    so double-clicking the title never shrinks the text to the sidebar inspector's size. */
+.ticket-inspector__title-frame--reader {
+  max-width: remify(864px);
+}
+.ticket-inspector__title-frame--reader::after,
 .ticket-inspector__title-input--reader {
   max-width: remify(864px);
   font-size: var(--wa-font-size-l);

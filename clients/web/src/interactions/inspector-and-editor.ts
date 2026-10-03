@@ -20,6 +20,7 @@ import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKi
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
 import { type TicketReaderFrame } from '../ticket-reader-stack';
+import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
 import { type TicketView } from '../ticket-views';
 import { data } from './dom';
 import { type Control, type DetailsFinishTask, type Project } from './types';
@@ -334,8 +335,17 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
   );
   lifetime.add(
     delegate(document.body, 'input', INSPECTOR_AND_EDITOR_TARGETS.ticketTitleField.selector, (_event, target) => {
-      titleDraft.value = (target as HTMLInputElement).value;
+      // The wrapping editor is a textarea, but a title stays one line: pasted breaks collapse (HS2-98ZVPE).
+      titleDraft.value = normalizeTicketTitleField(target as HTMLTextAreaElement);
       if (titleDraft.value.trim()) titleAutosave.schedule(titleDraft.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.ticketTitleField.selector, (event, target) => {
+      // Enter finishes the edit through the focusout autosave instead of inserting a newline.
+      if (!ticketTitleKeyFinishesEdit(event as KeyboardEvent)) return;
+      event.preventDefault();
+      (target as HTMLTextAreaElement).blur();
     }),
   );
   lifetime.add(

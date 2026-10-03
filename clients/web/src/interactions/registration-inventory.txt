@@ -373,6 +373,7 @@ inspector-and-editor	delegate	document.body	'click'	'[data-action="apply-ticket-
 inspector-and-editor	delegate	document.body	'dblclick'	'[data-action="edit-ticket-title"]'
 inspector-and-editor	delegate	document.body	'keydown'	'[data-action="edit-ticket-title"]'
 inspector-and-editor	delegate	document.body	'input'	'[name="ticket-title"]'
+inspector-and-editor	delegate	document.body	'keydown'	'[name="ticket-title"]'
 inspector-and-editor	delegate	document.body	'focusout'	'[name="ticket-title"]'
 inspector-and-editor	delegate	document.body	'keydown'	'[name="ticket-tag-input"]'
 inspector-and-editor	delegate	document.body	'focusout'	'[name="ticket-tag-input"]'

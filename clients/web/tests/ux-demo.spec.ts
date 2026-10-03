@@ -1,6 +1,7 @@
 import { expect, type Locator, test } from '@playwright/test';
 
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
+import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 test('previews every ticket-source dialog state at wide and narrow widths (HS2-7FYYN9)', async ({ page }) => {
   for (const width of [1280, 390]) {
@@ -4050,6 +4051,32 @@ test('enters, autosaves, and re-enters reader title editing in the TicketReader 
     await expect(
       page.locator('[data-component="ticket-inspector"]').getByRole('heading', { name: /Build TicketList/ }),
     ).toBeVisible();
+  }
+});
+
+test('wraps a long title in the reader and sidebar title editors at 1280 and 390 (HS2-98ZVPE)', async ({ page }) => {
+  const longTitle = 'Ticket title editor clips long titles on one line at narrow widths in the reader and the sidebar';
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const component of ['ticket-reader', 'ticket-inspector'] as const) {
+      await page.goto(`/ux-demo?component=${component}`);
+      const surface = page.locator(`[data-component="${component}"]`).first();
+      await editLongTitleThroughWrappingEditor(
+        page,
+        surface,
+        () => surface.locator('[data-action="edit-ticket-title"]').dblclick(),
+        longTitle,
+      );
+      // Keyboard re-entry still opens the editor on the saved single-line title.
+      await surface.locator('[data-action="edit-ticket-title"]').press('Enter');
+      const editor = surface.getByRole('textbox', { name: 'Ticket title' });
+      await expect(editor).toBeFocused();
+      expect(await editor.evaluate((node: HTMLTextAreaElement) => node.value.includes('\n'))).toBe(false);
+      await surface
+        .locator('[data-component="ticket-inspector-header"]')
+        .screenshot({ path: test.info().outputPath(`hs2-98zvpe-${component}-editing-${width}.png`) });
+      await editor.blur();
+    }
   }
 });
 
