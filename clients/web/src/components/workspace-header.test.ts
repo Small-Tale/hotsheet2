@@ -182,9 +182,10 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('search-suggestions');
     expect(headerCss).not.toContain('search-help');
     expect(headerCss).toContainSource('.workspace-header__overflow-group { display: none; }');
-    // While its search is open the overflow menu yields too; no sibling combinator reads the field.
-    expect(String(WorkspaceControls({ mode: 'list', searchOpen: true }))).toContain(
-      'workspace-header__overflow-group workspace-header__overflow-group--yield',
+    // While its search is open the overflow menu yields too, through Kerf's group visibility; no
+    // sibling combinator reads the field (HS2-DAMHD1).
+    expect(String(WorkspaceControls({ mode: 'list', searchOpen: true }))).toMatch(
+      /class="kui-toolbar-control-group workspace-header__overflow-group"[^>]*data-visibility="yield-to-expanded-sibling"/,
     );
     expect(headerCss).toContainSource('wa-button.workspace-header__text-action::part(base) { width: auto;');
     expect(headerCss).toContainSource(
@@ -420,7 +421,7 @@ describe('WorkspaceHeader', () => {
       '.workspace-header__utility-group:not(.workspace-header__utility-group--rail) { display: none; }',
     );
     expect(headerCss).toContainSource(
-      '.workspace-header__overflow-group:not( .workspace-header__overflow-group--rail, .workspace-header__overflow-group--yield ) { display: inline-flex; }',
+      '.workspace-header__overflow-group:not(.workspace-header__overflow-group--rail) { display: inline-flex; }',
     );
     expect(headerCss).toContainSource(
       '.workspace-header__sort-group:not(.workspace-header__sort-group--rail) { display: none; }',
@@ -436,35 +437,48 @@ describe('WorkspaceHeader', () => {
     ])
       expect(railMarkup).toContain(`${group} ${group}--rail`);
     expect(markup).not.toContain('--rail');
-    // The rail sizes its search as its own row; the header grows its search on the header's row.
-    expect(railMarkup).toContain('ticket-search-field ticket-search-field--row');
+    // The rail sizes its search as its own row (Kerf `sizing="fill"`, `placement="end"`); the header grows
+    // its search on the header's row (HS2-DAMHD1).
+    expect(railMarkup).toMatch(
+      /class="kui-toolbar-control-group ticket-search-field"[^>]*data-sizing="fill"[^>]*data-placement="end"/,
+    );
     expect(markup).toContain('ticket-search-field ticket-search-field--grow');
-    // Transition matrix for the yield state: closed -> open -> closed again, toolbar and rail.
+    // The rail's view switcher fills its own row through Kerf's `sizing="fill"`.
+    expect(railMarkup).toMatch(/view-mode-switcher view-mode-switcher--rail"[^>]*data-sizing="fill"/);
+    // Transition matrix for the yield state: closed -> open -> closed again, toolbar and rail. The
+    // header's groups always opt into Kerf's yield, which acts only while a sibling is expanded, so
+    // the search's own expanded state is the single source of truth.
     const groups = [
       'view-mode-switcher',
       'workspace-header__sort-group',
       'workspace-header__utility-group',
       'workspace-header__overflow-group',
     ];
+    const yieldsIn = (html: string, group: string) =>
+      new RegExp(`class="kui-toolbar-control-group ${group}"[^>]*data-visibility="yield-to-expanded-sibling"`).test(
+        html,
+      );
     const closedMarkup = String(WorkspaceControls({ mode: 'list', searchOpen: false }));
     const openMarkup = String(WorkspaceControls({ mode: 'list', searchOpen: true }));
     for (const group of groups) {
-      expect(closedMarkup).not.toContain(`${group}--yield`);
-      expect(openMarkup).toContain(`${group} ${group}--yield`);
+      expect(yieldsIn(closedMarkup, group)).toBe(true);
+      expect(yieldsIn(openMarkup, group)).toBe(true);
     }
+    expect(closedMarkup).toMatch(/ticket-search-field--grow"[^>]*data-expanded="false"/);
+    expect(openMarkup).toMatch(/ticket-search-field--grow ticket-search-field--open"[^>]*data-expanded="true"/);
     expect(String(WorkspaceControls({ mode: 'list', searchOpen: false }))).toBe(closedMarkup);
     // The rail never yields; it wraps its groups onto rows instead (HS2-K9KWJJ).
     const railOpen = String(WorkspaceControls({ mode: 'list', presentation: 'rail', searchOpen: true }));
+    expect(railOpen).not.toContain('yield-to-expanded-sibling');
     expect(railOpen).not.toContain('--yield');
-    expect(railOpen).toContain('ticket-search-field--row ticket-search-field--open');
+    expect(railOpen).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="true"/);
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(416px))');
     expect(headerCss).not.toContainSource('.workspace-header__sort-group { display: none; }');
-    // An open search hides its sibling groups through the `--yield` modifiers WorkspaceControls
-    // derives from its own `searchOpen` state, never by reading the search field's rendered state
-    // or styling it from this stylesheet (HS2-0SARDD, HS2-8FS5BJ).
-    expect(headerCss).toContainSource(
-      '@container kui-toolbar (max-width: remify(480px)) { .view-mode-switcher--yield, .workspace-header__sort-group--yield, .workspace-header__utility-group--yield { display: none; } }',
-    );
+    // An open search hides its sibling groups through Kerf's yield visibility, never through app
+    // modifiers, by reading the search field's rendered state, or by styling it from this stylesheet
+    // (HS2-0SARDD, HS2-8FS5BJ, HS2-DAMHD1).
+    expect(headerCss).not.toContain('--yield');
+    expect(headerCss).not.toContain('view-mode-switcher--rail');
     expect(headerCss).not.toContain('ticket-search-field');
     expect(headerCss).not.toContain(':has(');
     expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(224px))');

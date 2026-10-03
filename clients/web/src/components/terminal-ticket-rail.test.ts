@@ -47,7 +47,12 @@ describe('TerminalTicketRail', () => {
     expect(markup.match(/<wa-select[^>]*name="terminal-rail-project"[^>]*>/)?.[0]).not.toContain(
       'kui-select--fit-menu',
     );
-    expect(markup.match(/<wa-select[^>]*name="terminal-rail-view"[^>]*>/)?.[0]).not.toContain('kui-select--fit-menu');
+    const viewSelect = markup.match(/<wa-select[^>]*name="terminal-rail-view"[^>]*>/)?.[0];
+    expect(viewSelect).not.toContain('kui-select--fit-menu');
+    // The view title is Kerf's title Select with an inset ring, not an app className hook (HS2-DAMHD1).
+    expect(viewSelect).toContain('data-presentation="title"');
+    expect(viewSelect).toContain('data-focus-ring-inset="true"');
+    expect(viewSelect).not.toContain('terminal-ticket-rail__view-select');
   });
   it('is a Workbench navigation panel whose root view lists tickets under its pinned controls (HS2-FY06N4)', () => {
     const parts = terminalTicketRailPanel(props);
@@ -91,9 +96,9 @@ describe('TerminalTicketRail', () => {
     );
     expect(css).not.toMatch(/__controls \{/);
     expect(css).not.toMatch(/__controls[^{]*\{[^}]*grid-(?:column|row)/);
-    // The composed groups take their rail presentation through their own props and stylesheets:
-    // the view switcher's `--rail` full-row width and the search field's `layout="row"` placement
-    // and entrance (HS2-8FS5BJ). This stylesheet styles no other component.
+    // The composed groups take their rail presentation through their own props: the view switcher's
+    // full-row Kerf `sizing="fill"` and the search field's `layout="row"` placement and entrance
+    // (HS2-8FS5BJ, HS2-DAMHD1). This stylesheet styles no other component.
     expect(css).not.toContain('view-mode-switcher');
     expect(css).not.toContain('ticket-search-field');
     expect(css).not.toContain('quick-ticket-composer');
@@ -101,8 +106,8 @@ describe('TerminalTicketRail', () => {
     expect(css).not.toContain('.kui-');
     const headerCss = readFileSync(new URL('./workspace-header.css', import.meta.url), 'utf8'),
       searchCss = readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8');
-    expect(headerCss).toContainSource('.view-mode-switcher.view-mode-switcher--rail { width: 100%; }');
-    expect(searchCss).toContainSource('.ticket-search-field.ticket-search-field--row { margin-inline-start: auto; }');
+    expect(headerCss).not.toContain('view-mode-switcher--rail');
+    expect(searchCss).not.toContain('ticket-search-field--row');
     expect(css).not.toMatch(/ticket-inspector__header > \.kui-toolbar \{[^}]*padding-left/);
     // Kerf beta.62 balances the toolbar tracks itself (`centerAlign="balanced"`).
     expect(css).not.toContain('ticket-inspector__header > .kui-toolbar');
@@ -125,15 +130,12 @@ describe('TerminalTicketRail', () => {
     // The heading wrapper only draws the rule; the Toolbar inside keeps Kerf's inset and height.
     expect(css).toMatchSource(/__heading \{ display:grid;border-bottom:/);
     expect(css).not.toContain('--kui-sunken-panel-radius');
-    expect(readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8')).toMatch(
-      /translateY\(calc\(-100% - var\(--kui-space-xs\)\)\)/,
-    );
-    // The view-title Select keeps its 36px geometry and inset focus ring through the className hook
-    // this module passes to it, until Kerf ships a title presentation (KF-PZ23ZP).
-    expect(css).toContainSource(
-      '.terminal-ticket-rail__view .terminal-ticket-rail__view-select::part(combobox) { min-height: remify(36px); padding: 0 remify(21.6px) 0 0; outline-offset: -3px; }',
-    );
-    expect(css).toContain('KF-PZ23ZP');
+    // The rail search's row entrance is Kerf's stacked fill-search motion (KF-XFPJSY, HS2-DAMHD1).
+    expect(readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8')).not.toContain('translateY');
+    // The view-title Select's 36px geometry and inset focus ring are Kerf's `presentation="title"` and
+    // `focusRingInset` (KF-PZ23ZP, HS2-DAMHD1); this module styles no Select part.
+    expect(css).not.toContain('::part(');
+    expect(css).not.toContain('view-select');
     expect(css).not.toMatch(/__heading \{[^}]*min-height/);
   });
   it('separates the heading from the ticket scroller and preserves the shared compact launcher', () => {

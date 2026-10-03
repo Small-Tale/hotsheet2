@@ -80,13 +80,11 @@ describe('Kerf application UI profile', () => {
     // The doctor itself is the CI gate: any active error, review finding, or warning fails it
     // (beta.69 `failOn`, KF-6S5EKX; HS2-Z44YPD retired the wrapper script).
     expect(config.failOn).toBe('warning');
-    // Known Kerf gaps are documented suppressions, never budgets: the three KUI-L022 hook classes
-    // HS2-8FS5BJ moved into their owning components (search layout, header yield, rail view title),
-    // each naming the Kerf ticket whose adoption removes it (HS2-DAMHD1).
+    // Known Kerf gaps are documented suppressions, never budgets. HS2-DAMHD1 adopted Kerf's toolbar
+    // yield, fill, placement, tiny-visibility, and Select title APIs, leaving only the header search's
+    // grow floor (KF-K4VBTS); HS2-AEK8GK removes it, after which this list must be empty.
     expect(config.suppressions.map(({ rules, target }) => `${rules.join(',')} ${target}`)).toEqual([
       'KUI-L022 src/components/ticket-search-field.tsx',
-      'KUI-L022 src/components/workspace-controls.tsx',
-      'KUI-L022 src/components/terminal-ticket-rail.tsx',
     ]);
     for (const suppression of config.suppressions) expect(suppression.rationale).toMatch(/KF-[0-9A-Z]{6}/);
   });

@@ -69,9 +69,12 @@ export function terminalTicketRailPanel({
 }: TerminalTicketRailProps): NavigationPanelParts {
   const heading = views.length ? (
     <div class="terminal-ticket-rail__view">
+      {/* Kerf's view-title Select: a 36px trigger flush with the list below, its caret beside the
+          label, and an inset focus ring the rail's clipping ancestors never crop (HS2-HEYASQ,
+          HS2-DAMHD1). */}
       <Select
-        className="terminal-ticket-rail__view-select"
-        presentation="toolbar-borderless"
+        presentation="title"
+        focusRingInset
         name="terminal-rail-view"
         value={selectedViewId}
         ariaLabel="Ticket rail view"

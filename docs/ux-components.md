@@ -428,14 +428,13 @@ element: it is Toolbar zone content — the view-mode, sort, and selection
 own borderless nested-dropdown group — so the application shell's header Toolbar and the
 demo's `WorkspaceHeader` Toolbar host them as cataloged children, and the workspace-grid
 rail's own grid places the same groups (HS2-EZ1N7Z). `WorkspaceIdentity` is a real
-`ToolbarText` for the leading zone. Responsive rules key off the component's own
-`searchOpen` state: while it is open, the non-rail groups (view switcher, sort, selection
-actions, overflow menu) render a literal `--yield` modifier, and a compact (480px or less)
-toolbar hides them so the field takes the row. The header asks `TicketSearchField` for
-`layout="grow"` and the rail for `layout="row"`, so no stylesheet reads the field's rendered
-state or styles it from outside (HS2-8FS5BJ). The yield modifiers and the rail switcher's
-full-row width wait on Kerf `KF-6WX6VK` and `KF-GM376R`, and are documented `KUI-L022`
-suppressions until then (`HS2-DAMHD1`). Both wrappers are declared to Kerf's composition rule (`rendersAs`) in
+`ToolbarText` for the leading zone. The non-rail groups (view switcher, sort, selection
+actions, overflow menu) set Kerf's `visibility="yield-to-expanded-sibling"`: on a compact
+(480px or less) toolbar they leave the row while the search is expanded and return when it
+closes, so the field takes the row. The rail's view switcher fills its own row through Kerf's
+`sizing="fill"`. The header asks `TicketSearchField` for `layout="grow"` and the rail for
+`layout="row"`, so no stylesheet reads the field's rendered state or styles it from outside
+(HS2-8FS5BJ, HS2-DAMHD1). Both wrappers are declared to Kerf's composition rule (`rendersAs`) in
 `clients/web/ai/component-composition-extension.json`. The mode selector composes Kerf
 `SegmentedControl` inside `ToolbarControlGroup`, with
 one accessible View mode group and native sequentially focusable buttons. Kerf owns
@@ -877,23 +876,24 @@ edit/remove, clear, Enter, and the keyboard; the app projects `model.state` into
 workspace toolbar, the workspace-grid ticket rail, and the saved-view dialog's non-collapsible
 query field all render this one component with their own model, so the helpers cannot drift
 apart or be forgotten on a new surface. Its rendered group carries the root class
-`ticket-search-field` plus literal modifiers for the app's own state (`--open`) and the
-toolbar sizing policy a consumer picks with the `layout` prop (HS2-8FS5BJ). A consumer never
-styles the field from its own stylesheet; only literal classes are classifiable by the Kerf
-analyzer, so each combination is spelled out.
+`ticket-search-field`. A consumer picks the toolbar sizing policy with the `layout` prop and
+never styles the field from its own stylesheet (HS2-8FS5BJ). Each policy is a set of Kerf
+`ToolbarControlGroup` props (HS2-DAMHD1):
 
 - `layout="inline"` (default) keeps Kerf's own collapsed and expanded widths.
 - `layout="grow"` is the workspace header policy. The open field grows into the free room on
   its row from a 19rem floor, which keeps the view, sort, and utility groups beside it in a
   640px toolbar. It takes the whole row on a compact toolbar, and its collapsed icon leaves
-  toolbars of 224px or less.
-- `layout="row"` is the narrow-rail policy. The collapsed icon sits at the zone's trailing
-  edge, and the open field fills a row of its own through Kerf `fill`, sliding in from the row
-  above.
+  toolbars of 224px or less (`visibility="hide-collapsed-tiny"`).
+- `layout="row"` is the narrow-rail policy (`sizing="fill"`, `placement="end"`). The collapsed
+  icon sits at its stacked row's trailing edge, and the open field fills a row of its own,
+  entering from the row above with Kerf's reduced-motion-aware motion.
 
-The grow sizing, row placement, and row entrance wait on Kerf `KF-GM376R`, `KF-6WX6VK`, and
-`KF-XFPJSY`. Until then they are narrow rules in `ticket-search-field.css` with documented
-`KUI-L022` suppressions (`HS2-DAMHD1`).
+The grow floor is the one exception. Kerf's `sizing="grow"` floor is `min(100%, 19rem)`, which
+drops out of a content-sized trailing zone, so in a wide header the open field would wrap under
+its siblings (`KF-K4VBTS`). Until that ships, the floor stays a narrow rule on the app's own
+literal `--grow` and `--open` root modifiers in `ticket-search-field.css`, with one documented
+`KUI-L022` suppression (`HS2-AEK8GK`).
 
 The grouped field's quieter chip tint is set on the `ticket-search-field__query` hook Kerf
 renders on its field root. The form-field presentation renders no such hook, so its chips keep
@@ -1807,10 +1807,10 @@ ticket list, quick-ticket launcher, and ticket inspector inside a Kerf NavStack 
 The header/scroller boundary has a quiet one-pixel separator. Its launcher is the same blue pill
 component used by list and column views, with the compact rail label `Ticket…` to prevent wrapping
 and the launcher's own `size="compact"` (a 36px trigger) rather than a rail override. Its
-notifications view asks `NotificationCenter` for `inset="flush"`. The view title is a Kerf `Select`
-whose 36px, flush-start geometry and inset focus ring use the rail's own className hook until Kerf
-ships a title presentation (`KF-PZ23ZP`). The rail stylesheet styles no other component
-(HS2-8FS5BJ).
+notifications view asks `NotificationCenter` for `inset="flush"`. The view title is a Kerf
+`Select presentation="title"` with `focusRingInset`: a 36px, flush-start trigger with its caret
+beside the label and a focus ring inset so the rail's clipping ancestors never crop it
+(HS2-HEYASQ, HS2-DAMHD1). The rail stylesheet styles no other component (HS2-8FS5BJ).
 Its inspector route is one toolbar row: Kerf's back control, the ticket number, the ticket actions,
 and the rail toggle; the catalog demo pushes a ticket on a plain row click and pops on Back.
 The rail remains independently resizable and hideable beside the terminal grid and is represented
@@ -1819,8 +1819,8 @@ directly in the UX catalog. It already composes Kerf `Toolbar`, `ToolbarControlG
 trailing zone of a cataloged `Toolbar` (`responsive="stack"`, `responsiveAt="narrow"`): the rail
 is always narrower than that breakpoint, so the zone stacks and wraps at group granularity, giving
 the full-width view switcher its own row, sort plus selection actions plus the trailing-aligned
-collapsible search the next, and an expanded search a full row of its own with the same enter
-animation (the search field's `layout="row"`); the toolbar's own 8px inset and gap replace the
+collapsible search the next, and an expanded search a full row of its own with Kerf's stacked
+fill-search entrance (the search field's `layout="row"`); the toolbar's own 8px inset and gap replace the
 earlier app-owned grid (HS2-K9KWJJ, superseding the 4px connected top inset from HS2-4Y6SM9).
 
 ## 7. Overlays and shared interaction components
@@ -2253,7 +2253,9 @@ the plain `kerf-ui-doctor --full` command, with `"failOn": "warning"` in `.kerf-
 active error, review finding, or warning fails it (`KF-6S5EKX`). The interim wrapper script from
 HS2-6PD4FS is gone. Known, tracked gaps are not budgeted; they are documented `suppressions` in
 `.kerf-ui-doctor.json`, each with a rationale naming the Kerf ticket whose adoption removes it. Today
-that is only the three `KUI-L022` hook classes tracked by HS2-DAMHD1. Beta.69 credits wiring calls
+that is only the `KUI-L022` grow-floor hook on `TicketSearchField` (`KF-K4VBTS`, removed by
+HS2-AEK8GK); HS2-DAMHD1 adopted Kerf's toolbar yield, fill, placement, tiny-visibility, and Select
+title APIs and dropped the other two. Beta.69 credits wiring calls
 reachable from a declared entry and resolves app-owned helpers through the composition catalog's
 `wiring.sources`, so the former `KUI-L401` suppressions are gone (`KF-KWMJMS`, `KF-XKMC7W`,
 HS2-Y2QG3G). The doctor report keeps counting suppressions as `suppressed`. The Kerf ESLint rules the

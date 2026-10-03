@@ -7545,13 +7545,14 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await expect(collapsibleQuery).toHaveText('');
   await collapsibleQuery.press('Escape');
   await expect(collapsible).toHaveAttribute('data-expanded', 'false');
-  // Each `layout` sizes the open field through TicketSearchField's own policy, open -> closed ->
-  // open again, with no consumer stylesheet involved (HS2-8FS5BJ).
+  // Each `layout` sizes the open field through TicketSearchField's own policy (Kerf group props,
+  // HS2-DAMHD1), open -> closed -> open again, with no consumer stylesheet involved (HS2-8FS5BJ).
   const grow = fields.nth(3),
     row = fields.nth(4);
   for (let pass = 0; pass < 2; pass += 1) {
     await demo.getByRole('button', { name: 'Search grow layout' }).click();
     await expect(grow).toHaveClass(/ticket-search-field--grow ticket-search-field--open/);
+    await expect(grow).toHaveAttribute('data-visibility', 'hide-collapsed-tiny');
     // The 19rem floor holds beside the leading title on a wide toolbar.
     await expect.poll(async () => Math.round((await grow.boundingBox())?.width ?? 0)).toBeGreaterThanOrEqual(304);
     await demo.getByRole('searchbox', { name: 'Search grow layout' }).press('Escape');
@@ -7564,9 +7565,13 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   const rowZoneBox = (await rowZone.boundingBox())!,
     rowBox = (await row.boundingBox())!;
   expect(Math.abs(rowZoneBox.x + rowZoneBox.width - (rowBox.x + rowBox.width))).toBeLessThanOrEqual(1);
+  await expect(row).toHaveAttribute('data-placement', 'end');
   await demo.getByRole('button', { name: 'Search row layout' }).click();
-  await expect(row).toHaveClass(/ticket-search-field--row ticket-search-field--open/);
+  await expect(row).toHaveAttribute('data-expanded', 'true');
+  await expect(row).toHaveAttribute('data-sizing', 'fill');
   await expect(row.locator('[data-component="token-search-field"]')).toHaveAttribute('data-fill', 'true');
+  // It enters its new row with Kerf's stacked fill-search motion, not an app keyframe (KF-XFPJSY).
+  expect(await row.evaluate((node) => getComputedStyle(node).animationName)).toBe('kui-toolbar-fill-search-enter');
   // Open, it fills a row of its own (Kerf `fill`).
   await expect
     .poll(async () => Math.round((await row.boundingBox())?.width ?? 0))

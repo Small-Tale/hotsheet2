@@ -63,42 +63,25 @@ wa-button.workspace-header__text-action::part(base) {
 .workspace-header__sort-group {
   --kui-select-selected-color: var(--kui-toolbar-control-color);
 }
-/* The search field sizes itself through its own `layout="grow"` policy (TicketSearchField,
-   HS2-8FS5BJ); this module styles only its own groups. The overflow menu only appears where the
-   container queries below yield controls to it. */
+/* The search field sizes itself and the header's groups yield to it through Kerf
+   ToolbarControlGroup props (HS2-8FS5BJ, HS2-DAMHD1); this module styles only its own groups. The
+   overflow menu only appears where the container queries below move controls into it. */
 .workspace-header__overflow-group {
   display: none;
 }
 /* The terminal rail composes the same groups (marked `--rail`) in a toolbar that is always narrower
-   than these breakpoints and wraps them onto rows instead of yielding them to the menu, so the
-   overflow queries skip rail groups (HS2-K9KWJJ). The rail's view switcher fills its first row:
-   TEMPORARY until ToolbarControlGroup offers a full-row size (KF-GM376R). */
-.view-mode-switcher.view-mode-switcher--rail {
-  width: 100%;
-}
+   than these breakpoints and wraps them onto rows instead of moving them into the menu, so the
+   overflow queries skip rail groups (HS2-K9KWJJ). */
 @container kui-toolbar (max-width: remify(480px)) {
   .workspace-header__utility-group:not(.workspace-header__utility-group--rail) {
     display: none;
   }
-  .workspace-header__overflow-group:not(
-    .workspace-header__overflow-group--rail,
-    .workspace-header__overflow-group--yield
-  ) {
+  .workspace-header__overflow-group:not(.workspace-header__overflow-group--rail) {
     display: inline-flex;
   }
 }
 @container kui-toolbar (max-width: remify(416px)) {
   .workspace-header__sort-group:not(.workspace-header__sort-group--rail) {
-    display: none;
-  }
-}
-/* On a narrow (mobile) toolbar, the groups WorkspaceControls marks `--yield` while its search is
-   open leave the row so the search field gets all of it (HS2-0SARDD). TEMPORARY until Kerf's
-   Toolbar can let an expanded trailing control take a compact row from its siblings (KF-6WX6VK). */
-@container kui-toolbar (max-width: remify(480px)) {
-  .view-mode-switcher--yield,
-  .workspace-header__sort-group--yield,
-  .workspace-header__utility-group--yield {
     display: none;
   }
 }

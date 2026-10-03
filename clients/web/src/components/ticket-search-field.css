@@ -1,7 +1,8 @@
 /* TicketSearchField: Kerf's grouped TokenSearchField owns the border, padding, and focus ring.
    This module owns only the Hot Sheet helper surfaces (tag suggestions, date helper, syntax
-   help) that hang below the field, the field's token colors, and the toolbar sizing policy a
-   consumer picks with the `layout` prop (HS2-N5G6JS, HS2-8FS5BJ). */
+   help) that hang below the field, the field's token colors, and the one toolbar sizing rule Kerf
+   cannot express yet (HS2-N5G6JS, HS2-8FS5BJ). Every other part of the `layout` policy is a Kerf
+   ToolbarControlGroup `sizing`/`visibility`/`placement` prop (HS2-DAMHD1). */
 .ticket-search-field {
   position: relative;
 }
@@ -19,17 +20,13 @@
 .ticket-search-field .ticket-search-field__query {
   --kui-token-search-token-background: var(--wa-color-brand-fill-quiet);
 }
-.ticket-search-form-field {
-  display: grid;
-  gap: var(--kui-space-2xs);
-  min-width: 0;
-}
-/* `layout="grow"` (the workspace header). TEMPORARY until Kerf ships an expanded-search
-   grow policy (KF-GM376R, KF-6WX6VK): the open field grows into the free room on its row from a
-   19rem floor (which keeps the view, sort, and utility groups beside it in a 640px toolbar,
-   HS2-W843B4) instead of Kerf's `fill`, which always wraps it onto its own row. On a compact
-   toolbar it takes the whole row (its sibling groups yield, HS2-0SARDD), and in the tiniest
-   toolbars the collapsed icon leaves. Root classes are the app's own layout and open state. */
+/* `layout="grow"` (the workspace header). TEMPORARY until Kerf's `sizing="grow"` keeps its basis
+   as the floor of a content-sized Toolbar zone (KF-K4VBTS, HS2-AEK8GK): Kerf's `min(100%, 19rem)`
+   floor drops out of the trailing zone's width, so in a wide header the open field would wrap
+   under its sibling groups. The open field grows from a plain 19rem floor instead, which keeps the
+   view, sort, and utility groups beside it (HS2-W843B4), and takes the whole row on a compact
+   toolbar, where those groups yield (HS2-0SARDD). Root classes are the app's own layout and open
+   state. */
 .ticket-search-field.ticket-search-field--grow.ticket-search-field--open {
   --kui-token-search-expanded-width: 48rem;
   min-width: 19rem;
@@ -41,33 +38,10 @@
     min-width: 0;
   }
 }
-@container kui-toolbar (max-width: remify(224px)) {
-  .ticket-search-field.ticket-search-field--grow:not(.ticket-search-field--open) {
-    display: none;
-  }
-}
-/* `layout="row"` (the narrow ticket rail). Kerf's `fill` gives the open field a full row of its
-   own. TEMPORARY until Kerf can place a group at a wrapping zone's trailing edge and animate a
-   group onto its new row (KF-XFPJSY): the collapsed icon is pushed to the trailing edge, and
-   the open field slides in from the row above (HS2-K9KWJJ). */
-.ticket-search-field.ticket-search-field--row {
-  margin-inline-start: auto;
-}
-.ticket-search-field.ticket-search-field--row.ticket-search-field--open {
-  animation: ticket-search-field-row-enter 0.25s ease;
-}
-@keyframes ticket-search-field-row-enter {
-  from {
-    transform: translateY(calc(-100% - var(--kui-space-xs)));
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ticket-search-field.ticket-search-field--row.ticket-search-field--open {
-    animation: none;
-  }
+.ticket-search-form-field {
+  display: grid;
+  gap: var(--kui-space-2xs);
+  min-width: 0;
 }
 .ticket-search-field__help-button {
   display: grid;

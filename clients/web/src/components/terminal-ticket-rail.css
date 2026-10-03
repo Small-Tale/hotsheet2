@@ -2,7 +2,7 @@
    (HS2-FY06N4); the stack fills it and owns the toolbar row, pinned header, and scrolling view.
    The composed WorkspaceControls, TicketSearchField, QuickTicketLauncher, and NotificationCenter
    take their rail presentation through their own props (HS2-8FS5BJ); this module styles only its
-   own wrappers and the className hooks it passes to its Kerf Selects. */
+   own wrappers and the className hook it passes to its project Select. */
 .terminal-ticket-rail {
   display: grid;
   width: 100%;
@@ -29,17 +29,4 @@
   display: flex;
   width: max-content;
   max-width: remify(192px);
-}
-/* TEMPORARY until Kerf Select offers a view-title presentation (KF-PZ23ZP): the view title
-   is a 36px trigger whose label starts flush with the list below, with the caret tucked against
-   it, and its focus ring is inset so the rail's clipping ancestors never crop it (HS2-HEYASQ). The
-   rules target only the className hook this module passes to its own Select. */
-.terminal-ticket-rail__view .terminal-ticket-rail__view-select::part(combobox) {
-  min-height: remify(36px);
-  padding: 0 remify(21.6px) 0 0;
-  outline-offset: -3px;
-}
-.terminal-ticket-rail__view .terminal-ticket-rail__view-select::part(expand-icon) {
-  position: absolute;
-  inset-inline-end: remify(2.4px);
 }

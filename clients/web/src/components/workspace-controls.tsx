@@ -335,18 +335,15 @@ function WorkspaceOverflowControls({
     >
       {menu}
     </ToolbarControlGroup>
-  ) : searchOpen ? (
-    // The open search takes the compact row the menu would otherwise appear in (HS2-8FS5BJ).
+  ) : (
+    // The open search takes the compact row the menu would otherwise appear in (HS2-DAMHD1).
     <ToolbarControlGroup
-      className="workspace-header__overflow-group workspace-header__overflow-group--yield"
+      className="workspace-header__overflow-group"
       single
       appearance="borderless"
       nestedDropdown
+      visibility="yield-to-expanded-sibling"
     >
-      {menu}
-    </ToolbarControlGroup>
-  ) : (
-    <ToolbarControlGroup className="workspace-header__overflow-group" single appearance="borderless" nestedDropdown>
       {menu}
     </ToolbarControlGroup>
   );
@@ -357,8 +354,8 @@ function WorkspaceOverflowControls({
  * actions, the collapsible ticket search, and the narrow-width overflow menu, each a
  * cataloged ToolbarControlGroup (or the TicketSearchField that renders one). There is no
  * wrapper element; the enclosing Toolbar zone (or the workspace-grid rail's own grid) owns
- * layout (HS2-EZ1N7Z). Responsive rules key off this component's own `searchOpen` state through
- * `--yield` modifiers, and the search field sizes itself through its `layout` prop (HS2-8FS5BJ).
+ * layout (HS2-EZ1N7Z). The groups yield to the open search and the search field sizes itself through
+ * Kerf ToolbarControlGroup props, chosen by `presentation` (HS2-8FS5BJ, HS2-DAMHD1).
  */
 export function WorkspaceControls({
   mode,
@@ -443,23 +440,18 @@ export function WorkspaceControls({
         </button>
       </>
     );
-  // While the header's search is open its other groups carry a `--yield` modifier: on a compact
-  // toolbar they leave the row to the search field (HS2-0SARDD). The state is the app's own
-  // `searchOpen`, so no stylesheet reads the search field's rendered state (HS2-8FS5BJ). The rail
-  // never yields; it wraps its groups onto rows instead.
-  const yieldToSearch = !rail && searchOpen;
+  // On a compact header toolbar the open search takes the whole row: the header's other trailing
+  // groups opt into Kerf's `visibility="yield-to-expanded-sibling"` and return when it closes
+  // (HS2-0SARDD, HS2-DAMHD1). The rail never yields; it wraps its groups onto rows instead, and its
+  // view switcher fills its own row (`sizing="fill"`).
   return (
     <>
       {rail ? (
-        <ToolbarControlGroup className="view-mode-switcher view-mode-switcher--rail" shape="rounded">
-          {viewSwitcher}
-        </ToolbarControlGroup>
-      ) : yieldToSearch ? (
-        <ToolbarControlGroup className="view-mode-switcher view-mode-switcher--yield" shape="pill">
+        <ToolbarControlGroup className="view-mode-switcher view-mode-switcher--rail" shape="rounded" sizing="fill">
           {viewSwitcher}
         </ToolbarControlGroup>
       ) : (
-        <ToolbarControlGroup className="view-mode-switcher" shape="pill">
+        <ToolbarControlGroup className="view-mode-switcher" shape="pill" visibility="yield-to-expanded-sibling">
           {viewSwitcher}
         </ToolbarControlGroup>
       )}
@@ -471,17 +463,14 @@ export function WorkspaceControls({
         >
           {sortSelect}
         </ToolbarControlGroup>
-      ) : yieldToSearch ? (
+      ) : (
         <ToolbarControlGroup
-          className="workspace-header__sort-group workspace-header__sort-group--yield"
+          className="workspace-header__sort-group"
           single
           shape="pill"
           focusRing="outline"
+          visibility="yield-to-expanded-sibling"
         >
-          {sortSelect}
-        </ToolbarControlGroup>
-      ) : (
-        <ToolbarControlGroup className="workspace-header__sort-group" single shape="pill" focusRing="outline">
           {sortSelect}
         </ToolbarControlGroup>
       )}
@@ -494,21 +483,13 @@ export function WorkspaceControls({
         >
           {utilityButtons}
         </ToolbarControlGroup>
-      ) : yieldToSearch ? (
-        <ToolbarControlGroup
-          className="workspace-header__utility-group workspace-header__utility-group--yield"
-          label="View actions"
-          selectedChrome="outline"
-          selectedTone="pop"
-        >
-          {utilityButtons}
-        </ToolbarControlGroup>
       ) : (
         <ToolbarControlGroup
           className="workspace-header__utility-group"
           label="View actions"
           selectedChrome="outline"
           selectedTone="pop"
+          visibility="yield-to-expanded-sibling"
         >
           {utilityButtons}
         </ToolbarControlGroup>

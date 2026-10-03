@@ -13,22 +13,10 @@
   "cache": true,
   "suppressions": [
     {
-      "id": "hs2-8fs5bj-search-layout-hooks",
+      "id": "hs2-damhd1-search-grow-floor",
       "rules": ["KUI-L022"],
       "target": "src/components/ticket-search-field.tsx",
-      "rationale": "Only the ticket-search-field--grow, --row, and --open root modifiers styled in ticket-search-field.css: the header's grow-with-floor sizing (KF-GM376R, KF-6WX6VK) and the rail's trailing-edge placement and row entrance (KF-XFPJSY) have no Kerf prop yet. They replaced cross-component selectors in workspace-header.css and terminal-ticket-rail.css (HS2-8FS5BJ). Remove with HS2-DAMHD1."
-    },
-    {
-      "id": "hs2-8fs5bj-workspace-yield-hooks",
-      "rules": ["KUI-L022"],
-      "target": "src/components/workspace-controls.tsx",
-      "rationale": "Only the view-mode-switcher--rail full-row width (KF-GM376R) and the --yield modifiers that hide the header's groups while its search takes a compact row (KF-6WX6VK, HS2-0SARDD). They replaced :has() selectors keyed on the search field's Kerf state (HS2-8FS5BJ). Remove with HS2-DAMHD1."
-    },
-    {
-      "id": "hs2-8fs5bj-rail-view-select",
-      "rules": ["KUI-L022"],
-      "target": "src/components/terminal-ticket-rail.tsx",
-      "rationale": "Only the terminal-ticket-rail__view-select hook: the rail's view-title Select geometry and inset focus ring (HS2-HEYASQ) have no Kerf presentation yet (KF-PZ23ZP). It replaced .kui-select::part selectors (HS2-8FS5BJ). Remove with HS2-DAMHD1."
+      "rationale": "Only the ticket-search-field--grow and --open root modifiers styled in ticket-search-field.css: the workspace header's expanded search keeps a plain 19rem floor because Kerf's sizing=\"grow\" min(100%, basis) floor drops out of a content-sized trailing zone and wraps the field in a wide header (KF-K4VBTS). Every other HS2-8FS5BJ hook now uses Kerf props (HS2-DAMHD1). Remove with HS2-AEK8GK."
     }
   ],
   "failOn": "warning"
