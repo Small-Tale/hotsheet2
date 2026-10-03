@@ -1724,7 +1724,13 @@ Styling ownership (HS2-DR549A):
   canvas before the canvas takes the frame's preview scale. Its heartbeat claims report only that
   mirrored size, without focus or interaction. Rendered rows are about 12 px at a 1280 px
   viewport and about 7 px at 390 px (previously about 3 px), which matches the mobile drawer
-  terminal's default 80-column density.
+  terminal's default 80-column density. At phone width the preview stays a faithful mirror of the
+  full PTY grid and never crops rows or columns (HS2-XTZ740). A recent-rows crop gains at most
+  about 25% there (the 5:3 canvas is height-bound in the phone frame), while it hides part of the
+  screen. A column crop would truncate the lines of a terminal the preview may not resize. The
+  live screen is already the most recent output, and a phone-driven PTY already takes the mobile
+  column setting (HS2-WMN626). Giving the phone frame the canvas aspect is tracked separately
+  (HS2-28EVHV).
 
 Grid scale is a discrete fit count controlled by icon-only minus/plus buttons with visible
 tooltip and accessible names. Plus zooms in (fewer terminals on the controlling axis);
