@@ -6527,6 +6527,17 @@ test('responds to feedback choices embedded in the ticket description', async ({
   await readerSurface.screenshot({ path: '/private/tmp/hs2-11n1wj-details-feedback-reader-wide.png' });
   await page.setViewportSize({ width: 940, height: 844 });
   await readerSurface.screenshot({ path: '/private/tmp/hs2-11n1wj-details-feedback-reader-narrow.png' });
+  // The response editor is NoteCard's exported NoteEditor composed by the panel (HS2-3X404M); it keeps
+  // both actions inside the surface at phone width.
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const name of ['No response needed', 'Respond']) {
+    const box = (await details.getByRole('button', { name, exact: true }).boundingBox())!,
+      surface = (await readerSurface.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(surface.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(surface.x + surface.width);
+  }
+  await readerSurface.screenshot({ path: '/private/tmp/hs2-3x404m-details-feedback-reader-390.png' });
+  await page.setViewportSize({ width: 940, height: 844 });
   await details.getByRole('button', { name: 'Respond' }).click();
   await expect
     .poll(() => patches.find((patch) => patch.note_kind === 'regular')?.note)

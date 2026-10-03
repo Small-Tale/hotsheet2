@@ -1409,6 +1409,10 @@ icons; structural separators do not require icons.
   a single click (or Enter/Space) on an editable note enters its controlled, blur-flushed
   autosaving editor, while links and controls inside the note keep their own action
   (HS2-H1K9YY).
+  The module also exports its body editor (`NoteEditor`, with feedback-response and action
+  variants) and the full-width `RespondToFeedbackButton` beside `FeedbackPrompt`, so
+  `TicketInfoPanel`'s marked-description feedback composes them instead of rendering
+  NoteCard's private classes (HS2-3X404M).
   In reader mode, regular/status notes remain directly editable, while feedback-needed
   and feedback-draft notes always render their Respond/Submit editor style. An uppercase
   `CHOICE` block in a feedback-needed note becomes Markdown-capable rounded options;

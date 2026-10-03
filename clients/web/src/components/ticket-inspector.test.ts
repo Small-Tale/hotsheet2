@@ -316,6 +316,14 @@ describe('TicketInspector', () => {
     expect(reader.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
     expect(reader).toContain('aria-label="Feedback response"');
     expect(reader).not.toContain('CHOICE:');
+    // HS2-3X404M: the panel composes NoteCard's exported editor and respond action rather than
+    // writing NoteCard's private classes into its own source.
+    expect(reader).toContain('placeholder="Additional response (optional)"');
+    expect(reader).toContain('No response needed');
+    const panelSource = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.tsx'), 'utf8');
+    expect(panelSource).not.toContain('note-card__');
+    expect(panelSource).toMatch(/<NoteEditor\b/);
+    expect(panelSource).toMatch(/<RespondToFeedbackButton\b/);
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
     // The feedback state keeps the surface's own 8px padding and only recolors it.
     expect(css).toMatch(/\.ticket-info-panel__details-surface \{[^}]*padding: var\(--kui-space-xs\);/);

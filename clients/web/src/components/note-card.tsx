@@ -183,6 +183,80 @@ export function FeedbackPrompt({
   );
 }
 
+/**
+ * A note's body editor (HS2-3X404M): the textarea plus, for a reader feedback editor, its "No response
+ * needed" and Respond/Submit actions. `NoteCard` renders it while editing, and hosts that answer a
+ * feedback request outside a note card (the marked ticket description in `TicketInfoPanel`) compose it
+ * instead of borrowing NoteCard's classes. `id` is the note (or details-feedback) id the actions target.
+ */
+export function NoteEditor({
+  id,
+  source,
+  response = false,
+  actions = false,
+  placeholder,
+}: {
+  id: string;
+  source: string;
+  /** Answering a feedback request: response semantics, label, and the "No response needed" action. */
+  response?: boolean;
+  /** Show the explicit submit actions (reader feedback editors). */
+  actions?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <div class="note-card__editor">
+      <textarea
+        name="note-body"
+        data-note-id={id}
+        data-note-response={response ? 'true' : undefined}
+        aria-label={response ? 'Feedback response' : 'Note body'}
+        placeholder={placeholder}
+      >
+        {source}
+      </textarea>
+      {actions && (
+        <div>
+          {response && (
+            <wa-button
+              size="small"
+              appearance="outlined"
+              {...INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.attrs}
+              data-note-id={id}
+              title="Clear this feedback request without replying"
+            >
+              No response needed
+            </wa-button>
+          )}
+          <wa-button
+            size="small"
+            appearance="accent"
+            {...INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.attrs}
+            data-note-id={id}
+            data-note-response={response ? 'true' : undefined}
+          >
+            {response ? 'Respond' : 'Submit'}
+          </wa-button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The full-width "Respond to Feedback" action that opens the reader at a feedback request (HS2-3X404M). */
+export function RespondToFeedbackButton({ id }: { id: string }) {
+  return (
+    <wa-button
+      class="note-card__respond"
+      appearance="outlined"
+      {...INSPECTOR_AND_EDITOR_ACTIONS.respondToFeedback.attrs}
+      data-note-id={id}
+    >
+      Respond to Feedback
+    </wa-button>
+  );
+}
+
 export function NoteCard({
   id,
   kind,
@@ -272,62 +346,25 @@ export function NoteCard({
         />
       )}
       {editorOpen ? (
-        <div class="note-card__editor">
-          <textarea
-            name="note-body"
-            data-note-id={id}
-            data-note-response={feedbackResponse ? 'true' : undefined}
-            aria-label={feedbackResponse ? 'Feedback response' : 'Note body'}
-            placeholder={
-              feedbackResponse && choiceGroup
-                ? 'Additional response (optional)'
-                : feedbackResponse && inlineReplies.length
-                  ? 'General response (optional)'
-                  : undefined
-            }
-          >
-            {source}
-          </textarea>
-          {feedbackEditor && (
-            <div>
-              {feedbackResponse && (
-                <wa-button
-                  size="small"
-                  appearance="outlined"
-                  {...INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.attrs}
-                  data-note-id={id}
-                  title="Clear this feedback request without replying"
-                >
-                  No response needed
-                </wa-button>
-              )}
-              <wa-button
-                size="small"
-                appearance="accent"
-                {...INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.attrs}
-                data-note-id={id}
-                data-note-response={feedbackResponse ? 'true' : undefined}
-              >
-                {feedbackResponse ? 'Respond' : 'Submit'}
-              </wa-button>
-            </div>
-          )}
-        </div>
+        <NoteEditor
+          id={id}
+          source={source}
+          response={feedbackResponse}
+          actions={feedbackEditor}
+          placeholder={
+            feedbackResponse && choiceGroup
+              ? 'Additional response (optional)'
+              : feedbackResponse && inlineReplies.length
+                ? 'General response (optional)'
+                : undefined
+          }
+        />
       ) : (
         <div class="note-card__body" {...editAttributes}>
           <MarkdownPreview source={body} attachmentContext={attachmentContext} size="inherit" />
         </div>
       )}
-      {respondToFeedback && !readerMode && (
-        <wa-button
-          class="note-card__respond"
-          appearance="outlined"
-          {...INSPECTOR_AND_EDITOR_ACTIONS.respondToFeedback.attrs}
-          data-note-id={id}
-        >
-          Respond to Feedback
-        </wa-button>
-      )}
+      {respondToFeedback && !readerMode && <RespondToFeedbackButton id={id} />}
       <footer class="note-card__footer">
         {aiAuthored ? (
           <AIContentLabel tool={aiTool ?? author} mayContainErrors={aiMayContainErrors} feedbackTarget={`note:${id}`} />

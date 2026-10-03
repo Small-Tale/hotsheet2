@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ConfidenceBadge, confidenceBand, NoteCard } from './note-card';
+import { ConfidenceBadge, confidenceBand, NoteCard, NoteEditor, RespondToFeedbackButton } from './note-card';
 
 describe('NoteCard', () => {
   it.each([
@@ -304,5 +304,44 @@ describe('NoteCard', () => {
     expect(markup).toContain('aria-label="AI-generated activity by Codex; may contain errors"');
     expect(markup).toContain('data-component="ai-content-label"');
     expect(markup).toContain('data-ai-feedback-target="note:distilled"');
+  });
+});
+
+describe('NoteEditor and RespondToFeedbackButton (HS2-3X404M)', () => {
+  it('renders a plain note editor without submit actions', () => {
+    const markup = String(NoteEditor({ id: 'n1', source: 'Draft' }));
+    expect(markup).toContain('class="note-card__editor"');
+    expect(markup).toContain('aria-label="Note body"');
+    expect(markup).toContain('>Draft</textarea>');
+    expect(markup).not.toContain('wa-button');
+    expect(markup).not.toContain('data-note-response');
+  });
+
+  it('renders a feedback response editor with its dismiss and respond actions', () => {
+    const markup = String(
+      NoteEditor({
+        id: 'details',
+        source: '',
+        response: true,
+        actions: true,
+        placeholder: 'Additional response (optional)',
+      }),
+    );
+    expect(markup).toContain('aria-label="Feedback response"');
+    expect(markup).toContain('placeholder="Additional response (optional)"');
+    expect(markup.match(/data-note-response="true"/g)).toHaveLength(2);
+    expect(markup).toContain('No response needed');
+    expect(markup).toMatch(/data-note-id="details"[^>]*>\s*Respond\s*</);
+  });
+
+  it('labels a non-response editor action Submit', () => {
+    expect(String(NoteEditor({ id: 'd', source: 'x', actions: true }))).toMatch(/>\s*Submit\s*</);
+  });
+
+  it('renders the full-width Respond to Feedback action for a note id', () => {
+    const markup = String(RespondToFeedbackButton({ id: 'feedback-1' }));
+    expect(markup).toContain('class="note-card__respond"');
+    expect(markup).toContain('data-note-id="feedback-1"');
+    expect(markup).toContain('Respond to Feedback');
   });
 });

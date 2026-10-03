@@ -1,4 +1,3 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@kerfjs/ui/list-inset-control.css';
 import './ticket-info-panel.css';
 
@@ -13,9 +12,8 @@ import { CircleAlert, Plus } from 'lucide';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { DETAILS_FEEDBACK_ID, textRequestsFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
-import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
-import { FeedbackPrompt, type NoteCardProps } from './note-card';
+import { FeedbackPrompt, type NoteCardProps, NoteEditor, RespondToFeedbackButton } from './note-card';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TicketCategorySelect } from './ticket-category-select';
 import { TicketInspectorPanel } from './ticket-inspector-panel';
@@ -229,37 +227,13 @@ function LoadedTicketInfoPanel({
                 selectedChoices={feedbackChoiceSelections?.[DETAILS_FEEDBACK_ID]}
                 attachmentContext={attachmentContext}
               />
-              <div class="note-card__editor">
-                <textarea
-                  name="note-body"
-                  data-note-id={DETAILS_FEEDBACK_ID}
-                  data-note-response="true"
-                  aria-label="Feedback response"
-                  placeholder="Additional response (optional)"
-                >
-                  {noteDraft ?? ''}
-                </textarea>
-                <div>
-                  <wa-button
-                    size="small"
-                    appearance="outlined"
-                    {...INSPECTOR_AND_EDITOR_ACTIONS.dismissFeedback.attrs}
-                    data-note-id={DETAILS_FEEDBACK_ID}
-                    title="Clear this feedback request without replying"
-                  >
-                    No response needed
-                  </wa-button>
-                  <wa-button
-                    size="small"
-                    appearance="accent"
-                    {...INSPECTOR_AND_EDITOR_ACTIONS.saveNoteEdit.attrs}
-                    data-note-id={DETAILS_FEEDBACK_ID}
-                    data-note-response="true"
-                  >
-                    Respond
-                  </wa-button>
-                </div>
-              </div>
+              <NoteEditor
+                id={DETAILS_FEEDBACK_ID}
+                source={noteDraft ?? ''}
+                response
+                actions
+                placeholder="Additional response (optional)"
+              />
             </div>
           ) : (
             <>
@@ -274,16 +248,7 @@ function LoadedTicketInfoPanel({
                 editable={canEditText}
                 attachmentContext={attachmentContext}
               />
-              {detailsFeedback && canAddNotes && (
-                <wa-button
-                  class="note-card__respond"
-                  appearance="outlined"
-                  {...INSPECTOR_AND_EDITOR_ACTIONS.respondToFeedback.attrs}
-                  data-note-id={DETAILS_FEEDBACK_ID}
-                >
-                  Respond to Feedback
-                </wa-button>
-              )}
+              {detailsFeedback && canAddNotes && <RespondToFeedbackButton id={DETAILS_FEEDBACK_ID} />}
             </>
           )}
         </div>
