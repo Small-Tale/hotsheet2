@@ -125,6 +125,10 @@ describe('content components', () => {
     expect(css).toMatchSource(
       /\.markdown-preview\[data-tone='inherit'\],\s*\.markdown-preview\[data-tone='inverse'\] \{ color: inherit/,
     );
+    // Inverse inline code deepens the brand fill and keeps the light text (HS2-WS438X); code blocks are untouched.
+    expect(css).toMatchSource(
+      /\[data-tone='inverse'\] :not\(pre\) > code \{ background: color-mix\(in srgb, black 24%, transparent\);[^}]*color: inherit/,
+    );
     expect(css).toMatchSource(/\[data-size='small'\] \{ font-size: var\(--wa-font-size-xs\); line-height: 1\.4/);
     expect(css).toMatchSource(/\[data-size='inherit'\] \{ font: inherit/);
     expect(css).toMatchSource(

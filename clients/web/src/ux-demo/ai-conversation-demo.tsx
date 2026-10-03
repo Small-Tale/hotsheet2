@@ -22,7 +22,7 @@ export function aiConversationProviderLabel(id = aiConversationProvider.value) {
 }
 
 const completed: ConversationMessage[] = [
-  { id: 'question-1', role: 'user', content: 'Review the client connection flow.' },
+  { id: 'question-1', role: 'user', content: 'Review the client connection flow in `api.ts`.' },
   {
     id: 'answer-1',
     role: 'assistant',

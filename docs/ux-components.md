@@ -1263,7 +1263,8 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   references, inline supported images, and expose host-native actions.
   Consumers choose presentation through props rather than restyling `.markdown-preview`
   (HS2-7RY5GK): `tone` (`default`; `inherit` takes the container color but keeps link
-  color; `inverse` carries the container color into links, for loud fills), `size`
+  color; `inverse` carries the container color into links and gives inline code a deepened,
+  outlined chip that keeps AA contrast on loud fills such as the AI user bubble, HS2-WS438X), `size`
   (`default`; `small` is the 12px/1.4 secondary scale; `inherit` takes the container
   font), `density` (`default` 16px block rhythm; `compact` 4px; `flush` 0), and `media`
   (`full`; `thumbnail` crops attachment images into a 192 x 112px box). The

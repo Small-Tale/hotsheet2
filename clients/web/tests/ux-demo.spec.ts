@@ -2658,6 +2658,66 @@ test('exposes every MarkdownPreview and AIContentLabel presentation variant', as
   await expect(labels.nth(2).getByRole('button', { name: /Helpful/ })).toBeVisible();
 });
 
+/** WCAG contrast of a code chip's text against its fill composited over the opaque container behind it. */
+async function codeChipContrast(code: Locator) {
+  return code.evaluate((node) => {
+    const parse = (value: string) => {
+      const numbers = (value.match(/[\d.]+/g) ?? []).map(Number);
+      // `color(srgb r g b / a)` uses 0-1 channels; `rgb()`/`rgba()` use 0-255.
+      const scale = value.startsWith('color(') ? 1 : 255;
+      return {
+        rgb: numbers.slice(0, 3).map((channel) => channel / scale),
+        alpha: numbers.length > 3 ? numbers[3] : 1,
+      };
+    };
+    let container = node.parentElement!;
+    while (parse(getComputedStyle(container).backgroundColor).alpha < 1) container = container.parentElement!;
+    const base = parse(getComputedStyle(container).backgroundColor).rgb,
+      chip = parse(getComputedStyle(node).backgroundColor),
+      text = parse(getComputedStyle(node).color).rgb,
+      fill = base.map((channel, index) => chip.rgb[index] * chip.alpha + channel * (1 - chip.alpha)),
+      luminance = (rgb: number[]) => {
+        const [r, g, b] = rgb.map((channel) =>
+          channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+        );
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      },
+      [light, dark] = [luminance(text), luminance(fill)].sort((a, b) => b - a);
+    return (light + 0.05) / (dark + 0.05);
+  });
+}
+
+test('keeps inverse inline code legible on the brand fill in the demo and the AI user bubble (HS2-WS438X)', async ({
+  page,
+}) => {
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/ux-demo?component=markdown-preview&dev-review=false');
+      const variant = (label: string) =>
+        page
+          .locator('.markdown-preview-demo__variant')
+          .filter({ has: page.locator('figcaption', { hasText: label }) })
+          .locator('[data-component="markdown-preview"]');
+      const inverseCode = variant('tone="inverse"').locator('code').first();
+      await expect(inverseCode).toHaveText('code');
+      // The chip takes the container's text color and reads at AA contrast on its own fill.
+      expect(await inverseCode.evaluate((node) => getComputedStyle(node).color)).toBe(
+        await variant('tone="inverse"').evaluate((node) => getComputedStyle(node.parentElement!).color),
+      );
+      expect(await codeChipContrast(inverseCode)).toBeGreaterThanOrEqual(4.5);
+      // The default tone keeps its neutral chip.
+      expect(await codeChipContrast(variant('Default').locator('code').first())).toBeGreaterThanOrEqual(4.5);
+
+      await page.goto('/ux-demo?component=ai-conversation&dev-review=false');
+      const userCode = page.locator('[data-component="markdown-preview"][data-tone="inverse"] code').first();
+      await expect(userCode).toHaveText('api.ts');
+      expect(await codeChipContrast(userCode)).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});
+
 test('keeps feedback Markdown list spacing compact', async ({ page }) => {
   await page.goto('/ux-demo?component=note-card');
   const feedbackNote = page.locator('[data-component="note-card"][data-kind="feedback_needed"]');
