@@ -1550,7 +1550,9 @@ capability-aware sections when their underlying features and data contracts land
   group (set by drag-and-drop), and working directory (always the project root; users `cd`
   within shell commands) are intentionally not shown. The color palette's neutral slot is
   "Transparent": a command with that color (or none) renders with no background fill and the
-  default button styling, in the editor list and the sidebar alike. Field edits,
+  default button styling, in the editor list and the sidebar alike. In the sidebar a transparent
+  row still spans the same horizontal extent as the filled rows, so it is never inset from them
+  (HS2-F9JKMJ); the ProjectSidebar demo includes one. Field edits,
   reorders, and deletes autosave to a project-scoped draft on a debounce (no explicit Save
   button), surfacing a status line and validation errors. AI commands additionally use the
   shared Provider/Model/Effort submenus: **Project Default** stores no override, while an

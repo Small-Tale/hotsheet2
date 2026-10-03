@@ -40,6 +40,8 @@ export const sidebarViews: ViewNavigationItem[] = [
 export const sidebarCommands: CommandNavigationItem[] = [
   { id: 'verify', label: 'Verify project', color: '#14b8a6', icon: 'test', group: 'Quality' },
   { id: 'build', label: 'Build clients', color: '#f97316', icon: 'build', kind: 'shell', group: 'Quality' },
+  // The transparent palette slot (no fill) aligns with the filled rows (HS2-F9JKMJ).
+  { id: 'everything', label: 'Run everything', color: 'transparent', icon: 'balloon', group: 'Quality' },
   { id: 'publish', label: 'Publish preview', color: '#8b5cf6', icon: 'send', kind: 'ai', group: 'Release' },
 ];
 

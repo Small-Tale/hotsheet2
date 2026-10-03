@@ -254,8 +254,12 @@ describe('ProjectSidebar component slice', () => {
     // The row paints its own tones through Kerf's public ListItem tokens; no broad border-token
     // override and no wrapper fill (HS2-Z5YQWT).
     expect(css).toContainSource(
-      ".command-navigation__command:not([data-command-palette='transparent']) { --kui-layout-inline-margin: 0; --kui-list-item-background: var(--command-color); --kui-list-item-border: transparent; --kui-list-item-hover-border: transparent; --kui-list-item-selected-border: transparent; --kui-list-item-color: var(--hs-command-on);",
+      ".command-navigation__command:not([data-command-palette='transparent']) { --kui-list-item-background: var(--command-color); --kui-list-item-border: transparent; --kui-list-item-hover-border: transparent; --kui-list-item-selected-border: transparent; --kui-list-item-color: var(--hs-command-on);",
     );
+    // Every row, transparent included, drops the item's inline margin so transparent rows are not
+    // inset from filled ones (HS2-F9JKMJ).
+    expect(css).toMatch(/\.command-navigation__command \{\s*--kui-layout-inline-margin: 0;/);
+    expect(css.match(/--kui-layout-inline-margin/g)).toHaveLength(1);
     expect(css).not.toContain('--kui-color-neutral-border-normal');
     expect(css).not.toContain('--kui-color-brand-border-quiet');
     expect(css).not.toMatch(/command-navigation__command:not\([^)]*\) \{[^}]*\n {2}background:/);

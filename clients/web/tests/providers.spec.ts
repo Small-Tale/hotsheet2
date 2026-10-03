@@ -10305,6 +10305,70 @@ test('collapses individual project command groups independently and remembers ea
   await expect(commands.getByRole('button', { name: 'Git', exact: true })).toHaveAttribute('aria-expanded', 'false');
 });
 
+for (const viewport of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 844 },
+]) {
+  test(`aligns transparent project command rows with filled rows at ${viewport.width}px (HS2-F9JKMJ)`, async ({
+    page,
+  }) => {
+    const quality = [
+      ['requirements-code', 'Reqs ↔ Code', 'arrow-left-right', '#ec4899'],
+      ['hygiene', 'Check Code Hygiene', 'soap-dispenser-droplet', '#f97316'],
+      ['quality', 'Analyze Code Quality', 'circle-check-big', '#8b5cf6'],
+      // The legacy near-white neutral resolves to the transparent palette slot.
+      ['everything', 'Everything', 'balloon', '#e5e7eb'],
+      ['checks', 'Run checks', 'test', undefined],
+    ].map(([id, title, icon, color]) => ({
+      id,
+      title,
+      kind: 'ai',
+      prompt: title,
+      group: 'Quality',
+      icon,
+      ...(color ? { color } : {}),
+    }));
+    await page.setViewportSize(viewport);
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/commands', (route) => {
+      if (route.request().method() === 'GET') return route.fulfill({ json: quality });
+      return route.fallback();
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    if (viewport.width === 390) await page.getByRole('button', { name: 'Show project sidebar' }).click();
+    const commands = page.locator('[data-component="command-navigation"]');
+    await expect(commands.getByRole('button', { name: 'Everything' })).toBeVisible();
+    await expect(commands.locator('.command-navigation__command[data-command-palette="transparent"]')).toHaveCount(2);
+    const edges = () =>
+      commands.locator('.command-navigation__command > .kui-list-item').evaluateAll((rows) =>
+        rows.map((row) => {
+          const box = row.getBoundingClientRect();
+          return { left: Math.round(box.left), right: Math.round(box.right) };
+        }),
+      );
+    // Every row, filled or transparent, spans the same horizontal extent (HS2-F9JKMJ).
+    await expect.poll(async () => new Set((await edges()).map(({ left, right }) => `${left}:${right}`)).size).toBe(1);
+    const filled = commands.getByRole('button', { name: 'Analyze Code Quality' }),
+      transparent = commands.getByRole('button', { name: 'Everything' });
+    await expect(filled).toHaveCSS('background-color', 'rgb(139, 92, 246)');
+    await expect(transparent).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    // Hovering the transparent row keeps it aligned with the filled rows.
+    await commands.scrollIntoViewIfNeeded();
+    await transparent.hover();
+    const [filledBox, hoveredBox] = await Promise.all([filled.boundingBox(), transparent.boundingBox()]);
+    expect(Math.round(hoveredBox!.x)).toBe(Math.round(filledBox!.x));
+    expect(Math.round(hoveredBox!.width)).toBe(Math.round(filledBox!.width));
+    await page.waitForTimeout(220);
+    // A page clip, unlike an element screenshot, never scrolls the hovered row out from under the pointer.
+    await page.screenshot({
+      path: `/tmp/claude/hs2-f9jkmj-command-rows-${viewport.width}.png`,
+      clip: (await commands.boundingBox())!,
+    });
+  });
+}
+
 test('switches settings categories from the project sidebar', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');

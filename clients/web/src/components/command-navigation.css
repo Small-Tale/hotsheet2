@@ -7,8 +7,11 @@
   gap: var(--kui-space-2xs);
 }
 /* App-owned wrapper around each command's Kerf ListItem: it sizes the row and configures the row
-   through ListItem's public tokens (the item itself stays unstyled by app CSS, HS2-VABS08). */
+   through ListItem's public tokens (the item itself stays unstyled by app CSS, HS2-VABS08). Every
+   row, filled or transparent, drops the item's own inline margin so the wrapper alone sets the row's
+   extent and a transparent row is not inset from the filled ones (HS2-F9JKMJ). */
 .command-navigation__command {
+  --kui-layout-inline-margin: 0;
   display: grid;
   min-height: remify(40px);
   margin-inline: var(--kui-space-xs);
@@ -20,7 +23,6 @@
    borders so the row reads as one pill in every state; the wrapper paints nothing. The ListItem
    inherits these tokens from this wrapper since Kerf beta.64 (KF-XD6YH1, HS2-C3SPM6). */
 .command-navigation__command:not([data-command-palette='transparent']) {
-  --kui-layout-inline-margin: 0;
   --kui-list-item-background: var(--command-color);
   --kui-list-item-border: transparent;
   --kui-list-item-hover-border: transparent;

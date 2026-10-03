@@ -4806,6 +4806,15 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
     'background-color',
     'rgb(249, 115, 22)',
   );
+  // The transparent palette slot has no fill but spans the same extent as the filled rows (HS2-F9JKMJ).
+  const transparentCommand = commands.getByRole('button', { name: 'Run everything' });
+  await expect(transparentCommand).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  const [filledCommandBox, transparentCommandBox] = await Promise.all([
+    commands.getByRole('button', { name: 'Build clients' }).boundingBox(),
+    transparentCommand.boundingBox(),
+  ]);
+  expect(Math.round(transparentCommandBox!.x)).toBe(Math.round(filledCommandBox!.x));
+  expect(Math.round(transparentCommandBox!.width)).toBe(Math.round(filledCommandBox!.width));
   await expect(commands.getByRole('button', { name: 'Publish preview' })).toHaveCSS(
     'background-color',
     'rgb(139, 92, 246)',
