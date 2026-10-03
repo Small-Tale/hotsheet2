@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 
 import componentCatalogExtension from '../../ai/component-catalog-extension.json';
 import { createDevApp, demoModifiedTimes } from '../dev-server';
+import { AppShellSettings, appShellSettings, resetAppShellDemo } from './app-shell-demo';
 import {
   demoCatalog,
   demoKind,
@@ -522,6 +523,18 @@ describe('UX demo catalog', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('offers and resets the AppShell presentation and focus-ring settings (HS2-8ZJMCE)', () => {
+    const form = String(AppShellSettings());
+    expect(form).toContain('data-settings="app-shell"');
+    expect(form).toContain('name="presentation"');
+    expect(form).toContain('name="overlay-open"');
+    expect(form).toContain('data-action="reset-settings"');
+    appShellSettings.presentation.value = 'viewport';
+    appShellSettings.overlayOpen.value = true;
+    resetAppShellDemo();
+    expect([appShellSettings.presentation.value, appShellSettings.overlayOpen.value]).toEqual(['framed', false]);
   });
 
   it('resets every canonical TagChip demo setting', () => {

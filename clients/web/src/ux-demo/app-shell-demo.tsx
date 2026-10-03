@@ -1,5 +1,6 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { clampRegionSize, ResizableRegion } from '@kerfjs/ui/resizable-region';
+import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide';
 
@@ -33,6 +34,7 @@ import {
   sidebarCommands,
   sidebarViews,
 } from './project-sidebar-demo';
+import { syncSettingsControls } from './settings-controls';
 import { collectionTickets } from './ticket-collections-demo';
 import {
   composerCategory,
@@ -70,6 +72,44 @@ export const resizeDemoWidth = signal(260);
 export const resizeDemoHeight = signal(180);
 export const resizeDemoCollapsed = signal(false);
 export const shellEvent = signal('Explore the application shell.');
+/** AppShell's public presentation props (HS2-DR549A), adjustable in the demo settings (HS2-8ZJMCE). */
+export const appShellSettings = {
+  presentation: signal<'framed' | 'viewport'>('framed'),
+  /** Simulates a top-layer overlay hosted by the work area owning focus: the work-area ring turns off. */
+  overlayOpen: signal(false),
+};
+
+export function resetAppShellDemo(root?: ParentNode): void {
+  appShellSettings.presentation.value = 'framed';
+  appShellSettings.overlayOpen.value = false;
+  if (root)
+    syncSettingsControls(root, 'app-shell', {
+      values: { presentation: appShellSettings.presentation.value },
+      checked: { 'overlay-open': appShellSettings.overlayOpen.value },
+    });
+}
+
+export function AppShellSettings() {
+  return (
+    <form class="settings-form" data-settings="app-shell">
+      <Select
+        name="presentation"
+        label="Presentation"
+        value={appShellSettings.presentation.value}
+        choices={[
+          { value: 'framed', label: 'Framed (UX catalog window)' },
+          { value: 'viewport', label: 'Viewport (application root)' },
+        ]}
+      />
+      <wa-checkbox name="overlay-open" checked={appShellSettings.overlayOpen.value}>
+        Top-layer overlay open (work-area focus ring off)
+      </wa-checkbox>
+      <wa-button type="button" data-action="reset-settings">
+        Reset
+      </wa-button>
+    </form>
+  );
+}
 
 export const regionBounds: Record<string, { min: number; max: number }> = {
   'resize-demo-horizontal': { min: 250, max: 420 },
@@ -371,6 +411,8 @@ export function AppShellDemo() {
   return (
     <section class="app-shell-demo" aria-label="AppShell demo">
       <AppShell
+        presentation={appShellSettings.presentation.value}
+        workAreaFocusRing={!appShellSettings.overlayOpen.value}
         mode={shellMode.value}
         tabs={projectTabs.value}
         sidebar={shellMode.value === 'terminals' ? shellTerminalOperationsPanel() : shellSidebarPanel()}

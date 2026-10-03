@@ -1780,6 +1780,51 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
   await expect(badge).toHaveAttribute('data-band', 'partial');
 });
 
+test('round-trips AppShell presentation and work-area focus-ring settings (HS2-8ZJMCE)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=app-shell');
+    const shell = page.locator('[data-component="app-shell"]');
+    const workArea = shell.locator('.app-shell__work-area');
+    await expect(shell).toHaveAttribute('data-presentation', 'framed');
+    await expect(workArea).toHaveAttribute('data-focus-ring', 'true');
+    const framedRadius = await shell.evaluate((node) => getComputedStyle(node).borderTopLeftRadius);
+    expect(framedRadius).not.toBe('0px');
+    await page.locator('[data-action="toggle-settings"]').first().click();
+    const inspector = page.getByRole('complementary', { name: 'AppShell settings' });
+    const presentation = inspector.locator('wa-select[name="presentation"]');
+    const overlay = inspector.locator('wa-checkbox[name="overlay-open"]');
+    await expect(presentation).toHaveJSProperty('value', 'framed');
+    await expect(overlay).toHaveJSProperty('checked', false);
+    // Control → render: viewport drops the frame; an open overlay turns the work-area ring off.
+    await presentation.evaluate((node: HTMLElement & { value: string }) => {
+      node.value = 'viewport';
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(shell).toHaveAttribute('data-presentation', 'viewport');
+    await expect(shell).toHaveCSS('border-top-left-radius', '0px');
+    await overlay.click();
+    await expect(overlay).toHaveJSProperty('checked', true);
+    await expect(workArea).toHaveAttribute('data-focus-ring', 'false');
+    await workArea.focus();
+    await expect(workArea).toHaveCSS('outline-color', 'rgba(0, 0, 0, 0)');
+    await page.screenshot({ path: `/private/tmp/hs2-8zjmce-app-shell-viewport-overlay-${width}.png` });
+    // Reset → every live control and the render return to the defaults.
+    await inspector.getByRole('button', { name: 'Reset' }).click();
+    await expect(presentation).toHaveJSProperty('value', 'framed');
+    await expect(overlay).toHaveJSProperty('checked', false);
+    await expect(shell).toHaveAttribute('data-presentation', 'framed');
+    await expect(workArea).toHaveAttribute('data-focus-ring', 'true');
+    await workArea.focus();
+    await expect(workArea).not.toHaveCSS('outline-color', 'rgba(0, 0, 0, 0)');
+    // Edit again after the reset.
+    await overlay.click();
+    await expect(workArea).toHaveAttribute('data-focus-ring', 'false');
+    await expect(shell).toHaveAttribute('data-presentation', 'framed');
+    await page.screenshot({ path: `/private/tmp/hs2-8zjmce-app-shell-framed-overlay-${width}.png` });
+  }
+});
+
 test('round-trips StatusBadge controls through reset and a post-reset edit', async ({ page }) => {
   await page.goto('/ux-demo?component=status-badge');
   const badge = page.locator('[data-component="status-badge"]');

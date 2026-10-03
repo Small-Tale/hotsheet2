@@ -76,6 +76,9 @@ AppShell configures the components it composes through props rather than cross-c
 - **`workAreaFocusRing`** (default `true`). The runtime turns it off while a magnified terminal, a
   top-layer overlay hosted inside the work area, owns focus, so the ring never shows through that
   overlay's scrim.
+- **Demo settings (HS2-8ZJMCE).** The AppShell UX demo's settings expose both props: a
+  Presentation select (Framed / Viewport) and a "Top-layer overlay open" checkbox that turns the
+  work-area focus ring off, with Reset restoring the framed, ring-on defaults.
 - **Project strip.** AppShell renders `ProjectTabBar` with `surface="default"`. It sets
   `divider` only in terminals mode, where no page header sits between the strip and the work area.
 - **`--hotsheet-scroll-end-inset`.** The workspace sets `data-bottom-edge` from its own `mobile`

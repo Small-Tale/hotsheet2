@@ -118,6 +118,8 @@ import {
 import {
   addDemoProject,
   AppShellDemo,
+  AppShellSettings,
+  appShellSettings,
   closeAllProjectTabs,
   closeOtherProjectTabs,
   closeProjectTab,
@@ -126,6 +128,7 @@ import {
   ProjectTabBarDemo,
   ProjectTabDemo,
   projectTabs,
+  resetAppShellDemo,
   ResizableRegionDemo,
   resizeDemoCollapsed,
   selectProjectTab,
@@ -1263,6 +1266,7 @@ function DemoApp() {
         ? collectionTickets.value.find((ticket) => ticket.slug === contextMenu.value?.ticketSlug)
         : undefined;
   const hasSettings =
+    selected.id === 'app-shell' ||
     selected.id === 'tag-chip' ||
     selected.id === 'status-badge' ||
     selected.id === 'confidence-badge' ||
@@ -1339,7 +1343,9 @@ function DemoApp() {
               Close settings
             </wa-button>
           </header>
-          {selected.id === 'tag-chip' ? (
+          {selected.id === 'app-shell' ? (
+            <AppShellSettings />
+          ) : selected.id === 'tag-chip' ? (
             <TagChipSettings />
           ) : selected.id === 'status-badge' ? (
             <StatusBadgeSettings />
@@ -2401,6 +2407,7 @@ window.addEventListener('keydown', (event) => {
 });
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.resetSettings.selector, () => {
+    if (selectedId.value === 'app-shell') resetAppShellDemo(root);
     if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
     if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
     if (selectedId.value === 'confidence-badge') resetConfidenceBadgeDemo(root);
@@ -2585,6 +2592,14 @@ demoListeners.add(
     const chip = target.closest<HTMLElement>('[data-component="tag-chip"]');
     if (chip && chip.dataset.disabled !== 'true')
       tagChipSettings.event.value = `Remove requested for ${chip.dataset.tagId}`;
+  }),
+);
+demoListeners.add(
+  delegate(root, 'change', '[data-settings="app-shell"] [name]', (_event, target) => {
+    const control = target as FormControl;
+    if (control.getAttribute('name') === 'presentation')
+      appShellSettings.presentation.value = control.value as typeof appShellSettings.presentation.value;
+    if (control.getAttribute('name') === 'overlay-open') appShellSettings.overlayOpen.value = control.checked;
   }),
 );
 demoListeners.add(
