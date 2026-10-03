@@ -11242,6 +11242,15 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(inspector).toContainText('Ticket parsing error');
   await expect(inspector).toContainText('unsupported content follows the bounded Notes section');
   await expect(inspector).toContainText('01M1DNB977BK0NG7YJ77RVZXTV.md');
+  // The recovery icons are sized by LucideIcon size="s", not app CSS on their svg (HS2-8Z0GCC).
+  const recoveryIcons = inspector.locator('.corrupt-ticket-inspector__actions [data-lucide]');
+  await expect(recoveryIcons).toHaveCount(2);
+  for (const icon of await recoveryIcons.all()) {
+    await expect(icon).toHaveAttribute('data-size', 's');
+    expect(
+      await icon.evaluate((node) => [node.getBoundingClientRect().width, node.getBoundingClientRect().height]),
+    ).toEqual([16, 16]);
+  }
   await inspector.getByRole('button', { name: 'Reveal in Finder' }).click();
   await expect(page.locator('.app-toast')).toContainText('Opened the file location.');
   await expect(inspector).not.toContainText('Opened the file location.');

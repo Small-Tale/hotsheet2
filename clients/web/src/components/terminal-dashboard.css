@@ -95,7 +95,7 @@
 .terminal-dashboard__project + .terminal-dashboard__project {
   margin-top: remify(16px);
 }
-.terminal-dashboard__project h2 {
+.terminal-dashboard__project-title {
   display: flex;
   margin: 0 0 remify(7.2px);
   color: var(--wa-color-neutral-on-normal);
@@ -104,7 +104,7 @@
   align-items: center;
   gap: remify(7.2px);
 }
-.terminal-dashboard__project h2 span {
+.terminal-dashboard__project-count {
   display: grid;
   min-width: remify(21.6px);
   height: remify(21.6px);

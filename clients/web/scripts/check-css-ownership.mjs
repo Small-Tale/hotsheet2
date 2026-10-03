@@ -149,6 +149,8 @@ export function typeOf(compound) {
  *   `{ name, component, classes, children }`; a component node's children are the JSX this module
  *   projects into it (its children and JSX-valued props), which render inside that component.
  * - `declares`: top-level names the module declares (its own local components).
+ * - `localRoots`: for each top-level function or arrow-function declaration, the JSX nodes its body
+ *   renders outermost (its returned tree), so a local component's markup can be judged in place.
  * - `cssImports`: relative stylesheet imports.
  */
 export function moduleFacts(path, source) {
@@ -283,14 +285,29 @@ export function moduleFacts(path, source) {
     ts.forEachChild(node, visit);
   };
   visit(file);
+  const localRoots = new Map();
+  const addRoots = (name, body) => {
+    if (!body) return;
+    const roots = [];
+    collectChildren(body, roots);
+    localRoots.set(name, roots);
+  };
   for (const statement of file.statements) {
-    if (ts.isFunctionDeclaration(statement) && statement.name) declares.add(statement.name.text);
+    if (ts.isFunctionDeclaration(statement) && statement.name) {
+      declares.add(statement.name.text);
+      addRoots(statement.name.text, statement.body);
+    }
     if (ts.isVariableStatement(statement))
       for (const declaration of statement.declarationList.declarations)
-        if (ts.isIdentifier(declaration.name)) declares.add(declaration.name.text);
+        if (ts.isIdentifier(declaration.name)) {
+          declares.add(declaration.name.text);
+          const init = declaration.initializer;
+          if (init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init)))
+            addRoots(declaration.name.text, init.body);
+        }
   }
   const components = new Set([...nodes.values()].filter((node) => node.component).map((node) => node.name));
-  return { path, classTokens, classUses, tags, components, elements, cssImports, declares };
+  return { path, classTokens, classUses, tags, components, elements, cssImports, declares, localRoots };
 }
 
 /**
@@ -419,11 +436,30 @@ export function findViolations(model) {
       isForeignComponent(node) &&
       (!tag || tag === '*' || !LEAF_COMPONENTS.has(node.name) || LEAF_COMPONENTS.get(node.name).has(tag));
     const nodeTag = (node) => (node.component ? undefined : node.name.toLowerCase());
-    const descendants = (node, into = []) => {
+    // An own local component renders its returned JSX in place (HS2-8Z0GCC): judge that markup,
+    // including the child components it composes, as if it were written inline. `seen` guards
+    // against a local component that (indirectly) renders itself.
+    const isLocal = (node) => node.component && !isForeignComponent(node);
+    const rootsOf = (node) =>
+      ownerFacts.find((fact) => fact.localRoots?.has(node.name))?.localRoots.get(node.name) ?? [];
+    const childrenOf = (node, seen = new Set()) =>
+      node.children.flatMap((child) => {
+        if (!isLocal(child)) return [child];
+        if (seen.has(child.name)) return [];
+        return childrenOf({ children: rootsOf(child) }, new Set(seen).add(child.name));
+      });
+    const descendants = (node, into = [], seen = new Set()) => {
       for (const child of node.children) {
+        if (isLocal(child)) {
+          if (seen.has(child.name)) continue;
+          const inside = new Set(seen).add(child.name);
+          // Its returned tree, and the JSX this module projects into it, both render below `node`.
+          descendants({ children: rootsOf(child) }, into, inside);
+          descendants(child, into, inside);
+          continue;
+        }
         into.push(child);
-        // An own local component's markup lives in another function: opaque, but not foreign.
-        if (!child.component || isForeignComponent(child)) descendants(child, into);
+        if (!child.component || isForeignComponent(child)) descendants(child, into, seen);
       }
       return into;
     };
@@ -454,7 +490,7 @@ export function findViolations(model) {
           if (combinator === '+' || combinator === '~') break;
           const wanted = typeOf(compound);
           const matchesTag = (node) => !wanted || wanted === '*' || nodeTag(node) === wanted;
-          const range = current.flatMap((node) => (combinator === '>' ? node.children : descendants(node)));
+          const range = current.flatMap((node) => (combinator === '>' ? childrenOf(node) : descendants(node)));
           if (combinator === ' ' && range.some((node) => reaches(node, wanted)))
             return {
               kind: 'foreign-element',

@@ -170,7 +170,7 @@ body[data-resizing-project-sidebar='true'] {
   gap: remify(16px);
   margin-bottom: remify(24px);
 }
-.settings-inspector h2 {
+.settings-inspector__title {
   margin: remify(2.4px) 0 0;
   overflow-wrap: anywhere;
   font-size: var(--wa-font-size-xl);

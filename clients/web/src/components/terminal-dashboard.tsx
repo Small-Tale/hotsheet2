@@ -654,9 +654,9 @@ export function TerminalDashboard({
         ) : (
           visibleGroups.map((group) => (
             <section class="terminal-dashboard__project" data-key={group.projectId} data-project-id={group.projectId}>
-              <h2>
+              <h2 class="terminal-dashboard__project-title">
                 {group.projectName}
-                <span>{group.sessions.length + group.chats.length}</span>
+                <span class="terminal-dashboard__project-count">{group.sessions.length + group.chats.length}</span>
               </h2>
               <Grid
                 sessions={group.sessions}

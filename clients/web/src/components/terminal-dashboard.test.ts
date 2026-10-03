@@ -88,7 +88,9 @@ describe('TerminalDashboard', () => {
     const grouped = String(
       TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2, grouping: 'project' }),
     );
-    expect(grouped).toMatch(/<h2>Project One<span>2<\/span>/);
+    expect(grouped).toMatch(
+      /<h2 class="terminal-dashboard__project-title">Project One<span class="terminal-dashboard__project-count">2<\/span>/,
+    );
     const hidden = String(
       TerminalDashboard({
         groups,

@@ -104,6 +104,8 @@ export function X(p: { on: boolean }) {
     expect([...facts.classTokens]).toEqual(expect.arrayContaining(['x__row', 'x__row--on', 'x__copy', 'x__raw']));
     expect([...facts.tags]).toEqual(expect.arrayContaining(['i', 'span', 'table', 'canvas', 'small']));
     expect(facts.declares).toEqual(new Set(['Local', 'X']));
+    expect(facts.localRoots.get('Local').map((node) => node.name)).toEqual(['i']);
+    expect(facts.localRoots.get('X').map((node) => node.name)).toEqual(['Row']);
     const row = facts.elements.find((element) => element.name === 'Row');
     expect(row.component).toBe(true);
     expect(row.children.map((child) => child.name).sort()).toEqual(['small', 'span']);
@@ -217,9 +219,66 @@ export const O = () => <span class="card__own"><LucideIcon name="x" /></span>;`,
       'src/components/table.tsx': `import './table.css';
 function BandRow() { return <tr><td /></tr>; }
 export const Table = () => <table class="table"><tbody><BandRow /></tbody></table>;`,
-      'src/components/table.css': '.table td { padding: 0; }',
+      'src/components/table.css': '.table td { padding: 0; } .table tbody > tr { height: 8px; }',
     };
     expect(scan(files)).toEqual([]);
+  });
+
+  // HS2-8Z0GCC: a local component's returned JSX renders in place, so the child components it
+  // composes are judged as if they were written inline (the corrupt-ticket recovery-actions shape).
+  it("sees through the component's own local components to the child components they render", () => {
+    const files = {
+      'src/components/panel.tsx': `import './panel.css';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+function Actions() {
+  return (
+    <>
+      <button type="button"><LucideIcon name="folder" />Reveal</button>
+    </>
+  );
+}
+const Leaf = () => <LucideIcon name="x" />;
+const Nested = () => <Leaf />;
+export const Panel = () => (
+  <div class="panel">
+    <div class="panel__actions"><Actions /></div>
+    <span class="panel__leaf"><Nested /></span>
+    <span class="panel__own"><Actions /></span>
+  </div>
+);`,
+      'src/components/panel.css': `.panel__actions svg { width: 16px; }
+.panel__actions button { gap: 4px; }
+.panel__actions > button { cursor: pointer; }
+.panel__leaf > svg { color: red; }
+.panel__own > span { color: red; }
+.panel__own h2 { margin: 0; }`,
+    };
+    const found = scan(files);
+    expect(selectors(found, 'foreign-element')).toEqual(['.panel__actions svg', '.panel__leaf > svg']);
+    expect(found.find(({ selector }) => selector === '.panel__actions svg').detail).toContain(
+      'also reaches inside <LucideIcon>',
+    );
+    expect(found.find(({ selector }) => selector === '.panel__leaf > svg').detail).toContain(
+      'it can only be the root of <LucideIcon>',
+    );
+  });
+
+  it('judges JSX projected into a local component and survives self-rendering local components', () => {
+    const files = {
+      'src/components/frame.tsx': `import './frame.css';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+function Shell(p: { children: unknown }) { return <section>{p.children}</section>; }
+function Loop(p: { depth: number }): unknown { return p.depth ? <Loop depth={p.depth - 1} /> : <i />; }
+export const Frame = () => (
+  <div class="frame">
+    <Shell><LucideIcon name="x" /></Shell>
+    <p class="frame__loop"><Loop depth={2} /></p>
+  </div>
+);`,
+      'src/components/frame.css': `.frame svg { width: 4px; } .frame > section { gap: 0; } .frame__loop i { color: red; }
+.frame__loop > i { color: blue; }`,
+    };
+    expect(selectors(scan(files), 'foreign-element')).toEqual(['.frame svg']);
   });
 
   it('judges classed elements built outside JSX by what the module renders', () => {

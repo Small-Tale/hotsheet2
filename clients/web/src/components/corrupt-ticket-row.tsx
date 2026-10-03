@@ -36,7 +36,7 @@ function RecoveryActions({ ticket, recovery }: { ticket: CorruptTicket; recovery
         data-corrupt-key={key}
         disabled={Boolean(recovery?.pending)}
       >
-        <LucideIcon icon={FolderOpen} name="folder-open" />
+        <LucideIcon icon={FolderOpen} name="folder-open" size="s" />
         {recovery?.pending === 'reveal' ? 'Showing…' : revealFileLabel()}
       </button>
       {ticket.error_code !== 'upgrade_required' && (
@@ -46,7 +46,7 @@ function RecoveryActions({ ticket, recovery }: { ticket: CorruptTicket; recovery
           data-corrupt-key={key}
           disabled={Boolean(recovery?.pending)}
         >
-          <LucideIcon icon={Bot} name="bot" />
+          <LucideIcon icon={Bot} name="bot" size="s" />
           {recovery?.pending === 'repair' ? 'Queuing…' : 'Attempt AI repair'}
         </button>
       )}

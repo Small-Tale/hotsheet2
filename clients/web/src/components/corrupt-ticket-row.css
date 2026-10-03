@@ -200,9 +200,6 @@
   opacity: 0.58;
   cursor: wait;
 }
-.corrupt-ticket-inspector__actions svg {
-  width: remify(16px);
-}
 .corrupt-ticket-inspector__recovery {
   color: var(--wa-color-success-on-quiet);
 }

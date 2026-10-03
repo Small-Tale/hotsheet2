@@ -1355,7 +1355,7 @@ function DemoApp() {
           <header>
             <div>
               <p class="eyebrow">Demo settings</p>
-              <h2>{selected.name}</h2>
+              <h2 class="settings-inspector__title">{selected.name}</h2>
             </div>
             <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded="true">
               Close settings

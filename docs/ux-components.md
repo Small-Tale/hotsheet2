@@ -2368,7 +2368,11 @@ The check reports five kinds of finding:
 The check allows a few things:
 
 - A component's own local components (functions declared in the same module) count as its own
-  markup.
+  markup. The check sees through them (HS2-8Z0GCC): a local component's returned JSX, and any JSX
+  projected into it, is judged in place as if written inline. So `.x svg` over a local component
+  that renders a `LucideIcon` is a `foreign-element` finding like an inline icon. The
+  `CorruptTicketInspector` recovery buttons now size their icons with `size="s"` instead of
+  `.corrupt-ticket-inspector__actions svg`.
 - `*`, `html`, `body`, sibling chains, and `@keyframes` steps are ignored.
 
 A `LucideIcon` gets no allowance, even when the component renders it itself (HS2-4AQJEX). Its `svg`
