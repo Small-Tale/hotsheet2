@@ -25,6 +25,10 @@ describe('touch textarea sizing (HS2-6PC150)', () => {
     expect(readFileSync(new URL('../style.css', import.meta.url), 'utf8')).toContain(
       "@import './components/textarea-sizing.css';",
     );
+    // The UX demo loads the same shared tokens so touch auto-grow is representable in the catalog (HS2-YBBJEN).
+    expect(readFileSync(new URL('../ux-demo/style.css', import.meta.url), 'utf8')).toContain(
+      "@import '../components/textarea-sizing.css';",
+    );
   });
 
   it('routes every resizable app textarea through the shared touch tokens', () => {

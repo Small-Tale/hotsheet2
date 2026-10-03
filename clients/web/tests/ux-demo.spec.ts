@@ -6633,6 +6633,37 @@ test('renders the real inspector chrome as a value-free loading placeholder', as
   }
 });
 
+test('loads the shared touch textarea tokens so catalog textareas auto-grow under a coarse pointer (HS2-YBBJEN)', async ({
+  browser,
+}) => {
+  for (const coarse of [true, false]) {
+    const context = await browser.newContext({
+        viewport: { width: coarse ? 390 : 1280, height: 844 },
+        hasTouch: coarse,
+        isMobile: coarse,
+      }),
+      page = await context.newPage();
+    await page.goto('/ux-demo?component=note-composer');
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(coarse);
+    const textarea = page.locator('[aria-label="NoteComposer demo"] textarea').first();
+    await expect(textarea).toBeVisible();
+    // Coarse pointers size to content with no resize grip, exactly as production does; fine pointers keep
+    // the fixed height and vertical grip.
+    await expect(textarea).toHaveCSS('resize', coarse ? 'none' : 'vertical');
+    const sizing = await textarea.evaluate((node) => getComputedStyle(node).getPropertyValue('field-sizing'));
+    expect(sizing).toBe(coarse ? 'content' : 'fixed');
+    if (coarse) {
+      const before = (await textarea.boundingBox())!.height;
+      await textarea.fill(Array.from({ length: 8 }, (_, index) => `Line ${index + 1}`).join('\n'));
+      await expect.poll(async () => (await textarea.boundingBox())!.height).toBeGreaterThan(before);
+      await textarea.screenshot({ path: '/private/tmp/hs2-ybbjen-note-composer-coarse-390.png' });
+    } else {
+      await textarea.screenshot({ path: '/private/tmp/hs2-ybbjen-note-composer-fine-1280.png' });
+    }
+    await context.close();
+  }
+});
+
 test('exposes the TicketInfoPanel placeholder variant beside the loaded panel (HS2-XBHADT)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });

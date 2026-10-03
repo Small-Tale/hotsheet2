@@ -1,4 +1,7 @@
 @import '../components/cursor-semantics.css';
+/* The shared touch textarea tokens (HS2-6PC150), imported like the app entry so the catalog shows touch
+   auto-grow (HS2-YBBJEN). */
+@import '../components/textarea-sizing.css';
 :root {
   font-family:
     Inter,
