@@ -898,9 +898,10 @@ its siblings (`KF-K4VBTS`). Until that ships, the floor stays a narrow rule on t
 literal `--grow` and `--open` root modifiers in `ticket-search-field.css`, with one documented
 `KUI-L022` suppression (`HS2-AEK8GK`).
 
-The grouped field's quieter chip tint is set on the `ticket-search-field__query` hook Kerf
-renders on its field root. The form-field presentation renders no such hook, so its chips keep
-Kerf's default tint (`KF-5G8WJ0`, `HS2-RXHZVR`). Every action it renders uses
+Both presentations share one quieter chip tint (`--wa-color-brand-fill-quiet`): it is set on the
+`ticket-search-field__query` hook that Kerf renders on the root of the grouped field and of the
+form field alike. Kerf resolves its token defaults at their use sites, so the bare hook applies
+(`KF-5G8WJ0`, `HS2-RXHZVR`). Every action it renders uses
 one generic name (`edit-ticket-search-token`, `remove-ticket-search-token`,
 `clear-ticket-search`, `toggle-ticket-search-help`, `apply-ticket-search-date`); the shared
 `wireTicketSearchFields` helper (`clients/web/src/interactions/ticket-search-field.ts`) resolves

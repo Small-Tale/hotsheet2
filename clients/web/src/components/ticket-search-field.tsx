@@ -236,9 +236,8 @@ export interface TicketSearchFormFieldProps {
  * Kerf's `TokenSearchField presentation="form-field"` (visible label, hint, required marker,
  * full width, no Toolbar) driven by the same managed model, with the syntax-help button and
  * the date/help surfaces stacked below it in flow. The app-owned wrapper carries the field id
- * for the shared delegated wiring. Its chips keep Kerf's default token colors: the form-field
- * presentation renders no `className` hook and Kerf declares the token defaults on its own root,
- * so neither a hook nor inheritance can match the grouped field's quieter chips yet (KF-5G8WJ0).
+ * for the shared delegated wiring. Its chips share the grouped field's quieter tint through the same
+ * `ticket-search-field__query` hook Kerf renders on the form-field root (KF-5G8WJ0, HS2-RXHZVR).
  */
 export function TicketSearchFormField({
   id,
@@ -256,6 +255,7 @@ export function TicketSearchFormField({
     <div class="ticket-search-form-field" data-ticket-search-for={id}>
       <TokenSearchField
         presentation="form-field"
+        className="ticket-search-field__query"
         id={id}
         label={label}
         model={model}
@@ -313,8 +313,8 @@ export function TicketSearchField({
       clearAction: TICKET_SEARCH_ACTIONS.clear.value,
       clearLabel,
       trailing: help ? <TicketSearchHelpButton open={helpOpen} /> : undefined,
-      // The field's token colors are set on this app-owned hook (HS2-8FS5BJ), never by reaching
-      // into Kerf's `.kui-token-search`.
+      // The field's token colors are set on this app-owned hook, shared with TicketSearchFormField
+      // (HS2-8FS5BJ, HS2-RXHZVR), never by reaching into Kerf's `.kui-token-search`.
       className: 'ticket-search-field__query',
       fill: layout === 'row',
     },

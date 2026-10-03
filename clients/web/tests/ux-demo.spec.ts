@@ -7485,6 +7485,39 @@ test('aligns the TicketSearchFormField with a Web Awesome input and keeps its se
     await query.click();
     await page.keyboard.type('tag:docs ');
     await expect(section.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
+    // Its chips share the grouped field's quiet tint through the same className hook, in light and dark
+    // themes (KF-5G8WJ0, HS2-RXHZVR).
+    const grouped = page.getByRole('searchbox', { name: 'Search query', exact: true }).first();
+    await grouped.click();
+    await page.keyboard.type('tag:docs ');
+    const chipTints = () =>
+      page.evaluate(() => {
+        const background = (selector: string) =>
+            getComputedStyle(document.querySelector<HTMLElement>(`${selector} [data-component="token-search-token"]`)!)
+              .backgroundColor,
+          probe = document.body.appendChild(document.createElement('div'));
+        probe.style.background = 'var(--wa-color-brand-fill-quiet)';
+        const quiet = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return {
+          form: background('.ticket-search-field-demo__form'),
+          grouped: background('[data-token-search-id="ticket-search-demo"]'),
+          quiet,
+        };
+      });
+    for (const theme of ['dark', 'light'] as const) {
+      await page.getByRole('button', { name: `Use ${theme} theme`, exact: true }).evaluate((button: HTMLElement) => {
+        button.click();
+      });
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      const tints = await chipTints();
+      expect(tints.form).toBe(tints.quiet);
+      expect(tints.grouped).toBe(tints.quiet);
+    }
+    await page.locator('[data-token-search-id="ticket-search-demo"] [data-action="clear-ticket-search"]').click();
+    await expect(
+      page.locator('[data-token-search-id="ticket-search-demo"] [data-component="token-search-token"]'),
+    ).toHaveCount(0);
     await section.getByRole('button', { name: 'Search syntax help' }).click();
     await expect(section.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
     await section.screenshot({ path: test.info().outputPath(`ticket-search-form-field-${width}.png`) });

@@ -13,11 +13,11 @@
   height: auto;
   overflow: visible;
 }
-/* The grouped field's quieter chips: its token color is set on the app-owned `className` hook
-   Kerf's TokenSearchField renders on its root (HS2-8FS5BJ). Kerf declares its defaults on that same
-   root, so the hook is qualified by this component's own root to outrank them (KF-5G8WJ0); the
-   surface and border tokens match Kerf's defaults and are not restated. */
-.ticket-search-field .ticket-search-field__query {
+/* Both presentations' quieter chips: the token color is set on the app-owned `className` hook
+   Kerf's TokenSearchField renders on its root in the grouped and the form-field presentation alike
+   (HS2-8FS5BJ, HS2-RXHZVR). Kerf resolves its token defaults at their use sites, so the bare hook
+   applies (KF-5G8WJ0); the surface and border tokens match Kerf's defaults and are not restated. */
+.ticket-search-field__query {
   --kui-token-search-token-background: var(--wa-color-brand-fill-quiet);
 }
 /* `layout="grow"` (the workspace header). TEMPORARY until Kerf's `sizing="grow"` keeps its basis

@@ -3,7 +3,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { createTicketSearchModel, replaceTicketSearch } from '../ticket-search-model';
-import { TICKET_SEARCH_ACTIONS, TicketSearchField, TicketSearchSurfaces } from './ticket-search-field';
+import {
+  TICKET_SEARCH_ACTIONS,
+  TicketSearchField,
+  TicketSearchFormField,
+  TicketSearchSurfaces,
+} from './ticket-search-field';
 
 const tags = ['client', 'Docs', 'needs design', 'server'];
 
@@ -222,6 +227,17 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(css).not.toContain('@keyframes');
   });
 
+  it("gives the form field the grouped field's chip-color hook on its rendered root (HS2-RXHZVR)", () => {
+    const markup = String(TicketSearchFormField({ id: 'form-search', label: 'View query', model: model('is:open') }));
+    // Kerf renders `className` on the form-field root (KF-5G8WJ0), the same hook the grouped field uses.
+    expect(markup).toContain(
+      '<div class="kui-token-search__field ticket-search-field__query" data-token-search-form-field="form-search"',
+    );
+    expect(markup).toContain('data-token-value="is:open"');
+    const grouped = String(TicketSearchField({ id: 'grouped', label: 'Search', model: model('is:open') }));
+    expect(grouped).toContain('class="kui-token-search ticket-search-field__query"');
+  });
+
   it('owns the token colors and helper popover styles that every consumer shares', () => {
     const css = readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8');
     expect(css).toContainSource('.ticket-search-field { position: relative; }');
@@ -229,10 +245,13 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
       ".ticket-search-field[data-content='search'][data-expanded='true'] { height: auto; overflow: visible; }",
     );
     // The chip tint is set on the app's own className hook, never on Kerf's `.kui-token-search`, and
-    // the tokens that equal Kerf's defaults are not restated (HS2-8FS5BJ).
+    // the tokens that equal Kerf's defaults are not restated (HS2-8FS5BJ). Kerf's use-site token
+    // fallbacks let the bare hook apply, so it needs no grouped-root qualifier and the form field
+    // shares it (KF-5G8WJ0, HS2-RXHZVR).
     expect(css).toContainSource(
-      '.ticket-search-field .ticket-search-field__query { --kui-token-search-token-background: var(--wa-color-brand-fill-quiet); }',
+      '.ticket-search-field__query { --kui-token-search-token-background: var(--wa-color-brand-fill-quiet); }',
     );
+    expect(css).not.toContain('.ticket-search-field .ticket-search-field__query');
     expect(css).not.toContain('.kui-');
     // Tag suggestions are Kerf's own in-flow rows now (HS2-5JXBQY); the app styles only its helpers.
     expect(css).not.toContain('__suggestions');
