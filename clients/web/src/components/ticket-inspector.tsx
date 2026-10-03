@@ -261,7 +261,16 @@ export function ticketInspectorPanel({
   const header = (
     <div class="ticket-inspector__header" data-component="ticket-inspector-header" {...identity}>
       {titleEditing ? (
-        <input class="ticket-inspector__title-input" name="ticket-title" aria-label="Ticket title" value={titleDraft} />
+        <input
+          class={
+            presentation === 'reader'
+              ? 'ticket-inspector__title-input ticket-inspector__title-input--reader'
+              : 'ticket-inspector__title-input'
+          }
+          name="ticket-title"
+          aria-label="Ticket title"
+          value={titleDraft}
+        />
       ) : (
         <h1
           class={

@@ -572,7 +572,7 @@ describe('UX demo catalog', () => {
     readerTitleEditing.value = true;
     try {
       const editing = String(TicketReaderDemo());
-      expect(editing).toContain('class="ticket-inspector__title-input"');
+      expect(editing).toContain('class="ticket-inspector__title-input ticket-inspector__title-input--reader"');
       expect(editing).toContain('value="Draft reader title"');
     } finally {
       readerTitleEditing.value = false;

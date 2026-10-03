@@ -62,6 +62,23 @@ describe('TicketInspector', () => {
     expect(reader).toContain('<h1 class="ticket-inspector__title ticket-inspector__title--reader"');
   });
 
+  it('keeps the reader title typography while the title is being edited (HS2-R8M8HB)', () => {
+    const editing = { ...base, canUpdate: true, titleEditing: true, titleDraft: 'Draft' };
+    expect(String(TicketInspector(editing))).toContain(
+      '<input class="ticket-inspector__title-input" name="ticket-title"',
+    );
+    expect(String(TicketInspector({ ...editing, presentation: 'reader' }))).toContain(
+      '<input class="ticket-inspector__title-input ticket-inspector__title-input--reader" name="ticket-title"',
+    );
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
+    const rule = (selector: string) =>
+      css.match(new RegExp(`\\n${selector.replace(/[.-]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+    for (const declaration of ['max-width: remify(864px);', 'font-size: var(--wa-font-size-l);'])
+      expect(rule('.ticket-inspector__title-input--reader')).toContain(declaration);
+    expect(rule('.ticket-inspector__title--reader')).toContain('font-size: var(--wa-font-size-l);');
+    expect(rule('.ticket-inspector__title-input')).toContain('font-weight: var(--wa-font-weight-heading);');
+  });
+
   it('renders each public tab without changing ticket identity', () => {
     for (const tab of ['info', 'timeline', 'code-review', 'attachments'] as const) {
       const markup = String(TicketInspector({ ...base, activeTab: tab, collapseControl: true }));

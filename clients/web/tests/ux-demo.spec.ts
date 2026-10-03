@@ -3994,6 +3994,30 @@ test('enters, autosaves, and re-enters reader title editing in the TicketReader 
     const reader = page.locator('[data-component="ticket-reader"]');
     const heading = reader.getByRole('heading', { name: 'Build TicketReader component and UX demo' });
     await expect(heading).toBeVisible();
+    // The editor keeps the static reader title's typography and reading width (HS2-R8M8HB), in both the
+    // standard and the large reader text sizes.
+    const typography = (node: Element) => {
+      const style = getComputedStyle(node);
+      return {
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        lineHeight: style.lineHeight,
+        maxWidth: style.maxWidth,
+      };
+    };
+    const textSizeToggle = reader.locator('[data-action="toggle-reader-text-size"]');
+    for (const largeText of [true, false]) {
+      await textSizeToggle.click();
+      await expect(reader).toHaveAttribute('data-large-text', String(largeText));
+      const staticTitle = await heading.evaluate(typography);
+      expect(parseFloat(staticTitle.fontSize)).toBeGreaterThan(16);
+      await heading.dblclick();
+      const editor = reader.locator('.ticket-inspector__title-input');
+      await expect(editor).toBeFocused();
+      expect(await editor.evaluate(typography)).toEqual(staticTitle);
+      await editor.blur();
+      await expect(heading).toBeVisible();
+    }
     await heading.dblclick();
     const titleEditor = reader.locator('.ticket-inspector__title-input');
     await expect(titleEditor).toBeVisible();
