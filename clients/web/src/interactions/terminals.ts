@@ -130,6 +130,8 @@ export interface TerminalInteractionsDependencies {
   readonly terminalRename: Signal<TerminalRenameTarget | undefined>;
   readonly closeDrawerTabIds: (ids: readonly string[]) => Promise<void>;
   readonly saveTerminalName: (projectId: string, terminalId: string, name: string) => void;
+  /** Clear a terminal's saved name so its tab shows the derived default again (HS2-2Q7KTX). */
+  readonly resetTerminalName: (projectId: string, terminalId: string) => void;
 }
 
 /** Register this group only when the application wiring owner invokes it. */
@@ -188,6 +190,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalRename,
     closeDrawerTabIds,
     saveTerminalName,
+    resetTerminalName,
   } = dependencies;
   // The magnified terminal (HS2-Z9PQSC) and the shell's permission popup (HS2-ZESCM2) are manual
   // popovers; keep them in the top layer as Kerf renders them.
@@ -789,6 +792,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
               terminalId: session.id,
               value: session.title ?? session.id,
               session: terminalRenameSession,
+              defaultName: session.named ? session.defaultTitle : undefined,
             };
             queueMicrotask(() => document.querySelector<Control>('[name="terminal-name"]')?.focus());
           }
@@ -808,6 +812,14 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         name = target.querySelector<Control>('[name="terminal-name"]')?.value ?? '';
       if (!rename || !name.trim()) return;
       saveTerminalName(rename.projectId, rename.terminalId, name);
+      terminalRename.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.resetTerminalRename.selector, () => {
+      const rename = terminalRename.value;
+      if (!rename?.defaultName) return;
+      resetTerminalName(rename.projectId, rename.terminalId);
       terminalRename.value = undefined;
     }),
   );

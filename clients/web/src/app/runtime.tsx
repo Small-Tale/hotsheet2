@@ -270,6 +270,7 @@ import {
   defaultTerminalNames,
   parseTerminalNames,
   reconcileLocalTerminalNames,
+  restoreDefaultTerminalTitle,
   retitleTerminal,
   terminalNameKey,
   terminalTitle,
@@ -1352,17 +1353,18 @@ export async function startHotSheetWebClient() {
             ]),
             owned = infos.filter((session) => terminalProjectOwner(openProjects, session.cwd) === current.id),
             defaultNames = defaultTerminalNames(owned, aiToolLabel),
-            sessions = owned.map((session, index) => ({
-              ...session,
-              scrollback: '',
-              projectId: current.id,
-              projectName: current.name,
-              title: terminalTitle(
-                terminalNames.value[terminalNameKey(current.id, session.id)],
-                session.name,
-                defaultNames[index],
-              ),
-            }));
+            sessions = owned.map((session, index) => {
+              const localName = terminalNames.value[terminalNameKey(current.id, session.id)];
+              return {
+                ...session,
+                scrollback: '',
+                projectId: current.id,
+                projectName: current.name,
+                title: terminalTitle(localName, session.name, defaultNames[index]),
+                defaultTitle: defaultNames[index],
+                named: Boolean(localName || session.name),
+              };
+            });
           reconcileTerminalNames(current, owned);
           return {
             projectId: current.id,
@@ -1484,6 +1486,29 @@ export async function startHotSheetWebClient() {
         pendingTerminalRenames.delete(key);
       });
   }
+  /**
+   * Return a renamed terminal to its derived default name (HS2-2Q7KTX): retitle the tab at once,
+   * forget any browser-local copy (an in-flight or legacy rename), and clear the server's saved
+   * name so every client follows through the `terminal_renamed` event.
+   */
+  function resetTerminalName(projectId: string, terminalId: string) {
+    const target = projects.value.find((item) => item.id === projectId),
+      key = terminalNameKey(projectId, terminalId);
+    if (!target) return;
+    if (Object.hasOwn(terminalNames.value, key))
+      persistLocalTerminalNames(withoutTerminalName(terminalNames.value, key));
+    terminalGroups.value = restoreDefaultTerminalTitle(terminalGroups.value, projectId, terminalId);
+    pendingTerminalRenames.add(key);
+    void new Api(target.apiPath)
+      .renameTerminal(terminalId, null)
+      .catch((reason: unknown) => {
+        showToast(`The terminal name could not be reset: ${reason instanceof Error ? reason.message : String(reason)}`);
+        if (terminalGroupLoaded(projectId)) void refreshTerminalDashboard();
+      })
+      .finally(() => {
+        pendingTerminalRenames.delete(key);
+      });
+  }
   /** Upload settled browser-local names the server lacks and drop ones it supersedes. */
   function reconcileTerminalNames(current: Project, sessions: readonly TerminalInfo[]) {
     const { upload, drop } = reconcileLocalTerminalNames(
@@ -1502,7 +1527,17 @@ export async function startHotSheetWebClient() {
     if (pendingTerminalRenames.has(key)) return;
     if (Object.hasOwn(terminalNames.value, key))
       persistLocalTerminalNames(withoutTerminalName(terminalNames.value, key));
-    if (name) terminalGroups.value = retitleTerminal(terminalGroups.value, current.id, terminalId, name);
+    if (name) {
+      terminalGroups.value = retitleTerminal(terminalGroups.value, current.id, terminalId, name);
+      return;
+    }
+    // A cleared name returns the tab to the default this client already derived (HS2-2Q7KTX);
+    // only a terminal it has not listed yet needs the list refetched.
+    const known = terminalGroups.value
+      .find((group) => group.projectId === current.id)
+      ?.sessions.find((session) => session.id === terminalId);
+    if (known?.defaultTitle)
+      terminalGroups.value = restoreDefaultTerminalTitle(terminalGroups.value, current.id, terminalId);
     else if (terminalGroupLoaded(current.id)) void refreshTerminalDashboard();
   }
   // Serialize terminal creation so a create in flight (including its dashboard refresh) never *drops* a
@@ -5182,7 +5217,7 @@ export async function startHotSheetWebClient() {
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
     setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, terminalCopy, terminalPaste, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
-    closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, viewportMobile, sidebarCollapsed, inspectorCollapsed, revealInspectorOverlay,
+    closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, resetTerminalName, viewportMobile, sidebarCollapsed, inspectorCollapsed, revealInspectorOverlay,
     selectTickets, selectionOrder, visibleTickets, selectedView, hideVerifiedColumn, cancelTicketDrafts, openTicketReader, ticketContextMenu,
     selectedRows, executeBulkTicketAction, tickets, openNotWorking, openTicketClose, copySelection, pasteSelection, openBulkTicketDialog,
     restoreTrashedTickets, bulkTicketDialog, openEmptyTrash, emptyTrash, setTicketCloseReason, searchTicketCloseTargets, ticketCloseDialog, submitTicketClose,

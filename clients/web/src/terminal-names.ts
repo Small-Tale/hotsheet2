@@ -94,21 +94,43 @@ export function reconcileLocalTerminalNames(
 }
 
 /** Retitle one project's terminal in place (an optimistic rename or a `terminal_renamed` event). */
-export function retitleTerminal<G extends { projectId: string; sessions: readonly { id: string; title?: string }[] }>(
-  groups: readonly G[],
-  projectId: string,
-  terminalId: string,
-  title: string,
-): G[] {
+export function retitleTerminal<
+  G extends { projectId: string; sessions: readonly { id: string; title?: string; named?: boolean }[] },
+>(groups: readonly G[], projectId: string, terminalId: string, title: string): G[] {
+  return updateTerminalSession(groups, projectId, terminalId, { title, named: true });
+}
+
+/**
+ * Return one project's terminal to its derived default tab name (HS2-2Q7KTX), as the optimistic
+ * half of clearing its saved name. A session without a recorded default is left unchanged.
+ */
+export function restoreDefaultTerminalTitle<
+  G extends {
+    projectId: string;
+    sessions: readonly { id: string; title?: string; defaultTitle?: string; named?: boolean }[];
+  },
+>(groups: readonly G[], projectId: string, terminalId: string): G[] {
+  const session = groups
+    .find((group) => group.projectId === projectId)
+    ?.sessions.find((item) => item.id === terminalId);
+  if (!session?.defaultTitle) return groups as G[];
+  return updateTerminalSession(groups, projectId, terminalId, { title: session.defaultTitle, named: false });
+}
+
+function updateTerminalSession<
+  G extends { projectId: string; sessions: readonly { id: string; title?: string; named?: boolean }[] },
+>(groups: readonly G[], projectId: string, terminalId: string, patch: { title: string; named: boolean }): G[] {
   const stale = (group: G) =>
     group.projectId === projectId &&
-    group.sessions.some((session) => session.id === terminalId && session.title !== title);
+    group.sessions.some(
+      (session) => session.id === terminalId && (session.title !== patch.title || session.named !== patch.named),
+    );
   if (!groups.some(stale)) return groups as G[];
   return groups.map((group) =>
     stale(group)
       ? {
           ...group,
-          sessions: group.sessions.map((session) => (session.id === terminalId ? { ...session, title } : session)),
+          sessions: group.sessions.map((session) => (session.id === terminalId ? { ...session, ...patch } : session)),
         }
       : group,
   );

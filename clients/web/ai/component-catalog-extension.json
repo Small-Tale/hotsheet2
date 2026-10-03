@@ -1500,9 +1500,9 @@
       "id": "terminal-rename-dialog",
       "name": "TerminalRenameDialog",
       "kind": "component",
-      "purpose": "Rename a terminal while retaining its stable identity.",
+      "purpose": "Rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores.",
       "useWhen": [
-        "Hot Sheet needs rename a terminal while retaining its stable identity."
+        "Hot Sheet needs rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalRenameDialog behavior."

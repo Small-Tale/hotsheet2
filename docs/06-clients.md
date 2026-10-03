@@ -2262,7 +2262,12 @@ prunes. The browser keeps a rename locally only
 while its write is in flight (or after a failed write, retried by the next terminal refresh),
 and uploads renames saved locally before names moved to the server once, then drops them. The
 Rename dialog always opens on the current name of the terminal being renamed, never on a
-previous rename's or an abandoned edit's text: each open is a new field session (HS2-MEW525). Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
+previous rename's or an abandoned edit's text: each open is a new field session (HS2-MEW525). While a
+rename applies, the dialog names the terminal's derived default in the field hint and offers
+**Reset to default** (HS2-2Q7KTX): it retitles the tab to that default at once, drops any
+browser-local copy, and clears the saved name with `PUT /terminals/{id}/name {"name": null}`,
+whose `terminal_renamed` event (no name) returns every other client's tab to its own derived
+default without a refetch. A terminal still on its default name shows no reset action. Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
 one mixed drawer strip by dragging across either kind. Both strips use Kerf's controlled
 `TabBar`/`AppTab` composition and one `wireTabBars` delegation. Both use manual activation:
 Left/Right/Home/End move focus without replacing the focused controlled tab node, and

@@ -5,6 +5,7 @@ import {
   defaultTerminalNames,
   parseTerminalNames,
   reconcileLocalTerminalNames,
+  restoreDefaultTerminalTitle,
   retitleTerminal,
   terminalNameKey,
   terminalTitle,
@@ -84,5 +85,41 @@ describe('terminal names', () => {
     expect(renamed[1]).toBe(groups[1]);
     expect(retitleTerminal(renamed, 'p', 'a', 'Build')).toBe(renamed);
     expect(retitleTerminal(groups, 'p', 'missing', 'Build')).toBe(groups);
+  });
+  it('resets a renamed terminal to its default and back again across every transition (HS2-2Q7KTX)', () => {
+    const groups = [
+      {
+        projectId: 'p',
+        sessions: [
+          { id: 'a', title: 'Claude 1', defaultTitle: 'Claude 1', named: false },
+          { id: 'b', title: 'Terminal 1', named: false },
+        ],
+      },
+      { projectId: 'q', sessions: [{ id: 'a', title: 'Claude 1', defaultTitle: 'Claude 1', named: false }] },
+    ];
+    // Unnamed → reset is a no-op that keeps identity.
+    expect(restoreDefaultTerminalTitle(groups, 'p', 'a')).toBe(groups);
+    // Rename marks the session named.
+    const renamed = retitleTerminal(groups, 'p', 'a', 'Review');
+    expect(renamed[0].sessions[0]).toMatchObject({ title: 'Review', named: true, defaultTitle: 'Claude 1' });
+    // Reset restores the default title and clears the named flag, touching only that project.
+    const reset = restoreDefaultTerminalTitle(renamed, 'p', 'a');
+    expect(reset[0].sessions[0]).toMatchObject({ title: 'Claude 1', named: false });
+    expect(reset[0].sessions[1]).toBe(renamed[0].sessions[1]);
+    expect(reset[1]).toBe(groups[1]);
+    // Repeating the reset changes nothing.
+    expect(restoreDefaultTerminalTitle(reset, 'p', 'a')).toBe(reset);
+    // A rename to exactly the default text still counts as a rename the user can reset.
+    const sameText = retitleTerminal(reset, 'p', 'a', 'Claude 1');
+    expect(sameText).not.toBe(reset);
+    expect(sameText[0].sessions[0]).toMatchObject({ title: 'Claude 1', named: true });
+    expect(restoreDefaultTerminalTitle(sameText, 'p', 'a')[0].sessions[0]).toMatchObject({ named: false });
+    // Rename again after the reset (empty-then-refill).
+    expect(retitleTerminal(reset, 'p', 'a', 'Again')[0].sessions[0]).toMatchObject({ title: 'Again', named: true });
+    // Without a recorded default, or for an unknown terminal/project, nothing changes.
+    const named = retitleTerminal(groups, 'p', 'b', 'Logs');
+    expect(restoreDefaultTerminalTitle(named, 'p', 'b')).toBe(named);
+    expect(restoreDefaultTerminalTitle(named, 'p', 'missing')).toBe(named);
+    expect(restoreDefaultTerminalTitle(named, 'missing', 'a')).toBe(named);
   });
 });

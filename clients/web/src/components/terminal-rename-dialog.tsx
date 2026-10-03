@@ -1,5 +1,6 @@
 import { List } from '@kerfjs/ui/list';
 import { Row } from '@kerfjs/ui/row';
+import { Spacer } from '@kerfjs/ui/spacer';
 
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 
@@ -14,6 +15,11 @@ export interface TerminalRenameTarget {
    * the current name of the terminal being renamed, never a previous rename's text.
    */
   session: number;
+  /**
+   * The terminal's derived default name, present only while a user rename applies to it
+   * (HS2-2Q7KTX). It names what Reset to default restores and enables that action.
+   */
+  defaultName?: string;
 }
 
 export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget }) {
@@ -31,10 +37,17 @@ export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget
             name="terminal-name"
             label="Terminal name"
             value={target?.value ?? ''}
+            hint={target?.defaultName ? `Default name: ${target.defaultName}` : undefined}
             required
             autofocus
           ></wa-input>
-          <Row hAlign="right" vAlign="middle" gap="xs">
+          <Row vAlign="middle" gap="xs">
+            {target?.defaultName ? (
+              <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.resetTerminalRename.attrs}>
+                Reset to default
+              </wa-button>
+            ) : undefined}
+            <Spacer flex />
             <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalRename.attrs}>
               Cancel
             </wa-button>

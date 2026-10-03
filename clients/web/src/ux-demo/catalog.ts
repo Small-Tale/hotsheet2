@@ -624,7 +624,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'terminal-rename-dialog',
         'TerminalRenameDialog',
-        'Rename a terminal while retaining its stable identity.',
+        'Rename a terminal while retaining its stable identity; a renamed terminal also offers Reset to default, naming the default it restores.',
         'feature-floor',
         true,
       ),

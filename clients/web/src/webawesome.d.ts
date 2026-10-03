@@ -6,6 +6,7 @@ type WaBase = KerfBaseAttrs & {
   value?: AttrLike;
   label?: AttrLike;
   placeholder?: AttrLike;
+  hint?: AttrLike;
   disabled?: AttrLike<boolean>;
   checked?: AttrLike<boolean>;
   required?: AttrLike<boolean>;

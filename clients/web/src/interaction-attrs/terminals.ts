@@ -49,6 +49,7 @@ export const TERMINALS_ACTIONS = {
   closeAiChatTab: action('close-ai-chat-tab'),
   renameTerminalForm: action('rename-terminal-form'),
   cancelTerminalRename: action('cancel-terminal-rename'),
+  resetTerminalRename: action('reset-terminal-rename'),
 } as const;
 
 /**

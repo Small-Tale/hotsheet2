@@ -42,6 +42,10 @@ export interface TerminalDashboardSession {
   projectId: string;
   projectName: string;
   title?: string;
+  /** The derived default tab name a reset restores (HS2-2Q7KTX). */
+  defaultTitle?: string;
+  /** Whether a user rename (saved or in flight) supplies `title` rather than the default. */
+  named?: boolean;
   alive: boolean;
   busy: boolean;
   cwd?: string;

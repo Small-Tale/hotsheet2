@@ -66,7 +66,7 @@ import {
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { TerminalKeyBar } from '../components/terminal-key-bar';
-import { TerminalRenameDialog } from '../components/terminal-rename-dialog';
+import { TerminalRenameDialog, type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
 import { TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
 import { showTicketReaderDialog } from '../components/ticket-reader';
@@ -536,6 +536,14 @@ const CLIPBOARD_DEMO_TEXT = Array.from({ length: 40 }, (_, index) => `line ${ind
   clipboardDemoPaste = signal<TerminalPasteState | undefined>(undefined),
   clipboardDemoOutput = signal(''),
   clipboardDemoGeneration = signal(0);
+// HS2-2Q7KTX: the rename dialog opens renamed (offering Reset to default) or default-named.
+const renameDemoTargets = {
+    renamed: { projectId: 'demo', terminalId: 'shell', value: 'Development', defaultName: 'Terminal 1' },
+    default: { projectId: 'demo', terminalId: 'shell', value: 'Terminal 1' },
+  } as const,
+  renameDemoSession = signal(1),
+  renameDemoTarget = signal<TerminalRenameTarget | undefined>({ ...renameDemoTargets.renamed, session: 1 }),
+  renameDemoOutput = signal('');
 const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
 const markdownAutosave = createDebouncedAutosave((value: string) => {
   markdownSavedValue.value = value;
@@ -1157,7 +1165,16 @@ function demoContent(item: DemoDefinition) {
   }
   if (item.id === 'terminal-rename-dialog')
     return (
-      <TerminalRenameDialog target={{ projectId: 'demo', terminalId: 'shell', value: 'Development', session: 1 }} />
+      <section class="terminal-rename-demo" aria-label="Terminal rename dialog">
+        <Row gap="xs">
+          <wa-button data-rename-demo-open="renamed">Rename a renamed terminal</wa-button>
+          <wa-button data-rename-demo-open="default">Rename a default-named terminal</wa-button>
+        </Row>
+        <p class="component-stage__event" data-rename-demo-output>
+          {renameDemoOutput.value || 'Reset to default appears only while a rename applies.'}
+        </p>
+        <TerminalRenameDialog target={renameDemoTarget.value} />
+      </section>
     );
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner') return <ConnectionStateBannerDemo />;
@@ -1786,6 +1803,39 @@ demoListeners.add(
           : 'Paste → sends the clipboard to the terminal';
     },
   ),
+);
+// The rename dialog demo reports what each production action would do (HS2-2Q7KTX).
+demoListeners.add(
+  delegate(root, 'click', '[data-rename-demo-open]', (_event, target) => {
+    const kind = (target as HTMLElement).dataset.renameDemoOpen === 'default' ? 'default' : 'renamed';
+    renameDemoSession.value += 1;
+    renameDemoTarget.value = { ...renameDemoTargets[kind], session: renameDemoSession.value };
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', '.terminal-rename-demo [data-action="reset-terminal-rename"]', () => {
+    renameDemoOutput.value = `Reset to default → the tab shows ${renameDemoTarget.value?.defaultName ?? ''} again`;
+    renameDemoTarget.value = undefined;
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', '.terminal-rename-demo [data-action="cancel-terminal-rename"]', () => {
+    renameDemoOutput.value = 'Cancel → the name is unchanged';
+    renameDemoTarget.value = undefined;
+  }),
+);
+demoListeners.add(
+  delegate(root, 'submit', '.terminal-rename-demo [data-action="rename-terminal-form"]', (event, target) => {
+    event.preventDefault();
+    const name = target.querySelector<HTMLInputElement>('[name="terminal-name"]')?.value.trim() ?? '';
+    renameDemoOutput.value = `Rename → the tab shows ${name}`;
+    renameDemoTarget.value = undefined;
+  }),
+);
+demoListeners.add(
+  delegate(root, 'wa-hide', '.terminal-rename-demo [data-terminal-rename-dialog]', () => {
+    renameDemoTarget.value = undefined;
+  }),
 );
 // The clipboard sheet demos drive the same open/close/selection behavior as production (HS2-FRB545).
 demoListeners.add(

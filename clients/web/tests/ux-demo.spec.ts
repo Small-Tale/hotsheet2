@@ -332,6 +332,29 @@ test('represents the application states extracted from main.tsx in the UX catalo
   await expect(rename.getByRole('textbox', { name: 'Terminal name' })).toHaveJSProperty('value', 'Development');
   await expect(renameSurface).toBeVisible();
   await renameSurface.screenshot({ path: '/private/tmp/hs2-737h3x-terminal-rename-wide.png' });
+  // HS2-2Q7KTX: the renamed variant names its default and offers Reset to default; the
+  // default-named variant does not.
+  const renameField = rename.locator('wa-input[name="terminal-name"]'),
+    resetRename = rename.getByRole('button', { name: 'Reset to default' });
+  await expect(renameField).toHaveJSProperty('hint', 'Default name: Terminal 1');
+  await resetRename.click();
+  await expect(rename).toHaveJSProperty('open', false);
+  await expect(page.locator('[data-rename-demo-output]')).toHaveText(
+    'Reset to default → the tab shows Terminal 1 again',
+  );
+  await page.getByRole('button', { name: 'Rename a default-named terminal' }).click();
+  await expect(rename).toHaveJSProperty('open', true);
+  await expect(renameField).toHaveJSProperty('value', 'Terminal 1');
+  await expect(renameField).toHaveJSProperty('hint', '');
+  await expect(resetRename).toHaveCount(0);
+  await rename.getByRole('button', { name: 'Cancel' }).click();
+  await expect(rename).toHaveJSProperty('open', false);
+  await page.getByRole('button', { name: 'Rename a renamed terminal' }).click();
+  await expect(renameField).toHaveJSProperty('value', 'Development');
+  await expect(resetRename).toBeVisible();
+  await rename.getByRole('textbox', { name: 'Terminal name' }).fill('Release');
+  await rename.getByRole('button', { name: 'Rename' }).click();
+  await expect(page.locator('[data-rename-demo-output]')).toHaveText('Rename → the tab shows Release');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/ux-demo?component=terminal-rename-dialog');
   const narrowRename = page.locator('[data-terminal-rename-dialog]');

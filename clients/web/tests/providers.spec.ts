@@ -5712,6 +5712,85 @@ for (const width of [1280, 390])
     await page.screenshot({ path: `/private/tmp/claude/hs2-mew525-rename-prefill-${width}.png` });
   });
 
+for (const width of [1280, 390])
+  test(`resets a renamed terminal to its default name from the rename dialog at ${width}px (HS2-2Q7KTX)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await mockProject(page);
+    const renames: unknown[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/terminals/tests/name'))
+        renames.push(request.postDataJSON());
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]'),
+      dialog = page.locator('[data-terminal-rename-dialog]'),
+      field = dialog.locator('wa-input[name="terminal-name"]'),
+      reset = dialog.getByRole('button', { name: 'Reset to default' }),
+      openRename = async (tabName: RegExp) => {
+        await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
+        await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+        await expect(dialog).toHaveJSProperty('open', true);
+      };
+    await expect(drawer.getByRole('tab', { name: /Codex Main/ })).toBeVisible();
+    // A terminal on its default name offers no reset.
+    await openRename(/Tests/);
+    await expect(reset).toHaveCount(0);
+    await expect(field).toHaveJSProperty('hint', '');
+    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Quality shell');
+    await dialog.getByRole('button', { name: 'Rename' }).click();
+    await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toBeVisible();
+    // Once renamed, the dialog names the default and offers to restore it.
+    await openRename(/Quality shell/);
+    await expect(field).toHaveJSProperty('value', 'Quality shell');
+    await expect(field).toHaveJSProperty('hint', 'Default name: Tests');
+    await expect(reset).toBeVisible();
+    await page.waitForTimeout(400); // let the dialog's open animation settle before measuring and capturing
+    const box = await dialog.locator('[part~="dialog"]').boundingBox(),
+      resetBox = await reset.boundingBox(),
+      renameBox = await dialog.getByRole('button', { name: 'Rename' }).boundingBox();
+    expect(resetBox!.x).toBeGreaterThanOrEqual(box!.x);
+    expect(renameBox!.x + renameBox!.width).toBeLessThanOrEqual(box!.x + box!.width);
+    expect(resetBox!.x + resetBox!.width).toBeLessThan(renameBox!.x);
+    expect(Math.abs(resetBox!.y - renameBox!.y)).toBeLessThanOrEqual(2);
+    await page.screenshot({ path: `/private/tmp/claude/hs2-2q7ktx-reset-offered-${width}.png` });
+    await reset.click();
+    await expect(dialog).toHaveJSProperty('open', false);
+    await expect(drawer.getByRole('tab', { name: /^Tests/ })).toBeVisible();
+    await expect(drawer.getByRole('tab', { name: /Quality shell/ })).toHaveCount(0);
+    await expect.poll(() => renames).toEqual([{ name: 'Quality shell' }, { name: null }]);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => JSON.parse(localStorage.getItem('hotsheet.terminals.names') ?? '{}')['demo-checkout:tests'],
+        ),
+      )
+      .toBeUndefined();
+    // Reopening shows the default name and no reset; the default survives a reload.
+    await openRename(/Tests/);
+    await expect(field).toHaveJSProperty('value', 'Tests');
+    await expect(reset).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveJSProperty('open', false);
+    await page.reload();
+    const reloaded = page.locator('[data-component="terminal-drawer"]');
+    await expect(reloaded.getByRole('tab', { name: /^Tests/ })).toBeVisible();
+    // Renaming again after a reset works and offers the reset again.
+    await reloaded.getByRole('tab', { name: /^Tests/ }).click({ button: 'right' });
+    await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+    await dialog.getByRole('textbox', { name: /Terminal name/ }).fill('Second name');
+    await dialog.getByRole('button', { name: 'Rename' }).click();
+    await expect(reloaded.getByRole('tab', { name: /Second name/ })).toBeVisible();
+    await reloaded.getByRole('tab', { name: /Second name/ }).click({ button: 'right' });
+    await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+    await expect(reset).toBeVisible();
+    await expect(field).toHaveJSProperty('hint', 'Default name: Tests');
+  });
+
 test('shares a terminal rename with other devices and restores it through the real server (HS2-89FPV1)', async ({
   browser,
 }) => {
@@ -5793,6 +5872,21 @@ test('shares a terminal rename with other devices and restores it through the re
       freshDrawer = await openOnRealServer(fresh);
     await expect(freshDrawer.getByRole('tab', { name: /Release shell/ })).toBeVisible();
     expect(await fresh.evaluate(() => localStorage.getItem('hotsheet.terminals.names'))).toBeNull();
+
+    // Reset to default (HS2-2Q7KTX) clears the shared name: the server forgets it and the other
+    // devices return to their own derived default live, again without refetching the list.
+    phoneListReads = 0;
+    const laptopDrawerAgain = laptop.locator('[data-component="terminal-drawer"]');
+    await laptopDrawerAgain.getByRole('tab', { name: /Release shell/ }).click({ button: 'right' });
+    await laptop.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+    await laptop.locator('[data-terminal-rename-dialog]').getByRole('button', { name: 'Reset to default' }).click();
+    await expect(laptopDrawerAgain.getByRole('tab', { name: /Shared Shell/ })).toBeVisible();
+    await expect
+      .poll(async () => (await server.request<Array<{ id: string; name?: string }>>('/terminals'))[0]?.name)
+      .toBeUndefined();
+    await expect(phoneDrawer.getByRole('tab', { name: /Shared Shell/ })).toBeVisible({ timeout: 30_000 });
+    await expect(freshDrawer.getByRole('tab', { name: /Shared Shell/ })).toBeVisible({ timeout: 30_000 });
+    expect(phoneListReads, 'the cleared-name event restores the default; no terminal list refetch').toBe(0);
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
     await server.stop();

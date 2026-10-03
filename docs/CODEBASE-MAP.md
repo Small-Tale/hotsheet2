@@ -143,7 +143,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/migration-job-client.ts # Project-owned start/rejoin/watch lifecycle, stale responses and reconnect errors
     src/migration-server-integration.test.ts # Opt-in real PGLite → Rust import → source registration → bare Git backup → authorized cleanup
     src/terminal-ws-bridge.ts #  Vite WebSocket upgrade bridge; keeps server credentials out of browser URLs and frames
-    src/terminal-names.ts   #   Human-readable generated-id fallback, tab-title precedence (in-flight local rename > server `name` > default), legacy local-name upload/drop reconcile, and live retitle (HS2-89FPV1)
+    src/terminal-names.ts   #   Human-readable generated-id fallback, tab-title precedence (in-flight local rename > server `name` > default), legacy local-name upload/drop reconcile, live retitle (HS2-89FPV1), and reset-to-default restore (HS2-2Q7KTX)
     src/lucide-catalog.ts    #   Lazy full Lucide catalog loader (separate chunk): PascalCase→kebab, dedup, sorted entries, bounded search, lucideCatalogVersion signal for reactive resolution (HS2-5VSNV3)
     src/components/lucide-popular.ts # Bundled curated "popular" command icons (synchronous defaults + legacy) for the picker and command rendering
     src/components/command-icon.ts # resolveCommandIcon: legacy-alias + popular + lazy-catalog resolution with a default fallback (HS2-5VSNV3)
