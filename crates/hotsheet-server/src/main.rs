@@ -231,6 +231,12 @@ async fn main() -> Result<()> {
     // Terminals that survived a restart in the broker get their session monitors back, so an
     // ended session still releases its claims (HS2-RXWXQ8).
     hotsheet_server::resume_broker_terminal_sessions(&state).await;
+    // Names of terminals that did not survive (no broker, or a crashed broker) must not carry
+    // over to a later terminal reusing the id (HS2-8A0FYR).
+    let pruned = hotsheet_server::prune_orphaned_terminal_names(&state).await;
+    if !pruned.is_empty() {
+        println!("forgot {} saved name(s) of ended terminals", pruned.len());
+    }
     // Chat drives do not survive a restart; release what their ended sessions still hold.
     hotsheet_server::release_orphaned_drive_sessions(&state).await;
 

@@ -9223,6 +9223,37 @@ pub async fn resume_broker_terminal_sessions(state: &AppState) {
     }
 }
 
+/// Forget saved tab names of terminals that no longer exist (HS2-8A0FYR). Run at server startup,
+/// after the broker (if any) is attached: a terminal that vanished without `DELETE
+/// /terminals/{id}` — the in-process manager lost it in a restart, or the broker crashed and a
+/// fresh one was spawned — must not lend its name to a later terminal reusing the id. Pruning
+/// needs an authoritative live list, so an unreachable broker skips it rather than wiping every
+/// name; `GET /terminals` never prunes. Returns the pruned ids.
+pub async fn prune_orphaned_terminal_names(state: &AppState) -> Vec<String> {
+    let live: Vec<String> = if let Some(broker) = &state.terminal_broker {
+        match broker.call(hotsheet_terminals::BrokerRequest::List).await {
+            Ok(hotsheet_terminals::BrokerResponse::List { terminals }) => {
+                terminals.into_iter().map(|info| info.id).collect()
+            }
+            _ => return Vec::new(),
+        }
+    } else {
+        state
+            .terminals
+            .list()
+            .into_iter()
+            .map(|key| key.1)
+            .collect()
+    };
+    match terminal_names::retain_live(&Settings::new(state.store.root()), &live) {
+        Ok(pruned) => pruned,
+        Err(error) => {
+            eprintln!("pruning saved terminal names failed: {error}");
+            Vec::new()
+        }
+    }
+}
+
 /// `GET /terminals` — the live terminals (id, alive, busy).
 async fn list_terminals(State(state): State<AppState>) -> Json<Vec<TerminalInfo>> {
     Json(with_terminal_names(

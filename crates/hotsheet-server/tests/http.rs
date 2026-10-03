@@ -1021,6 +1021,164 @@ async fn terminal_rename_persists_announces_and_is_forgotten_on_kill() {
 }
 
 #[tokio::test]
+async fn a_restart_prunes_names_of_terminals_that_did_not_survive() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+
+    // Server 1 (no broker): rename two terminals, then "restart" — the in-process PTYs die
+    // without any DELETE, so their names would otherwise linger.
+    let (dir, st1) = state();
+    let router1 = app(st1);
+    for id in ["gone-a", "gone-b"] {
+        let body = format!(r#"{{"command":"cat","id":"{id}"}}"#);
+        let opened = router1
+            .clone()
+            .oneshot(authed("POST", "/terminals", Some(&body)))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let renamed = router1
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("/terminals/{id}/name"),
+                Some(r#"{"name":"Old name"}"#),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(renamed.status(), StatusCode::OK);
+    }
+    let names = || {
+        Settings::new(dir.path())
+            .get("terminal.names", Scope::Local)
+            .unwrap()
+    };
+    assert_eq!(
+        names(),
+        Some(serde_json::json!({"gone-a":"Old name","gone-b":"Old name"}))
+    );
+    // A list read never prunes, even of a name whose terminal is not listed.
+    Settings::new(dir.path())
+        .set(
+            "terminal.names",
+            serde_json::json!({"gone-a":"Old name","gone-b":"Old name","ghost":"Ghost"}),
+            Scope::Local,
+        )
+        .unwrap();
+    let _ = router1
+        .clone()
+        .oneshot(authed("GET", "/terminals", None))
+        .await
+        .unwrap();
+    assert_eq!(names().unwrap()["ghost"], "Ghost");
+    drop(router1);
+
+    // Server 2 over the same store, still without a broker: nothing survived, so startup forgets
+    // every saved name, and a terminal reusing an old id starts unnamed.
+    let store = FsStore::open(dir.path()).unwrap();
+    let st2 = AppState::new(store, SECRET.into()).unwrap();
+    let mut pruned = hotsheet_server::prune_orphaned_terminal_names(&st2).await;
+    pruned.sort();
+    assert_eq!(pruned, ["ghost", "gone-a", "gone-b"]);
+    assert_eq!(names(), None);
+    let router2 = app(st2.clone());
+    let reopened = router2
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"gone-a"}"#),
+        ))
+        .await
+        .unwrap();
+    assert!(body_json(reopened).await.get("name").is_none());
+    // Pruning again with a live, renamed terminal keeps that name (idempotent).
+    let _ = router2
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/terminals/gone-a/name",
+            Some(r#"{"name":"New name"}"#),
+        ))
+        .await
+        .unwrap();
+    assert!(
+        hotsheet_server::prune_orphaned_terminal_names(&st2)
+            .await
+            .is_empty()
+    );
+    assert_eq!(names(), Some(serde_json::json!({"gone-a":"New name"})));
+    let _ = router2
+        .oneshot(authed("DELETE", "/terminals/gone-a", None))
+        .await
+        .unwrap();
+
+    // Broker mode: names of terminals the broker still hosts survive; a crashed broker (here, an
+    // unreachable socket) never wipes names, because the live list is unknown.
+    let broker_dir = tempfile::tempdir().unwrap();
+    let sock = broker_dir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+    let st3 = AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+        .unwrap()
+        .with_terminal_broker_at(TerminalBroker::at(&sock, "proj"));
+    let router3 = app(st3.clone());
+    let opened = router3
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"sleep","args":["30"],"id":"survivor"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    let _ = router3
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/terminals/survivor/name",
+            Some(r#"{"name":"Kept"}"#),
+        ))
+        .await
+        .unwrap();
+    Settings::new(dir.path())
+        .set(
+            "terminal.names",
+            serde_json::json!({"survivor":"Kept","crashed":"Lost"}),
+            Scope::Local,
+        )
+        .unwrap();
+    let unreachable = AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+        .unwrap()
+        .with_terminal_broker_at(TerminalBroker::at(
+            broker_dir.path().join("missing.sock"),
+            "proj",
+        ));
+    assert!(
+        hotsheet_server::prune_orphaned_terminal_names(&unreachable)
+            .await
+            .is_empty()
+    );
+    assert_eq!(
+        names(),
+        Some(serde_json::json!({"survivor":"Kept","crashed":"Lost"}))
+    );
+    assert_eq!(
+        hotsheet_server::prune_orphaned_terminal_names(&st3).await,
+        ["crashed"]
+    );
+    assert_eq!(names(), Some(serde_json::json!({"survivor":"Kept"})));
+    let _ = router3
+        .oneshot(authed("DELETE", "/terminals/survivor", None))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn create_extracts_leading_title_tags_over_http() {
     let (_dir, state) = state();
     let response = app(state)

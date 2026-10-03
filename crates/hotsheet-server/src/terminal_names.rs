@@ -70,6 +70,35 @@ pub fn set(settings: &Settings, id: &str, name: Option<&str>) -> Result<bool, Se
     Ok(true)
 }
 
+/// Forget every saved name whose terminal id is not in `live` (HS2-8A0FYR). A terminal that
+/// disappears without `DELETE /terminals/{id}` (a server restart without the broker, or a broker
+/// crash) would otherwise leave its name behind for a later terminal that reuses the id. Returns
+/// the pruned ids, sorted.
+pub fn retain_live<S: AsRef<str>>(
+    settings: &Settings,
+    live: &[S],
+) -> Result<Vec<String>, SettingsError> {
+    let _guard = WRITE_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut names = all(settings)?;
+    let pruned: Vec<String> = names
+        .keys()
+        .filter(|id| !live.iter().any(|live| live.as_ref() == id.as_str()))
+        .cloned()
+        .collect();
+    if pruned.is_empty() {
+        return Ok(pruned);
+    }
+    names.retain(|id, _| !pruned.contains(id));
+    if names.is_empty() {
+        settings.unset(SETTINGS_KEY, Scope::Local)?;
+    } else {
+        settings.set(SETTINGS_KEY, serde_json::json!(names), Scope::Local)?;
+    }
+    Ok(pruned)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,5 +183,62 @@ mod tests {
             }
         });
         assert_eq!(all(&settings).unwrap().len(), 8);
+    }
+
+    #[test]
+    fn retain_live_prunes_only_missing_terminals_across_transitions() {
+        let (_dir, settings) = settings();
+        // Nothing saved: nothing to prune, and the setting stays absent.
+        assert!(retain_live::<&str>(&settings, &[]).unwrap().is_empty());
+        assert_eq!(settings.get(SETTINGS_KEY, Scope::Local).unwrap(), None);
+        set(&settings, "a", Some("Build")).unwrap();
+        set(&settings, "b", Some("Tests")).unwrap();
+        set(&settings, "c", Some("Logs")).unwrap();
+        // Every named terminal is live: a no-op.
+        assert!(
+            retain_live(&settings, &["a", "b", "c", "d"])
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(all(&settings).unwrap().len(), 3);
+        // Two disappeared.
+        assert_eq!(
+            retain_live(&settings, &["b"]).unwrap(),
+            vec!["a".to_owned(), "c".to_owned()]
+        );
+        assert_eq!(
+            all(&settings).unwrap(),
+            BTreeMap::from([("b".into(), "Tests".into())])
+        );
+        // Repeating the prune is idempotent.
+        assert!(retain_live(&settings, &["b"]).unwrap().is_empty());
+        // A reused id starts unnamed; renaming it again works (empty-then-refill).
+        assert_eq!(
+            retain_live::<&str>(&settings, &[]).unwrap(),
+            vec!["b".to_owned()]
+        );
+        assert_eq!(settings.get(SETTINGS_KEY, Scope::Local).unwrap(), None);
+        assert!(set(&settings, "a", Some("Again")).unwrap());
+        assert_eq!(all(&settings).unwrap().get("a").unwrap(), "Again");
+    }
+
+    #[test]
+    fn retain_live_drops_malformed_entries_with_the_rewrite() {
+        let (_dir, settings) = settings();
+        settings
+            .set(
+                SETTINGS_KEY,
+                serde_json::json!({"gone": "Old", "live": "Kept", "junk": 3}),
+                Scope::Local,
+            )
+            .unwrap();
+        assert_eq!(
+            retain_live(&settings, &["live"]).unwrap(),
+            vec!["gone".to_owned()]
+        );
+        assert_eq!(
+            settings.get(SETTINGS_KEY, Scope::Local).unwrap(),
+            Some(serde_json::json!({"live": "Kept"}))
+        );
     }
 }

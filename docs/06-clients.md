@@ -2254,7 +2254,11 @@ project's machine-local settings (`terminal.names`, `Scope::Local`), `GET /termi
 as the optional `name`, and a `terminal_renamed` change event (terminal id, new name) retitles
 the tab live in every other client and device without a refetch. The name therefore survives a
 reload, a project restore, and a server restart, and never renames the PTY identity; killing a
-terminal forgets its name so a reused id starts fresh. The browser keeps a rename locally only
+terminal forgets its name so a reused id starts fresh. A terminal can also disappear without
+that kill (a restart without the broker, or a crashed broker replaced by a fresh one), so server
+startup prunes saved names whose ids are not in the live terminal list (HS2-8A0FYR); an
+unreachable broker skips the prune rather than wiping every name, and `GET /terminals` never
+prunes. The browser keeps a rename locally only
 while its write is in flight (or after a failed write, retried by the next terminal refresh),
 and uploads renames saved locally before names moved to the server once, then drops them. The
 Rename dialog always opens on the current name of the terminal being renamed, never on a
