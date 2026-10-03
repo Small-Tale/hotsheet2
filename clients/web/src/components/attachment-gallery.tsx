@@ -172,7 +172,7 @@ function GalleryButton({
   return (
     <button
       type="button"
-      class={className ? `attachment-gallery__control ${className}` : 'attachment-gallery__control'}
+      class={className || undefined}
       data-action={action}
       aria-label={accessibleLabel}
       title={accessibleLabel}
@@ -582,7 +582,6 @@ export function AttachmentGallery({
             <ToolbarControlGroup label="Media zoom">
               <button
                 type="button"
-                class="attachment-gallery__control"
                 {...ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.attrs}
                 data-zoom-direction="out"
                 aria-label="Zoom out"
@@ -593,7 +592,6 @@ export function AttachmentGallery({
               </button>
               <button
                 type="button"
-                class="attachment-gallery__control"
                 {...ATTACHMENTS_AND_GALLERY_ACTIONS.zoomGalleryImage.attrs}
                 data-zoom-direction="in"
                 aria-label="Zoom in"

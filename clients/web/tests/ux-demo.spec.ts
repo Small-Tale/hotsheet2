@@ -3333,6 +3333,15 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(sortSelect).toHaveAttribute('disabled', '');
   for (const name of ['Toggle Up Next for selected tickets', 'More actions for selected tickets', 'Search tickets'])
     await expect(header.getByRole('button', { name })).toHaveAttribute('disabled', '');
+  // Kerf's ToolbarControlGroup owns the disabled utility buttons' presentation with no app restyle
+  // (KF-FTADQT, HS2-0MH5V1): a not-allowed cursor, half opacity, and no hover chrome.
+  for (const name of ['Toggle Up Next for selected tickets', 'More actions for selected tickets']) {
+    const utility = header.getByRole('button', { name });
+    await expect(utility).toHaveCSS('cursor', 'not-allowed');
+    await expect(utility).toHaveCSS('opacity', '0.5');
+    await utility.hover({ force: true });
+    await expect(utility).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  }
   await expect(page.getByRole('region', { name: 'Project settings' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Workspace board' })).toHaveCount(0);
   await header.getByRole('button', { name: 'List view' }).click();
@@ -4680,6 +4689,14 @@ test('navigates and zooms the standalone attachment gallery demo', async ({ page
   }
   await expect(gallery.locator('[data-component="toolbar-control-group"][data-tone="dark"]')).toHaveCount(3);
   await expect(gallery.locator('.attachment-gallery__filename')).toHaveCSS('color', 'rgb(255, 255, 255)');
+  // At fit the gallery cannot zoom out. Kerf's ToolbarControlGroup owns that disabled button's
+  // presentation with no app restyle (KF-FTADQT, HS2-0MH5V1): not-allowed, half opacity, no hover.
+  const zoomOut = gallery.getByRole('button', { name: 'Zoom out' });
+  await expect(zoomOut).toBeDisabled();
+  await expect(zoomOut).toHaveCSS('cursor', 'not-allowed');
+  await expect(zoomOut).toHaveCSS('opacity', '0.5');
+  await zoomOut.hover({ force: true });
+  await expect(zoomOut).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const fitWidth = await image.evaluate((node) => (node as HTMLElement).getBoundingClientRect().width);
   await gallery.getByRole('button', { name: 'Zoom in' }).click();
   expect(await image.evaluate((node) => (node as HTMLElement).getBoundingClientRect().width)).toBeGreaterThan(fitWidth);

@@ -419,7 +419,7 @@ export function WorkspaceControls({
       <>
         <button
           type="button"
-          class="workspace-header__up-next-button workspace-header__utility-action"
+          class="workspace-header__up-next-button"
           disabled={ticketActionsDisabled || !selectedTicketsUpNextEligible}
           {...TICKET_SELECTION_ACTIONS.toggleSelectedUpNext.attrs}
           aria-label="Toggle Up Next for selected tickets"
@@ -430,7 +430,6 @@ export function WorkspaceControls({
         </button>
         <button
           type="button"
-          class="workspace-header__utility-action"
           disabled={ticketActionsDisabled}
           {...TICKET_SELECTION_ACTIONS.openSelectedTicketActions.attrs}
           aria-label="More actions for selected tickets"

@@ -2378,9 +2378,9 @@ findings) without changing a rendered pixel or computed style. Each fix gives ap
 
 - **Own classes.** `CommandNavigation`'s running indicator is `.command-navigation__running`.
   `ViewNavigation` renders `.view-navigation__list` and `.view-navigation__entry`. Both popover
-  `<nav>`s are `.repository-status-popover__nav`. The workspace header's utility buttons are
-  `.workspace-header__utility-action`, which still restyles its disabled state although Kerf's
-  group owns it since `KF-FTADQT` shipped; HS2-0MH5V1 removes that rule.
+  `<nav>`s are `.repository-status-popover__nav`. The workspace header's utility buttons carry
+  no app class: Kerf's `ToolbarControlGroup` owns their disabled cursor, dimming, and absent hover
+  chrome (`KF-FTADQT`, adopted in HS2-0MH5V1).
 - **Child props.** `RepositorySummary` and the popover's synchronization values size their icons
   through `LucideIcon`'s `size`. The popover tints them through an app wrapper,
   `.repository-status-popover__sync-icon`.
@@ -2411,7 +2411,8 @@ an own class or configures the child through its props:
 - `ConfidenceCalibration`: `recent-title`, `recent-list`, and `recent-item`.
 - The project statistics page: `project-statistics__title`.
 - `AttachmentGallery`:
-  - Its own buttons carry `attachment-gallery__control` for their disabled tone.
+  - Its toolbar buttons carry no app class: Kerf's `ToolbarControlGroup` owns their disabled
+    cursor, dimming, and absent hover chrome (`KF-FTADQT`, adopted in HS2-0MH5V1).
   - The video carries `attachment-gallery__video`.
   - Media-control icons use LucideIcon `size` instead of a gallery-wide `svg` rule that also
     reached Kerf's toolbars.

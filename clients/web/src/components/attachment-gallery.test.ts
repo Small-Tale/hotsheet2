@@ -37,6 +37,14 @@ describe('AttachmentGallery', () => {
       expect(markup).toContain('data-tone="dark"');
     }
   });
+  it("leaves its toolbar buttons' disabled state to Kerf's ToolbarControlGroup (KF-FTADQT, HS2-0MH5V1)", () => {
+    const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
+    expect(css).not.toContain(':disabled');
+    expect(css).not.toContain('cursor: default');
+    const markup = String(AttachmentGallery({ images, activeUrl: '/a.png' }));
+    expect(markup).toMatch(/<button[^>]*aria-label="Zoom out"[^>]*disabled/);
+    expect(markup).not.toContain('attachment-gallery__control');
+  });
   it('keeps full-screen media and its sizing wrapper square-cornered', () => {
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
     expect(css).toMatchSource(/\.attachment-gallery__media-wrap \{[^}]*border-radius:0/);

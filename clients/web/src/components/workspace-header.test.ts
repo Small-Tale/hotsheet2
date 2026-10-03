@@ -295,6 +295,15 @@ describe('WorkspaceHeader', () => {
     expect(css).not.toMatch(/\.view-mode-switcher__badge \{[^}]*(?:^|[;{]\s*)height:/);
   });
 
+  it("leaves the disabled utility buttons to Kerf's ToolbarControlGroup (KF-FTADQT, HS2-0MH5V1)", () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
+    expect(css).not.toContain(':disabled');
+    expect(css).not.toContain('--kui-toolbar-control-hover-background');
+    const empty = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }));
+    expect(empty).not.toContain('workspace-header__utility-action');
+    expect(empty).toMatch(/<button[^>]*disabled[^>]*data-action="open-selected-ticket-actions"/);
+  });
+
   it('enables selected-ticket actions and reflects the shared Up Next state', () => {
     const empty = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }));
     expect(empty).toMatch(/<button[^>]*disabled[^>]*data-action="toggle-selected-up-next"/);
