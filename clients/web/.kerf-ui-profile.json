@@ -332,12 +332,6 @@
       "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-info-panel__blocked-editor, ticket-info-panel__blocked-surface, ticket-info-panel__details-surface, ticket-info-panel__provenance."
     },
     {
-      "id": "intentional-nested-inset-ticket-inspector-skeleton",
-      "rules": ["KUI-L004"],
-      "target": "src/components/ticket-inspector-skeleton.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: ticket-info-panel__details-surface, ticket-inspector-skeleton__lines, ticket-inspector-skeleton__provenance."
-    },
-    {
       "id": "intentional-nested-inset-ticket-inspector",
       "rules": ["KUI-L004"],
       "target": "src/components/ticket-inspector.tsx",
@@ -444,12 +438,6 @@
       "rules": ["KUI-L008"],
       "target": "src/components/ticket-inspector-panel.tsx",
       "rationale": "Reviewed HS2-M6B8AD: (extended for HS2-MGVE50) the dynamic class expression only composes this component's own app-owned base class with its `--reader` presentation modifier and forwards the composing tab panel's own root class (ticket-info-panel, ticket-timeline, ticket-code-review, ticket-attachments); no Kerf public class is chosen dynamically. Expressions: class={classes.join(' ')}"
-    },
-    {
-      "id": "state-modifier-classes-ticket-inspector-skeleton",
-      "rules": ["KUI-L008"],
-      "target": "src/components/ticket-inspector-skeleton.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`ticket-inspector-skeleton__note${card ? ' ticket-inspector-skeleton__note--card' : ''}`}"
     },
     {
       "id": "state-modifier-classes-ticket-inspector",

@@ -2,10 +2,12 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@kerfjs/ui/list-inset-control.css';
 import './ticket-info-panel.css';
 
+import { rem } from '@kerfjs/ui/css-values';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Skeleton } from '@kerfjs/ui/skeleton';
 import { CircleAlert, Plus } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
@@ -54,7 +56,77 @@ export interface TicketInfoPanelProps {
   updatedLabel?: string;
   attachmentContext?: AttachmentReferenceContext;
 }
-export function TicketInfoPanel({
+/**
+ * The info panel, or its value-free loading state (HS2-XBHADT). The `placeholder` variant keeps the
+ * real chrome (metadata controls in their Kerf `placeholder` mode, Block ticket, section headers, and
+ * the notes placeholder) and shows unknown per-ticket values as Skeleton blocks. It is inert and
+ * hidden from assistive technology; the inspector skeleton composes it instead of borrowing classes.
+ */
+export function TicketInfoPanel(
+  props: ({ placeholder?: false } & TicketInfoPanelProps) | { placeholder: true; readerPresentation?: boolean },
+) {
+  return props.placeholder ? (
+    <TicketInfoPanelPlaceholder readerPresentation={props.readerPresentation} />
+  ) : (
+    <LoadedTicketInfoPanel {...props} />
+  );
+}
+
+function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPresentation?: boolean }) {
+  return (
+    <TicketInspectorPanel
+      component="ticket-info-panel"
+      className="ticket-info-panel"
+      presentation={readerPresentation ? 'reader' : 'sidebar'}
+      attributes={{ 'data-placeholder': 'true', 'aria-hidden': 'true', inert: '' }}
+    >
+      <section class="ticket-info-panel__metadata" aria-label="Ticket metadata">
+        <TicketCategorySelect name="inspector-category" value="" placeholder />
+        <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
+        <div class="ticket-info-panel__status-field">
+          <ListHeader label="Status" />
+          <ListInsetControl>
+            <div class="ticket-info-panel__status-line">
+              <TicketStatusMenu value="not_started" placeholder />
+            </div>
+          </ListInsetControl>
+        </div>
+      </section>
+      <section class="ticket-info-panel__section ticket-info-panel__blocked-section">
+        <ListItem
+          action="edit-blocked-reason"
+          icon={<LucideIcon icon={Plus} name="plus" />}
+          label="Block ticket"
+          tabIndex={-1}
+        />
+      </section>
+      <section class="ticket-info-panel__section ticket-info-panel__details-section">
+        <ListHeader label="Details" />
+        <div class="ticket-info-panel__details-surface">
+          <div class="ticket-info-panel__details-placeholder">
+            <Skeleton lines={3} />
+          </div>
+        </div>
+      </section>
+      <section class="ticket-info-panel__section">
+        <ListHeader
+          label="Tags"
+          actionDisabled
+          action="open-ticket-tag-popover"
+          actionLabel="Add tag"
+          actionIcon={<LucideIcon icon={Plus} name="plus" />}
+        />
+      </section>
+      <TicketNotes placeholder />
+      <footer class="ticket-info-panel__provenance">
+        <Skeleton width={rem(6)} height={rem(0.6875)} />
+        <Skeleton width={rem(4)} height={rem(0.6875)} />
+      </footer>
+    </TicketInspectorPanel>
+  );
+}
+
+function LoadedTicketInfoPanel({
   status,
   priority,
   category,

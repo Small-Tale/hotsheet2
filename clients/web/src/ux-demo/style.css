@@ -396,6 +396,19 @@ body[data-resizing-project-sidebar='true'] {
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-l);
 }
+/* TicketInfoPanel variant gallery: the loaded panel above its placeholder variant (HS2-XBHADT). */
+.info-panel-demo {
+  display: grid;
+  width: min(remify(432px), 100%);
+  margin: auto;
+  gap: remify(8px);
+}
+.info-panel-demo__caption {
+  margin: remify(8px) 0 0;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  font-weight: var(--wa-font-weight-semibold);
+}
 .code-review-demo {
   display: grid;
   width: min(remify(896px), 100%);

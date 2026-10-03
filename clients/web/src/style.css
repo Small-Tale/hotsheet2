@@ -58,7 +58,7 @@ select {
   color: var(--wa-color-neutral-on-loud);
 }
 /* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
-   (ticket-inspector-skeleton.css), which replaced the earlier dimmed-stale-inspector overlay
+   (owned by ticket-inspector.tsx since HS2-XBHADT), which replaced the earlier dimmed-stale-inspector overlay
    (.ticket-inspector-transition) — that dead rule was removed with HS2-YSHZQK. */
 .ticket-page-more {
   display: block;

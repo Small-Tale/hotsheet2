@@ -3,7 +3,9 @@ import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
+import { pct, rem } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Skeleton } from '@kerfjs/ui/skeleton';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -447,6 +449,92 @@ export function TicketInspector({
         element="div"
         side="right"
         collapseControl={presentation !== 'reader' && collapseControl}
+      />
+    </aside>
+  );
+}
+
+/**
+ * The inspector's loading placeholder parts (HS2-REG3A2): the real inspector chrome (toolbar, header,
+ * Kerf tab bar, and the {@link TicketInfoPanel} `placeholder` variant) with the unknown ticket values as
+ * unanimated Skeleton blocks. It lives with the inspector so only the inspector renders its own class
+ * contract, and the info panel and notes render their own placeholder variants (HS2-XBHADT). The tabs
+ * use the loaded sidebar inspector's icon-only TabBar presentation so they fit any rail width
+ * (HS2-MYS1MR). Like the inspector it exposes Workbench panel parts (HS2-QQW6CT).
+ */
+export function ticketInspectorSkeletonPanel({ slug }: { slug?: string } = {}): SidebarPanelParts {
+  return {
+    label: 'Loading ticket',
+    toolbar: {
+      label: 'Ticket inspector toolbar',
+      dividerSides: '',
+      center: slug ? <ToolbarText text={slug} size="small" /> : <ToolbarText text="" size="small" placeholder />,
+      trailing: (
+        <ToolbarControlGroup appearance="borderless" label="Ticket actions">
+          <button type="button" aria-label="Open ticket reader" title="Open ticket reader" tabIndex={-1}>
+            <LucideIcon icon={BookOpen} name="book-open" />
+          </button>
+        </ToolbarControlGroup>
+      ),
+    },
+    toggle: inspectorToggle(),
+    header: (
+      // The chrome is shown for continuity only; `inert` keeps all of it non-interactive while loading.
+      <div class="ticket-inspector__header" data-component="ticket-inspector-header" aria-hidden="true" inert>
+        <div class="ticket-inspector__title-placeholder">
+          <Skeleton height={rem(1.25)} />
+          <Skeleton width={pct(62)} height={rem(1.25)} />
+        </div>
+        <div class="ticket-inspector__tabs-frame">
+          <TabBar
+            id="ticket-inspector-loading"
+            label="Ticket inspector sections"
+            className="ticket-inspector__tabs"
+            allocation="fill"
+            presentation="inspector"
+          >
+            {tabs.map((tab) => (
+              <AppTab
+                id={tab.id}
+                name={tab.label}
+                selected={tab.id === 'info'}
+                closable={false}
+                placeholder
+                presentation="icon-only"
+                size="compact"
+                leading={<LucideIcon icon={tab.icon} name={tab.iconName} size={14.4} />}
+              />
+            ))}
+          </TabBar>
+        </div>
+      </div>
+    ),
+    content: (
+      <div class="ticket-inspector__body" data-component="ticket-inspector-skeleton-body" aria-busy="true">
+        <TicketInfoPanel placeholder />
+      </div>
+    ),
+    pane: {},
+  };
+}
+
+/** The skeleton rendered standalone (the terminal rail's pushed detail and the UX catalog). */
+export function TicketInspectorSkeleton({
+  slug,
+  collapseControl = false,
+}: { slug?: string; collapseControl?: boolean } = {}) {
+  return (
+    <aside
+      class="ticket-inspector ticket-inspector--placeholder"
+      data-component="ticket-inspector-skeleton"
+      aria-busy="true"
+      aria-label="Loading ticket"
+    >
+      <SidebarPane
+        parts={ticketInspectorSkeletonPanel({ slug })}
+        element="div"
+        side="right"
+        collapseControl={collapseControl}
       />
     </aside>
   );

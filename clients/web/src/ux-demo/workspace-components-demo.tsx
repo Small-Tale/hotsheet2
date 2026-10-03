@@ -21,8 +21,8 @@ import {
   TicketInspector,
   ticketInspectorPanel,
   type TicketInspectorProps,
+  TicketInspectorSkeleton,
 } from '../components/ticket-inspector';
-import { TicketInspectorSkeleton } from '../components/ticket-inspector-skeleton';
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
 import {

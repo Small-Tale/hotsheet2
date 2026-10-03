@@ -16,7 +16,7 @@ export interface TicketInspectorPanelProps {
 
 /**
  * The scrolling content column every ticket inspector tab panel composes (HS2-MGVE50): Info, Timeline,
- * Code Review, Attachments, and the loading skeleton. It owns the 8px-grid inset model (HS2-EQEGGG,
+ * Code Review, Attachments, and the Info placeholder variant. It owns the 8px-grid inset model (HS2-EQEGGG,
  * HS2-R64ETQ) — each direct child sits 8px from the inspector edge, the reader variant uses the modal's
  * inset instead — so the panels never restyle one another's markup.
  */

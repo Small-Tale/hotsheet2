@@ -6495,7 +6495,7 @@ test('renders the real inspector chrome as a value-free loading placeholder', as
   const skeleton = page.locator('[data-component="ticket-inspector-skeleton"]');
   await expect(skeleton).toBeVisible();
   await expect(skeleton).toHaveAttribute('aria-busy', 'true');
-  // It IS the inspector: same aside chrome, working collapse control, real segmented tab bar.
+  // It IS the inspector: same aside chrome, working collapse control, real icon-only tab bar.
   await expect(skeleton).toHaveClass(/\bticket-inspector--placeholder\b/);
   await expect(skeleton.getByRole('button', { name: 'Hide ticket inspector' })).toBeVisible();
   await expect(skeleton.locator('.ticket-inspector__tabs [data-component="app-tab"]')).toHaveCount(4);
@@ -6516,7 +6516,45 @@ test('renders the real inspector chrome as a value-free loading placeholder', as
   await skeleton.screenshot({ path: '/private/tmp/hs2-reg3a2-ticket-inspector-skeleton.png' });
   // The chrome is non-interactive through `inert` on its own wrappers, not CSS reaching into Kerf (HS2-MGVE50).
   await expect(skeleton.locator('.ticket-inspector__header')).toHaveJSProperty('inert', true);
-  await expect(skeleton.locator('[data-component="ticket-inspector-skeleton-panel"]')).toHaveJSProperty('inert', true);
+  const infoPlaceholder = skeleton.locator('[data-component="ticket-info-panel"][data-placeholder="true"]');
+  await expect(infoPlaceholder).toHaveJSProperty('inert', true);
+  // The body composes the TicketInfoPanel and TicketNotes placeholder variants (HS2-XBHADT).
+  await expect(infoPlaceholder.locator('[data-component="ticket-notes"][data-placeholder="true"]')).toBeVisible();
+  // The loading tabs are the loaded sidebar inspector's icon-only strip, so all four fit at every
+  // width instead of clipping wide name skeletons at phone width (HS2-MYS1MR).
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const tabs = skeleton.locator('.ticket-inspector__tabs [data-component="app-tab"]');
+    await expect(tabs).toHaveCount(4);
+    await expect(tabs.first()).toHaveAttribute('data-presentation', 'icon-only');
+    const fit = await skeleton.evaluate((root) => {
+      const bar = root.querySelector('.ticket-inspector__tabs')!.getBoundingClientRect();
+      return [...root.querySelectorAll('.ticket-inspector__tabs [data-component="app-tab"]')].every((tab) => {
+        const box = tab.getBoundingClientRect();
+        return box.width > 0 && box.left >= bar.left - 0.5 && box.right <= bar.right + 0.5;
+      });
+    });
+    expect(fit).toBe(true);
+    await skeleton.screenshot({ path: `/private/tmp/hs2-mys1mr-ticket-inspector-skeleton-${width}.png` });
+  }
+});
+
+test('exposes the TicketInfoPanel placeholder variant beside the loaded panel (HS2-XBHADT)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=ticket-info-panel');
+    const loaded = page.getByRole('region', { name: 'TicketInfoPanel demo', exact: true });
+    const placeholder = page.getByRole('region', { name: 'TicketInfoPanel placeholder demo' });
+    await expect(loaded.locator('[data-component="ticket-info-panel"]')).not.toHaveAttribute('data-placeholder');
+    await expect(loaded).toContainText('Hot Sheet git');
+    const panel = placeholder.locator('[data-component="ticket-info-panel"][data-placeholder="true"]');
+    await expect(panel).toHaveJSProperty('inert', true);
+    await expect(panel.locator('.kui-select--placeholder')).toHaveCount(3);
+    await expect(panel.locator('[data-component="ticket-notes"][data-placeholder="true"]')).toHaveCount(1);
+    await expect(panel).not.toContainText('Hot Sheet git');
+    const box = await panel.boundingBox();
+    expect(box!.width).toBeLessThanOrEqual(width);
+  }
 });
 
 test('lets inspector Markdown keep its own typography in sidebar and reader (HS2-MGVE50)', async ({ page }) => {

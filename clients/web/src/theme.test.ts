@@ -49,7 +49,6 @@ const kerfSpacingMigratedComponents = [
   'ticket-board-column.css',
   'ticket-close-dialog.css',
   'ticket-field-conflict.css',
-  'ticket-inspector-skeleton.css',
   'ticket-link-choice-dialog.css',
   'ticket-list.css',
   'ticket-code-review.css',

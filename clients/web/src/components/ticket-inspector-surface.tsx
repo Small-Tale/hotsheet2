@@ -2,9 +2,8 @@ import type { CorruptTicket } from '../api';
 import { corruptTicketInspectorPanel, type CorruptTicketRecoveryState } from './corrupt-ticket-row';
 import { notificationInspectorPanel } from './notification-inspector';
 import type { SidebarPanelParts } from './sidebar-panel';
-import { ticketInspectorPanel, type TicketInspectorProps } from './ticket-inspector';
+import { ticketInspectorPanel, type TicketInspectorProps, ticketInspectorSkeletonPanel } from './ticket-inspector';
 import { ticketInspectorPlaceholderPanel } from './ticket-inspector-placeholder';
-import { ticketInspectorSkeletonPanel } from './ticket-inspector-skeleton';
 
 /**
  * The application shell's right-rail surfaces as Workbench panel parts (HS2-QQW6CT). Each routes to

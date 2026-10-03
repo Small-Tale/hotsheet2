@@ -81,6 +81,13 @@
 .ticket-inspector__title[data-editable='true'] {
   cursor: text;
 }
+/* Loading skeleton title (HS2-REG3A2, HS2-XBHADT): two Skeleton lines in the title's place, with the
+   loaded title's bottom gap above the (now compact, icon-only) tab strip (HS2-MYS1MR). */
+.ticket-inspector__title-placeholder {
+  display: grid;
+  margin: remify(6.4px) remify(16px) var(--kui-space-m);
+  gap: remify(6.4px);
+}
 .ticket-inspector__title-input {
   width: calc(100% - var(--kui-space-m));
   margin: var(--kui-space-2xs) var(--kui-space-xs) var(--kui-space-m);

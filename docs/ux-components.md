@@ -1132,8 +1132,12 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   **Style ownership (HS2-MGVE50):** each panel styles only its own markup in its own stylesheet —
   `TicketInfoPanel` (`ticket-info-panel__*`), `TicketTimeline` (`ticket-timeline__*`),
   `TicketAttachments` (`ticket-attachments__*`), `TicketCodeReview` (`ticket-code-review--panel`),
-  and the skeleton (`ticket-inspector-skeleton__*`, non-interactive through `inert` rather than
-  CSS reaching into the Kerf tab bar). The column no longer restyles descendant `h2`/`p`, so Markdown
+  and the loading skeleton. The skeleton renders no other component's classes (HS2-XBHADT): it lives
+  in `ticket-inspector.tsx` beside the chrome it reuses, and its body composes the
+  `TicketInfoPanel placeholder` variant, which in turn composes `TicketNotes placeholder`. Both
+  variants keep the real chrome and draw the unknown values as Kerf `Skeleton` blocks, inert and
+  hidden from assistive technology. The skeleton's tab strip uses the loaded sidebar inspector's
+  icon-only `AppTab`/`TabBar` props, so all four tabs fit at phone width (HS2-MYS1MR). The column no longer restyles descendant `h2`/`p`, so Markdown
   headings, paragraphs, quotations, and activity-note text inside the inspector use their own
   component typography; the Details editor aligns to its surface through `MarkdownEditor`
   `inset="flush"` instead of a padding override, and the reader's card-free chrome and title size are

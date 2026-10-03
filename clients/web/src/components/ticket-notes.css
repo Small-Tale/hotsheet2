@@ -13,3 +13,36 @@
   color: var(--wa-color-neutral-on-quiet) !important;
   font-style: italic;
 }
+
+/* Placeholder variant (HS2-XBHADT): value-free note entries mirroring the note-card header
+   (kind + time) over skeleton bodies; the regular note keeps its card border. */
+.ticket-notes__placeholder {
+  display: grid;
+  gap: remify(16px);
+}
+.ticket-notes__placeholder-note {
+  display: grid;
+  gap: remify(8px);
+}
+.ticket-notes__placeholder-note[data-kind='regular'] {
+  padding: remify(12px);
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: remify(10.4px);
+}
+.ticket-notes__placeholder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.ticket-notes__placeholder-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: remify(6.4px);
+  font-weight: 650;
+}
+.ticket-notes__placeholder-body {
+  display: grid;
+  gap: remify(6.4px);
+}

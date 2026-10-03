@@ -42,6 +42,12 @@
   border-radius: remify(10.4px);
   background: var(--wa-color-surface-default);
 }
+/* Placeholder variant (HS2-XBHADT): skeleton detail lines inset like the rendered Markdown. */
+.ticket-info-panel__details-placeholder {
+  display: grid;
+  padding: remify(13.6px) remify(16px);
+  gap: remify(9.6px);
+}
 .ticket-info-panel__details-surface[data-feedback-needed='true'] {
   display: grid;
   border-color: var(--wa-color-warning-border-normal);

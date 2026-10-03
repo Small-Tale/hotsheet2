@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { TicketInspectorSkeleton } from './ticket-inspector-skeleton';
+import { TicketInfoPanel } from './ticket-info-panel';
+import { TicketInspectorSkeleton } from './ticket-inspector';
+import { TicketNotes } from './ticket-notes';
 
 describe('TicketInspectorSkeleton', () => {
   it('renders the real inspector chrome in a busy, value-free placeholder state', () => {
@@ -35,9 +37,52 @@ describe('TicketInspectorSkeleton', () => {
     expect(markup).not.toMatch(/HS2-/);
   });
 
+  it('composes the info panel and notes placeholder variants instead of borrowing their classes', () => {
+    const markup = String(TicketInspectorSkeleton());
+    // HS2-XBHADT: the body is the TicketInfoPanel placeholder variant, which composes TicketNotes'.
+    expect(markup).toMatch(/data-component="ticket-info-panel"[^>]*data-placeholder="true"/);
+    expect(markup).toMatch(/<section class="ticket-notes" data-component="ticket-notes" data-placeholder="true">/);
+    expect(markup).not.toContain('ticket-inspector-skeleton__');
+    expect(markup).not.toContain('ticket-inspector-skeleton-panel');
+    // HS2-MYS1MR: the loading tabs use the loaded sidebar inspector's icon-only presentation.
+    expect(markup.match(/data-component="app-tab"[^>]*data-presentation="icon-only"/g)).toHaveLength(4);
+  });
+
   it('shows the known slug while its ticket loads, and a skeleton slug otherwise', () => {
     expect(String(TicketInspectorSkeleton({ slug: 'HS2-4J50K3' }))).toContain('HS2-4J50K3');
     // Without a known slug the header uses ToolbarText's own placeholder, not ticket text.
     expect(String(TicketInspectorSkeleton())).not.toMatch(/HS2-/);
+  });
+});
+
+describe('placeholder variants', () => {
+  it('renders TicketInfoPanel value-free, inert, and hidden in either presentation', () => {
+    const sidebar = String(TicketInfoPanel({ placeholder: true }));
+    expect(sidebar).not.toContain('ticket-inspector-panel--reader');
+    expect(sidebar).toContain('data-placeholder="true"');
+    expect(sidebar).toContain('aria-hidden="true"');
+    expect(sidebar).toMatch(/\binert\b/);
+    expect(sidebar).toContain('class="ticket-info-panel__details-placeholder"');
+    expect(sidebar.match(/kui-select--placeholder/g)).toHaveLength(3);
+    // The Tags and Notes add actions are drawn but disabled while loading.
+    expect(sidebar.match(/aria-label="Add (tag|note)"[^>]*disabled/g)).toHaveLength(2);
+    // Value-free: no tags, notes, provider, or updated time.
+    expect(sidebar).not.toContain('Hot Sheet git');
+    expect(sidebar).not.toContain('No notes added.');
+    expect(String(TicketInfoPanel({ placeholder: true, readerPresentation: true }))).toMatch(
+      /ticket-inspector-panel--reader/,
+    );
+  });
+
+  it('renders TicketNotes as two activity entries and one regular note card', () => {
+    const markup = String(TicketNotes({ placeholder: true }));
+    expect(markup.match(/data-kind="activity"/g)).toHaveLength(2);
+    expect(markup.match(/data-kind="regular"/g)).toHaveLength(1);
+    expect(markup).toContain('Activity');
+    expect(markup).toContain('kui-skeleton');
+    // The loaded notes variant is unchanged.
+    const loaded = String(TicketNotes({ notes: [] }));
+    expect(loaded).toContain('No notes added.');
+    expect(loaded).not.toContain('data-placeholder');
   });
 });
