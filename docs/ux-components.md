@@ -1224,8 +1224,9 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   - assignee/reviewer/claim fields when supported
   - capability-aware validation and unsupported-field explanation
 - `TicketDetailsSection` — section header remains outside its visually distinct
-  bordered Markdown surface, matching Notes hierarchy; double-click non-empty details,
-  single-click the empty prompt, or use its keyboard action to begin editing. In write
+  bordered Markdown surface, matching Notes hierarchy; single-click the rendered details
+  (or the empty prompt) or use its keyboard action to begin editing, while links and
+  other controls inside the Markdown keep their own action (HS2-H1K9YY). In write
   mode the textarea owns the complete bordered surface, with content inset by internal
   padding and the native vertical resize handle at the surface's outer corner.
 - `TicketTagsSection` — **built**: controlled chips with capability-aware removal,
@@ -1267,8 +1268,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
   font), `density` (`default` 16px block rhythm; `compact` 4px; `flush` 0), and `media`
   (`full`; `thumbnail` crops attachment images into a 192 x 112px box). The
   `MarkdownPreview` UX demo shows every variant on the surface it is designed for.
-- `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard
-  to edit non-empty content, single-click to add empty content, persistent controlled
+- `MarkdownEditor` — **demo built**: rendered preview by default, single-click/keyboard
+  to edit (non-empty or empty content alike; a click or Enter on a link or other control
+  inside the rendered Markdown keeps that control's action, and a double-click's repeat
+  press keeps the new editor focused, HS2-H1K9YY), persistent controlled
   draft, full-surface vertically resizable embedded details with padded text and an
   outer-corner resize handle, inline/expanded presentation, and 150 ms debounced autosave without routine
   Save/Cancel actions. Internal editor controls preserve editing; external blur flushes.
@@ -1398,7 +1401,9 @@ icons; structural separators do not require icons.
   `density="compact"` selects the tighter 11.2px/8px inset and 9.6px radius used for every
   kind in the TicketNotes list, while the default `comfortable` density keeps the canonical
   card inset; the demo shows both (HS2-7RY5GK);
-  double-click enters a controlled editor whose Save persists and Cancel restores.
+  a single click (or Enter/Space) on an editable note enters its controlled, blur-flushed
+  autosaving editor, while links and controls inside the note keep their own action
+  (HS2-H1K9YY).
   In reader mode, regular/status notes remain directly editable, while feedback-needed
   and feedback-draft notes always render their Respond/Submit editor style. An uppercase
   `CHOICE` block in a feedback-needed note becomes Markdown-capable rounded options;

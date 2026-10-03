@@ -87,6 +87,7 @@ import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { wireTicketSearchFields } from '../interactions/ticket-search-field';
+import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
 import { nextMobileTerminalColumns } from '../mobile-terminal-columns';
 import type { PermissionAutomationAction } from '../permission-notifications';
 import { terminalCopyMessage, terminalCopySelection } from '../terminal-clipboard';
@@ -2964,13 +2965,14 @@ const beginNoteEdit = (id: string) => {
   queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus());
 };
 demoListeners.add(
-  delegate(root, 'dblclick', DEMO_MARKERS.editOnDoubleClick.selector, (_event, target) => {
+  delegate(root, 'click', DEMO_MARKERS.editOnClick.selector, (event, target) => {
+    if (!clickBeginsMarkdownEdit(event as MouseEvent, target)) return;
     beginNoteEdit((target as HTMLElement).closest<HTMLElement>('[data-note-id]')!.dataset.noteId!);
   }),
 );
 demoListeners.add(
-  delegate(root, 'keydown', DEMO_MARKERS.editOnDoubleClick.selector, (event, target) => {
-    if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
+  delegate(root, 'keydown', DEMO_MARKERS.editOnClick.selector, (event, target) => {
+    if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
     event.preventDefault();
     beginNoteEdit((target as HTMLElement).closest<HTMLElement>('[data-note-id]')!.dataset.noteId!);
   }),
@@ -3085,20 +3087,20 @@ demoListeners.add(
   }),
 );
 demoListeners.add(
-  delegate(root, 'dblclick', DEMO_ACTIONS.editMarkdown.selector, () => {
+  delegateCapture(root, 'mousedown', '*', (event) => {
+    if (repeatPressWouldLeaveNewEditor(event as MouseEvent, document.activeElement)) event.preventDefault();
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', DEMO_ACTIONS.editMarkdown.selector, (event, target) => {
+    if (!clickBeginsMarkdownEdit(event as MouseEvent, target)) return;
     markdownMode.value = 'write';
     queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus());
   }),
 );
 demoListeners.add(
-  delegate(root, 'click', '[data-action="edit-markdown"][data-empty="true"]', () => {
-    markdownMode.value = 'write';
-    queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus());
-  }),
-);
-demoListeners.add(
-  delegate(root, 'keydown', DEMO_ACTIONS.editMarkdown.selector, (event) => {
-    if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
+  delegate(root, 'keydown', DEMO_ACTIONS.editMarkdown.selector, (event, target) => {
+    if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
     event.preventDefault();
     markdownMode.value = 'write';
     queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus());

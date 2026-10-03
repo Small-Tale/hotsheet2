@@ -150,7 +150,7 @@ export const DEMO_FIELDS = {
 export const DEMO_MARKERS = {
   attachmentDropTarget: attr('data-attachment-drop-target', 'true'),
   editBlockedReason: attr('data-edit-blocked-reason', 'true'),
-  editOnDoubleClick: attr('data-edit-on-double-click', 'true'),
+  editOnClick: attr('data-edit-on-click', 'true'),
   galleryAnnotationSurface: attr('data-gallery-annotation-surface', 'true'),
   notWorkingDropzone: attr('data-not-working-dropzone', 'true'),
   tabKindProject: attr('data-tab-kind', 'project'),

@@ -214,11 +214,11 @@ export function NoteCard({
   const editAttributes =
     editable && !editorOpen
       ? {
-          'data-edit-on-double-click': 'true',
+          'data-edit-on-click': 'true',
           role: 'button',
           tabIndex: 0,
           'aria-label': 'Edit note',
-          title: 'Double-click to edit',
+          title: 'Click to edit',
         }
       : {};
   const acknowledgement = kind === 'regular' && body.trim() === 'No response needed';
@@ -237,8 +237,8 @@ export function NoteCard({
           : undefined
       }
       data-acknowledgement={acknowledgement ? 'true' : undefined}
-      data-edit-on-double-click={editable && !editorOpen ? 'true' : undefined}
-      title={editable && !editorOpen ? 'Double-click to edit' : undefined}
+      data-edit-on-click={editable && !editorOpen ? 'true' : undefined}
+      title={editable && !editorOpen ? 'Click to edit' : undefined}
     >
       <header class="note-card__header">
         <span class="note-card__kind">

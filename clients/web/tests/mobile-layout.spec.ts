@@ -1368,7 +1368,10 @@ test('touch textareas grow with their content instead of offering a resize grip 
   // The inspector's details editor and the note composer grow the same way.
   await page.locator('[data-ticket-slug="HS2-M1"]').tap();
   const inspector = page.locator('#app-right-rail');
-  await inspector.locator('[data-action="edit-markdown"]').first().dblclick();
+  await inspector
+    .locator('[data-action="edit-markdown"]')
+    .first()
+    .click({ position: { x: 4, y: 4 } });
   const source = inspector.locator('[name="markdown-source"]');
   await expect(source).toBeFocused();
   const sourceEmpty = await textareaSizing(source);

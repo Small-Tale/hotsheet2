@@ -271,7 +271,7 @@ test('vetoes reader dismissal when an asynchronous draft flush fails', async ({ 
   await openProjects(page);
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
   const reader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
-  await reader.locator('[data-action="edit-markdown"]').dblclick();
+  await reader.locator('[data-action="edit-markdown"]').click({ position: { x: 4, y: 4 } });
   await reader.getByRole('textbox', { name: 'Ticket details' }).fill('Unsaved reader draft');
   await page.keyboard.press('Escape');
   await expect(page.locator('.app-error')).toContainText('Draft persistence failed');
@@ -355,14 +355,14 @@ test('edits same-slug linked readers through their owning project and flushes be
   const targetReader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
   await targetReader.getByRole('link', { name: '@third-project/HS2-LINK01' }).click();
   const deepReader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Deep Work' });
-  await deepReader.locator('[data-action="edit-markdown"]').dblclick();
+  await deepReader.locator('[data-action="edit-markdown"]').click({ position: { x: 4, y: 4 } });
   await deepReader.getByRole('textbox', { name: 'Ticket details' }).fill('Deep project draft stays with git-deep.');
   await page.screenshot({ path: '/private/tmp/hs2-1xqb2k-linked-edit-wide.png', fullPage: true });
   await page.setViewportSize({ width: 720, height: 760 });
   await page.screenshot({ path: '/private/tmp/hs2-1xqb2k-linked-edit-narrow.png', fullPage: true });
   await deepReader.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(deepReader).toHaveCount(0);
-  await targetReader.locator('[data-action="edit-markdown"]').dblclick();
+  await targetReader.locator('[data-action="edit-markdown"]').click({ position: { x: 4, y: 4 } });
   await targetReader
     .getByRole('textbox', { name: 'Ticket details' })
     .fill('Target project draft stays with git-target.');
@@ -453,7 +453,7 @@ test('merges a concurrent remote edit into a linked reader draft instead of disc
   await openProjects(page);
   await page.locator('#app-right-rail').getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
-  await reader.locator('[data-action="edit-markdown"]').dblclick();
+  await reader.locator('[data-action="edit-markdown"]').click({ position: { x: 4, y: 4 } });
   const editor = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(editor).toHaveValue('First line\nSecond line');
   // Another writer appends a line the reader has not seen.
@@ -468,7 +468,7 @@ test('merges a concurrent remote edit into a linked reader draft instead of disc
   await expect(rendered).toContainText('First line, edited in the reader');
   await expect(rendered).toContainText('Appended elsewhere');
   await expect(page.locator('.app-error')).toHaveCount(0);
-  await rendered.dblclick();
+  await rendered.click({ position: { x: 4, y: 4 } });
   await expect(editor).toHaveValue('First line, edited in the reader\nSecond line\nAppended elsewhere');
   // A genuine overlap keeps the draft and says so instead of silently replacing it.
   details = 'First line, rewritten elsewhere\nSecond line\nAppended elsewhere';

@@ -2259,11 +2259,11 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   expect(readerContentWidth!.width).toBeGreaterThan(readerWidth!.width * 0.9);
   const editableNote = reader.locator('[data-component="note-card"][data-note-id="reader-note"]');
   await expect(editableNote.locator('.note-card__body')).toHaveAttribute('aria-label', 'Edit note');
-  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).getByRole('heading').first().click();
   const readerDetails = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(readerDetails).toBeFocused();
   await expect(readerDetails).toHaveCSS('resize', 'vertical');
-  await editableNote.locator('.note-card__body').dblclick();
+  await editableNote.locator('.note-card__body').click({ position: { x: 4, y: 4 } });
   await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
   await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toHaveCSS('resize', 'vertical');
   await editableNote.getByRole('textbox', { name: 'Note body' }).fill('Edited note body');
@@ -2298,7 +2298,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   );
   await expect(reader.getByRole('textbox', { name: 'Feedback response' })).toBeVisible();
   await expect(reader.getByRole('textbox', { name: 'Note body' })).toHaveValue(/keep the response/i);
-  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).getByRole('heading').first().click();
   const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
   await readerSource.fill('## Reader draft\nPreserved across the shared inspector surface.');
   await readerSource.blur();
@@ -2311,7 +2311,14 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const editor = page.locator('[data-component="markdown-editor"]');
   await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Implementation notes');
   await expect(editor.getByRole('link', { name: 'Open the component guide' })).toHaveAttribute('target', '_blank');
-  await editor.getByRole('button', { name: 'Edit Markdown content' }).dblclick();
+  // A link inside the rendered Markdown follows the link and never starts editing (HS2-H1K9YY).
+  const guide = page.waitForEvent('popup');
+  await editor.getByRole('link', { name: 'Open the component guide' }).click();
+  await (await guide).close();
+  await expect(editor).toHaveAttribute('data-mode', 'preview');
+  // A single click on the rendered content enters the editor.
+  await expect(editor.getByRole('button', { name: 'Edit Markdown content' })).toHaveAttribute('title', 'Click to edit');
+  await editor.getByRole('heading', { name: 'Implementation notes' }).click();
   const source = editor.getByRole('textbox', { name: 'Markdown content' });
   await expect(source).toHaveValue(/Implementation notes/);
   await source.fill('## Revised goal\nA preserved draft.');
@@ -6492,12 +6499,12 @@ test('sizes inspector editors and titles through child tokens and own classes (H
     '--hs-note-reader-height': '187px',
   };
   const editorHeights = async (root: import('@playwright/test').Locator) => {
-    await root.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+    await root.getByRole('button', { name: 'Edit Ticket details' }).getByRole('heading').first().click();
     const details = root.getByRole('textbox', { name: 'Ticket details' });
     const detailsHeight = await details.evaluate((node) => getComputedStyle(node).height);
     await details.blur();
     const note = root.locator('[data-component="note-card"] .note-card__body[aria-label="Edit note"]').first();
-    await note.dblclick();
+    await note.click({ position: { x: 4, y: 4 } });
     const noteHeight = await root
       .getByRole('textbox', { name: 'Note body' })
       .first()

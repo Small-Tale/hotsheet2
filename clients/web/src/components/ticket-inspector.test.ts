@@ -153,7 +153,7 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-component="note-card"');
     expect(markup).not.toContain('data-action="edit-ticket-reader"');
     expect(markup).toContain('data-action="edit-markdown"');
-    expect(markup).toContain('data-edit-on-double-click="true"');
+    expect(markup).toContain('data-edit-on-click="true"');
     expect(markup).not.toContain('data-action="edit-note"');
     expect(markup).toContain('popoverTarget="ticket-tag-reader-hs2-test"');
     expect(String(TicketInspector({ ...base }))).toContain('popoverTarget="ticket-tag-sidebar-hs2-test"');
@@ -166,7 +166,7 @@ describe('TicketInspector', () => {
       }),
     );
     expect(editing).toContain('name="markdown-source"');
-    expect(editing).toContain('data-edit-on-double-click="true"');
+    expect(editing).toContain('data-edit-on-click="true"');
   });
 
   it('names every non-duplicate close outcome in human language (HS2-N11T22)', () => {

@@ -45,7 +45,7 @@ export const INSPECTOR_AND_EDITOR_TARGETS = {
   ticketTagInputField: attr('name', 'ticket-tag-input'),
   markdownSourceField: attr('name', 'markdown-source'),
   newNoteBodyField: attr('name', 'new-note-body'),
-  editOnDoubleClick: attr('data-edit-on-double-click', 'true'),
+  editOnClick: attr('data-edit-on-click', 'true'),
   noteBodyField: attr('name', 'note-body'),
   inlineFeedbackResponseField: attr('name', 'inline-feedback-response'),
   editBlockedReason: attr('data-edit-blocked-reason', 'true'),

@@ -151,7 +151,7 @@ describe('NoteCard', () => {
 
   it('exposes content editing without a redundant edit button', () => {
     const markup = String(NoteCard({ id: 'actions', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body' }));
-    expect(markup).toContain('data-edit-on-double-click="true"');
+    expect(markup).toContain('data-edit-on-click="true"');
     expect(markup).toContain('aria-label="Edit note"');
     expect(markup).not.toContain('data-action="edit-note"');
     expect(markup).not.toContain('open-ticket-reader');
@@ -189,7 +189,7 @@ describe('NoteCard', () => {
     const regular = String(
       NoteCard({ id: 'regular', kind: 'regular', author: 'Codex', time: 'Now', body: 'Read only', readerMode: true }),
     );
-    expect(regular).toContain('data-edit-on-double-click="true"');
+    expect(regular).toContain('data-edit-on-click="true"');
     expect(regular).toContain('aria-label="Edit note"');
     expect(regular).not.toContain('data-action="edit-note"');
     const needed = String(

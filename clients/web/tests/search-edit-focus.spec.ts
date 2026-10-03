@@ -155,7 +155,10 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
   );
 
   // Start editing the details field so it holds focus.
-  await inspector.locator('[data-action="edit-markdown"]').first().dblclick();
+  await inspector
+    .locator('[data-action="edit-markdown"]')
+    .first()
+    .click({ position: { x: 4, y: 4 } });
   const editor = inspector.locator('[name="markdown-source"]');
   await expect(editor).toBeFocused();
 

@@ -15,6 +15,7 @@ import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
+import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
 import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind } from '../ticket-editor-size';
 import { type TicketFieldConflict } from '../ticket-field-reconciliation';
 import { type TicketPatch } from '../ticket-operations';
@@ -390,20 +391,23 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       dependencies.pointerDetailsFinish = undefined;
     }),
   );
+  // A single click enters editing; links and controls inside the rendered Markdown keep their own
+  // action instead (HS2-H1K9YY). The repeat press of a habitual double-click keeps focus in the
+  // editor its first click opened.
   lifetime.add(
-    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, (_event, target) => {
-      beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
+    delegateCapture(document.body, 'mousedown', '*', (event) => {
+      if (repeatPressWouldLeaveNewEditor(event as MouseEvent, document.activeElement)) event.preventDefault();
     }),
   );
   lifetime.add(
-    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, (_event, target) => {
-      if (data(target).empty === 'true') beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, (event, target) => {
+      if (clickBeginsMarkdownEdit(event as MouseEvent, target))
+        beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
     }),
   );
   lifetime.add(
     delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_ACTIONS.editMarkdown.selector, (event, target) => {
-      const keyboard = event as KeyboardEvent;
-      if (!['Enter', ' '].includes(keyboard.key)) return;
+      if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
       event.preventDefault();
       beginDetailsEdit(isReaderSurface(target), linkedReaderFrame(target));
     }),
@@ -532,7 +536,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'dblclick', INSPECTOR_AND_EDITOR_TARGETS.editOnDoubleClick.selector, (_event, target) => {
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_TARGETS.editOnClick.selector, (event, target) => {
+      if (!clickBeginsMarkdownEdit(event as MouseEvent, target)) return;
       beginNoteEdit(
         data(target.closest('[data-note-id]')!).noteId!,
         isReaderSurface(target),
@@ -541,10 +546,14 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     }),
   );
   lifetime.add(
-    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.editOnDoubleClick.selector, (event, target) => {
-      if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
+    delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.editOnClick.selector, (event, target) => {
+      if (!keyBeginsMarkdownEdit(event as KeyboardEvent, target)) return;
       event.preventDefault();
-      beginNoteEdit(data(target.closest('[data-note-id]')!).noteId!, isReaderSurface(target));
+      beginNoteEdit(
+        data(target.closest('[data-note-id]')!).noteId!,
+        isReaderSurface(target),
+        linkedReaderFrame(target),
+      );
     }),
   );
   lifetime.add(

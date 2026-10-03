@@ -7668,7 +7668,7 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await row.click();
   const inspector = page.locator('#app-right-rail');
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
   await editor.fill('Draft preserved across a redundant reselect');
   // Typing never writes; the draft is only local until focus leaves the editor (HS2-RE1PS6).
@@ -7774,7 +7774,7 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
   const inspector = page.locator('#app-right-rail');
   await expect(inspector).toContainText('Jira routed ticket');
   await expect(inspector).toContainText('Before edit');
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await inspector.getByRole('textbox', { name: 'Ticket details' }).fill('After edit');
   // Selecting another ticket takes focus from the editor, which sends the edit to the routed provider.
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
@@ -11090,7 +11090,7 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   let editor = inspector.getByRole('textbox', { name: 'Ticket details' });
 
   liveFull = { ...liveFull, details: 'Remote-only details', concurrency_token: 'remote-details' };
@@ -11118,13 +11118,13 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   });
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
   await expect(reader).toBeVisible();
-  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   editor = reader.getByRole('textbox', { name: 'Ticket details' });
   await editor.fill('My local wording');
   await editor.blur();
   await expect.poll(() => patches.some((patch) => patch.details === 'My local wording')).toBe(true);
   liveFull = { ...liveFull, details: 'Their newer wording', concurrency_token: 'remote-conflict' };
-  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await editor.fill('My revised local wording');
   await editor.blur();
   const conflict = reader.locator('[data-component="ticket-field-conflict"]');
@@ -11182,7 +11182,7 @@ test('merges a concurrent remote edit and rides out token churn without losing t
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
   await expect(editor).toHaveValue('Intro\nMiddle\nEnd');
   // The AI appends a line the client has not seen yet, and keeps renewing its lease while the user saves.
@@ -11192,7 +11192,7 @@ test('merges a concurrent remote edit and rides out token churn without losing t
   await editor.blur();
   await expect.poll(() => liveFull.details).toBe('Intro, edited locally\nMiddle\nEnd\nAppended by the AI');
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await expect(editor).toHaveValue('Intro, edited locally\nMiddle\nEnd\nAppended by the AI');
   await page.screenshot({ path: test.info().outputPath('hs2-a4xcxe-merged-editor-wide.png') });
   await expect(page.locator('.app-error')).toHaveCount(0);
@@ -11204,7 +11204,7 @@ test('merges a concurrent remote edit and rides out token churn without losing t
   await expect
     .poll(() => liveFull.details)
     .toBe('Intro, edited locally\nMiddle\nEnd\nAppended by the AI\nMore from me');
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   // Only a true overlap asks: the AI rewrites the line the user is rewriting too.
   liveFull = {
     ...liveFull,
@@ -11300,7 +11300,7 @@ test('does not report this clients own in-flight autosave as a merge conflict', 
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector = page.locator('#app-right-rail');
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   const editor = inspector.getByRole('textbox', { name: 'Ticket details' });
   const partial = 'they should have round borders and outl',
     complete = 'they should have round borders and outlines';
@@ -11325,7 +11325,7 @@ test('does not report this clients own in-flight autosave as a merge conflict', 
   liveFull = { ...liveFull, details: complete, concurrency_token: 'complete-token' };
   await second.fulfill({ json: { store: 'git-local', ...liveFull } });
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await expect(editor).toHaveValue(complete);
 });
 
@@ -11842,7 +11842,7 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
     const section = surface.locator('.ticket-info-panel__details-section');
     await expectDetailsSpacing(surface);
     await section.screenshot({ path: `/private/tmp/hs2-s6s709-${name}-preview.png` });
-    await surface.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+    await surface.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
     const editor = surface.getByRole('textbox', { name: 'Ticket details' });
     await expect(editor).toBeFocused();
     await expectDetailsSpacing(surface);
@@ -11870,7 +11870,7 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   const details = inspector.getByRole('textbox', { name: 'Ticket details' });
   await details.fill('Autosaved details');
   await page.waitForTimeout(300);
@@ -11880,7 +11880,10 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await expect(inspector.getByRole('button', { name: /Save|Cancel/ })).toHaveCount(0);
 
   const note = inspector.locator('[data-component="note-card"][data-note-id="N3"]');
-  await note.locator('.note-card__body p').first().dblclick();
+  await note
+    .locator('.note-card__body p')
+    .first()
+    .click({ position: { x: 4, y: 4 } });
   const noteEditor = note.getByRole('textbox', { name: 'Note body' });
   await noteEditor.fill('Autosaved note');
   await noteEditor.blur();
@@ -11916,14 +11919,14 @@ test('honors the first control click while ticket details is focused', async ({ 
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const inspector = page.locator('#app-right-rail');
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   const details = inspector.getByRole('textbox', { name: 'Ticket details' });
   await details.fill('Saved before the first action');
   await inspector.locator('[data-action="add-ticket-note"]').first().click();
   await expect(inspector.getByRole('textbox', { name: 'New note' })).toBeFocused();
   await expect.poll(() => patches.some((patch) => patch.details === 'Saved before the first action')).toBe(true);
   await inspector.locator('[data-action="cancel-new-note"]').click();
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await inspector.getByRole('textbox', { name: 'Ticket details' }).fill('Saved before changing tabs');
   await inspector.getByRole('tab', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toBeVisible();
@@ -11950,7 +11953,7 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
     .poll(() => patches.some((patch) => patch.note === 'Created note' && patch.note_kind === 'regular'))
     .toBe(true);
   const feedbackSurface = inspector.locator('[data-note-id="N2"] .note-card__body');
-  await feedbackSurface.dblclick();
+  await feedbackSurface.click({ position: { x: 4, y: 4 } });
   const feedbackEditor = inspector.getByRole('textbox', { name: 'Note body' });
   await expect(feedbackEditor).toHaveValue('Should this reader preserve the current draft?');
   await feedbackEditor.fill('Revised feedback question');
@@ -11960,7 +11963,10 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
     .toBe(true);
   const noteSurface = inspector.locator('[data-note-id="N3"] .note-card__body');
   await expect(noteSurface).toHaveAttribute('aria-label', 'Edit note');
-  await noteSurface.locator('p').first().dblclick();
+  await noteSurface
+    .locator('p')
+    .first()
+    .click({ position: { x: 4, y: 4 } });
   const editor = inspector.getByRole('textbox', { name: 'Note body' });
   await editor.fill('Edited lifecycle note');
   await editor.blur();
@@ -11975,7 +11981,7 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
   await expect(reader.getByRole('button', { name: 'Edit ticket', exact: true })).toHaveCount(0);
   const readerDetails = reader.getByRole('button', { name: 'Edit Ticket details' });
   await expect(readerDetails).toBeVisible();
-  await readerDetails.dblclick();
+  await readerDetails.click({ position: { x: 4, y: 4 } });
   const readerDetailsEditor = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(readerDetailsEditor).toBeFocused();
   await readerDetailsEditor.blur();
@@ -14720,14 +14726,14 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await referencedNote.screenshot({ path: '/private/tmp/hs2-b6937s-inline-image-reference.png' });
 });
 
-test('edits non-empty details on double click and empty details on one click', async ({ page }) => {
+test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async ({ page }) => {
   await mockProject(page);
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
   const preview = page.getByRole('button', { name: 'Edit Ticket details' });
-  await preview.dblclick();
+  await preview.click({ position: { x: 4, y: 4 } });
   const source = page.getByRole('textbox', { name: 'Ticket details' });
   await expect(source).toBeFocused();
   await source.fill('Carried into the larger editor');
@@ -14760,14 +14766,14 @@ test('edits non-empty details on double click and empty details on one click', a
   await expect(reader).toBeVisible();
   const readerPreview = reader.getByRole('button', { name: 'Edit Ticket details' });
   await expect(readerPreview).toContainText('Carried into the larger editor');
-  await readerPreview.dblclick();
+  await readerPreview.click({ position: { x: 4, y: 4 } });
   await expect(reader.getByRole('textbox', { name: 'Ticket details' })).toHaveValue('Carried into the larger editor');
   await expect(reader.getByRole('textbox', { name: 'Feedback response' })).toHaveCount(0);
   await expect(reader.locator('article[data-note-id="N2"]')).toHaveAttribute('data-kind', 'regular');
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(reader).toHaveCount(0);
   await expect(source).toHaveCount(0);
-  await page.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await page.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await source.fill('');
   await source.blur();
   await expect(page.getByText('Click to add Markdown.')).toBeVisible();
@@ -14778,7 +14784,7 @@ test('edits non-empty details on double click and empty details on one click', a
   await expect(page.locator('.ticket-info-panel__details-surface [data-component="markdown-preview"]')).toContainText(
     'Added from an empty ticket',
   );
-  await page.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await page.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await page.setViewportSize({ width: 1024, height: 600 });
   await detailsSurface.screenshot({ path: '/private/tmp/hs2-7nzkyc-details-editor-narrow.png' });
 });
@@ -14793,7 +14799,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
   let reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
     preview = reader.getByRole('button', { name: 'Edit Ticket details' });
   const sidebar = page.locator('#app-right-rail');
-  await preview.dblclick();
+  await preview.click({ position: { x: 4, y: 4 } });
   let source = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(source).toBeFocused();
   await expect(sidebar.getByRole('textbox', { name: 'Ticket details' })).toHaveCount(0);
@@ -14808,7 +14814,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
   await expect(reader.getByRole('textbox', { name: 'Note body' })).toBeVisible();
   await expect(sidebar.getByRole('textbox', { name: 'Note body' })).toHaveCount(0);
   await reader.getByRole('textbox', { name: 'Note body' }).blur();
-  await preview.dblclick();
+  await preview.click({ position: { x: 4, y: 4 } });
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(reader).toHaveCount(0);
   const inspector = page.locator('#app-right-rail');
@@ -14817,7 +14823,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
   await page.getByRole('button', { name: 'Open ticket reader' }).click();
   reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   preview = reader.getByRole('button', { name: 'Edit Ticket details' });
-  await preview.dblclick();
+  await preview.click({ position: { x: 4, y: 4 } });
   source = reader.getByRole('textbox', { name: 'Ticket details' });
   await source.fill('Saved while the reader closes');
   await page.screenshot({ path: '/private/tmp/hs2-x3gx39-reader-edit-wide.png', fullPage: true });
@@ -14848,11 +14854,11 @@ test('persists separate sidebar, reader, and new-ticket heights through rerender
       }, height);
       await expect.poll(() => locator.evaluate((node) => Math.round(node.getBoundingClientRect().height))).toBe(height);
     };
-  await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await resize(inspector.getByRole('textbox', { name: 'Ticket details' }), 132);
   await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
-  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await resize(reader.getByRole('textbox', { name: 'Ticket details' }), 222);
   await reader.getByRole('button', { name: 'Block ticket' }).click();
   await resize(reader.getByRole('textbox', { name: 'Blocked reason' }), 144);
@@ -20193,7 +20199,10 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     await expect(badge).toHaveText('48%');
 
     // A human text edit through the real note editor keeps the AI-reported score.
-    await card.locator('.note-card__body p').first().dblclick();
+    await card
+      .locator('.note-card__body p')
+      .first()
+      .click({ position: { x: 4, y: 4 } });
     const editor = card.getByRole('textbox', { name: 'Note body' });
     await editor.fill('## Result\nShipped and documented.\n\n## Confidence\n48');
     await editor.blur();

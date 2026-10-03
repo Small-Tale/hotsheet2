@@ -75,7 +75,7 @@ export function MarkdownEditor({
             data-action={editable ? 'edit-markdown' : undefined}
             data-empty={String(empty)}
             aria-label={editable ? `Edit ${label}` : label}
-            title={editable ? (empty ? 'Click to add Markdown' : 'Double-click to edit') : undefined}
+            title={editable ? (empty ? 'Click to add Markdown' : 'Click to edit') : undefined}
           >
             <MarkdownPreview
               source={value}

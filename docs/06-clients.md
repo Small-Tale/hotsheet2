@@ -519,9 +519,19 @@ and identity-less legacy entries remain conservatively blocking.
   of truth for blocked presentation: a non-empty reason persists and shows the badge/rail,
   an empty edit sends `null` to clear it, and the authoritative response exits
   editing without making the text disappear. An existing blocked-reason surface enters
-  that editor on double-click, matching details and ordinary notes. Existing blocked
-  reasons and ordinary notes do not add redundant per-item Edit buttons; their content
-  surfaces support double-click plus Enter/Space keyboard entry instead.
+  that editor on double-click. Existing blocked reasons and ordinary notes do not add
+  redundant per-item Edit buttons; their content surfaces support pointer plus
+  Enter/Space keyboard entry instead.
+  Rendered Markdown fields — ticket details and editable notes, in the inspector and the
+  reader alike — enter their editor on a **single click** (or tap), with Enter/Space as
+  the keyboard entry (HS2-H1K9YY). A click that starts on a link, ticket reference,
+  attachment/gallery button, enabled form control, or other control inside the rendered
+  Markdown performs only that control's action and never starts editing; Enter on a
+  focused nested link likewise follows the link. A drag that finishes a text selection
+  and a modified click (Cmd/Ctrl/Shift/Alt) do not start editing either, and the repeat
+  press of a habitual double-click keeps focus in the editor the first click opened.
+  Rendered GFM task-list checkboxes stay read-only. The plain-text blocked reason and the
+  ticket title keep double-click entry.
 
 - **Ticket claims.** Ticket rows show a yellow spinner directly after status only
   while a worker holds a non-expired claim lease. Started tickets without a lease remain

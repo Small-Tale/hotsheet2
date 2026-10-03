@@ -49,7 +49,7 @@ test('keeps attacker Markdown inert through kerf raw while preserving safe GFM a
 
   await page.goto('/ux-demo?component=ticket-reader');
   const note = page.locator('[data-component="note-card"][data-note-id="reader-note"]');
-  await note.locator('.note-card__body').dblclick();
+  await note.locator('.note-card__body').click({ position: { x: 4, y: 4 } });
   const editor = note.getByRole('textbox', { name: 'Note body' });
   await editor.fill(adversarialMarkdown);
   await editor.blur();
