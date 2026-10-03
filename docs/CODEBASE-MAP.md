@@ -131,7 +131,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations
     src/new-ticket-attachments.ts # Post-create staged attachment upload with partial-failure accounting
-    src/attachment-label-editing.ts # Per-surface open attachment batch label editor state (begin/restore/end), shared by the app and the UX demo (HS2-SG0AZY)
+    src/attachment-label-editing.ts # Per-surface open attachment batch label editor state (begin/restore/end) and its autosave controller (controlled draft, recovery copy, one merged write on blur/page hide), shared by the app and the UX demo (HS2-SG0AZY, HS2-0QQHSZ)
     src/github-attachment-settings.ts # HS1-compatible GitHub assets-repository setting keys carried through a connection-dialog edit (HS2-HSA64D)
     src/new-ticket-source.ts # Project ticket sources from provider descriptors; the composer's writable-source choices and last-used/default target resolution (HS2-NZMJBJ)
       src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, and soft-delete patch planning

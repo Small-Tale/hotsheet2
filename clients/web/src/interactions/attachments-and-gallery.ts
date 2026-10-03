@@ -9,12 +9,7 @@ import {
   type MediaAnnotation,
   type TicketRow,
 } from '../api';
-import {
-  type AttachmentLabelEditing,
-  beginAttachmentLabelEdit,
-  endAttachmentLabelEdit,
-  restoreAttachmentLabelEdit,
-} from '../attachment-label-editing';
+import { type AttachmentLabelEditing, createAttachmentLabelEditor } from '../attachment-label-editing';
 import { browserRandomId } from '../browser-id';
 import { ATTACHMENT_CONTEXT_MENU_HEIGHT, type AttachmentContextMenuKind } from '../components/attachment-context-menu';
 import {
@@ -35,6 +30,7 @@ import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
 } from '../interaction-attrs/attachments-and-gallery';
+import { ticketDraftKey } from '../ticket-draft-store';
 import { data } from './dom';
 import { type AttachmentMenu, type GallerySource, type Project } from './types';
 
@@ -214,26 +210,57 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         : undefined,
     };
   }
-  async function persistAttachmentMetadata(ids: string[], metadata: AttachmentMetadata) {
+  async function persistAttachmentMetadata(ids: readonly string[], metadata: AttachmentMetadata): Promise<boolean> {
     const current = project(),
       ticket = selectedTicket.value;
-    if (!current || !ticket || !ids.length) return;
+    if (!current || !ticket || !ids.length) return false;
     attachmentMessage.value = 'Updating attachment group…';
     try {
-      const result = await api().updateCheckoutAttachmentMetadata(current.id, ticket.qualified_id, ids, metadata);
+      const result = await api().updateCheckoutAttachmentMetadata(current.id, ticket.qualified_id, [...ids], metadata);
       selectedTicket.value = result.ticket;
       attachmentMessage.value = '';
       showToast('Attachment group updated.');
       await refreshProject();
+      return true;
     } catch (reason) {
       attachmentMessage.value = `Update failed: ${reason instanceof Error ? reason.message : String(reason)}`;
+      return false;
     }
   }
+  // The batch label is ticket text (HS2-0QQHSZ): a controlled draft with a local recovery copy keyed by
+  // project, ticket, and batch, written once when focus leaves the editor or the page hides.
+  const labelEditor = createAttachmentLabelEditor({
+    editing: attachmentLabelEditing,
+    draftKey: (batchKey) => {
+      const current = project(),
+        ticket = selectedTicket.value;
+      return current && ticket
+        ? ticketDraftKey(current.id, ticket.qualified_id, 'attachment_label', batchKey)
+        : undefined;
+    },
+    currentLabel: (edit) =>
+      selectedTicket.value?.attachments.find((item) => edit.ids?.includes(item.id))?.batch_label ?? '',
+    describe: (batch) => metadataForBatch(batch),
+    save: (edit, label) =>
+      persistAttachmentMetadata(edit.ids ?? [], { ...edit.metadata, batch_label: label || undefined }),
+    notify: showToast,
+  });
+  const flushLabelOnHide = () => {
+    void labelEditor.flush();
+  };
+  document.defaultView?.addEventListener('pagehide', flushLabelOnHide, { signal: lifetime.signal });
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+      if (document.visibilityState === 'hidden') flushLabelOnHide();
+    },
+    { signal: lifetime.signal },
+  );
   lifetime.add(
     delegate(
       document.body,
       'change',
-      '[name="attachment-batch-label"], [name="attachment-batch-purpose"]',
+      ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchPurposeField.selector,
       (_event, target) => {
         const batch = target.closest<HTMLElement>('[data-attachment-ids]'),
           ids = batch?.dataset.attachmentIds?.split(',').filter(Boolean);
@@ -244,10 +271,20 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   lifetime.add(
     delegate(
       document.body,
+      'input',
+      ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
+      (_event, target) => {
+        labelEditor.input(target as HTMLInputElement);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
       'dblclick',
       ATTACHMENTS_AND_GALLERY_ACTIONS.editAttachmentBatchLabel.selector,
       (_event, target) => {
-        const input = beginAttachmentLabelEdit(target, attachmentLabelEditing);
+        const input = labelEditor.begin(target);
         if (!input) return;
         queueMicrotask(() => {
           input.focus();
@@ -266,7 +303,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
           key = (event as KeyboardEvent).key;
         if (key !== 'Escape' && key !== 'Enter') return;
         const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
-        if (key === 'Escape') restoreAttachmentLabelEdit(input, attachmentLabelEditing);
+        if (key === 'Escape') labelEditor.escape(input);
         input.blur();
         requestAnimationFrame(() =>
           requestAnimationFrame(() => {
@@ -287,7 +324,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       'blur',
       ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
       (_event, target) => {
-        endAttachmentLabelEdit(target, attachmentLabelEditing);
+        void labelEditor.finish(target);
       },
     ),
   );

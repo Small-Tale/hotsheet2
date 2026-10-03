@@ -312,7 +312,9 @@ attachments-and-gallery	delegate	document.body	'change'	'input[name="ticket-atta
 attachments-and-gallery	delegate	document.body	'dragover'	dropTargets
 attachments-and-gallery	delegate	document.body	'dragleave'	ATTACHMENT_DROP_TARGET
 attachments-and-gallery	delegate	document.body	'drop'	dropTargets
-attachments-and-gallery	delegate	document.body	'change'	'[name="attachment-batch-label"], [name="attachment-batch-purpose"]'
+attachments-and-gallery	document.addEventListener	'visibilitychange'
+attachments-and-gallery	delegate	document.body	'change'	'[name="attachment-batch-purpose"]'
+attachments-and-gallery	delegate	document.body	'input'	'[name="attachment-batch-label"]'
 attachments-and-gallery	delegate	document.body	'dblclick'	'[data-action="edit-attachment-batch-label"]'
 attachments-and-gallery	delegate	document.body	'keydown'	'[name="attachment-batch-label"]'
 attachments-and-gallery	delegateCapture	document.body	'blur'	'[name="attachment-batch-label"]'

@@ -20258,6 +20258,180 @@ test('keeps a production attachment label edit open while a live ticket update r
   expect(writes).toHaveLength(1);
 });
 
+test('autosaves a production attachment label once on blur, page hide, and Enter, and recovers it after a reload (HS2-0QQHSZ)', async ({
+  page,
+}) => {
+  const writes: Array<{ attachment_ids: string[]; batch_label?: string; batch_id?: string }> = [],
+    held: import('@playwright/test').Route[] = [];
+  let holdWrites = false,
+    liveFull = {
+      ...full,
+      attachments: full.attachments.map((item) => ({
+        ...item,
+        batch_id: undefined as string | undefined,
+        batch_label: undefined as string | undefined,
+      })),
+    };
+  await mockProject(page);
+  await page.route('**/tickets/*01', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: { store: 'git-local', ...liveFull } })
+      : route.fallback(),
+  );
+  await page.route('**/tickets/*01/attachments', (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    const body = route.request().postDataJSON() as (typeof writes)[number];
+    writes.push(body);
+    if (holdWrites) {
+      held.push(route);
+      return;
+    }
+    liveFull = {
+      ...liveFull,
+      attachments: liveFull.attachments.map((item) =>
+        body.attachment_ids.includes(item.id)
+          ? { ...item, batch_id: body.batch_id, batch_label: body.batch_label }
+          : item,
+      ),
+    };
+    return route.fulfill({ json: { store: 'git-local', ...liveFull } });
+  });
+  const openAttachments = async () => {
+    await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
+    await page
+      .locator('#app-right-rail')
+      .getByRole('tab', { name: /Attachments/ })
+      .click();
+  };
+  const storedDraft = () =>
+    page.evaluate(() =>
+      Object.keys(localStorage)
+        .filter((key) => key.includes(':attachment_label:'))
+        .map((key) => JSON.parse(localStorage.getItem(key)!) as { base: string; draft: string }),
+    );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await openAttachments();
+  const inspector = page.locator('#app-right-rail'),
+    batch = inspector.locator('[data-attachment-group-drop-target]').first(),
+    editor = batch.getByRole('textbox', { name: /^Batch label for/ }),
+    title = batch.getByRole('button', { name: /^Edit batch label/ });
+
+  // Rapid typing updates only the controlled draft and, after the debounce, the local recovery copy.
+  await title.dblclick();
+  await expect(editor).toBeFocused();
+  await editor.pressSequentially('Rapid label', { delay: 15 });
+  await expect(editor).toHaveValue('Rapid label');
+  await expect
+    .poll(storedDraft)
+    .toEqual([{ base: '', draft: 'Rapid label', at: expect.any(Number) as unknown as number }]);
+  expect(writes).toHaveLength(0);
+
+  // A reload whose page-hide write (if the unloading page sends one) never commits keeps the copy;
+  // reopening the batch restores it.
+  holdWrites = true;
+  await page.reload();
+  holdWrites = false;
+  writes.length = 0;
+  held.length = 0;
+  await openAttachments();
+  await title.dblclick();
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue('Rapid label');
+  await expect(page.locator('.app-toast')).toContainText('Restored an unsaved label edit.');
+  await page.screenshot({ path: test.info().outputPath('hs2-0qqhsz-restored-label-1280.png') });
+
+  // Blur writes once; the draft stays visible in the open editor while that write is in flight.
+  holdWrites = true;
+  await editor.evaluate((node) => {
+    (node as HTMLInputElement).blur();
+  });
+  await expect.poll(() => writes.length).toBe(1);
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue('Rapid label');
+  holdWrites = false;
+  liveFull = {
+    ...liveFull,
+    attachments: liveFull.attachments.map((item) =>
+      writes[0].attachment_ids.includes(item.id)
+        ? { ...item, batch_id: writes[0].batch_id, batch_label: writes[0].batch_label }
+        : item,
+    ),
+  };
+  await held.pop()!.fulfill({ json: { store: 'git-local', ...liveFull } });
+  expect(writes[0]).toMatchObject({ batch_label: 'Rapid label' });
+  await expect(page.locator('[data-editing-label]')).toHaveCount(0);
+  await expect(inspector.getByRole('button', { name: 'Edit batch label Rapid label' })).toBeVisible();
+  await expect.poll(storedDraft).toEqual([]);
+
+  // Post-save editing starts from the saved label and commits through Enter with one more write.
+  const saved = inspector.locator('[data-attachment-group-drop-target]').first();
+  await saved.getByRole('button', { name: 'Edit batch label Rapid label' }).dblclick();
+  const savedEditor = saved.getByRole('textbox', { name: /^Batch label for/ });
+  await expect(savedEditor).toBeFocused();
+  await expect(savedEditor).toHaveValue('Rapid label');
+  await savedEditor.evaluate((node) => {
+    const input = node as HTMLInputElement;
+    input.setSelectionRange(input.value.length, input.value.length);
+  });
+  await savedEditor.pressSequentially(' v2', { delay: 15 });
+  await savedEditor.press('Enter');
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1]).toMatchObject({ batch_label: 'Rapid label v2' });
+  await expect(page.locator('[data-editing-label]')).toHaveCount(0);
+
+  // Page hide writes the open draft at once without closing the editor; the later blur writes nothing new.
+  await saved.getByRole('button', { name: 'Edit batch label Rapid label v2' }).dblclick();
+  await expect(savedEditor).toBeFocused();
+  await savedEditor.fill('Hidden mid-edit');
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => writes.length).toBe(3);
+  expect(writes[2]).toMatchObject({ batch_label: 'Hidden mid-edit' });
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  });
+  await savedEditor.press('Enter');
+  await expect(page.locator('[data-editing-label]')).toHaveCount(0);
+  expect(writes).toHaveLength(3);
+
+  // The reader composes the same editor in its own scope and writes once when its edit finishes.
+  await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
+  await reader.getByRole('tab', { name: /Attachments/ }).click();
+  const readerBatch = reader.locator('[data-attachment-group-drop-target]').first();
+  await readerBatch.getByRole('button', { name: 'Edit batch label Hidden mid-edit' }).dblclick();
+  const readerEditor = readerBatch.getByRole('textbox', { name: /^Batch label for/ });
+  await expect(readerEditor).toBeFocused();
+  await readerEditor.fill('Reader label');
+  await expect(page.locator('[data-editing-label]')).toHaveCount(1);
+  await page.screenshot({ path: test.info().outputPath('hs2-0qqhsz-reader-editing-1280.png') });
+  expect(writes).toHaveLength(3);
+  await readerEditor.press('Enter');
+  await expect.poll(() => writes.length).toBe(4);
+  expect(writes[3]).toMatchObject({ batch_label: 'Reader label' });
+  await expect(readerBatch.getByRole('button', { name: 'Edit batch label Reader label' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close ticket reader' }).click();
+
+  // At 390 the inspector overlay edits the same way; Escape restores the label and writes nothing.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').first().click();
+  const narrow = page.locator('#app-right-rail').locator('[data-attachment-group-drop-target]').first();
+  await narrow.getByRole('button', { name: 'Edit batch label Reader label' }).dblclick();
+  const narrowEditor = narrow.getByRole('textbox', { name: /^Batch label for/ });
+  await expect(narrowEditor).toBeFocused();
+  await narrowEditor.fill('Narrow draft');
+  await page.screenshot({ path: test.info().outputPath('hs2-0qqhsz-inspector-editing-390.png') });
+  await narrowEditor.press('Escape');
+  await expect(page.locator('[data-editing-label]')).toHaveCount(0);
+  await expect(narrow.locator('[data-action="edit-attachment-batch-label"]')).toHaveText('Reader label');
+  await expect.poll(storedDraft).toEqual([]);
+  expect(writes).toHaveLength(4);
+});
+
 test('moves a media thumbnail between batches and removes active media from its gallery menu (HS2-9PA2KD, HS2-EDX5J3)', async ({
   page,
 }) => {

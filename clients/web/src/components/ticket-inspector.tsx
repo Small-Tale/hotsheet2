@@ -93,6 +93,8 @@ export interface TicketInspectorProps {
   attachmentMessage?: string;
   /** The attachment batch key whose label editor is open (HS2-SG0AZY). */
   attachmentLabelEditing?: string;
+  /** The controlled draft of that open label editor (HS2-0QQHSZ). */
+  attachmentLabelDraft?: string;
   attachmentContext?: AttachmentReferenceContext;
   notes?: readonly NoteCardProps[];
   editingNoteId?: string;
@@ -164,6 +166,7 @@ export function ticketInspectorPanel({
   attachmentsEditable = attachmentsEnabled,
   attachmentMessage = '',
   attachmentLabelEditing,
+  attachmentLabelDraft,
   attachmentContext,
   notes,
   editingNoteId,
@@ -429,6 +432,7 @@ export function ticketInspectorPanel({
           editable={attachmentsEditable}
           message={attachmentMessage}
           editingLabelBatch={attachmentLabelEditing}
+          editingLabelDraft={attachmentLabelDraft}
           presentation={presentation}
         />
       )}

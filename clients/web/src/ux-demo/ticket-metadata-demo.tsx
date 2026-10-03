@@ -2,7 +2,9 @@ import { signal } from 'kerfjs';
 
 import {
   type AttachmentLabelEditing,
+  attachmentLabelEditingDraft,
   attachmentLabelEditingKey,
+  createAttachmentLabelEditor,
   INSPECTOR_ATTACHMENT_LABEL_SCOPE,
 } from '../attachment-label-editing';
 import { browserRandomId } from '../browser-id';
@@ -15,6 +17,7 @@ import { TicketInfoPanel } from '../components/ticket-info-panel';
 import { TicketPrioritySelect } from '../components/ticket-priority-select';
 import { TicketStatusMenu } from '../components/ticket-status-menu';
 import { TicketTimeline } from '../components/ticket-timeline';
+import { ticketDraftKey } from '../ticket-draft-store';
 
 export function TicketCategorySelectDemo() {
   return (
@@ -227,6 +230,20 @@ export function renameAttachmentDemoBatch(batchId: string, label: string) {
       : item,
   );
 }
+/**
+ * The demo composes the production label editor (HS2-0QQHSZ) over its fixture: the same controlled
+ * draft, 150 ms recovery copy, one write on blur, Enter, or page hide, and restore on reopen.
+ */
+export const attachmentDemoLabelEditor = createAttachmentLabelEditor({
+  editing: attachmentDemoLabelEditing,
+  draftKey: (batchKey) => ticketDraftKey('ux-demo', 'ticket-attachments-demo', 'attachment_label', batchKey),
+  currentLabel: (edit) => attachmentDemoItems.value.find((item) => edit.ids?.includes(item.id))?.batch_label ?? '',
+  describe: (batch) => ({ batch_id: batch.dataset.attachmentBatch || undefined }),
+  save: (edit, label) => {
+    renameAttachmentDemoBatch(edit.metadata?.batch_id ?? '', label);
+    return Promise.resolve(true);
+  },
+});
 const appendOnlyAttachmentDemoItems: TicketAttachmentItem[] = [
   { id: 'gh-trace', name: 'trace.log', url: 'data:text/plain,trace', batch_id: 'gh', batch_label: 'Repro' },
   // An append-only provider projects no annotations (HS2-HSA64D).
@@ -240,6 +257,10 @@ export function TicketAttachmentsDemo() {
         <TicketAttachments
           attachments={attachmentDemoItems.value}
           editingLabelBatch={attachmentLabelEditingKey(
+            attachmentDemoLabelEditing.value,
+            INSPECTOR_ATTACHMENT_LABEL_SCOPE,
+          )}
+          editingLabelDraft={attachmentLabelEditingDraft(
             attachmentDemoLabelEditing.value,
             INSPECTOR_ATTACHMENT_LABEL_SCOPE,
           )}

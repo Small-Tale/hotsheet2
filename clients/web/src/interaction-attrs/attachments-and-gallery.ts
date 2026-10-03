@@ -36,6 +36,7 @@ export const ATTACHMENTS_AND_GALLERY_ACTIONS = {
  */
 export const ATTACHMENTS_AND_GALLERY_TARGETS = {
   attachmentBatchLabelField: attr('name', 'attachment-batch-label'),
+  attachmentBatchPurposeField: attr('name', 'attachment-batch-purpose'),
   galleryImage: attr('data-gallery-image', 'true'),
   galleryMedia: attr('data-gallery-media', 'true'),
   galleryAnnotationSurface: attr('data-gallery-annotation-surface', 'true'),

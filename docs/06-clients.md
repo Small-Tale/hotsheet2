@@ -1370,7 +1370,12 @@ and identity-less legacy entries remain conservatively blocking.
   inline editor on double-click; Enter saves, Escape cancels, and focus returns to the title
   control after the updated group renders (HS2-34SE3Z). Application state owns which label is
   being edited, per surface (the inspector or each reader frame), so a live ticket update that
-  rerenders the panel keeps the editor open with its typed draft (HS2-SG0AZY). Its purpose remains a compact tag-sized control. Files
+  rerenders the panel keeps the editor open with its typed draft (HS2-SG0AZY). The label follows the ticket
+  text autosave rule (HS2-0QQHSZ): keystrokes update a controlled draft and, after 150 ms, a
+  local recovery copy keyed by project, ticket, and batch with the label the edit started from.
+  The one server write happens when focus leaves the editor (Enter blurs it) or the page hides,
+  merged against that edit-start label, and the editor shows its draft until the write commits.
+  Reopening the batch restores an unsaved copy. Its purpose remains a compact tag-sized control. Files
   move between groups by dragging either the file row or its media-grid preview (without a
   separate handle glyph). Preview drags use the existing attachment identity and never fall
   through to the upload path or create a copied attachment; only

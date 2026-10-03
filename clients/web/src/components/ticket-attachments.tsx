@@ -102,6 +102,7 @@ export function TicketAttachments({
   message = '',
   presentation = 'sidebar',
   editingLabelBatch,
+  editingLabelDraft,
 }: {
   attachments?: readonly TicketAttachmentItem[];
   /** New files can be added (the provider reports `attachments`). */
@@ -119,6 +120,11 @@ export function TicketAttachments({
    * keeps the editor open (HS2-SG0AZY); see `attachment-label-editing.ts`.
    */
   editingLabelBatch?: string;
+  /**
+   * The controlled draft of the label being edited (HS2-0QQHSZ): the open editor shows it, so a
+   * rerender keeps what the user typed. Defaults to the batch's stored label.
+   */
+  editingLabelDraft?: string;
 }) {
   const manageable = enabled && editable;
   const groups = groupAttachments(attachments);
@@ -184,7 +190,11 @@ export function TicketAttachments({
                   )}
                   <input
                     class="ticket-attachments__batch-title-editor"
-                    value={group.explicitLabel ?? ''}
+                    value={
+                      manageable && group.key === editingLabelBatch && editingLabelDraft !== undefined
+                        ? editingLabelDraft
+                        : (group.explicitLabel ?? '')
+                    }
                     placeholder={group.label}
                     aria-label={`Batch label for ${group.label}`}
                     name="attachment-batch-label"

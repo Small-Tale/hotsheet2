@@ -1207,6 +1207,10 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     `editingLabelBatch` names the batch (`AttachmentBatch.key`) whose label editor is open; the
     caller owns that state through `attachment-label-editing.ts`, so a rerender never closes the
     editor (HS2-SG0AZY). `TicketInspector` forwards it as `attachmentLabelEditing`.
+    `editingLabelDraft` (forwarded as `attachmentLabelDraft`) is that editor's controlled draft.
+    `createAttachmentLabelEditor` owns the label's autosave contract for the app and the demo:
+    a 150 ms recovery copy, one merged write on blur, Enter, or page hide, and restore on
+    reopen (HS2-0QQHSZ).
 - `TicketMetadataEditor`
   - `Select` — **demo built**: compact, icon-bearing Web Awesome select foundation
     shared by ticket category and priority controls, including selected-value and

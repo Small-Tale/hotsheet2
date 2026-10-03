@@ -41,11 +41,6 @@ import { createScope } from 'kerfjs/scope';
 import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from 'lucide';
 
 import type { ProviderAccount } from '../api';
-import {
-  beginAttachmentLabelEdit,
-  endAttachmentLabelEdit,
-  restoreAttachmentLabelEdit,
-} from '../attachment-label-editing';
 import type { CommandDropTarget } from '../command-order';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
@@ -348,7 +343,7 @@ import {
   toggleCollectionTicketUpNext,
 } from './ticket-collections-demo';
 import {
-  attachmentDemoLabelEditing,
+  attachmentDemoLabelEditor,
   attachmentDemoMenu,
   AttachmentGalleryDemo,
   closeAttachmentDemoMenu,
@@ -362,7 +357,6 @@ import {
   galleryDemoVolume,
   galleryDemoVolumeOpen,
   regroupAttachmentDemo,
-  renameAttachmentDemoBatch,
   setGalleryDemo,
   setGalleryDemoAnnotationEndpoint,
   shiftGalleryDemo,
@@ -3795,7 +3789,7 @@ demoListeners.add(
 );
 demoListeners.add(
   delegate(root, 'dblclick', DEMO_ACTIONS.editAttachmentBatchLabel.selector, (_event, target) => {
-    const input = beginAttachmentLabelEdit(target, attachmentDemoLabelEditing);
+    const input = attachmentDemoLabelEditor.begin(target);
     if (!input) return;
     queueMicrotask(() => {
       input.focus();
@@ -3809,7 +3803,7 @@ demoListeners.add(
     const key = (event as KeyboardEvent).key;
     if (key !== 'Escape' && key !== 'Enter') return;
     const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
-    if (key === 'Escape') restoreAttachmentLabelEdit(input, attachmentDemoLabelEditing);
+    if (key === 'Escape') attachmentDemoLabelEditor.escape(input);
     input.blur();
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
@@ -3824,16 +3818,22 @@ demoListeners.add(
   }),
 );
 demoListeners.add(
-  delegate(root, 'change', DEMO_FIELDS.attachmentBatchLabel.selector, (_event, target) => {
-    const batch = target.closest<HTMLElement>('[data-attachment-ids]');
-    if (batch) renameAttachmentDemoBatch(batch.dataset.attachmentBatch ?? '', (target as HTMLInputElement).value);
+  delegate(root, 'input', DEMO_FIELDS.attachmentBatchLabel.selector, (_event, target) => {
+    attachmentDemoLabelEditor.input(target as HTMLInputElement);
   }),
 );
 demoListeners.add(
   delegateCapture(root, 'blur', DEMO_FIELDS.attachmentBatchLabel.selector, (_event, target) => {
-    endAttachmentLabelEdit(target, attachmentDemoLabelEditing);
+    void attachmentDemoLabelEditor.finish(target);
   }),
 );
+const flushDemoLabelOnHide = () => {
+  void attachmentDemoLabelEditor.flush();
+};
+window.addEventListener('pagehide', flushDemoLabelOnHide);
+demoListeners.add(() => {
+  window.removeEventListener('pagehide', flushDemoLabelOnHide);
+});
 let draggedDemoAttachment: string | undefined;
 const clearDemoAttachmentDrag = () => {
   draggedDemoAttachment = undefined;

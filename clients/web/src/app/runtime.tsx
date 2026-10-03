@@ -66,6 +66,7 @@ import {
 import { attachmentRoundNumbers } from '../attachment-grouping';
 import {
   type AttachmentLabelEditing,
+  attachmentLabelEditingDraft,
   attachmentLabelEditingKey,
   INSPECTOR_ATTACHMENT_LABEL_SCOPE,
 } from '../attachment-label-editing';
@@ -4001,6 +4002,7 @@ export async function startHotSheetWebClient() {
       attachmentsEditable: canEditAttachments(),
       attachmentMessage: attachmentMessage.value,
       attachmentLabelEditing: attachmentLabelEditingKey(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
+      attachmentLabelDraft: attachmentLabelEditingDraft(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
       fieldConflict: readerOpen.value ? undefined : fieldConflict.value,
       fieldConflictResolution: fieldConflictResolution.value,
     };
@@ -4091,6 +4093,7 @@ export async function startHotSheetWebClient() {
         attachmentsEditable={editable && canEditAttachments()}
         attachmentMessage={editable ? attachmentMessage.value : ''}
         attachmentLabelEditing={attachmentLabelEditingKey(attachmentLabelEditing.value, readerScope)}
+        attachmentLabelDraft={attachmentLabelEditingDraft(attachmentLabelEditing.value, readerScope)}
         largeText={readerLargeText.value}
         fieldConflict={editable ? fieldConflict.value : undefined}
         fieldConflictResolution={editable ? fieldConflictResolution.value : ''}
