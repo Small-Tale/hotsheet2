@@ -52,11 +52,5 @@
   outline-offset: -3px;
 }
 .drive-control svg {
-  width: remify(16px);
-  height: remify(16px);
   fill: currentColor;
-}
-.drive-control__options svg {
-  width: remify(11.2px);
-  height: remify(11.2px);
 }

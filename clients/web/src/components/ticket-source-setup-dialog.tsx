@@ -213,7 +213,9 @@ export function TicketSourceSetupDialog({
         <LucideIcon slot="start" icon={ChevronLeft} name="chevron-left" /> Ticket source types
       </wa-button>
       <div class="ticket-source-setup__remote">
-        <LucideIcon icon={GitBranch} name="git-branch" />
+        <span class="ticket-source-setup__remote-icon">
+          <LucideIcon icon={GitBranch} name="git-branch" size="s" />
+        </span>
         <div>
           <strong>Back up this ticket repository</strong>
           <p>Paste the clone URL from your Git host. Hot Sheet will connect this repository and make its first push.</p>

@@ -31,9 +31,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.permission-request-card__identity svg {
-  width: remify(16px);
-  height: remify(16px);
+.permission-request-card__identity-icon {
+  display: flex;
   color: var(--wa-color-success-fill-loud);
 }
 .permission-request-card__project {
@@ -57,17 +56,16 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.permission-request-card__summary svg {
-  width: remify(17.6px);
-  height: remify(17.6px);
+.permission-request-card__summary-icon {
+  display: flex;
   color: var(--permission-accent);
 }
-.permission-request-card[data-state='deny'] .permission-request-card__summary svg,
-.permission-request-card[data-state='failed'] .permission-request-card__summary svg,
-.permission-request-card[data-state='disconnected'] .permission-request-card__summary svg {
+.permission-request-card[data-state='deny'] .permission-request-card__summary-icon,
+.permission-request-card[data-state='failed'] .permission-request-card__summary-icon,
+.permission-request-card[data-state='disconnected'] .permission-request-card__summary-icon {
   color: var(--wa-color-danger-on-quiet);
 }
-.permission-request-card[data-state='external'] .permission-request-card__summary svg {
+.permission-request-card[data-state='external'] .permission-request-card__summary-icon {
   color: var(--wa-color-neutral-on-quiet);
 }
 .permission-request-card__details {
@@ -195,10 +193,6 @@
 .permission-request-card .permission-request-card__stop-automation:hover {
   color: var(--wa-color-neutral-on-normal);
   background: var(--wa-color-neutral-fill-normal);
-}
-.permission-request-card__stop-automation svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
 }
 .permission-request-card--list[data-resolved='true'] {
   padding-bottom: remify(16px);

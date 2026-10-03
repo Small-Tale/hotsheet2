@@ -63,10 +63,6 @@
   display: inline-flex;
   opacity: 0.5;
 }
-.command-navigation__type svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 /* The running indicator is this module's own trailing markup, passed into the Kerf ListItem. */
 .command-navigation__running {
   width: remify(8px);

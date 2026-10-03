@@ -27,7 +27,7 @@ export function PendingAttachmentPicker({
       <header>
         <h3>Attachments</h3>
         <label>
-          <LucideIcon icon={Plus} name="plus" />
+          <LucideIcon size={14.4} icon={Plus} name="plus" />
           <span>Add</span>
           <input type="file" multiple name="not-working-attachments" aria-label="Browse evidence attachments" />
         </label>
@@ -36,22 +36,26 @@ export function PendingAttachmentPicker({
         <div class="pending-attachment-picker__items">
           {attachments.map((item) => (
             <div class="pending-attachment-picker__item" data-pending-attachment-id={item.id}>
-              <LucideIcon icon={Paperclip} name="paperclip" />
-              <span title={item.name}>{item.name}</span>
+              <span class="pending-attachment-picker__item-icon">
+                <LucideIcon icon={Paperclip} name="paperclip" size={14.4} />
+              </span>
+              <span class="pending-attachment-picker__item-name" title={item.name}>
+                {item.name}
+              </span>
               <button
                 type="button"
                 {...TICKET_SELECTION_ACTIONS.removeNotWorkingAttachment.attrs}
                 data-pending-attachment-id={item.id}
                 aria-label={`Remove ${item.name}`}
               >
-                <LucideIcon icon={Trash2} name="trash-2" />
+                <LucideIcon size={14.4} icon={Trash2} name="trash-2" />
               </button>
             </div>
           ))}
         </div>
       )}
       <label class="pending-attachment-picker__drop">
-        <LucideIcon icon={Upload} name="upload" />
+        <LucideIcon size={14.4} icon={Upload} name="upload" />
         <span>Drop attachments here or browse</span>
         <input
           type="file"

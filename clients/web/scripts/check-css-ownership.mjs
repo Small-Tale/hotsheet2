@@ -30,11 +30,14 @@ const IDENTIFIER = /^-?[a-z_][a-z0-9_-]*$/i;
 const TICKET = /^(?:HS2|KF)-[0-9A-Z]{6}$/;
 
 /**
- * Kerf leaf primitives whose whole markup is one raw element. A component that renders the
- * primitive itself may size that element like its own markup; the same element inside another
- * component is still that component's.
+ * Kerf leaf components and the only elements their markup contains. They are child components
+ * like any other: a selector whose subject can be one of these elements (for example `.x > svg`
+ * over a `LucideIcon`) styles that component, so size an icon through its `size` prop (HS2-4AQJEX).
+ * A subject they cannot contain (`.x span`) passes over them.
  */
-export const ICON_PRIMITIVES = new Map([['LucideIcon', 'svg']]);
+export const LEAF_COMPONENTS = new Map([
+  ['LucideIcon', new Set(['svg', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'ellipse', 'g'])],
+]);
 
 /**
  * Shell stylesheets: one app surface split across many style-less modules. Each also owns the
@@ -410,14 +413,17 @@ export function findViolations(model) {
     };
     const ownerOfBlock = (block) =>
       list(model.blockOwners.get(block) ?? (model.sheetNamed.get(block) ?? []).map((other) => other.path));
-    const isForeignComponent = (node) =>
-      node.component && !ICON_PRIMITIVES.has(node.name) && !ownerFacts.some((fact) => fact.declares.has(node.name));
-    const nodeTag = (node) => (node.component ? ICON_PRIMITIVES.get(node.name) : node.name.toLowerCase());
+    const isForeignComponent = (node) => node.component && !ownerFacts.some((fact) => fact.declares.has(node.name));
+    // Whether a foreign component's markup can contain an element matching `tag` (`''` and `*` match anything).
+    const reaches = (node, tag) =>
+      isForeignComponent(node) &&
+      (!tag || tag === '*' || !LEAF_COMPONENTS.has(node.name) || LEAF_COMPONENTS.get(node.name).has(tag));
+    const nodeTag = (node) => (node.component ? undefined : node.name.toLowerCase());
     const descendants = (node, into = []) => {
       for (const child of node.children) {
         into.push(child);
         // An own local component's markup lives in another function: opaque, but not foreign.
-        if (!child.component || isForeignComponent(child) || ICON_PRIMITIVES.has(child.name)) descendants(child, into);
+        if (!child.component || isForeignComponent(child)) descendants(child, into);
       }
       return into;
     };
@@ -430,9 +436,7 @@ export function findViolations(model) {
       );
       if (!matches.length)
         // The classed element is built outside JSX literals: judge by the modules as a whole.
-        return ownerFacts.some(
-          (fact) => fact.tags.has(tag) || [...fact.components].some((name) => ICON_PRIMITIVES.get(name) === tag),
-        )
+        return ownerFacts.some((fact) => fact.tags.has(tag))
           ? null
           : {
               kind: 'foreign-element',
@@ -451,14 +455,14 @@ export function findViolations(model) {
           const wanted = typeOf(compound);
           const matchesTag = (node) => !wanted || wanted === '*' || nodeTag(node) === wanted;
           const range = current.flatMap((node) => (combinator === '>' ? node.children : descendants(node)));
-          if (combinator === ' ' && range.some(isForeignComponent))
+          if (combinator === ' ' && range.some((node) => reaches(node, wanted)))
             return {
               kind: 'foreign-element',
               detail: `the descendant selector below ${via} also reaches inside ${names(range)}; use a child combinator, an own class, or the child's props`,
             };
           const next = range.filter(matchesTag);
           if (!next.length) {
-            if (index === steps.length - 1 && range.some(isForeignComponent))
+            if (index === steps.length - 1 && range.some((node) => reaches(node, wanted)))
               return {
                 kind: 'foreign-element',
                 detail: `<${tag}> below ${via} is not authored by ${ownerNames}; it can only be the root of ${names(range)}`,

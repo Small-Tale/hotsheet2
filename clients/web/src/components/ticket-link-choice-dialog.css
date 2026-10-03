@@ -42,9 +42,8 @@
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
 }
-.ticket-link-choice-dialog__matches > li > button > svg {
-  width: remify(16px);
-  height: remify(16px);
+.ticket-link-choice-dialog__arrow {
+  display: flex;
   color: var(--wa-color-neutral-on-quiet);
 }
 .ticket-link-choice-dialog__status {
@@ -57,10 +56,6 @@
 .ticket-link-choice-dialog__status[data-status='completed'],
 .ticket-link-choice-dialog__status[data-status='verified'] {
   color: var(--wa-color-success-on-quiet);
-}
-.ticket-link-choice-dialog__status svg {
-  width: remify(13.6px);
-  height: remify(13.6px);
 }
 .ticket-link-choice-dialog__ticket,
 .ticket-link-choice-dialog__source {
@@ -83,10 +78,6 @@
   display: inline-flex;
   align-items: center;
   gap: var(--kui-space-2xs);
-}
-.ticket-link-choice-dialog__source svg {
-  width: remify(12px);
-  height: remify(12px);
 }
 .ticket-link-choice-dialog__actions {
   display: flex;
@@ -118,7 +109,7 @@
     justify-content: flex-start;
     gap: var(--kui-space-xs);
   }
-  .ticket-link-choice-dialog__matches > li > button > svg {
+  .ticket-link-choice-dialog__arrow {
     grid-area: arrow;
   }
 }

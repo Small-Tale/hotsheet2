@@ -324,7 +324,7 @@ export function ProjectSidebarDemo() {
           aria-valuenow={projectSidebarHeight.value}
           tabindex="0"
         >
-          <LucideIcon icon={GripHorizontal} name="grip-horizontal" />
+          <LucideIcon size={18.4} icon={GripHorizontal} name="grip-horizontal" />
         </div>
       </div>
       <p class="component-stage__event" aria-live="polite">

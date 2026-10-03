@@ -217,7 +217,7 @@ function LoadedTicketInfoPanel({
           {detailsFeedback && readerPresentation && canAddNotes ? (
             <div class="ticket-info-panel__details-feedback" data-details-feedback="true">
               <header class="ticket-info-panel__details-feedback-header">
-                <LucideIcon icon={CircleAlert} name="circle-alert" />
+                <LucideIcon size={15.2} icon={CircleAlert} name="circle-alert" />
                 Feedback needed
               </header>
               <FeedbackPrompt

@@ -107,7 +107,9 @@ export function PermissionRequestCard({
     >
       <header class="permission-request-card__header">
         <span class="permission-request-card__identity">
-          <LucideIcon icon={Bot} name="bot" />
+          <span class="permission-request-card__identity-icon">
+            <LucideIcon icon={Bot} name="bot" size="s" />
+          </span>
           <strong>{item.agent}</strong>
           {item.role && <span aria-hidden="true">·</span>}
           {item.role && <span>{item.role}</span>}
@@ -118,7 +120,9 @@ export function PermissionRequestCard({
         <time>{relativeTime(timestamp)}</time>
       </header>
       <div class="permission-request-card__summary">
-        <LucideIcon icon={stateIcon} name={iconName} />
+        <span class="permission-request-card__summary-icon">
+          <LucideIcon icon={stateIcon} name={iconName} size={17.6} />
+        </span>
         <strong>{statusLabel}</strong>
       </div>
       {item.action.trim() && (
@@ -160,7 +164,7 @@ export function PermissionRequestCard({
                   aria-label={`Stop auto-${countdownAction} countdown`}
                   title={`Stop auto-${countdownAction} countdown for this request`}
                 >
-                  <LucideIcon icon={Pause} name="pause" />
+                  <LucideIcon size={14.4} icon={Pause} name="pause" />
                 </button>
               </div>
             )}

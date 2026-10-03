@@ -10,10 +10,6 @@
   cursor: pointer;
   gap: var(--kui-space-2xs);
 }
-.flow-back-button svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .flow-back-button:hover:not(:disabled) {
   color: var(--wa-color-brand-on-loud);
 }

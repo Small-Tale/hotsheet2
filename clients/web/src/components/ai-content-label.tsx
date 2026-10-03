@@ -25,7 +25,7 @@ export function AIContentFeedback({ tool = 'AI', feedbackTarget }: { tool?: stri
         aria-label="Helpful — keep suggestions like this"
         title="Helpful — keep suggestions like this"
       >
-        <LucideIcon icon={ThumbsUp} name="thumbs-up" />
+        <LucideIcon size="xs" icon={ThumbsUp} name="thumbs-up" />
       </button>
       <button
         type="button"
@@ -35,7 +35,7 @@ export function AIContentFeedback({ tool = 'AI', feedbackTarget }: { tool?: stri
         aria-label="Not helpful — stop suggestions like this"
         title="Not helpful — stop suggestions like this"
       >
-        <LucideIcon icon={ThumbsDown} name="thumbs-down" />
+        <LucideIcon size="xs" icon={ThumbsDown} name="thumbs-down" />
       </button>
     </span>
   );
@@ -58,7 +58,7 @@ export function AIContentLabel({
       aria-label={accessible}
     >
       <span class="ai-content-label__attribution">
-        <LucideIcon icon={Sparkles} name="sparkles" />
+        <LucideIcon size="xs" icon={Sparkles} name="sparkles" />
         {attribution}
         {mayContainErrors && <span> · may contain errors</span>}
       </span>

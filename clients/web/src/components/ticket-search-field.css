@@ -59,10 +59,6 @@
   color: var(--wa-color-neutral-on-normal);
   background: var(--wa-color-neutral-border-quiet);
 }
-.ticket-search-field__help-button svg {
-  width: remify(13.12px);
-  height: remify(13.12px);
-}
 /* Inside the group the surfaces wrapper is transparent so each popover positions against the
    group; placed externally (dialogs) it is a stacked block and the surfaces sit in normal flow. */
 .ticket-search-field > .ticket-search-surfaces {

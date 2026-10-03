@@ -131,7 +131,11 @@ export function TicketRow(raw: TicketRowProps) {
       aria-label={`${props.category} category`}
     >
       <span class="ticket-list-row__category-icon">
-        <LucideIcon icon={categoryIcon} name={props.categoryIcon!} />
+        <LucideIcon
+          icon={categoryIcon}
+          name={props.categoryIcon!}
+          size={props.presentation === 'column' ? 15.2 : 26.4}
+        />
       </span>
     </span>
   ) : (
@@ -185,7 +189,7 @@ export function TicketRow(raw: TicketRowProps) {
                   title={`${props.priority} priority`}
                 >
                   <span class="ticket-list-row__priority-icon">
-                    <LucideIcon icon={priority.icon} name={priority.name} />
+                    <LucideIcon icon={priority.icon} name={priority.name} size="s" />
                   </span>
                 </span>
                 <strong title={props.title}>{props.title}</strong>
@@ -201,7 +205,7 @@ export function TicketRow(raw: TicketRowProps) {
                   title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
                 >
                   <span class="ticket-list-row__up-next-icon">
-                    <LucideIcon icon={Star} name="star" />
+                    <LucideIcon icon={Star} name="star" size="s" />
                   </span>
                 </button>
               )}
@@ -210,7 +214,7 @@ export function TicketRow(raw: TicketRowProps) {
               {needsReview && (
                 <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review">
                   <span class="ticket-list-row__feedback-icon">
-                    <LucideIcon icon={CircleAlert} name="circle-alert" />
+                    <LucideIcon icon={CircleAlert} name="circle-alert" size={12.8} />
                   </span>
                   Needs review
                 </span>

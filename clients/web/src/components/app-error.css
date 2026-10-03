@@ -44,7 +44,3 @@
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
-.app-error > button svg {
-  width: remify(16px);
-  height: remify(16px);
-}

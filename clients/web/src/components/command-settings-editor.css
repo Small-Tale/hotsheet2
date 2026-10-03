@@ -47,10 +47,6 @@
   opacity: 0.45;
   cursor: default;
 }
-.command-settings-editor__button svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 /* The primary creation action (HS2-JSSMFY). */
 .command-settings-editor__add-command {
   color: var(--wa-color-brand-on-loud);
@@ -100,10 +96,6 @@
   color: var(--wa-color-danger-on-quiet);
   border-color: var(--wa-color-neutral-border-normal);
   background: var(--wa-color-surface-default);
-}
-.command-settings-editor__group-delete svg {
-  width: remify(14px);
-  height: remify(14px);
 }
 .command-settings-editor__group-items {
   display: grid;
@@ -161,10 +153,6 @@
   cursor: grab;
   opacity: 0.55;
 }
-.command-settings-editor__row-grip svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .command-settings-editor__row-icon {
   display: grid;
   width: remify(32px);
@@ -188,10 +176,6 @@
     var(--wa-color-danger-border-loud) 46% 54%,
     transparent 54%
   );
-}
-.command-settings-editor__row-icon svg {
-  width: remify(18px);
-  height: remify(18px);
 }
 .command-settings-editor__row-text {
   display: grid;
@@ -253,10 +237,6 @@
   color: var(--command-text-color);
   background: var(--command-color);
   place-items: center;
-}
-.command-settings-editor__dialog-icon svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 .command-settings-editor__dialog-body {
   min-height: 0;

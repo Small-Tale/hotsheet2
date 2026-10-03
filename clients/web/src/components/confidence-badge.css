@@ -15,19 +15,10 @@
   line-height: 1;
   white-space: nowrap;
 }
-.confidence-badge svg {
-  width: remify(12px);
-  height: remify(12px);
-  flex: none;
-}
 .confidence-badge[data-appearance='labeled'] {
   height: remify(32px);
   padding: 0 var(--kui-space-s);
   font-size: var(--wa-font-size-xs);
-}
-.confidence-badge[data-appearance='labeled'] svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 .confidence-badge[data-band='verified'] {
   color: var(--wa-color-success-on-quiet);

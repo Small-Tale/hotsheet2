@@ -134,7 +134,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                               <i class="command-navigation__running" aria-hidden="true"></i>
                             ) : type ? (
                               <span class="command-navigation__type" aria-label={type.label} title={type.label}>
-                                <LucideIcon icon={type.icon} name={type.name} />
+                                <LucideIcon size="s" icon={type.icon} name={type.name} />
                               </span>
                             ) : undefined
                           }

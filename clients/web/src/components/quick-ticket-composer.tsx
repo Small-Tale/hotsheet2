@@ -98,7 +98,7 @@ export function QuickTicketLauncher({
           : 'Create a new ticket or drop tickets to duplicate'
       }
     >
-      <LucideIcon icon={Plus} name="plus" />
+      <LucideIcon size="s" icon={Plus} name="plus" />
       {label}
     </button>
   );
@@ -166,7 +166,7 @@ export function QuickTicketComposer({
               aria-label={upNext ? 'Remove new ticket from Up Next' : 'Add new ticket to Up Next'}
               title={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
             >
-              <LucideIcon icon={Star} name="star" />
+              <LucideIcon size="s" icon={Star} name="star" />
             </button>
           </div>
           <label class="quick-ticket-composer__details">
@@ -178,12 +178,12 @@ export function QuickTicketComposer({
           <section class="quick-ticket-composer__attachments" aria-label="New ticket attachments">
             <header>
               <span>
-                <LucideIcon icon={Paperclip} name="paperclip" />
+                <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />
                 Attachments
               </span>
               {attachmentsEnabled && (
                 <label>
-                  <LucideIcon icon={Plus} name="plus" />
+                  <LucideIcon size={14.4} icon={Plus} name="plus" />
                   Add
                   <input
                     type="file"
@@ -200,7 +200,7 @@ export function QuickTicketComposer({
                   aria-label="Remove all staged attachments"
                   disabled={submitting}
                 >
-                  <LucideIcon icon={Trash2} name="trash-2" />
+                  <LucideIcon size={14.4} icon={Trash2} name="trash-2" />
                   Remove all
                 </button>
               )}
@@ -209,7 +209,7 @@ export function QuickTicketComposer({
               <div class="quick-ticket-composer__attachment-list">
                 {attachments.map((item) => (
                   <div class="quick-ticket-composer__attachment" data-pending-attachment-id={item.id}>
-                    <LucideIcon icon={Paperclip} name="paperclip" />
+                    <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />
                     <span title={item.name}>{item.name}</span>
                     <button
                       type="button"
@@ -218,7 +218,7 @@ export function QuickTicketComposer({
                       aria-label={`Remove ${item.name}`}
                       title={`Remove ${item.name}`}
                     >
-                      <LucideIcon icon={Trash2} name="trash-2" />
+                      <LucideIcon size={14.4} icon={Trash2} name="trash-2" />
                     </button>
                   </div>
                 ))}
@@ -226,7 +226,7 @@ export function QuickTicketComposer({
             )}
             {attachmentsEnabled ? (
               <label class="quick-ticket-composer__drop">
-                <LucideIcon icon={Upload} name="upload" />
+                <LucideIcon size={14.4} icon={Upload} name="upload" />
                 <span>Drop attachment files anywhere in this area or browse</span>
                 <input
                   type="file"

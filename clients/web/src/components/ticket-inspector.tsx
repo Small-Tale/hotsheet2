@@ -293,7 +293,7 @@ export function ticketInspectorPanel({
       {feedbackNeeded && (
         <div class="ticket-inspector__feedback" role="status">
           <span class="ticket-inspector__feedback-icon">
-            <LucideIcon icon={CircleAlert} name="circle-alert" />
+            <LucideIcon icon={CircleAlert} name="circle-alert" size="s" />
           </span>
           <span>Needs review</span>
         </div>
@@ -314,7 +314,7 @@ export function ticketInspectorPanel({
           <TicketDuplicateTarget target={duplicateTarget} />
         ) : (
           <div class="ticket-inspector__close-outcome" role="status" data-close-reason="duplicate">
-            <LucideIcon icon={CopyX} name="copy-x" />
+            <LucideIcon size="s" icon={CopyX} name="copy-x" />
             <span>Duplicate of another ticket</span>
           </div>
         ))}

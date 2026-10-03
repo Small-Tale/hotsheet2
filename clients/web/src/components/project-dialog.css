@@ -16,10 +16,6 @@ wa-dialog[data-project-dialog] {
   min-height: remify(40px);
   padding: 0;
 }
-.project-dialog__path svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .project-dialog__error:empty {
   display: none;
 }

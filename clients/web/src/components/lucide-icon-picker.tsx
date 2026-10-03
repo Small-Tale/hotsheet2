@@ -45,7 +45,7 @@ export function LucideIconPicker({ value, query = '', searchName, selectAction }
     <div class="lucide-icon-picker" data-component="lucide-icon-picker">
       <label class="lucide-icon-picker__search">
         <span class="lucide-icon-picker__search-icon" aria-hidden="true">
-          <LucideIcon icon={Search} name="search" />
+          <LucideIcon size="s" icon={Search} name="search" />
         </span>
         <input
           type="search"
@@ -74,7 +74,7 @@ export function LucideIconPicker({ value, query = '', searchName, selectAction }
                 aria-label={current.name}
                 title={current.name}
               >
-                <LucideIcon icon={current.icon} name={current.name} />
+                <LucideIcon size={18} icon={current.icon} name={current.name} />
               </button>
             </li>
           )}
@@ -89,7 +89,7 @@ export function LucideIconPicker({ value, query = '', searchName, selectAction }
                 aria-label={entry.name}
                 title={entry.name}
               >
-                <LucideIcon icon={entry.icon} name={entry.name} />
+                <LucideIcon size={18} icon={entry.icon} name={entry.name} />
               </button>
             </li>
           ))}

@@ -44,7 +44,7 @@ export function ConfidenceBadge({
       aria-label={`Confidence ${value} percent`}
       title={`AI-reported confidence ${value}%: ${confidenceBandLabels[band]}`}
     >
-      <LucideIcon icon={Gauge} name="gauge" />
+      <LucideIcon icon={Gauge} name="gauge" size={appearance === 'labeled' ? 's' : 'xs'} />
       <span aria-hidden="true">{appearance === 'labeled' ? `Confidence ${value}%` : `${value}%`}</span>
     </span>
   );

@@ -65,11 +65,6 @@
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
 }
-.ticket-code-review__evidence-grid svg {
-  width: remify(16px);
-  height: remify(16px);
-  flex: none;
-}
 .ticket-code-review__evidence-grid strong {
   color: var(--wa-color-text-normal);
 }
@@ -121,10 +116,6 @@
   font-weight: var(--wa-font-weight-semibold);
   cursor: pointer;
 }
-.ticket-code-review__compare-banner > button svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-}
 .ticket-code-review__compare-open {
   color: var(--wa-color-brand-on-normal);
   background: var(--wa-color-brand-fill-normal);
@@ -175,12 +166,6 @@
   font-size: var(--wa-font-size-2xs);
   font-weight: 500;
 }
-.ticket-code-review__range svg,
-.ticket-code-review__commit > button svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-  flex: none;
-}
 .ticket-code-review__range:disabled,
 .ticket-code-review__commit > button:disabled {
   opacity: 0.55;
@@ -211,10 +196,6 @@
   margin-top: remify(0.8px);
   color: var(--wa-color-neutral-on-quiet);
   place-items: center;
-}
-.ticket-code-review__graph svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 .ticket-code-review__commit-summary {
   display: grid;
@@ -301,10 +282,6 @@
   gap: var(--kui-space-xs);
   text-align: center;
 }
-.ticket-code-review__empty svg {
-  width: remify(19.2px);
-  height: remify(19.2px);
-}
 .ticket-code-review__message {
   color: var(--wa-color-neutral-on-quiet) !important;
   font-size: var(--wa-font-size-xs) !important;
@@ -347,11 +324,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.ticket-code-review__ref svg {
-  width: remify(11.2px);
-  height: remify(11.2px);
-  flex: none;
 }
 .ticket-code-review__ref[data-ref-kind='head'] {
   color: var(--wa-color-success-on-quiet);

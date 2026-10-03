@@ -10,10 +10,6 @@
   display: inline-flex;
   color: var(--wa-color-neutral-on-quiet);
 }
-.ticket-context-menu__icon svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 wa-dropdown-item[variant='danger'] .ticket-context-menu__icon {
   color: var(--wa-color-danger-on-quiet);
 }

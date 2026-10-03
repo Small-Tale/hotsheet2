@@ -59,10 +59,6 @@
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
-.terminal-key-bar button svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .terminal-key-bar button:hover {
   background: color-mix(in srgb, var(--wa-color-surface-default) 28%, transparent);
 }

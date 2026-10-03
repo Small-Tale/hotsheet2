@@ -111,15 +111,30 @@ export function X(p: { on: boolean }) {
 });
 
 describe('ownership detection', () => {
-  it('accepts a component styling its own blocks, its own raw elements, and its own icons', () => {
+  it('accepts a component styling its own blocks and its own raw elements', () => {
     expect(
       scan(
         card(`.card { display: grid; }
-.card__header > h2, .card__header svg { margin: 0; }
+.card__header > h2 { margin: 0; }
 .card__body > p { margin: 0; }
 .card:hover .card__header { color: red; }`),
       ),
     ).toEqual([]);
+  });
+
+  // HS2-4AQJEX: a LucideIcon is a Kerf child component like any other; size it through its `size` prop.
+  it("flags a selector that styles the component's own LucideIcon svg", () => {
+    const found = scan(card('.card__header svg { width: 8px; } .card__header > svg { color: red; }'));
+    expect(selectors(found, 'foreign-element')).toEqual(['.card__header > svg', '.card__header svg']);
+    expect(found[0].detail).toContain('it can only be the root of <LucideIcon>');
+    expect(found[1].detail).toContain('also reaches inside <LucideIcon>');
+  });
+
+  it('passes over a LucideIcon for subjects its markup cannot contain', () => {
+    expect(scan(card('.card__header h2 { margin: 0; } .card__header * { min-width: 0; }'))).toEqual([]);
+    expect(selectors(scan(card('.card__header path { stroke-width: 3; }')), 'foreign-element')).toEqual([
+      '.card__header path',
+    ]);
   });
 
   it('flags Kerf classes and [data-component] selectors', () => {
@@ -194,7 +209,7 @@ describe('ownership detection', () => {
       `export const S = () => <span class="card__spinner"><LoadingSpinner /></span>;
 export const O = () => <span class="card__own"><LucideIcon name="x" /></span>;`,
     );
-    expect(selectors(scan(files), 'foreign-element')).toEqual(['.card__spinner > svg']);
+    expect(selectors(scan(files), 'foreign-element')).toEqual(['.card__own > svg', '.card__spinner > svg']);
   });
 
   it("treats the component's own local components as its markup, not foreign", () => {

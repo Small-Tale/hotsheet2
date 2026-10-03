@@ -48,7 +48,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                 {...COMMANDS_AND_AI_ACTIONS.resetAllShortcuts.attrs}
                 disabled={!hasOverrides}
               >
-                <LucideIcon icon={RotateCcw} name="rotate-ccw" />
+                <LucideIcon size={14.4} icon={RotateCcw} name="rotate-ccw" />
                 Reset all to defaults
               </button>
             </Row>
@@ -84,7 +84,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                                 <span class="keyboard-settings__description">{shortcut.description}</span>
                                 {conflict && (
                                   <span class="keyboard-settings__conflict" role="status">
-                                    <LucideIcon icon={TriangleAlert} name="triangle-alert" />
+                                    <LucideIcon size={12.8} icon={TriangleAlert} name="triangle-alert" />
                                     Also used by “{conflict.label}”
                                   </span>
                                 )}
@@ -113,7 +113,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                                       aria-label={`Cancel editing ${shortcut.label}`}
                                       title="Cancel"
                                     >
-                                      <LucideIcon icon={X} name="x" />
+                                      <LucideIcon size={14.4} icon={X} name="x" />
                                     </button>
                                   ) : (
                                     <>
@@ -125,7 +125,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                                         aria-label={`Change shortcut for ${shortcut.label}`}
                                         title="Change shortcut"
                                       >
-                                        <LucideIcon icon={Pencil} name="pencil" />
+                                        <LucideIcon size={14.4} icon={Pencil} name="pencil" />
                                       </button>
                                       <button
                                         type="button"
@@ -136,7 +136,7 @@ export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSett
                                         aria-label={`Reset ${shortcut.label} to its default`}
                                         title="Reset to default"
                                       >
-                                        <LucideIcon icon={RotateCcw} name="rotate-ccw" />
+                                        <LucideIcon size={14.4} icon={RotateCcw} name="rotate-ccw" />
                                       </button>
                                     </>
                                   )

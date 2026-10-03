@@ -142,7 +142,7 @@ export function TicketAttachments({
           </h2>
           {enabled && (
             <label class="ticket-attachments__browse">
-              <LucideIcon icon={Plus} name="plus" />
+              <LucideIcon size={13.6} icon={Plus} name="plus" />
               <span>Add</span>
               <input type="file" name="ticket-attachments" multiple aria-label="Browse and add attachments" />
             </label>
@@ -225,7 +225,7 @@ export function TicketAttachments({
                     data-attachment-url={manageable ? attachment.url : undefined}
                     data-attachment-menu-kind={manageable ? 'item' : undefined}
                   >
-                    <LucideIcon icon={Paperclip} name="paperclip" />
+                    <LucideIcon size={14.4} icon={Paperclip} name="paperclip" />
                     {manageable || !attachment.url ? (
                       <span title={`${attachment.name} — double-click to open`}>{attachment.name}</span>
                     ) : (
@@ -241,7 +241,7 @@ export function TicketAttachments({
                         aria-label={`More actions for ${attachment.name}`}
                         title={`More actions for ${attachment.name}`}
                       >
-                        <LucideIcon icon={MoreHorizontal} name="more-horizontal" />
+                        <LucideIcon size={14.4} icon={MoreHorizontal} name="more-horizontal" />
                       </button>
                     )}
                   </div>
@@ -284,7 +284,7 @@ export function TicketAttachments({
                             title={`${item.annotationCount} ${item.annotationCount === 1 ? 'annotation' : 'annotations'}`}
                             aria-hidden="true"
                           >
-                            <LucideIcon icon={Pencil} name="pencil" />
+                            <LucideIcon size="s" icon={Pencil} name="pencil" />
                           </span>
                         )}
                       </button>
@@ -297,13 +297,15 @@ export function TicketAttachments({
         </div>
         {manageable && attachments.length > 0 && (
           <div class="ticket-attachments__new-group" data-attachment-new-group-drop-target="true">
-            <LucideIcon icon={Plus} name="plus" />
+            <LucideIcon size="s" icon={Plus} name="plus" />
             <span>New group</span>
           </div>
         )}
         {enabled ? (
           <label class="ticket-attachments__drop">
-            <LucideIcon icon={Upload} name="upload" />
+            <span class="ticket-attachments__drop-icon">
+              <LucideIcon icon={Upload} name="upload" size="s" />
+            </span>
             <span>Drop attachments here or browse</span>
             <input type="file" name="ticket-attachments" multiple aria-label="Drop or browse attachments" />
           </label>

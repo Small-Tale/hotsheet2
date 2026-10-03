@@ -21,10 +21,6 @@
   display: inline-flex;
   color: var(--wa-color-warning-on-quiet);
 }
-.project-close-dialog__intro svg {
-  width: remify(17.6px);
-  height: remify(17.6px);
-}
 .project-close-dialog__intro p {
   margin: 0;
   line-height: 1.45;

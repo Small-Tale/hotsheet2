@@ -26,6 +26,11 @@ describe('AIContentLabel', () => {
     expect(css).toMatchSource(/__attribution \{ gap: var\(--kui-space-2xs\)/);
     expect(css).toMatchSource(/__feedback \{ gap: var\(--kui-space-2xs\)/);
     expect(css).toMatchSource(/__feedback button \{[^}]*width: remify\(32px\); height: remify\(32px\)/);
-    expect(css).toMatchSource(/__feedback svg \{ width: remify\(12px\); height: remify\(12px\)/);
+    // Glyphs are sized by the LucideIcon size prop, never by CSS on the Kerf svg (HS2-4AQJEX).
+    expect(css).not.toMatch(/svg/);
+    const markup = String(AIContentLabel({ tool: 'Claude', feedbackTarget: 'note:one' }));
+    const icons = markup.match(/<svg[^>]*>/g) ?? [];
+    expect(icons).toHaveLength(3);
+    for (const icon of icons) expect(icon).toContain('data-size="xs"');
   });
 });

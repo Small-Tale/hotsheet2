@@ -179,10 +179,6 @@
   min-height: remify(28px);
   padding-inline: remify(6.4px);
 }
-.ai-conversation__selection-actions svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-}
 .ai-conversation__empty {
   display: grid;
   max-width: remify(416px);
@@ -191,10 +187,6 @@
   text-align: center;
   justify-items: center;
   gap: var(--wa-space-xs);
-}
-.ai-conversation__empty svg {
-  width: remify(28px);
-  height: remify(28px);
 }
 .ai-conversation__empty p {
   margin: 0;
@@ -267,11 +259,6 @@
 }
 .ai-conversation__files a:hover {
   text-decoration: underline;
-}
-.ai-conversation__files svg {
-  width: remify(12.8px);
-  height: remify(12.8px);
-  flex: none;
 }
 .ai-conversation__files span {
   overflow: hidden;
@@ -355,10 +342,6 @@
   gap: remify(7.2px);
   font-size: var(--wa-font-size-s);
 }
-.ai-conversation__progress svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .ai-conversation__error {
   display: grid;
   padding: var(--wa-space-s);
@@ -372,9 +355,8 @@
   gap: var(--wa-space-xs);
   overflow-wrap: anywhere;
 }
-.ai-conversation__error > svg {
-  width: remify(17.6px);
-  height: remify(17.6px);
+.ai-conversation__error > .ai-conversation__error-icon {
+  display: flex;
   margin-top: remify(2.4px);
 }
 .ai-conversation__error > span {
@@ -463,10 +445,6 @@
 .ai-conversation__send:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-.ai-conversation__composer svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 @media (max-width: remify(640px)) {
   .ai-conversation::part(dialog) {

@@ -104,8 +104,9 @@ wa-dialog[data-ticket-source-setup-dialog] {
   grid-template-columns: var(--wa-space-l) minmax(0, 1fr);
   gap: var(--wa-space-s);
 }
-.ticket-source-setup__remote > svg {
-  width: var(--wa-space-l);
+.ticket-source-setup__remote-icon {
+  display: flex;
+  justify-content: center;
 }
 .ticket-source-setup__remote p {
   margin: var(--wa-space-xs) 0;

@@ -57,7 +57,11 @@ export function MarkdownEditor({
               data-action={expandAction}
               aria-label={expanded ? 'Use inline editor' : 'Expand editor'}
             >
-              <LucideIcon icon={expanded ? Minimize2 : Maximize2} name={expanded ? 'minimize-2' : 'maximize-2'} />
+              <LucideIcon
+                size={15.2}
+                icon={expanded ? Minimize2 : Maximize2}
+                name={expanded ? 'minimize-2' : 'maximize-2'}
+              />
             </button>
           )}
         </header>

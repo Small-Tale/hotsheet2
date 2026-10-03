@@ -56,10 +56,6 @@
   outline: var(--wa-focus-ring);
   outline-offset: 2px;
 }
-.terminal-drawer__focus-exit svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 /* Phone focus-mode text-size control, mirroring the Exit pill in the opposite corner (HS2-ZSFAHF). */
 .terminal-drawer__focus-text-size {
   position: absolute;
@@ -84,10 +80,6 @@
 .terminal-drawer__focus-text-size:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 2px;
-}
-.terminal-drawer__focus-text-size svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 /* Hidden while the virtual keyboard is presented, like the magnified toolbar (HS2-ZSFAHF). */
 .terminal-drawer__focus-text-size[data-keyboard-visible='true'] {
@@ -132,10 +124,6 @@
 .terminal-drawer__focus-clipboard button:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: -2px;
-}
-.terminal-drawer__focus-clipboard svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 .terminal-drawer__rail {
   display: flex;

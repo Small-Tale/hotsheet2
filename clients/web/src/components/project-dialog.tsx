@@ -50,7 +50,7 @@ export function ProjectDialog({
                 aria-label="Browse for project folder"
                 title="Browse for project folder"
               >
-                <LucideIcon icon={Ellipsis} name="ellipsis" />
+                <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
               </wa-button>
             </div>
             <div class="project-dialog__path">
@@ -66,7 +66,7 @@ export function ProjectDialog({
                 aria-label="Browse for ticket store"
                 title="Browse for ticket store"
               >
-                <LucideIcon icon={Ellipsis} name="ellipsis" />
+                <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
               </wa-button>
             </div>
             <p class="project-dialog__error" role="alert">

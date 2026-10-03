@@ -2339,9 +2339,29 @@ The check allows a few things:
 
 - A component's own local components (functions declared in the same module) count as its own
   markup.
-- A `LucideIcon` the component renders itself counts as its own `svg`. `HS2-4AQJEX` tracks moving
-  those sizing rules to the icon's `size` prop.
 - `*`, `html`, `body`, sibling chains, and `@keyframes` steps are ignored.
+
+A `LucideIcon` gets no allowance, even when the component renders it itself (HS2-4AQJEX). Its `svg`
+is Kerf markup like any other child component's, so `.x svg` and `.x > svg` over a `LucideIcon` are
+`foreign-element` findings:
+
+- **Size** an icon with its `size` prop: a named step (`xs` 12, `s` 16, `m` 20, `l` 24, `xl` 32) or
+  positive pixels such as `size={14.4}`. The prop's `[data-lucide][data-size]` rule outranks
+  ordinary app and Kerf slot selectors. Where a Kerf slot already sizes a projected icon, such as
+  the `TokenSearchField` trailing help button, leave `size` off so the slot keeps its size.
+- **Tint, offset, place, spin, or chip** an icon through an own wrapper element, such as
+  `<span class="x__icon">` with `display: flex`. Examples include color, a `margin-top` that aligns
+  the icon with text, a `grid-area`, a rotation, or a padded tinted chip. `color` reaches the glyph
+  through `currentColor`.
+- **Fill** cannot go through a wrapper. The svg's `fill="none"` attribute stops inheritance, so the
+  five solid-glyph rules (active and pressed stars, the Drive options triangle) stay allowlisted
+  until Kerf ships a solid-glyph prop (`KF-RP5W0Z`, adoption `HS2-ZFFCHW`).
+
+`LucideIcon` stays transparent to subjects its markup cannot contain: `.x span` or `.x h2` over a
+subtree with an icon is not a finding.
+
+The migration sized about 130 icon renders through `size` and removed the svg rules from 43
+stylesheets. Before/after captures of all 83 UX demo components at 1280 and 390 are pixel-identical.
 
 The markup rule's residue at introduction was 15 findings: shell markup in `runtime.tsx`
 (`HS2-T35VN7`), four modules that render a sibling's class (`HS2-WP69TD`), and the dev review

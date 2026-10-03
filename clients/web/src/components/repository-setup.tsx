@@ -26,7 +26,7 @@ export function RepositorySetup({
       >
         <div class="repository-setup__message">
           <span class="repository-setup__icon">
-            <LucideIcon icon={CircleCheck} name="circle-check" />
+            <LucideIcon size="m" icon={CircleCheck} name="circle-check" />
           </span>
           <div>
             <strong>Git is ready</strong>

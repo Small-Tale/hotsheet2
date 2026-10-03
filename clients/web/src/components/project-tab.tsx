@@ -119,7 +119,7 @@ export function ProjectTab({
         aria-label={`${notificationCount} pending notification${notificationCount === 1 ? '' : 's'}`}
         title={`${notificationCount} pending notification${notificationCount === 1 ? '' : 's'}`}
       >
-        <LucideIcon icon={Bell} name="bell" />
+        <LucideIcon size={11.52} icon={Bell} name="bell" />
         <span aria-hidden="true">{notificationCount}</span>
       </span>
     ) : undefined;

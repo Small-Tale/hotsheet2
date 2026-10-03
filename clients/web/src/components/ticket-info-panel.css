@@ -67,11 +67,6 @@
   font-size: var(--wa-font-size-xs);
   font-weight: 700;
 }
-.ticket-info-panel__details-feedback-header svg {
-  width: remify(15.2px);
-  height: remify(15.2px);
-  flex: none;
-}
 .ticket-info-panel__blocked-surface {
   min-width: 0;
   padding: var(--kui-space-xs);

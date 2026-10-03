@@ -114,10 +114,6 @@
   width: remify(26.4px);
   height: remify(26.4px);
 }
-.ticket-list-row__category-icon > svg {
-  width: 100%;
-  height: 100%;
-}
 .ticket-list-row__category--label {
   width: remify(32px);
   overflow: visible;
@@ -157,10 +153,6 @@
   height: remify(16px);
   line-height: 0;
   vertical-align: -0.15em;
-}
-.ticket-list-row__priority-icon > svg {
-  width: 100%;
-  height: 100%;
 }
 .ticket-list-row__metadata,
 .ticket-list-row__tags {
@@ -206,10 +198,6 @@
   display: inline-flex;
   width: remify(12.8px);
   height: remify(12.8px);
-}
-.ticket-list-row__feedback-icon > svg {
-  width: 100%;
-  height: 100%;
 }
 .ticket-list-row__claim {
   display: inline-flex;
@@ -259,10 +247,6 @@
   display: inline-flex;
   width: remify(16px);
   height: remify(16px);
-}
-.ticket-list-row__up-next-icon > svg {
-  width: 100%;
-  height: 100%;
 }
 /* Lucide renders fill="none" on the svg itself, so the active fill must target the svg,
    not the wrapping icon span, or the star stays hollow (HS2-KGHRHS). */

@@ -18,10 +18,6 @@
   color: var(--wa-color-neutral-on-quiet);
   pointer-events: none;
 }
-.lucide-icon-picker__search-icon svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .lucide-icon-picker__search input {
   width: 100%;
   padding: remify(6px) remify(10px) remify(6px) remify(32px);
@@ -74,10 +70,6 @@
   border-color: var(--wa-color-brand-border-loud);
   color: var(--wa-color-brand-on-quiet);
   background: var(--wa-color-brand-fill-quiet);
-}
-.lucide-icon-picker__icon svg {
-  width: remify(18px);
-  height: remify(18px);
 }
 
 .lucide-icon-picker__hint,

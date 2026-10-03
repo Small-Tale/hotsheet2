@@ -101,7 +101,7 @@ function FeedbackBlocks({
                 data-offset={sourceStart + segment.reply.offset}
                 aria-label={`Remove response at character ${sourceStart + segment.reply.offset}`}
               >
-                <LucideIcon icon={X} name="x" />
+                <LucideIcon size="s" icon={X} name="x" />
               </button>
             </div>
           )}
@@ -149,7 +149,7 @@ export function FeedbackPrompt({
                 aria-pressed={selected.has(choice.id) ? 'true' : 'false'}
               >
                 <span class="note-card__choice-check" aria-hidden="true">
-                  <LucideIcon icon={Check} name="check" />
+                  <LucideIcon size="xs" icon={Check} name="check" />
                 </span>
                 <span>
                   <MarkdownPreview
@@ -316,7 +316,7 @@ export function NoteCard({
     >
       <header class="note-card__header">
         <span class="note-card__kind">
-          <LucideIcon icon={presentation.icon} name={presentation.iconName} />
+          <LucideIcon size={15.2} icon={presentation.icon} name={presentation.iconName} />
           {title ?? presentation.label}
         </span>
         <span class="note-card__header-end">
@@ -328,7 +328,7 @@ export function NoteCard({
                 data-note-id={id}
                 aria-label="Delete note"
               >
-                <LucideIcon icon={Trash2} name="trash-2" />
+                <LucideIcon size={12.8} icon={Trash2} name="trash-2" />
               </button>
             </span>
           )}

@@ -16,11 +16,6 @@
 .ai-content-label__attribution {
   gap: var(--kui-space-2xs);
 }
-.ai-content-label__attribution > svg {
-  width: remify(12px);
-  height: remify(12px);
-  flex: none;
-}
 .ai-content-label__feedback {
   gap: var(--kui-space-2xs);
 }
@@ -40,8 +35,4 @@
 .ai-content-label__feedback button:focus-visible {
   color: var(--wa-color-brand-on-quiet);
   background: var(--wa-color-brand-fill-quiet);
-}
-.ai-content-label__feedback svg {
-  width: remify(12px);
-  height: remify(12px);
 }

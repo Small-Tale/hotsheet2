@@ -94,7 +94,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           aria-pressed={props.conversationOpen ? 'true' : 'false'}
           disabled={props.conversationDisabled}
         >
-          <LucideIcon icon={MessageSquare} name="message-square" />
+          <LucideIcon size="s" icon={MessageSquare} name="message-square" />
         </button>
       </div>
     </div>

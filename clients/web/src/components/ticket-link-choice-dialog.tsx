@@ -36,7 +36,7 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
                 data-ticket-qualified-id={match.qualifiedId}
               >
                 <span class="ticket-link-choice-dialog__status" data-status={match.status}>
-                  <LucideIcon icon={CircleDot} name="circle-dot" />
+                  <LucideIcon size={13.6} icon={CircleDot} name="circle-dot" />
                 </span>
                 <span class="ticket-link-choice-dialog__ticket">
                   <strong>{match.slug}</strong>
@@ -44,12 +44,14 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
                 </span>
                 <span class="ticket-link-choice-dialog__source">
                   <span>
-                    <LucideIcon icon={GitBranch} name="git-branch" />
+                    <LucideIcon size="xs" icon={GitBranch} name="git-branch" />
                     {match.connectionId}
                   </span>
                   <small>{match.projectName}</small>
                 </span>
-                <LucideIcon icon={ArrowRight} name="arrow-right" />
+                <span class="ticket-link-choice-dialog__arrow">
+                  <LucideIcon icon={ArrowRight} name="arrow-right" size="s" />
+                </span>
               </button>
             </li>
           ))}

@@ -67,7 +67,7 @@ export function TerminalVisibilityDialogDemo() {
   return (
     <section class="terminal-visibility-demo">
       <wa-button appearance="accent" data-action="show-terminal-visibility-demo" aria-haspopup="dialog">
-        <LucideIcon icon={Eye} name="eye" />
+        <LucideIcon size="s" icon={Eye} name="eye" />
         Manage Workspace Visibility
       </wa-button>
       <TerminalVisibilityDialog

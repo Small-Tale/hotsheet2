@@ -52,7 +52,7 @@ export function ProjectTabBar({
         title="Workspace grid"
         aria-pressed={String(mode === 'terminals')}
       >
-        <LucideIcon icon={Grid3X3} name="grid-3x3" />
+        <LucideIcon size="s" icon={Grid3X3} name="grid-3x3" />
       </button>
       <button
         type="button"
@@ -63,7 +63,7 @@ export function ProjectTabBar({
         title="Cross-project stats"
         aria-pressed={String(mode === 'stats')}
       >
-        <LucideIcon icon={ChartNoAxesCombined} name="chart-no-axes-combined" />
+        <LucideIcon size="s" icon={ChartNoAxesCombined} name="chart-no-axes-combined" />
       </button>
     </div>
   );
@@ -78,7 +78,7 @@ export function ProjectTabBar({
         aria-label="Add project"
         title="Add project"
       >
-        <LucideIcon icon={Plus} name="plus" />
+        <LucideIcon size="s" icon={Plus} name="plus" />
       </button>
     </div>
   );

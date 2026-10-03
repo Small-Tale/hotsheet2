@@ -197,9 +197,11 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--wa-space-xs);
 }
-.workspace-chat-tile__preview-surface > svg {
+.workspace-chat-tile__preview-icon {
+  display: flex;
   width: remify(16px);
   height: remify(16px);
+  align-self: start;
   padding: var(--wa-space-2xs);
   border-radius: var(--wa-border-radius-m);
   color: var(--wa-color-brand-on-quiet);
@@ -423,11 +425,6 @@
 .terminal-tile__open:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
-.terminal-tile__menu svg,
-.terminal-tile__open svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 /* Zero-size positioned anchor at the safe-area corner: the Kerf FloatingToolbar keeps its own
    bottom-end inset relative to this anchor, so it clears the device inset without app CSS on the
    toolbar itself (HS2-VABS08). */
@@ -590,12 +587,6 @@
 .terminal-tile__text-size:hover,
 .terminal-tile__clipboard:hover {
   background: var(--wa-color-neutral-fill-quiet);
-}
-.terminal-tile__close svg,
-.terminal-tile__text-size svg,
-.terminal-tile__clipboard svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 .terminal-tile[data-mobile-chrome='true'] .terminal-tile__menu,
 .terminal-tile[data-mobile-chrome='true'] .terminal-tile__open {

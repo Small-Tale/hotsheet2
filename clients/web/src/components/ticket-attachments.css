@@ -54,11 +54,6 @@
 .ticket-attachments__item[data-action='open-attachment-row'] {
   cursor: pointer;
 }
-.ticket-attachments__item > svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-  flex: none;
-}
 .ticket-attachments__item > span {
   min-width: 0;
   overflow: hidden;
@@ -83,11 +78,6 @@
     background-color 120ms ease,
     box-shadow 120ms ease;
   place-items: center;
-}
-.ticket-attachments__item-menu svg {
-  display: block;
-  width: remify(14.4px);
-  height: remify(14.4px);
 }
 .ticket-attachments__item-menu:hover,
 .ticket-attachments__item-menu:focus-visible {
@@ -207,10 +197,6 @@
   color: var(--wa-color-brand-on-loud);
   background: var(--wa-color-brand-fill-loud);
 }
-.ticket-attachments__new-group svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .ticket-attachments__browse {
   display: inline-flex;
   min-height: remify(32px);
@@ -225,10 +211,6 @@
 }
 .ticket-attachments__browse:hover {
   background: var(--wa-color-brand-fill-quiet);
-}
-.ticket-attachments__browse svg {
-  width: remify(13.6px);
-  height: remify(13.6px);
 }
 .ticket-attachments__browse input,
 .ticket-attachments__drop input {
@@ -256,9 +238,8 @@
   border-color: var(--wa-color-focus);
   background: var(--wa-color-brand-fill-quiet);
 }
-.ticket-attachments__drop svg {
-  width: remify(16px);
-  height: remify(16px);
+.ticket-attachments__drop-icon {
+  display: flex;
   color: var(--wa-color-focus);
 }
 .ticket-attachments__image-grid {
@@ -308,10 +289,6 @@
   background: var(--wa-color-brand-fill-loud);
   box-shadow: var(--wa-shadow-s);
   place-items: center;
-}
-.ticket-attachments__annotation-marker svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 @media (max-width: remify(640px)) {
   .ticket-attachments__image-grid button {

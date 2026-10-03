@@ -83,6 +83,7 @@ export function CorruptTicketRow({
         <LucideIcon
           icon={upgradeRequired ? RefreshCw : FileWarning}
           name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
+          size={26.4}
         />
       </span>
       <div class="corrupt-ticket-row__content">
@@ -128,10 +129,13 @@ export function corruptTicketInspectorPanel({
     toggle: inspectorToggle(),
     header: (
       <header class="corrupt-ticket-inspector__header" data-component="corrupt-ticket-inspector-header">
-        <LucideIcon
-          icon={upgradeRequired ? RefreshCw : FileWarning}
-          name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
-        />
+        <span class="corrupt-ticket-inspector__header-icon">
+          <LucideIcon
+            icon={upgradeRequired ? RefreshCw : FileWarning}
+            name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
+            size="s"
+          />
+        </span>
         <div>
           <span>{upgradeRequired ? 'Hot Sheet 2 update required' : 'Unreadable ticket'}</span>
           <h1>{identity}</h1>

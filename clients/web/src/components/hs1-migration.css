@@ -8,9 +8,8 @@
   align-items: start;
   gap: var(--kui-space-m);
 }
-.hs1-migration-dialog__intro > svg {
-  width: remify(24px);
-  height: remify(24px);
+.hs1-migration-dialog__intro-icon {
+  display: flex;
   color: var(--wa-color-brand-on-quiet);
 }
 .hs1-migration-dialog__intro p {

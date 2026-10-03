@@ -26,10 +26,6 @@
   align-items: center;
   gap: var(--wa-space-xs);
 }
-.provider-setup-form__auth-actions svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .provider-setup-form__device-code {
   justify-self: start;
   padding: var(--wa-space-xs) var(--wa-space-m);
@@ -102,10 +98,6 @@
   display: inline-flex;
   align-items: center;
   gap: var(--wa-space-2xs);
-}
-.provider-setup-form__repository-actions svg {
-  width: remify(14px);
-  height: remify(14px);
 }
 .provider-setup-form__repository-actions button {
   padding: 0;

@@ -41,7 +41,9 @@ export function Hs1MigrationDialog({
     >
       <form class="hs1-migration-dialog" {...PROJECT_LIFECYCLE_ACTIONS.importHs1Project.attrs}>
         <div class="hs1-migration-dialog__intro">
-          <LucideIcon icon={ArchiveRestore} name="archive-restore" />
+          <span class="hs1-migration-dialog__intro-icon">
+            <LucideIcon icon={ArchiveRestore} name="archive-restore" size="l" />
+          </span>
           <div>
             <strong>Hot Sheet 1 data found in {projectName}</strong>
             <p>

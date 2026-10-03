@@ -281,7 +281,7 @@ function TerminalCard({
             aria-label={`Close ${session.title ?? session.id}`}
             title="Close"
           >
-            <LucideIcon icon={X} name="x" />
+            <LucideIcon size="s" icon={X} name="x" />
           </button>
         )}
         <span
@@ -321,7 +321,7 @@ function TerminalCard({
             aria-label={`Text size: ${mobile.columns} columns. Change text size`}
             title="Change text size"
           >
-            <LucideIcon icon={ALargeSmall} name="a-large-small" />
+            <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
           </button>
         )}
         {clipboardActions && (
@@ -332,7 +332,7 @@ function TerminalCard({
             aria-label="Copy terminal text"
             title="Copy terminal text"
           >
-            <LucideIcon icon={Copy} name="copy" />
+            <LucideIcon size="s" icon={Copy} name="copy" />
           </button>
         )}
         {clipboardActions && (
@@ -343,7 +343,7 @@ function TerminalCard({
             aria-label="Paste"
             title="Paste"
           >
-            <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
+            <LucideIcon size="s" icon={ClipboardPaste} name="clipboard-paste" />
           </button>
         )}
         <button
@@ -354,7 +354,7 @@ function TerminalCard({
           aria-label={`More actions for ${session.title ?? session.id}`}
           title="More actions"
         >
-          <LucideIcon icon={Ellipsis} name="ellipsis" />
+          <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
         </button>
         {/* The phone toolbar leaves this to More actions → Open (and the identity), so the identity keeps
             room beside Copy and Paste at 390px (HS2-8NQRJB). */}
@@ -367,7 +367,7 @@ function TerminalCard({
             aria-label={`Open ${session.title ?? session.id} in project terminal drawer`}
             title="Open in project terminal drawer"
           >
-            <LucideIcon icon={ExternalLink} name="external-link" />
+            <LucideIcon size="s" icon={ExternalLink} name="external-link" />
           </button>
         )}
       </footer>
@@ -496,7 +496,9 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
           data-preview-scale={String(scale)}
           style={`--workspace-chat-preview-scale:${scale};--workspace-chat-preview-natural-width:${WORKSPACE_CHAT_PREVIEW_NATURAL_WIDTH}px;--workspace-chat-preview-natural-height:${WORKSPACE_CHAT_PREVIEW_NATURAL_HEIGHT}px`}
         >
-          <LucideIcon icon={MessageSquare} name="message-square" />
+          <span class="workspace-chat-tile__preview-icon">
+            <LucideIcon icon={MessageSquare} name="message-square" size={8} />
+          </span>
           <div>
             <strong>{chat.tool} AI chat</strong>
             <p>{chat.summary || `Open ${chat.name} to continue the conversation.`}</p>

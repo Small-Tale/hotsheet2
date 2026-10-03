@@ -355,7 +355,9 @@ function RepositoryFileList({
   if (files.length === 0)
     return (
       <div class="repository-status-popover__empty">
-        <LucideIcon icon={CircleCheck} name="circle-check" />
+        <span class="repository-status-popover__empty-icon">
+          <LucideIcon icon={CircleCheck} name="circle-check" size="l" />
+        </span>
         <p>No {view} files.</p>
       </div>
     );
@@ -394,7 +396,7 @@ function RepositoryFileList({
                 tabIndex={0}
                 aria-label={`Actions for ${file.path}`}
               >
-                <LucideIcon icon={Ellipsis} name="ellipsis" />
+                <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
               </span>
             }
           />
@@ -501,7 +503,9 @@ function CodeReviewFileList({
   if (files.length === 0)
     return (
       <div class="repository-status-popover__empty">
-        <LucideIcon icon={CircleCheck} name="circle-check" />
+        <span class="repository-status-popover__empty-icon">
+          <LucideIcon icon={CircleCheck} name="circle-check" size="l" />
+        </span>
         <p>No {view} files.</p>
       </div>
     );
@@ -538,7 +542,7 @@ function CodeReviewFileList({
               tabIndex={0}
               aria-label={`Actions for ${file.path}`}
             >
-              <LucideIcon icon={Ellipsis} name="ellipsis" />
+              <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
             </span>
           }
         />
@@ -572,7 +576,7 @@ function RepositoryFileContextMenu({
         data-repository-file-path={menu.path}
         disabled={!menu.diff}
       >
-        <LucideIcon icon={GitCompare} name="git-compare" />
+        <LucideIcon size="s" icon={GitCompare} name="git-compare" />
         Show Diff
       </button>
       <button
@@ -582,7 +586,7 @@ function RepositoryFileContextMenu({
         data-repository-file-path={menu.path}
         disabled={multiple}
       >
-        <LucideIcon icon={ExternalLink} name="external-link" />
+        <LucideIcon size="s" icon={ExternalLink} name="external-link" />
         Open
       </button>
       <button
@@ -592,7 +596,7 @@ function RepositoryFileContextMenu({
         data-repository-file-path={menu.path}
         disabled={multiple}
       >
-        <LucideIcon icon={FolderOpen} name="folder-open" />
+        <LucideIcon size="s" icon={FolderOpen} name="folder-open" />
         {reveal}
       </button>
       <hr />
@@ -602,7 +606,7 @@ function RepositoryFileContextMenu({
         data-repository-file-action="copy-path"
         data-repository-file-path={menu.path}
       >
-        <LucideIcon icon={Clipboard} name="clipboard" />
+        <LucideIcon size="s" icon={Clipboard} name="clipboard" />
         Copy Relative Path
       </button>
       {menu.absolutePath && (
@@ -612,7 +616,7 @@ function RepositoryFileContextMenu({
           data-repository-file-action="copy-absolute-path"
           data-repository-file-path={menu.absolutePath}
         >
-          <LucideIcon icon={Copy} name="copy" />
+          <LucideIcon size="s" icon={Copy} name="copy" />
           Copy Absolute Path
         </button>
       )}

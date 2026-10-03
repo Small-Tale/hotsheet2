@@ -89,10 +89,6 @@
   background: var(--wa-color-neutral-fill-normal);
   outline: none;
 }
-.repository-status-popover__file-menu-trigger svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .repository-status-popover__path {
   display: flex;
   min-width: 0;
@@ -144,9 +140,8 @@
   gap: var(--kui-space-xs);
   text-align: center;
 }
-.repository-status-popover__empty svg {
-  width: remify(24px);
-  height: remify(24px);
+.repository-status-popover__empty-icon {
+  display: flex;
   color: var(--wa-color-success-on-quiet);
 }
 .repository-status-popover__loading,
@@ -207,10 +202,6 @@
 .repository-status-popover__context-menu button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-.repository-status-popover__context-menu svg {
-  width: remify(16px);
-  height: remify(16px);
 }
 .repository-status-popover__context-menu hr {
   width: 100%;

@@ -271,6 +271,7 @@ export function ResizableRegionDemo() {
       <div class="resizable-region-demo__controls">
         <wa-button appearance="outlined" data-action="toggle-resizable-collapse">
           <LucideIcon
+            size="s"
             slot="start"
             icon={resizeDemoCollapsed.value ? PanelLeftOpen : PanelLeftClose}
             name={resizeDemoCollapsed.value ? 'panel-left-open' : 'panel-left-close'}

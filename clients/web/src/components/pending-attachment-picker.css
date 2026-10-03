@@ -26,10 +26,6 @@
 .pending-attachment-picker header label:hover {
   background: var(--wa-color-brand-fill-quiet);
 }
-.pending-attachment-picker label svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-}
 .pending-attachment-picker input {
   position: absolute;
   width: 1px;
@@ -52,13 +48,12 @@
   gap: var(--kui-space-xs);
   font-size: var(--wa-font-size-xs);
 }
-.pending-attachment-picker__item > svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
+.pending-attachment-picker__item-icon {
+  display: flex;
   flex: none;
   color: var(--wa-color-neutral-on-quiet);
 }
-.pending-attachment-picker__item > span {
+.pending-attachment-picker__item-name {
   min-width: 0;
   overflow: hidden;
   flex: 1;
@@ -80,10 +75,6 @@
 .pending-attachment-picker__item button:hover {
   background: var(--wa-color-danger-fill-normal);
   color: var(--wa-color-danger-on-quiet);
-}
-.pending-attachment-picker__item button svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
 }
 .pending-attachment-picker__drop {
   display: grid;

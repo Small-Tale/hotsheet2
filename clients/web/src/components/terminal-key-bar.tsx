@@ -104,7 +104,7 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
               aria-label="Copy terminal text"
               title="Copy terminal text"
             >
-              <LucideIcon icon={Copy} name="copy" />
+              <LucideIcon size="s" icon={Copy} name="copy" />
             </button>
             <button
               type="button"
@@ -113,7 +113,7 @@ export function TerminalKeyBar({ modifiers, functionRow = false }: TerminalKeyBa
               aria-label="Paste"
               title="Paste"
             >
-              <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
+              <LucideIcon size="s" icon={ClipboardPaste} name="clipboard-paste" />
             </button>
           </div>
           <div class="terminal-key-bar__group" role="group" aria-label="Navigation keys">

@@ -21,7 +21,9 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
       aria-label={`Resolve ${conflict.label.toLocaleLowerCase()} conflict`}
     >
       <header>
-        <LucideIcon icon={GitMerge} name="git-merge" />
+        <span class="ticket-field-conflict__icon">
+          <LucideIcon icon={GitMerge} name="git-merge" size="s" />
+        </span>
         <span>
           <strong>Resolve {conflict.label.toLocaleLowerCase()} conflict</strong>
           <small>This field changed elsewhere while you were editing it.</small>
@@ -45,11 +47,11 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
       </label>
       <footer>
         <button type="button" {...INSPECTOR_AND_EDITOR_ACTIONS.acceptRemoteTicketField.attrs}>
-          <LucideIcon icon={RotateCcw} name="rotate-ccw" />
+          <LucideIcon size={13.6} icon={RotateCcw} name="rotate-ccw" />
           Use theirs
         </button>
         <button type="button" {...INSPECTOR_AND_EDITOR_ACTIONS.applyTicketFieldMerge.attrs}>
-          <LucideIcon icon={GitMerge} name="git-merge" />
+          <LucideIcon size={13.6} icon={GitMerge} name="git-merge" />
           Apply merged value
         </button>
       </footer>

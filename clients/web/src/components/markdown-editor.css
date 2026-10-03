@@ -99,10 +99,6 @@
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
 }
-.markdown-editor__toolbar svg {
-  width: remify(15.2px);
-  height: remify(15.2px);
-}
 .markdown-editor__expand {
   width: remify(32px);
   padding: 0 !important;

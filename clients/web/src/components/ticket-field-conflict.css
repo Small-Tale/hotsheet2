@@ -13,10 +13,9 @@
   gap: remify(8.8px);
   align-items: flex-start;
 }
-.ticket-field-conflict > header > svg {
+.ticket-field-conflict > header > .ticket-field-conflict__icon {
+  display: flex;
   flex: none;
-  width: remify(16px);
-  height: remify(16px);
   margin-top: remify(2.4px);
   color: var(--wa-color-warning-on-quiet);
 }
@@ -98,10 +97,6 @@
   border-color: var(--wa-color-brand-border-normal);
   color: var(--wa-color-brand-on-normal);
   background: var(--wa-color-brand-fill-normal);
-}
-.ticket-field-conflict button svg {
-  width: remify(13.6px);
-  height: remify(13.6px);
 }
 @container (max-width: remify(352px)) {
   .ticket-field-conflict__versions {

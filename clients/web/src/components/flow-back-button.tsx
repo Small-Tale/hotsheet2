@@ -14,7 +14,7 @@ export function FlowBackButton({
 }) {
   return (
     <button class="flow-back-button" type="button" data-action={action} disabled={disabled}>
-      <LucideIcon icon={ChevronLeft} name="chevron-left" />
+      <LucideIcon size="s" icon={ChevronLeft} name="chevron-left" />
       {label}
     </button>
   );

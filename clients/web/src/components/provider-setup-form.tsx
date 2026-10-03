@@ -150,7 +150,8 @@ export function ProviderSetupForm({
                   {...COMMANDS_AND_AI_ACTIONS.copyGithubCode.attrs}
                   data-key="copy-github-code"
                 >
-                  <LucideIcon slot="start" icon={Copy} name="copy" /> {auth.copied ? 'Copy again' : 'Copy code'}
+                  <LucideIcon size="s" slot="start" icon={Copy} name="copy" />{' '}
+                  {auth.copied ? 'Copy again' : 'Copy code'}
                 </wa-button>
                 <wa-button
                   appearance="plain"
@@ -158,7 +159,7 @@ export function ProviderSetupForm({
                   {...COMMANDS_AND_AI_ACTIONS.reopenGithubSignIn.attrs}
                   data-key="reopen-github-sign-in"
                 >
-                  <LucideIcon slot="start" icon={ExternalLink} name="external-link" /> Reopen GitHub
+                  <LucideIcon size="s" slot="start" icon={ExternalLink} name="external-link" /> Reopen GitHub
                 </wa-button>
                 <wa-button
                   appearance="plain"
@@ -198,7 +199,7 @@ export function ProviderSetupForm({
                   {...COMMANDS_AND_AI_ACTIONS.startGithubSignIn.attrs}
                   data-key="start-github-sign-in"
                 >
-                  <LucideIcon slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub Enterprise
+                  <LucideIcon size="s" slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub Enterprise
                 </wa-button>
                 <wa-button
                   appearance="plain"
@@ -251,7 +252,7 @@ export function ProviderSetupForm({
                   {...COMMANDS_AND_AI_ACTIONS.startGithubSignIn.attrs}
                   data-key="start-github-sign-in"
                 >
-                  <LucideIcon slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub
+                  <LucideIcon size="s" slot="start" icon={LogIn} name="log-in" /> Sign in with GitHub
                 </wa-button>
                 <wa-button
                   appearance="plain"
@@ -397,12 +398,14 @@ export function ProviderSetupForm({
                   .filter((installation) => installation.settingsUrl)
                   .map((installation) => (
                     <a href={installation.settingsUrl} target="_blank" rel="noopener">
-                      Change access for {installation.account} <LucideIcon icon={ExternalLink} name="external-link" />
+                      Change access for {installation.account}{' '}
+                      <LucideIcon size={14} icon={ExternalLink} name="external-link" />
                     </a>
                   ))}
                 {auth.installUrl && (
                   <a href={auth.installUrl} target="_blank" rel="noopener">
-                    Add another account or organization <LucideIcon icon={ExternalLink} name="external-link" />
+                    Add another account or organization{' '}
+                    <LucideIcon size={14} icon={ExternalLink} name="external-link" />
                   </a>
                 )}
                 <button
@@ -411,7 +414,8 @@ export function ProviderSetupForm({
                   data-key="refresh-github-repositories"
                   disabled={auth.refreshing}
                 >
-                  <LucideIcon icon={RefreshCw} name="refresh-cw" /> {auth.refreshing ? 'Refreshing…' : 'Refresh list'}
+                  <LucideIcon size={14} icon={RefreshCw} name="refresh-cw" />{' '}
+                  {auth.refreshing ? 'Refreshing…' : 'Refresh list'}
                 </button>
               </div>
             </section>

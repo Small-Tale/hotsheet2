@@ -31,10 +31,6 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-.keyboard-settings__reset-all svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
-}
 .keyboard-settings__group-title {
   margin: 0 0 var(--kui-space-2xs);
   color: var(--wa-color-neutral-on-quiet);
@@ -90,10 +86,6 @@
   color: var(--wa-color-warning-on-quiet);
   font-size: var(--wa-font-size-2xs);
   font-weight: 600;
-}
-.keyboard-settings__conflict svg {
-  width: remify(12.8px);
-  height: remify(12.8px);
 }
 .keyboard-settings__controls {
   flex: none;
@@ -153,10 +145,6 @@
 .keyboard-settings__action:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-.keyboard-settings__action svg {
-  width: remify(14.4px);
-  height: remify(14.4px);
 }
 .keyboard-settings__fixed {
   display: inline-flex;

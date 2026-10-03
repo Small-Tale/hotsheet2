@@ -33,10 +33,6 @@
   justify-items: center;
   gap: var(--kui-space-xs);
 }
-.ai-tool-settings__empty svg {
-  width: remify(32px);
-  height: remify(32px);
-}
 .ai-tool-settings__empty p {
   max-width: remify(480px);
   margin: 0;

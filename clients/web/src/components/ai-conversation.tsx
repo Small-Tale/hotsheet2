@@ -146,6 +146,7 @@ export function ConversationMessages({
                 <li>
                   <a href={file.url} download={file.filename}>
                     <LucideIcon
+                      size={12.8}
                       icon={file.kind === 'media' ? Image : Paperclip}
                       name={file.kind === 'media' ? 'image' : 'paperclip'}
                     />
@@ -292,7 +293,7 @@ export function AIConversation({
             aria-label="Copy selected messages"
             title="Copy selected messages"
           >
-            <LucideIcon icon={Copy} name="copy" />
+            <LucideIcon size={14.4} icon={Copy} name="copy" />
           </wa-button>
           <wa-button
             appearance="plain"
@@ -301,7 +302,7 @@ export function AIConversation({
             aria-label="Clear message selection"
             title="Clear message selection"
           >
-            <LucideIcon icon={X} name="x" />
+            <LucideIcon size={14.4} icon={X} name="x" />
           </wa-button>
         </span>
       )}
@@ -312,7 +313,7 @@ export function AIConversation({
       <section class="ai-conversation__transcript" aria-label="Conversation transcript" aria-live="polite">
         {messages.length === 0 && (
           <div class="ai-conversation__empty">
-            <LucideIcon icon={MessageSquare} name="message-square" />
+            <LucideIcon size={28} icon={MessageSquare} name="message-square" />
             <strong>{readOnly ? 'No conversation messages yet' : 'Start a conversation'}</strong>
             <p>
               {readOnly
@@ -342,13 +343,15 @@ export function AIConversation({
         ))}
         {busy && progress && (
           <p class="ai-conversation__progress" role="status">
-            <LucideIcon icon={Bot} name="bot" />
+            <LucideIcon size="s" icon={Bot} name="bot" />
             {progress}
           </p>
         )}
         {error && (
           <p class="ai-conversation__error" role="alert">
-            <LucideIcon icon={CircleAlert} name="circle-alert" />
+            <span class="ai-conversation__error-icon">
+              <LucideIcon icon={CircleAlert} name="circle-alert" size={17.6} />
+            </span>
             <span>
               <strong>Conversation unavailable</strong>
               {error}
@@ -449,7 +452,7 @@ export function AIConversation({
           aria-label={`Send message to ${tool}`}
           title={busy ? `${tool} is still working` : `Send message to ${tool}`}
         >
-          <LucideIcon icon={ArrowUp} name="arrow-up" />
+          <LucideIcon size="s" icon={ArrowUp} name="arrow-up" />
         </button>
       </div>
     </form>

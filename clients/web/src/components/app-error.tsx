@@ -15,7 +15,7 @@ export function AppError({ message }: { message: string }) {
         aria-label="Dismiss error"
         title="Dismiss error"
       >
-        <LucideIcon icon={X} name="x" />
+        <LucideIcon size="s" icon={X} name="x" />
       </button>
     </div>
   );

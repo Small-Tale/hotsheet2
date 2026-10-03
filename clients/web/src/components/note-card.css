@@ -24,11 +24,6 @@
   font-size: var(--wa-font-size-xs);
   font-weight: 700;
 }
-.note-card__kind svg {
-  width: remify(15.2px);
-  height: remify(15.2px);
-  flex: none;
-}
 .note-card__time,
 .note-card__footer {
   color: var(--wa-color-neutral-on-quiet);
@@ -69,10 +64,6 @@
 .note-card__actions button:hover {
   color: var(--wa-color-brand-on-quiet);
   background: var(--wa-color-brand-fill-quiet);
-}
-.note-card__actions svg {
-  width: remify(12.8px);
-  height: remify(12.8px);
 }
 /* Reading scale (HS2-MGVE50): a reading surface such as the large-text reader sets the unitless
    --hotsheet-reading-scale on its own root; each reading part multiplies its own ordinary size by it
@@ -205,10 +196,6 @@
   color: var(--wa-color-danger-on-quiet);
   background: var(--wa-color-danger-fill-quiet);
 }
-.note-card__inline-reply-row button svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .note-card__choices {
   display: grid;
   gap: var(--kui-space-xs);
@@ -252,10 +239,6 @@
   border-color: var(--wa-color-success-fill-loud);
   color: var(--wa-color-neutral-on-loud);
   background: var(--wa-color-success-fill-normal);
-}
-.note-card__choice-check svg {
-  width: remify(12px);
-  height: remify(12px);
 }
 .note-card[data-kind='status'] {
   border-color: transparent;

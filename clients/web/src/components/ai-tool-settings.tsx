@@ -84,7 +84,7 @@ export function AiToolSettings({
     return (
       <section class="ai-tool-settings" data-component="ai-tool-settings">
         <div class="ai-tool-settings__empty">
-          <LucideIcon icon={Bot} name="bot" />
+          <LucideIcon size="xl" icon={Bot} name="bot" />
           <strong>No AI tools detected</strong>
           <p>Install or enable a drivable AI-tool plugin to configure Drive, AI shells, and AI chat.</p>
         </div>

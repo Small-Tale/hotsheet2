@@ -72,7 +72,7 @@ export function TicketCodeReview({
       {loading && <p role="status">{loadingMessage}</p>}
       {!loading && review && review.commits.length === 0 && (
         <div class="ticket-code-review__empty">
-          <LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" />
+          <LucideIcon size={19.2} icon={GitCommitHorizontal} name="git-commit-horizontal" />
           <p>{emptyMessage}</p>
         </div>
       )}
@@ -88,20 +88,20 @@ export function TicketCodeReview({
               <h3>Change evidence</h3>
               <div class="ticket-code-review__evidence-grid">
                 <span>
-                  <LucideIcon icon={FileText} name="file-text" />
+                  <LucideIcon size="s" icon={FileText} name="file-text" />
                   <strong>{review.summary.files.docs}</strong> docs
                 </span>
                 <span>
-                  <LucideIcon icon={FlaskConical} name="flask-conical" />
+                  <LucideIcon size="s" icon={FlaskConical} name="flask-conical" />
                   <strong>{review.summary.files.tests}</strong> tests
                 </span>
                 <span>
-                  <LucideIcon icon={FileCode2} name="file-code-2" />
+                  <LucideIcon size="s" icon={FileCode2} name="file-code-2" />
                   <strong>{review.summary.files.source}</strong> source
                 </span>
                 {review.summary.files.other > 0 && (
                   <span>
-                    <LucideIcon icon={CircleHelp} name="circle-help" />
+                    <LucideIcon size="s" icon={CircleHelp} name="circle-help" />
                     <strong>{review.summary.files.other}</strong> other
                   </span>
                 )}
@@ -164,7 +164,7 @@ export function TicketCodeReview({
                 disabled={!enabled || !compareReady}
                 aria-label={`Open comparison in ${review.difftool ?? 'configured diff tool'}`}
               >
-                <LucideIcon icon={ExternalLink} name="external-link" />
+                <LucideIcon size={14.4} icon={ExternalLink} name="external-link" />
                 Open
               </button>
             </div>
@@ -190,14 +190,14 @@ export function TicketCodeReview({
                       disabled={!enabled}
                       aria-label={`Open ${range.count} commit bundle ${shortSha(range.from)} through ${shortSha(range.to)} in ${review.difftool ?? 'configured diff tool'}`}
                     >
-                      <LucideIcon icon={GitCompareArrows} name="git-compare-arrows" />
+                      <LucideIcon size={14.4} icon={GitCompareArrows} name="git-compare-arrows" />
                       <span>
                         Open {range.count}-commit bundle
                         <small>
                           {shortSha(range.from)} → {shortSha(range.to)}
                         </small>
                       </span>
-                      <LucideIcon icon={ExternalLink} name="external-link" />
+                      <LucideIcon size={14.4} icon={ExternalLink} name="external-link" />
                     </button>
                   </li>
                 )),
@@ -208,7 +208,7 @@ export function TicketCodeReview({
                   data-compared={labels.length ? labels.join('').toLowerCase() : undefined}
                 >
                   <span class="ticket-code-review__graph" aria-hidden="true">
-                    <LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" />
+                    <LucideIcon size="s" icon={GitCommitHorizontal} name="git-commit-horizontal" />
                   </span>
                   <div
                     class="ticket-code-review__commit-summary"
@@ -248,7 +248,7 @@ export function TicketCodeReview({
                     disabled={!enabled}
                     aria-label={`Open commit ${commit.short_sha} in ${review.difftool ?? 'configured diff tool'}`}
                   >
-                    <LucideIcon icon={ExternalLink} name="external-link" />
+                    <LucideIcon size={14.4} icon={ExternalLink} name="external-link" />
                   </button>
                 </li>,
               ];
@@ -328,7 +328,11 @@ function commitRefs(refs: readonly CommitRef[] | undefined) {
           data-ref-kind={ref.kind}
           title={`${ref.kind === 'tag' ? 'Tag' : ref.kind === 'remote' ? 'Remote branch' : ref.kind === 'head' ? 'Current HEAD' : 'Branch'}: ${ref.label}`}
         >
-          <LucideIcon icon={ref.kind === 'tag' ? Tag : GitBranch} name={ref.kind === 'tag' ? 'tag' : 'git-branch'} />
+          <LucideIcon
+            size={11.2}
+            icon={ref.kind === 'tag' ? Tag : GitBranch}
+            name={ref.kind === 'tag' ? 'tag' : 'git-branch'}
+          />
           <span>{ref.label}</span>
         </span>
       ))}

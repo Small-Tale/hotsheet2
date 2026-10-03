@@ -49,7 +49,7 @@ export function StatusBadge({
     <>
       {showIcon && (
         <span class="status-badge__icon">
-          <LucideIcon icon={value.icon} name={value.iconName} />
+          <LucideIcon icon={value.icon} name={value.iconName} size={compact ? 'xs' : 13.6} />
         </span>
       )}
       <span>{value.label}</span>

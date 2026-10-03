@@ -73,10 +73,6 @@
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
 }
-.project-tab-bar__modes svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .project-tab-bar__actions [hidden] {
   display: none;
 }
@@ -99,11 +95,6 @@
 .project-tab-bar__action:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
-}
-.project-tab-bar__action svg {
-  display: block;
-  width: remify(16px);
-  height: remify(16px);
 }
 /* Mobile: a plain flex row (no TabBar) with the mode switcher, a flexible project Select, and the
    Add-project action (HS2-4C5RM7). */

@@ -115,7 +115,9 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                 );
                 return source.provider === 'git' ? (
                   <div class="ticket-provider-settings__store" data-source-id={source.connectionId}>
-                    <LucideIcon icon={Database} name="database" />
+                    <span class="ticket-provider-settings__store-icon">
+                      <LucideIcon icon={Database} name="database" size="s" />
+                    </span>
                     {copy}
                   </div>
                 ) : (
@@ -235,7 +237,9 @@ export function AccountsSettings({ accounts, error = '', signingOut }: AccountsS
                   {account.sources.length ? (
                     account.sources.map((source) => (
                       <div class="ticket-provider-settings__store" data-source-id={source.connection_id}>
-                        <LucideIcon icon={Cable} name="cable" />
+                        <span class="ticket-provider-settings__store-icon">
+                          <LucideIcon icon={Cable} name="cable" size="s" />
+                        </span>
                         <span class="ticket-provider-settings__connection-copy">
                           <strong>
                             {source.name}

@@ -737,10 +737,6 @@ body[data-resizing-project-sidebar='true'] {
   gap: var(--wa-space-xs);
   cursor: pointer;
 }
-.terminal-visibility-demo > wa-button svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .project-tab-demo__surface {
   display: grid;
   padding: remify(16px);
@@ -798,10 +794,6 @@ body[data-resizing-project-sidebar='true'] {
 .resizable-region-demo__controls wa-button::part(base) {
   cursor: pointer;
 }
-.resizable-region-demo__controls svg {
-  width: remify(16px);
-  height: remify(16px);
-}
 .resizable-region-demo__panel {
   display: flex;
   width: 100%;
@@ -850,10 +842,6 @@ body[data-resizing-project-sidebar='true'] {
   .project-tab-demo__surface {
     grid-template-columns: 1fr;
   }
-}
-.project-sidebar-demo__resize-handle svg {
-  width: remify(18.4px);
-  height: remify(18.4px);
 }
 @media (max-width: remify(960px)) {
   body {

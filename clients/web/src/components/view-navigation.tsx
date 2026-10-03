@@ -78,10 +78,12 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                   }
                 >
                   {item.countLoading ? (
-                    <LucideIcon icon={LoaderCircle} name="loader-circle" />
+                    <span class="view-navigation__count-spinner">
+                      <LucideIcon size={9.92} icon={LoaderCircle} name="loader-circle" />
+                    </span>
                   ) : (
                     <>
-                      {item.searchCount && <LucideIcon icon={Search} name="search" />}
+                      {item.searchCount && <LucideIcon size={9.92} icon={Search} name="search" />}
                       {item.count}
                     </>
                   )}
@@ -126,7 +128,7 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                       title={`More actions for ${item.label}`}
                       aria-haspopup="menu"
                     >
-                      <LucideIcon icon={Ellipsis} name="ellipsis" />
+                      <LucideIcon size={14.4} icon={Ellipsis} name="ellipsis" />
                     </button>
                   </span>
                 )}

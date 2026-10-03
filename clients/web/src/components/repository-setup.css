@@ -31,10 +31,6 @@
   background: var(--wa-color-brand-fill-quiet);
   place-items: center;
 }
-.repository-setup__icon svg {
-  width: remify(20px);
-  height: remify(20px);
-}
 .repository-setup__error {
   margin: 0;
   padding: var(--kui-space-xs);

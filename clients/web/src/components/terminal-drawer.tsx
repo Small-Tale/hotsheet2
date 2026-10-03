@@ -375,7 +375,7 @@ export function TerminalDrawer({
           aria-label={`Text size: ${focusTextSize.columns} columns. Change text size`}
           title="Change text size"
         >
-          <LucideIcon icon={ALargeSmall} name="a-large-small" />
+          <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
         </button>
       )}
       {focusMode && focusTextSize && (
@@ -391,10 +391,10 @@ export function TerminalDrawer({
             aria-label="Copy terminal text"
             title="Copy terminal text"
           >
-            <LucideIcon icon={Copy} name="copy" />
+            <LucideIcon size="s" icon={Copy} name="copy" />
           </button>
           <button type="button" {...TERMINALS_ACTIONS.pasteTerminalText.attrs} aria-label="Paste" title="Paste">
-            <LucideIcon icon={ClipboardPaste} name="clipboard-paste" />
+            <LucideIcon size="s" icon={ClipboardPaste} name="clipboard-paste" />
           </button>
         </div>
       )}
@@ -406,7 +406,7 @@ export function TerminalDrawer({
           aria-label="Exit terminal focus"
           title="Exit terminal focus"
         >
-          <LucideIcon icon={Minimize2} name="minimize-2" />
+          <LucideIcon size="s" icon={Minimize2} name="minimize-2" />
           <span>Exit</span>
         </button>
       )}

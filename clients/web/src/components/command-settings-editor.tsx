@@ -73,7 +73,7 @@ function CommandRow({
       draggable="true"
     >
       <span class="command-settings-editor__row-grip" aria-hidden="true">
-        <LucideIcon icon={GripVertical} name="grip-vertical" />
+        <LucideIcon size="s" icon={GripVertical} name="grip-vertical" />
       </span>
       <span
         class="command-settings-editor__row-icon"
@@ -81,7 +81,7 @@ function CommandRow({
         style={commandIconStyle(command)}
         aria-hidden="true"
       >
-        <LucideIcon icon={icon.icon} name={icon.name} />
+        <LucideIcon size={18} icon={icon.icon} name={icon.name} />
       </span>
       <span class="command-settings-editor__row-text">
         <strong>{label}</strong>
@@ -371,7 +371,7 @@ function CommandGroup({
               data-group={group}
               aria-label={`Delete empty group ${group}`}
             >
-              <LucideIcon icon={Trash2} name="trash-2" />
+              <LucideIcon size={14} icon={Trash2} name="trash-2" />
             </button>
           )}
         </div>
@@ -424,14 +424,14 @@ export function CommandSettingsEditor({
             class="command-settings-editor__button"
             {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}
           >
-            <LucideIcon icon={FolderPlus} name="folder-plus" /> Add group
+            <LucideIcon size="s" icon={FolderPlus} name="folder-plus" /> Add group
           </button>
           <button
             type="button"
             class="command-settings-editor__button command-settings-editor__add-command"
             {...COMMANDS_AND_AI_ACTIONS.addCommandSetting.attrs}
           >
-            <LucideIcon icon={Plus} name="plus" /> Add command
+            <LucideIcon size="s" icon={Plus} name="plus" /> Add command
           </button>
         </div>
       </header>
@@ -478,7 +478,7 @@ export function CommandSettingsEditor({
                         }
                         style={commandIconStyle(editing)}
                       >
-                        <LucideIcon icon={editingIcon.icon} name={editingIcon.name} />
+                        <LucideIcon size="s" icon={editingIcon.icon} name={editingIcon.name} />
                       </span>
                     </ToolbarControlGroup>
                     <ToolbarText text="Edit command" id="command-editor-title" size="xlarge" />

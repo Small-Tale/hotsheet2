@@ -14,13 +14,9 @@
 .status-badge__icon {
   display: inline-flex;
   flex: none;
-  /* The Kerf icon is 1em; the app-owned wrapper sets the size (HS2-57MAAH). */
+  /* The wrapper's box matches the LucideIcon size prop the badge passes (HS2-57MAAH, HS2-4AQJEX). */
   width: remify(13.6px);
   height: remify(13.6px);
-}
-.status-badge__icon > svg {
-  width: 100%;
-  height: 100%;
 }
 .status-badge--started {
   color: var(--wa-color-warning-on-quiet);

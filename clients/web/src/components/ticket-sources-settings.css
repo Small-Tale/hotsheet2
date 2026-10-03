@@ -37,9 +37,8 @@
 .ticket-provider-settings__store + .ticket-provider-settings__store {
   border-top: 1px solid var(--wa-color-neutral-border-quiet);
 }
-.ticket-provider-settings__store > svg {
-  width: remify(16px);
-  height: remify(16px);
+.ticket-provider-settings__store-icon {
+  display: flex;
   flex: none;
   color: var(--wa-color-neutral-on-quiet);
 }

@@ -34,10 +34,6 @@
   font-size: var(--wa-font-size-3xs);
   font-weight: 750;
 }
-.project-tab__notification svg {
-  width: remify(11.52px);
-  height: remify(11.52px);
-}
 .project-tab__work {
   position: relative;
   display: grid;

@@ -132,7 +132,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
       {hasResources && (
         <div class="project-close-dialog__intro">
           <span>
-            <LucideIcon icon={CircleAlert} name="circle-alert" />
+            <LucideIcon size={17.6} icon={CircleAlert} name="circle-alert" />
           </span>
           <p id="project-close-dialog-summary">{projectCloseRunningSummary(state.resources)}</p>
         </div>
