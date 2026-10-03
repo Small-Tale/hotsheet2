@@ -1250,7 +1250,20 @@ fn resolve_hook_command(command: &str) -> String {
     }
 }
 
-/// Claude-style `.mcp.json`: `{ "mcpServers": { "<name>": { command, args } } }`.
+/// Environment every generated MCP server entry declares. MCP configs are read only by AI
+/// clients, so the shim identifies each mutation as the `ai` actor even when Hot Sheet did
+/// not launch the client (HS2-28DM8B). An explicit `actor_role` argument still wins.
+const MCP_ENV: &[(&str, &str)] = &[("HOTSHEET_ACTOR_ROLE", "ai")];
+
+fn mcp_env_json() -> serde_json::Value {
+    MCP_ENV
+        .iter()
+        .map(|(key, value)| ((*key).to_string(), serde_json::Value::from(*value)))
+        .collect::<serde_json::Map<_, _>>()
+        .into()
+}
+
+/// Claude-style `.mcp.json`: `{ "mcpServers": { "<name>": { command, args, env } } }`.
 fn write_mcp_json(
     target: &Path,
     name: &str,
@@ -1273,7 +1286,7 @@ fn write_mcp_json(
     }
     servers.as_object_mut().unwrap().insert(
         name.to_string(),
-        serde_json::json!({ "command": command, "args": args }),
+        serde_json::json!({ "command": command, "args": args, "env": mcp_env_json() }),
     );
     write_file(
         target,
@@ -1281,7 +1294,8 @@ fn write_mcp_json(
     )
 }
 
-/// OpenCode project config: `{ "mcp": { "<name>": { type: "local", command: [...] } } }`.
+/// OpenCode project config:
+/// `{ "mcp": { "<name>": { type: "local", command: [...], environment } } }`.
 fn write_mcp_opencode_json(
     target: &Path,
     name: &str,
@@ -1305,7 +1319,7 @@ fn write_mcp_opencode_json(
     command_line.extend_from_slice(args);
     mcp.as_object_mut().unwrap().insert(
         name.to_string(),
-        serde_json::json!({ "type": "local", "command": command_line }),
+        serde_json::json!({ "type": "local", "command": command_line, "environment": mcp_env_json() }),
     );
     write_file(
         target,
@@ -1313,7 +1327,7 @@ fn write_mcp_opencode_json(
     )
 }
 
-/// Codex-style TOML: `[mcp_servers.<name>]` with `command` + `args`.
+/// Codex-style TOML: `[mcp_servers.<name>]` with `command`, `args`, and `env`.
 fn write_mcp_toml(
     target: &Path,
     name: &str,
@@ -1339,6 +1353,15 @@ fn write_mcp_toml(
         toml::Value::Array(
             args.iter()
                 .map(|a| toml::Value::String(a.clone()))
+                .collect(),
+        ),
+    );
+    entry.insert(
+        "env".into(),
+        toml::Value::Table(
+            MCP_ENV
+                .iter()
+                .map(|(key, value)| ((*key).to_string(), toml::Value::from(*value)))
                 .collect(),
         ),
     );
@@ -2254,6 +2277,25 @@ args = ["--path", "{{store}}"]
         for id in ["jay", "oscar", "toby"] {
             fixture.setup(id);
         }
+        // Every MCP format declares the ai actor for external clients (HS2-28DM8B).
+        let json: serde_json::Value =
+            serde_json::from_str(&fixture.read("shared.json").unwrap()).unwrap();
+        assert_eq!(
+            json["mcpServers"]["hotsheet"]["env"]["HOTSHEET_ACTOR_ROLE"],
+            "ai"
+        );
+        let opencode: serde_json::Value =
+            serde_json::from_str(&fixture.read("opencode.json").unwrap()).unwrap();
+        assert_eq!(
+            opencode["mcp"]["hotsheet"]["environment"]["HOTSHEET_ACTOR_ROLE"],
+            "ai"
+        );
+        let codex: toml::Table =
+            toml::from_str(&fixture.read(".toby/config.toml").unwrap()).unwrap();
+        assert_eq!(
+            codex["mcp_servers"]["hotsheet"]["env"]["HOTSHEET_ACTOR_ROLE"].as_str(),
+            Some("ai")
+        );
         assert!(
             fixture
                 .read("shared.json")

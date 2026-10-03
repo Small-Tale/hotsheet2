@@ -184,7 +184,7 @@ fn codex_declares_its_project_local_skill() {
     let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
     assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
     assert!(skill_body.contains("name: hotsheet"));
-    assert!(skill_body.contains("<!-- hotsheet-skill-version: 55 -->"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 56 -->"));
     // Non-trivial tickets get a preliminary-thoughts note before implementation (HS2-C4X2MD).
     assert!(skill_body.contains("## Preliminary thoughts"));
     // Non-trivial claims carry an ETA and renewals re-estimate (HS2-DQQ0AX).

@@ -418,7 +418,7 @@ References to the _original_ Hot Sheet (the predecessor at
 predecessor links; they do not attribute Hot Sheet 2.
 
 <!-- BEGIN hotsheet:claude -->
-<!-- hotsheet-instructions-version: 54 -->
+<!-- hotsheet-instructions-version: 55 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -499,6 +499,11 @@ known gaps deferred to follow-ups. Pass the same integer in that same update as
 bands: **90-100** fully verified end to end against the real system; **70-89** verified with
 minor assumptions; **40-69** partially verified or an ambiguous ask; **below 40** largely
 unverified — name the gaps. A bare number without the factor lines is non-compliant.
+Identify yourself as the AI actor: sessions Hot Sheet launches already set
+`HOTSHEET_ACTOR_ROLE=ai`, and generated MCP configs declare it for `hotsheet-mcp`;
+otherwise pass `--actor-role ai --actor-id <your-id>` (MCP `actor_role: "ai"`,
+`actor_id`). An AI completion without a score is rejected with
+`confidence_required` and changes nothing; retry the same call with the score.
 
 **Format AI-authored notes for human scanning.** Lead with the outcome or decision, not a
 chronological transcript. For a substantial note, use short Markdown sections such as

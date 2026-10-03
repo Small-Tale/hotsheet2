@@ -232,6 +232,12 @@ MCP mutations therefore act as `ai` automatically. This is the one deliberate be
 change for existing callers: those sessions are AI by construction, so they now follow
 the rule the bundled instructions already required.
 
+External AI clients that Hot Sheet did not launch opt in through setup (HS2-28DM8B). Every
+MCP config that `hotsheet-cli setup` generates declares `HOTSHEET_ACTOR_ROLE=ai` in its
+`hotsheet-mcp` server environment: `env` in Claude-style `.mcp.json` and Codex TOML, and
+`environment` in OpenCode. Their MCP mutations therefore act as `ai` too. MCP configs are
+read only by AI clients, and an explicit `actor_role` argument still wins.
+
 Rules are role-specific, and their feedback is written for the reader:
 
 - **AI completion rule:** an `ai` actor that moves a ticket to `completed` (edit, batch,

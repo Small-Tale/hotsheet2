@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 55 -->
+<!-- hotsheet-skill-version: 56 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -91,6 +91,13 @@ system; 70-89 verified with minor assumptions; 40-69 partially verified or an am
 ask; below 40 largely unverified — name the gaps. A bare number without the factor lines
 is non-compliant. Example:
 `hotsheet-cli edit <slug> --status completed --note-file done.md --note-confidence 82`.
+
+**Actor identity:** identify yourself as the AI actor on every ticket write. Sessions Hot
+Sheet launches already set `HOTSHEET_ACTOR_ROLE=ai` (with `HOTSHEET_ACTOR_ID`), and
+generated MCP configs declare it for the `hotsheet-mcp` shim; otherwise pass
+`--actor-role ai --actor-id <worker>` on CLI writes (MCP `actor_role: "ai"`, `actor_id`).
+An AI completion without a confidence score is rejected with `confidence_required` and
+changes nothing; retry the same call with the score.
 
 Format AI-authored notes for human scanning. Lead with the outcome or decision, not a
 chronological transcript. For a substantial note, use short Markdown sections such as

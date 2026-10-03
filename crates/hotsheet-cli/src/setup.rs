@@ -113,6 +113,8 @@ mod tests {
         let mcp: serde_json::Value = serde_json::from_str(&read(d.path(), ".mcp.json")).unwrap();
         let hs = &mcp["mcpServers"]["hotsheet"];
         assert_eq!(hs["command"], "hotsheet-mcp");
+        // External AI clients identify every MCP mutation as the `ai` actor (HS2-28DM8B).
+        assert_eq!(hs["env"]["HOTSHEET_ACTOR_ROLE"], "ai");
         let args: Vec<&str> = hs["args"]
             .as_array()
             .unwrap()
@@ -245,6 +247,11 @@ mod tests {
         let cfg: toml::Table = toml::from_str(&read(d.path(), ".codex/config.toml")).unwrap();
         let hs = cfg["mcp_servers"]["hotsheet"].as_table().unwrap();
         assert_eq!(hs["command"].as_str().unwrap(), "hotsheet-mcp");
+        assert_eq!(
+            hs["env"]["HOTSHEET_ACTOR_ROLE"].as_str(),
+            Some("ai"),
+            "codex MCP entry declares the ai actor (HS2-28DM8B)"
+        );
         assert!(
             read(d.path(), ".git/info/exclude")
                 .lines()
