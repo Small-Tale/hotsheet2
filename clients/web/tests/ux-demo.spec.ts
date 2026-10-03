@@ -181,8 +181,8 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'false');
   await expect(page.locator('[data-action="toggle-geometry-overlay"]')).toHaveCount(0);
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  // ProjectTabBar renders three specimens (standalone, with a workspace action, and the divider-free
-  // shell-column variant, HS2-DR549A); the AppTab demo composes its tabs inside a TabBar
+  // ProjectTabBar renders four specimens (standalone, with the new-ticket and the Empty Trash workspace
+  // actions, HS2-PNCDAE, and the divider-free shell-column variant, HS2-DR549A); the AppTab demo composes its tabs inside a TabBar
   // (HS2-GX51F7), so the overlay treats that bar as the single specimen and shows no tab borders.
   // The demo frames each bar in its own rounded stage box, so the overlay reports the bar's real
   // bottom-only border rather than a demo-imposed outline (HS2-4APEJP).
@@ -191,7 +191,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(page.getByRole('heading', { name: 'ProjectTabBar', exact: true })).toBeVisible();
   const borders = page.locator('.kui-catalog__geometry-border'),
     bounds = page.locator('.kui-catalog__geometry-bound');
-  await expect(borders).toHaveCount(2);
+  await expect(borders).toHaveCount(3);
   await expect(bounds).toHaveCount(0);
   for (const border of await borders.all()) {
     await expect(border).toHaveCSS('border-bottom-width', '1px');
@@ -214,7 +214,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await catalog.getByRole('button', { name: /ProjectTabBar/ }).click();
   await expect(page.getByRole('heading', { name: 'ProjectTabBar', exact: true })).toBeVisible();
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  await expect(borders).toHaveCount(2);
+  await expect(borders).toHaveCount(3);
   await expect(bounds).toHaveCount(0);
   const theme = page.getByRole('button', { name: 'Use dark theme' });
   await theme.click();
@@ -940,7 +940,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     rail = page.locator('[data-component="terminal-ticket-rail"]'),
     project = panel.locator('wa-select[name="terminal-rail-project"]'),
     view = rail.locator('wa-select[name="terminal-rail-view"]'),
-    launcher = rail.getByRole('button', { name: 'Ticket…' });
+    launcher = rail.locator('[data-component="quick-ticket-composer-launcher"]');
   await expect(rail).toBeVisible();
   await expect(project).toHaveAttribute('value', 'demo');
   await expect(view).toHaveAttribute('value', 'all');
@@ -968,7 +968,12 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading .kui-toolbar')!),
       headingWrap = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
       content = getComputedStyle(node.querySelector<HTMLElement>('.kui-nav-stack__view[data-nav-active="true"]')!),
-      launcherStyle = getComputedStyle(node.querySelector<HTMLElement>('.quick-ticket-composer__launcher')!);
+      // The launcher is a brand Web Awesome pill (HS2-PNCDAE): its fill and radius live on the base part.
+      launcherStyle = getComputedStyle(
+        node
+          .querySelector<HTMLElement>('.quick-ticket-composer__launcher')!
+          .shadowRoot!.querySelector('[part~="base"]')!,
+      );
     return {
       mode: {
         top: mode.top,

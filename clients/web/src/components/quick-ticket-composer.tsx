@@ -83,9 +83,13 @@ export function QuickTicketLauncher({
   label = 'New ticket…',
   size = 'default',
 }: { attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact' } = {}) {
+  // A brand Web Awesome pill: Kerf's TabBar `end` zone accepts one standalone `wa-button`, and the
+  // composition extension declares this launcher `rendersAs @kerfjs/ui:wa-button` (HS2-PNCDAE).
   return (
-    <button
-      type="button"
+    <wa-button
+      variant="brand"
+      pill
+      size={size === 'compact' ? 'small' : 'medium'}
       class="quick-ticket-composer__launcher"
       data-size={size}
       data-component="quick-ticket-composer-launcher"
@@ -98,9 +102,9 @@ export function QuickTicketLauncher({
           : 'Create a new ticket or drop tickets to duplicate'
       }
     >
-      <LucideIcon size="s" icon={Plus} name="plus" />
+      <LucideIcon size="s" slot="start" icon={Plus} name="plus" />
       {label}
-    </button>
+    </wa-button>
   );
 }
 

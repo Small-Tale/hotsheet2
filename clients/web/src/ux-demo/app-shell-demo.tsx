@@ -9,7 +9,7 @@ import { type ConnectionState, ConnectionStateBanner } from '../components/conne
 import { projectSidebarPanel } from '../components/project-sidebar';
 import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
 import { ProjectTabBar, type ProjectTabBarMode } from '../components/project-tab-bar';
-import { QuickTicketComposer, QuickTicketLauncher } from '../components/quick-ticket-composer';
+import { QuickTicketComposer } from '../components/quick-ticket-composer';
 import { terminalOperationsPanel } from '../components/terminal-operations-sidebar';
 import { TicketBoard } from '../components/ticket-board';
 import { ticketInspectorPanel } from '../components/ticket-inspector';
@@ -240,11 +240,16 @@ export function ProjectTabBarDemo() {
           tabs={projectTabs.value}
           label="Open projects with workspace action"
           mode={shellMode.value}
-          workspaceAction={
-            <wa-button variant="brand" data-action="demo-new-ticket">
-              New ticket…
-            </wa-button>
-          }
+          workspaceAction={{ kind: 'new-ticket' }}
+        />
+      </div>
+      {/* The Trash view swaps the far-edge action for the outlined danger Empty Trash button (HS2-PNCDAE). */}
+      <div class="project-tab-bar-demo__frame">
+        <ProjectTabBar
+          tabs={projectTabs.value}
+          label="Open projects with the Trash view action"
+          mode={shellMode.value}
+          workspaceAction={{ kind: 'empty-trash' }}
         />
       </div>
       {/* The shell-column presentation (HS2-DR549A): the strip shares the column surface and leaves the
@@ -431,7 +436,7 @@ export function AppShellDemo() {
             />
           ) : undefined
         }
-        projectTabAction={!globalMode && !projectSettings ? <QuickTicketLauncher /> : undefined}
+        projectTabAction={!globalMode && !projectSettings ? { kind: 'new-ticket' } : undefined}
         workspace={workspace}
         workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'}
         terminalDrawer={

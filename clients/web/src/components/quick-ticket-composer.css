@@ -1,35 +1,13 @@
+/* The launcher is a brand Web Awesome pill (HS2-PNCDAE): Web Awesome owns its size, fill, hover, and
+   focus ring; `size="compact"` maps to the small button of a narrow heading such as the ticket rail's.
+   The app styles only the host's drop-target ring while tickets or files are dragged over it. */
 .quick-ticket-composer__launcher {
-  display: inline-flex;
-  min-height: remify(40px);
-  padding: var(--kui-space-xs) var(--kui-space-m);
-  border: 1px solid var(--wa-color-brand-border-loud);
-  border-radius: 999px;
-  color: var(--wa-color-neutral-on-loud);
-  background: var(--wa-color-brand-fill-loud);
-  box-shadow: var(--wa-shadow-xs);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 650;
-  align-items: center;
-  gap: var(--kui-space-xs);
+  flex: none;
+  border-radius: var(--wa-border-radius-pill);
   white-space: nowrap;
 }
-/* `size="compact"`: the shorter trigger of a narrow heading toolbar such as the ticket rail's. */
-.quick-ticket-composer__launcher[data-size='compact'] {
-  min-height: remify(36px);
-  padding-inline: remify(12.8px);
-}
-.quick-ticket-composer__launcher:hover {
-  filter: brightness(0.96);
-  box-shadow: var(--wa-shadow-s);
-}
 .quick-ticket-composer__launcher:is([data-dragging='true'], [data-dragging-ticket='true']) {
-  border-color: var(--wa-color-focus);
-  background: var(--wa-color-brand-fill-quiet);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent);
-}
-.quick-ticket-composer__launcher:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 24%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 40%, transparent);
 }
 .quick-ticket-dialog {
   position: fixed;

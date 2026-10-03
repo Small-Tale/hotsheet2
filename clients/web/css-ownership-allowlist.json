@@ -14,18 +14,6 @@
       "reason": "borrowed-markup: <Toolbar> class renders .app-shell, which belongs to src/components/app-shell.tsx; compose that component or give this element an own class"
     },
     {
-      "file": "src/app/runtime.tsx",
-      "selector": ".workspace-header__text-action",
-      "ticket": "HS2-T35VN7",
-      "reason": "borrowed-markup: <wa-button> class renders .workspace-header, which belongs to src/components/workspace-controls.tsx, src/components/workspace-header.tsx; compose that component or give this element an own class"
-    },
-    {
-      "file": "src/app/runtime.tsx",
-      "selector": ".workspace-header__text-action-label",
-      "ticket": "HS2-T35VN7",
-      "reason": "borrowed-markup: <span> class renders .workspace-header, which belongs to src/components/workspace-controls.tsx, src/components/workspace-header.tsx; compose that component or give this element an own class"
-    },
-    {
       "file": "src/components/repository-status-popover.tsx",
       "selector": ".ticket-code-review__notice",
       "ticket": "HS2-WP69TD",

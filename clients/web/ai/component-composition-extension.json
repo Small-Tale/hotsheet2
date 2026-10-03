@@ -9,6 +9,258 @@
   },
   "entries": [
     {
+      "key": "hotsheet-web:add-project-action",
+      "package": "hotsheet-web",
+      "id": "add-project-action",
+      "name": "AddProjectAction",
+      "kind": "component",
+      "purpose": "The project strip's Add-project action: one native icon button in a single borderless compact ToolbarControlGroup.",
+      "publicExports": [
+        {
+          "name": "AddProjectAction"
+        }
+      ],
+      "source": "src/components/project-strip-actions.tsx",
+      "styleSources": [],
+      "rendersAs": ["@kerfjs/ui:toolbar-control-group"],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": ["toolbar-zone"],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": true,
+        "helpers": [],
+        "obligations": ["Handle the choose-project action once at the application root."]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": ["actions"],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": ["The icon-only button is named \"Add project\" with aria-label."]
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "ai/component-catalog-extension.json",
+        "composition": "docs/ux-components.md"
+      }
+    },
+    {
+      "key": "hotsheet-web:empty-trash-action",
+      "package": "hotsheet-web",
+      "id": "empty-trash-action",
+      "name": "EmptyTrashAction",
+      "kind": "component",
+      "purpose": "The Trash view's standalone outlined danger Empty Trash button.",
+      "publicExports": [
+        {
+          "name": "EmptyTrashAction"
+        }
+      ],
+      "source": "src/components/workspace-controls.tsx",
+      "styleSources": ["src/components/workspace-header.css"],
+      "rendersAs": ["@kerfjs/ui:wa-button"],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": ["application-ui"],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": true,
+        "helpers": [],
+        "obligations": ["Handle the open-empty-trash action once at the application root."]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": ["actions"],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": ["The visible \"Empty Trash\" label names the button."]
+      },
+      "boundaries": {
+        "rootClass": "workspace-header__text-action",
+        "publicClasses": ["workspace-header__text-action"],
+        "publicTokens": [],
+        "placeableClasses": ["workspace-header__text-action"]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "ai/component-catalog-extension.json",
+        "composition": "docs/ux-components.md"
+      }
+    },
+    {
+      "key": "hotsheet-web:project-dashboard-modes",
+      "package": "hotsheet-web",
+      "id": "project-dashboard-modes",
+      "name": "ProjectDashboardModes",
+      "kind": "component",
+      "purpose": "The project strip's global dashboard switcher: a borderless compact ToolbarControlGroup of native pressed buttons.",
+      "publicExports": [
+        {
+          "name": "ProjectDashboardModes"
+        }
+      ],
+      "source": "src/components/project-strip-actions.tsx",
+      "styleSources": [],
+      "rendersAs": ["@kerfjs/ui:toolbar-control-group"],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": ["toolbar-zone"],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "shell mode",
+          "owner": "application",
+          "required": true
+        }
+      ],
+      "wiring": {
+        "required": true,
+        "helpers": [],
+        "obligations": ["Handle the set-shell-mode action once at the application root."]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": ["actions"],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": [
+          "The group is named \"Global dashboards\"; each icon-only button carries aria-label and aria-pressed."
+        ]
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "ai/component-catalog-extension.json",
+        "composition": "docs/ux-components.md"
+      }
+    },
+    {
+      "key": "hotsheet-web:quick-ticket-launcher",
+      "package": "hotsheet-web",
+      "id": "quick-ticket-launcher",
+      "name": "QuickTicketLauncher",
+      "kind": "component",
+      "purpose": "The brand pill wa-button that opens the quick ticket composer and accepts dropped tickets and files.",
+      "publicExports": [
+        {
+          "name": "QuickTicketLauncher"
+        }
+      ],
+      "source": "src/components/quick-ticket-composer.tsx",
+      "styleSources": ["src/components/quick-ticket-composer.css"],
+      "rendersAs": ["@kerfjs/ui:wa-button"],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": ["application-ui"],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "attachments enabled",
+          "owner": "application",
+          "required": false
+        }
+      ],
+      "wiring": {
+        "required": true,
+        "helpers": [],
+        "obligations": [
+          "Handle expand-ticket-composer clicks and the new-ticket and duplicate-ticket drop targets once at the application root."
+        ]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": ["actions"],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": ["The visible label names the button; the title describes the drop target."]
+      },
+      "boundaries": {
+        "rootClass": "quick-ticket-composer__launcher",
+        "publicClasses": ["quick-ticket-composer__launcher"],
+        "publicTokens": [],
+        "placeableClasses": ["quick-ticket-composer__launcher"]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "ai/component-catalog-extension.json",
+        "composition": "docs/ux-components.md"
+      }
+    },
+    {
       "key": "hotsheet-web:ticket-search-field",
       "package": "hotsheet-web",
       "id": "ticket-search-field",
@@ -100,6 +352,71 @@
       "provenance": {
         "selection": "ai/component-catalog-extension.json",
         "composition": "docs/ux-components.md#34-search-and-filtering--feature-floor"
+      }
+    },
+    {
+      "key": "hotsheet-web:ticket-view-action",
+      "package": "hotsheet-web",
+      "id": "ticket-view-action",
+      "name": "TicketViewAction",
+      "kind": "component",
+      "purpose": "Renders the current ticket view's primary action spec as QuickTicketLauncher or EmptyTrashAction.",
+      "publicExports": [
+        {
+          "name": "TicketViewAction"
+        }
+      ],
+      "source": "src/components/workspace-controls.tsx",
+      "styleSources": ["src/components/workspace-header.css"],
+      "rendersAs": ["@kerfjs/ui:wa-button"],
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": ["application-ui"],
+      "zones": [],
+      "children": {
+        "mode": "none",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [
+        {
+          "id": "ticket view action spec",
+          "owner": "application",
+          "required": true
+        }
+      ],
+      "wiring": {
+        "required": true,
+        "helpers": [],
+        "obligations": ["The rendered launcher or Empty Trash button carries its own root-wired actions."]
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": ["actions"],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": ["Inherits the rendered button’s visible label."]
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [],
+        "publicTokens": [],
+        "placeableClasses": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "ai/component-catalog-extension.json",
+        "composition": "docs/ux-components.md"
       }
     },
     {

@@ -1,3 +1,4 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
 import './workspace-header.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -24,10 +25,12 @@ import {
   Search,
   Settings,
   Star,
+  Trash2,
 } from 'lucide';
 
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { createTicketSearchModel } from '../ticket-search-model';
+import { QuickTicketLauncher } from './quick-ticket-composer';
 import { TicketSearchField } from './ticket-search-field';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
@@ -99,6 +102,39 @@ export function WorkspaceIdentity({
       size="large"
       headingLevel={headingLevel}
     />
+  );
+}
+
+/** The current ticket view's primary action: create a ticket, or empty the trash in the Trash view. It is
+ * data so each placement renders it as literal zone JSX that Kerf's composition rule can check
+ * (HS2-PNCDAE). */
+export type TicketViewActionSpec =
+  | { kind: 'new-ticket'; attachmentsEnabled?: boolean; label?: string; size?: 'default' | 'compact' }
+  | { kind: 'empty-trash' };
+
+/** The Trash view's standalone outlined danger `wa-button` (declared `rendersAs @kerfjs/ui:wa-button`). */
+export function EmptyTrashAction() {
+  return (
+    <wa-button
+      class="workspace-header__text-action"
+      appearance="outlined"
+      variant="danger"
+      {...TICKET_SELECTION_ACTIONS.openEmptyTrash.attrs}
+    >
+      <span class="workspace-header__text-action-label">
+        <LucideIcon icon={Trash2} name="trash-2" />
+        <span>Empty Trash</span>
+      </span>
+    </wa-button>
+  );
+}
+
+/** Renders a {@link TicketViewActionSpec} as its single standalone `wa-button` (HS2-PNCDAE). */
+export function TicketViewAction({ action }: { action: TicketViewActionSpec }) {
+  return action.kind === 'empty-trash' ? (
+    <EmptyTrashAction />
+  ) : (
+    <QuickTicketLauncher attachmentsEnabled={action.attachmentsEnabled} label={action.label} size={action.size} />
   );
 }
 

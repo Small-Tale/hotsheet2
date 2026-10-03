@@ -4,18 +4,21 @@ import './project-tab-bar.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { TabBar } from '@kerfjs/ui/tab-bar';
-import type { SafeHtml } from 'kerfjs/jsx-runtime';
-import { ArchiveRestore, ChartNoAxesCombined, Grid3X3, Plus } from 'lucide';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ArchiveRestore } from 'lucide';
 
-import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
-import { PROJECT_LIFECYCLE_ACTIONS } from '../interaction-attrs/project-lifecycle';
+import { AddProjectAction, ProjectDashboardModes, type ProjectStripMode } from './project-strip-actions';
 import { ProjectTab, type ProjectTabProps } from './project-tab';
+import { TicketViewAction, type TicketViewActionSpec } from './workspace-controls';
 
 export interface ProjectTabBarProps {
   tabs: ProjectTabProps[];
   label?: string;
   mode?: ProjectTabBarMode;
-  workspaceAction?: SafeHtml;
+  /** The current ticket view's primary action, pinned in TabBar's far-edge `end` zone. It is data, not
+   * markup, so the zone renders literal JSX that Kerf's composition rule checks (HS2-PNCDAE). */
+  workspaceAction?: TicketViewActionSpec;
   /** Mobile: the horizontal tab strip does not fit a single narrow column, so the project tabs are
    * replaced with a project Select while the dashboard mode switcher and Add-project action remain
    * (HS2-4C5RM7). */
@@ -26,7 +29,7 @@ export interface ProjectTabBarProps {
   /** Draw the bottom rule separating the strip from the content below it (default true). */
   divider?: boolean;
 }
-export type ProjectTabBarMode = 'project' | 'terminals' | 'stats';
+export type ProjectTabBarMode = ProjectStripMode;
 
 /** Stable id for the projects tab strip; `wireTabBars`'s reorder reports carry it as `barId` so the
  * host can route project reorders (main.tsx) separately from other tab bars. */
@@ -41,47 +44,6 @@ export function ProjectTabBar({
   surface = 'lowered',
   divider = true,
 }: ProjectTabBarProps) {
-  const modes = (
-    <div class="project-tab-bar__modes" role="group" aria-label="Global dashboards">
-      <button
-        type="button"
-        tabindex="0"
-        {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
-        data-shell-mode="terminals"
-        aria-label="Workspace grid"
-        title="Workspace grid"
-        aria-pressed={String(mode === 'terminals')}
-      >
-        <LucideIcon size="s" icon={Grid3X3} name="grid-3x3" />
-      </button>
-      <button
-        type="button"
-        tabindex="0"
-        {...NAVIGATION_AND_TABS_ACTIONS.setShellMode.attrs}
-        data-shell-mode="stats"
-        aria-label="Cross-project stats"
-        title="Cross-project stats"
-        aria-pressed={String(mode === 'stats')}
-      >
-        <LucideIcon size="s" icon={ChartNoAxesCombined} name="chart-no-axes-combined" />
-      </button>
-    </div>
-  );
-  const actions = (
-    <div class="project-tab-bar__actions">
-      {/* A native button styled by the app: the strip sits beside Kerf's TabBar (whose trailing zone
-          takes only dormant decoration), so no Toolbar owns a control group here (HS2-402AXQ). */}
-      <button
-        type="button"
-        class="project-tab-bar__action"
-        {...PROJECT_LIFECYCLE_ACTIONS.chooseProject.attrs}
-        aria-label="Add project"
-        title="Add project"
-      >
-        <LucideIcon size="s" icon={Plus} name="plus" />
-      </button>
-    </div>
-  );
   const rootAttributes = {
     'data-component': 'project-tab-bar',
     'data-mode': mode,
@@ -95,45 +57,53 @@ export function ProjectTabBar({
       active = choosable.find((tab) => tab.selected) ?? choosable[0];
     return (
       <div class="project-tab-bar project-tab-bar--mobile" {...rootAttributes}>
-        {modes}
-        {choosable.length ? (
-          <div class="project-tab-bar__select">
-            <Select
-              presentation="toolbar-borderless"
-              size="compact"
-              name="mobile-project"
-              value={active.id}
-              ariaLabel="Project"
-              choices={choosable.map((tab) => ({ value: tab.id, label: tab.name }))}
-              renderSelected={(choice) => (
-                <span class="project-tab-bar__selected-project">
-                  {choice.label}
-                  {active.operation && (
-                    <span
-                      class="project-tab-bar__operation"
-                      aria-label={active.operation.label}
-                      title={active.operation.label}
-                    >
-                      <LucideIcon icon={ArchiveRestore} name="archive-restore" />
-                      <small>
-                        {active.operation.percent !== undefined
-                          ? `${Math.floor(active.operation.percent)}%`
-                          : active.operation.state === 'running'
-                            ? 'Working'
-                            : active.operation.state === 'succeeded'
-                              ? 'Backup'
-                              : 'Attention'}
-                      </small>
-                    </span>
-                  )}
-                </span>
+        {/* The phone strip is a Kerf Toolbar whose leading zone holds the mode switcher, the project
+            Select, and Add project as control groups, so each has a cataloged parent (HS2-PNCDAE). */}
+        <Toolbar
+          label="Projects"
+          dividerSides=""
+          leading={
+            <>
+              <ProjectDashboardModes mode={mode} />
+              {choosable.length > 0 && (
+                <ToolbarControlGroup single appearance="borderless" size="compact">
+                  <Select
+                    presentation="toolbar-borderless"
+                    size="compact"
+                    name="mobile-project"
+                    value={active.id}
+                    ariaLabel="Project"
+                    choices={choosable.map((tab) => ({ value: tab.id, label: tab.name }))}
+                    renderSelected={(choice) => (
+                      <span class="project-tab-bar__selected-project">
+                        {choice.label}
+                        {active.operation && (
+                          <span
+                            class="project-tab-bar__operation"
+                            aria-label={active.operation.label}
+                            title={active.operation.label}
+                          >
+                            <LucideIcon icon={ArchiveRestore} name="archive-restore" />
+                            <small>
+                              {active.operation.percent !== undefined
+                                ? `${Math.floor(active.operation.percent)}%`
+                                : active.operation.state === 'running'
+                                  ? 'Working'
+                                  : active.operation.state === 'succeeded'
+                                    ? 'Backup'
+                                    : 'Attention'}
+                            </small>
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  />
+                </ToolbarControlGroup>
               )}
-            />
-          </div>
-        ) : (
-          <span class="project-tab-bar__select-empty" aria-hidden="true" />
-        )}
-        {actions}
+              <AddProjectAction />
+            </>
+          }
+        />
       </div>
     );
   }
@@ -148,9 +118,9 @@ export function ProjectTabBar({
         // Add-project stays beside the last tab; Kerf pins the workspace action (a standalone
         // primary action) at the far edge through its `end` zone (HS2-NE8JBS, KF-A59SC4, HS2-T44PFW).
         trailingPlacement="adjacent"
-        leading={modes}
-        trailing={actions}
-        end={workspaceAction}
+        leading={<ProjectDashboardModes mode={mode} />}
+        trailing={<AddProjectAction />}
+        end={workspaceAction && <TicketViewAction action={workspaceAction} />}
       >
         {tabs.map((tab) => (
           <ProjectTab {...tab} selected={mode === 'project' && tab.selected} />

@@ -584,9 +584,31 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
   `divider={false}`). On desktop, Add project stays beside the last tab (TabBar's adjacent trailing
   placement) and the workspace action sits in TabBar's far-edge `end` zone (KF-A59SC4, HS2-T44PFW), so
   the strip needs no trailing-flex token, growing group, or auto margin. When the tabs overflow they
-  shrink and scroll while + and the action stay visible. `QuickTicketLauncher` is a native-button
-  pill rather than the cataloged standalone `wa-button`; HS2-PNCDAE tracks making that zone content
-  catalog-conformant. Each `ProjectTab` sets Kerf's attention-color token
+  shrink and scroll while + and the action stay visible.
+
+  Every zone holds catalog-accepted content, written as literal JSX so Kerf's `KUI-L202`
+  composition rule checks each placement (HS2-PNCDAE):
+
+  | Zone       | Content                                                                                                                                                               |
+  | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `leading`  | `ProjectDashboardModes`: a borderless, compact `ToolbarControlGroup` of native pressed icon buttons (raised brand selection)                                          |
+  | `trailing` | `AddProjectAction`: one native icon button in a single borderless, compact `ToolbarControlGroup`                                                                      |
+  | `end`      | `TicketViewAction`: renders `QuickTicketLauncher` (a brand `wa-button` pill, `size="small"` for compact headings) or `EmptyTrashAction` (outlined danger `wa-button`) |
+  - The strip owns no control chrome. Those components live in `project-strip-actions.tsx` and
+    `workspace-controls.tsx`, and `ai/component-composition-extension.json` declares them
+    `rendersAs` `@kerfjs/ui:toolbar-control-group` or `@kerfjs/ui:wa-button`.
+  - `workspaceAction` and AppShell's `projectTabAction` are a `TicketViewActionSpec`
+    (`{ kind: 'new-ticket' }` or `{ kind: 'empty-trash' }`), not markup. The demo shows both.
+  - The phone strip is a Kerf `Toolbar` whose `leading` zone holds the modes, the project `Select`
+    (in a single borderless group), and Add project.
+  - The launcher keeps its drop-target data attributes. The app styles only the host's
+    drag-over ring; Web Awesome owns its size, fill, hover, and focus.
+  - Heading `Toolbar`s (the workspace page heading, the phone view header, and the terminal ticket
+    rail) still pass the same standalone `wa-button` through a variable, because Toolbar zones
+    accept no standalone `wa-button` and a control group restyles a nested one. `KF-9N7K8S`
+    requests that kind; HS2-F4P7ZA adopts it.
+
+  Each `ProjectTab` sets Kerf's attention-color token
   on its own AppTab root (`[data-tab-kind='project']`). It keeps Kerf's own drop-target treatment.
 
 - `ProjectTabContextMenu` — **built** with Lucide icons for Close Tab, Close Other

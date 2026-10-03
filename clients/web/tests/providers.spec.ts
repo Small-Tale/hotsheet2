@@ -3350,7 +3350,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   const rail = page.locator('#app-right-rail'),
     projectSelect = page.locator('#app-right-rail wa-select[name="terminal-rail-project"]'),
     viewSelect = rail.locator('wa-select[name="terminal-rail-view"]'),
-    launcher = rail.getByRole('button', { name: 'Ticket…' });
+    launcher = rail.locator('[data-component="quick-ticket-composer-launcher"]');
   await expect(rail).toBeVisible();
   await expect(projectSelect).toHaveAttribute('value', 'demo-checkout');
   await expect(projectSelect.locator('xpath=..')).toHaveAttribute('data-component', 'toolbar-control-group');
@@ -3369,7 +3369,12 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       project = document.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect(),
       hide = document.querySelector<HTMLElement>('[aria-label="Hide ticket rail"]')!.getBoundingClientRect(),
       heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
-      launcherStyle = getComputedStyle(node.querySelector<HTMLElement>('.quick-ticket-composer__launcher')!);
+      // The launcher is a brand Web Awesome pill (HS2-PNCDAE): its fill lives on the base part.
+      launcherStyle = getComputedStyle(
+        node
+          .querySelector<HTMLElement>('.quick-ticket-composer__launcher')!
+          .shadowRoot!.querySelector('[part~="base"]')!,
+      );
     return {
       modeBottom: mode.bottom,
       modeWidth: mode.width,
@@ -14043,18 +14048,26 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const launcher = page.getByRole('button', { name: 'New ticket…' });
+  // The launcher is a Web Awesome pill (HS2-PNCDAE): a real drag event starts on its shadow button and
+  // is composed, so the delegated drop target sees (and marks) the host.
+  const launcher = page.getByRole('button', { name: 'New ticket…' }),
+    launcherHost = page.locator('[data-component="quick-ticket-composer-launcher"]');
   await launcher.evaluate((node) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File(['first proof'], 'first-proof.txt', { type: 'text/plain' }));
-    node.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    node.dispatchEvent(
+      new DragEvent('dragover', { bubbles: true, cancelable: true, composed: true, dataTransfer: transfer }),
+    );
   });
-  await expect(launcher).toHaveAttribute('data-dragging', 'true');
+  await expect(launcherHost).toHaveAttribute('data-dragging', 'true');
   await launcher.evaluate((node) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File(['first proof'], 'first-proof.txt', { type: 'text/plain' }));
-    node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    node.dispatchEvent(
+      new DragEvent('drop', { bubbles: true, cancelable: true, composed: true, dataTransfer: transfer }),
+    );
   });
+  await expect(launcherHost).not.toHaveAttribute('data-dragging', 'true');
   const form = page.locator('[data-action="create-ticket-form"]');
   await expect(form.getByText('first-proof.txt')).toBeVisible();
   await form.screenshot({ path: '/private/tmp/hs2-v1xn4t-new-ticket-drop-wide.png' });

@@ -20,6 +20,7 @@ import {
   workbenchRailPanel,
   workbenchSidebarPanel,
 } from './sidebar-panel';
+import type { TicketViewActionSpec } from './workspace-controls';
 
 /** The Workbench id; Kerf derives the panel ids `app-left-rail`, `app-right-rail`, and `app-bottom-drawer`. */
 export const APP_WORKBENCH_ID = 'app';
@@ -30,7 +31,8 @@ export interface AppShellProps {
   sidebar?: SidebarPanelParts;
   header: SafeHtml;
   headerActions?: SafeHtml;
-  projectTabAction?: SafeHtml;
+  /** The current ticket view's primary action, rendered in the project strip's far-edge zone (HS2-PNCDAE). */
+  projectTabAction?: TicketViewActionSpec;
   pageHeader?: SafeHtml;
   workspace: SafeHtml;
   composer?: SafeHtml;

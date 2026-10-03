@@ -1,7 +1,6 @@
 // The shell renders the shared app-heading presentation (main.tsx loads it first).
 import '../components/heading.css';
 
-import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -10,7 +9,6 @@ import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
-import { Trash2 } from 'lucide';
 
 import {
   applyKnownActiveTicketExpiries,
@@ -110,7 +108,6 @@ import { type AppTabKind } from '../components/project-tab-context-menu';
 import {
   focusQuickTicketComposerTitle,
   QuickTicketComposer,
-  QuickTicketLauncher,
   showQuickTicketComposer,
 } from '../components/quick-ticket-composer';
 import {
@@ -174,6 +171,8 @@ import {
   type WorkspaceSurfaceProps,
 } from '../components/workspace-composition-surfaces';
 import {
+  TicketViewAction,
+  type TicketViewActionSpec,
   WorkspaceControls,
   WorkspaceIdentity,
   type WorkspaceSort,
@@ -217,7 +216,6 @@ import {
 } from '../inline-search';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
-import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { beginInteractionTiming } from '../interaction-performance';
 import type {
   Control,
@@ -4476,22 +4474,24 @@ export async function startHotSheetWebClient() {
             ? 'Ticket errors'
             : (customViewFor(view)?.name ?? 'Queue');
   }
+  function ticketViewActionSpec(
+    view: TicketView,
+    canCreate: boolean,
+    label?: string,
+    size?: 'default' | 'compact',
+  ): TicketViewActionSpec | undefined {
+    return view === 'trash'
+      ? { kind: 'empty-trash' }
+      : canCreate
+        ? { kind: 'new-ticket', attachmentsEnabled: canStageNewTicketAttachments(), label, size }
+        : undefined;
+  }
+  // Heading Toolbars place this standalone brand `wa-button` in their `trailing` zone, which Kerf's
+  // catalog does not accept yet (KF-9N7K8S); the project strip renders the same spec as literal,
+  // conformant TabBar `end` content (HS2-PNCDAE).
   function ticketViewAction(view: TicketView, canCreate: boolean, label?: string, size?: 'default' | 'compact') {
-    return view === 'trash' ? (
-      <wa-button
-        class="workspace-header__text-action"
-        appearance="outlined"
-        variant="danger"
-        {...TICKET_SELECTION_ACTIONS.openEmptyTrash.attrs}
-      >
-        <span class="workspace-header__text-action-label">
-          <LucideIcon icon={Trash2} name="trash-2" />
-          <span>Empty Trash</span>
-        </span>
-      </wa-button>
-    ) : canCreate ? (
-      <QuickTicketLauncher attachmentsEnabled={canStageNewTicketAttachments()} label={label} size={size} />
-    ) : undefined;
+    const action = ticketViewActionSpec(view, canCreate, label, size);
+    return action && <TicketViewAction action={action} />;
   }
   function ticketContextMenuSurface() {
     const menu = ticketContextMenu.value;
@@ -4769,7 +4769,7 @@ export async function startHotSheetWebClient() {
         }
         projectTabAction={
           !viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value)
-            ? ticketViewAction(selectedView.value, canCreate)
+            ? ticketViewActionSpec(selectedView.value, canCreate)
             : undefined
         }
         banner={

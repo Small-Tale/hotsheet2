@@ -386,6 +386,8 @@ describe('UX demo catalog', () => {
         'Internal typed composition boundary whose constituent production surfaces are cataloged individually.',
       'workspace-controls':
         'Toolbar zone content (identity, view-mode, sort, selection, search, overflow groups) of the cataloged WorkspaceHeader; declared in ai/component-composition-extension.json.',
+      'project-strip-actions':
+        'TabBar and Toolbar zone content (dashboard modes, Add project) of the cataloged ProjectTabBar; declared in ai/component-composition-extension.json.',
     };
     const componentsDir = fileURLToPath(new URL('../components', import.meta.url));
     const files = readdirSync(componentsDir).filter((name) => name.endsWith('.tsx') && !name.endsWith('.test.tsx'));
@@ -413,7 +415,7 @@ describe('UX demo catalog', () => {
   });
 
   // Modules that exist only as zone content of a cataloged composition (declared in the composition extension).
-  const COMPOSITION_ONLY_MODULES = new Set(['workspace-controls']);
+  const COMPOSITION_ONLY_MODULES = new Set(['workspace-controls', 'project-strip-actions']);
 
   it('keeps the app composition catalog aligned with the catalog extension, sources, and Kerf roots (HS2-N5G6JS)', () => {
     const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -463,7 +465,12 @@ describe('UX demo catalog', () => {
       ).entries.map((entry) => [entry.id, entry]),
     );
     expect(composition.entries.map((entry) => entry.id)).toEqual([
+      'add-project-action',
+      'empty-trash-action',
+      'project-dashboard-modes',
+      'quick-ticket-launcher',
       'ticket-search-field',
+      'ticket-view-action',
       'workspace-controls',
       'workspace-identity',
     ]);

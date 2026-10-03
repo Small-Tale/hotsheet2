@@ -408,7 +408,16 @@ describe('application shell components', () => {
     expect(markup).toContain('aria-label="Workspace grid"');
     expect(markup).toContain('data-lucide="grid-3x3"');
     expect(markup).toContain('aria-label="Cross-project stats"');
-    expect(markup.match(/tabindex="0"/g)?.length).toBeGreaterThanOrEqual(3);
+    // The modes and Add project are borderless compact Kerf control groups of native buttons in the
+    // TabBar's leading and trailing zones (HS2-PNCDAE).
+    expect(markup).toMatch(
+      /kui-tab-bar__leading"><div class="kui-toolbar-control-group"[^>]*aria-label="Global dashboards" data-appearance="borderless"[^>]*data-size="compact"[^>]*><button type="button" data-action="set-shell-mode"/,
+    );
+    expect(markup).toMatch(
+      /kui-tab-bar__trailing"><div class="kui-toolbar-control-group"[^>]*data-appearance="borderless"[^>]*data-single="true"[^>]*><button type="button" data-action="choose-project" aria-label="Add project">/,
+    );
+    expect(markup).not.toContain('project-tab-bar__actions');
+    expect(markup).not.toContain('project-tab-bar__modes');
     expect(markup).not.toContain('aria-label="Hide project sidebar"');
     expect(markup).toContain('data-project-id="one"');
     expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
@@ -418,15 +427,31 @@ describe('application shell components', () => {
     const desktop = String(
       ProjectTabBar({
         tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }],
-        workspaceAction: 'new-ticket' as never,
+        workspaceAction: { kind: 'new-ticket' },
       }),
     );
     // Add-project stays adjacent to the tabs; Kerf pins the workspace action in TabBar's far-edge `end`
     // zone, so the strip needs no trailing-flex token, growing group, or auto margin (HS2-NE8JBS,
     // KF-A59SC4, HS2-T44PFW). The strip never styles the TabBar's markup (HS2-DR549A).
     expect(desktop).toContain('data-trailing-placement="adjacent"');
-    expect(desktop).toMatch(/kui-tab-bar__trailing[^]*project-tab-bar__actions[^]*data-action="choose-project"/);
-    expect(desktop).toMatch(/<div class="kui-tab-bar__end"[^>]*>new-ticket<\/div>/);
+    expect(desktop).toMatch(/kui-tab-bar__trailing[^]*kui-toolbar-control-group[^]*data-action="choose-project"/);
+    // The workspace action is data the strip renders as one standalone brand `wa-button` (HS2-PNCDAE).
+    expect(desktop).toMatch(
+      /<div class="kui-tab-bar__end"><wa-button variant="brand" pill size="medium" class="quick-ticket-composer__launcher"[^>]*data-action="expand-ticket-composer"[^>]*>[^]*New ticket…<\/wa-button><\/div>/,
+    );
+    const trash = String(
+      ProjectTabBar({
+        tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }],
+        workspaceAction: { kind: 'empty-trash' },
+      }),
+    );
+    expect(trash).toMatch(
+      /<div class="kui-tab-bar__end"><wa-button class="workspace-header__text-action" appearance="outlined" variant="danger" data-action="open-empty-trash"/,
+    );
+    expect(trash).not.toContain('expand-ticket-composer');
+    expect(
+      String(ProjectTabBar({ tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }] })),
+    ).not.toContain('kui-tab-bar__end');
     expect(desktop).not.toContain('project-tab-bar__workspace-action');
     const css = readFileSync(new URL('./project-tab-bar.css', import.meta.url), 'utf8');
     const rules = css.replace(/\/\*[^]*?\*\//g, '');
@@ -440,10 +465,10 @@ describe('application shell components', () => {
       ProjectTabBar({
         mobile: true,
         tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }],
-        workspaceAction: 'new-ticket' as never,
+        workspaceAction: { kind: 'new-ticket' },
       }),
     );
-    expect(mobile).not.toContain('new-ticket');
+    expect(mobile).not.toContain('expand-ticket-composer');
   });
 
   it('exposes the strip surface and bottom rule as props on desktop and mobile (HS2-DR549A)', () => {
@@ -683,7 +708,7 @@ describe('application shell components', () => {
         sidebar: sidebarParts('project sidebar'),
         header: 'head' as never,
         headerActions: 'actions' as never,
-        projectTabAction: 'tab-action' as never,
+        projectTabAction: { kind: 'new-ticket', label: 'tab-action' },
         pageHeader: Toolbar({
           dividerSides: '',
           leading: ToolbarText({ text: 'All Tickets', id: 'all-tickets-title', size: 'xlarge', headingLevel: 1 }),
@@ -715,8 +740,10 @@ describe('application shell components', () => {
     expect(markup).toContain('role="heading" aria-level="1"');
     expect(markup).toContain('class="kui-toolbar__leading">head');
     expect(markup).toContain('class="kui-toolbar__trailing">actions');
-    expect(markup).toContain('class="project-tab-bar__actions"');
-    expect(markup).toContain('tab-action');
+    expect(markup).toContain('aria-label="Add project"');
+    expect(markup).toMatch(
+      /kui-tab-bar__end"><wa-button[^>]*quick-ticket-composer__launcher[^]*tab-action<\/wa-button>/,
+    );
     expect(markup).toContain('data-component="toolbar"');
     // The popup overlay follows the tab strip inside the main column, before the right rail (the
     // rails' own `data-*-overlay*` attributes also contain "overlay", so search from the strip).

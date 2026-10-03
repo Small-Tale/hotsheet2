@@ -50,9 +50,13 @@ describe('QuickTicketComposer', () => {
     expect(String(QuickTicketLauncher({ size: 'compact' }))).toContain(
       'class="quick-ticket-composer__launcher" data-size="compact"',
     );
-    expect(readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8')).toContainSource(
-      ".quick-ticket-composer__launcher[data-size='compact'] { min-height: remify(36px); padding-inline: remify(12.8px); }",
-    );
+    // A brand Web Awesome pill whose size maps to a Web Awesome size, not app geometry (HS2-PNCDAE).
+    expect(collapsed).toMatch(/^<wa-button variant="brand" pill size="medium" class="quick-ticket-composer__launcher"/);
+    expect(String(QuickTicketLauncher({ size: 'compact' }))).toContain('size="small"');
+    expect(collapsed).toContain('<svg slot="start" data-lucide="plus"');
+    const launcherCss = readFileSync(new URL('./quick-ticket-composer.css', import.meta.url), 'utf8');
+    expect(launcherCss).not.toMatch(/quick-ticket-composer__launcher[^{]*\{[^}]*(?:min-height|padding|background)/);
+    expect(launcherCss).not.toMatch(/quick-ticket-composer__launcher[^{]*::part/);
     const collapsedComposer = String(QuickTicketComposer({ expanded: false }));
     expect(collapsedComposer).toContain('data-component="quick-ticket-composer"');
     expect(collapsedComposer).toContain('aria-hidden="true"');
