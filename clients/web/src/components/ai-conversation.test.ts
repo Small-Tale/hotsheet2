@@ -302,6 +302,14 @@ describe('AIConversation', () => {
       /\.ai-conversation__composer textarea \{[^}]*field-sizing: content[^}]*max-height: remify\(144px\)[^}]*border: 0/,
     );
   });
+  it("sizes its own dialog panel over Web Awesome's default margin cap, with an 8px phone margin (HS2-MWMMCN)", () => {
+    expect(css).toMatch(
+      /\.ai-conversation::part\(dialog\) \{[^}]*width: min\(remify\(768px\), calc\(100vw - remify\(32px\)\)\);[^}]*max-width: none;[^}]*max-height: none;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: remify\(640px\)\) \{\s*\.ai-conversation::part\(dialog\) \{[^}]*width: calc\(100vw - remify\(16px\)\);/,
+    );
+  });
   it('offers exports for completed transcripts and makes partial saved transcripts read-only', () => {
     const message = {
       id: 'answer',

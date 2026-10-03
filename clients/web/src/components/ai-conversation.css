@@ -1,7 +1,12 @@
+/* The conversation sizes its own panel: Web Awesome's default `max-width`/`max-height`
+   (`100% - --wa-space-2xl`) would otherwise cap the panel at a 20px margin and silently undo the
+   phone rule's 8px margin below (HS2-MWMMCN). */
 .ai-conversation::part(dialog) {
   position: relative;
   width: min(remify(768px), calc(100vw - remify(32px)));
+  max-width: none;
   height: min(remify(608px), calc(100vh - remify(48px)));
+  max-height: none;
 }
 .ai-conversation::part(body) {
   display: grid;

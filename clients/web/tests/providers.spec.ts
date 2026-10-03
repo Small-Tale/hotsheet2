@@ -12400,6 +12400,14 @@ for (const viewport of [
         top: Math.round(popupBox!.y - dialogBox!.y),
         bottom: Math.round(dialogBox!.y + dialogBox!.height - (popupBox!.y + popupBox!.height)),
       }));
+    // The conversation owns its panel size: a phone keeps an 8px margin (`100vw - 16px`) instead of
+    // Web Awesome's default 20px cap, and a wide window keeps the 768px panel (HS2-MWMMCN).
+    await expect
+      .poll(async () => {
+        const box = (await dialog.boundingBox())!;
+        return { x: Math.round(box.x), width: Math.round(box.width) };
+      })
+      .toEqual(viewport.width === 390 ? { x: 8, width: 374 } : { x: 256, width: 768 });
     // The foreground covers the dialog panel, so the popup sits fully inside it with symmetric insets:
     // 16px on a phone, 32px wide (HS2-SH3DR7).
     const expectedInset = viewport.width === 390 ? 16 : 32;

@@ -336,6 +336,10 @@ does not introduce polling or another network request.
   conversation without running `$hotsheet`; Drive uses a separate stable connection and explicitly
   starts that workflow in the drawer. It keeps the ticket workspace visible behind a bounded, vertically
   scrollable transcript rather than replacing the project route.
+  - dialog size: the conversation owns its panel size instead of Web Awesome's default
+    `100% - 40px` cap. Wide windows get `min(768px, 100vw - 32px)` by `min(608px, 100vh - 48px)`;
+    at 640px and below the panel keeps an 8px margin (`100vw - 16px` by `100vh - 16px`, so 374px
+    wide at 390px) (HS2-MWMMCN).
   - header: tool identity, ready/working/message-count context, conversation usage, and
     native Save/Stop buttons inside Kerf `ToolbarControlGroup` in both dialog and embedded
     presentations. Save is disabled for empty or active transcripts; Stop appears only
