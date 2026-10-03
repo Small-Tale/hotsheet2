@@ -264,7 +264,7 @@ export function TerminalTicketRailDemo() {
               }
             : undefined
         }
-        action={<QuickTicketLauncher label="Ticket…" size="compact" />}
+        action={{ kind: 'new-ticket', label: 'Ticket…', size: 'compact' }}
       />
     </section>
   );

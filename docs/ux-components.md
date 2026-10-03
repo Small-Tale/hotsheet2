@@ -612,9 +612,9 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
   - The launcher keeps its drop-target data attributes. The app styles only the host's
     drag-over ring; Web Awesome owns its size, fill, hover, and focus.
   - Heading `Toolbar`s (the workspace page heading, the phone view header, and the terminal ticket
-    rail) still pass the same standalone `wa-button` through a variable, because Toolbar zones
-    accept no standalone `wa-button` and a control group restyles a nested one. `KF-9N7K8S`
-    requests that kind; HS2-F4P7ZA adopts it.
+    rail) render the same spec as literal `<TicketViewAction>` JSX in their `trailing` zone. Kerf
+    Toolbar accepts one standalone primary `wa-button` there and keeps its Web Awesome chrome
+    (`KF-9N7K8S`, HS2-F4P7ZA). The rail's `action` prop is a `TicketViewActionSpec` too.
 
   Each `ProjectTab` sets Kerf's attention-color token
   on its own AppTab root (`[data-tab-kind='project']`). It keeps Kerf's own drop-target treatment.

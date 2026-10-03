@@ -296,9 +296,6 @@ export function AppShell({
  * `.app-shell__mobile-view` placement (HS2-T35VN7).
  */
 function AppShellMobileViewHeader({ value, choices, action }: AppShellMobileView) {
-  // Kerf's catalog does not accept a standalone wa-button in a Toolbar zone yet (KF-9N7K8S), so the
-  // view action stays a variable like the page heading's until HS2-F4P7ZA adopts the fix.
-  const trailing = action && <TicketViewAction action={action} />;
   return (
     <Toolbar
       className="app-shell__mobile-view-header"
@@ -317,7 +314,8 @@ function AppShellMobileViewHeader({ value, choices, action }: AppShellMobileView
           />
         </ToolbarControlGroup>
       }
-      trailing={trailing}
+      // Kerf Toolbar accepts one standalone primary wa-button in `trailing` (KF-9N7K8S, HS2-F4P7ZA).
+      trailing={action && <TicketViewAction action={action} />}
     />
   );
 }

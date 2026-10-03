@@ -4407,7 +4407,7 @@ export async function startHotSheetWebClient() {
           ? { key: `ticket:${railInspectorProps.slug}`, parts: ticketInspectorPanel(railInspectorProps) }
           : undefined,
         title: mode === 'notifications' ? 'Notifications' : ticketViewTitle(railView),
-        action: mode === 'notifications' ? undefined : ticketViewAction(railView, canCreate, 'Ticket…', 'compact'),
+        action: mode === 'notifications' ? undefined : ticketViewActionSpec(railView, canCreate, 'Ticket…', 'compact'),
       },
     };
   }
@@ -4474,13 +4474,6 @@ export async function startHotSheetWebClient() {
       : canCreate
         ? { kind: 'new-ticket', attachmentsEnabled: canStageNewTicketAttachments(), label, size }
         : undefined;
-  }
-  // Heading Toolbars place this standalone brand `wa-button` in their `trailing` zone, which Kerf's
-  // catalog does not accept yet (KF-9N7K8S); the project strip renders the same spec as literal,
-  // conformant TabBar `end` content (HS2-PNCDAE).
-  function ticketViewAction(view: TicketView, canCreate: boolean, label?: string, size?: 'default' | 'compact') {
-    const action = ticketViewActionSpec(view, canCreate, label, size);
-    return action && <TicketViewAction action={action} />;
   }
   function ticketContextMenuSurface() {
     const menu = ticketContextMenu.value;
@@ -4684,16 +4677,17 @@ export async function startHotSheetWebClient() {
             : searchQuery.value.trim() || searchTokens.value.length
               ? 'Search results'
               : ticketViewTitle(selectedView.value);
+    const headingAction = !['settings', 'notifications'].includes(viewMode.value)
+      ? ticketViewActionSpec(selectedView.value, canCreate)
+      : undefined;
+    // Heading Toolbars render the view action as literal `trailing` content: Kerf Toolbar accepts one
+    // standalone primary wa-button there (KF-9N7K8S, HS2-F4P7ZA).
     const secondaryPageHeader = (
       <div class="app-heading" data-component="heading" data-has-icon="false">
         <Toolbar
           dividerSides=""
           leading={<ToolbarText text={workspaceTitle} id="workspace-page-title" size="xlarge" headingLevel={1} />}
-          trailing={
-            !['settings', 'notifications'].includes(viewMode.value)
-              ? ticketViewAction(selectedView.value, canCreate)
-              : undefined
-          }
+          trailing={headingAction && <TicketViewAction action={headingAction} />}
         />
       </div>
     );

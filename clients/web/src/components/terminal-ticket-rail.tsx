@@ -14,6 +14,7 @@ import {
   PanelCollapseControl,
   type SidebarPanelParts,
 } from './sidebar-panel';
+import { TicketViewAction, type TicketViewActionSpec } from './workspace-controls';
 
 /** The NavStack id of the workspace grid's ticket rail (`wireNavStack` finds it by this). */
 export const TERMINAL_TICKET_RAIL_STACK_ID = 'terminal-ticket-rail-stack';
@@ -33,7 +34,8 @@ export interface TerminalTicketRailProps {
    */
   detail?: { key: string; parts: SidebarPanelParts };
   title?: string;
-  action?: SafeHtml;
+  /** The rail view's primary action, rendered as literal Toolbar `trailing` content (HS2-F4P7ZA). */
+  action?: TicketViewActionSpec;
 }
 
 /** A static surface's panel parts as one pushed NavStack view (HS2-FY06N4). */
@@ -117,7 +119,7 @@ export function terminalTicketRailPanel({
           trailing={controls}
         />
         <div class="terminal-ticket-rail__heading">
-          <Toolbar dividerSides="" leading={heading} trailing={action} />
+          <Toolbar dividerSides="" leading={heading} trailing={action && <TicketViewAction action={action} />} />
         </div>
       </div>
     ),

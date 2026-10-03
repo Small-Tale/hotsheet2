@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { QuickTicketLauncher } from './quick-ticket-composer';
 import { TerminalTicketRail, terminalTicketRailPanel } from './terminal-ticket-rail';
 import { ticketInspectorPanel } from './ticket-inspector';
 
@@ -141,7 +140,7 @@ describe('TerminalTicketRail', () => {
   it('separates the heading from the ticket scroller and preserves the shared compact launcher', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8'),
       markup = String(
-        TerminalTicketRail({ ...props, action: QuickTicketLauncher({ label: 'Ticket…', size: 'compact' }) }),
+        TerminalTicketRail({ ...props, action: { kind: 'new-ticket', label: 'Ticket…', size: 'compact' } }),
       ),
       heading = markup.match(
         /<div class="terminal-ticket-rail__heading"><header class="kui-toolbar"[\s\S]*?<\/header>/,
