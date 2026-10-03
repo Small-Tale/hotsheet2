@@ -6771,13 +6771,21 @@ test('sizes inspector editors and titles through child tokens and own classes (H
       await expect(title).toHaveCSS('font-size', presentation === 'reader' ? '20px' : '16px');
       await expect(title).toHaveCSS('cursor', 'text');
       // Stored desktop heights reach each child through its public height token; touch screens drop them.
-      expect(await editorHeights(root)).toEqual(
-        coarse
-          ? { details: '48px', note: '80px', blocked: '64px' }
-          : presentation === 'reader'
+      // On touch the demo now loads the shared textarea tokens (HS2-YBBJEN), so the multi-paragraph
+      // details editor grows to its content instead of a stored height, while the short note and empty
+      // blocked-reason editors sit at their component minimums.
+      const measured = await editorHeights(root);
+      if (coarse) {
+        expect({ note: measured.note, blocked: measured.blocked }).toEqual({ note: '80px', blocked: '64px' });
+        expect(parseFloat(measured.details)).toBeGreaterThan(
+          parseFloat(heights[`--hs-details-${presentation}-height`]),
+        );
+      } else
+        expect(measured).toEqual(
+          presentation === 'reader'
             ? { details: '221px', note: '187px', blocked: '143px' }
             : { details: '131px', note: '99px', blocked: '77px' },
-      );
+        );
       await context.close();
     }
   }
