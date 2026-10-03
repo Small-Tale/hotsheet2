@@ -195,33 +195,26 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     const kerf = (layout: 'inline' | 'grow' | 'row', expanded: boolean) =>
       attrs(render(layout, expanded), 'data-sizing', 'data-visibility', 'data-placement');
     expect(kerf('inline', true)).toEqual(kerf('inline', false));
-    expect(kerf('grow', false)).toEqual(expect.objectContaining({ 'data-visibility': 'hide-collapsed-tiny' }));
+    expect(kerf('grow', false)).toEqual(
+      expect.objectContaining({ 'data-sizing': 'grow', 'data-visibility': 'hide-collapsed-tiny' }),
+    );
     expect(kerf('grow', true)).toEqual(kerf('grow', false));
     expect(kerf('row', false)).toEqual(expect.objectContaining({ 'data-sizing': 'fill', 'data-placement': 'end' }));
     expect(kerf('row', true)).toEqual(kerf('row', false));
     // `row` hands the full-row width to Kerf's `fill` on the field too; the other layouts never fill.
     expect(render('row', true)).toContain('data-fill="true"');
     expect(render('grow', true)).toContain('data-fill="false"');
-    // Only the header's grow floor still uses app root modifiers (KF-K4VBTS, HS2-AEK8GK); every other
-    // layout renders the bare literal root class.
-    expect(group(render('inline', true))[1]).toBe('kui-toolbar-control-group ticket-search-field');
-    expect(group(render('row', true))[1]).toBe('kui-toolbar-control-group ticket-search-field');
-    expect(group(render('grow', false))[1]).toBe(
-      'kui-toolbar-control-group ticket-search-field ticket-search-field--grow',
-    );
-    expect(group(render('grow', true))[1]).toBe(
-      'kui-toolbar-control-group ticket-search-field ticket-search-field--grow ticket-search-field--open',
-    );
+    // Every layout, open or closed, renders the bare literal root class: the header's grow floor is
+    // Kerf's `sizing="grow"` basis since KF-K4VBTS (HS2-AEK8GK), so no app root modifier remains.
+    for (const layout of ['inline', 'grow', 'row'] as const)
+      for (const expanded of [false, true])
+        expect(group(render(layout, expanded))[1]).toBe('kui-toolbar-control-group ticket-search-field');
 
     const css = readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8');
-    expect(css).toContainSource(
-      '.ticket-search-field.ticket-search-field--grow.ticket-search-field--open { --kui-token-search-expanded-width: 48rem; min-width: 19rem; flex: 1 1 19rem; }',
-    );
-    expect(css).toContainSource(
-      '@container kui-toolbar (max-width: remify(480px)) { .ticket-search-field.ticket-search-field--grow.ticket-search-field--open { width: 100%; min-width: 0; } }',
-    );
-    expect(css).toContain('KF-K4VBTS');
-    // The tiny-toolbar hide, trailing-edge placement, and row entrance are Kerf's now.
+    // The grow floor, tiny-toolbar hide, trailing-edge placement, and row entrance are Kerf's now.
+    expect(css).not.toContain('ticket-search-field--grow');
+    expect(css).not.toContain('min-width: 19rem');
+    expect(css).not.toContain('--kui-token-search-expanded-width');
     expect(css).not.toContain('ticket-search-field--row');
     expect(css).not.toContain(':not(.ticket-search-field--open)');
     expect(css).not.toContain('@keyframes');

@@ -13,12 +13,6 @@
   "cache": true,
   "suppressions": [
     {
-      "id": "hs2-damhd1-search-grow-floor",
-      "rules": ["KUI-L022"],
-      "target": "src/components/ticket-search-field.tsx",
-      "rationale": "Only the ticket-search-field--grow and --open root modifiers styled in ticket-search-field.css: the workspace header's expanded search keeps a plain 19rem floor because Kerf's sizing=\"grow\" min(100%, basis) floor drops out of a content-sized trailing zone and wraps the field in a wide header (KF-K4VBTS). Every other HS2-8FS5BJ hook now uses Kerf props (HS2-DAMHD1). Remove with HS2-AEK8GK."
-    },
-    {
       "id": "test-markup-assertion-scripts-check-css-ownership-test-mjs",
       "rules": ["KUI-L023"],
       "target": "scripts/check-css-ownership.test.mjs",

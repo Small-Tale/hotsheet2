@@ -62,9 +62,9 @@ export interface TicketSearchFieldProps {
   /**
    * How the toolbar group sizes itself in its Toolbar zone (HS2-8FS5BJ), each a Kerf
    * ToolbarControlGroup policy (HS2-DAMHD1). `inline` (default) keeps Kerf's own collapsed and
-   * expanded widths. `grow` is the workspace header policy: the expanded field grows into its row's
-   * free room from a 19rem floor and takes the whole row on a compact toolbar, and its collapsed
-   * icon leaves the tiniest toolbars (`visibility="hide-collapsed-tiny"`). `row` is the narrow-rail policy (`sizing="fill"`, `placement="end"`): the
+   * expanded widths. `grow` is the workspace header policy (`sizing="grow"`): the expanded field grows
+   * into its row's free room from Kerf's 19rem basis floor and takes the whole row on a compact
+   * toolbar, and its collapsed icon leaves the tiniest toolbars (`visibility="hide-collapsed-tiny"`). `row` is the narrow-rail policy (`sizing="fill"`, `placement="end"`): the
    * collapsed icon sits at its stacked row's trailing edge and the expanded field takes a full row
    * of its own, entering from the row above.
    */
@@ -332,31 +332,20 @@ export function TicketSearchField({
         )}
       </>
     );
-  // Each layout is a Kerf ToolbarControlGroup policy (HS2-DAMHD1). `grow` drops the collapsed icon
-  // from the tiniest toolbars (`visibility="hide-collapsed-tiny"`); its open field's 19rem floor stays
-  // on the app's own `--grow`/`--open` root modifiers until Kerf's `sizing="grow"` keeps its basis in a
-  // content-sized zone (KF-K4VBTS, HS2-AEK8GK). Kerf's analyzer classifies only literal class names,
-  // so both states are spelled out. `row` fills a wrapping row (with Kerf's stacked-row entrance) and
-  // sits at its row's trailing edge while collapsed.
+  // Each layout is a Kerf ToolbarControlGroup policy (HS2-DAMHD1). `grow` (Kerf `sizing="grow"`,
+  // HS2-AEK8GK) grows the open field from Kerf's 19rem basis floor, which holds in a content-sized
+  // trailing zone since KF-K4VBTS, and drops the collapsed icon from the tiniest toolbars
+  // (`visibility="hide-collapsed-tiny"`). `row` fills a wrapping row (with Kerf's stacked-row
+  // entrance) and sits at its row's trailing edge while collapsed.
   if (layout === 'grow')
-    return open ? (
+    return (
       <ToolbarControlGroup
-        className="ticket-search-field ticket-search-field--grow ticket-search-field--open"
-        expanded
+        className="ticket-search-field"
+        expanded={open}
         single
         content="search"
         focusRing="halo"
-        visibility="hide-collapsed-tiny"
-      >
-        {content}
-      </ToolbarControlGroup>
-    ) : (
-      <ToolbarControlGroup
-        className="ticket-search-field ticket-search-field--grow"
-        expanded={false}
-        single
-        content="search"
-        focusRing="halo"
+        sizing="grow"
         visibility="hide-collapsed-tiny"
       >
         {content}

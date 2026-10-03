@@ -81,17 +81,16 @@ describe('Kerf application UI profile', () => {
     // (beta.69 `failOn`, KF-6S5EKX; HS2-Z44YPD retired the wrapper script).
     expect(config.failOn).toBe('warning');
     // Known Kerf gaps are documented suppressions, never budgets. HS2-DAMHD1 adopted Kerf's toolbar
-    // yield, fill, placement, tiny-visibility, and Select title APIs, leaving only the header search's
-    // grow floor (KF-K4VBTS); HS2-AEK8GK removes it. Beta.70's KUI-L023 also reads HTML string literals
-    // in unit-test assertions as rendered markup (KF-GESM24), so test files alone may carry exact
-    // per-file KUI-L023 suppressions until Kerf skips test modules (HS2-1GPHS5).
+    // yield, fill, placement, tiny-visibility, and Select title APIs, and HS2-AEK8GK adopted
+    // `sizing="grow"` once its basis floor shipped (KF-K4VBTS), so production code carries none.
+    // Beta.70's KUI-L023 reads HTML string literals in unit-test assertions as rendered markup
+    // (KF-GESM24), so test files alone may carry exact per-file KUI-L023 suppressions until Kerf skips
+    // test modules (HS2-1GPHS5).
     const [testSuppressions, productionSuppressions] = [
       config.suppressions.filter(({ target }) => /\.test\.(?:ts|tsx|mjs)$/.test(target)),
       config.suppressions.filter(({ target }) => !/\.test\.(?:ts|tsx|mjs)$/.test(target)),
     ];
-    expect(productionSuppressions.map(({ rules, target }) => `${rules.join(',')} ${target}`)).toEqual([
-      'KUI-L022 src/components/ticket-search-field.tsx',
-    ]);
+    expect(productionSuppressions.map(({ rules, target }) => `${rules.join(',')} ${target}`)).toEqual([]);
     for (const suppression of testSuppressions) {
       expect(suppression.rules).toEqual(['KUI-L023']);
       expect(suppression.rationale).toContain('KF-GESM24');

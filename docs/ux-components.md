@@ -886,19 +886,18 @@ never styles the field from its own stylesheet (HS2-8FS5BJ). Each policy is a se
 `ToolbarControlGroup` props (HS2-DAMHD1):
 
 - `layout="inline"` (default) keeps Kerf's own collapsed and expanded widths.
-- `layout="grow"` is the workspace header policy. The open field grows into the free room on
-  its row from a 19rem floor, which keeps the view, sort, and utility groups beside it in a
-  640px toolbar. It takes the whole row on a compact toolbar, and its collapsed icon leaves
-  toolbars of 224px or less (`visibility="hide-collapsed-tiny"`).
+- `layout="grow"` is the workspace header policy (`sizing="grow"`, `HS2-AEK8GK`). The open field
+  grows into the free room on its row from Kerf's 19rem basis, which stays its floor in the
+  header's content-sized trailing zone (`KF-K4VBTS`, Kerf 5.0.0-beta.70). That keeps the view,
+  sort, and utility groups beside it, so a wide header stays one 60px row with the search open.
+  It takes the whole row on a compact toolbar, and its collapsed icon leaves toolbars of 224px or
+  less (`visibility="hide-collapsed-tiny"`).
 - `layout="row"` is the narrow-rail policy (`sizing="fill"`, `placement="end"`). The collapsed
   icon sits at its stacked row's trailing edge, and the open field fills a row of its own,
   entering from the row above with Kerf's reduced-motion-aware motion.
 
-The grow floor is the one exception. Kerf's `sizing="grow"` floor is `min(100%, 19rem)`, which
-drops out of a content-sized trailing zone, so in a wide header the open field would wrap under
-its siblings (`KF-K4VBTS`). Until that ships, the floor stays a narrow rule on the app's own
-literal `--grow` and `--open` root modifiers in `ticket-search-field.css`, with one documented
-`KUI-L022` suppression (`HS2-AEK8GK`).
+No layout styles the group from `ticket-search-field.css`; the former app grow-floor rule and its
+`--grow`/`--open` root modifiers were removed with `HS2-AEK8GK`.
 
 Both presentations share one quieter chip tint (`--wa-color-brand-fill-quiet`): it is set on the
 `ticket-search-field__query` hook that Kerf renders on the root of the grouped field and of the
@@ -2275,10 +2274,21 @@ URL, for example `npm run ui:doctor -- --browser-url http://127.0.0.1:4173`.
 the plain `kerf-ui-doctor --full` command, with `"failOn": "warning"` in `.kerf-ui-doctor.json`, so any
 active error, review finding, or warning fails it (`KF-6S5EKX`). The interim wrapper script from
 HS2-6PD4FS is gone. Known, tracked gaps are not budgeted; they are documented `suppressions` in
-`.kerf-ui-doctor.json`, each with a rationale naming the Kerf ticket whose adoption removes it. Today
-that is only the `KUI-L022` grow-floor hook on `TicketSearchField` (`KF-K4VBTS`, removed by
-HS2-AEK8GK); HS2-DAMHD1 adopted Kerf's toolbar yield, fill, placement, tiny-visibility, and Select
-title APIs and dropped the other two. Beta.69 credits wiring calls
+`.kerf-ui-doctor.json`, each with a rationale naming the Kerf ticket whose adoption removes it.
+Production code carries none: HS2-DAMHD1 adopted Kerf's toolbar yield, fill, placement,
+tiny-visibility, and Select title APIs, and HS2-AEK8GK removed the last one, the `KUI-L022`
+grow-floor hook on `TicketSearchField`, by adopting `sizing="grow"` once Kerf 5.0.0-beta.70 kept
+its basis floor (`KF-K4VBTS`). `src/kerf-ui-profile.test.ts` pins that the non-test suppression
+list is empty.
+
+Kerf 5.0.0-beta.70 (HS2-1GPHS5) added `KUI-L023`, the markup-borrowing rule. It flags a module that
+renders markup owned by another component. The analyzer also reads HTML string literals in
+unit-test assertions (for example `expect(markup).toContain('<div class="kui-…">')`) as markup the
+test module renders, so it flags those tests even though they only inspect output. Each such test
+file carries one exact `KUI-L023` suppression whose rationale cites `KF-GESM24`. The profile test
+requires every test-file suppression to be `KUI-L023` only and to cite `KF-GESM24`. `KF-GESM24`
+(skip test modules) is fixed in Kerf but not yet released; `HS2-51MB3F` removes the suppressions
+with the Kerf upgrade that ships it. Beta.69 credits wiring calls
 reachable from a declared entry and resolves app-owned helpers through the composition catalog's
 `wiring.sources`, so the former `KUI-L401` suppressions are gone (`KF-KWMJMS`, `KF-XKMC7W`,
 HS2-Y2QG3G). The doctor report keeps counting suppressions as `suppressed`. The Kerf ESLint rules the

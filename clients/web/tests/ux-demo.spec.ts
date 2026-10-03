@@ -3098,6 +3098,45 @@ test('omits status sorting from column view and restores it in list view', async
   await page.screenshot({ path: '/private/tmp/hs2-nydfqf-column-sort-options.png', fullPage: true });
 });
 
+test('keeps the opened grow search on the wide header row through Kerf sizing="grow" (HS2-AEK8GK)', async ({
+  page,
+}) => {
+  // Kerf's grow basis holds as the trailing zone's floor since KF-K4VBTS, so the opened search stays
+  // beside the view, sort, and utility groups instead of wrapping (toolbar 60px, not 112px).
+  for (const width of [1440, 1100]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+    const header = page.locator('.workspace-header'),
+      search = header.locator('.ticket-search-field');
+    const geometry = () =>
+      header.evaluate((node) => {
+        const toolbar = (node.closest('.kui-toolbar') ?? node.querySelector('.kui-toolbar'))!,
+          box = (selector: string) => node.querySelector(selector)!.getBoundingClientRect();
+        return {
+          toolbarHeight: Math.round(toolbar.getBoundingClientRect().height),
+          searchTop: Math.round(box('.ticket-search-field').top),
+          searchWidth: Math.round(box('.ticket-search-field').width),
+          sortTop: Math.round(box('.workspace-header__sort-group').top),
+          viewTop: Math.round(box('.view-mode-switcher').top),
+          utilityTop: Math.round(box('.workspace-header__utility-group').top),
+          utilityRight: Math.round(box('.workspace-header__utility-group').right),
+          searchLeft: Math.round(box('.ticket-search-field').left),
+        };
+      });
+    await expect(search).toHaveAttribute('data-sizing', 'grow');
+    expect((await geometry()).toolbarHeight).toBe(60);
+    await header.getByRole('button', { name: 'Search tickets' }).click();
+    await expect(search).toHaveAttribute('data-expanded', 'true');
+    await expect.poll(async () => (await geometry()).searchWidth).toBeGreaterThanOrEqual(304);
+    const open = await geometry();
+    expect(open.toolbarHeight).toBe(60);
+    expect(open.searchTop).toBe(open.sortTop);
+    expect(open.viewTop).toBe(open.sortTop);
+    expect(open.utilityTop).toBe(open.sortTop);
+    expect(open.searchLeft).toBeGreaterThanOrEqual(open.utilityRight);
+  }
+});
+
 test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=workspace-header&dev-review=false');
@@ -7962,13 +8001,14 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
     row = fields.nth(4);
   for (let pass = 0; pass < 2; pass += 1) {
     await demo.getByRole('button', { name: 'Search grow layout' }).click();
-    await expect(grow).toHaveClass(/ticket-search-field--grow ticket-search-field--open/);
+    await expect(grow).toHaveAttribute('data-expanded', 'true');
+    await expect(grow).toHaveAttribute('data-sizing', 'grow');
     await expect(grow).toHaveAttribute('data-visibility', 'hide-collapsed-tiny');
     // The 19rem floor holds beside the leading title on a wide toolbar.
     await expect.poll(async () => Math.round((await grow.boundingBox())?.width ?? 0)).toBeGreaterThanOrEqual(304);
     await demo.getByRole('searchbox', { name: 'Search grow layout' }).press('Escape');
     await expect(grow).toHaveAttribute('data-expanded', 'false');
-    await expect(grow).not.toHaveClass(/ticket-search-field--open/);
+    await expect(grow).toHaveAttribute('data-sizing', 'grow');
     await expect.poll(async () => Math.round((await grow.boundingBox())?.width ?? 0)).toBe(44);
   }
   const rowZone = row.locator('xpath=..');
