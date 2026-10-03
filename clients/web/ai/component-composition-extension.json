@@ -21,6 +21,7 @@
         }
       ],
       "source": "src/components/ticket-search-field.tsx",
+      "styleSources": ["src/components/ticket-search-field.css"],
       "rendersAs": ["@kerfjs/ui:toolbar-control-group"],
       "parents": {
         "mode": "listed",
@@ -114,6 +115,7 @@
         }
       ],
       "source": "src/components/workspace-controls.tsx",
+      "styleSources": ["src/components/workspace-header.css"],
       "rendersAs": ["@kerfjs/ui:toolbar-control-group"],
       "parents": {
         "mode": "listed",
@@ -202,6 +204,7 @@
         }
       ],
       "source": "src/components/workspace-controls.tsx",
+      "styleSources": ["src/components/workspace-header.css"],
       "rendersAs": ["@kerfjs/ui:toolbar-text"],
       "parents": {
         "mode": "any",

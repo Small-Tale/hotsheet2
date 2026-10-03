@@ -311,12 +311,17 @@ describe('allowlist', () => {
   });
 });
 
-describe('the clients/web workspace', () => {
+// A full workspace scan takes seconds; under a parallel suite it can exceed the default 5 s timeout, so the
+// scan against the checked-in allowlist runs once and the block gets a wider timeout.
+let cachedWorkspaceReport;
+const workspaceReport = () => (cachedWorkspaceReport ??= checkWorkspace(workspace));
+
+describe('the clients/web workspace', { timeout: 30_000 }, () => {
   let temporary;
   afterEach(() => temporary && rmSync(temporary, { recursive: true, force: true }));
 
   it('is clean against its checked-in allowlist, and every entry names its ticket', () => {
-    const report = checkWorkspace(workspace);
+    const report = workspaceReport();
     expect(formatReport(report).text).toMatch(/^CSS ownership clean/);
     const allowlist = JSON.parse(readFileSync(join(workspace, 'css-ownership-allowlist.json'), 'utf8'));
     for (const item of allowlist.entries) expect(item.ticket).toMatch(/^(?:HS2|KF)-[0-9A-Z]{6}$/);
@@ -338,14 +343,12 @@ describe('the clients/web workspace', () => {
   // HS2-7ZGYJY's drawer-rail `svg` / `.terminal-tab i` rules are fixed; the fixture tests above keep each
   // shape covered, and the real drawer stylesheet must stay clean.
   it('keeps the terminal drawer rail free of reported missed cases (HS2-7ZGYJY)', () => {
-    const drawer = checkWorkspace(workspace).violations.filter(
-      ({ file }) => file === 'src/components/terminal-drawer.css',
-    );
+    const drawer = workspaceReport().violations.filter(({ file }) => file === 'src/components/terminal-drawer.css');
     expect(drawer).toEqual([]);
   });
 
   it('keeps UX demo stage styles out of the demoed components (HS2-TV78E1)', () => {
-    const demo = checkWorkspace(workspace).violations.filter(({ file }) => file === 'src/ux-demo/style.css');
+    const demo = workspaceReport().violations.filter(({ file }) => file === 'src/ux-demo/style.css');
     expect(demo.filter(({ kind }) => kind === 'foreign-element')).toEqual([]);
     const allowlist = JSON.parse(readFileSync(join(workspace, 'css-ownership-allowlist.json'), 'utf8'));
     expect(allowlist.entries.filter(({ ticket }) => ticket === 'HS2-TV78E1')).toEqual([]);

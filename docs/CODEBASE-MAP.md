@@ -34,7 +34,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     scripts/format-sources.mjs # Shared Prettier scope for format/check: required tracked paths plus optional local opencode.json
     scripts/format-sources.test.mjs # Unit scope/error checks and real npm-script clean-checkout formatting regression
     ai/component-catalog-extension.json # Generated Hot Sheet component/composition purpose, use, public-hook, and geometry-ownership metadata for AI and human consumers
-    ai/component-composition-extension.json # Hand-maintained composition facts for app wrappers of Kerf roots (`rendersAs`), loaded by the Kerf doctor through `.kerf-ui-profile.json` `catalogs`
+    ai/component-composition-extension.json # Hand-maintained composition facts for app wrappers of Kerf roots (`rendersAs`), loaded by the Kerf doctor through `.kerf-ui-profile.json` `catalogs`; each entry's `styleSources` names the stylesheets it owns for the doctor's `ownership: "component"` mode (`.kerf-ui-doctor.json`, HS2-HGAH8E)
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
     src/project-startup.ts   #   Concurrent remembered-project preparation, active-first presentation, per-arrival background registration, bounded parallel retry
     src/controlled-open.ts   #   Post-render sync that drives marked (`data-controlled-open`) custom elements' live `open`, since Kerf beta.51 no longer removes it on re-render
@@ -152,7 +152,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/provider-model-effort-menu.tsx # Reusable Provider/Model/Effort/Other wa-dropdown submenu group shared by the Drive options popup and the in-conversation model/effort popup; host-controlled via delegated data-action clicks (HS2-59DWHN)
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     scripts/sync-component-catalog-extension.mjs # Deterministically derives/checks the app-owned Kerf consumer catalog extension from the implemented UX inventory
-    scripts/check-css-ownership.mjs # `npm run css:ownership` (last step of `npm run lint`): fails on cross-component CSS selectors (Kerf classes, other components' class blocks, hook-class descendants, element selectors reaching child-component markup), owners derived from TSX; tested by scripts/check-css-ownership.test.mjs (HS2-EWYDH7)
+    scripts/check-css-ownership.mjs # `npm run css:ownership` (last step of `npm run lint`): fails on cross-component CSS selectors (Kerf classes, other components' class blocks, hook-class descendants, element selectors reaching child-component markup), owners derived from TSX; tested by scripts/check-css-ownership.test.mjs (HS2-EWYDH7); keeps the app-to-app cases the doctor's component ownership mode does not cover yet (KF-1MRZ86, KF-GMM06Q, KF-WMMDDW; retired by HS2-1GWX47)
     css-ownership-allowlist.json # Ticketed, count-exact known cross-component CSS residue for check-css-ownership.mjs; stale entries fail lint, so it only shrinks
     scripts/playwright-workers.mjs # Load-aware local Playwright worker count used by playwright.config.ts (HS2-MHPHZB); tested by scripts/playwright-workers.test.mjs
     scripts/remify-css.mjs   #   PostCSS plugin (wired in vite.config.ts css.postcss) — author spacing in px via remify(8px) → 0.5rem (÷16); keeps CSS on the 8px grid. Tested by scripts/remify-css.test.mjs

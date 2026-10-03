@@ -5,8 +5,11 @@
 // into another component: not a Kerf component (`.kui-*`, `[data-component]`), and not another
 // application component's classes or markup.
 //
-// Kerf's doctor enforces this only across packages (its ownership rules compare
-// `entry.package`), so app-to-app ownership is checked here until KF-5X1TWD ships.
+// Kerf's doctor runs with `ownership: "component"` (KF-5X1TWD, HS2-HGAH8E), but it judges only
+// the selector subject against composition-cataloged entries' exact public classes. This check
+// still owns everything else: element/modifier classes and uncataloged components (KF-GMM06Q),
+// hook descendants and composed-child element subjects (KF-1MRZ86), and another component's class
+// used as context or inside `:has()` (KF-WMMDDW). HS2-1GWX47 retires it when those ship.
 //
 // Ownership comes from the TSX sources, not from file names: each stylesheet is owned by the
 // modules that import it, and each class block is owned by the module(s) that render it.

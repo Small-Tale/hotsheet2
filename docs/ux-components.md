@@ -2249,12 +2249,32 @@ budget that only ever decreased; HS2-9ME409 and HS2-TF76Z2 drove it to zero.
 
 #### Component CSS ownership guard (HS2-EWYDH7)
 
-The doctor's ownership rules (`KUI-L019`–`KUI-L022`) treat a component as foreign only when it
-comes from another package. Its analyzer decides `isForeign` by comparing `entry.package`, so
-nothing in the Hot Sheet catalog is ever foreign to a Hot Sheet stylesheet, and narrowing
-`publicClasses` cannot change that. `KF-5X1TWD` asks Kerf for per-component ownership.
+Since Kerf 5.0.0-beta.69 (`KF-5X1TWD`) the doctor runs with `"ownership": "component"` in
+`.kerf-ui-doctor.json` (HS2-HGAH8E). In that mode a catalog entry owns only the stylesheets in its
+`styleSources` and its `source` module, so the doctor's ownership rules (`KUI-L019`–`KUI-L022`) now
+also apply between Hot Sheet's own cataloged components. The three composition entries in
+`ai/component-composition-extension.json` declare their `styleSources`.
 
-Until it ships, `npm run css:ownership` runs as the last step of `npm run lint`. It is
+The doctor's coverage is still partial. HS2-HGAH8E ran the same probe rules through both checks:
+
+| Probe rule (in an unrelated component stylesheet)             | Doctor (component mode) | App check         |
+| ------------------------------------------------------------- | ----------------------- | ----------------- |
+| `.own .ticket-search-field` (sibling entry's root as subject) | `KUI-L019`              | `foreign-class`   |
+| `.workspace-header__identity > span` (cataloged anatomy)      | `KUI-L019` (descendant) | `foreign-class`   |
+| `.kui-button`, `[data-component="toolbar"]`                   | `KUI-L001`, `KUI-L019`  | `kerf`            |
+| `.ticket-search-field .own`, `.own:has(.ticket-search-field)` | allowed by design       | `foreign-class`   |
+| `.ticket-search-field svg` (descendant of a sibling's root)   | not reported            | `foreign-class`   |
+| `.ticket-row__title` (no composition entry, unlisted class)   | not reported            | `foreign-class`   |
+| `.terminal-ticket-rail__view-select svg` (hook descendant)    | not reported            | `hook-descendant` |
+| `.active-claim-spinner > svg` (`LoadingSpinner` root)         | not reported            | `foreign-element` |
+
+The doctor judges only the selector subject, and only against the exact `publicClasses` of
+composition entries. Kerf tickets cover the gaps: `KF-1MRZ86` (element subjects inside a hook
+target, a sibling root, or a composed child), `KF-GMM06Q` (class ownership derived from source
+and selection entries), and `KF-WMMDDW` (opt-in strictness for a sibling's class used as context).
+HS2-1GWX47 retires the app check once they ship.
+
+Until then, `npm run css:ownership` runs as the last step of `npm run lint`. It is
 `clients/web/scripts/check-css-ownership.mjs`, unit-tested in `check-css-ownership.test.mjs`, and
 enforces this rule: **a component stylesheet styles only the class blocks its own component
 renders, plus the native HTML and raw Web Awesome elements that component authors itself.**

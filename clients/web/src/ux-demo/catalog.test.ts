@@ -396,6 +396,7 @@ describe('UX demo catalog', () => {
         id: string;
         name: string;
         source: string;
+        styleSources?: string[];
         rendersAs?: string[];
         boundaries: { rootClass: string | null; publicClasses: string[]; placeableClasses?: string[] };
       }>;
@@ -407,6 +408,8 @@ describe('UX demo catalog', () => {
     const profile = JSON.parse(readFileSync(`${root}.kerf-ui-profile.json`, 'utf8')) as {
       catalogs?: Array<{ package: string; selection?: { path: string }; composition: { path: string } }>;
     };
+    const doctor = JSON.parse(readFileSync(`${root}.kerf-ui-doctor.json`, 'utf8')) as { ownership?: string };
+    expect(doctor.ownership).toBe('component');
     expect(composition.package).toBe('hotsheet-web');
     expect(composition.compatibility).toEqual({
       componentCatalog: './component-catalog-extension.json',
@@ -445,6 +448,12 @@ describe('UX demo catalog', () => {
         ).toBe(true);
       expect(existsSync(`${root}${entry.source}`), entry.source).toBe(true);
       expect(readFileSync(`${root}${entry.source}`, 'utf8')).toContain(`export function ${entry.name}(`);
+      // Kerf doctor component ownership (HS2-HGAH8E): an entry owns exactly the stylesheets its module imports.
+      const sourceText = readFileSync(`${root}${entry.source}`, 'utf8'),
+        sourceDirectory = entry.source.replace(/[^/]+$/, '');
+      expect(entry.styleSources, entry.id).toEqual(
+        [...sourceText.matchAll(/^import '\.\/([\w.-]+\.css)';$/gm)].map((match) => `${sourceDirectory}${match[1]}`),
+      );
       for (const rootKey of entry.rendersAs ?? []) expect(kerfKeys.has(rootKey), rootKey).toBe(true);
       if (entry.boundaries.rootClass) expect(entry.boundaries.publicClasses).toContain(entry.boundaries.rootClass);
     }
