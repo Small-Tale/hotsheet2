@@ -6868,6 +6868,52 @@ test('scales the ProjectCloseDialog TerminalPreview canvas to fit its frame at w
   }
 });
 
+test('renders the ProjectCloseDialog TerminalPreview at a legible glyph size at wide and phone widths (HS2-XHBDRV)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');
+  const dialog = page.locator('[data-component="project-close-dialog"]');
+  await expect(dialog).toHaveJSProperty('open', true);
+  await dialog.getByRole('button', { name: /Tests/ }).click();
+  const region = dialog.getByRole('region', { name: 'Tests terminal preview' }),
+    viewport = region.locator('[data-component="terminal-viewport"]');
+  await expect(viewport).toHaveAttribute('data-connection', 'connected');
+  const glyphs = () =>
+    viewport.evaluate((node) => {
+      const frame = node.parentElement!.getBoundingClientRect(),
+        screen = node.querySelector('.xterm-screen')!.getBoundingClientRect(),
+        row = [...node.querySelectorAll<HTMLElement>('.xterm-rows > div')].find((item) => item.textContent.trim())!;
+      return {
+        gridSize: node.dataset.gridSize,
+        // The rendered (post-transform) height of one terminal row: the on-screen glyph size.
+        rowHeight: row.getBoundingClientRect().height,
+        // How much of the frame the scaled grid fills along its bound axis.
+        fill: Math.max(screen.width / frame.width, screen.height / frame.height),
+        inside: screen.right <= frame.right + 0.5 && screen.bottom <= frame.bottom + 0.5,
+      };
+    });
+  // A phone-width frame is about a quarter of the 1280px canvas; the 80x24 grid at the dashboard font
+  // must still render rows of about 7px instead of the 177-column fit's 3px glyphs.
+  for (const [width, minimumRow] of [
+    [1280, 12],
+    [390, 6],
+  ] as const) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await expect
+      .poll(async () => {
+        const result = await glyphs();
+        return result.inside && result.rowHeight >= minimumRow;
+      }, `the preview renders legible rows inside the frame at ${width}px`)
+      .toBe(true);
+    const result = await glyphs();
+    expect(result.gridSize).toBe('80x24');
+    // The grid fills the frame along its bound axis instead of a corner of the canvas.
+    expect(result.fill).toBeGreaterThan(0.95);
+    await region.screenshot({ path: test.info().outputPath(`xhbdrv-close-preview-${width}.png`) });
+  }
+});
+
 test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKKS05)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');

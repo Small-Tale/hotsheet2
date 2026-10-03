@@ -5190,18 +5190,27 @@ test('previews running project resources with shared menus and explicit keep-run
         }),
       };
     });
-  const expectPreviewFits = async () => {
+  // The non-claiming preview mirrors the PTY grid at the dashboard font, so its rendered rows stay
+  // legible instead of the 177-column 12px fit's ~3px glyphs at phone width (HS2-XHBDRV).
+  const renderedRowHeight = () =>
+    viewport.evaluate((node) => {
+      const row = [...node.querySelectorAll<HTMLElement>('.xterm-rows > div')].find((item) => item.textContent.trim());
+      return row ? row.getBoundingClientRect().height : 0;
+    });
+  const expectPreviewFits = async (minimumRowHeight: number) => {
     await expect.poll(async () => (await previewFit()).inside).toBe(true);
     const fit = await previewFit();
     expect(fit.rows).toBeGreaterThan(0);
     expect(fit.scale).toBeGreaterThan(0);
     expect(fit.scale).toBeLessThanOrEqual(1);
+    await expect(viewport).toHaveAttribute('data-font-size', '24');
+    await expect.poll(renderedRowHeight).toBeGreaterThanOrEqual(minimumRowHeight);
   };
-  await expectPreviewFits();
+  await expectPreviewFits(12);
   await page.screenshot({ path: '/private/tmp/hs2-6c0wzn-project-close-wide-after.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog).toHaveJSProperty('open', true);
-  await expectPreviewFits();
+  await expectPreviewFits(6);
   await expect
     .poll(() =>
       dialog.evaluate((element) => {

@@ -132,6 +132,9 @@ function initializeStaticTerminalViewport(
 ): void {
   const scaledPreview = element.dataset.displayMode === 'scaled-preview',
     fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
+    // A demo TerminalPreview renders the mirroring preview's 80×24 fallback grid (HS2-XHBDRV).
+    mirrorPtyGrid = scaledPreview && !fixedDashboardGrid,
+    fixedGrid = fixedDashboardGrid || mirrorPtyGrid,
     background = getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim() || '#000';
   if (scaledPreview) {
     element.style.width = `${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;
@@ -139,7 +142,7 @@ function initializeStaticTerminalViewport(
     element.dataset.naturalSize = `${TERMINAL_PREVIEW_NATURAL_WIDTH}x${TERMINAL_PREVIEW_NATURAL_HEIGHT}`;
   }
   const terminal = new Terminal({
-    ...(fixedDashboardGrid
+    ...(fixedGrid
       ? { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS, lineHeight: TERMINAL_DASHBOARD_LINE_HEIGHT }
       : {}),
     cursorBlink: !scaledPreview,
@@ -147,7 +150,7 @@ function initializeStaticTerminalViewport(
     convertEol: false,
     scrollback: terminalScrollbackLimit(element.dataset.displayMode, fixedDashboardGrid || !scaledPreview),
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: fixedDashboardGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12,
+    fontSize: fixedGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12,
     theme: { background },
   });
   own(() => {
@@ -163,7 +166,7 @@ function initializeStaticTerminalViewport(
   element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
   element.dataset.sizingFocus = String(terminalViewportClaimsSizing(scaledPreview, fixedDashboardGrid));
   element.dataset.viewportVisible = 'true';
-  if (fixedDashboardGrid) {
+  if (fixedGrid) {
     element.dataset.fontSize = String(TERMINAL_DASHBOARD_FONT_SIZE);
     element.dataset.letterSpacing = '0';
     element.dataset.lineHeight = String(TERMINAL_DASHBOARD_LINE_HEIGHT);
@@ -185,7 +188,7 @@ function initializeStaticTerminalViewport(
     const screen = terminal.element.querySelector<HTMLElement>('.xterm-screen');
     if (!screen || screen.offsetWidth <= 0 || screen.offsetHeight <= 0) return;
     const target = element.parentElement ?? element;
-    if (!fixedDashboardGrid) {
+    if (!fixedGrid) {
       fit.fit();
       terminal.element.style.transform = '';
       if (scaledPreview) applyScaledPreviewTransform(element);
@@ -200,13 +203,25 @@ function initializeStaticTerminalViewport(
       }
       return;
     }
-    const scale = terminalPhysicalScale(
-      screen.offsetWidth,
-      screen.offsetHeight,
-      Math.max(1, target.clientWidth - 1),
-      Math.max(1, target.clientHeight - 1),
-    );
+    // A mirroring preview fills its fixed 1280×768 canvas, which then scales to the frame.
+    const scale = mirrorPtyGrid
+      ? terminalPhysicalScale(
+          screen.offsetWidth,
+          screen.offsetHeight,
+          TERMINAL_PREVIEW_NATURAL_WIDTH - 1,
+          TERMINAL_PREVIEW_NATURAL_HEIGHT - 1,
+        )
+      : terminalPhysicalScale(
+          screen.offsetWidth,
+          screen.offsetHeight,
+          Math.max(1, target.clientWidth - 1),
+          Math.max(1, target.clientHeight - 1),
+        );
     if (scale <= 0) return;
+    if (mirrorPtyGrid) {
+      terminal.element.style.transformOrigin = 'top left';
+      applyScaledPreviewTransform(element);
+    }
     terminal.element.style.transform = `scale(${scale})`;
     element.dataset.scale = String(scale);
     element.dataset.physicalScale = String(scale);
@@ -274,7 +289,11 @@ function initializeTerminalViewport(
     fixedDashboardGrid = element.dataset.gridPolicy === 'dashboard-80x24',
     magnified = Boolean(element.closest('[data-fixed-aspect-terminal-card="magnified"]')),
     settledResize = element.classList.contains('terminal-viewport--dedicated'),
-    insideDrawer = Boolean(element.closest('[data-region-id="app-bottom-drawer"]'));
+    insideDrawer = Boolean(element.closest('[data-region-id="app-bottom-drawer"]')),
+    // A non-claiming preview (no grid policy) mirrors the borrowed PTY's grid at the dashboard font
+    // and scales it to fill the canvas, so its glyphs stay legible (HS2-XHBDRV).
+    mirrorPtyGrid = scaledPreview && !fixedDashboardGrid,
+    fixedGrid = fixedDashboardGrid || mirrorPtyGrid;
   const background = getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim() || '#000';
   if (scaledPreview) {
     element.style.width = `${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;
@@ -287,14 +306,14 @@ function initializeTerminalViewport(
   // first frames could otherwise show the emulator at its constructor size (HS2-MHPHZB). Dedicated
   // drawer terminals stay paintable (and focusable) from mount.
   if (magnified && element.dataset.geometryReady !== 'true') element.dataset.geometryReady = 'false';
-  if (fixedDashboardGrid) {
+  if (fixedGrid) {
     element.dataset.geometryReady = 'false';
     element.dataset.fontSize = String(TERMINAL_DASHBOARD_FONT_SIZE);
     element.dataset.letterSpacing = '0';
     element.dataset.lineHeight = String(TERMINAL_DASHBOARD_LINE_HEIGHT);
   }
   const terminal = new Terminal({
-      ...(fixedDashboardGrid
+      ...(fixedGrid
         ? { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS, lineHeight: TERMINAL_DASHBOARD_LINE_HEIGHT }
         : {}),
       cursorBlink: !scaledPreview,
@@ -302,7 +321,7 @@ function initializeTerminalViewport(
       convertEol: false,
       scrollback,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-      fontSize: fixedDashboardGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12,
+      fontSize: fixedGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12,
       theme: { background },
     }),
     fit = new FitAddon();
@@ -391,18 +410,20 @@ function initializeTerminalViewport(
   let mobileGridRows = TERMINAL_DASHBOARD_ROWS,
     lastMobileClaimGrid = '',
     lastSettledGeometry: { cols: number; rows: number } | undefined;
+  // The fixed local grid: the dashboard's 80×24, or a mirroring preview's last reported PTY size.
+  const fixedGridSize = () =>
+    mirrorPtyGrid && serverSize ? serverSize : { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS };
   const proposed = () => {
     if (mobile80xM()) return { cols: mobileCols(), rows: mobileGridRows };
-    if (fixedDashboardGrid) return { cols: TERMINAL_DASHBOARD_COLS, rows: TERMINAL_DASHBOARD_ROWS };
+    if (fixedGrid) return fixedGridSize();
     const dimensions = fit.proposeDimensions() ?? { cols: terminal.cols, rows: terminal.rows };
     return settledResize ? terminalDedicatedGridSize(dimensions.cols, dimensions.rows) : dimensions;
   };
-  const claimDimensions = () =>
-    !fixedDashboardGrid && !mobile80xM() && lastSettledGeometry ? lastSettledGeometry : proposed();
+  const claimDimensions = () => (!fixedGrid && !mobile80xM() && lastSettledGeometry ? lastSettledGeometry : proposed());
   const reconcileScale = () => {
     if (!terminal.element) return;
     const previewScale = scaledPreview ? applyScaledPreviewTransform(element) : 1;
-    if (fixedDashboardGrid || mobile80xM()) {
+    if (fixedGrid || mobile80xM()) {
       if (!scaledPreview) element.style.transform = '';
       if (!mobile80xM()) element.dataset.scale = String(previewScale);
       delete element.dataset.viewingLabel;
@@ -429,7 +450,7 @@ function initializeTerminalViewport(
     element.dataset.sizingFocus = String(sizingFocus);
     element.dataset.viewportVisible = String(visible);
     if (socket?.readyState !== WebSocket.OPEN) return;
-    if (!fixedDashboardGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
+    if (!fixedGrid && !mobile80xM() && element.dataset.geometryReady !== 'true') return;
     const size = claimDimensions();
     socket.send(terminalResizeClaim(viewerId, size.cols, size.rows, sizingFocus, visible, false));
   };
@@ -524,7 +545,8 @@ function initializeTerminalViewport(
       terminal.element.style.transform = `scale(${scale})`;
       element.dataset.physicalScale = String(scale);
     } else {
-      terminal.element.style.transformOrigin = '';
+      // A mirroring preview anchors its grid top-left on the canvas, like the terminal it mirrors.
+      terminal.element.style.transformOrigin = mirrorPtyGrid ? 'top left' : '';
       terminal.element.style.transform = `scale(${scale})`;
       element.dataset.physicalScale = String(scale);
     }
@@ -537,7 +559,7 @@ function initializeTerminalViewport(
     }
   };
   const scheduleDashboardFill = () => {
-    if ((!fixedDashboardGrid && !mobile80xM()) || dashboardFrame !== undefined) return;
+    if ((!fixedGrid && !mobile80xM()) || dashboardFrame !== undefined) return;
     dashboardFrame = window.requestAnimationFrame(() => {
       dashboardFrame = undefined;
       applyDashboardPhysicalFill();
@@ -554,8 +576,9 @@ function initializeTerminalViewport(
         releaseWebgl();
         terminal.resize(mobileCols(), mobileGridRows);
         scheduleDashboardFill();
-      } else if (fixedDashboardGrid) {
-        terminal.resize(TERMINAL_DASHBOARD_COLS, TERMINAL_DASHBOARD_ROWS);
+      } else if (fixedGrid) {
+        const size = fixedGridSize();
+        terminal.resize(size.cols, size.rows);
         scheduleDashboardFill();
       } else {
         fit.fit();
@@ -572,7 +595,7 @@ function initializeTerminalViewport(
       /* layout can be transiently zero-sized */
       return;
     }
-    if (!fixedDashboardGrid && !mobile80xM()) lastSettledGeometry = { cols: terminal.cols, rows: terminal.rows };
+    if (!fixedGrid && !mobile80xM()) lastSettledGeometry = { cols: terminal.cols, rows: terminal.rows };
     element.dataset.gridSize = `${terminal.cols}x${terminal.rows}`;
     reconcileScale();
     claim();
@@ -649,7 +672,7 @@ function initializeTerminalViewport(
         let bytes = new Uint8Array(value);
         if (initialReplay) {
           initialReplay = false;
-          if (fixedDashboardGrid || magnified) bytes = stripLeadingZshPromptEolMark(bytes);
+          if (fixedGrid || magnified) bytes = stripLeadingZshPromptEolMark(bytes);
         }
         if (replacementReplayPending) {
           replacementReplayPending = false;

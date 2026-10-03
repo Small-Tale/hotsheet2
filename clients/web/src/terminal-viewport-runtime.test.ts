@@ -24,6 +24,7 @@ const allocated = vi.hoisted(() => ({
     write: ReturnType<typeof vi.fn>;
     buffer: { active: { baseY: number; cursorY: number; viewportY: number } };
     focus: ReturnType<typeof vi.fn>;
+    options: Record<string, unknown>;
   }>,
 }));
 vi.mock('@xterm/xterm', () => ({
@@ -44,7 +45,9 @@ vi.mock('@xterm/xterm', () => ({
     buffer = { active: { baseY: 20, cursorY: 3, viewportY: 20 } };
     focus = vi.fn();
     element?: { style: Record<string, string> };
-    constructor() {
+    options: Record<string, unknown>;
+    constructor(options: Record<string, unknown> = {}) {
+      this.options = { ...options };
       allocated.terminals.push(this);
     }
     open() {
@@ -688,5 +691,112 @@ describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
     expect(viewport.style.transform).toBeUndefined();
     expect(viewport.dataset.previewScale).toBeUndefined();
     dispose();
+  });
+
+  describe('a non-claiming preview mirrors the PTY grid at a legible font (HS2-XHBDRV)', () => {
+    // The 1000×600 mocked screen filling the 1280×768 canvas (less the 1px guard).
+    const canvasFill = Math.min(1279 / 1000, 767 / 600);
+    function claims(sent: string[]) {
+      return sent
+        .map((value) => (JSON.parse(value) as { resize?: Record<string, unknown> }).resize)
+        .filter((value): value is Record<string, unknown> => Boolean(value));
+    }
+    function mountLivePreview() {
+      allocated.openElement = true;
+      vi.stubGlobal('getComputedStyle', () => ({
+        getPropertyValue: () => '#000',
+        paddingLeft: '0px',
+        paddingRight: '0px',
+        paddingTop: '0px',
+        paddingBottom: '0px',
+      }));
+      const runFrames = captureFrames(),
+        { viewport } = previewElement();
+      Object.assign(viewport as unknown as Record<string, unknown>, { clientWidth: 1280, clientHeight: 768 });
+      const dispose = mountTerminalViewportRuntime(viewport, { url: 'ws://lan/terminal', viewerId: 'close-preview' }),
+        terminal = allocated.terminals[0],
+        sent: string[] = [];
+      giveScreen(terminal);
+      const socket = sockets[0] as unknown as EventTarget & { readyState: number; send: (value: string) => void };
+      socket.send = (value: string) => sent.push(value);
+      socket.readyState = 1;
+      const size = async (cols: number, rows: number) => {
+        socket.dispatchEvent(
+          new MessageEvent('message', { data: JSON.stringify({ pty_size: { cols, rows }, driven_by: 'drawer' }) }),
+        );
+        await Promise.resolve();
+      };
+      return { viewport, terminal, socket, sent, runFrames, size, dispose };
+    }
+
+    it('renders the 80×24 fallback at the dashboard font, scaled to fill the canvas, before a PTY size arrives', () => {
+      const { viewport, terminal, socket, sent, runFrames, dispose } = mountLivePreview();
+      // The 177-column 12px fit is gone: the grid starts at the dashboard tile's 80×24 and font.
+      expect(terminal.options).toMatchObject({ cols: 80, rows: 24, fontSize: 24 });
+      expect(viewport.dataset.fontSize).toBe('24');
+      expect(viewport.dataset.geometryReady).toBe('false');
+      socket.dispatchEvent(new Event('open'));
+      runFrames();
+      expect(terminal.resize).toHaveBeenLastCalledWith(80, 24);
+      const style = (terminal as unknown as { element: { style: Record<string, string> } }).element.style;
+      expect(style.transform).toBe(`scale(${canvasFill})`);
+      expect(style.transformOrigin).toBe('top left');
+      expect(viewport.dataset.geometryReady).toBe('true');
+      // The canvas still takes the frame's preview scale on top of the grid fill (HS2-S7E53Q).
+      expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+      expect(viewport.dataset.gridSize).toBe('80x24');
+      // Its heartbeat claim is non-focus and non-interacting, so it cannot drive the PTY.
+      expect(claims(sent).at(-1)).toMatchObject({ cols: 80, rows: 24, focus: false, interacting: false });
+      dispose();
+    });
+
+    it('adopts each reported PTY size, keeps filling the canvas, and never claims sizing (HS2-6C0WZN)', async () => {
+      const { viewport, terminal, socket, sent, runFrames, size, dispose } = mountLivePreview();
+      socket.dispatchEvent(new Event('open'));
+      runFrames();
+      // A wider borrowed PTY: the local grid matches it, so its output renders without rewrapping.
+      await size(132, 40);
+      expect(terminal.resize).toHaveBeenLastCalledWith(132, 40);
+      expect(viewport.dataset.gridSize).toBe('132x40');
+      expect(viewport.dataset.ptySize).toBe('132x40');
+      expect(viewport.dataset.driving).toBe('false');
+      // A later layout pass keeps the mirrored grid instead of refitting 177 columns, and re-claims it.
+      resize[0].callback();
+      runFrames();
+      expect(terminal.resize).toHaveBeenLastCalledWith(132, 40);
+      expect(claims(sent).at(-1)).toMatchObject({ cols: 132, rows: 40, focus: false, interacting: false });
+      // A repeated report is a no-op; a narrower PTY shrinks the grid back.
+      const calls = terminal.resize.mock.calls.length;
+      await size(132, 40);
+      expect(terminal.resize.mock.calls.length).toBe(calls);
+      await size(80, 24);
+      expect(terminal.resize).toHaveBeenLastCalledWith(80, 24);
+      resize[0].callback();
+      runFrames();
+      expect(viewport.dataset.gridSize).toBe('80x24');
+      expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+      // Across every transition the preview only ever reported the PTY's own size, without focus.
+      expect(claims(sent).every((claim) => claim.focus === false && claim.interacting === false)).toBe(true);
+      expect(viewport.dataset.sizingFocus).toBe('false');
+      dispose();
+    });
+
+    it('renders a static (demo) TerminalPreview on the same 80×24 dashboard-font grid', () => {
+      allocated.openElement = true;
+      const runFrames = captureFrames(),
+        { viewport } = previewElement(),
+        dispose = mountStaticTerminalViewportRuntime(viewport, { output: 'PASS\r\n' }),
+        terminal = allocated.terminals[0];
+      giveScreen(terminal);
+      runFrames();
+      expect(terminal.options).toMatchObject({ cols: 80, rows: 24, fontSize: 24 });
+      const style = (terminal as unknown as { element: { style: Record<string, string> } }).element.style;
+      expect(style.transform).toBe(`scale(${canvasFill})`);
+      expect(style.transformOrigin).toBe('top left');
+      expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+      expect(viewport.dataset.gridSize).toBe('80x24');
+      expect(viewport.dataset.fontSize).toBe('24');
+      dispose();
+    });
   });
 });
