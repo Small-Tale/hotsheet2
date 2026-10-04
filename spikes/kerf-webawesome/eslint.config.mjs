@@ -1,4 +1,5 @@
 import eslint from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
 import importX from 'eslint-plugin-import-x';
 import kerfjs from 'eslint-plugin-kerfjs';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
@@ -11,7 +12,7 @@ export default tseslint.config(
   ...tseslint.configs.strictTypeChecked,
   {
     languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
-    plugins: { 'simple-import-sort': simpleImportSort, import: importX, tsdoc },
+    plugins: { '@stylistic': stylistic, 'simple-import-sort': simpleImportSort, import: importX, tsdoc },
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowBoolean: true }],
@@ -23,6 +24,8 @@ export default tseslint.config(
       'import/newline-after-import': 'error',
       'import/no-duplicates': 'error',
       'tsdoc/syntax': 'warn',
+      // Childless JSX elements, native and custom, use the self-closing form (HS2-G5WBZ5).
+      '@stylistic/jsx-self-closing-comp': ['error', { component: true, html: true }],
     },
   },
   kerfjs.configs.recommended,
