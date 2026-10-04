@@ -1966,7 +1966,9 @@ Awesome drawer), which would leave a popover painted on top but inert, the watch
 `showModal()` above that modal so its decision controls receive clicks, re-lifts it when a newer
 modal opens, and returns it to a non-blocking popover once no other modal remains. While lifted it
 takes focus itself (never a decision button) and blocks the dialog beneath until answered or
-ignored; Escape never cancels it (HS2-MAE27T). When a standalone AI conversation is open, the active permission popup is
+ignored (HS2-MAE27T). Escape then belongs to the popup as the topmost surface: it acts as Ignore
+(client-only, no decision) and never reaches the modal beneath, so the composer stays open
+(HS2-S8K9BG). When a standalone AI conversation is open, the active permission popup is
 promoted into that dialog's top layer so it remains visible and interactive instead of
 being trapped beneath the modal; resolving it uses the same authoritative permission
 path. Standalone conversation dialogs use native light-dismiss and Escape behavior and

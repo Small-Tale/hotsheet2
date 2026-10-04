@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  dismissLiftedOverlay,
   openModalDialogs,
   openTopLayerOverlays,
+  TOP_LAYER_DISMISS_ATTRIBUTE,
   TOP_LAYER_OVERLAY_ATTRIBUTE,
   wireTopLayerOverlays,
 } from './top-layer-overlay';
@@ -258,6 +260,94 @@ describe('top-layer overlays above modal dialogs (HS2-MAE27T)', () => {
     await Promise.resolve();
     expect(popup.layer).toBe('popover');
     dispose();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('Escape over a lifted overlay (HS2-S8K9BG)', () => {
+  function key(init: { key?: string; isComposing?: boolean } = {}) {
+    return {
+      key: init.key ?? 'Escape',
+      isComposing: init.isComposing ?? false,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    };
+  }
+  function withDismiss(element: FakeOverlay) {
+    const dismiss = { click: vi.fn() },
+      selectors: string[] = [];
+    Object.assign(element, {
+      querySelector: (selector: string) => {
+        selectors.push(selector);
+        return dismiss;
+      },
+    });
+    return { dismiss, selectors };
+  }
+  const dismissKey = (container: ReturnType<typeof root>, event: ReturnType<typeof key>) =>
+    dismissLiftedOverlay(container as unknown as ParentNode, event as unknown as KeyboardEvent);
+
+  it('swallows Escape and activates the dismiss control of the topmost lifted overlay', () => {
+    const below = overlay({ dialog: true, layer: 'modal' }),
+      top = overlay({ dialog: true, layer: 'modal' }),
+      belowDismiss = withDismiss(below),
+      topDismiss = withDismiss(top),
+      event = key();
+    expect(dismissKey(root([below, top]), event)).toBe(true);
+    // Stopped before Web Awesome's document handler closes the modal beneath, and before `cancel`.
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(topDismiss.selectors).toEqual([`[${TOP_LAYER_DISMISS_ATTRIBUTE}]`]);
+    expect(topDismiss.dismiss.click).toHaveBeenCalledTimes(1);
+    expect(belowDismiss.dismiss.click).not.toHaveBeenCalled();
+  });
+
+  it('still swallows Escape for a lifted overlay without a dismiss control', () => {
+    const lifted = overlay({ dialog: true, layer: 'modal' }),
+      event = key();
+    Object.assign(lifted, { querySelector: () => null });
+    expect(dismissKey(root([lifted]), event)).toBe(true);
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves Escape alone when no overlay is lifted, and other keys or IME composition always', () => {
+    const popover = overlay({ dialog: true, layer: 'popover' }),
+      { dismiss } = withDismiss(popover),
+      idle = key();
+    // A plain popover never blocks a modal, so Escape still closes whatever modal is open.
+    expect(dismissKey(root([popover]), idle)).toBe(false);
+    expect(idle.preventDefault).not.toHaveBeenCalled();
+    expect(idle.stopPropagation).not.toHaveBeenCalled();
+    const lifted = overlay({ dialog: true, layer: 'modal' }),
+      liftedDismiss = withDismiss(lifted),
+      enter = key({ key: 'Enter' }),
+      composing = key({ isComposing: true });
+    expect(dismissKey(root([lifted]), enter)).toBe(false);
+    expect(dismissKey(root([lifted]), composing)).toBe(false);
+    expect(composing.stopPropagation).not.toHaveBeenCalled();
+    expect(dismiss.click).not.toHaveBeenCalled();
+    expect(liftedDismiss.dismiss.click).not.toHaveBeenCalled();
+  });
+
+  it('routes keydown through a capture listener and removes it on disposal', () => {
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
+    const lifted = overlay({ dialog: true, layer: 'modal' }),
+      { dismiss } = withDismiss(lifted),
+      container = root([lifted], [modalHost()]),
+      dispose = wireTopLayerOverlays(container as unknown as HTMLElement);
+    expect(container.addEventListener).toHaveBeenCalledWith('keydown', expect.any(Function), true);
+    container.dispatch('keydown', key());
+    expect(dismiss.click).toHaveBeenCalledTimes(1);
+    dispose();
+    expect(container.removeEventListener).toHaveBeenCalledWith('keydown', expect.any(Function), true);
+    container.dispatch('keydown', key());
+    expect(dismiss.click).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
   });
 });

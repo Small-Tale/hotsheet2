@@ -14,8 +14,15 @@
  * beneath (HS2-MAE27T). A marked overlay that is a `<dialog>` is therefore lifted with `showModal()`
  * above every open modal dialog, re-lifted when a newer one opens, and returned to a non-blocking
  * popover once none remains. Escape cannot cancel it, so the app's state stays the only way to close it.
+ *
+ * While an overlay is lifted it is the topmost surface, so Escape belongs to it, not to the modal beneath:
+ * the watcher stops the key before Web Awesome's document-level handler closes that modal, and clicks the
+ * overlay's `[data-top-layer-dismiss]` control (the permission popup's client-only Ignore) if it has one
+ * (HS2-S8K9BG).
  */
 export const TOP_LAYER_OVERLAY_ATTRIBUTE = 'data-top-layer-overlay';
+/** Marks the control inside an overlay that Escape activates while the overlay is lifted above a modal. */
+export const TOP_LAYER_DISMISS_ATTRIBUTE = 'data-top-layer-dismiss';
 
 const OVERLAY_SELECTOR = `[${TOP_LAYER_OVERLAY_ATTRIBUTE}][popover]`;
 /** Native dialogs plus the Web Awesome hosts whose modal dialog lives in their shadow root. */
@@ -79,6 +86,23 @@ export function openTopLayerOverlays(root: ParentNode): void {
   }
 }
 
+/**
+ * Give Escape to the topmost lifted overlay: stop it before any modal beneath sees it (and before the
+ * overlay's own `cancel`), then activate the overlay's dismiss control. Returns whether it handled the key.
+ */
+export function dismissLiftedOverlay(root: ParentNode, event: KeyboardEvent): boolean {
+  if (event.key !== 'Escape' || event.isComposing) return false;
+  const lifted = [...root.querySelectorAll<OverlayElement>(OVERLAY_SELECTOR)].filter((overlay) =>
+    overlay.matches(':modal'),
+  );
+  const overlay = lifted.at(-1);
+  if (!overlay) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  overlay.querySelector<HTMLElement>(`[${TOP_LAYER_DISMISS_ATTRIBUTE}]`)?.click();
+  return true;
+}
+
 /** Keep marked overlays under `root` in the top layer as Kerf renders them; returns a disposer. */
 export function wireTopLayerOverlays(root: HTMLElement): () => void {
   const reopen = () => {
@@ -91,17 +115,23 @@ export function wireTopLayerOverlays(root: HTMLElement): () => void {
     preventCancel = (event: Event) => {
       if (isOverlay(event.target)) event.preventDefault();
     },
+    // Capture on `root` runs before Web Awesome's bubbling `document` keydown handler.
+    escape = (event: KeyboardEvent) => {
+      dismissLiftedOverlay(root, event);
+    },
     observer = new MutationObserver(reopen);
   observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
   for (const type of MODAL_LIFECYCLE_EVENTS) root.addEventListener(type, reopenSoon);
   // A modal overlay that still closes (a forced Escape) reopens; `cancel` and `close` do not bubble.
   root.addEventListener('cancel', preventCancel, true);
   root.addEventListener('close', reopenSoon, true);
+  root.addEventListener('keydown', escape, true);
   openTopLayerOverlays(root);
   return () => {
     observer.disconnect();
     for (const type of MODAL_LIFECYCLE_EVENTS) root.removeEventListener(type, reopenSoon);
     root.removeEventListener('cancel', preventCancel, true);
     root.removeEventListener('close', reopenSoon, true);
+    root.removeEventListener('keydown', escape, true);
   };
 }

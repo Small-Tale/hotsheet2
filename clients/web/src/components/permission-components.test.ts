@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
-import { TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
+import { TOP_LAYER_DISMISS_ATTRIBUTE, TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation } from './notification-navigation';
 import {
@@ -109,6 +109,8 @@ describe('permission presentation components', () => {
     // popup itself rather than a decision button (HS2-MAE27T); the other layers stay `<aside>`.
     expect(top).toMatch(/^<dialog [^>]*tabindex="-1"/);
     expect(inline).toMatch(/^<aside /);
+    // Escape activates the popup's client-only Ignore while it is lifted above a modal (HS2-S8K9BG).
+    expect(top).toMatch(new RegExp(`<button [^>]*${TOP_LAYER_DISMISS_ATTRIBUTE}[^>]*>\\s*Ignore`));
     // The in-flow layer is how the AI conversation's foreground places its copy without restyling it (HS2-M2W2DP).
     const flow = String(PermissionRequestPopup({ item: pending, layer: 'flow' }));
     expect(flow).toContain('data-layer="flow"');

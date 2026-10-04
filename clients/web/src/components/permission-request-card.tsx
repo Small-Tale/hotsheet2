@@ -5,7 +5,7 @@ import { Bot, Check, CircleAlert, Clock3, ExternalLink, Pause, ShieldCheck, X } 
 
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
-import { TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
+import { TOP_LAYER_DISMISS_ATTRIBUTE, TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
 
 export type PermissionRequestCardState = 'pending' | 'resolving' | 'failed' | 'disconnected';
 
@@ -142,6 +142,8 @@ export function PermissionRequestCard({
             type="button"
             class="permission-request-card__quiet-action"
             {...NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.attrs}
+            // Escape activates Ignore while the shell popup is lifted above a modal (HS2-S8K9BG).
+            {...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }}
             data-request-key={item.key}
           >
             Ignore

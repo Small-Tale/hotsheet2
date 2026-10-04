@@ -11002,7 +11002,7 @@ for (const viewport of [
   }) => {
     await page.setViewportSize(viewport);
     await mockProject(page);
-    let pending = [61, 62].map((id) => ({
+    let pending = [61, 62, 63].map((id) => ({
       id,
       connection: 'codex-session',
       tool: 'Bash',
@@ -11012,7 +11012,7 @@ for (const viewport of [
     }));
     await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
     const resolved: unknown[] = [];
-    await page.route(/\/permissions\/6[12]$/, async (route) => {
+    await page.route(/\/permissions\/6[1-3]$/, async (route) => {
       const id = Number(new URL(route.request().url()).pathname.split('/').pop());
       resolved.push({ id, ...route.request().postDataJSON() });
       pending = pending.filter((item) => item.id !== id);
@@ -11056,11 +11056,18 @@ for (const viewport of [
     await expect(popup).toContainText('request-62');
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
     await expect(title).toBeVisible();
-    // Escape never cancels the popup itself; Web Awesome closes the composer, and the popup returns to a
-    // non-blocking popover.
+    // Escape belongs to the topmost surface: it ignores the lifted popup (client-only, no decision) and
+    // never reaches Web Awesome's handler, so the composer beneath stays open (HS2-S8K9BG).
     await page.keyboard.press('Escape');
+    await expect(popup).toContainText('request-63');
+    await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
+    await expect(composer).toHaveJSProperty('open', true);
+    expect(resolved).toHaveLength(1);
+    // The composer closes underneath (its Cancel, dispatched because the lifted popup blocks pointer
+    // input): the popup returns to a non-blocking popover.
+    await composer.getByRole('button', { name: 'Cancel', exact: true }).dispatchEvent('click');
     await expect(composer).toHaveJSProperty('open', false);
-    await expect(popup).toContainText('request-62');
+    await expect(popup).toContainText('request-63');
     await expect.poll(() => popup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
     expect(await popup.evaluate((element) => element.matches(':modal'))).toBe(false);
     // Reopen the composer: lifted again; Ignore dismisses the popup and the composer becomes usable.
@@ -11071,7 +11078,10 @@ for (const viewport of [
     await expect(popup).toHaveCount(0);
     await title.locator('input').fill('typed after the permission popup');
     await expect(title).toHaveJSProperty('value', 'typed after the permission popup');
-    await expect(composer).toHaveJSProperty('open', true);
+    // With no lifted popup, Escape is the composer's again.
+    await page.keyboard.press('Escape');
+    await expect(composer).toHaveJSProperty('open', false);
+    expect(resolved).toHaveLength(1);
   });
 }
 
