@@ -159,7 +159,7 @@ export function TicketSearchFieldDemo() {
           <code>TicketSearchFormField</code> uses Kerf's form-field presentation: a visible label, hint, and required
           marker that line up with a <code>wa-input</code>, with the helper surfaces stacked below (HS2-E40KC0).
         </p>
-        <wa-input name="ticket-search-demo-form-name" label="View name" required></wa-input>
+        <wa-input name="ticket-search-demo-form-name" label="View name" required />
         <TicketSearchFormField
           id="ticket-search-demo-form"
           label="View query"

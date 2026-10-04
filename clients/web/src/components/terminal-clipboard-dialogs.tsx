@@ -145,7 +145,7 @@ export function TerminalPasteDialog({ state }: { state?: TerminalPasteState }) {
             autoCapitalize="off"
             autocomplete="off"
             autocorrect="off"
-          ></textarea>
+          />
           <Row hAlign="right" vAlign="middle" gap="xs">
             <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalPaste.attrs}>
               Cancel

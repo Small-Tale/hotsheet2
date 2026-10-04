@@ -119,7 +119,9 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   root has no per-file rule override: Promise rejection values are typed `unknown`, and
   defensive checks that intentionally exceed a total static type use explained,
   single-next-line exceptions so new code remains subject to the full baseline
-  (HS2-W3RDCB).
+  (HS2-W3RDCB). Childless JSX elements, native and custom alike, use the self-closing form
+  (`<wa-input … />`, not `<wa-input …></wa-input>`); `@stylistic/jsx-self-closing-comp`
+  enforces it in `clients/web`, and `--fix` rewrites violations (HS2-G5WBZ5).
 - Repository formatting uses Prettier for supported JavaScript, TypeScript, JSON, CSS,
   HTML, Markdown, and YAML plus `cargo fmt` for Rust. `clients/web` owns the pinned
   Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command

@@ -67,7 +67,7 @@ export function TerminalVisibilityNameDialog({ prompt }: { prompt?: TerminalVisi
           value={prompt?.value ?? ''}
           required
           autofocus
-        ></wa-input>
+        />
         <footer>
           <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.cancelTerminalVisibilityName.attrs}>
             Cancel

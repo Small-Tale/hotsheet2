@@ -43,7 +43,7 @@ export function RepositorySetup({
           placeholder="git@github.com:you/project.git"
           required
           autofocus
-        ></wa-input>
+        />
         {error && (
           <p class="repository-setup__error" role="alert">
             {error}

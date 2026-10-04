@@ -353,7 +353,7 @@ export function ProviderSetupForm({
               />
               <datalist id="provider-setup-github-repositories">
                 {repositories.map((repository) => (
-                  <option value={repository}></option>
+                  <option value={repository} />
                 ))}
               </datalist>
               <small class="provider-setup-form__field-hint">
@@ -369,7 +369,7 @@ export function ProviderSetupForm({
               required
               placeholder={labels[1]}
               value={connection?.locator ?? ''}
-            ></wa-input>
+            />
           )}
           {choosing && (
             <section
@@ -453,7 +453,7 @@ export function ProviderSetupForm({
                 required
                 value={emailValue}
                 data-key={`email-${prefillKey}`}
-              ></wa-input>
+              />
               <wa-input
                 name="api-base"
                 type="url"
@@ -462,7 +462,7 @@ export function ProviderSetupForm({
                 placeholder="https://company.atlassian.net"
                 value={apiBaseValue}
                 data-key={`api-base-${prefillKey}`}
-              ></wa-input>
+              />
             </>
           )}
           {kind === 'gitlab' && (
@@ -474,7 +474,7 @@ export function ProviderSetupForm({
               placeholder="https://gitlab.com/api/v4"
               value={apiBaseValue}
               data-key={`api-base-${prefillKey}`}
-            ></wa-input>
+            />
           )}
           {defaultChoice !== undefined && (
             <wa-checkbox class="provider-setup-form__wide" name="make-default" value="on" checked={defaultChoice}>

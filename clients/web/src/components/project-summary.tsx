@@ -75,7 +75,7 @@ export function ProjectSummary({
                     }
                     data-background-bar={index}
                     data-background-zero={String(backgroundValue === 0)}
-                  ></span>
+                  />
                 )}
                 <span
                   class="project-summary__bar-foreground"
@@ -83,7 +83,7 @@ export function ProjectSummary({
                   style={value === 0 ? undefined : `--bar-height:${Math.max(1, Math.round((value / maximum) * 100))}%`}
                   data-bar={index}
                   data-zero={String(value === 0)}
-                ></span>
+                />
               </span>
             );
           })}

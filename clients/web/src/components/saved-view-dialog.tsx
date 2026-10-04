@@ -68,7 +68,7 @@ export function SavedViewDialog({
             required
             autofocus
             disabled={busy || undefined}
-          ></wa-input>
+          />
           <div class="saved-view-dialog__query" data-key={`saved-view-query-session-${session}`}>
             <TicketSearchFormField
               id="saved-view-query"

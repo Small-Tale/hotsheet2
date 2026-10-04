@@ -220,7 +220,7 @@ export function TicketSourceSetupDialog({
             placeholder="git@github.com:you/tickets.git"
             required
             autofocus
-          ></wa-input>
+          />
           <a
             class="ticket-source-setup__remote-help"
             href="https://github.com/Small-Tale/hotsheet2/blob/main/docs/ticket-repository-remotes.md"
@@ -233,7 +233,7 @@ export function TicketSourceSetupDialog({
       </div>
       {remoteBusy && (
         <div class="ticket-source-setup__remote-progress" role="status">
-          <wa-progress-bar indeterminate label="Connecting and pushing ticket repository"></wa-progress-bar>
+          <wa-progress-bar indeterminate label="Connecting and pushing ticket repository" />
           <p>Connecting the remote and uploading the ticket history. Large repositories can take several minutes.</p>
         </div>
       )}

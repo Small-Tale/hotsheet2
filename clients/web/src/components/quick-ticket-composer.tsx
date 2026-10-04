@@ -159,7 +159,7 @@ export function QuickTicketComposer({
             value={title}
             autofocus
             required
-          ></wa-input>
+          />
           <div class="quick-ticket-composer__metadata">
             <TicketCategorySelect name="new-ticket-category" label="Category" value={category} />
             <button

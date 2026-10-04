@@ -18,7 +18,7 @@ export function ServerBusyBars({ count, busy }: ServerBusyBarsProps) {
   return (
     <div class="server-busy-bars" data-component="server-busy-bars" data-visible={String(busy)} aria-hidden="true">
       {Array.from({ length: bars }, (_bar, index) => (
-        <span class="server-busy-bars__bar" style={`--bar-index:${index}`}></span>
+        <span class="server-busy-bars__bar" style={`--bar-index:${index}`} />
       ))}
     </div>
   );

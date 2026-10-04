@@ -131,7 +131,7 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                           label={command.running ? `Running ${command.label}` : command.label}
                           trailing={
                             command.running ? (
-                              <i class="command-navigation__running" aria-hidden="true"></i>
+                              <i class="command-navigation__running" aria-hidden="true" />
                             ) : type ? (
                               <span class="command-navigation__type" aria-label={type.label} title={type.label}>
                                 <LucideIcon size="s" icon={type.icon} name={type.name} />

@@ -133,7 +133,7 @@ export function TicketRowDemo() {
 export function TicketRowSettings() {
   return (
     <form class="settings-form" data-settings="ticket-list-row">
-      <wa-input name="title" label="Title" value={ticketRowSettings.title.value}></wa-input>
+      <wa-input name="title" label="Title" value={ticketRowSettings.title.value} />
       <Select
         name="status"
         label="Status"
@@ -149,7 +149,7 @@ export function TicketRowSettings() {
         value={ticketRowSettings.priority.value}
         choices={(['low', 'default', 'high', 'urgent'] as const).map((value) => ({ value, label: value }))}
       />
-      <wa-input name="category" label="Category" value={ticketRowSettings.category.value}></wa-input>
+      <wa-input name="category" label="Category" value={ticketRowSettings.category.value} />
       <Select
         name="category-icon"
         label="Category icon"
@@ -162,9 +162,9 @@ export function TicketRowSettings() {
         value={ticketRowSettings.categoryColor.value}
         choices={CATEGORY_COLORS.map((option): SelectChoice => ({ value: option.value, label: option.label }))}
       />
-      <wa-input name="tags" label="Tags (comma separated)" value={ticketRowSettings.tags.value}></wa-input>
-      <wa-input name="agent" label="Active agent" value={ticketRowSettings.agentName.value}></wa-input>
-      <wa-input name="updated" label="Updated label" value={ticketRowSettings.updatedLabel.value}></wa-input>
+      <wa-input name="tags" label="Tags (comma separated)" value={ticketRowSettings.tags.value} />
+      <wa-input name="agent" label="Active agent" value={ticketRowSettings.agentName.value} />
+      <wa-input name="updated" label="Updated label" value={ticketRowSettings.updatedLabel.value} />
       <wa-checkbox name="up-next" checked={ticketRowSettings.upNext.value}>
         Up Next
       </wa-checkbox>

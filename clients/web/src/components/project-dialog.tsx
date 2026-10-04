@@ -42,7 +42,7 @@ export function ProjectDialog({
               ticket store. Override it when the project uses another store.
             </Text>
             <div class="project-dialog__path">
-              <wa-input name="project-root" label="Project folder" value={root} required></wa-input>
+              <wa-input name="project-root" label="Project folder" value={root} required />
               <wa-button
                 appearance="outlined"
                 type="button"
@@ -58,7 +58,7 @@ export function ProjectDialog({
                 name="ticket-store"
                 label="Ticket store (optional)"
                 placeholder="Automatically discover &lt;project&gt;.hs2"
-              ></wa-input>
+              />
               <wa-button
                 appearance="outlined"
                 type="button"

@@ -172,7 +172,7 @@ export function TicketRow(raw: TicketRowProps) {
           <span
             class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`}
             aria-label={indicator.replace('-', ' ')}
-          ></span>
+          />
         )}
         <div class="ticket-list-row__body">
           {props.presentation === 'list' && category}

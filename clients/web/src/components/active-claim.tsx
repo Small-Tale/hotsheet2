@@ -24,9 +24,7 @@ export function ActiveClaimSpinner({ label }: { label: string }) {
 export function ClaimEta({ eta }: { eta: ClaimEtaPresentation }) {
   return (
     <span class="claim-eta" data-claim-eta={eta.kind} title={eta.title}>
-      {eta.kind === 'estimate' && (
-        <wa-progress-ring class="claim-eta__ring" value={eta.percent} aria-hidden="true"></wa-progress-ring>
-      )}
+      {eta.kind === 'estimate' && <wa-progress-ring class="claim-eta__ring" value={eta.percent} aria-hidden="true" />}
       <span class="claim-eta__label">{eta.label}</span>
     </span>
   );

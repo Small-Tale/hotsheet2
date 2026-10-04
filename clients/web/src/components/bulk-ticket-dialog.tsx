@@ -72,7 +72,7 @@ export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
       label={`${adding ? 'Add' : 'Remove'} tag — ${state.count} selected`}
     >
       <form {...TICKET_SELECTION_ACTIONS.submitBulkTag.attrs} data-tag-mode={state.mode}>
-        <wa-input name="bulk-ticket-tag" label={adding ? 'Tag to add' : 'Tag to remove'} required autofocus></wa-input>
+        <wa-input name="bulk-ticket-tag" label={adding ? 'Tag to add' : 'Tag to remove'} required autofocus />
         {!adding && state.choices.length > 0 && (
           <div class="bulk-ticket-dialog__choices" aria-label="Tags in selection">
             <Row gap="xs" wrap>

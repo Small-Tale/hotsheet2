@@ -27,9 +27,9 @@ mount(app, () => {
   const revision = structuralRevision.value;
   return (
     <section class={dark.value ? 'wa-dark app' : 'app'} data-revision={revision}>
-      <wa-input data-testid="name" label="Name" value={value} hint={`revision ${revision}`}></wa-input>
+      <wa-input data-testid="name" label="Name" value={value} hint={`revision ${revision}`} />
       <output data-value>{value}</output>
-      <output data-events></output>
+      <output data-events />
       <wa-button data-action="rerender">Morph</wa-button>
       <wa-button data-action="theme">Theme</wa-button>
       <wa-button data-action="open" variant="brand">

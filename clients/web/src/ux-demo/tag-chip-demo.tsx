@@ -72,7 +72,7 @@ export function TagChipDemo() {
 export function TagChipSettings() {
   return (
     <form class="settings-form" data-settings="tag-chip">
-      <wa-input name="label" label="Label" value={tagChipSettings.label.value}></wa-input>
+      <wa-input name="label" label="Label" value={tagChipSettings.label.value} />
       <Select
         name="variant"
         label="Variant"

@@ -53,7 +53,7 @@ function BandRow({ band }: { band: CalibrationBand }) {
             <wa-progress-bar
               value={String(Math.round(rate * 100))}
               label={`${BAND_LABELS[band.band] ?? band.band} reopen rate`}
-            ></wa-progress-bar>
+            />
           )}
         </div>
       </td>

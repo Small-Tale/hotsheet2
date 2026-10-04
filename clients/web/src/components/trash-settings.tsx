@@ -29,7 +29,7 @@ export function TrashSettings({ days, message = '' }: { days: number; message?: 
               label="Keep deleted tickets for (days)"
               value={String(days)}
               required
-            ></wa-input>
+            />
           </div>
           <footer>
             <Row vAlign="middle" gap="xs">

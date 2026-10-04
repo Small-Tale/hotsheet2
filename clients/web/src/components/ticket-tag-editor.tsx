@@ -58,7 +58,7 @@ export function TicketTagEditor({
           <small>Press Enter to add</small>
           <datalist id={`${popoverId}-suggestions`}>
             {available.map((tag) => (
-              <option value={tag}></option>
+              <option value={tag} />
             ))}
           </datalist>
         </div>

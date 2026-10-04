@@ -323,7 +323,7 @@ function CommandDetailFields({
               value={option.value}
               checked={resolveCommandColor(command.color) === option.value}
             />
-            <span aria-hidden="true"></span>
+            <span aria-hidden="true" />
             <span class="command-settings-editor__swatch-label">{option.label}</span>
           </label>
         ))}

@@ -59,6 +59,8 @@ export default tseslint.config(
       'import/newline-after-import': 'error',
       'import/no-duplicates': 'error',
       'tsdoc/syntax': 'warn',
+      // Childless JSX elements, native and custom, use the self-closing form (HS2-G5WBZ5).
+      '@stylistic/jsx-self-closing-comp': ['error', { component: true, html: true }],
     },
   },
   kerfjs.configs.recommended,

@@ -40,7 +40,7 @@ export function TerminalRenameDialog({ target }: { target?: TerminalRenameTarget
             hint={target?.defaultName ? `Default name: ${target.defaultName}` : undefined}
             required
             autofocus
-          ></wa-input>
+          />
           <Row vAlign="middle" gap="xs">
             {target?.defaultName ? (
               <wa-button appearance="plain" type="button" {...TERMINALS_ACTIONS.resetTerminalRename.attrs}>

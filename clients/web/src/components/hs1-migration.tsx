@@ -65,7 +65,7 @@ export function Hs1MigrationDialog({
             value={defaultStore}
             required
             disabled={busy}
-          ></wa-input>
+          />
           <wa-button
             appearance="outlined"
             type="button"
@@ -77,7 +77,7 @@ export function Hs1MigrationDialog({
         </div>
         {busy && (
           <div class="hs1-migration-dialog__progress" role="status">
-            <wa-progress-bar indeterminate label="Importing Hot Sheet 1 project"></wa-progress-bar>
+            <wa-progress-bar indeterminate label="Importing Hot Sheet 1 project" />
             <p>Exporting and importing tickets, copying attachments, and configuring detected AI tools…</p>
           </div>
         )}
@@ -219,7 +219,7 @@ export function Hs1JobBanner({
           label={`${phase} progress`}
           value={String(percent ?? 0)}
           indeterminate={percent === undefined && job.progress.total !== 0}
-        ></wa-progress-bar>
+        />
       )}
       {connectionError && (
         <p class="hs1-job__connection">

@@ -230,7 +230,7 @@ function TerminalCard({
         data-project-id={session.projectId}
         data-terminal-id={session.id}
         aria-hidden="true"
-      ></div>
+      />
     ) : (
       <div
         class={`terminal-viewport${dashboardPreview ? ' terminal-viewport--scaled-preview' : ''}`}
@@ -246,7 +246,7 @@ function TerminalCard({
         data-geometry-ready="false"
         aria-hidden={dashboardPreview ? 'true' : undefined}
         aria-label={dashboardPreview ? undefined : `${session.title ?? session.id} interactive terminal`}
-      ></div>
+      />
     );
   return (
     <article
@@ -288,7 +288,7 @@ function TerminalCard({
           class="terminal-tile__state"
           aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
           title={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
-        ></span>
+        />
         <button
           type="button"
           class="terminal-tile__identity"
@@ -425,7 +425,7 @@ export function TerminalPreview({
           data-display-mode="scaled-preview"
           data-geometry-ready="false"
           aria-hidden="true"
-        ></div>
+        />
       </div>
       <p class="terminal-preview__fallback">{fallback}</p>
     </div>
@@ -466,7 +466,7 @@ export function TerminalSession({
         data-project-id={session.projectId}
         data-terminal-id={session.id}
         aria-label={`${session.title ?? session.id} interactive terminal`}
-      ></div>
+      />
     </section>
   );
 }
@@ -506,7 +506,7 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
         </div>
       </div>
       <footer class="terminal-tile__footer">
-        <span class="terminal-tile__state" aria-label={state} title={state}></span>
+        <span class="terminal-tile__state" aria-label={state} title={state} />
         <button
           type="button"
           class="terminal-tile__identity"

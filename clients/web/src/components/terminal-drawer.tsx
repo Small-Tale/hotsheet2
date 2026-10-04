@@ -200,7 +200,7 @@ export function TerminalDrawer({
               closeIcon={<LucideIcon icon={X} name="x" />}
               rootAttributes={{ 'data-tab-kind': 'terminal', 'data-terminal-id': session.id }}
               leading={<LucideIcon icon={SquareTerminal} name="square-terminal" />}
-              trailing={session.busy ? <i class="terminal-drawer__busy-dot" aria-label="Busy"></i> : undefined}
+              trailing={session.busy ? <i class="terminal-drawer__busy-dot" aria-label="Busy" /> : undefined}
             />
           );
         const chat = chatsById.get(id)!;
