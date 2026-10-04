@@ -116,19 +116,35 @@
   .project-close-dialog {
     --width: calc(100vw - 2 * var(--kui-space-xs));
   }
+  /* The phone dialog keeps the same 8px viewport gutter vertically as horizontally instead of Web
+     Awesome's 80% height cap, so the canvas-aspect preview, the consequences, and the actions all fit
+     without scrolling the body (HS2-28EVHV). */
+  .project-close-dialog::part(dialog) {
+    max-height: calc(100dvh - 2 * var(--kui-space-xs));
+  }
   .project-close-dialog__layout {
     min-height: remify(304px);
     max-height: calc(100vh - remify(400px));
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(remify(112px), remify(160px)) minmax(remify(192px), 1fr);
+    /* The resource list takes only the rows it needs (up to 160px, then scrolls), so the terminal
+       preview below can take the canvas aspect instead of a short, wide leftover row (HS2-28EVHV). */
+    grid-template-rows: auto minmax(remify(192px), 1fr);
   }
   .project-close-dialog__resources {
+    max-height: remify(160px);
     border-right: 0;
     border-bottom: 1px solid var(--wa-color-surface-border);
   }
   .project-close-dialog__terminal {
     --terminal-preview-inset: var(--kui-space-m);
-    min-height: remify(192px);
+    /* The preview frame is this section's padding box inset by --terminal-preview-inset, which equals
+       the phone padding below, so the content box is the frame: giving it the 5:3 canvas aspect makes
+       the mirrored grid width-bound, so its glyphs grow instead of leaving the frame's sides empty
+       (HS2-28EVHV). */
+    box-sizing: content-box;
+    min-height: 0;
+    align-self: start;
+    aspect-ratio: 5 / 3;
   }
   .project-close-dialog__detail {
     padding: var(--kui-space-m);

@@ -1770,8 +1770,13 @@ Styling ownership (HS2-DR549A):
   about 25% there (the 5:3 canvas is height-bound in the phone frame), while it hides part of the
   screen. A column crop would truncate the lines of a terminal the preview may not resize. The
   live screen is already the most recent output, and a phone-driven PTY already takes the mobile
-  column setting (HS2-WMN626). Giving the phone frame the canvas aspect is tracked separately
-  (HS2-28EVHV).
+  column setting (HS2-WMN626). At phone width the frame now takes the 5:3 canvas aspect: the
+  resource list shrinks to its rows (capped at 160px, then scrolls), the preview section's content
+  box (equal to the frame, since its padding matches `--terminal-preview-inset`) has
+  `aspect-ratio: 5 / 3`, and the dialog panel keeps an 8px viewport gutter instead of Web
+  Awesome's 80% height cap so the consequences and actions still fit unscrolled. An 80x24 grid
+  becomes nearly width-bound (about 96% of the frame width; its own aspect is about 1.6) and its
+  rows grow from about 6.7 px to about 8 px (HS2-28EVHV).
 
 Grid scale is a discrete fit count controlled by icon-only minus/plus buttons with visible
 tooltip and accessible names. Plus zooms in (fewer terminals on the controlling axis);

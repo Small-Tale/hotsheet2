@@ -7371,6 +7371,29 @@ test('renders the ProjectCloseDialog TerminalPreview at a legible glyph size at 
     expect(result.gridSize).toBe('80x24');
     // The grid fills the frame along its bound axis instead of a corner of the canvas.
     expect(result.fill).toBeGreaterThan(0.95);
+    if (width === 390) {
+      // The phone frame takes the 5:3 canvas aspect, so the grid is width-bound and its rows grow from
+      // about 6.7px to about 8px; the consequences and actions still fit without scrolling (HS2-28EVHV).
+      const phone = await viewport.evaluate((node) => {
+        const frame = node.parentElement!.getBoundingClientRect(),
+          screen = node.querySelector('.xterm-screen')!.getBoundingClientRect(),
+          host = node.closest('[data-component="project-close-dialog"]')!,
+          body = host.shadowRoot!.querySelector<HTMLElement>('[part~="body"]')!;
+        return {
+          aspect: frame.width / frame.height,
+          widthFill: screen.width / frame.width,
+          bodyOverflow: body.scrollHeight - body.clientHeight,
+          panelBottom: host.shadowRoot!.querySelector('[part~="dialog"]')!.getBoundingClientRect().bottom,
+        };
+      });
+      expect(phone.aspect).toBeCloseTo(5 / 3, 1);
+      expect(phone.widthFill).toBeGreaterThan(0.94);
+      expect(result.rowHeight).toBeGreaterThan(7.5);
+      expect(phone.bodyOverflow).toBeLessThanOrEqual(1);
+      expect(phone.panelBottom).toBeLessThanOrEqual(844);
+      await expect(dialog.locator('.project-close-dialog__consequences')).toBeInViewport({ ratio: 1 });
+      await expect(dialog.getByRole('button', { name: 'Stop & Close' })).toBeInViewport({ ratio: 1 });
+    }
     await region.screenshot({ path: test.info().outputPath(`xhbdrv-close-preview-${width}.png`) });
   }
 });
