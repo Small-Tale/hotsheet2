@@ -19,6 +19,17 @@ export const TERMINAL_PASTE_EVENT = 'hotsheet-terminal-paste';
  */
 export const TERMINAL_EDIT_MENU_EVENT = 'hotsheet-terminal-edit-menu';
 
+/**
+ * Whether a keydown inside a terminal should dismiss its open edit menu instead of reaching xterm,
+ * which would otherwise consume Escape (HS2-B06X7Y).
+ */
+export function terminalEditMenuDismissKey(
+  event: Pick<KeyboardEvent, 'key' | 'isComposing'>,
+  menuOpen: boolean,
+): boolean {
+  return menuOpen && event.key === 'Escape' && !event.isComposing;
+}
+
 export interface TerminalEditMenuDetail {
   x: number;
   y: number;

@@ -10,6 +10,7 @@ import {
   terminalBufferText,
   terminalCopyMessage,
   terminalCopySelection,
+  terminalEditMenuDismissKey,
   type TerminalReadTextDetail,
   writeClipboardText,
 } from './terminal-clipboard';
@@ -144,5 +145,14 @@ describe('terminalCopySelection and terminalCopyMessage', () => {
     expect(terminalCopyMessage('a\nb', false)).toBe('Copied terminal text (2 lines)');
     expect(terminalCopyMessage('a', true)).toBe('Copied selection (1 line)');
     expect(terminalCopyMessage('', false)).toBe('Copied terminal text (0 lines)');
+  });
+});
+
+describe('terminalEditMenuDismissKey (HS2-B06X7Y)', () => {
+  it('dismisses only an open menu on a plain Escape', () => {
+    expect(terminalEditMenuDismissKey({ key: 'Escape', isComposing: false }, true)).toBe(true);
+    expect(terminalEditMenuDismissKey({ key: 'Escape', isComposing: false }, false)).toBe(false);
+    expect(terminalEditMenuDismissKey({ key: 'Escape', isComposing: true }, true)).toBe(false);
+    expect(terminalEditMenuDismissKey({ key: 'Enter', isComposing: false }, true)).toBe(false);
   });
 });

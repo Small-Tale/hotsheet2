@@ -2729,6 +2729,8 @@ terminal. The menu is a context-mode Kerf `PopupMenu`:
 - **Paste** (Lucide `clipboard-paste`) runs the Paste path above, including its denied/unavailable sheet.
 
 The menu acts on the terminal it was opened over. An outside touch, Escape, or choosing an item dismisses it.
+Escape works even while a focused terminal holds the keyboard, and that Escape never reaches the shell
+(HS2-B06X7Y); with the menu closed, Escape is the terminal's again.
 
 **Touch text selection (HS2-EYR96N).** The long-press is also how a phone selects a range of
 terminal text directly, using xterm's own selection (the same highlight and text a desktop mouse

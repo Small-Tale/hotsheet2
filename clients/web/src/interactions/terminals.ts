@@ -27,6 +27,7 @@ import {
   terminalCopyMessage,
   terminalCopySelection,
   type TerminalEditMenuDetail,
+  terminalEditMenuDismissKey,
   writeClipboardText,
 } from '../terminal-clipboard';
 import { adjustTerminalFit, terminalGridBasis } from '../terminal-grid-layout';
@@ -421,6 +422,19 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
         }),
         selection: selection === true,
       };
+    }),
+  );
+  // Escape dismisses the open edit menu even while a focused terminal holds the keyboard: xterm's
+  // helper textarea handles Escape and stops it, so the document-level dismiss never sees it. Capture
+  // it first, and do not also send ESC to the shell (HS2-B06X7Y).
+  lifetime.add(
+    delegateCapture(document.body, 'keydown', TERMINALS_TARGETS.terminalViewport.selector, (event) => {
+      const keyboard = event as KeyboardEvent;
+      if (!terminalEditMenuDismissKey(keyboard, Boolean(terminalEditMenu.peek()))) return;
+      keyboard.preventDefault();
+      keyboard.stopPropagation();
+      editMenuViewport = undefined;
+      terminalEditMenu.value = undefined;
     }),
   );
   // Copy from the long-press edit menu takes the terminal's touch selection straight to the clipboard

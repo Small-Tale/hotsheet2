@@ -586,4 +586,17 @@ test('selects a range of terminal text with a long-press and drag, and copies it
   await page.touchscreen.tap(screen.x + 8, screen.y + 8);
   await expect(menu).toHaveCount(0);
   await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  // Escape dismisses it too while the focused terminal holds the keyboard, and never reaches the shell
+  // as ESC (HS2-B06X7Y).
+  await touchSelect(page, { x: screen.x + screen.width - 4, y: screen.y + screen.height - 4 });
+  await expect(menu.getByRole('menuitem', { name: 'Paste' })).toBeVisible();
+  await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
+  const sentBefore = (await sentInput(page)).length;
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  expect((await sentInput(page)).slice(sentBefore)).toEqual([]);
+  // With the menu closed, Escape is the terminal's again.
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => (await sentInput(page)).slice(sentBefore)).toEqual(['\u001b']);
 });
