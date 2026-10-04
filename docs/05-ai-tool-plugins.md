@@ -491,7 +491,13 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   Lock files remain in place to avoid unlink/recreate races; they hold no durable
   application data and the operating system releases their lock on process exit.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*` that leak into
-  child shells — HS1 §22.13.1).
+  child shells — HS1 §22.13.1). Every launched process also drops the inherited
+  repository-locating git variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, …;
+  HS2-J79CZF): PTY shells through `scrub_env`, and AI tools, configured commands, the
+  terminal broker, external apps, and `hotsheet-cli launch` through
+  `hotsheet_ticketing::git::launch`. A server started from a git hook therefore
+  never hands the hook's repository to an agent or shell working in a checkout
+  ([`02` §2.12.1](02-ticket-storage.md)).
 - **Server-arbitrated PTY sizing.** A PTY has exactly one size, but many viewers
   (across devices) attach at once and want different sizes. The **server is the
   sole arbiter** of the size: viewers send _size claims_, the server picks the size

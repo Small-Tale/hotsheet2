@@ -7,7 +7,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use hotsheet_plugins::{AiToolDescriptor, ModelSpec, Plugin};
 
@@ -62,7 +61,7 @@ impl CommandModelCatalog {
     }
 
     fn output(&self, args: &[String], cwd: Option<&Path>) -> Result<String, String> {
-        let mut command = Command::new(&self.program);
+        let mut command = hotsheet_ticketing::git::launch(&self.program);
         command.args(args);
         if let Some(cwd) = cwd {
             command.current_dir(cwd);

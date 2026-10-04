@@ -1,7 +1,7 @@
 //! Repository-status detail discovery and safe host file actions.
 
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use hotsheet_ticketing::repository_status::{self, RepositoryFile, RepositoryStatus};
 use serde::{Deserialize, Serialize};
@@ -401,7 +401,7 @@ fn commit_count(root: &Path) -> u64 {
 }
 
 fn spawn(program: &str, args: &[std::ffi::OsString]) -> Result<(), RepositoryBrowserError> {
-    Command::new(program)
+    hotsheet_ticketing::git::launch(program)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())

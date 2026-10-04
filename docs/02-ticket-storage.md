@@ -773,6 +773,17 @@ passed or inherited environment. ESLint forbids importing `node:child_process` a
 else under `src/`, and a unit test keeps the list in parity with the Rust and test-helper
 lists.
 
+The same rule covers every process Hot Sheet launches for people and agents
+(HS2-J79CZF; the maintainer chose stripping everywhere, with no opt-out setting). AI
+tools, configured commands, the terminal broker, external apps, `hotsheet-cli launch`,
+and the CLI's server launch start from `hotsheet_ticketing::git::launch(program)`, which
+removes the same list while keeping explicit `.env(...)` values. PTY shells drop it
+through `hotsheet_terminals::env::scrub_env`, whose copy of the list is parity-tested
+against the ticketing source. A source scan forbids a bare `Command::new` in the
+production code of `hotsheet-aitools`, `hotsheet-server`, `hotsheet-cli`, and
+`hotsheet-terminals` (only signal helpers such as `kill` are exempt). A user who wants a
+hook's `GIT_DIR` inside a terminal can export it in that shell.
+
 ## 2.13 Copy & move between stores
 
 Tickets need to move between stores — e.g. promote a scratch idea into the team

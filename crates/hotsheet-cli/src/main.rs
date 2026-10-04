@@ -3336,7 +3336,7 @@ fn cmd_launch(
     // The session's worker id: the instructions tell the AI to claim with it, and its claims
     // are released when the tool exits (HS2-1VAW1C).
     let worker = hotsheet_cli::launch_worker_id(tool, &Ulid::new());
-    let mut command = std::process::Command::new(&program);
+    let mut command = hotsheet_ticketing::git::launch(&program);
     command
         .args(&launch.args)
         .current_dir(&launch_dir)
@@ -3566,7 +3566,7 @@ fn cmd_serve(
     let exe = resolve_server_binary(&current, std::env::var_os("PATH").as_deref())?;
     verify_server_version(&exe)?;
 
-    let mut cmd = std::process::Command::new(&exe);
+    let mut cmd = hotsheet_ticketing::git::launch(&exe);
     cmd.args(server_args(
         path,
         bind,
@@ -3785,7 +3785,7 @@ fn resolve_server_binary(current_exe: &Path, path: Option<&std::ffi::OsStr>) -> 
 }
 
 fn verify_server_version(exe: &Path) -> Result<()> {
-    let output = std::process::Command::new(exe)
+    let output = hotsheet_ticketing::git::launch(exe)
         .arg("--version")
         .output()
         .with_context(|| format!("could not run {} --version", exe.display()))?;

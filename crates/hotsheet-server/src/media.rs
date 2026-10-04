@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Mutex, OnceLock};
 
 use axum::body::{Body, Bytes};
@@ -184,7 +184,7 @@ pub fn optional_video_poster(
     let output = workspace.path().join("thumbnail.jpg");
     fs::write(&input, bytes)?;
     let executable = std::env::var_os("HOTSHEET_FFMPEG").unwrap_or_else(|| "ffmpeg".into());
-    let result = Command::new(executable)
+    let result = hotsheet_ticketing::git::launch(executable)
         .args(["-v", "error", "-ss", "0.1", "-i"])
         .arg(&input)
         .args(["-frames:v", "1", "-vf", "scale=640:-2", "-q:v", "3", "-y"])

@@ -1,7 +1,7 @@
 //! The real [`ProcessSpawner`] over `std::process` — the host's production adapter.
 
 use std::io::Write;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 
 use crate::ports::{ProcessSpawner, SpawnSpec, SpawnedProcess};
 
@@ -10,7 +10,7 @@ pub struct SystemSpawner;
 
 impl ProcessSpawner for SystemSpawner {
     fn spawn(&self, spec: &SpawnSpec) -> std::io::Result<Box<dyn SpawnedProcess>> {
-        let mut cmd = Command::new(&spec.program);
+        let mut cmd = hotsheet_ticketing::git::launch(&spec.program);
         cmd.args(&spec.args).current_dir(&spec.cwd);
         for (k, v) in &spec.env {
             cmd.env(k, v);

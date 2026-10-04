@@ -16,7 +16,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
@@ -1133,7 +1133,7 @@ pub fn ensure_codex_daemon_in(program: &str, codex_home: &Path) -> std::io::Resu
 }
 
 fn run_daemon_start(program: &str, codex_home: Option<&Path>) -> std::io::Result<()> {
-    let mut cmd = Command::new(program);
+    let mut cmd = hotsheet_ticketing::git::launch(program);
     cmd.args(["app-server", "daemon", "start"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -1214,7 +1214,7 @@ impl crate::drive::BackingService for CodexDaemonService {
 /// none is running). Used to tear down a per-run isolated-home daemon so it isn't orphaned
 /// when the home goes away (HS2-9M6T68). Best-effort: returns the child's status.
 pub fn stop_codex_daemon_in(program: &str, codex_home: &Path) -> std::io::Result<()> {
-    Command::new(program)
+    hotsheet_ticketing::git::launch(program)
         .args(["app-server", "daemon", "stop"])
         .env("CODEX_HOME", codex_home)
         .stdin(Stdio::null())

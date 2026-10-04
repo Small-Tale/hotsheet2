@@ -10,6 +10,8 @@ rust-version.workspace = true
 
 [dependencies]
 hotsheet-plugins.workspace = true
+# Every launched AI tool drops inherited repository-locating GIT_* vars (git::launch, HS2-J79CZF).
+hotsheet-ticketing.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -28,4 +30,3 @@ futures-util.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-hotsheet-ticketing.workspace = true

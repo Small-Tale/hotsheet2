@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::{Arc, Mutex};
 
 const HISTORY_CAP: usize = 50;
@@ -153,7 +153,7 @@ impl CommandManager {
             .or_else(|| self.roots.lock().unwrap().get(project).cloned())
             .ok_or_else(|| "unknown command project".to_string())?;
         let (program, args) = execution(&def, &root)?;
-        let mut child = Command::new(program)
+        let mut child = hotsheet_ticketing::git::launch(program)
             .args(args)
             .current_dir(root)
             .stdin(Stdio::null())

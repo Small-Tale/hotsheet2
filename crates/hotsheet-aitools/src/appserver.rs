@@ -12,7 +12,6 @@
 //! (HS2-115).
 
 use std::path::Path;
-use std::process::Command;
 use std::time::Duration;
 
 use crate::codex::{CodexAppServer, CodexDaemonService, StdioTransport};
@@ -130,7 +129,7 @@ impl AppServerModelCatalog {
 
 impl RuntimeModelCatalogSource for AppServerModelCatalog {
     fn version(&self) -> Result<String, String> {
-        let mut command = Command::new(&self.program);
+        let mut command = hotsheet_ticketing::git::launch(&self.program);
         command.arg("--version");
         for (key, value) in &self.env {
             command.env(key, value);

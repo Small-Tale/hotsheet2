@@ -5,7 +5,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 
 use crate::ports::{RpcReader, RpcWriter};
 
@@ -34,7 +34,7 @@ impl StreamChild {
         envs: &[(String, String)],
         own_group: bool,
     ) -> std::io::Result<Self> {
-        let mut cmd = Command::new(program);
+        let mut cmd = hotsheet_ticketing::git::launch(program);
         #[cfg(unix)]
         if own_group {
             use std::os::unix::process::CommandExt;

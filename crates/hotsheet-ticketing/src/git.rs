@@ -17,6 +17,7 @@
 //! (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM`,
 //! `GIT_SSH_COMMAND`, `GIT_TERMINAL_PROMPT`, ...) are deliberately kept.
 
+use std::ffi::OsStr;
 use std::path::Path;
 use std::process::Command;
 
@@ -58,8 +59,30 @@ pub const REPOSITORY_ENV_VARS: &[&str] = &[
 /// Prefer [`command_in`] when one directory is the whole context.
 #[must_use]
 pub fn command() -> Command {
-    // This is the one sanctioned bare spawn; every other site goes through here.
+    // This is the one sanctioned bare git spawn; every other site goes through here.
     let mut cmd = Command::new("git");
+    remove_repository_env(&mut cmd);
+    cmd
+}
+
+/// A [`Command`] for any non-git program Hot Sheet launches (an AI tool, a configured
+/// command, the terminal broker, an external app), with every [`REPOSITORY_ENV_VARS`]
+/// entry removed (HS2-J79CZF).
+///
+/// A process launched from a server or CLI that was itself started from a git hook or
+/// `git bisect run` would otherwise run its own `git` against the hook's repository
+/// instead of the checkout it was started in. Explicit `.env(...)` calls made after this
+/// still apply. A source-scan test forbids a bare `Command::new` in the launching
+/// crates' production code.
+#[must_use]
+pub fn launch(program: impl AsRef<OsStr>) -> Command {
+    let mut cmd = Command::new(program);
+    remove_repository_env(&mut cmd);
+    cmd
+}
+
+/// Remove every [`REPOSITORY_ENV_VARS`] entry from `cmd`'s environment.
+pub fn remove_repository_env(cmd: &mut Command) -> &mut Command {
     for var in REPOSITORY_ENV_VARS {
         cmd.env_remove(var);
     }
@@ -128,6 +151,38 @@ mod tests {
             envs.iter()
                 .any(|(k, v)| k == "GIT_AUTHOR_NAME" && v.as_deref() == Some("kept"))
         );
+    }
+
+    #[test]
+    fn launch_removes_repository_variables_and_keeps_explicit_env() {
+        let mut cmd = launch("claude");
+        cmd.env("HOTSHEET_SERVER", "http://127.0.0.1:1")
+            .env("GIT_SSH_COMMAND", "ssh");
+        assert_eq!(cmd.get_program(), OsStr::new("claude"));
+        let envs: Vec<(String, Option<String>)> = cmd
+            .get_envs()
+            .map(|(k, v)| {
+                (
+                    k.to_string_lossy().into_owned(),
+                    v.map(|v| v.to_string_lossy().into_owned()),
+                )
+            })
+            .collect();
+        for var in REPOSITORY_ENV_VARS {
+            assert!(
+                envs.iter().any(|(k, v)| k == var && v.is_none()),
+                "{var} must be removed from a launched process (HS2-J79CZF)"
+            );
+        }
+        for (key, value) in [
+            ("HOTSHEET_SERVER", "http://127.0.0.1:1"),
+            ("GIT_SSH_COMMAND", "ssh"),
+        ] {
+            assert!(
+                envs.iter()
+                    .any(|(k, v)| k == key && v.as_deref() == Some(value))
+            );
+        }
     }
 
     #[test]

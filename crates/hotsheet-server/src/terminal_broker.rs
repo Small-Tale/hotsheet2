@@ -181,7 +181,7 @@ fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<()> {
     hotsheet_terminals::broker_socket::prepare_parent(socket)?;
     let current = std::env::current_exe().ok();
     let (executable, self_hosted) = broker_launch(current);
-    let mut command = std::process::Command::new(executable);
+    let mut command = hotsheet_ticketing::git::launch(executable);
     if self_hosted {
         command
             .arg("--terminal-broker-process")

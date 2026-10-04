@@ -29,7 +29,7 @@ pub use setup::{SetupReport, run_setup};
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
@@ -306,7 +306,7 @@ pub fn run_migrate_with_progress(
 
     eprintln!("Exporting {} …", hotsheet_dir.display());
     observe(MigrationProgress::phase("export_start"));
-    let mut child = Command::new("node")
+    let mut child = hotsheet_ticketing::git::launch("node")
         .arg(&export_mjs)
         .arg(hotsheet_dir)
         .arg("--out")
