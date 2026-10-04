@@ -1,4 +1,42 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Locator, test } from '@playwright/test';
+
+/**
+ * A submenu choice's icon and label insets once its submenu has finished opening. The show animation
+ * scales the submenu container, which lives in an ancestor's shadow root rather than on the item, so
+ * wait for every running animation in the document and in each ancestor shadow root, then require a
+ * few identical frames; a frame-starved run under parallel load can otherwise read the scaled,
+ * mid-animation geometry (HS2-X99SQ9).
+ */
+async function settledChoiceGeometry(choice: Locator) {
+  return choice.evaluate(async (node) => {
+    const roots: (Document | ShadowRoot)[] = [document];
+    for (let current: Node | null = node; current;) {
+      const root = current.getRootNode();
+      if (root instanceof ShadowRoot) {
+        roots.push(root);
+        current = root.host;
+      } else current = current.parentNode;
+      if (current instanceof Element && current.shadowRoot && !roots.includes(current.shadowRoot))
+        roots.push(current.shadowRoot);
+    }
+    const read = () => {
+      const item = node.getBoundingClientRect();
+      const icon = node.querySelector('[slot="icon"]')!.getBoundingClientRect();
+      const label = node.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
+      return { iconInset: icon.left - item.left, labelInset: label.left - item.left, width: item.width };
+    };
+    let previous = read(),
+      stable = 0;
+    for (let frame = 0; frame < 240 && stable < 3; frame += 1) {
+      await Promise.all(roots.flatMap((root) => root.getAnimations()).map((animation) => animation.finished));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const next = read();
+      stable = JSON.stringify(next) === JSON.stringify(previous) ? stable + 1 : 0;
+      previous = next;
+    }
+    return previous;
+  });
+}
 
 test('uses one disclosure and aligned icon-label choices at wide and narrow sizes', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -28,28 +66,8 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   // The current model is a checked PopupMenu choice; submenus hold no divider (KF-7KR1BC).
   await expect(modelChoices.first()).toHaveAttribute('checked', '');
   await expect(model.locator(':scope > wa-divider[slot="submenu"]')).toHaveCount(0);
-  await modelChoices.first().evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
-  });
-  const modelGeometry = await modelChoices.first().evaluate(async (node) => {
-    // Read once the submenu's show animation (which scales its container, outside this
-    // item's own animations) has settled: two consecutive frames with identical geometry.
-    const read = () => {
-      const item = node.getBoundingClientRect();
-      const icon = node.querySelector('[slot="icon"]')!.getBoundingClientRect();
-      const label = node.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
-      return { iconInset: icon.left - item.left, labelInset: label.left - item.left, width: item.width };
-    };
-    let previous = read();
-    for (let frame = 0; frame < 120; frame += 1) {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      const next = read();
-      if (JSON.stringify(next) === JSON.stringify(previous)) return next;
-      previous = next;
-    }
-    return previous;
-  });
-  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-drive-options-menu-wide.png', fullPage: true });
+  const modelGeometry = await settledChoiceGeometry(modelChoices.first());
+  await page.screenshot({ path: test.info().outputPath('drive-options-menu-wide.png'), fullPage: true });
 
   await effort.hover();
   const effortChoices = effort.locator(':scope > wa-dropdown-item[slot="submenu"]');
@@ -58,27 +76,7 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
     'checked',
     '',
   );
-  await effortChoices.first().evaluate(async (node) => {
-    await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
-  });
-  const effortGeometry = await effortChoices.first().evaluate(async (node) => {
-    // Read once the submenu's show animation (which scales its container, outside this
-    // item's own animations) has settled: two consecutive frames with identical geometry.
-    const read = () => {
-      const item = node.getBoundingClientRect();
-      const icon = node.querySelector('[slot="icon"]')!.getBoundingClientRect();
-      const label = node.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
-      return { iconInset: icon.left - item.left, labelInset: label.left - item.left, width: item.width };
-    };
-    let previous = read();
-    for (let frame = 0; frame < 120; frame += 1) {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      const next = read();
-      if (JSON.stringify(next) === JSON.stringify(previous)) return next;
-      previous = next;
-    }
-    return previous;
-  });
+  const effortGeometry = await settledChoiceGeometry(effortChoices.first());
   expect(Math.abs(effortGeometry.iconInset - modelGeometry.iconInset)).toBeLessThan(1);
   expect(Math.abs(effortGeometry.labelInset - modelGeometry.labelInset)).toBeLessThan(4);
 
@@ -86,5 +84,5 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   await effort.hover();
   await expect(effortChoices.first()).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-drive-options-menu-narrow.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('drive-options-menu-narrow.png'), fullPage: true });
 });
