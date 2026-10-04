@@ -764,6 +764,15 @@ outside that constructor. Web test helpers that spawn Hot Sheet binaries or git
 (`clients/web/tests/real-ticket-server.ts`, `clients/web/scripts/scale-stress.mjs`)
 strip the same list through `clients/web/scripts/repository-env.mjs`.
 
+The web client's production Node code does the same (HS2-T1H6NP). Every child process in
+`clients/web/src` (the dev bridge's git runner, store init, server launch, reveal and
+folder-chooser helpers, the HS1 backup git calls, the dev-review commit and push, and the
+migration job and lock runners) spawns through `clients/web/src/child-process.ts`. Its
+`spawn`, `spawnSync`, and `execFileAsync` wrappers always remove the same list from the
+passed or inherited environment. ESLint forbids importing `node:child_process` anywhere
+else under `src/`, and a unit test keeps the list in parity with the Rust and test-helper
+lists.
+
 ## 2.13 Copy & move between stores
 
 Tickets need to move between stores — e.g. promote a scratch idea into the team

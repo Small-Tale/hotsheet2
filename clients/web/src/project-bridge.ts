@@ -1,10 +1,10 @@
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, readdir, readFile, realpath, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 
 import type { Checkout } from './api';
+import { spawn } from './child-process';
 import { assessCompatibility, type CompatibilityAssessment, type ServerCompatibility } from './compatibility';
 import {
   type BackupGit,

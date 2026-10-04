@@ -1,8 +1,8 @@
-import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, resolve } from 'node:path';
 
+import { spawn } from '../child-process';
 import type { DevReviewResult, DevReviewSubmission } from './index';
 import { runCommand } from './shell';
 

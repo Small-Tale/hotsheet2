@@ -1,7 +1,6 @@
-import { execFile, type ExecFileOptions } from 'node:child_process';
-import { promisify } from 'node:util';
+import type { ExecFileOptions } from 'node:child_process';
 
-const execFileAsync = promisify(execFile);
+import { execFileAsync } from '../child-process';
 
 /** Characters that never need quoting in a POSIX shell word. */
 const SHELL_SAFE = /^[A-Za-z0-9_@%+=:,./-]+$/;
@@ -46,7 +45,7 @@ export async function runCommand(
   const command = shellQuoteCommand(file, args);
   try {
     const { stdout, stderr } = await execFileAsync(file, args, options);
-    return { stdout: stdout.toString(), stderr: stderr.toString() };
+    return { stdout, stderr };
   } catch (cause) {
     const detail = cause as { code?: number | string; stderr?: string | Buffer };
     const stderr = detail.stderr ? detail.stderr.toString() : '';

@@ -85,6 +85,25 @@ export default tseslint.config(
     },
   },
   {
+    // Every child process in src/ goes through src/child-process.ts, which strips inherited
+    // repository-locating GIT_* variables so a git hook or `git bisect run` cannot redirect a spawned
+    // git or Hot Sheet binary into the calling repository (HS2-T1H6NP).
+    files: ['src/**/*.{ts,tsx,mts}'],
+    ignores: ['src/child-process.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: ['node:child_process', 'child_process'].map((name) => ({
+            name,
+            allowTypeImports: true,
+            message: 'Spawn through src/child-process.ts so inherited GIT_DIR and friends are stripped (HS2-T1H6NP).',
+          })),
+        },
+      ],
+    },
+  },
+  {
     // These dev-only browser/file/CLI boundaries validate data at runtime. Keep the
     // exceptions file-local so equivalent mistakes remain errors everywhere else.
     files: ['src/dev-review/index.ts'],

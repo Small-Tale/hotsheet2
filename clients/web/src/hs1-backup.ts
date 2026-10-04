@@ -1,13 +1,12 @@
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { promisify } from 'node:util';
 
-const execute = promisify(execFile);
+import { execFileAsync } from './child-process';
+
 export type BackupGit = (store: string, args: string[]) => Promise<string>;
 export const backupGit: BackupGit = async (store, args) => {
-  const { stdout } = await execute('git', ['-C', store, ...args], {
+  const { stdout } = await execFileAsync('git', ['-C', store, ...args], {
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     timeout: 30_000,
     maxBuffer: 16 * 1024 * 1024,

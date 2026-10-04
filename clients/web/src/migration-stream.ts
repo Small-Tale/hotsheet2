@@ -1,6 +1,6 @@
-import { spawn, spawnSync } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 
+import { spawn, spawnSync } from './child-process';
 import type { MigrationProgress } from './migration-progress';
 
 /** Decode split UTF-8, CR updates, coalesced records, and a final unterminated line. */

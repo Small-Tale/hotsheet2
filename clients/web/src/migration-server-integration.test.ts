@@ -1,11 +1,10 @@
-import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { promisify } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
 
+import { execFileAsync } from './child-process';
 import { createDevApp } from './dev-server';
 import { backupGit, hasHs1Backup } from './hs1-backup';
 import type { MigrationJob, MigrationStart } from './migration-progress';
@@ -26,7 +25,7 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
     process.env.HOTSHEET_MIGRATION_JOBS = resolve(workspace, 'jobs');
     await mkdir(root);
     try {
-      await promisify(execFile)(
+      await execFileAsync(
         'node',
         [
           '--input-type=module',
@@ -113,7 +112,7 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
       // Replaying terminal history must not undo an intentional later relink.
       const replacement = resolve(workspace, 'replacement.hs2');
       await mkdir(replacement);
-      await promisify(execFile)(process.env.HOTSHEET_CLI_BIN ?? 'hotsheet-cli', [
+      await execFileAsync(process.env.HOTSHEET_CLI_BIN ?? 'hotsheet-cli', [
         '-C',
         replacement,
         'init',
@@ -150,7 +149,7 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
       // The fixture opens no terminals. Its detached broker intentionally outlives
       // server shutdown, so stop only brokers whose command owns this unique home.
       if (process.platform !== 'win32') {
-        const { stdout } = await promisify(execFile)('ps', ['-eo', 'pid=,args=']);
+        const { stdout } = await execFileAsync('ps', ['-eo', 'pid=,args=']);
         for (const line of stdout.split('\n')) {
           const match = line.trim().match(/^(\d+)\s+(.+)$/);
           if (match?.[2].includes(`--terminal-broker-process ${resolve(home, 'broker')}/`)) {
