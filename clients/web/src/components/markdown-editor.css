@@ -139,3 +139,10 @@
     Menlo,
     monospace;
 }
+/* iOS zooms into a focused field under 16px; touch screens keep the source at least that size,
+   still honoring a larger reading scale (HS2-8JPRRC). */
+@media (pointer: coarse) {
+  .markdown-editor__source {
+    font-size: max(var(--hs-touch-field-min-font-size), calc(var(--hotsheet-reading-scale, 1) * var(--wa-font-size-s)));
+  }
+}

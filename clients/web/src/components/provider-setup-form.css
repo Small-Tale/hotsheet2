@@ -133,3 +133,9 @@
 .provider-setup-form__account-copy strong {
   overflow-wrap: anywhere;
 }
+/* iOS zooms into a focused field under 16px (HS2-8JPRRC). */
+@media (pointer: coarse) {
+  .provider-setup-form__field-control {
+    font-size: max(var(--hs-touch-field-min-font-size), 1em);
+  }
+}

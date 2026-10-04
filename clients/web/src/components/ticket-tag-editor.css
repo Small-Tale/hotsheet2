@@ -54,3 +54,9 @@
   color: var(--wa-color-text-quiet);
   font-size: var(--wa-font-size-2xs);
 }
+/* iOS zooms into a focused field under 16px (HS2-8JPRRC). */
+@media (pointer: coarse) {
+  .ticket-tag-editor__popover input {
+    font-size: max(var(--hs-touch-field-min-font-size), var(--wa-font-size-xs));
+  }
+}

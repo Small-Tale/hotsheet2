@@ -100,6 +100,10 @@ When automation lands, remove the manual-only step and record it below.
     prompt. Magnify a grid terminal and confirm its footer carries the same pair. Attach a trackpad
     or mouse to the iPad and confirm the pair disappears. Automated coverage emulates a coarse
     pointer in Chromium at 1180x820, which cannot prove Safari's pointer media reporting.
+14. HS2-8JPRRC — on a **physical iPhone** (iOS Safari), tap into New ticket → Details, the
+    inspector's details editor, the Add tag field, an attachment purpose select, and the ticket
+    source repository search. Confirm the page never zooms in on focus. Automated coverage measures
+    computed font sizes under Chromium phone emulation, which cannot prove Safari's zoom heuristic.
 
 ### Local production host over the LAN
 

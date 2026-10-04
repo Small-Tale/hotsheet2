@@ -1707,7 +1707,11 @@ and identity-less legacy entries remain conservatively blocking.
   settings, the not-working note, and dev review) instead grows with its content from its
   minimum height and shrinks when cleared; its dialog or panel scrolls to keep the actions
   reachable, and stored desktop editor heights do not apply. Browsers without
-  `field-sizing` keep the grip (HS2-6PC150).
+  `field-sizing` keep the grip (HS2-6PC150). On touch screens every native text field is also
+  set at 16 px or larger (`--hs-touch-field-min-font-size`), because iOS zooms the page into a
+  focused field below that size: the Details textarea, the details editor source, the tag input,
+  the attachment purpose select (whose pill then grows with its text), and the repository search
+  field. A mouse keeps the compact type (HS2-8JPRRC).
   The form uses 16 px between sibling regions, 8 px within metadata/evidence/action groups,
   and 4 px for connected labels and icon details (HS2-4Y6SM9).
   The footer names the ticket source the new ticket is created in. When the project has two

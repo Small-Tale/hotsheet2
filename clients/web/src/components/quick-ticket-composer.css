@@ -106,6 +106,13 @@
     }
   }
 }
+/* iOS zooms into a focused field under 16px, so touch screens keep the details field at least that
+   size (HS2-8JPRRC). */
+@media (pointer: coarse) {
+  .quick-ticket-composer__details textarea {
+    font-size: max(var(--hs-touch-field-min-font-size), var(--wa-font-size-s));
+  }
+}
 .quick-ticket-composer:is([data-dragging='true'], [data-dragging-ticket='true']) {
   border-color: var(--wa-color-focus);
   background: var(--wa-color-brand-fill-quiet);

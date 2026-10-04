@@ -114,6 +114,7 @@ describe('shared client theme', () => {
       '--hs-command-gray',
       '--hs-reader-text-scale',
       '--hs-selected-row-overlap',
+      '--hs-touch-field-min-font-size',
     ];
     const cssReferences = required.filter(
       (token) => !token.startsWith('--hs-priority-') && token !== '--hs-category-fallback',
@@ -214,8 +215,11 @@ describe('shared client theme', () => {
     const typeToken = 'var\\(--wa-font-size-(?:3xs|2xs|xs|s|m|l|xl|2xl|3xl|4xl|5xl|smaller|larger)\\)';
     // Reading scale (HS2-MGVE50): a reading surface multiplies a typography step (or the inherited size).
     const readingToken = `calc\\(var\\(--hotsheet-reading-scale, 1\\) \\* (?:${typeToken}|1em)\\)`;
+    // Touch floor (HS2-8JPRRC): a native text field on a coarse pointer never drops below the 16px
+    // iOS zoom threshold, otherwise it keeps its typography step.
+    const touchFloor = `max\\(var\\(--hs-touch-field-min-font-size\\), (?:${typeToken}|${readingToken}|1em)\\)`;
     const allowedSize = new RegExp(
-      `^(?:${typeToken}|${readingToken}|clamp\\(${typeToken}, \\d*\\.?\\d+vw, ${typeToken}\\))$`,
+      `^(?:${typeToken}|${readingToken}|${touchFloor}|clamp\\(${typeToken}, \\d*\\.?\\d+vw, ${typeToken}\\))$`,
     );
     for (const path of clientCss) {
       const source = css(path);

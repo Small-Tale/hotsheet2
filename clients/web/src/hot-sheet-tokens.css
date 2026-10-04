@@ -7,6 +7,10 @@
   color-scheme: dark;
 }
 :root {
+  /* iOS zooms the page into any focused text field set below 16 CSS px. Touch screens keep native
+     fields at least this size; it is a literal px value because the threshold ignores the root
+     font size (HS2-8JPRRC). */
+  --hs-touch-field-min-font-size: 16px;
   /* Adjacent selected rows overlap their shared 1px border so the selection reads as one block
      (HS2-M6B8AD); this is border geometry, not spacing. */
   --hs-selected-row-overlap: -1px;

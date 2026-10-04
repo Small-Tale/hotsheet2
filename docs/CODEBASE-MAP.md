@@ -99,6 +99,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-clipboard.ts # Phone terminal copy/paste: buffer-text snapshot, viewport events, clipboard read/write fallbacks (HS2-FRB545)
     src/components/terminal-clipboard-dialogs.tsx # Phone terminal Copy sheet and Paste-fallback sheet (HS2-FRB545), and the long-press TerminalEditMenu (HS2-KKP8YJ)
     tests/terminal-clipboard.spec.ts # Phone terminal copy/paste flows, denied/unavailable fallback, desktop absence (HS2-FRB545)
+    tests/touch-field-font.spec.ts # Touch screens keep native text fields at 16px+ so iOS never zooms on focus; desktop stays compact (HS2-8JPRRC)
     tests/shell-composition.spec.ts # AppShell/ProjectTabBar/terminal grid and drawer configured through props, not cross-component CSS (HS2-DR549A)
     src/terminal-viewport-runtime.test.ts # Partial setup failure/cleanup and successful refill with idempotent teardown
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos

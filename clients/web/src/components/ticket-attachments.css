@@ -296,3 +296,12 @@
     height: min(remify(160px), 44vw);
   }
 }
+/* iOS zooms into a focused select under 16px; on touch screens the purpose pill grows with its text
+   instead (HS2-8JPRRC). */
+@media (pointer: coarse) {
+  .ticket-attachments__batch > header select {
+    height: auto;
+    min-height: remify(26.4px);
+    font-size: max(var(--hs-touch-field-min-font-size), var(--wa-font-size-xs));
+  }
+}
