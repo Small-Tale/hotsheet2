@@ -12,12 +12,12 @@ allowed-tools: Read, Grep, Glob, Bash, Agent
 
 Analyze the overall quality of Hot Sheet 2 and produce one report covering every surface:
 
-| Surface            | Where                                                                                                                                                                       | Gates                                                                            |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Core + CLI         | `crates/hotsheet-model`, `hotsheet-ticketing`, `hotsheet-index`, `hotsheet-cli`, `hotsheet-extsync`, `hotsheet-aitools`, `hotsheet-plugins`, `hotsheet-mcp`, `hotsheet-tls` | fmt, clippy, nextest, llvm-cov                                                   |
-| Server + terminals | `crates/hotsheet-server` (HTTP/WS, `tests/http.rs`), `crates/hotsheet-terminals`                                                                                            | same Rust gates, plus server E2E                                                 |
-| Web client         | `clients/web` (Kerf + Web Awesome)                                                                                                                                          | lint (incl. `css:ownership`, catalog), `tsc`, vitest, Playwright, Kerf UI doctor |
-| Migrator           | `migrator/` (Node)                                                                                                                                                          | lint, vitest coverage, cross-language conformance                                |
+| Surface            | Where                                                                                                                                                                       | Gates                                                                           |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Core + CLI         | `crates/hotsheet-model`, `hotsheet-ticketing`, `hotsheet-index`, `hotsheet-cli`, `hotsheet-extsync`, `hotsheet-aitools`, `hotsheet-plugins`, `hotsheet-mcp`, `hotsheet-tls` | fmt, clippy, nextest, llvm-cov                                                  |
+| Server + terminals | `crates/hotsheet-server` (HTTP/WS, `tests/http.rs`), `crates/hotsheet-terminals`                                                                                            | same Rust gates, plus server E2E                                                |
+| Web client         | `clients/web` (Kerf + Web Awesome)                                                                                                                                          | lint (incl. catalog, Kerf UI doctor), `tsc`, vitest, Playwright, Kerf UI doctor |
+| Migrator           | `migrator/` (Node)                                                                                                                                                          | lint, vitest coverage, cross-language conformance                               |
 
 Confirm the crate list with `ls crates` instead of trusting this table.
 
@@ -56,15 +56,14 @@ those unsandboxed before treating a failure as a regression (CLAUDE.md, memory n
 3. **Web client gates** (from `clients/web`)
 
    ```
-   npm run lint          # format check, ESLint --max-warnings 0, css:ownership, catalog:check
+   npm run lint          # format check, ESLint --max-warnings 0, catalog:check, ui:doctor
    npx tsc --noEmit -p .
    npx vitest run
-   npm run ui:doctor
    ```
 
    Judge `npm run lint` by its exit status, not by grepping output. Report: lint findings
-   by rule, type errors by file, unit pass/fail, Kerf UI doctor counts, and the size of
-   `css-ownership-allowlist.json` (each entry must name a ticket; it may only shrink).
+   by rule, type errors by file, unit pass/fail, and Kerf UI doctor counts, including every
+   suppression in `.kerf-ui-doctor.json` (each must name a still-open `KF-*` ticket).
 
 4. **Web end-to-end** (from `clients/web`)
 
@@ -124,8 +123,8 @@ those unsandboxed before treating a failure as a regression (CLAUDE.md, memory n
      - Browser test fixtures whose JSON shape differs from the real server's wire shape.
    - **Web client**
      - Application CSS that styles Kerf components (`.kui-*`, `[data-component]`, Kerf
-       `::part`s) or another component's markup. `css:ownership` and the doctor catch most of
-       this; review each allowlist and doctor suppression for a still-open ticket.
+       `::part`s) or another component's markup. The Kerf UI doctor catches most of this;
+       review each doctor suppression for a still-open ticket.
      - Icons that are not Lucide through the shared icon component (emoji, Unicode shapes).
      - Text editors with Save/Cancel buttons, or writes on every keystroke, instead of the
        blur/page-hide autosave contract.

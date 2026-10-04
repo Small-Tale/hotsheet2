@@ -96,14 +96,22 @@ describe('Kerf application UI profile', () => {
       }),
     );
     // Known Kerf gaps are documented suppressions, never budgets. Production components carry none
-    // (HS2-DAMHD1, HS2-AEK8GK), and beta.72 skips test modules for KUI-L023 (KF-GESM24, HS2-51MB3F).
-    // The only suppressions are UX demo modules that render the demo group's own stage class, which
-    // implicit ownership of `src/ux-demo/main.tsx` misattributes (KF-303MPV).
-    for (const suppression of config.suppressions) {
-      expect(suppression.rules).toEqual(['KUI-L023']);
-      expect(suppression.target).toMatch(/^src\/ux-demo\/[a-z-]+-demo\.tsx$/);
-      expect(suppression.rationale).toContain('KF-303MPV');
-    }
-    for (const suppression of config.suppressions) expect(suppression.rationale).toMatch(/KF-[0-9A-Z]{6}/);
+    // (HS2-DAMHD1, HS2-AEK8GK), beta.72 skips test modules for KUI-L023 (KF-GESM24, HS2-51MB3F), and
+    // beta.73 lets the UX demo ownership group own its stage class (KF-303MPV, HS2-R9GQJE): none remain.
+    expect(config.suppressions).toEqual([]);
+    // The doctor replaced the app CSS ownership check, so `npm run lint` ends with it (HS2-R9GQJE).
+    const scripts = (
+      JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+        scripts: Record<string, string>;
+      }
+    ).scripts;
+    expect(scripts.lint.split('&&').map((step) => step.trim())).toEqual([
+      'npm run format:check',
+      'eslint . --max-warnings 0',
+      'npm run catalog:check',
+      'npm run ui:doctor',
+    ]);
+    expect(scripts['ui:doctor']).toBe('kerf-ui-doctor --full');
+    expect(scripts).not.toHaveProperty('css:ownership');
   });
 });

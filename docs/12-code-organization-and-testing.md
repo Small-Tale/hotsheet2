@@ -128,23 +128,20 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command
   runs the repository-wide format check first, so CI rejects drift in all supported
   source and structured-content areas (HS2-F0BC6Q).
-- The web lint command ends with `npm run css:ownership`, which runs
-  `clients/web/scripts/check-css-ownership.mjs` (HS2-EWYDH7). It enforces component CSS
-  ownership between the app's own components. A stylesheet may style only the class blocks
-  its component renders, plus the native and raw Web Awesome elements it authors; a module renders
-  only its own class blocks (HS2-TM6K9V); and owners
-  are derived from the TSX sources. The Kerf doctor runs strict component ownership: `source` on every catalog entry,
-  `implicitComponentOwnership`, shell-stylesheet `ownershipGroups`, and
-  `ownershipContext: "any-package"` (HS2-R9GQJE). As of Kerf 5.0.0-beta.72 it misses only
-  restyles of a co-owned class (`KF-D5EY24`), and misattributes the UX demo group's stage class
-  (`KF-303MPV`, suppressed per file). The check stays until both ship (HS2-R9GQJE). Known residue is a ticketed, count-exact allowlist
-  (`clients/web/css-ownership-allowlist.json`) that can only shrink: a new finding or a stale
-  entry fails lint. See [ux-components.md](ux-components.md) for the rule set.
   Both commands require the tracked web, migrator, compatibility-spike, docs, and
   workflow paths. The setup-generated root `opencode.json` is optional in a clean
   checkout; when present, it receives the same formatting and syntax checks. Missing
   tracked paths and unreadable or malformed local config remain errors. Rust formatting
   continues through `cargo fmt` after Prettier succeeds (HS2-G9K0NY).
+- The web lint command ends with `npm run ui:doctor` (`kerf-ui-doctor --full`), which enforces
+  component CSS ownership between the app's own components. A stylesheet may style only the class
+  blocks its component renders, plus the native and raw Web Awesome elements it authors, and a
+  module renders only its own class blocks (HS2-TM6K9V). The doctor runs strict component
+  ownership: `source` on every catalog entry, `implicitComponentOwnership`, shell-stylesheet
+  `ownershipGroups`, and `ownershipContext: "any-package"`, with no suppressions. Kerf
+  5.0.0-beta.73 closed the last gaps (`KF-D5EY24`, `KF-303MPV`), so HS2-R9GQJE deleted the former
+  app check (`scripts/check-css-ownership.mjs`, HS2-EWYDH7) and its allowlist. See
+  [ux-components.md](ux-components.md) for the rule set.
 - Wire types in `hotsheet-types` derive serde + `ts-rs` (→ TypeScript for the Kerf client;
   Swift generation added for the native client).
 - Kerf component props that represent CSS lengths, flex shorthands, or colors use the

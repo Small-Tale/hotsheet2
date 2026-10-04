@@ -2368,31 +2368,32 @@ the heading's `data-summary-size="small"` variant and reserves the row on its ow
 module also imports `native-popover-dialog.css` directly instead of through a CSS `@import`, so it
 co-owns the `.dialog-surface` it renders.
 
-HS2-R9GQJE reran the probe matrix on beta.72 (rule in an unrelated component stylesheet, or markup
-in an unrelated module):
+HS2-R9GQJE reran the probe matrix on Kerf 5.0.0-beta.73, with each rule placed in an unrelated
+component stylesheet or the markup in an unrelated module. The doctor now reports every case the
+former app check enforced:
 
-| Probe                                                                   | Doctor (strict)    | App check         |
-| ----------------------------------------------------------------------- | ------------------ | ----------------- |
-| `.ticket-search-field .own`, `.own:has(.ticket-search-field)`           | `KUI-L019` context | `foreign-class`   |
-| `.ticket-search-field svg` (descendant of a sibling's root)             | `KUI-L019`         | `foreign-class`   |
-| `.ticket-list-row__category` (literal element class)                    | `KUI-L019`         | `foreign-class`   |
-| `.ticket-list-row--list` (dynamic modifier of a co-owned block)         | not reported       | `foreign-class`   |
-| `.terminal-ticket-rail__project svg` (hook descendant)                  | `KUI-L019`         | `hook-descendant` |
-| `.active-claim-spinner > svg` (uncataloged owner)                       | `KUI-L019`         | `foreign-element` |
-| `.own > svg` over a composed `LucideIcon`                               | `KUI-L019`         | `foreign-element` |
-| `.kui-toolbar > .own` (Kerf class as context)                           | `KUI-L019` context | `kerf`            |
-| JSX `class=`, raw HTML in a template literal with `${…}`, `className =` | `KUI-L023`         | `borrowed-markup` |
+| Probe                                                                   | Doctor (strict)    |
+| ----------------------------------------------------------------------- | ------------------ |
+| `.ticket-search-field .own`, `.own:has(.ticket-search-field)`           | `KUI-L019` context |
+| `.ticket-search-field svg` (descendant of a sibling's root)             | `KUI-L019`         |
+| `.ticket-list-row__category` (literal element class)                    | `KUI-L019`         |
+| `.ticket-list-row--list` (modifier of a co-owned block, `KF-D5EY24`)    | `KUI-L019`         |
+| `.terminal-ticket-rail__project svg` (hook descendant)                  | `KUI-L019`         |
+| `.active-claim-spinner > svg` (uncataloged owner)                       | `KUI-L019`         |
+| `.own > svg` over a composed `LucideIcon`                               | `KUI-L019`         |
+| `.kui-toolbar > .own` (Kerf class as context)                           | `KUI-L019` context |
+| JSX `class=`, raw HTML in a template literal with `${…}`, `className =` | `KUI-L023`         |
 
-One gap remains. `ticket-row.tsx` and `corrupt-ticket-row.tsx` both import `ticket-row.css`, so the
-doctor treats `ticket-list-row` as co-owned and skips CSS-subject diagnostics for it (`KF-D5EY24`).
-The doctor also misattributes the UX demo group's `.component-stage__event` to the importing
-`src/ux-demo/main.tsx` (`KF-303MPV`); the affected demo modules carry exact `KUI-L023` suppressions
-citing it. The app check stays until both ship; HS2-R9GQJE then deletes it.
+Beta.73 also lets the UX demo ownership group own its `.component-stage__event` (`KF-303MPV`), so
+the doctor runs with no suppressions. HS2-R9GQJE therefore deleted the app check
+(`scripts/check-css-ownership.mjs`, its test, `css-ownership-allowlist.json`, and the
+`css:ownership` script). `npm run lint` now ends with `npm run ui:doctor`.
 
-Until then, `npm run css:ownership` runs as the last step of `npm run lint`. It is
-`clients/web/scripts/check-css-ownership.mjs`, unit-tested in `check-css-ownership.test.mjs`, and
-enforces this rule: **a component stylesheet styles only the class blocks its own component
-renders, plus the native HTML and raw Web Awesome elements that component authors itself.**
+The rest of this section records the rule and its history. **A component stylesheet styles only
+the class blocks its own component renders, plus the native HTML and raw Web Awesome elements that
+component authors itself.** "The check" and "the guard" below mean the retired app check
+(HS2-EWYDH7). It enforced the rule from its introduction until HS2-R9GQJE, and the doctor now
+reports the same cases.
 
 Ownership comes from the TSX sources, not from file names:
 
@@ -2482,18 +2483,14 @@ close button inside the group stays a literal `raw()` string. The heading at 128
 identical before and after. This fix removed the last seven entries, so the allowlist is now
 empty.
 
-Known residue is listed in `clients/web/css-ownership-allowlist.json`. Each entry has `file`,
-`selector` (with whitespace normalized), an exact `count` when the selector occurs more than once,
-a `ticket` (`HS2-*` or `KF-*`) and a `reason`.
-
-The allowlist can only shrink. An uncovered finding fails lint, and so does an extra occurrence of
-an allowlisted selector. An entry that now matches fewer findings than it claims is stale and also
-fails lint until it is lowered or deleted.
+Known residue was listed in `clients/web/css-ownership-allowlist.json`, which could only shrink. Each
+entry named a file, a selector, an exact count, and a tracking ticket. It was empty when
+HS2-R9GQJE deleted the check.
 
 At introduction the check found 122 findings in 115 entries, grouped by area under `HS2-DYAR0S`,
 `HS2-PK1C1X`, `HS2-M2W2DP`, `HS2-YNW0B3`, `HS2-7ZGYJY`, `HS2-148B5C`, `HS2-4V4CV2`, `HS2-QM0C3T`,
-`HS2-TV78E1`, and `HS2-0X36TX`. Never add an entry for new code; fix the selector, give the
-element an own class, or configure the child through its props.
+`HS2-TV78E1`, and `HS2-0X36TX`. For a new finding, fix the selector, give the element its own
+class, or configure the child through its props; never suppress it.
 
 UX demo stage styles in `src/ux-demo/style.css` style only demo-authored markup (HS2-TV78E1).
 Demo captions, case frames, and copy carry their own demo classes (`__caption`, `__case`,
