@@ -4,9 +4,6 @@
   max-width: remify(640px);
   gap: var(--wa-space-m);
 }
-.provider-setup-form__back {
-  width: fit-content;
-}
 .provider-setup-form__account-usage,
 .provider-setup-form__field-hint {
   color: var(--wa-color-neutral-on-quiet);

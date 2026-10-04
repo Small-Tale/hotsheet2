@@ -1935,7 +1935,9 @@ visible sides, and both side layouts (block content, action-row footer).
 `FlowBackButton` is the corresponding in-content back affordance for multi-screen dialogs:
 a quiet brand-colored chevron and destination label at the start of the detail screen.
 Back belongs there rather than beside Cancel/Submit in the footer. Ticket-source setup and
-conversation save share this visual contract; save scope pushes forward and pops backward.
+conversation save share this visual contract; save scope pushes forward and pops backward. The
+ticket-source provider form and remote-backup screen compose it through `ProviderSetupBackButton`,
+so every setup dialog has one back affordance (HS2-WJ4JDW).
 
 ## 8. Setup, settings, and connection management
 
@@ -2470,7 +2472,8 @@ HS2-WP69TD removed the four sibling-class entries by composing the owner instead
 - **`DiffToolMissingNotice`** is exported by `TicketCodeReview`, which owns
   `.ticket-code-review__notice`. The change-evidence dialog composes it.
 - **`ProviderSetupBackButton`** is exported by `ProviderSetupForm`. It takes the screen's back
-  `action`, so the remote-backup screen composes it with its own action.
+  `action`, so the remote-backup screen composes it with its own action. Since HS2-WJ4JDW it
+  renders the shared `FlowBackButton` instead of a plain Web Awesome button.
 - **The terminal initialization error** is created by the imperative runtime in
   `terminal-viewport.ts`. It renders its own `.terminal-viewport-error` block from
   `terminal-viewport-error.css`, and TerminalDashboard's error viewport still centers it.

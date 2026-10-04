@@ -8,10 +8,11 @@ import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
 import type { AttrSpec } from 'kerfjs';
-import { Check, ChevronLeft, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
+import { Check, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
 import type { ProviderAccount, ProviderConnection } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { FlowBackButton } from './flow-back-button';
 import { ProviderIcon } from './provider-icon';
 
 export type ExternalProviderKind = 'github' | 'gitlab' | 'jira';
@@ -91,11 +92,8 @@ function accountUsage(account: ProviderAccount, capitalized = true) {
  * with their own back action (HS2-WP69TD).
  */
 export function ProviderSetupBackButton({ action }: { action: AttrSpec<'data-action'> }) {
-  return (
-    <wa-button class="provider-setup-form__back" appearance="plain" type="button" {...action.attrs}>
-      <LucideIcon slot="start" icon={ChevronLeft} name="chevron-left" /> Ticket source types
-    </wa-button>
-  );
+  // The one chevron back affordance shared by multi-screen setup dialogs (HS2-WJ4JDW).
+  return <FlowBackButton action={action.value} label="Ticket source types" />;
 }
 
 export function ProviderSetupForm({

@@ -38,7 +38,9 @@ describe('extracted shared presentations', () => {
   it('renders the ticket-source back control with each screen own back action', () => {
     for (const action of [COMMANDS_AND_AI_ACTIONS.backProviderKind, PROJECT_LIFECYCLE_ACTIONS.backTicketStoreRemote]) {
       const markup = String(ProviderSetupBackButton({ action }));
-      expect(markup).toContain('class="provider-setup-form__back"');
+      // It composes the shared FlowBackButton, the one back affordance across setup dialogs (HS2-WJ4JDW).
+      expect(markup).toContain('class="flow-back-button"');
+      expect(markup).toContain('type="button"');
       expect(markup).toContain(`data-action="${action.value}"`);
       expect(markup).toContain('Ticket source types');
       expect(markup).toContain('data-lucide="chevron-left"');
