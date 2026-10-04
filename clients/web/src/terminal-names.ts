@@ -79,7 +79,7 @@ export function reconcileLocalTerminalNames(
   projectId: string,
   sessions: readonly { id: string; name?: string }[],
   local: Readonly<Record<string, string>>,
-  pending: ReadonlySet<string>,
+  pending: Pick<ReadonlySet<string>, 'has'>,
 ): { upload: { terminalId: string; name: string }[]; drop: string[] } {
   const upload: { terminalId: string; name: string }[] = [],
     drop: string[] = [];
@@ -134,4 +134,55 @@ function updateTerminalSession<
         }
       : group,
   );
+}
+
+/**
+ * Per-terminal name writes in user order (HS2-0E7Q6E). Each rename, Reset to default, or legacy
+ * upload is a separate `PUT /terminals/{id}/name`, and two in flight at once can reach the server in
+ * either order. The queue runs one write per terminal at a time; an intent queued behind a running
+ * write replaces any older queued intent, so only the latest one runs next and the last user action
+ * always lands last. A key stays pending until its queue drains, which also keeps server echoes of
+ * earlier writes from retitling the tab mid-sequence.
+ */
+export interface TerminalNameWriteQueue {
+  /** Queue `write` for `key`; resolves once it ran or a newer intent superseded it. */
+  enqueue(key: string, write: () => Promise<unknown>): Promise<void>;
+  /** Whether `key` has a write running or queued. */
+  has(key: string): boolean;
+}
+
+export function createTerminalNameWriteQueue(): TerminalNameWriteQueue {
+  const queues = new Map<string, { next?: { write: () => Promise<unknown>; settle: Array<() => void> } }>();
+  const run = (key: string, write: () => Promise<unknown>, settle: Array<() => void>) => {
+    void write()
+      .catch(() => undefined)
+      .finally(() => {
+        for (const done of settle) done();
+        const queue = queues.get(key),
+          next = queue?.next;
+        if (!queue || !next) {
+          queues.delete(key);
+          return;
+        }
+        queue.next = undefined;
+        run(key, next.write, next.settle);
+      });
+  };
+  return {
+    enqueue(key, write) {
+      return new Promise<void>((resolve) => {
+        const queue = queues.get(key);
+        if (!queue) {
+          queues.set(key, {});
+          run(key, write, [resolve]);
+          return;
+        }
+        // A newer intent supersedes the queued one; both callers settle when the newer write does.
+        queue.next = { write, settle: [...(queue.next?.settle ?? []), resolve] };
+      });
+    },
+    has(key) {
+      return queues.has(key);
+    },
+  };
 }

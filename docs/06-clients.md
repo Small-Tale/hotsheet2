@@ -2311,7 +2311,11 @@ rename applies, the dialog names the terminal's derived default in the field hin
 **Reset to default** (HS2-2Q7KTX): it retitles the tab to that default at once, drops any
 browser-local copy, and clears the saved name with `PUT /terminals/{id}/name {"name": null}`,
 whose `terminal_renamed` event (no name) returns every other client's tab to its own derived
-default without a refetch. A terminal still on its default name shows no reset action. Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
+default without a refetch. A terminal still on its default name shows no reset action. Each
+terminal's name writes (rename, reset, and legacy uploads) run one at a time in user order; an
+intent made while a write is in flight replaces any older queued one, so the last rename or reset
+always reaches the server last, and the terminal counts as pending until its queue drains
+(HS2-0E7Q6E). Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
 one mixed drawer strip by dragging across either kind. Both strips use Kerf's controlled
 `TabBar`/`AppTab` composition and one `wireTabBars` delegation. Both use manual activation:
 Left/Right/Home/End move focus without replacing the focused controlled tab node, and

@@ -6102,6 +6102,63 @@ for (const width of [1280, 390])
     await page.screenshot({ path: `/private/tmp/claude/hs2-mew525-rename-prefill-${width}.png` });
   });
 
+test('serializes terminal name writes so a reset made during a slow rename still wins (HS2-0E7Q6E)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const sent: unknown[] = [],
+    held: import('@playwright/test').Route[] = [];
+  let holdNext = true;
+  // Hold the first name write in flight, as a slow connection would; later writes pass straight through.
+  await page.route('**/terminals/tests/name', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    sent.push(route.request().postDataJSON());
+    if (holdNext) {
+      holdNext = false;
+      held.push(route);
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    dialog = page.locator('[data-terminal-rename-dialog]'),
+    rename = async (tabName: RegExp, name: string | null) => {
+      await drawer.getByRole('tab', { name: tabName }).click({ button: 'right' });
+      await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+      await expect(dialog).toHaveJSProperty('open', true);
+      if (name === null) await dialog.getByRole('button', { name: 'Reset to default' }).click();
+      else {
+        await dialog.getByRole('textbox', { name: /Terminal name/ }).fill(name);
+        await dialog.getByRole('button', { name: 'Rename' }).click();
+      }
+      await expect(dialog).toHaveJSProperty('open', false);
+    };
+  await expect(drawer.getByRole('tab', { name: /^Tests/ })).toBeVisible();
+  // Rename (held in flight), rename again, then reset — all before the first write answers.
+  await rename(/^Tests/, 'First name');
+  await expect.poll(() => sent.length).toBe(1);
+  await rename(/First name/, 'Second name');
+  await rename(/Second name/, null);
+  await expect(drawer.getByRole('tab', { name: /^Tests/ })).toBeVisible();
+  // Nothing else reaches the server while the first write is outstanding.
+  await page.waitForTimeout(300);
+  expect(sent).toEqual([{ name: 'First name' }]);
+  await held[0].fallback();
+  // The queued intents coalesce to the latest one: the reset runs next, and "Second name" never does.
+  await expect.poll(() => sent).toEqual([{ name: 'First name' }, { name: null }]);
+  await expect(drawer.getByRole('tab', { name: /^Tests/ })).toBeVisible();
+  // The server kept the user's last action: a reload still shows the default name.
+  await page.reload();
+  await expect(page.locator('[data-component="terminal-drawer"]').getByRole('tab', { name: /^Tests/ })).toBeVisible();
+  await expect(
+    page.locator('[data-component="terminal-drawer"]').getByRole('tab', { name: /First name|Second name/ }),
+  ).toHaveCount(0);
+});
+
 for (const width of [1280, 390])
   test(`resets a renamed terminal to its default name from the rename dialog at ${width}px (HS2-2Q7KTX)`, async ({
     page,

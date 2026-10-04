@@ -275,6 +275,7 @@ import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
 import {
+  createTerminalNameWriteQueue,
   defaultTerminalNames,
   parseTerminalNames,
   reconcileLocalTerminalNames,
@@ -529,7 +530,8 @@ export async function startHotSheetWebClient() {
     // Long-press terminal edit menu (HS2-KKP8YJ).
     terminalEditMenu = signal<TerminalEditMenuState | undefined>(undefined);
   /** Project-scoped keys of renames whose server write is still in flight (HS2-89FPV1). */
-  const pendingTerminalRenames = new Set<string>();
+  // Serializes each terminal's name writes so the last rename or reset always lands last (HS2-0E7Q6E).
+  const pendingTerminalRenames = createTerminalNameWriteQueue();
   let terminalDashboardGeneration = 0,
     terminalCreateChain: Promise<unknown> = Promise.resolve();
   let terminalDrawerTransitionTimer: number | undefined, terminalPreviewClickTimer: number | undefined;
@@ -1484,10 +1486,8 @@ export async function startHotSheetWebClient() {
     const target = projects.value.find((item) => item.id === projectId),
       key = terminalNameKey(projectId, terminalId);
     if (!target) return;
-    pendingTerminalRenames.add(key);
-    void new Api(target.apiPath)
-      .renameTerminal(terminalId, name)
-      .then(
+    void pendingTerminalRenames.enqueue(key, () =>
+      new Api(target.apiPath).renameTerminal(terminalId, name).then(
         () => {
           if (terminalNames.value[key] === name)
             persistLocalTerminalNames(withoutTerminalName(terminalNames.value, key));
@@ -1497,10 +1497,8 @@ export async function startHotSheetWebClient() {
             `The terminal name could not be saved: ${reason instanceof Error ? reason.message : String(reason)}`,
           );
         },
-      )
-      .finally(() => {
-        pendingTerminalRenames.delete(key);
-      });
+      ),
+    );
   }
   /**
    * Return a renamed terminal to its derived default name (HS2-2Q7KTX): retitle the tab at once,
@@ -1514,16 +1512,12 @@ export async function startHotSheetWebClient() {
     if (Object.hasOwn(terminalNames.value, key))
       persistLocalTerminalNames(withoutTerminalName(terminalNames.value, key));
     terminalGroups.value = restoreDefaultTerminalTitle(terminalGroups.value, projectId, terminalId);
-    pendingTerminalRenames.add(key);
-    void new Api(target.apiPath)
-      .renameTerminal(terminalId, null)
-      .catch((reason: unknown) => {
+    void pendingTerminalRenames.enqueue(key, () =>
+      new Api(target.apiPath).renameTerminal(terminalId, null).catch((reason: unknown) => {
         showToast(`The terminal name could not be reset: ${reason instanceof Error ? reason.message : String(reason)}`);
         if (terminalGroupLoaded(projectId)) void refreshTerminalDashboard();
-      })
-      .finally(() => {
-        pendingTerminalRenames.delete(key);
-      });
+      }),
+    );
   }
   /** Upload settled browser-local names the server lacks and drop ones it supersedes. */
   function reconcileTerminalNames(current: Project, sessions: readonly TerminalInfo[]) {

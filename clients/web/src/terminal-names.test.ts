@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createTerminalNameWriteQueue,
   defaultTerminalName,
   defaultTerminalNames,
   parseTerminalNames,
@@ -121,5 +122,95 @@ describe('terminal names', () => {
     expect(restoreDefaultTerminalTitle(named, 'p', 'b')).toBe(named);
     expect(restoreDefaultTerminalTitle(named, 'p', 'missing')).toBe(named);
     expect(restoreDefaultTerminalTitle(named, 'missing', 'a')).toBe(named);
+  });
+});
+
+describe('terminal name write queue (HS2-0E7Q6E)', () => {
+  /** A write whose completion the test controls, recording when it starts. */
+  function deferredWrites() {
+    const started: string[] = [],
+      finish = new Map<string, (ok: boolean) => void>();
+    const write = (label: string) => () =>
+      new Promise<void>((resolve, reject) => {
+        started.push(label);
+        finish.set(label, (ok) => {
+          if (ok) resolve();
+          else reject(new Error(label));
+        });
+      });
+    const settle = async (label: string, ok = true) => {
+      finish.get(label)!(ok);
+      for (let tick = 0; tick < 5; tick += 1) await Promise.resolve();
+    };
+    return { started, write, settle };
+  }
+
+  it('runs one write per terminal at a time, in user order, and drains to not pending', async () => {
+    const queue = createTerminalNameWriteQueue(),
+      { started, write, settle } = deferredWrites();
+    expect(queue.has('p:t1')).toBe(false);
+    const first = queue.enqueue('p:t1', write('rename A'));
+    expect(started).toEqual(['rename A']);
+    expect(queue.has('p:t1')).toBe(true);
+    void queue.enqueue('p:t1', write('reset'));
+    // The reset waits for the rename instead of racing it to the server.
+    expect(started).toEqual(['rename A']);
+    await settle('rename A');
+    await first;
+    expect(started).toEqual(['rename A', 'reset']);
+    expect(queue.has('p:t1')).toBe(true);
+    await settle('reset');
+    expect(queue.has('p:t1')).toBe(false);
+  });
+
+  it('coalesces intents queued behind a running write to the latest one', async () => {
+    const queue = createTerminalNameWriteQueue(),
+      { started, write, settle } = deferredWrites(),
+      settled: string[] = [];
+    void queue.enqueue('p:t1', write('rename A'));
+    void queue.enqueue('p:t1', write('rename B')).then(() => settled.push('B'));
+    void queue.enqueue('p:t1', write('reset')).then(() => settled.push('reset'));
+    await settle('rename A');
+    // "rename B" never runs: the reset superseded it before it started; both callers settle together.
+    expect(started).toEqual(['rename A', 'reset']);
+    expect(settled).toEqual([]);
+    await settle('reset');
+    expect(settled).toEqual(['B', 'reset']);
+    expect(queue.has('p:t1')).toBe(false);
+  });
+
+  it('continues after a failed write, keeps terminals independent, and refills after draining', async () => {
+    const queue = createTerminalNameWriteQueue(),
+      { started, write, settle } = deferredWrites();
+    void queue.enqueue('p:t1', write('t1 rename'));
+    void queue.enqueue('p:t2', write('t2 rename'));
+    // Another terminal's write never waits on this one.
+    expect(started).toEqual(['t1 rename', 't2 rename']);
+    void queue.enqueue('p:t1', write('t1 reset'));
+    await settle('t1 rename', false);
+    expect(started).toContain('t1 reset');
+    await settle('t1 reset');
+    await settle('t2 rename');
+    expect(queue.has('p:t1')).toBe(false);
+    expect(queue.has('p:t2')).toBe(false);
+    // Empty-then-refill: a new write after draining runs immediately.
+    void queue.enqueue('p:t1', write('t1 again'));
+    expect(started.at(-1)).toBe('t1 again');
+    expect(queue.has('p:t1')).toBe(true);
+    await settle('t1 again');
+    expect(queue.has('p:t1')).toBe(false);
+  });
+
+  it('serves as the pending set reconciliation consults', () => {
+    const queue = createTerminalNameWriteQueue();
+    void queue.enqueue(terminalNameKey('p', 't1'), () => new Promise(() => undefined));
+    const { upload } = reconcileLocalTerminalNames(
+      'p',
+      [{ id: 't1' }],
+      { [terminalNameKey('p', 't1')]: 'Local' },
+      queue,
+    );
+    // A terminal with a write in flight is not re-uploaded.
+    expect(upload).toEqual([]);
   });
 });
