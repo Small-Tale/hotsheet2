@@ -9,13 +9,23 @@ test('keeps details, metadata, and notes inside the ticket inspector at narrow a
   const inspector = page.locator('[data-component="ticket-inspector"]');
   const content = inspector.locator('.ticket-inspector-panel');
   await expect(inspector).toBeVisible();
-  await content.evaluate((node) => {
-    const details = node.querySelector('.markdown-preview');
-    const note = node.querySelector('.note-card__body');
-    if (!details || !note) throw new Error('Expected details and note content');
-    details.textContent = 'details/'.repeat(180);
-    note.textContent = 'note/'.repeat(180);
-  });
+  // Enter the unbroken strings through the real editors so the demo's state owns them. Writing
+  // `textContent` directly was undone by any later re-render, which full-suite load made likely
+  // (HS2-Y8VMXD).
+  await inspector.getByRole('button', { name: 'Edit Ticket details' }).getByRole('heading').first().click();
+  const detailsEditor = inspector.getByRole('textbox', { name: 'Ticket details' });
+  await detailsEditor.fill('details/'.repeat(180));
+  await detailsEditor.blur();
+  await expect(detailsEditor).toHaveCount(0);
+  const note = content.locator('[data-component="note-card"]').first();
+  await note.locator('.note-card__body').click({ position: { x: 4, y: 4 } });
+  const noteEditor = note.getByRole('textbox', { name: 'Note body' });
+  await noteEditor.fill('note/'.repeat(180));
+  await noteEditor.blur();
+  await expect(noteEditor).toHaveCount(0);
+  // A deterministic re-render (away to Timeline and back) must keep both: the content is state.
+  await inspector.getByRole('tab', { name: 'Timeline' }).click();
+  await inspector.getByRole('tab', { name: 'Info' }).click();
 
   for (const width of [820, 1440, 820]) {
     await page.setViewportSize({ width, height: 900 });
