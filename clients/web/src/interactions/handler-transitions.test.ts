@@ -305,7 +305,7 @@ it('keeps LAN visibility identities stable on rename and distinct after delete/r
     },
   );
   vi.stubGlobal('customElements', { whenDefined: () => Promise.resolve() });
-  Object.assign(document.body, { querySelectorAll: () => [] });
+  Object.assign(document.body, { querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} });
   const state = signal(initialTerminalVisibilityState()),
     prompt = signal<TerminalVisibilityNamePrompt | undefined>({ mode: 'add', value: '' }),
     menu = signal<{ id: string; x: number; y: number } | undefined>(undefined);

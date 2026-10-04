@@ -1960,7 +1960,13 @@ watcher opens, so it paints in the browser top layer above the Workbench's main-
 or maximized terminal drawer, and the rails; its decision controls stay hit-testable over the
 drawer. It keeps its placement at the top-right of the main column through CSS anchor positioning
 (`anchor-name: --app-shell-main`), falling back to the viewport corner where anchors are
-unavailable, and uses the full-width phone placement below 672px (HS2-ZESCM2). When a standalone AI conversation is open, the active permission popup is
+unavailable, and uses the full-width phone placement below 672px (HS2-ZESCM2). The popup is a
+`<dialog>`: while any other modal dialog is open (such as the Create ticket composer or a Web
+Awesome drawer), which would leave a popover painted on top but inert, the watcher lifts it with
+`showModal()` above that modal so its decision controls receive clicks, re-lifts it when a newer
+modal opens, and returns it to a non-blocking popover once no other modal remains. While lifted it
+takes focus itself (never a decision button) and blocks the dialog beneath until answered or
+ignored; Escape never cancels it (HS2-MAE27T). When a standalone AI conversation is open, the active permission popup is
 promoted into that dialog's top layer so it remains visible and interactive instead of
 being trapped beneath the modal; resolving it uses the same authoritative permission
 path. Standalone conversation dialogs use native light-dismiss and Escape behavior and

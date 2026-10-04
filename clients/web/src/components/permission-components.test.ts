@@ -105,6 +105,10 @@ describe('permission presentation components', () => {
     // Both attributes the shared watcher (`openTopLayerOverlays`) selects on, so it calls showPopover().
     expect(top).toContain(TOP_LAYER_OVERLAY_ATTRIBUTE);
     expect(top).toContain('Allow Once');
+    // A `<dialog>`, so the watcher can lift it with showModal() above an open modal dialog, focusing the
+    // popup itself rather than a decision button (HS2-MAE27T); the other layers stay `<aside>`.
+    expect(top).toMatch(/^<dialog [^>]*tabindex="-1"/);
+    expect(inline).toMatch(/^<aside /);
     // The in-flow layer is how the AI conversation's foreground places its copy without restyling it (HS2-M2W2DP).
     const flow = String(PermissionRequestPopup({ item: pending, layer: 'flow' }));
     expect(flow).toContain('data-layer="flow"');
@@ -119,6 +123,11 @@ describe('permission presentation components', () => {
       "  .permission-request-popup[data-layer='inline'],\n  .permission-request-popup[data-layer='top'] {",
     );
     expect(css).toContain('@supports (position-anchor: --app-shell-main)');
+    expect(css).toMatchSource(
+      /\.permission-request-popup\[data-layer='top'\] \{[^}]*max-width:none;[^}]*border-radius:0;[^}]*box-shadow:none;[^}]*transition:none;/,
+    );
+    expect(css).toMatchSource(/\.permission-request-popup\[data-layer='top'\]\[open\] \{\s*display:block;/);
+    expect(css).toMatchSource(/\.permission-request-popup\[data-layer='top'\]::backdrop \{\s*background:transparent;/);
     expect(css).toContain('position-anchor: --app-shell-main;');
     expect(readFileSync(resolve(import.meta.dirname, 'app-shell.css'), 'utf8')).toContain(
       'anchor-name: --app-shell-main;',

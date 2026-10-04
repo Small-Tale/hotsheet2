@@ -10993,6 +10993,88 @@ for (const viewport of [
   });
 }
 
+for (const viewport of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 844 },
+]) {
+  test(`keeps the permission popup interactable above the open Create ticket dialog at ${viewport.width}px (HS2-MAE27T)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await mockProject(page);
+    let pending = [61, 62].map((id) => ({
+      id,
+      connection: 'codex-session',
+      tool: 'Bash',
+      action: `npx playwright test request-${id}`,
+      agent: 'codex',
+      always_allow_supported: true,
+    }));
+    await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+    const resolved: unknown[] = [];
+    await page.route(/\/permissions\/6[12]$/, async (route) => {
+      const id = Number(new URL(route.request().url()).pathname.split('/').pop());
+      resolved.push({ id, ...route.request().postDataJSON() });
+      pending = pending.filter((item) => item.id !== id);
+      await route.fulfill({ json: { connection: 'codex-session', decision: 'allow', persisted: false } });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const popup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
+    await expect(popup).toContainText('request-61');
+    // Without a modal the popup is an ordinary, non-blocking popover.
+    await expect.poll(() => popup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
+    // The popup sits over the launcher at both widths, so dispatch the launcher's click directly.
+    const launcher = page.locator('[data-component="quick-ticket-composer-launcher"]:visible').first();
+    await launcher.dispatchEvent('click');
+    const composer = page.locator('[data-component="quick-ticket-composer"]'),
+      title = composer.locator('wa-input[name="new-ticket-title"]');
+    await expect(title).toBeVisible();
+    // The composer's modal would leave a popover painted on top but inert, so clicks reached the dialog
+    // beneath (HS2-MAE27T); the popup is lifted as a modal dialog above it instead.
+    await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
+    await expect(popup).toBeFocused();
+    // Capture once the composer's open animation settles, so the evidence shows the real stacking.
+    await expect
+      .poll(() => composer.evaluate((element) => element.shadowRoot?.querySelector('dialog')?.getAnimations().length))
+      .toBe(0);
+    await page.screenshot({ path: `/private/tmp/hs2-mae27t-permission-over-composer-${viewport.width}.png` });
+    for (const name of ['Ignore', 'Deny', 'Always Allow', 'Allow Once']) {
+      const button = popup.getByRole('button', { name, exact: true });
+      await expect(button).toBeVisible();
+      expect(
+        await button.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return element === document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        }),
+      ).toBe(true);
+    }
+    await popup.getByRole('button', { name: 'Allow Once', exact: true }).click();
+    expect(resolved).toEqual([expect.objectContaining({ id: 61, decision: 'allow', scope: 'once' })]);
+    // The next request renders while the composer is still open and is lifted straight above it.
+    await expect(popup).toContainText('request-62');
+    await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
+    await expect(title).toBeVisible();
+    // Escape never cancels the popup itself; Web Awesome closes the composer, and the popup returns to a
+    // non-blocking popover.
+    await page.keyboard.press('Escape');
+    await expect(composer).toHaveJSProperty('open', false);
+    await expect(popup).toContainText('request-62');
+    await expect.poll(() => popup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
+    expect(await popup.evaluate((element) => element.matches(':modal'))).toBe(false);
+    // Reopen the composer: lifted again; Ignore dismisses the popup and the composer becomes usable.
+    await launcher.dispatchEvent('click');
+    await expect(title).toBeVisible();
+    await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
+    await popup.getByRole('button', { name: 'Ignore', exact: true }).click();
+    await expect(popup).toHaveCount(0);
+    await title.locator('input').fill('typed after the permission popup');
+    await expect(title).toHaveJSProperty('value', 'typed after the permission popup');
+    await expect(composer).toHaveJSProperty('open', true);
+  });
+}
+
 test('hides a permission popup when its server disconnects and restores only live requests', async ({ page }) => {
   await mockProject(page);
   let offline = false;

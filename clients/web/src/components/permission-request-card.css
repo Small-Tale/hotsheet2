@@ -224,10 +224,12 @@
 /* The shell's popup is a manual popover in the browser top layer (HS2-ZESCM2), so the Workbench's
    main-pane clip and the terminal drawer can no longer cover it. Undo the user-agent popover box and
    keep the in-column placement: anchored to the main column where CSS anchor positioning exists, and
-   to the viewport's top-right corner otherwise. */
+   to the viewport's top-right corner otherwise. Over an open modal dialog the same `<dialog>` is
+   lifted with `showModal()` (HS2-MAE27T), so the modal user-agent box and backdrop are undone too. */
 .permission-request-popup[data-layer='top'] {
   position: fixed;
   inset: auto;
+  max-width: none;
   top: remify(56px);
   right: remify(16px);
   width: min(remify(704px), calc(100vw - remify(32px)));
@@ -237,7 +239,20 @@
   padding: 0;
   overflow-y: auto;
   border: 0;
+  border-radius: 0;
   color: inherit;
+  background: transparent;
+  box-shadow: none;
+  transition: none;
+}
+/* Web Awesome's native styles give every `<dialog>` a panel box and transition, and an open one flex. */
+.permission-request-popup[data-layer='top'][open] {
+  display: block;
+}
+.permission-request-popup[data-layer='top']:focus {
+  outline: none;
+}
+.permission-request-popup[data-layer='top']::backdrop {
   background: transparent;
 }
 @supports (position-anchor: --app-shell-main) {
