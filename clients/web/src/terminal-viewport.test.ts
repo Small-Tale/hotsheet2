@@ -20,6 +20,7 @@ import {
   terminalFittedFontSize,
   terminalInverseScalePercent,
   terminalPhysicalScale,
+  terminalPreviewGridAspect,
   terminalPreviewScale,
   terminalReconnectDelay,
   terminalResizeClaim,
@@ -93,8 +94,18 @@ describe('terminal viewport protocol', () => {
     expect(terminalPreviewScale(640, 384)).toBe(0.5);
     expect(terminalPreviewScale(640, 240)).toBe(0.3125);
     expect(terminalPreviewScale(0, 384)).toBe(0);
+    // A mirroring preview fits its grid footprint on the canvas instead (HS2-RBS46R).
+    expect(terminalPreviewScale(318, 199, 1227, 767)).toBeCloseTo(199 / 767);
+    expect(terminalPreviewScale(318, 199, 0, 767)).toBe(0);
     expect(terminalPhysicalScale(1281, 767, 1280, 768)).toBeCloseTo(1280 / 1281);
     expect(terminalPhysicalScale(0, 767, 1280, 768)).toBe(0);
+  });
+  it('publishes a mirrored grid aspect only once the grid has a size (HS2-RBS46R)', () => {
+    expect(terminalPreviewGridAspect(721, 450)).toBe(1.6022);
+    expect(terminalPreviewGridAspect(1280, 768)).toBe(1.6667);
+    expect(terminalPreviewGridAspect(0, 450)).toBeUndefined();
+    expect(terminalPreviewGridAspect(721, 0)).toBeUndefined();
+    expect(terminalPreviewGridAspect(Number.NaN, 450)).toBeUndefined();
   });
   it('iteratively fits an interactive fixed grid by its measured physical scale', () => {
     expect(terminalFittedFontSize(13, 1.05)).toBeCloseTo(13.65);

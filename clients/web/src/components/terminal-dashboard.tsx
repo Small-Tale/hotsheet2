@@ -398,7 +398,10 @@ export function FixedAspectTerminalCard({
  * framed 1280×768 scaled viewport over the terminal background, with `fallback` text shown until the
  * live terminal connects. Containers tune it through `--terminal-preview-inset` (frame inset,
  * default `--kui-space-l`) and `--terminal-preview-radius` (frame radius, default
- * `--wa-border-radius-m`); the preview owns the frame, canvas, and fallback toggle.
+ * `--wa-border-radius-m`); the preview owns the frame, canvas, and fallback toggle. Once its mirrored
+ * grid renders, it publishes the grid's own aspect as `--terminal-preview-grid-aspect` on its
+ * container (and `data-grid-aspect` on its root), so a container can give the frame that aspect and
+ * the grid fills it on both axes (HS2-RBS46R).
  */
 export function TerminalPreview({
   projectId,

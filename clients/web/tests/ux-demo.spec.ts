@@ -7372,7 +7372,7 @@ test('renders the ProjectCloseDialog TerminalPreview at a legible glyph size at 
     // The grid fills the frame along its bound axis instead of a corner of the canvas.
     expect(result.fill).toBeGreaterThan(0.95);
     if (width === 390) {
-      // The phone frame takes the 5:3 canvas aspect, so the grid is width-bound and its rows grow from
+      // The phone frame takes a canvas-like aspect, so the grid is width-bound and its rows grow from
       // about 6.7px to about 8px; the consequences and actions still fit without scrolling (HS2-28EVHV).
       const phone = await viewport.evaluate((node) => {
         const frame = node.parentElement!.getBoundingClientRect(),
@@ -7381,13 +7381,20 @@ test('renders the ProjectCloseDialog TerminalPreview at a legible glyph size at 
           body = host.shadowRoot!.querySelector<HTMLElement>('[part~="body"]')!;
         return {
           aspect: frame.width / frame.height,
+          gridAspect: Number(node.closest<HTMLElement>('[data-component="terminal-preview"]')!.dataset.gridAspect),
           widthFill: screen.width / frame.width,
+          heightFill: screen.height / frame.height,
           bodyOverflow: body.scrollHeight - body.clientHeight,
           panelBottom: host.shadowRoot!.querySelector('[part~="dialog"]')!.getBoundingClientRect().bottom,
         };
       });
-      expect(phone.aspect).toBeCloseTo(5 / 3, 1);
-      expect(phone.widthFill).toBeGreaterThan(0.94);
+      // The frame then takes the mirrored grid's own published aspect, so the grid fills it on both
+      // axes instead of staying slightly height-bound inside 5:3 (HS2-RBS46R).
+      expect(phone.gridAspect).toBeGreaterThan(1.5);
+      expect(phone.gridAspect).toBeLessThan(5 / 3);
+      expect(phone.aspect).toBeCloseTo(phone.gridAspect, 2);
+      expect(phone.widthFill).toBeGreaterThan(0.98);
+      expect(phone.heightFill).toBeGreaterThan(0.98);
       expect(result.rowHeight).toBeGreaterThan(7.5);
       expect(phone.bodyOverflow).toBeLessThanOrEqual(1);
       expect(phone.panelBottom).toBeLessThanOrEqual(844);

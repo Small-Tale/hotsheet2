@@ -115,11 +115,28 @@ export function terminalViewportScale(
 ): number {
   return Math.max(0, Math.min(1, viewportCols / ptyCols, viewportRows / ptyRows));
 }
-export function terminalPreviewScale(frameWidth: number, frameHeight: number): number {
-  return Math.max(
-    0,
-    Math.min(frameWidth / TERMINAL_PREVIEW_NATURAL_WIDTH, frameHeight / TERMINAL_PREVIEW_NATURAL_HEIGHT),
-  );
+/**
+ * The scale that fits a preview's content (the 1280×768 canvas by default, or a mirroring preview's
+ * grid footprint on it — HS2-RBS46R) inside its frame.
+ */
+export function terminalPreviewScale(
+  frameWidth: number,
+  frameHeight: number,
+  contentWidth: number = TERMINAL_PREVIEW_NATURAL_WIDTH,
+  contentHeight: number = TERMINAL_PREVIEW_NATURAL_HEIGHT,
+): number {
+  if (!(contentWidth > 0) || !(contentHeight > 0)) return 0;
+  return Math.max(0, Math.min(frameWidth / contentWidth, frameHeight / contentHeight));
+}
+
+/**
+ * The aspect (width / height) of a mirroring preview's rendered grid, which a container can give its
+ * frame so the grid fills it on both axes (HS2-RBS46R); `undefined` until the grid has a size.
+ */
+export function terminalPreviewGridAspect(screenWidth: number, screenHeight: number): number | undefined {
+  if (!Number.isFinite(screenWidth) || !Number.isFinite(screenHeight) || screenWidth <= 0 || screenHeight <= 0)
+    return undefined;
+  return Math.round((screenWidth / screenHeight) * 10_000) / 10_000;
 }
 
 export function terminalPhysicalScale(

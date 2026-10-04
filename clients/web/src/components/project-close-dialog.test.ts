@@ -174,14 +174,14 @@ describe('ProjectCloseDialog', () => {
     expect(css).toMatchSource(/__layout \{[^}]*min-height:remify\(352px\)/);
   });
 
-  it('gives the phone preview frame the 5:3 canvas aspect and keeps the dialog unscrolled (HS2-28EVHV)', () => {
+  it('gives the phone preview frame the published grid aspect (5:3 fallback) and keeps the dialog unscrolled (HS2-28EVHV, HS2-RBS46R)', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'project-close-dialog.css'), 'utf8'),
       phone = css.slice(css.indexOf('@media (max-width: remify(672px))'));
     // The list takes only its rows (capped, then scrolls); the preview's content box is the frame.
     expect(phone).toMatchSource(/__layout \{[^}]*grid-template-rows:auto minmax\(remify\(192px\), 1fr\)/);
     expect(phone).toMatchSource(/__resources \{[^}]*max-height:remify\(160px\)/);
     expect(phone).toMatchSource(
-      /__terminal \{[^}]*--terminal-preview-inset:var\(--kui-space-m\)[^}]*box-sizing:content-box[^}]*aspect-ratio:5 \/ 3/,
+      /__terminal \{[^}]*--terminal-preview-inset:var\(--kui-space-m\)[^}]*box-sizing:content-box[^}]*max-height:remify\(224px\)[^}]*aspect-ratio:var\(--terminal-preview-grid-aspect, 5 \/ 3\)/,
     );
     // The frame equals the content box only while the phone detail padding matches the inset.
     expect(phone).toMatchSource(/__detail \{ padding:var\(--kui-space-m\)/);

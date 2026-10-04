@@ -609,6 +609,11 @@ describe('unpainted until the first geometry pass (HS2-MHPHZB)', () => {
 });
 
 describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
+  // The 1000×600 mocked screen filling the 1280×768 canvas (less the 1px guard).
+  const canvasFill = Math.min(1279 / 1000, 767 / 600);
+  // A mirroring preview fits that grid footprint, not the whole canvas, to its frame (HS2-RBS46R).
+  const mirrorFrameScale = (width: number, height: number) =>
+    Math.min(width / (1000 * canvasFill), height / (600 * canvasFill));
   function previewElement(gridPolicy?: string) {
     const created = element().viewport,
       frame = { clientWidth: 318, clientHeight: 240 };
@@ -706,12 +711,12 @@ describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
       dispose = mountStaticTerminalViewportRuntime(viewport, { output: 'PASS\r\n' });
     giveScreen(allocated.terminals[0]);
     runFrames();
-    expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+    expect(viewport.style.transform).toBe(`scale(${mirrorFrameScale(318, 240)})`);
     expect(viewport.dataset.geometryReady).toBe('true');
     Object.assign(frame, { clientWidth: 640, clientHeight: 600 });
     resize[0].callback();
     runFrames();
-    expect(viewport.style.transform).toBe(`scale(${640 / 1280})`);
+    expect(viewport.style.transform).toBe(`scale(${mirrorFrameScale(640, 600)})`);
     dispose();
   });
 
@@ -728,8 +733,6 @@ describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
   });
 
   describe('a non-claiming preview mirrors the PTY grid at a legible font (HS2-XHBDRV)', () => {
-    // The 1000×600 mocked screen filling the 1280×768 canvas (less the 1px guard).
-    const canvasFill = Math.min(1279 / 1000, 767 / 600);
     function claims(sent: string[]) {
       return sent
         .map((value) => (JSON.parse(value) as { resize?: Record<string, unknown> }).resize)
@@ -777,7 +780,7 @@ describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
       expect(style.transformOrigin).toBe('top left');
       expect(viewport.dataset.geometryReady).toBe('true');
       // The canvas still takes the frame's preview scale on top of the grid fill (HS2-S7E53Q).
-      expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+      expect(viewport.style.transform).toBe(`scale(${mirrorFrameScale(318, 240)})`);
       expect(viewport.dataset.gridSize).toBe('80x24');
       // Its heartbeat claim is non-focus and non-interacting, so it cannot drive the PTY.
       expect(claims(sent).at(-1)).toMatchObject({ cols: 80, rows: 24, focus: false, interacting: false });
@@ -808,10 +811,52 @@ describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
       resize[0].callback();
       runFrames();
       expect(viewport.dataset.gridSize).toBe('80x24');
-      expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+      expect(viewport.style.transform).toBe(`scale(${mirrorFrameScale(318, 240)})`);
       // Across every transition the preview only ever reported the PTY's own size, without focus.
       expect(claims(sent).every((claim) => claim.focus === false && claim.interacting === false)).toBe(true);
       expect(viewport.dataset.sizingFocus).toBe('false');
+      dispose();
+    });
+
+    it('publishes the mirrored grid aspect on the preview container, live and static (HS2-RBS46R)', async () => {
+      const attachPreview = (viewport: HTMLElement) => {
+        const container = { style: { setProperty: vi.fn() } },
+          preview = { dataset: {} as Record<string, string>, parentElement: container };
+        (viewport as unknown as { closest: (selector: string) => unknown }).closest = (selector: string) =>
+          selector === '[data-component="terminal-preview"]' ? preview : null;
+        return { preview, container };
+      };
+      const live = mountLivePreview(),
+        { preview, container } = attachPreview(live.viewport);
+      live.socket.dispatchEvent(new Event('open'));
+      live.runFrames();
+      // The 1000×600 mocked screen publishes its own 5:3 aspect, once per distinct value.
+      expect(preview.dataset.gridAspect).toBe('1.6667');
+      expect(container.style.setProperty).toHaveBeenCalledWith('--terminal-preview-grid-aspect', '1.6667');
+      const published = container.style.setProperty.mock.calls.length;
+      resize[0].callback();
+      live.runFrames();
+      expect(container.style.setProperty.mock.calls.length).toBe(published);
+      // A differently shaped mirrored grid republishes its new aspect.
+      Object.assign((live.terminal as unknown as { element: Record<string, unknown> }).element, {
+        querySelector: () => ({ offsetWidth: 721, offsetHeight: 450 }),
+      });
+      await live.size(80, 24);
+      resize[0].callback();
+      live.runFrames();
+      expect(preview.dataset.gridAspect).toBe('1.6022');
+      expect(container.style.setProperty).toHaveBeenLastCalledWith('--terminal-preview-grid-aspect', '1.6022');
+      live.dispose();
+
+      allocated.openElement = true;
+      const runFrames = captureFrames(),
+        { viewport } = previewElement(),
+        demo = attachPreview(viewport),
+        dispose = mountStaticTerminalViewportRuntime(viewport, { output: 'PASS\r\n' });
+      giveScreen(allocated.terminals.at(-1)!);
+      runFrames();
+      expect(demo.preview.dataset.gridAspect).toBe('1.6667');
+      expect(demo.container.style.setProperty).toHaveBeenCalledWith('--terminal-preview-grid-aspect', '1.6667');
       dispose();
     });
 
@@ -827,7 +872,7 @@ describe('scaled-preview canvas fits its frame (HS2-S7E53Q)', () => {
       const style = (terminal as unknown as { element: { style: Record<string, string> } }).element.style;
       expect(style.transform).toBe(`scale(${canvasFill})`);
       expect(style.transformOrigin).toBe('top left');
-      expect(viewport.style.transform).toBe(`scale(${318 / 1280})`);
+      expect(viewport.style.transform).toBe(`scale(${mirrorFrameScale(318, 240)})`);
       expect(viewport.dataset.gridSize).toBe('80x24');
       expect(viewport.dataset.fontSize).toBe('24');
       dispose();

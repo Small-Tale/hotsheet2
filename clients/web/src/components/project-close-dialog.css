@@ -140,11 +140,15 @@
     /* The preview frame is this section's padding box inset by --terminal-preview-inset, which equals
        the phone padding below, so the content box is the frame: giving it the 5:3 canvas aspect makes
        the mirrored grid width-bound, so its glyphs grow instead of leaving the frame's sides empty
-       (HS2-28EVHV). */
+       (HS2-28EVHV). Once the preview publishes its mirrored grid's own aspect, the frame takes that
+       instead, so the grid fills the frame on both axes (HS2-RBS46R); the height cap keeps an
+       unusually tall PTY from pushing the consequences and actions off screen (the grid then stays a
+       full, height-bound mirror). */
     box-sizing: content-box;
     min-height: 0;
+    max-height: remify(224px);
     align-self: start;
-    aspect-ratio: 5 / 3;
+    aspect-ratio: var(--terminal-preview-grid-aspect, 5 / 3);
   }
   .project-close-dialog__detail {
     padding: var(--kui-space-m);

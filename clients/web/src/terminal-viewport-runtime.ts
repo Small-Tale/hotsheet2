@@ -51,6 +51,7 @@ import {
   terminalFittedFontSize,
   terminalInverseScalePercent,
   terminalPhysicalScale,
+  terminalPreviewGridAspect,
   terminalPreviewScale,
   terminalReconnectDelay,
   terminalResizeClaim,
@@ -109,9 +110,48 @@ function mountWithCleanup(initialize: (own: OwnTerminalResource) => void): () =>
  * dashboard tile's preview-scale contract. Every scaled preview takes it, with or without the
  * dashboard's 80×24 grid policy, so a TerminalPreview never shows a native-size crop (HS2-S7E53Q).
  */
+// The canvas footprint of each mirroring preview's grid: it is anchored top-left and fills the canvas
+// along one axis only, so the frame fits this footprint rather than the whole canvas (HS2-RBS46R).
+const previewGridFootprints = new WeakMap<HTMLElement, { width: number; height: number }>();
+
+/**
+ * Records a mirroring preview's fitted grid, then publishes its aspect as
+ * `--terminal-preview-grid-aspect` on the TerminalPreview's positioned container (and
+ * `data-grid-aspect` on the preview root), so the container can give the frame the grid's own aspect
+ * and the grid fills it on both axes (HS2-RBS46R). The screen's untransformed size does not depend on
+ * the frame, so resizing the frame from this value cannot feed back into it.
+ */
+function publishPreviewGrid(element: HTMLElement, screen: HTMLElement, gridScale: number): void {
+  previewGridFootprints.set(element, {
+    width: screen.offsetWidth * gridScale,
+    height: screen.offsetHeight * gridScale,
+  });
+  const preview = element.closest<HTMLElement>('[data-component="terminal-preview"]'),
+    container = preview?.parentElement,
+    aspect = terminalPreviewGridAspect(screen.offsetWidth, screen.offsetHeight);
+  if (!preview || !container || aspect === undefined) return;
+  const value = String(aspect);
+  if (preview.dataset.gridAspect === value) return;
+  preview.dataset.gridAspect = value;
+  container.style.setProperty('--terminal-preview-grid-aspect', value);
+}
+
+/**
+ * Scales a `scaled-preview` viewport's fixed 1280×768 canvas to fit its frame (the parent), the
+ * dashboard tile's preview-scale contract. Every scaled preview takes it, with or without the
+ * dashboard's 80×24 grid policy, so a TerminalPreview never shows a native-size crop (HS2-S7E53Q).
+ * A mirroring preview fits its grid's footprint instead, so the grid (not the canvas's empty margin)
+ * meets the frame; the frame clips only that empty margin (HS2-RBS46R).
+ */
 function applyScaledPreviewTransform(element: HTMLElement): number {
   const frame = element.parentElement,
-    scale = terminalPreviewScale(frame?.clientWidth ?? 0, frame?.clientHeight ?? 0);
+    footprint = previewGridFootprints.get(element),
+    scale = terminalPreviewScale(
+      frame?.clientWidth ?? 0,
+      frame?.clientHeight ?? 0,
+      footprint?.width ?? TERMINAL_PREVIEW_NATURAL_WIDTH,
+      footprint?.height ?? TERMINAL_PREVIEW_NATURAL_HEIGHT,
+    );
   element.style.transform = `scale(${scale})`;
   element.dataset.previewScale = String(scale);
   return scale;
@@ -221,6 +261,7 @@ function initializeStaticTerminalViewport(
     if (scale <= 0) return;
     if (mirrorPtyGrid) {
       terminal.element.style.transformOrigin = 'top left';
+      publishPreviewGrid(element, screen, scale);
       applyScaledPreviewTransform(element);
     }
     terminal.element.style.transform = `scale(${scale})`;
@@ -549,6 +590,10 @@ function initializeTerminalViewport(
       // A mirroring preview anchors its grid top-left on the canvas, like the terminal it mirrors.
       terminal.element.style.transformOrigin = mirrorPtyGrid ? 'top left' : '';
       terminal.element.style.transform = `scale(${scale})`;
+      if (mirrorPtyGrid) {
+        publishPreviewGrid(element, screen, scale);
+        applyScaledPreviewTransform(element);
+      }
       element.dataset.physicalScale = String(scale);
     }
     terminal.element.style.width = '';

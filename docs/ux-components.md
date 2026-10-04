@@ -1776,7 +1776,16 @@ Styling ownership (HS2-DR549A):
   `aspect-ratio: 5 / 3`, and the dialog panel keeps an 8px viewport gutter instead of Web
   Awesome's 80% height cap so the consequences and actions still fit unscrolled. An 80x24 grid
   becomes nearly width-bound (about 96% of the frame width; its own aspect is about 1.6) and its
-  rows grow from about 6.7 px to about 8 px (HS2-28EVHV).
+  rows grow from about 6.7 px to about 8 px (HS2-28EVHV). A mirroring preview then publishes its
+  rendered grid's own aspect (the untransformed `.xterm-screen` width / height) as the
+  `--terminal-preview-grid-aspect` custom property on its positioned container, plus
+  `data-grid-aspect` on the preview root, and fits its grid's canvas footprint (not the whole
+  1280×768 canvas, whose empty margin the frame clips) to the frame (HS2-RBS46R). The phone
+  dialog's frame takes `aspect-ratio: var(--terminal-preview-grid-aspect, 5 / 3)`, capped at
+  224px tall so an unusually tall PTY stays a full, height-bound mirror without pushing the actions
+  off screen. Any PTY size therefore fills the frame on both axes: an 80x24 grid fills about
+  99.8% of the phone frame width with rows of about 8.3 px, and at 1280 it reaches the frame's
+  bound axis exactly. The dashboard tile's 80×24 policy keeps the plain canvas contract.
 
 Grid scale is a discrete fit count controlled by icon-only minus/plus buttons with visible
 tooltip and accessible names. Plus zooms in (fewer terminals on the controlling axis);
