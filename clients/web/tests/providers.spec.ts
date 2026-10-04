@@ -20535,6 +20535,22 @@ test('autosaves a production attachment label once on blur, page hide, and Enter
   await expect(narrow.locator('[data-action="edit-attachment-batch-label"]')).toHaveText('Reader label');
   await expect.poll(storedDraft).toEqual([]);
   expect(writes).toHaveLength(4);
+  // That Escape finished only the edit: the inspector overlay stays open (HS2-Q2T01A).
+  const rail = page.locator('#app-right-rail');
+  await expect(rail).toHaveAttribute('data-presentation', 'overlay');
+  await expect(rail).toHaveAttribute('data-collapsed', 'false');
+  // The title editor finishes the same way: Escape leaves the field (its blur autosaves) and the overlay
+  // stays open.
+  await rail.locator('[data-action="edit-ticket-title"]').first().dblclick();
+  const titleField = rail.locator('[name="ticket-title"]');
+  await expect(titleField).toBeFocused();
+  await titleField.press('Escape');
+  await expect(titleField).toHaveCount(0);
+  await expect(rail).toHaveAttribute('data-collapsed', 'false');
+  await page.screenshot({ path: test.info().outputPath('hs2-q2t01a-overlay-kept-390.png') });
+  // A second Escape, outside any editor, dismisses the overlay as before.
+  await page.keyboard.press('Escape');
+  await expect(rail).toHaveAttribute('data-collapsed', 'true');
 });
 
 test('moves a media thumbnail between batches and removes active media from its gallery menu (HS2-9PA2KD, HS2-EDX5J3)', async ({

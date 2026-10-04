@@ -14,6 +14,8 @@ import { type DebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { DETAILS_FEEDBACK_ID } from '../feedback-needed';
 import { combineFeedbackReply, type InlineFeedbackReply, sourceOffsetForVisibleOffset } from '../feedback-replies';
+import { inlineEditorEscape } from '../inline-editor-escape';
+import { ATTACHMENTS_AND_GALLERY_TARGETS } from '../interaction-attrs/attachments-and-gallery';
 import { INSPECTOR_AND_EDITOR_ACTIONS, INSPECTOR_AND_EDITOR_TARGETS } from '../interaction-attrs/inspector-and-editor';
 import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
 import { manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind } from '../ticket-editor-size';
@@ -346,6 +348,36 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       titleDraft.value = normalizeTicketTitleField(target as HTMLTextAreaElement);
       if (titleDraft.value.trim()) titleAutosave.schedule(titleDraft.value);
     }),
+  );
+  // Escape in an inline editor finishes that edit (its focusout autosaves) and stops there, so the
+  // narrow inspector overlay, which Kerf's Workbench dismisses from a document keydown, stays open
+  // until a second Escape. The batch label restores its own value on Escape (HS2-Q2T01A).
+  const finishInlineEditOnEscape = (event: Event) => {
+    const field = event.target instanceof Element ? event.target : null,
+      outcome = inlineEditorEscape(
+        event as KeyboardEvent,
+        field,
+        ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
+      );
+    if (outcome === 'none') return;
+    event.stopPropagation();
+    if (outcome === 'finish') (field as HTMLElement).blur();
+  };
+  lifetime.add(
+    delegate(
+      document.body,
+      'keydown',
+      INSPECTOR_AND_EDITOR_TARGETS.ticketInspectorHeader.selector,
+      finishInlineEditOnEscape,
+    ),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'keydown',
+      INSPECTOR_AND_EDITOR_TARGETS.ticketInspectorBody.selector,
+      finishInlineEditOnEscape,
+    ),
   );
   lifetime.add(
     delegate(document.body, 'keydown', INSPECTOR_AND_EDITOR_TARGETS.ticketTitleField.selector, (event, target) => {

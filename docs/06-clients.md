@@ -1375,7 +1375,11 @@ and identity-less legacy entries remain conservatively blocking.
   local recovery copy keyed by project, ticket, and batch with the label the edit started from.
   The one server write happens when focus leaves the editor (Enter blurs it) or the page hides,
   merged against that edit-start label, and the editor shows its draft until the write commits.
-  Reopening the batch restores an unsaved copy. Its purpose remains a compact tag-sized control. Files
+  Reopening the batch restores an unsaved copy. Escape in any inline editor of the inspector (the
+  batch label, the title, notes, details, tags, and the blocked reason) acts on that editor only: the
+  label restores its value, the others finish their edit (blur autosaves), and the key stops there,
+  so the narrow-layout inspector overlay stays open until a second Escape outside the editor
+  (HS2-Q2T01A). Its purpose remains a compact tag-sized control. Files
   move between groups by dragging either the file row or its media-grid preview (without a
   separate handle glyph). Preview drags use the existing attachment identity and never fall
   through to the upload path or create a copied attachment; only
