@@ -2828,10 +2828,12 @@ as `terminal-copy-dialog` and `terminal-paste-dialog`, with both paste reasons e
 
 HS2-KKP8YJ adds `TerminalEditMenu` (cataloged as `terminal-edit-menu`, composing Kerf
 `popup-menu`). It is an app-owned, zero-size fixed anchor (`terminal-edit-menu`) around a
-context-mode `PopupMenu` (`data-context-menu="terminal-edit"`). The menu opens at a touch
-long-press point and has two items: **Copy Text…** (`copy-terminal-text`, Lucide `copy`) and
-**Paste** (`paste-terminal-text`, Lucide `clipboard-paste`). They reuse the HS2-FRB545 actions. The
-demo opens it from a stage button and reports the action production would take.
+context-mode `PopupMenu` (`data-context-menu="terminal-edit"`). The menu opens where a touch
+long-press lifts and has two items: **Copy Text…** (`copy-terminal-text`, Lucide `text-select`) and
+**Paste** (`paste-terminal-text`, Lucide `clipboard-paste`). They reuse the HS2-FRB545 actions. Its
+`selection` state (HS2-EYR96N) leads with **Copy** (`copy-terminal-selection`, Lucide `copy`) for
+the text the press selected. The demo opens both variants from stage buttons ("Long-press here",
+"Long-press a word") and reports the action production would take.
 
 HS2-5DHHPV adds a `touchClipboard` prop to `TerminalDashboard`, `FixedAspectTerminalCard`, and
 `TerminalDrawer` for touch-first devices at desktop widths. With it, the magnified card's toolbar

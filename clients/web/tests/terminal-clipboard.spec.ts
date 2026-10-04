@@ -307,7 +307,7 @@ test('opens the terminal edit menu on a long-press and copies and pastes through
     pasteItem = menu.getByRole('menuitem', { name: 'Paste' });
   await expect(copyItem).toBeVisible();
   await expect(pasteItem).toBeVisible();
-  await expect(copyItem.locator('[data-lucide="copy"]')).toHaveCount(1);
+  await expect(copyItem.locator('[data-lucide="text-select"]')).toHaveCount(1);
   await expect(pasteItem.locator('[data-lucide="clipboard-paste"]')).toHaveCount(1);
   const itemBox = (await copyItem.boundingBox())!;
   expect(Math.abs(itemBox.y - point.y)).toBeLessThan(80);
@@ -474,4 +474,116 @@ test.describe('touch tablet at a desktop width', () => {
     await footer.getByRole('button', { name: 'Paste' }).tap();
     await expect.poll(async () => (await sentInput(page, 'nano')).slice(before)).toEqual(['q']);
   });
+});
+
+/** The viewport rect of `text` (its first match) inside the rendered terminal rows of `viewport`. */
+async function terminalTextBox(viewport: Locator, text: string) {
+  const box = await viewport.evaluate((node, needle) => {
+    for (const row of node.querySelectorAll('.xterm-rows > div')) {
+      const content = row.textContent,
+        index = content.indexOf(needle);
+      if (index < 0) continue;
+      const range = document.createRange(),
+        walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+      let offset = 0,
+        started = false;
+      for (let current = walker.nextNode(); current; current = walker.nextNode()) {
+        const length = current.textContent?.length ?? 0;
+        if (!started && index < offset + length) {
+          range.setStart(current, index - offset);
+          started = true;
+        }
+        if (started && index + needle.length <= offset + length) {
+          range.setEnd(current, index + needle.length - offset);
+          const rect = range.getBoundingClientRect();
+          return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+        }
+        offset += length;
+      }
+    }
+    return undefined;
+  }, text);
+  if (!box) throw new Error(`"${text}" is not rendered in the terminal`);
+  return box;
+}
+
+/** Long-press at `from`, optionally keep the finger down while dragging to `to`, then lift there. */
+async function touchSelect(page: Page, from: { x: number; y: number }, to?: { x: number; y: number }) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
+  await page.waitForTimeout(700);
+  for (let step = 1; step <= 6 && to; step += 1)
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: from.x + ((to.x - from.x) * step) / 6, y: from.y + ((to.y - from.y) * step) / 6 }],
+    });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+
+// HS2-EYR96N: a long-press selects the word under the finger, dragging on extends the range, and the
+// lift's edit menu copies exactly that range.
+test('selects a range of terminal text with a long-press and drag, and copies it', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await installPhone(page);
+  const { drawer, viewport } = await openFocusedDrawerTerminal(page);
+  const nano = await terminalTextBox(viewport, 'nano'),
+    version = await terminalTextBox(viewport, '8.4'),
+    rowMiddle = nano.y + nano.height / 2,
+    selection = viewport.locator('.xterm-selection div');
+
+  // Hold still on "nano": only that word is selected, highlighted by xterm, and the lift opens the menu
+  // led by Copy without tap-focusing anything.
+  await touchSelect(page, { x: nano.x + nano.width / 2, y: rowMiddle });
+  const menu = editMenu(page),
+    copy = menu.getByRole('menuitem', { name: 'Copy', exact: true });
+  await expect(copy).toBeVisible();
+  await expect(copy.locator('[data-lucide="copy"]')).toHaveCount(1);
+  await expect(menu.getByRole('menuitem', { name: 'Copy Text…' }).locator('[data-lucide="text-select"]')).toHaveCount(
+    1,
+  );
+  await expect(menu.getByRole('menuitem')).toHaveText(['Copy', 'Copy Text…', 'Paste']);
+  await expect(selection.first()).toBeVisible();
+  await copy.tap();
+  await expect(menu).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('nano');
+  await expect(toast(page)).toContainText('Copied selection (1 line)');
+
+  // Hold on "nano" again and drag to the end of "8.4": the range extends from the held word.
+  await touchSelect(
+    page,
+    { x: nano.x + nano.width / 2, y: rowMiddle },
+    { x: version.x + version.width - 2, y: rowMiddle },
+  );
+  await expect(copy).toBeVisible();
+  const menuBox = (await menu.boundingBox())!;
+  // The menu opens where the finger lifted, not where it went down.
+  expect(Math.abs(menuBox.x - (version.x + version.width))).toBeLessThan(220);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: test.info().outputPath('hs2-eyr96n-selection-menu-390.png') });
+  await page.screenshot({
+    path: test.info().outputPath('hs2-eyr96n-selection-zoom-390.png'),
+    clip: { x: 0, y: Math.max(0, nano.y - 12), width: 390, height: 200 },
+  });
+  await copy.tap();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('nano 8.4');
+
+  // Dragging backward from the held word keeps the whole word: "GNU nano" from a hold on "nano".
+  const gnu = await terminalTextBox(viewport, 'GNU');
+  await touchSelect(page, { x: nano.x + nano.width / 2, y: rowMiddle }, { x: gnu.x + 1, y: rowMiddle });
+  await copy.tap();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('GNU nano');
+
+  // A quick tap on the terminal drops the selection; a hold on blank cells selects nothing, so the menu
+  // offers only Copy Text… and Paste.
+  const screen = (await viewport.locator('.xterm-screen').boundingBox())!;
+  await page.touchscreen.tap(nano.x + nano.width / 2, rowMiddle);
+  await expect(selection).toHaveCount(0);
+  await touchSelect(page, { x: screen.x + screen.width - 4, y: screen.y + screen.height - 4 });
+  await expect(menu.getByRole('menuitem')).toHaveText(['Copy Text…', 'Paste']);
+  await expect(selection).toHaveCount(0);
+  // An outside touch dismisses the menu and leaves focus mode as it was.
+  await page.touchscreen.tap(screen.x + 8, screen.y + 8);
+  await expect(menu).toHaveCount(0);
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
 });

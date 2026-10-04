@@ -1191,6 +1191,7 @@ function demoContent(item: DemoDefinition) {
       <section class="terminal-edit-menu-demo" aria-label="Terminal edit menu">
         <Row gap="xs">
           <wa-button data-edit-menu-demo-open>Long-press here</wa-button>
+          <wa-button data-edit-menu-demo-open="selection">Long-press a word</wa-button>
         </Row>
         <p class="component-stage__event" data-edit-menu-demo-output>
           {editMenuDemoOutput.value || 'Open the menu, then choose an action.'}
@@ -1959,29 +1960,31 @@ demoListeners.add(delegate(root, 'wa-hide', '.terminal-clipboard-demo wa-dialog'
 // The edit menu demo opens where the stage was pressed and reports the production action (HS2-KKP8YJ).
 demoListeners.add(
   delegate(root, 'click', '[data-edit-menu-demo-open]', (_event, target) => {
-    const box = target.getBoundingClientRect();
-    editMenuDemo.value = viewportSafeContextMenuPosition(
-      box.left + box.width / 2,
-      box.bottom,
-      innerWidth,
-      innerHeight,
-      {
+    const box = target.getBoundingClientRect(),
+      // A long-press on a word leaves a selection, so the menu leads with Copy (HS2-EYR96N).
+      selection = (target as HTMLElement).dataset.editMenuDemoOpen === 'selection';
+    editMenuDemo.value = {
+      ...viewportSafeContextMenuPosition(box.left + box.width / 2, box.bottom, innerWidth, innerHeight, {
         width: 192,
-        height: 96,
-      },
-    );
+        height: selection ? 144 : 96,
+      }),
+      selection,
+    };
   }),
 );
 demoListeners.add(
   delegate(
     root,
     'click',
-    '.terminal-edit-menu-demo [data-action="copy-terminal-text"], .terminal-edit-menu-demo [data-action="paste-terminal-text"]',
+    '.terminal-edit-menu-demo [data-action="copy-terminal-selection"], .terminal-edit-menu-demo [data-action="copy-terminal-text"], .terminal-edit-menu-demo [data-action="paste-terminal-text"]',
     (_event, target) => {
+      const action = (target as HTMLElement).dataset.action;
       editMenuDemoOutput.value =
-        (target as HTMLElement).dataset.action === 'copy-terminal-text'
-          ? 'Copy Text… → opens the terminal Copy sheet'
-          : 'Paste → sends the clipboard to the terminal';
+        action === 'copy-terminal-selection'
+          ? 'Copy → copies the selected terminal text'
+          : action === 'copy-terminal-text'
+            ? 'Copy Text… → opens the terminal Copy sheet'
+            : 'Paste → sends the clipboard to the terminal';
       editMenuDemo.value = undefined;
     },
   ),

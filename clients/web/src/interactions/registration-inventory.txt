@@ -78,6 +78,7 @@ terminals	delegate	document.body	'click'	'[data-action="toggle-terminal-modifier
 terminals	delegate	document.body	'click'	'[data-action="toggle-terminal-function-row"]'
 terminals	delegate	document.body	'click'	'[data-action="send-terminal-key"]'
 terminals	delegate	document.body	TERMINAL_EDIT_MENU_EVENT	'[data-component="terminal-viewport"]'
+terminals	delegate	document.body	'click'	'[data-action="copy-terminal-selection"]'
 terminals	delegate	document.body	'click'	'[data-action="copy-terminal-text"]'
 terminals	delegate	document.body	'click'	'[data-action="confirm-terminal-copy"]'
 terminals	delegate	document.body	'click'	'[data-action="close-terminal-copy"]'

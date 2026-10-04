@@ -44,6 +44,17 @@ vi.mock('@xterm/xterm', () => ({
     write = vi.fn();
     buffer = { active: { baseY: 20, cursorY: 3, viewportY: 20 } };
     focus = vi.fn();
+    scrollLines = vi.fn();
+    modes = { applicationCursorKeysMode: false };
+    selection = '';
+    hasSelection = vi.fn(() => this.selection !== '');
+    select = vi.fn((col: number, row: number, length: number) => {
+      this.selection = `${String(col)},${String(row)}+${String(length)}`;
+    });
+    clearSelection = vi.fn(() => {
+      this.selection = '';
+    });
+    getSelection = vi.fn(() => this.selection);
     element?: { style: Record<string, string> };
     options: Record<string, unknown>;
     constructor(options: Record<string, unknown> = {}) {
@@ -242,25 +253,48 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
       prevented = () => vi.fn();
     const editRequests = () => dispatched.filter((event) => event.type === TERMINAL_EDIT_MENU_EVENT);
 
-    // Hold still: the timer fires an edit-menu request at the touch point; the native menu and the lift's tap are suppressed.
+    // An 80×24 grid of 10×20 px cells at the origin, scrolled to buffer line 20, with "hello world" on
+    // every line (HS2-EYR96N).
+    const terminal = allocated.terminals.at(-1)! as unknown as {
+      element: Record<string, unknown>;
+      buffer: { active: Record<string, unknown> };
+      select: ReturnType<typeof vi.fn>;
+      clearSelection: ReturnType<typeof vi.fn>;
+    };
+    terminal.element = {
+      style: {},
+      querySelector: () => ({ getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 480 }) }),
+    };
+    terminal.buffer.active.getLine = () => ({ isWrapped: false, translateToString: () => 'hello world' });
+
+    // Hold still: the timer selects the word under the finger ("hello" at row 23) instead of opening the
+    // menu; the native menu is suppressed.
     handler('touchstart')({ touches: [touch(30, 60)], timeStamp: 0 });
     const contextMenu = { preventDefault: prevented() };
     handler('contextmenu')(contextMenu);
     expect(contextMenu.preventDefault).toHaveBeenCalledTimes(1);
     scheduledTimeouts.at(-1)!();
-    expect(editRequests()).toHaveLength(1);
-    const request = editRequests()[0] as CustomEvent<{ x: number; y: number }>;
-    expect(request.bubbles).toBe(true);
-    expect(request.detail).toEqual({ x: 30, y: 60 });
+    expect(terminal.select).toHaveBeenLastCalledWith(0, 23, 5);
+    expect(editRequests()).toHaveLength(0);
+    // Dragging on extends the selection to the cell under the finger and never scrolls.
     const afterFire = { touches: [touch(30, 140)], timeStamp: 50, preventDefault: prevented() };
     handler('touchmove')(afterFire);
     expect(afterFire.preventDefault).toHaveBeenCalledTimes(1);
+    expect(terminal.select).toHaveBeenLastCalledWith(0, 23, 4 * 80 + 3 + 1);
+    // The lift opens the edit menu where the finger lifted, flagged with the selection, and is no tap.
     const lift = { changedTouches: [touch(30, 140)], timeStamp: 60, preventDefault: prevented() };
     handler('touchend')(lift);
     expect(lift.preventDefault).toHaveBeenCalledTimes(1);
+    expect(editRequests()).toHaveLength(1);
+    const request = editRequests()[0] as CustomEvent<{ x: number; y: number; selection: boolean }>;
+    expect(request.bubbles).toBe(true);
+    expect(request.detail).toEqual({ x: 30, y: 140, selection: true });
+    expect(terminal.clearSelection).not.toHaveBeenCalled();
 
-    // A quick tap keeps its default (focus) and leaves the desktop right-click menu alone afterwards.
+    // A quick tap drops the selection, keeps its default (focus), and leaves the desktop right-click menu
+    // alone afterwards.
     handler('touchstart')({ touches: [touch(10, 10)], timeStamp: 100 });
+    expect(terminal.clearSelection).toHaveBeenCalledTimes(1);
     const tap = { changedTouches: [touch(10, 10)], timeStamp: 120, preventDefault: prevented() };
     handler('touchend')(tap);
     expect(tap.preventDefault).not.toHaveBeenCalled();

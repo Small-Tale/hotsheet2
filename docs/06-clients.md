@@ -2719,21 +2719,35 @@ The long-press edit menu below works at every width. A mouse or trackpad desktop
 tablet with a trackpad attached (fine primary pointer), is unchanged.
 
 **Long-press terminal edit menu (HS2-KKP8YJ).** Holding one finger still on any interactive
-terminal for 500 ms opens a small edit menu at the touch point. This covers a drawer terminal in or
-out of focus mode and a magnified terminal. The menu is a context-mode Kerf `PopupMenu` with two
-items:
+terminal for 500 ms selects the word under the finger, and lifting opens a small edit menu where the
+finger lifted (HS2-EYR96N). This covers a drawer terminal in or out of focus mode and a magnified
+terminal. The menu is a context-mode Kerf `PopupMenu`:
 
-- **Copy Text…** (Lucide `copy`) opens the Copy sheet above.
+- **Copy** (Lucide `copy`) appears only when the press left a selection. It writes that selection to
+  the clipboard (async Clipboard API, else the off-screen legacy copy) and toasts the line count.
+- **Copy Text…** (Lucide `text-select`) opens the Copy sheet above.
 - **Paste** (Lucide `clipboard-paste`) runs the Paste path above, including its denied/unavailable sheet.
 
-The menu acts on the terminal it was opened over. An outside touch, Escape, or choosing an item
-dismisses it.
+The menu acts on the terminal it was opened over. An outside touch, Escape, or choosing an item dismisses it.
+
+**Touch text selection (HS2-EYR96N).** The long-press is also how a phone selects a range of
+terminal text directly, using xterm's own selection (the same highlight and text a desktop mouse
+drag produces):
+
+- The hold selects the word under the finger (xterm's word separators plus whitespace). A hold on a
+  blank or separator cell selects nothing, and the menu then offers only Copy Text… and Paste.
+- Keeping the finger down and dragging extends the selection from that word to the cell under the
+  finger, forward or backward and across rows; the held word always stays selected.
+- The selection stays after the lift and after Copy. The next touch on the terminal clears it, as
+  tapping elsewhere does in text.
+- Cells are mapped from the rendered `.xterm-screen` rectangle, so CSS-scaled (magnified or column
+  mode) terminals select the cell under the finger, and scrollback offsets are included.
 
 The gesture coexists with finger-drag scrolling (HS2-KFBRSB):
 
-- Drifting more than 10px cancels the hold, so a drag scrolls and never opens the menu.
+- Drifting more than 10px before the hold completes cancels it, so a drag scrolls and never selects.
 - A second finger or an early lift also cancels it, so a quick tap still focuses the terminal.
-- After the menu opens, the rest of that touch never scrolls.
+- After the hold completes, the rest of that touch extends the selection and never scrolls.
 - The lift that ends the hold is cancelled, so it does not also tap-focus the terminal, enter
   focus mode, or raise the keyboard.
 - Android's native long-press context menu is suppressed while the finger is down.

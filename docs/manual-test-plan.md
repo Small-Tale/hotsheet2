@@ -85,8 +85,11 @@ When automation lands, remove the manual-only step and record it below.
     proves native selection handles, the iOS paste prompt, and the legacy copy fallback.
 12. HS2-KKP8YJ — on a **physical phone** (iOS Safari and Android Chrome), hold one finger still on
     a drawer terminal (before and in focus mode) and on a magnified terminal. Confirm the
-    Copy Text… / Paste menu opens under the finger after about half a second, with no iOS callout,
-    loupe, or text selection and no Android system menu. Lifting must not raise the keyboard. Choose
+    word under the finger is highlighted after about half a second, with no iOS callout, loupe, or
+    native text selection and no Android system menu, and that lifting opens the Copy / Copy Text… /
+    Paste menu without raising the keyboard. Hold on a word and drag across lines before lifting;
+    confirm the highlight follows the finger and **Copy** puts exactly that range on the clipboard
+    (HS2-EYR96N). Hold on blank space and confirm the menu offers only Copy Text… and Paste. Choose
     **Copy Text…** and confirm the Copy sheet opens. Long-press again, choose **Paste**, and confirm
     the clipboard reaches the shell. Confirm a slow drag still scrolls without opening the menu, and
     a quick tap still focuses the terminal. Automated Chromium coverage drives DevTools touch

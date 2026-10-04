@@ -17,6 +17,7 @@ export const TERMINALS_ACTIONS = {
   toggleTerminalFunctionRow: action('toggle-terminal-function-row'),
   sendTerminalKey: action('send-terminal-key'),
   copyTerminalText: action('copy-terminal-text'),
+  copyTerminalSelection: action('copy-terminal-selection'),
   pasteTerminalText: action('paste-terminal-text'),
   confirmTerminalCopy: action('confirm-terminal-copy'),
   closeTerminalCopy: action('close-terminal-copy'),

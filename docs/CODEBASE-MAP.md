@@ -93,6 +93,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, input, leased claims, server-size scaling, and reconnect lifecycle
     src/terminal-touch-scroll.ts # Phone finger-drag scrolling: gesture/momentum controller and pixel-to-row scrollback/arrow-key conversion (HS2-KFBRSB)
     src/terminal-long-press.ts # Touch long-press controller (500 ms, 10px tolerance) that opens the terminal edit menu (HS2-KKP8YJ)
+    src/terminal-touch-selection.ts # Touch text selection: point→buffer cell, word bounds, anchored drag range, and the controller the long-press drives (HS2-EYR96N)
     src/terminal-keys.ts     #   Phone key-bar special keys and sticky modifiers encoded as xterm sequences (HS2-CKS78M)
     src/components/terminal-key-bar.tsx # Phone terminal accessory bar above the soft keyboard (HS2-CKS78M)
     src/terminal-clipboard.ts # Phone terminal copy/paste: buffer-text snapshot, viewport events, clipboard read/write fallbacks (HS2-FRB545)

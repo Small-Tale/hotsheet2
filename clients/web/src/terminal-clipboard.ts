@@ -22,9 +22,13 @@ export const TERMINAL_EDIT_MENU_EVENT = 'hotsheet-terminal-edit-menu';
 export interface TerminalEditMenuDetail {
   x: number;
   y: number;
+  /** Whether the long-press left a text selection the menu can copy (HS2-EYR96N). */
+  selection?: boolean;
 }
 
 export interface TerminalReadTextDetail {
+  /** Read only the terminal's current selection instead of the whole buffer (HS2-EYR96N). */
+  selectionOnly?: boolean;
   text?: string;
 }
 export interface TerminalPasteDetail {
@@ -58,6 +62,13 @@ export function terminalBufferText(buffer: TerminalBufferLike): string {
 /** Read the snapshot text of a mounted interactive viewport; undefined when none answered. */
 export function readTerminalViewportText(viewport: HTMLElement): string | undefined {
   const detail: TerminalReadTextDetail = {};
+  viewport.dispatchEvent(new CustomEvent(TERMINAL_READ_TEXT_EVENT, { detail }));
+  return detail.text;
+}
+
+/** Read the current text selection of a mounted interactive viewport; undefined when none answered. */
+export function readTerminalViewportSelection(viewport: HTMLElement): string | undefined {
+  const detail: TerminalReadTextDetail = { selectionOnly: true };
   viewport.dispatchEvent(new CustomEvent(TERMINAL_READ_TEXT_EVENT, { detail }));
   return detail.text;
 }

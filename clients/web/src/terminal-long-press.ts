@@ -1,8 +1,9 @@
 /**
  * Long-press on a touch terminal (HS2-KKP8YJ).
  *
- * Holding one finger still on an interactive terminal for {@link TERMINAL_LONG_PRESS_MS} opens the
- * terminal edit menu (Copy Text… / Paste) at the touch point, the conventional mobile edit gesture.
+ * Holding one finger still on an interactive terminal for {@link TERMINAL_LONG_PRESS_MS} selects the
+ * word under it (HS2-EYR96N); the lift then opens the terminal edit menu (Copy / Copy Text… / Paste),
+ * the conventional mobile edit gesture.
  * It coexists with the finger-drag scroll controller (`terminal-touch-scroll.ts`): any movement past
  * the tolerance, a second finger, or lifting early cancels the press, so a drag scrolls and a quick
  * tap still focuses the terminal.
@@ -40,6 +41,8 @@ export interface LongPressController {
   readonly active: boolean;
   /** Whether the current touch has fired. */
   readonly fired: boolean;
+  /** Where the current touch went down, while it is held. */
+  readonly origin: LongPressPoint | undefined;
 }
 
 export function createLongPressController({
@@ -91,6 +94,9 @@ export function createLongPressController({
     },
     get fired() {
       return fired;
+    },
+    get origin() {
+      return origin;
     },
   };
 }

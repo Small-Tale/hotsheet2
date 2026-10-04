@@ -7678,10 +7678,11 @@ test('catalogs the long-press terminal edit menu and its actions (HS2-KKP8YJ)', 
     await demo.getByRole('button', { name: 'Long-press here' }).click();
     const copy = menu.getByRole('menuitem', { name: 'Copy Text…' });
     await expect(copy).toBeVisible();
-    await expect(copy.locator('[data-lucide="copy"]')).toHaveCount(1);
+    await expect(copy.locator('[data-lucide="text-select"]')).toHaveCount(1);
     await expect(menu.getByRole('menuitem', { name: 'Paste' }).locator('[data-lucide="clipboard-paste"]')).toHaveCount(
       1,
     );
+    await expect(menu.getByRole('menuitem')).toHaveText(['Copy Text…', 'Paste']);
     await expect(copy).toHaveCSS('cursor', 'pointer');
     await page.waitForTimeout(300);
     await page.screenshot({ path: test.info().outputPath(`hs2-kkp8yj-demo-${width}.png`) });
@@ -7699,6 +7700,20 @@ test('catalogs the long-press terminal edit menu and its actions (HS2-KKP8YJ)', 
     await page.keyboard.press('Escape');
     await expect(menu).toHaveCount(0);
     await expect(output).toHaveText('Paste → sends the clipboard to the terminal');
+    // After a long-press selected a word, the menu leads with Copy (HS2-EYR96N).
+    await demo.getByRole('button', { name: 'Long-press a word' }).click();
+    const copySelection = menu.getByRole('menuitem', { name: 'Copy', exact: true });
+    await expect(menu.getByRole('menuitem')).toHaveText(['Copy', 'Copy Text…', 'Paste']);
+    await expect(copySelection.locator('[data-lucide="copy"]')).toHaveCount(1);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: test.info().outputPath(`hs2-eyr96n-demo-${width}.png`) });
+    await copySelection.click();
+    await expect(output).toHaveText('Copy → copies the selected terminal text');
+    await expect(menu).toHaveCount(0);
+    // Reset back to the plain menu: Copy is gone again.
+    await demo.getByRole('button', { name: 'Long-press here' }).click();
+    await expect(menu.getByRole('menuitem')).toHaveText(['Copy Text…', 'Paste']);
+    await page.keyboard.press('Escape');
   }
 });
 

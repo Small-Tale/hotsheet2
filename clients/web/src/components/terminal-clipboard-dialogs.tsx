@@ -4,7 +4,7 @@ import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
-import { ClipboardPaste, Copy } from 'lucide';
+import { ClipboardPaste, Copy, TextSelect } from 'lucide';
 
 import { contextPopupMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
@@ -29,11 +29,14 @@ export interface TerminalPasteState extends TerminalClipboardTarget {
 export interface TerminalEditMenuState {
   x: number;
   y: number;
+  /** A long-press selection exists, so the menu leads with Copy (HS2-EYR96N). */
+  selection?: boolean;
 }
 
 /**
  * Terminal edit menu (HS2-KKP8YJ): a context-mode Kerf PopupMenu at the long-press point that reuses
- * the HS2-FRB545 Copy and Paste actions. The interaction layer remembers which terminal it was opened
+ * the HS2-FRB545 Copy and Paste actions. After a long-press selected text it leads with Copy, which
+ * copies that selection (HS2-EYR96N). The interaction layer remembers which terminal it was opened
  * on, so the chosen action lands there.
  */
 export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
@@ -51,10 +54,20 @@ export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
         label="Terminal edit actions"
         rootAttributes={{ 'data-context-menu': 'terminal-edit' }}
         items={[
+          ...(state.selection
+            ? [
+                {
+                  label: 'Copy',
+                  action: TERMINALS_ACTIONS.copyTerminalSelection.value,
+                  icon: <LucideIcon icon={Copy} name="copy" />,
+                },
+              ]
+            : []),
           {
             label: 'Copy Text…',
             action: TERMINALS_ACTIONS.copyTerminalText.value,
-            icon: <LucideIcon icon={Copy} name="copy" />,
+            // Selecting text in a sheet, so the plain `copy` icon stays with Copy (HS2-EYR96N).
+            icon: <LucideIcon icon={TextSelect} name="text-select" />,
           },
           {
             label: 'Paste',

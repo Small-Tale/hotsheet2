@@ -14,12 +14,14 @@ import { type TerminalDashboardGroup, type TerminalDashboardSession } from '../c
 import { type TerminalRenameTarget } from '../components/terminal-rename-dialog';
 import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { revealContextPopupMenu, viewportSafeContextMenuPosition } from '../context-menu-position';
+import { copyWithSelection } from '../copy-text';
 import { type DrawerTabCloseAction, drawerTabCloseIds } from '../drawer-tab-order';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { type DrawerAIChat } from '../project-drive';
 import {
   pasteIntoTerminalViewport,
   readClipboardText,
+  readTerminalViewportSelection,
   readTerminalViewportText,
   TERMINAL_EDIT_MENU_EVENT,
   terminalCopyMessage,
@@ -410,11 +412,29 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     delegate(document.body, TERMINAL_EDIT_MENU_EVENT, TERMINALS_TARGETS.terminalViewport.selector, (event, target) => {
       const viewport = target as HTMLElement,
         { x, y } = (event as CustomEvent<TerminalEditMenuDetail>).detail;
+      const { selection } = (event as CustomEvent<TerminalEditMenuDetail>).detail;
       editMenuViewport = viewport;
-      terminalEditMenu.value = viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, {
-        width: 192,
-        height: 96,
-      });
+      terminalEditMenu.value = {
+        ...viewportSafeContextMenuPosition(x, y, window.innerWidth, window.innerHeight, {
+          width: 192,
+          height: selection === true ? 144 : 96,
+        }),
+        selection: selection === true,
+      };
+    }),
+  );
+  // Copy from the long-press edit menu takes the terminal's touch selection straight to the clipboard
+  // (HS2-EYR96N). The page is not inert here, so the shared off-screen selection fallback works.
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.copyTerminalSelection.selector, (_event, target) => {
+      const viewport = clipboardTarget(target),
+        text = viewport ? readTerminalViewportSelection(viewport) : undefined;
+      if (!text) return;
+      void writeClipboardText(text, navigator.clipboard as Clipboard | undefined, () => copyWithSelection(text)).then(
+        (copied) => {
+          showToast(copied ? terminalCopyMessage(text, true) : 'Could not copy the selection.');
+        },
+      );
     }),
   );
   lifetime.add(

@@ -70,7 +70,21 @@ describe('TerminalEditMenu (HS2-KKP8YJ)', () => {
     expect(markup).toContain('data-action="copy-terminal-text"');
     expect(markup).toContain('data-action="paste-terminal-text"');
     expect(markup).toContain('Copy Text…');
-    expect(markup).toContain('data-lucide="copy"');
+    expect(markup).not.toContain('data-action="copy-terminal-selection"');
+    // Copy Text… opens a sheet for selecting text, so the plain `copy` icon stays with Copy (HS2-EYR96N).
+    expect(markup).toContain('data-lucide="text-select"');
+    expect(markup).not.toContain('data-lucide="copy"');
     expect(markup).toContain('data-lucide="clipboard-paste"');
+  });
+
+  it('leads with Copy for a long-press selection (HS2-EYR96N)', () => {
+    const markup = String(TerminalEditMenu({ state: { x: 120, y: 340, selection: true } }));
+    expect(markup.match(/<wa-dropdown-item/g)).toHaveLength(3);
+    const order = ['copy-terminal-selection', 'copy-terminal-text', 'paste-terminal-text'].map((action) =>
+      markup.indexOf(`data-action="${action}"`),
+    );
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(markup).toMatch(/data-action="copy-terminal-selection"[\s\S]*?data-lucide="copy"[\s\S]*?Copy</);
   });
 });

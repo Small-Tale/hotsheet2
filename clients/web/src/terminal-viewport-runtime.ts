@@ -31,6 +31,7 @@ import {
 import { createLongPressController } from './terminal-long-press';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
+import { createTouchSelectionController } from './terminal-touch-selection';
 import {
   isTerminalReplacementReplay,
   parseTerminalSizeMessage,
@@ -795,12 +796,33 @@ function initializeTerminalViewport(
           };
         },
       }),
-      // A still one-finger hold asks for the terminal edit menu (HS2-KKP8YJ).
+      // A still one-finger hold selects the word under the finger; dragging on extends the range and
+      // the lift asks for the terminal edit menu (HS2-KKP8YJ, HS2-EYR96N).
+      touchSelection = createTouchSelectionController({
+        get cols() {
+          return terminal.cols;
+        },
+        geometry: () => {
+          const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen');
+          if (!screen || !terminal.cols || !terminal.rows) return undefined;
+          return {
+            rect: screen.getBoundingClientRect(),
+            cols: terminal.cols,
+            rows: terminal.rows,
+            viewportY: terminal.buffer.active.viewportY,
+          };
+        },
+        lineText: (row) => terminal.buffer.active.getLine(row)?.translateToString(false) ?? '',
+        select: ({ col, row, length }) => {
+          terminal.select(col, row, length);
+        },
+        clearSelection: () => {
+          terminal.clearSelection();
+        },
+      }),
       longPress = createLongPressController({
         onLongPress: (point) => {
-          element.dispatchEvent(
-            new CustomEvent<TerminalEditMenuDetail>(TERMINAL_EDIT_MENU_EVENT, { bubbles: true, detail: point }),
-          );
+          touchSelection.begin(point);
         },
         schedule: (callback, delay) => {
           const handle = window.setTimeout(callback, delay);
@@ -816,6 +838,8 @@ function initializeTerminalViewport(
           return;
         }
         const touch = event.touches[0];
+        // A new touch on the terminal drops an earlier touch selection, as tapping elsewhere does in text.
+        if (terminal.hasSelection()) touchSelection.clear();
         touchScroll.start({ y: touch.clientY, time: event.timeStamp });
         longPress.start({ x: touch.clientX, y: touch.clientY });
       },
@@ -823,8 +847,9 @@ function initializeTerminalViewport(
         if (event.touches.length !== 1) return;
         const touch = event.touches[0];
         longPress.move({ x: touch.clientX, y: touch.clientY });
-        // A finger that already opened the edit menu never also scrolls the terminal.
+        // A finger that already long-pressed extends its selection and never also scrolls the terminal.
         if (longPress.fired) {
+          touchSelection.extend({ x: touch.clientX, y: touch.clientY });
           event.preventDefault();
           return;
         }
@@ -836,12 +861,27 @@ function initializeTerminalViewport(
       touchEnd = (event: TouchEvent) => {
         const touch = event.changedTouches[0] as Touch | undefined;
         touchScroll.end(touch ? { y: touch.clientY, time: event.timeStamp } : undefined);
-        // The lift that ends a long press must not also tap-focus the terminal and raise the keyboard.
-        if (longPress.end()) event.preventDefault();
+        // The lift that ends a long press must not also tap-focus the terminal and raise the keyboard;
+        // it opens the edit menu where the finger lifted.
+        const point = longPress.origin;
+        if (!longPress.end()) return;
+        event.preventDefault();
+        touchSelection.finish();
+        element.dispatchEvent(
+          new CustomEvent<TerminalEditMenuDetail>(TERMINAL_EDIT_MENU_EVENT, {
+            bubbles: true,
+            detail: {
+              x: touch?.clientX ?? point?.x ?? 0,
+              y: touch?.clientY ?? point?.y ?? 0,
+              selection: terminal.hasSelection(),
+            },
+          }),
+        );
       },
       touchCancel = () => {
         touchScroll.cancel();
         longPress.cancel();
+        touchSelection.finish();
       },
       // Android raises a native context menu for a long press; the terminal's own edit menu replaces it.
       suppressTouchContextMenu = (event: Event) => {
@@ -914,7 +954,8 @@ function initializeTerminalViewport(
     // Phone clipboard actions (HS2-FRB545): snapshot the active buffer as selectable text, and paste
     // through xterm so bracketed-paste mode and newline normalization match a desktop paste.
     const readText = (event: Event) => {
-      (event as CustomEvent<TerminalReadTextDetail>).detail.text = terminalBufferText(terminal.buffer.active);
+      const detail = (event as CustomEvent<TerminalReadTextDetail>).detail;
+      detail.text = detail.selectionOnly ? terminal.getSelection() : terminalBufferText(terminal.buffer.active);
     };
     const paste = (event: Event) => {
       const text = (event as CustomEvent<TerminalPasteDetail>).detail.text;

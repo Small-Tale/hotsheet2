@@ -1593,9 +1593,9 @@
       "name": "TerminalEditMenu",
       "source": "src/components/terminal-clipboard-dialogs.tsx",
       "kind": "component",
-      "purpose": "Touch terminal edit menu opened by a long-press at the touch point: Copy Text… opens the Copy sheet and Paste sends the clipboard.",
+      "purpose": "Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard.",
       "useWhen": [
-        "Hot Sheet needs touch terminal edit menu opened by a long-press at the touch point: Copy Text… opens the Copy sheet and Paste sends the clipboard."
+        "Hot Sheet needs touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalEditMenu behavior."

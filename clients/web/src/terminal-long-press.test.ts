@@ -31,9 +31,12 @@ function harness() {
 describe('terminal long-press controller (HS2-KKP8YJ)', () => {
   it('fires once at the touch-down point after the hold and reports the fired lift', () => {
     const { controller, timers, presses, elapse } = harness();
+    expect(controller.origin).toBeUndefined();
     controller.start({ x: 40, y: 80 });
     expect(timers[0].delay).toBe(TERMINAL_LONG_PRESS_MS);
     expect(controller.active).toBe(true);
+    // The runtime reads the touch-down point at the lift to place the edit menu (HS2-EYR96N).
+    expect(controller.origin).toEqual({ x: 40, y: 80 });
     expect(controller.fired).toBe(false);
     // Drift inside the tolerance keeps the press alive and the original point.
     controller.move({ x: 40 + TERMINAL_LONG_PRESS_TOLERANCE, y: 80 - TERMINAL_LONG_PRESS_TOLERANCE });
@@ -43,9 +46,11 @@ describe('terminal long-press controller (HS2-KKP8YJ)', () => {
     // Movement after firing neither cancels nor refires.
     controller.move({ x: 200, y: 300 });
     expect(controller.fired).toBe(true);
+    expect(controller.origin).toEqual({ x: 40, y: 80 });
     expect(controller.end()).toBe(true);
     expect(controller.active).toBe(false);
     expect(controller.fired).toBe(false);
+    expect(controller.origin).toBeUndefined();
     expect(presses).toHaveLength(1);
   });
 

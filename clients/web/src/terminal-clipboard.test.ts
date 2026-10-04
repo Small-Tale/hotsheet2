@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   pasteIntoTerminalViewport,
   readClipboardText,
+  readTerminalViewportSelection,
   readTerminalViewportText,
   TERMINAL_PASTE_EVENT,
   TERMINAL_READ_TEXT_EVENT,
@@ -56,6 +57,17 @@ describe('viewport clipboard events', () => {
       (event as CustomEvent<TerminalReadTextDetail>).detail.text = 'snapshot';
     });
     expect(readTerminalViewportText(viewport)).toBe('snapshot');
+  });
+
+  it('asks a mounted viewport for only its selection (HS2-EYR96N)', () => {
+    const viewport = new EventTarget() as HTMLElement;
+    expect(readTerminalViewportSelection(viewport)).toBeUndefined();
+    viewport.addEventListener(TERMINAL_READ_TEXT_EVENT, (event) => {
+      const detail = (event as CustomEvent<TerminalReadTextDetail>).detail;
+      detail.text = detail.selectionOnly === true ? 'nano 8.4' : 'whole buffer';
+    });
+    expect(readTerminalViewportSelection(viewport)).toBe('nano 8.4');
+    expect(readTerminalViewportText(viewport)).toBe('whole buffer');
   });
 
   it('dispatches paste text to the viewport', () => {

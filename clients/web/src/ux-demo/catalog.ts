@@ -631,7 +631,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'terminal-edit-menu',
         'TerminalEditMenu',
-        'Touch terminal edit menu opened by a long-press at the touch point: Copy Text… opens the Copy sheet and Paste sends the clipboard.',
+        'Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard.',
         'feature-floor',
         true,
       ),
