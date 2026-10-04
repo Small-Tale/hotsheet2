@@ -1886,7 +1886,6 @@ pub fn move_between(
 mod tests {
     use super::*;
     use crate::StoreMetadata;
-    use std::process::Command;
 
     fn git_provider() -> (tempfile::TempDir, GitProvider) {
         let dir = tempfile::tempdir().unwrap();
@@ -3020,13 +3019,13 @@ mod tests {
     #[test]
     fn git_provider_reports_not_working_with_note_evidence_and_reopen_in_one_write() {
         let (_dir, provider) = git_provider();
-        Command::new("git")
+        crate::git::command()
             .arg("-C")
             .arg(provider.store.root())
             .arg("init")
             .output()
             .unwrap();
-        Command::new("git")
+        crate::git::command()
             .arg("-C")
             .arg(provider.store.root())
             .args(["config", "user.name", "Hot Sheet"])

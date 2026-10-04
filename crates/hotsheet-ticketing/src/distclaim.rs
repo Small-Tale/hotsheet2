@@ -21,7 +21,6 @@
 //! the rest of the store layer, so it works against any remote.
 
 use std::path::Path;
-use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
@@ -303,7 +302,7 @@ fn looks_like_reject(stderr: &str) -> bool {
 
 /// Run `git -C store_path <args>`, capturing (success, stdout, stderr).
 fn git(store_path: &Path, args: &[&str]) -> (bool, String, String) {
-    match Command::new("git")
+    match crate::git::command()
         .arg("-C")
         .arg(store_path)
         .args(args)
@@ -322,7 +321,7 @@ fn git(store_path: &Path, args: &[&str]) -> (bool, String, String) {
 fn git_stdin(store_path: &Path, args: &[&str], stdin: &str) -> (bool, String, String) {
     use std::io::Write;
     use std::process::Stdio;
-    let mut child = match Command::new("git")
+    let mut child = match crate::git::command()
         .arg("-C")
         .arg(store_path)
         .args(args)
@@ -365,11 +364,7 @@ mod tests {
         let a = dir.path().join("a");
         let b = dir.path().join("b");
         let run = |args: &[&str]| {
-            let ok = std::process::Command::new("git")
-                .args(args)
-                .status()
-                .unwrap()
-                .success();
+            let ok = crate::git::command().args(args).status().unwrap().success();
             assert!(ok, "git {args:?}");
         };
         run(&[
@@ -460,7 +455,7 @@ mod tests {
     #[test]
     fn a_store_without_a_remote_reports_no_remote() {
         let dir = tempfile::tempdir().unwrap();
-        std::process::Command::new("git")
+        crate::git::command()
             .args(["init", "--quiet", dir.path().to_str().unwrap()])
             .status()
             .unwrap();

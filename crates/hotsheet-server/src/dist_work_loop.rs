@@ -609,7 +609,7 @@ mod tests {
 
     fn git(args: &[&str]) {
         assert!(
-            std::process::Command::new("git")
+            hotsheet_ticketing::git::command()
                 .args(args)
                 .status()
                 .unwrap()

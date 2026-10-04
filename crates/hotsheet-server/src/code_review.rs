@@ -632,7 +632,7 @@ fn launch_worktree_files(
     if paths.is_empty() || !paths.iter().all(|path| changed.contains(path.as_str())) {
         return Err(CodeReviewError::InvalidTarget);
     }
-    let mut command = Command::new("git");
+    let mut command = hotsheet_ticketing::git::command();
     command.arg("-C").arg(root).args(difftool_args(&[]));
     if area == WorktreeArea::Staged {
         command.arg("--cached");
@@ -680,7 +680,7 @@ fn commit_parent_or_empty_tree(root: &Path, commit: &str) -> Result<String, Code
 }
 
 fn spawn_difftool(root: &Path, (old, new): (String, String)) -> Result<(), CodeReviewError> {
-    Command::new("git")
+    hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
         .args(["difftool", "--no-prompt", &old, &new])
@@ -697,7 +697,7 @@ fn spawn_difftool_files(
     (old, new): (&str, &str),
     paths: &[String],
 ) -> Result<(), CodeReviewError> {
-    let mut command = Command::new("git");
+    let mut command = hotsheet_ticketing::git::command();
     command
         .arg("-C")
         .arg(root)
@@ -789,7 +789,7 @@ fn launch_revisions(
 }
 
 fn git_output(root: &Path, args: &[&str]) -> Result<String, CodeReviewError> {
-    let output = Command::new("git")
+    let output = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
         .args(args)
@@ -804,7 +804,7 @@ fn git_output(root: &Path, args: &[&str]) -> Result<String, CodeReviewError> {
 }
 
 fn git_success(root: &Path, args: &[&str]) -> bool {
-    Command::new("git")
+    hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
         .args(args)

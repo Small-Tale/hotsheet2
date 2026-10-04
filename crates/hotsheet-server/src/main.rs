@@ -540,7 +540,7 @@ impl StopSignals {
 /// The store's git `user.email`, if configured — the default worker id for the driving
 /// loop (HS2-1TY7GC), matching how assignment identifies people (docs/10).
 fn git_email(path: &std::path::Path) -> Option<String> {
-    let out = std::process::Command::new("git")
+    let out = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(path)
         .args(["config", "user.email"])

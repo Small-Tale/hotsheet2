@@ -457,7 +457,7 @@ pub fn merge_driver_registered(store_path: &Path) -> bool {
     let attr_ok = std::fs::read_to_string(store_path.join(".gitattributes"))
         .map(|s| s.lines().any(|l| l.trim() == MERGE_ATTR_LINE))
         .unwrap_or(false);
-    let config_ok = Command::new("git")
+    let config_ok = hotsheet_ticketing::git::command()
         .current_dir(store_path)
         .args(["config", &format!("merge.{MERGE_DRIVER_NAME}.driver")])
         .output()
@@ -471,7 +471,7 @@ pub fn merge_driver_registered(store_path: &Path) -> bool {
 /// commit failure and must not produce a warning.
 pub fn git_commit_all(path: &Path, message: &str) {
     run_git(path, &["add", "-A"]);
-    match Command::new("git")
+    match hotsheet_ticketing::git::command()
         .current_dir(path)
         .args(["diff", "--cached", "--quiet", "--"])
         .status()
@@ -491,7 +491,11 @@ pub fn git_commit_all(path: &Path, message: &str) {
 }
 
 fn run_git(path: &Path, args: &[&str]) {
-    match Command::new("git").current_dir(path).args(args).output() {
+    match hotsheet_ticketing::git::command()
+        .current_dir(path)
+        .args(args)
+        .output()
+    {
         Ok(output) => {
             // Hooks may write to stdout even for quiet Git commands. Preserve all
             // diagnostics on stderr so machine migration stdout stays valid NDJSON.

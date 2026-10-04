@@ -12,7 +12,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::Duration;
 
 use hotsheet_model::{
@@ -640,7 +640,7 @@ impl FsStore {
         if self.push_after_commit
             && git_stdout(&self.root, &["remote"]).is_some_and(|s| !s.trim().is_empty())
         {
-            if let Ok(mut child) = Command::new("git")
+            if let Ok(mut child) = crate::git::command()
                 .arg("-C")
                 .arg(&self.root)
                 .args(["push", "--quiet"])
@@ -1422,7 +1422,7 @@ fn git_paths(root: &Path, args: &[&str], paths: &[PathBuf]) -> Result<(), StoreE
         .iter()
         .map(|path| path.strip_prefix(root).unwrap_or(path))
         .collect::<Vec<_>>();
-    let output = Command::new("git")
+    let output = crate::git::command()
         .env("LC_ALL", "C")
         .arg("-C")
         .arg(root)
@@ -1443,7 +1443,7 @@ fn git_paths(root: &Path, args: &[&str], paths: &[PathBuf]) -> Result<(), StoreE
 
 /// True when `git -C root <args>` exits 0 (used for `diff --cached --quiet`).
 fn git_ok(root: &Path, args: &[&str]) -> bool {
-    Command::new("git")
+    crate::git::command()
         .arg("-C")
         .arg(root)
         .args(args)
@@ -1457,7 +1457,7 @@ fn git_ok_paths(root: &Path, args: &[&str], paths: &[PathBuf]) -> bool {
         .iter()
         .map(|path| path.strip_prefix(root).unwrap_or(path))
         .collect::<Vec<_>>();
-    Command::new("git")
+    crate::git::command()
         .arg("-C")
         .arg(root)
         .args(args)
@@ -1469,7 +1469,7 @@ fn git_ok_paths(root: &Path, args: &[&str], paths: &[PathBuf]) -> bool {
 
 /// Captured stdout of `git -C root <args>`, or `None` if it failed to run.
 fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
-    let out = Command::new("git")
+    let out = crate::git::command()
         .arg("-C")
         .arg(root)
         .args(args)

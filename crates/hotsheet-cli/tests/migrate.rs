@@ -78,7 +78,7 @@ fn repeated_migration_treats_a_clean_commit_as_success_without_warning() {
     run().assert().success().stdout(predicate::str::contains(
         "Imported 1 ticket(s) (0 attachment file(s)), skipped 0 already present.",
     ));
-    let commits_before = std::process::Command::new("git")
+    let commits_before = hotsheet_ticketing::git::command()
         .current_dir(&store)
         .args(["rev-list", "--count", "HEAD"])
         .output()
@@ -90,7 +90,7 @@ fn repeated_migration_treats_a_clean_commit_as_success_without_warning() {
         .success()
         .stdout(predicate::str::contains("skipped 1 already present"))
         .stderr(predicate::str::contains("warning: git commit").not());
-    let commits_after = std::process::Command::new("git")
+    let commits_after = hotsheet_ticketing::git::command()
         .current_dir(&store)
         .args(["rev-list", "--count", "HEAD"])
         .output()
@@ -153,7 +153,7 @@ fn verifies_manually_pushed_import_and_rejects_old_remote_or_changed_origin() {
         .assert()
         .success();
     let git = |path: &std::path::Path, args: &[&str]| {
-        let output = std::process::Command::new("git")
+        let output = hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(path)
             .args(args)

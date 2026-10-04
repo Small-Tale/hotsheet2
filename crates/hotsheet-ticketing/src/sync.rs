@@ -13,7 +13,6 @@
 //! reports [`SyncReport::NoRemote`].
 
 use std::path::Path;
-use std::process::Command;
 
 /// The outcome of one [`sync_once`] cycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,7 +127,7 @@ fn ahead_behind(store_path: &Path) -> (u32, u32) {
 }
 
 fn git_ok(root: &Path, args: &[&str]) -> bool {
-    Command::new("git")
+    crate::git::command()
         .arg("-C")
         .arg(root)
         .args(args)
@@ -138,7 +137,7 @@ fn git_ok(root: &Path, args: &[&str]) -> bool {
 }
 
 fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
-    let out = Command::new("git")
+    let out = crate::git::command()
         .arg("-C")
         .arg(root)
         .args(args)

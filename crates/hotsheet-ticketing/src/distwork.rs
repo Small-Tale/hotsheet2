@@ -166,11 +166,7 @@ mod tests {
         let base = dir.path().join("base");
         let run = |args: &[&str]| {
             assert!(
-                std::process::Command::new("git")
-                    .args(args)
-                    .status()
-                    .unwrap()
-                    .success(),
+                crate::git::command().args(args).status().unwrap().success(),
                 "git {args:?}"
             );
         };
@@ -333,7 +329,7 @@ mod tests {
     fn no_remote_is_an_error() {
         let dir = tempfile::tempdir().unwrap();
         let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-        std::process::Command::new("git")
+        crate::git::command()
             .args(["init", "-q", dir.path().to_str().unwrap()])
             .status()
             .unwrap();

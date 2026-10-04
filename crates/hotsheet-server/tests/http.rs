@@ -11,7 +11,6 @@ use hotsheet_ticketing::{FsStore, STORE_SCHEMA_VERSION, Scope, Settings, StoreMe
 use http_body_util::BodyExt;
 use std::collections::{HashMap, VecDeque};
 use std::convert::Infallible;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
@@ -2223,7 +2222,7 @@ async fn ticket_mutation_does_not_wait_for_remote_publication() {
 
     fn git(path: &std::path::Path, args: &[&str]) {
         assert!(
-            Command::new("git")
+            hotsheet_ticketing::git::command()
                 .arg("-C")
                 .arg(path)
                 .args(args)
@@ -4336,7 +4335,7 @@ async fn opening_project_does_not_wait_for_ignored_checkout_traversal() {
     let checkout = workspace.path().join("app");
     std::fs::create_dir(&checkout).unwrap();
     assert!(
-        Command::new("git")
+        hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(&checkout)
             .args(["init", "--quiet"])
@@ -4376,7 +4375,7 @@ async fn an_open_checkout_announces_working_tree_changes_but_not_ignored_output(
     let checkout = workspace.path().join("app");
     std::fs::create_dir(&checkout).unwrap();
     assert!(
-        Command::new("git")
+        hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(&checkout)
             .args(["init", "--quiet"])
@@ -6782,7 +6781,7 @@ async fn repository_status_endpoint_reports_real_git_state() {
     let (_d, st) = state();
     let checkout = tempfile::tempdir().unwrap();
     let run = |args: &[&str]| {
-        let status = std::process::Command::new("git")
+        let status = hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(checkout.path())
             .args(args)
@@ -7030,7 +7029,7 @@ async fn repository_setup_initializes_only_the_checkout_and_preserves_existing_o
         .await
         .unwrap();
     assert_eq!(replacement.status(), StatusCode::CONFLICT);
-    let configured = Command::new("git")
+    let configured = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(checkout.path())
         .args(["remote", "get-url", "origin"])
@@ -7193,7 +7192,7 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         .unwrap();
     let checkout = tempfile::tempdir().unwrap();
     let run = |args: &[&str]| {
-        let output = Command::new("git")
+        let output = hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(checkout.path())
             .args(args)
@@ -7401,7 +7400,7 @@ async fn multi_file_diffs_launch_the_difftool_once() {
     let checkout = tempfile::tempdir().unwrap();
     let log = checkout.path().join(".git").join("difftool.log");
     let run = |args: &[&str]| {
-        let output = Command::new("git")
+        let output = hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(checkout.path())
             .args(args)
@@ -8463,14 +8462,14 @@ async fn me_views_resolve_assigned_to_me_and_needs_my_review() {
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     // `me` resolves via `git config user.email`, so the store dir must be a repo with a
     // pinned local identity (deterministic regardless of global git config).
-    std::process::Command::new("git")
+    hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(dir.path())
         .arg("init")
         .output()
         .unwrap();
     for args in [["user.email", "me@hs.test"], ["user.name", "Me"]] {
-        std::process::Command::new("git")
+        hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(dir.path())
             .arg("config")

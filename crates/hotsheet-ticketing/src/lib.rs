@@ -19,6 +19,7 @@ pub mod checkout_page;
 pub mod corrupt_cache;
 pub mod distclaim;
 pub mod distwork;
+pub mod git;
 pub mod identity;
 pub mod merge;
 pub mod metrics;

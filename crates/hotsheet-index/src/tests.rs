@@ -1173,7 +1173,7 @@ fn a_corrupt_ticket_file_is_skipped_not_fatal_on_rebuild_and_reconcile() {
 fn git_store() -> (tempfile::TempDir, FsStore) {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let ok = std::process::Command::new("git")
+    let ok = hotsheet_ticketing::git::command()
         .args(["-C"])
         .arg(dir.path())
         .args(["init", "-q", "-b", "main"])

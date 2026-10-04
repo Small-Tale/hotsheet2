@@ -65,7 +65,7 @@ pub fn snapshot(root: &Path) -> Result<RepositoryStatus, RepositoryStatusError> 
         )
         .into());
     }
-    let output = std::process::Command::new("git")
+    let output = crate::git::command()
         .args([
             "-C",
             root.to_str().unwrap_or("."),
@@ -211,7 +211,6 @@ fn change_kind(value: u8) -> Option<RepositoryFileChange> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
 
     #[test]
     fn distinguishes_an_uninitialized_folder_from_a_broken_repository() {
@@ -231,7 +230,7 @@ mod tests {
     #[test]
     fn snapshots_a_newly_initialized_repository() {
         let root = tempfile::tempdir().unwrap();
-        let output = Command::new("git")
+        let output = crate::git::command()
             .arg("-C")
             .arg(root.path())
             .args(["init", "--quiet"])

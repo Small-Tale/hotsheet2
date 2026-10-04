@@ -197,7 +197,7 @@ fn rollups_dir(store: &FsStore) -> std::path::PathBuf {
 /// to `-`), or `"local"` when git has no identity. Rollups shard by this so two people's
 /// files never conflict and a team view sums across them (`docs/14` §14.4).
 pub fn contributor_id(store: &FsStore) -> String {
-    let email = std::process::Command::new("git")
+    let email = crate::git::command()
         .arg("-C")
         .arg(store.root())
         .args(["config", "user.email"])

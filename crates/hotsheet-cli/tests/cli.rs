@@ -245,7 +245,7 @@ fn concurrent_edits_retry_external_git_locks_without_losing_history() {
             .all(|ticket| ticket.title.starts_with("After ")),
         "every edit is durable once its writer exits"
     );
-    let status = std::process::Command::new("git")
+    let status = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
         .args(["status", "--porcelain"])
@@ -257,7 +257,7 @@ fn concurrent_edits_retry_external_git_locks_without_losing_history() {
         "{}",
         String::from_utf8_lossy(&status.stdout)
     );
-    let history = std::process::Command::new("git")
+    let history = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
         .args(["log", "--format=%s", "-4"])
@@ -1571,7 +1571,7 @@ fn import_retry_repairs_attachments_without_rewriting_edits_and_commits_recovery
     }
     assert!(!checkpoint.exists());
     let git = |args: &[&str]| {
-        let output = std::process::Command::new("git")
+        let output = hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(&store_path)
             .args(args)
@@ -2223,7 +2223,7 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
     let store = root.path().join("tickets-project");
     let remote = root.path().join("tickets-remote.git");
     std::fs::create_dir(&project).unwrap();
-    Command::new("git")
+    Command::from_std(hotsheet_ticketing::git::command())
         .args(["init", "--bare", remote.to_str().unwrap()])
         .assert()
         .success();
@@ -2261,7 +2261,7 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
     let ignore = std::fs::read_to_string(project.join(".gitignore")).unwrap();
     assert!(ignore.lines().any(|line| line == hotsheet_cli::STORE_LINK));
 
-    let origin = Command::new("git")
+    let origin = Command::from_std(hotsheet_ticketing::git::command())
         .current_dir(&store)
         .args(["remote", "get-url", "origin"])
         .output()
@@ -2309,7 +2309,7 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
         r#"{"mcpServers":{"user-server":{"command":"user-command"}}}"#,
     )
     .unwrap();
-    Command::new("git")
+    Command::from_std(hotsheet_ticketing::git::command())
         .args(["init", "--bare", remote.to_str().unwrap()])
         .assert()
         .success();
@@ -2347,7 +2347,7 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
             .ticket_prefix,
         "ACME"
     );
-    let head = Command::new("git")
+    let head = Command::from_std(hotsheet_ticketing::git::command())
         .args([
             "-C",
             store.to_str().unwrap(),
@@ -2386,7 +2386,7 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
         store.canonicalize().unwrap().to_string_lossy().as_ref()
     );
 
-    let origin = Command::new("git")
+    let origin = Command::from_std(hotsheet_ticketing::git::command())
         .args(["-C", store.to_str().unwrap(), "remote", "get-url", "origin"])
         .output()
         .unwrap();
@@ -4122,7 +4122,7 @@ fn work_shared_daemon_completes_and_leaves_no_orphan_home() {
 #[test]
 fn merge_driver_resolves_concurrent_ticket_edits() {
     fn git(dir: &Path, args: &[&str]) {
-        let ok = std::process::Command::new("git")
+        let ok = hotsheet_ticketing::git::command()
             .current_dir(dir)
             .args(args)
             .status()
@@ -4147,7 +4147,7 @@ fn merge_driver_resolves_concurrent_ticket_edits() {
         .assert()
         .success();
     let base_branch = String::from_utf8(
-        std::process::Command::new("git")
+        hotsheet_ticketing::git::command()
             .current_dir(p)
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .output()
@@ -4184,7 +4184,7 @@ fn merge_driver_resolves_concurrent_ticket_edits() {
         .success();
 
     // Merge A into B — must succeed with no conflict markers.
-    let merged = std::process::Command::new("git")
+    let merged = hotsheet_ticketing::git::command()
         .current_dir(p)
         .args(["merge", "branch-a", "-m", "merge"])
         .status()
@@ -4281,7 +4281,7 @@ fn copy_and_move_between_stores() {
 #[test]
 fn sync_pulls_and_pushes_between_clones() {
     fn git(dir: &Path, args: &[&str]) -> bool {
-        std::process::Command::new("git")
+        hotsheet_ticketing::git::command()
             .current_dir(dir)
             .args(args)
             .status()

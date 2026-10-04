@@ -743,6 +743,27 @@ Sheet **still auto-commits its edits locally**, so it keeps full git history and
 the merge driver still governs any local branch merges. Detailed design +
 cadence/backoff: HS2-19.
 
+### 2.12.1 Git subprocesses target only the store they name
+
+Every `git` process Hot Sheet starts — commits, sync, claims, repository status, code
+review, init, and test fixtures — is built by one constructor,
+`hotsheet_ticketing::git::command()` (or `command_in(dir)`, which also pins the working
+directory and `-C`). It removes every inherited repository-locating variable before
+naming the store explicitly: exactly the set `git rev-parse --local-env-vars` prints
+(`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`,
+`GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_COMMON_DIR`, `GIT_CONFIG_PARAMETERS`, ...) plus
+`GIT_NAMESPACE`, `GIT_CEILING_DIRECTORIES`, `GIT_DISCOVERY_ACROSS_FILESYSTEM`, and
+`GIT_QUARANTINE_PATH`. Identity (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`) and global-config
+selection stay inherited.
+
+So `hotsheet-cli` or the server started from a git hook, `git rebase --exec`, or
+`git bisect run` still writes only to its own store, never to the calling repository.
+In particular, `git init --bare <path>` cannot reinitialize the inherited repository as
+bare (HS2-RRD417). A source-scan test rejects any bare git `Command` under `crates/`
+outside that constructor. Web test helpers that spawn Hot Sheet binaries or git
+(`clients/web/tests/real-ticket-server.ts`, `clients/web/scripts/scale-stress.mjs`)
+strip the same list through `clients/web/scripts/repository-env.mjs`.
+
 ## 2.13 Copy & move between stores
 
 Tickets need to move between stores — e.g. promote a scratch idea into the team

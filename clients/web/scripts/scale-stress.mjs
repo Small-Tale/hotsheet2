@@ -10,6 +10,8 @@ import { performance } from 'node:perf_hooks';
 import { createServer } from 'node:net';
 import { promisify } from 'node:util';
 
+import { withoutGitRepositoryEnv } from './repository-env.mjs';
+
 const execFileAsync = promisify(execFile);
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(scriptDir, '..');
@@ -183,7 +185,7 @@ async function runMeasured(command, args, options = {}) {
   const started = performance.now();
   const child = spawn(command, args, {
     cwd: options.cwd ?? repoRoot,
-    env: options.env ?? process.env,
+    env: options.env ?? withoutGitRepositoryEnv(process.env),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '',
@@ -688,7 +690,8 @@ async function main() {
   const store = join(root, 'project.hs2');
   const home = join(root, 'home');
   await Promise.all([mkdir(projectRoot), mkdir(home)]);
-  const env = { ...process.env, HOTSHEET_HOME: home };
+  // Never let an inherited GIT_DIR redirect the fixture store (HS2-RRD417).
+  const env = { ...withoutGitRepositoryEnv(process.env), HOTSHEET_HOME: home };
   const report = {
     generated_at: new Date().toISOString(),
     host: { platform: process.platform, arch: process.arch, node: process.version },

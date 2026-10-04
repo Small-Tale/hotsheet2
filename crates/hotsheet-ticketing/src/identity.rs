@@ -7,7 +7,6 @@
 //! teammate sees. There's no separate account system; git identity is the identity.
 
 use std::path::Path;
-use std::process::Command;
 
 /// The literal a caller passes to mean "the current user" in a person-valued filter.
 pub const ME: &str = "me";
@@ -24,7 +23,7 @@ pub fn current_user_name(store_root: &Path) -> Option<String> {
 }
 
 fn current_git_config(store_root: &Path, key: &str) -> Option<String> {
-    let out = Command::new("git")
+    let out = crate::git::command()
         .arg("-C")
         .arg(store_root)
         .args(["config", key])
@@ -52,18 +51,17 @@ pub fn resolve_me(value: &str, store_root: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
 
     fn git_repo_with_email(email: Option<&str>) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
-        Command::new("git")
+        crate::git::command()
             .arg("-C")
             .arg(dir.path())
             .arg("init")
             .output()
             .unwrap();
         if let Some(e) = email {
-            Command::new("git")
+            crate::git::command()
                 .arg("-C")
                 .arg(dir.path())
                 .args(["config", "user.email", e])
@@ -85,7 +83,7 @@ mod tests {
     #[test]
     fn current_user_name_reads_git_config() {
         let dir = git_repo_with_email(Some("dev@example.com"));
-        Command::new("git")
+        crate::git::command()
             .arg("-C")
             .arg(dir.path())
             .args(["config", "user.name", "Brian"])

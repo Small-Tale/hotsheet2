@@ -3,7 +3,6 @@
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use hotsheet_ticketing::FsStore;
@@ -12,7 +11,7 @@ const COMPLETION: &str = "hotsheet-hs1-import-completed.json";
 const BACKUP: &str = "hotsheet-hs1-backup.json";
 
 fn git(store: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
+    let output = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(store)
         .args(args)

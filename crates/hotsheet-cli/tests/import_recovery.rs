@@ -19,7 +19,7 @@ fn cli(store: &Path) -> Command {
     command
 }
 fn git(store: &Path, args: &[&str]) -> String {
-    let result = std::process::Command::new("git")
+    let result = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(store)
         .args(args)

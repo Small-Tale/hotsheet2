@@ -7,6 +7,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
+
 const execute = promisify(execFile);
 
 /** Real ticket storage, index, and HTTP mutations, isolated from the developer's registry. */
@@ -23,8 +25,10 @@ export async function realTicketServer() {
     store = resolve(directory, 'tickets'),
     root = resolve(directory, 'project'),
     secret = 'isolated-browser-test',
+    // An inherited GIT_DIR (git hook, `git bisect run`) must not redirect the isolated store
+    // into the developer checkout (HS2-RRD417).
     env = {
-      ...process.env,
+      ...withoutGitRepositoryEnv(process.env),
       HOTSHEET_HOME: resolve(directory, 'home'),
       HOTSHEET_NO_AUTOCOMMIT: '1',
       GIT_AUTHOR_NAME: 'Hot Sheet browser test',

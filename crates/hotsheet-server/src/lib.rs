@@ -11354,7 +11354,7 @@ impl RepositoryEventFilter {
     /// Re-read the ignored paths, so a build directory created after startup stops
     /// triggering status reads once Git has confirmed it ignores it.
     fn refresh_ignored(&mut self, root: &FsPath) {
-        let Ok(output) = std::process::Command::new("git")
+        let Ok(output) = hotsheet_ticketing::git::command()
             .arg("--no-optional-locks")
             .arg("-C")
             .arg(root)
@@ -11429,7 +11429,7 @@ fn path_spellings(path: &FsPath) -> Vec<std::path::PathBuf> {
 /// The checkout's Git directory and common directory (distinct for a linked worktree, whose
 /// HEAD, index and refs live outside the working tree), in every spelling.
 fn repository_git_dirs(root: &FsPath) -> Vec<std::path::PathBuf> {
-    let Ok(output) = std::process::Command::new("git")
+    let Ok(output) = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
         .args([
@@ -11568,7 +11568,7 @@ fn run_native_repository_monitor(
 }
 
 fn git_repository_fingerprint(root: &FsPath) -> Option<Vec<u8>> {
-    let output = std::process::Command::new("git")
+    let output = hotsheet_ticketing::git::command()
         .arg("--no-optional-locks")
         .arg("-C")
         .arg(root)
@@ -11963,7 +11963,7 @@ mod watcher_tests {
     }
 
     fn git(root: &std::path::Path, args: &[&str]) {
-        let status = std::process::Command::new("git")
+        let status = hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(root)
             .args(args)

@@ -210,7 +210,7 @@ fn checked_git(
     args: &[&str],
     operation: &'static str,
 ) -> Result<String, RepositorySetupError> {
-    let output = Command::new("git")
+    let output = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
         .args(args)
@@ -388,7 +388,7 @@ fn nearest_existing_path(path: &Path) -> &Path {
 }
 
 fn commit_count(root: &Path) -> u64 {
-    Command::new("git")
+    hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
         .args(["rev-list", "--count", "HEAD"])
@@ -416,7 +416,7 @@ mod tests {
     use super::*;
 
     fn git(root: &Path, args: &[&str]) -> String {
-        let output = Command::new("git")
+        let output = hotsheet_ticketing::git::command()
             .arg("-C")
             .arg(root)
             .args(args)
@@ -455,7 +455,7 @@ mod tests {
         assert_eq!(first.status.untracked, 1);
         assert_eq!(first.commit_count, 0);
         assert!(
-            !Command::new("git")
+            !hotsheet_ticketing::git::command()
                 .arg("-C")
                 .arg(root.path())
                 .args(["rev-parse", "--verify", "HEAD"])

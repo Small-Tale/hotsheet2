@@ -1795,7 +1795,7 @@ fn cmd_bootstrap(
         }
     }
 
-    let repository = std::process::Command::new("git")
+    let repository = hotsheet_ticketing::git::command()
         .args([
             "-C",
             project.to_str().unwrap_or("."),
@@ -1815,7 +1815,7 @@ fn cmd_bootstrap(
     let checkout = registry.register(&project, None, repository, vec![store.clone()])?;
     hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?;
 
-    let existing_remote = std::process::Command::new("git")
+    let existing_remote = hotsheet_ticketing::git::command()
         .args([
             "-C",
             store.to_str().unwrap_or("."),
@@ -1839,7 +1839,7 @@ fn cmd_bootstrap(
             ),
             Some(_) => {}
             None => {
-                let status = std::process::Command::new("git")
+                let status = hotsheet_ticketing::git::command()
                     .args([
                         "-C",
                         store.to_str().unwrap_or("."),
@@ -1966,7 +1966,7 @@ fn cmd_init(
         git_init(&destination);
         hotsheet_cli::register_merge_driver(&destination);
         if let Some(url) = remote {
-            let status = std::process::Command::new("git")
+            let status = hotsheet_ticketing::git::command()
                 .current_dir(&destination)
                 .args(["remote", "add", "origin", url])
                 .status()
@@ -3953,7 +3953,7 @@ fn git_merge_file(ours: &str, base: &str, theirs: &str) -> Result<(String, bool)
         write("base", base)?,
         write("theirs", theirs)?,
     );
-    let out = std::process::Command::new("git")
+    let out = hotsheet_ticketing::git::command()
         .args([
             "merge-file",
             "-p",
@@ -4666,7 +4666,7 @@ fn cmd_setup(
     let project_dir = project.unwrap_or_else(|| store.to_path_buf());
     // Setup also makes the checkout discoverable to server/MCP consumers. This records
     // context; generated MCP config still points directly at the store for headless use.
-    let repository = std::process::Command::new("git")
+    let repository = hotsheet_ticketing::git::command()
         .args([
             "-C",
             project_dir.to_str().unwrap_or("."),
@@ -5182,7 +5182,7 @@ fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
             repository,
         } => {
             let repository = repository.or_else(|| {
-                std::process::Command::new("git")
+                hotsheet_ticketing::git::command()
                     .args(["-C", root.to_str()?, "config", "--get", "remote.origin.url"])
                     .output()
                     .ok()

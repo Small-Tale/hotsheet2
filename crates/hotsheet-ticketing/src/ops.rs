@@ -3958,13 +3958,13 @@ mod tests {
     fn assign_sets_people_and_unions_review_requests() {
         use hotsheet_model::{ReviewKind, ReviewRequest};
         let (_d, store) = store();
-        std::process::Command::new("git")
+        crate::git::command()
             .arg("-C")
             .arg(store.root())
             .arg("init")
             .output()
             .unwrap();
-        std::process::Command::new("git")
+        crate::git::command()
             .arg("-C")
             .arg(store.root())
             .args(["config", "user.email", "requester@x.co"])
