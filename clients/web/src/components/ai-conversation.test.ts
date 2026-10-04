@@ -571,3 +571,16 @@ describe('AIConversation', () => {
     expect(css).toMatch(/\.ai-conversation__message--user \.ai-conversation__usage[^}]*color: color-mix/);
   });
 });
+
+describe('AI conversation foreground pointer interactivity (HS2-Q5TRYD)', () => {
+  it('becomes pointer-interactive only while its scroll timeline is active (it overflows)', () => {
+    const source = css,
+      rule = source.slice(source.indexOf('.ai-conversation__foreground {'), source.indexOf('@keyframes'));
+    expect(rule).toContain('pointer-events: none;');
+    expect(rule).toContain('animation: ai-conversation-foreground-scrollable linear both;');
+    expect(rule).toContain('animation-timeline: scroll(self);');
+    expect(source).toMatch(
+      /@keyframes ai-conversation-foreground-scrollable \{\s*from,\s*to \{\s*pointer-events: auto;\s*\}\s*\}/,
+    );
+  });
+});

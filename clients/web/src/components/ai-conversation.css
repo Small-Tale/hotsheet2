@@ -133,6 +133,18 @@
   inset: 0;
   align-items: flex-start;
   justify-content: center;
+  /* While the card overflows, the foreground's own scrollbar must be draggable (HS2-Q5TRYD). A scroll
+     timeline is active only while its scroller actually overflows, so this animation makes the
+     foreground pointer-interactive exactly then and leaves it transparent to the transcript
+     otherwise. Browsers without scroll timelines keep wheel, touch and keyboard scrolling. */
+  animation: ai-conversation-foreground-scrollable linear both;
+  animation-timeline: scroll(self);
+}
+@keyframes ai-conversation-foreground-scrollable {
+  from,
+  to {
+    pointer-events: auto;
+  }
 }
 .ai-conversation__transcript {
   display: flex;

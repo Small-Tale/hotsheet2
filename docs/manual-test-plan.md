@@ -104,6 +104,13 @@ When automation lands, remove the manual-only step and record it below.
     inspector's details editor, the Add tag field, an attachment purpose select, and the ticket
     source repository search. Confirm the page never zooms in on focus. Automated coverage measures
     computed font sizes under Chromium phone emulation, which cannot prove Safari's zoom heuristic.
+15. HS2-Q5TRYD — on a desktop with **classic (always-shown) scrollbars** (macOS "Show scroll
+    bars: Always", or Windows), open an AI conversation with a permission request whose command is
+    long enough that the card is taller than the dialog (shrink the window). Drag the foreground's
+    scrollbar with the mouse and confirm it scrolls to Allow Once. Then use a short command that
+    fits and confirm the transcript beneath the foreground stays clickable. Automated coverage runs
+    with overlay scrollbars (no gutter), so it asserts pointer interactivity and hit-testing, not
+    the drag itself.
 
 ### Local production host over the LAN
 

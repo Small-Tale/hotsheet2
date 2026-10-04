@@ -13398,6 +13398,11 @@ for (const viewport of [
         return { left, right };
       })
       .toEqual({ left: expectedInset, right: expectedInset });
+    // A card that fits leaves the foreground pointer-transparent, so the transcript beneath stays usable
+    // (HS2-Q5TRYD).
+    const fittingForeground = conversation.locator('.ai-conversation__foreground');
+    expect(await fittingForeground.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeLessThanOrEqual(0);
+    await expect(fittingForeground).toHaveCSS('pointer-events', 'none');
     await page.screenshot({ path: `/tmp/claude/hs2-sh3dr7-foreground-popup-${viewport.width}.png` });
     const [insets, headingBox, popupBox] = await Promise.all([
       geometry(),
@@ -13462,6 +13467,27 @@ for (const viewport of [
         buttonBox!.x + buttonBox!.width <= dialogBox!.x + dialogBox!.width
       );
     };
+    // While it overflows, the foreground is pointer-interactive, so its own scrollbar takes a mouse drag
+    // instead of the transcript beneath (HS2-Q5TRYD).
+    await expect.poll(() => foreground.evaluate((node) => getComputedStyle(node).pointerEvents)).toBe('auto');
+    const scrollbar = await foreground.evaluate((node: HTMLElement) => {
+      const box = node.getBoundingClientRect(),
+        gutter = node.offsetWidth - node.clientWidth,
+        x = box.right - Math.max(gutter, 2) / 2 - 1,
+        y = box.top + box.height / 2;
+      return { x, y, gutter, hit: document.elementFromPoint(x, y) === node };
+    });
+    expect(scrollbar.hit).toBe(true);
+    if (scrollbar.gutter > 0) {
+      await page.mouse.move(scrollbar.x, scrollbar.y);
+      await page.mouse.down();
+      await page.mouse.move(scrollbar.x, scrollbar.y + 60, { steps: 4 });
+      await page.mouse.up();
+      await expect.poll(() => foreground.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+      await foreground.evaluate((node) => {
+        node.scrollTop = 0;
+      });
+    }
     // Unscrolled, the lower actions start below the dialog's bottom edge.
     expect(await inside()).toBe(false);
     await dialog.evaluate((node) => Promise.all(node.getAnimations().map((animation) => animation.finished)));

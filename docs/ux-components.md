@@ -1565,7 +1565,11 @@ capability-aware sections when their underlying features and data contracts land
   inside the dialog (HS2-SH3DR7). When the card is taller than the dialog (a short viewport or a long
   command), the foreground itself scrolls (wheel and touch over the card chain to it), keeping its
   padding as shadow room, so the lower actions stay reachable without clipping the card's shadow
-  (HS2-VYM95K).
+  (HS2-VYM95K). While it overflows, the foreground is also pointer-interactive, so a mouse can drag
+  its scrollbar; a card that fits leaves it pointer-transparent over the transcript. A scroll-driven
+  animation (`animation-timeline: scroll(self)`) sets this, because a scroll timeline is active only
+  while its scroller overflows; browsers without scroll timelines keep wheel, touch and keyboard
+  scrolling (HS2-Q5TRYD).
 - `PermissionSummary`
 - `PermissionDetailDisclosure`
 - allow/deny/session-scope actions
