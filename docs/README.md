@@ -112,10 +112,11 @@ and don't imply reading order — read by group.
 
 **F · Collaboration & distribution**
 
-| Doc                                                                      | Topic                                                      | Status                                                                   |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md) | Human assignment + in-the-loop/review (vs machine claim)   | Partial (data model + write path + CLI; derived views/delivery deferred) |
-| [08-distributed-and-remote.md](08-distributed-and-remote.md)             | Multi-server orchestration, mobile, git-native claim/lease | Design                                                                   |
+| Doc                                                                      | Topic                                                                                                                                                                        | Status                                                                                     |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md) | Human assignment + in-the-loop/review (vs machine claim)                                                                                                                     | Partial (data model + write path + CLI; derived views/delivery deferred)                   |
+| [08-distributed-and-remote.md](08-distributed-and-remote.md)             | Multi-server orchestration, mobile, git-native claim/lease                                                                                                                   | Design                                                                                     |
+| [22-remote-testing.md](22-remote-testing.md)                             | Remote testing tiers; cloud-VM streaming evaluation (Moonlight/Sunshine, Parsec, DCV, Apple High Performance, RDP/AVD RemoteApp), region/RTT budget, launch-link integration | Design only (HS2-V59H7C; integration HS2-80077Y/HS2-YEH3R7; VM images deferred HS2-5AHG9Y) |
 
 **G · Integrations**
 

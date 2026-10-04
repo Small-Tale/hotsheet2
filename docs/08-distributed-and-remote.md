@@ -185,3 +185,5 @@ Empirically validated, so this is no longer a bet:
 - **Automatic sync engine** (hands-off team sharing): [02-ticket-storage.md](02-ticket-storage.md) §2.12
 - **Human assignment / in-the-loop** across a team/distributed setting:
   [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md)
+- **Remote testing** of built apps from phones and cloud build VMs (streaming tools,
+  region/RTT guidance, launch-link integration): [22-remote-testing.md](22-remote-testing.md)
