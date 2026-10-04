@@ -614,7 +614,10 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
   - Heading `Toolbar`s (the workspace page heading, the phone view header, and the terminal ticket
     rail) render the same spec as literal `<TicketViewAction>` JSX in their `trailing` zone. Kerf
     Toolbar accepts one standalone primary `wa-button` there and keeps its Web Awesome chrome
-    (`KF-9N7K8S`, HS2-F4P7ZA). The rail's `action` prop is a `TicketViewActionSpec` too.
+    (`KF-9N7K8S`, `KF-S4ZPRG`, HS2-F4P7ZA). The rail's `action` prop is a `TicketViewActionSpec`
+    too. The composition extension declares `TicketViewAction` `rendersAs @kerfjs/ui:wa-button`, so
+    the doctor's `KUI-L202` checks all three placements (a probe moving it to `leading` fails,
+    HS2-CJC0MX).
 
   Each `ProjectTab` sets Kerf's attention-color token
   on its own AppTab root (`[data-tab-kind='project']`). It keeps Kerf's own drop-target treatment.
