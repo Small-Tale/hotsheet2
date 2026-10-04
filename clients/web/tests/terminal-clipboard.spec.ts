@@ -600,3 +600,91 @@ test('selects a range of terminal text with a long-press and drag, and copies it
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await sentInput(page)).slice(sentBefore)).toEqual(['\u001b']);
 });
+
+// HS2-4BARC8: holding a selection drag at the top edge scrolls the scrollback, so the range grows past
+// the rows that were visible when the drag began.
+test('auto-scrolls a touch selection held at the top edge into the scrollback', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await installPhone(page);
+  const { viewport } = await openFocusedDrawerTerminal(page);
+  // The fixture repaints its nano screen whenever the client reports a resize; wait until focus mode's
+  // geometry has settled (no new resize for a while) so the repaint cannot race the injected lines.
+  const resizes = () =>
+    page.evaluate(
+      () =>
+        (window as unknown as FeedbackWindow).__terminalFeedbackSockets
+          .filter((socket) => socket.url.includes('/terminals/terminal-new/attach'))
+          .flatMap((socket) => socket.sent)
+          .filter((value) => typeof value === 'string' && value.includes('resize')).length,
+    );
+  let settled = -1;
+  await expect
+    .poll(
+      async () => {
+        const count = await resizes();
+        const stable = count === settled;
+        settled = count;
+        return stable;
+      },
+      { intervals: [400] },
+    )
+    .toBe(true);
+  // Fill the scrollback with numbered lines through the terminal's (fake) socket.
+  await page.evaluate(() => {
+    const socket = (window as unknown as FeedbackWindow).__terminalFeedbackSockets.find((entry) =>
+      entry.url.includes('/terminals/terminal-new/attach'),
+    ) as unknown as EventTarget;
+    const lines = Array.from({ length: 200 }, (_, index) => `line-${String(index + 1).padStart(3, '0')} scrollback`);
+    socket.dispatchEvent(
+      new MessageEvent('message', { data: new TextEncoder().encode(`\r\n${lines.join('\r\n')}`).buffer }),
+    );
+  });
+  await expect(viewport.locator('.xterm-rows')).toContainText('line-200');
+  const topLine = () =>
+    viewport.evaluate((node) => {
+      const match = /line-(\d{3})/.exec(node.querySelector('.xterm-rows > div')?.textContent ?? '');
+      return match ? Number(match[1]) : Number.NaN;
+    });
+  await expect.poll(topLine).toBeGreaterThan(100);
+  const firstVisible = await topLine();
+  const last = await terminalTextBox(viewport, 'line-200'),
+    screen = (await viewport.locator('.xterm-screen').boundingBox())!,
+    cdp = await page.context().newCDPSession(page),
+    start = { x: last.x + last.width / 2, y: last.y + last.height / 2 },
+    edge = { x: start.x, y: screen.y + 2 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
+  await page.waitForTimeout(700);
+  for (let step = 1; step <= 6; step += 1)
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: start.x, y: start.y + ((edge.y - start.y) * step) / 6 }],
+    });
+  // Hold at the edge: the viewport scrolls toward older lines while the finger stays still.
+  await expect
+    .poll(
+      () =>
+        viewport.evaluate((node) => {
+          const match = /line-(\d{3})/.exec(node.querySelector('.xterm-rows > div')?.textContent ?? '');
+          return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+        }),
+      { timeout: 5000 },
+    )
+    .toBeLessThan(firstVisible - 5);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  const copy = editMenu(page).getByRole('menuitem', { name: 'Copy', exact: true });
+  await expect(copy).toBeVisible();
+  await copy.tap();
+  // The fixture can repaint its nano screen over the on-screen rows, so assert on the scrollback part
+  // of the range, which auto-scroll produced.
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain('scrollback');
+  const copied = await page.evaluate(() => navigator.clipboard.readText()),
+    numbers = [...copied.matchAll(/line-(\d{3})/g)].map((match) => Number(match[1])),
+    firstCopied = numbers[0];
+  // Auto-scroll carried the selection well above the first row that was visible when the drag began,
+  // and every scrolled-in line between there and the screen is included, in order.
+  expect(firstCopied).toBeLessThan(firstVisible - 5);
+  expect(numbers.length).toBeGreaterThan(5);
+  expect(numbers).toEqual(Array.from({ length: numbers.length }, (_, index) => firstCopied + index));
+  expect(numbers.at(-1)).toBeGreaterThanOrEqual(firstVisible - 1);
+});

@@ -7,6 +7,7 @@ import {
   type TerminalGridGeometry,
   terminalSelectSpan,
   terminalWordAt,
+  touchSelectionEdge,
   type TouchSelectionTerminal,
 } from './terminal-touch-selection';
 
@@ -137,5 +138,97 @@ describe('touch selection controller (HS2-EYR96N)', () => {
     selection.extend(at(6, 21));
     expect(terminal.select).not.toHaveBeenCalled();
     expect(terminal.clearSelection).not.toHaveBeenCalled();
+  });
+});
+
+describe('touch selection edge auto-scroll (HS2-4BARC8)', () => {
+  it('reports the edge band, its direction, and a depth that saturates past the edge', () => {
+    // 4 rows of 16px from y=200: the bands are y<216 (top) and y>248 (bottom).
+    expect(touchSelectionEdge(230, geometry)).toEqual({ direction: 0, depth: 0 });
+    expect(touchSelectionEdge(212, geometry)).toEqual({ direction: -1, depth: 4 / 64 });
+    expect(touchSelectionEdge(100, geometry)).toEqual({ direction: -1, depth: 1 });
+    expect(touchSelectionEdge(256, geometry)).toEqual({ direction: 1, depth: 8 / 64 });
+  });
+
+  /** A terminal whose viewport really scrolls, with test-driven animation frames. */
+  function scrollingTerminal() {
+    const frames: Array<(time: number) => void> = [],
+      cancelled: number[] = [];
+    let viewportY = 20;
+    const terminal = {
+      cols: 10,
+      geometry: () => ({ ...geometry, viewportY }),
+      lineText: (row: number) => (row === 21 ? 'GNU nano 8.4' : 'older line'),
+      select: vi.fn(),
+      clearSelection: vi.fn(),
+      scrollLines: vi.fn((lines: number) => {
+        viewportY = Math.max(0, viewportY + lines);
+      }),
+      frame: vi.fn((callback: (time: number) => void) => {
+        const index = frames.push(callback) - 1;
+        return () => cancelled.push(index);
+      }),
+    } satisfies TouchSelectionTerminal;
+    const runFrame = (time: number) => {
+      frames[frames.length - 1](time);
+    };
+    return { terminal, frames, cancelled, runFrame, viewport: () => viewportY };
+  }
+
+  it('walks hold → drag into the top band → scroll and re-extend → drag back → lift', () => {
+    const { terminal, frames, cancelled, runFrame, viewport } = scrollingTerminal(),
+      selection = createTouchSelectionController(terminal);
+    selection.begin(at(5, 21));
+    // Inside the grid: no auto-scroll.
+    selection.extend(at(5, 22));
+    expect(terminal.frame).not.toHaveBeenCalled();
+    // Far past the top edge: one frame loop starts (repeated moves never start a second one).
+    selection.extend({ x: 140, y: 100 });
+    selection.extend({ x: 140, y: 90 });
+    expect(frames).toHaveLength(1);
+    runFrame(0);
+    runFrame(50);
+    runFrame(100);
+    // At full depth (48 rows/s) 100ms earns about 4 rows; each scrolled frame re-extends the selection.
+    expect(terminal.scrollLines).toHaveBeenCalled();
+    expect(terminal.scrollLines.mock.calls.every(([lines]) => lines < 0)).toBe(true);
+    expect(viewport()).toBeLessThan(20);
+    const [, row, length] = Object.values(terminal.select.mock.lastCall![0]);
+    expect(row).toBe(viewport());
+    expect(length).toBeGreaterThan(8);
+    // Back inside the grid: the loop stops and nothing more scrolls.
+    const scrolled = terminal.scrollLines.mock.calls.length;
+    // (A fixed screen point inside the grid: `at()` assumes the unscrolled viewport.)
+    selection.extend({ x: 140, y: 230 });
+    expect(cancelled.length).toBeGreaterThan(0);
+    runFrame(400);
+    expect(terminal.scrollLines.mock.calls.length).toBe(scrolled);
+    // Into the bottom band, then lift: the loop is cancelled and later frames do nothing.
+    selection.extend({ x: 140, y: 300 });
+    selection.finish();
+    runFrame(500);
+    runFrame(600);
+    expect(terminal.scrollLines.mock.calls.length).toBe(scrolled);
+  });
+
+  it('never auto-scrolls without an anchor, after clear, or on a terminal that cannot scroll', () => {
+    const { terminal, frames } = scrollingTerminal(),
+      selection = createTouchSelectionController(terminal);
+    selection.extend({ x: 140, y: 100 });
+    expect(frames).toHaveLength(0);
+    selection.begin(at(5, 21));
+    selection.clear();
+    selection.extend({ x: 140, y: 100 });
+    expect(frames).toHaveLength(0);
+    // Empty-then-refill: a new hold anchors and auto-scrolls again.
+    selection.begin(at(5, 21));
+    selection.extend({ x: 140, y: 100 });
+    expect(frames).toHaveLength(1);
+    const plain = fakeTerminal({ 21: 'GNU nano 8.4' }),
+      noScroll = createTouchSelectionController(plain);
+    noScroll.begin(at(5, 21));
+    expect(() => {
+      noScroll.extend({ x: 140, y: 100 });
+    }).not.toThrow();
   });
 });

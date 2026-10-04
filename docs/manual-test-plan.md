@@ -89,7 +89,9 @@ When automation lands, remove the manual-only step and record it below.
     native text selection and no Android system menu, and that lifting opens the Copy / Copy Text… /
     Paste menu without raising the keyboard. Hold on a word and drag across lines before lifting;
     confirm the highlight follows the finger and **Copy** puts exactly that range on the clipboard
-    (HS2-EYR96N). Hold on blank space and confirm the menu offers only Copy Text… and Paste. Choose
+    (HS2-EYR96N). Hold the drag at the top edge and confirm the terminal scrolls back through
+    earlier output while the highlight grows, at a controllable speed (HS2-4BARC8). Hold on blank
+    space and confirm the menu offers only Copy Text… and Paste. Choose
     **Copy Text…** and confirm the Copy sheet opens. Long-press again, choose **Paste**, and confirm
     the clipboard reaches the shell. Confirm a slow drag still scrolls without opening the menu, and
     a quick tap still focuses the terminal. Automated Chromium coverage drives DevTools touch

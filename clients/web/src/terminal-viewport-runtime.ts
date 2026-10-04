@@ -819,6 +819,15 @@ function initializeTerminalViewport(
         clearSelection: () => {
           terminal.clearSelection();
         },
+        scrollLines: (lines) => {
+          terminal.scrollLines(lines);
+        },
+        frame: (callback) => {
+          const handle = window.requestAnimationFrame(callback);
+          return () => {
+            window.cancelAnimationFrame(handle);
+          };
+        },
       }),
       longPress = createLongPressController({
         onLongPress: (point) => {

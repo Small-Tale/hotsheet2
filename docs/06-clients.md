@@ -2755,6 +2755,10 @@ drag produces):
   blank or separator cell selects nothing, and the menu then offers only Copy Text… and Paste.
 - Keeping the finger down and dragging extends the selection from that word to the cell under the
   finger, forward or backward and across rows; the held word always stays selected.
+- Holding the drag within one row of the top or bottom edge (or past it) auto-scrolls the scrollback
+  toward that edge, faster the deeper the finger is (8 to 48 rows per second), and the selection keeps
+  extending into the revealed rows; leaving the band or lifting stops it. The scrolling is a local
+  animation-frame loop with no network traffic (HS2-4BARC8).
 - The selection stays after the lift and after Copy. The next touch on the terminal clears it, as
   tapping elsewhere does in text.
 - Cells are mapped from the rendered `.xterm-screen` rectangle, so CSS-scaled (magnified or column
