@@ -239,6 +239,7 @@ import {
   mobileVirtualKeyboardVisible,
   transitionMobileTerminalFocus,
 } from '../mobile-terminal-focus';
+import { mobileViewChoices } from '../mobile-view-choices';
 import { type ProjectTicketSources, resolveNewTicketSource, writableTicketSources } from '../new-ticket-source';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import { parsePermissionResolution, PERMISSION_DELAYS } from '../permission-notifications';
@@ -4657,16 +4658,16 @@ export async function startHotSheetWebClient() {
         ? corruptTickets.value.find((item) => corruptTicketKey(item) === corruptKey)
         : undefined,
       canCreate = !['settings', 'notifications'].includes(viewMode.value) && canCreateTicketInView(selectedView.value),
-      railView = selectedView.value === 'errors' ? 'all' : selectedView.value,
-      mobileViewChoices = [
-        { value: 'all', label: 'Queue' },
-        { value: 'backlog', label: 'Backlog' },
-        { value: 'archive', label: 'Archive' },
-        ...((projectTicketCounts(current.id).trash ?? 0) > 0 || railView === 'trash'
-          ? [{ value: 'trash', label: 'Trash' }]
-          : []),
-        ...customViewsFor(current.id).map((view) => ({ value: customTicketViewId(view.id), label: view.name })),
-      ];
+      // The picker names the visible view, Ticket errors included, mirroring the sidebar (HS2-0VPMFS).
+      mobileChoices = mobileViewChoices({
+        selectedView: selectedView.value,
+        trashCount: projectTicketCounts(current.id).trash ?? 0,
+        corruptCount: corruptTickets.value.length,
+        customViews: customViewsFor(current.id).map((view) => ({
+          value: customTicketViewId(view.id),
+          label: view.name,
+        })),
+      });
     const workspaceTitle =
       viewMode.value === 'notifications'
         ? notificationViewTitle(notificationView.value)
@@ -4693,7 +4694,11 @@ export async function startHotSheetWebClient() {
     );
     const mobileView: AppShellMobileView | undefined =
         viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value)
-          ? { value: railView, choices: mobileViewChoices, action: ticketViewActionSpec(selectedView.value, canCreate) }
+          ? {
+              value: selectedView.value,
+              choices: mobileChoices,
+              action: ticketViewActionSpec(selectedView.value, canCreate),
+            }
           : undefined,
       pageHeader = viewportMobile.value && !mobileView ? secondaryPageHeader : undefined;
     const drawerViewAllowed = !['settings', 'notifications'].includes(viewMode.value);

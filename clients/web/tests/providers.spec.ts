@@ -11481,6 +11481,32 @@ test('lays the corrupt row icon beside its text for a real server diagnostic (HS
       // Let the narrow layout's sidebar slide finish before capturing the visual QA evidence.
       await page.waitForTimeout(1000);
       await page.screenshot({ path: test.info().outputPath(`hs2-sjvm8c-real-corrupt-row-${width}.png`) });
+      if (width >= 1024) continue;
+      // The narrow view picker names the visible view and offers it, like the sidebar (HS2-0VPMFS).
+      const picker = page.locator('wa-select[name="mobile-view"]'),
+        pickerLabel = () =>
+          picker.evaluate((node) =>
+            [...node.children]
+              .filter((child) => child.localName !== 'wa-option')
+              .map((child) => child.textContent.trim())
+              .join(''),
+          );
+      await expect(picker).toHaveJSProperty('value', 'errors');
+      await expect.poll(pickerLabel).toBe('Ticket errors');
+      await expect(picker.locator('wa-option[value="errors"]')).toHaveText('Ticket errors');
+      // Picker → Queue shows the ticket list; picker → Ticket errors brings the corrupt row back.
+      await picker.click();
+      await picker.locator('wa-option[value="all"]').click();
+      await expect(picker).toHaveJSProperty('value', 'all');
+      await expect.poll(pickerLabel).toBe('Queue');
+      await expect(corrupt).toHaveCount(0);
+      await picker.click();
+      await picker.locator('wa-option[value="errors"]').click();
+      await expect(picker).toHaveJSProperty('value', 'errors');
+      await expect.poll(pickerLabel).toBe('Ticket errors');
+      await expect(corrupt).toContainText(created.slug);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: test.info().outputPath('hs2-0vpmfs-picker-ticket-errors-390.png') });
     }
     await corrupt.getByRole('button', { name: `Open recovery for ${created.slug}` }).click();
     await expect(page.locator('[data-component="corrupt-ticket-inspector"]')).toContainText(`${created.id}.md`);
