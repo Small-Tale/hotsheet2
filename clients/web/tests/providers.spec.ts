@@ -20374,6 +20374,9 @@ test('edits and contains a wrapping attachment group title through the productio
         { ...liveFull.attachments[0], batch_id: body.batch_id as string, batch_label: body.batch_label as string },
       ],
     };
+    // A save slower than a couple of frames: focus must still return to the title once the editor
+    // closes, not only when the write happens to finish quickly (HS2-VRBDPV).
+    await new Promise((resolve) => setTimeout(resolve, 400));
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
   await page.goto('/');

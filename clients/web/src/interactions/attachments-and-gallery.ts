@@ -245,6 +245,9 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       persistAttachmentMetadata(edit.ids ?? [], { ...edit.metadata, batch_label: label || undefined }),
     notify: showToast,
   });
+  // The in-flight write of the most recently blurred label editor, so Enter can restore focus to the
+  // title only after the editor closes.
+  let labelFinish: Promise<boolean> | undefined;
   const flushLabelOnHide = () => {
     void labelEditor.flush();
   };
@@ -305,16 +308,22 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
         if (key === 'Escape') labelEditor.escape(input);
         input.blur();
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            if (ids)
-              document.body
-                .querySelector<HTMLElement>(
-                  `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
-                )
-                ?.focus();
-          }),
-        );
+        // The title button replaces the editor only once the blur's save settles, which can take
+        // longer than a couple of frames under load; restore focus after that, not on a frame count
+        // (HS2-VRBDPV).
+        const settled = labelFinish ?? Promise.resolve(true);
+        const restore = () =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              if (ids)
+                document.body
+                  .querySelector<HTMLElement>(
+                    `[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`,
+                  )
+                  ?.focus();
+            }),
+          );
+        settled.then(restore, restore);
       },
     ),
   );
@@ -324,7 +333,12 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       'blur',
       ATTACHMENTS_AND_GALLERY_TARGETS.attachmentBatchLabelField.selector,
       (_event, target) => {
-        void labelEditor.finish(target);
+        const pending = labelEditor.finish(target);
+        labelFinish = pending;
+        const clear = () => {
+          if (labelFinish === pending) labelFinish = undefined;
+        };
+        pending.then(clear, clear);
       },
     ),
   );

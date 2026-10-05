@@ -1378,7 +1378,9 @@ and identity-less legacy entries remain conservatively blocking.
   local recovery copy keyed by project, ticket, and batch with the label the edit started from.
   The one server write happens when focus leaves the editor (Enter blurs it) or the page hides,
   merged against that edit-start label, and the editor shows its draft until the write commits.
-  Reopening the batch restores an unsaved copy. Escape in any inline editor of the inspector (the
+  Enter or Escape returns keyboard focus to the batch title once that write settles and the
+  editor closes, however long the save takes (HS2-VRBDPV). Reopening the batch restores an
+  unsaved copy. Escape in any inline editor of the inspector (the
   batch label, the title, notes, details, tags, and the blocked reason) acts on that editor only: the
   label restores its value, the others finish their edit (blur autosaves), and the key stops there,
   so the narrow-layout inspector overlay stays open until a second Escape outside the editor
