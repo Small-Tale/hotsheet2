@@ -889,7 +889,11 @@ test('represents the production terminal dashboard and its shared context menu i
   await expect(dashboard).toBeVisible();
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
   await expect(dashboard).toHaveAttribute('data-fit', '3');
-  await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(2);
+  await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(3);
+  await expect(dashboard.locator('[data-ai-connection="connected"] [data-lucide="plug"]')).toBeVisible();
+  await expect(dashboard.locator('[data-ai-connection="missing"] [data-lucide="unplug"]')).toBeVisible();
+  await expect(dashboard.locator('[data-terminal-key="demo:halted"] .terminal-tile__halt')).toBeVisible();
+  await expect(dashboard.locator('[data-terminal-key="demo:halted"] [data-ai-connection]')).toHaveCount(0);
   const chat = dashboard.locator('[data-component="workspace-chat-tile"]');
   await expect(chat).toHaveCount(1);
   await expect(chat).toContainText('Codex AI chat');

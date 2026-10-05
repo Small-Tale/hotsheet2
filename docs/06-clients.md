@@ -2364,7 +2364,7 @@ set by `POST /terminals/{id}/ai-connection` from the session's `SessionStart` ho
 by `DELETE` from `SessionEnd` or by killing the terminal. Each change emits a
 `terminal_ai_connection` event, and the client refetches its terminals on that event.
 
-- **Connected:** the drawer tab shows a neutral Lucide `plug` icon ("Codex is connected to Hot
+- **Connected:** the drawer tab and dashboard tile show a neutral Lucide `plug` icon ("Codex is connected to Hot
   Sheet: its permission prompts come to the app"). This applies to any terminal, including a
   plain shell where someone ran `codex` or `claude` by hand.
 - **Not connected:** an `ai` terminal that is still running without a report after a 15-second
@@ -2372,9 +2372,10 @@ by `DELETE` from `SessionEnd` or by killing the terminal. Each change emits a
   prompts stay in the terminal and how to fix it: run `/hooks` in Codex, or run
   `hotsheet-cli setup --refresh` for other tools. The grace period is a local timer that only
   re-derives existing data; it sends no request.
-- **Combined states:** both icons sit beside the busy dot, and a halt outranks them. Plain
-  shells that never reported in show nothing. Dashboard tiles do not show the state yet
-  (`HS2-8WEY8X`).
+- **Combined states:** the drawer icon sits beside its busy dot and the tile icon beside its
+  activity dot; a halt outranks both projections (HS2-8WEY8X). Plain shells that never reported
+  in show no connection icon. Project attention represents halted errors; connection warnings
+  remain on the affected sessions, which can still use terminal-local permission prompts.
 
 Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
 one mixed drawer strip by dragging across either kind. Both strips use Kerf's controlled

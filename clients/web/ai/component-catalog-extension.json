@@ -1400,9 +1400,9 @@
       "name": "TerminalDashboard",
       "source": "src/components/terminal-dashboard.tsx",
       "kind": "composition",
-      "purpose": "Responsive workspace grid with a stable scroll owner for terminals, AI chats, and future cross-project tools.",
+      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states.",
       "useWhen": [
-        "Hot Sheet needs responsive workspace grid with a stable scroll owner for terminals, AI chats, and future cross-project tools."
+        "Hot Sheet needs responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalDashboard behavior."

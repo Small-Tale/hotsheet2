@@ -403,6 +403,40 @@ describe('TerminalDashboard', () => {
 });
 
 describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
+  it('projects connection transitions beside activity, with halt precedence (HS2-8WEY8X)', () => {
+    const session = {
+      id: 't1',
+      projectId: 'p',
+      projectName: 'P',
+      alive: true,
+      busy: true,
+      scrollback: '',
+      tool: 'codex',
+    };
+    for (const aiConnection of ['connected', 'missing'] as const) {
+      const markup = String(FixedAspectTerminalCard({ session: { ...session, aiConnection } }));
+      expect(markup).toContain(`data-ai-connection="${aiConnection}"`);
+      expect(markup).toContain(`data-lucide="${aiConnection === 'connected' ? 'plug' : 'unplug'}"`);
+      expect(markup).toContain('class="terminal-tile__state" aria-label="Busy"');
+      expect(markup).toContain(
+        aiConnection === 'connected' ? 'its permission prompts come to the app' : 'Run /hooks in Codex',
+      );
+      const halted = String(
+        FixedAspectTerminalCard({
+          session: {
+            ...session,
+            aiConnection,
+            halt: { message: 'Rate limit reached.', at: '2026-10-05T08:00:00Z', error_type: 'rate_limit' },
+          },
+        }),
+      );
+      expect(halted).toContain('Stopped: Rate limit reached.');
+      expect(halted).not.toContain('data-ai-connection');
+      expect(halted).not.toContain('class="terminal-tile__state"');
+    }
+    expect(String(FixedAspectTerminalCard({ session }))).not.toContain('data-ai-connection');
+  });
+
   it('replaces the state dot with the halt warning while the session is halted', () => {
     const session = { id: 't1', projectId: 'p', projectName: 'P', alive: true, busy: false, scrollback: '' };
     const halted = String(

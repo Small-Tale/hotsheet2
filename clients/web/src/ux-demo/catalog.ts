@@ -575,7 +575,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'terminal-dashboard',
         'TerminalDashboard',
-        'Responsive workspace grid with a stable scroll owner for terminals, AI chats, and future cross-project tools.',
+        'Responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states.',
         'feature-floor',
         true,
         ['fixed-aspect-terminal-card', 'floating-toolbar', 'toolbar-control-group', 'list-item'],

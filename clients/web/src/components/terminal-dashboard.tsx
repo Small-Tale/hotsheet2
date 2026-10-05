@@ -19,8 +19,10 @@ import {
   EyeOff,
   MessageSquare,
   Minus,
+  Plug,
   Plus,
   TriangleAlert,
+  Unplug,
   X,
 } from 'lucide';
 
@@ -28,7 +30,7 @@ import type { TerminalAiConnection, TerminalHalt } from '../api';
 import { contextPopupMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
-import type { AiConnectionState } from '../terminal-ai-connection';
+import { aiConnectionLabel, type AiConnectionState } from '../terminal-ai-connection';
 import {
   TERMINAL_TILE_HORIZONTAL_CHROME,
   TERMINAL_TILE_VERTICAL_CHROME,
@@ -308,11 +310,28 @@ function TerminalCard({
             <LucideIcon size="s" icon={TriangleAlert} name="triangle-alert" color={uiColor('danger-on-quiet')} />
           </span>
         ) : (
-          <span
-            class="terminal-tile__state"
-            aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
-            title={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
-          />
+          <>
+            <span
+              class="terminal-tile__state"
+              aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
+              title={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
+            />
+            {session.aiConnection && (
+              <span
+                class="terminal-tile__ai-connection"
+                data-ai-connection={session.aiConnection}
+                role="img"
+                aria-label={aiConnectionLabel(session.aiConnection, session.ai_connection?.agent, session.tool)}
+                title={aiConnectionLabel(session.aiConnection, session.ai_connection?.agent, session.tool)}
+              >
+                {session.aiConnection === 'connected' ? (
+                  <LucideIcon size="s" icon={Plug} name="plug" color={uiColor('neutral-on-quiet')} />
+                ) : (
+                  <LucideIcon size="s" icon={Unplug} name="unplug" color={uiColor('warning-on-quiet')} />
+                )}
+              </span>
+            )}
+          </>
         )}
         <button
           type="button"
