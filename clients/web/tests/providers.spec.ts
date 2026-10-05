@@ -166,7 +166,18 @@ test('acknowledges a halted prompt only after modal editing releases its top-lay
   await expect(popup).toHaveCount(1);
   await expect(popup).not.toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('hotsheet.halted-session-seen'))).toBeNull();
-  await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-deferred-modal.png') });
+  await composer.evaluate(async (dialog) => {
+    await Promise.all(
+      dialog
+        .getAnimations({ subtree: true })
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
+  await expect(composer).toHaveCSS('opacity', '1');
+  await expect(popup).not.toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('hotsheet.halted-session-seen'))).toBeNull();
+  await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-deferred-modal-settled.png') });
   await composer.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(popup).toBeVisible();
   await expect
