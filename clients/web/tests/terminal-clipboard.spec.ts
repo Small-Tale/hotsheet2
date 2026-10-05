@@ -521,6 +521,18 @@ async function touchSelect(page: Page, from: { x: number; y: number }, to?: { x:
   await cdp.detach();
 }
 
+/** Wait until a terminal row is the actual touch target after a top-layer menu or toast dismisses. */
+async function terminalRowCanReceiveTouch(page: Page, point: { x: number; y: number }) {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[data-terminal-id="terminal-new"]')),
+        point,
+      ),
+    )
+    .toBe(true);
+}
+
 // HS2-EYR96N: a long-press selects the word under the finger, dragging on extends the range, and the
 // lift's edit menu copies exactly that range.
 test('selects a range of terminal text with a long-press and drag, and copies it', async ({ page, context }) => {
@@ -548,6 +560,9 @@ test('selects a range of terminal text with a long-press and drag, and copies it
   await expect(menu).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('nano');
   await expect(toast(page)).toContainText('Copied selection (1 line)');
+  // The menu and toast use top-layer surfaces. A removed menu wrapper alone does not make the
+  // terminal row touchable; wait for the actual hit target before reusing the same coordinates.
+  await terminalRowCanReceiveTouch(page, { x: nano.x + nano.width / 2, y: rowMiddle });
 
   // Hold on "nano" again and drag to the end of "8.4": the range extends from the held word.
   await touchSelect(
@@ -567,12 +582,16 @@ test('selects a range of terminal text with a long-press and drag, and copies it
   });
   await copy.tap();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('nano 8.4');
+  await expect(menu).toHaveCount(0);
+  await terminalRowCanReceiveTouch(page, { x: nano.x + nano.width / 2, y: rowMiddle });
 
   // Dragging backward from the held word keeps the whole word: "GNU nano" from a hold on "nano".
   const gnu = await terminalTextBox(viewport, 'GNU');
   await touchSelect(page, { x: nano.x + nano.width / 2, y: rowMiddle }, { x: gnu.x + 1, y: rowMiddle });
   await copy.tap();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('GNU nano');
+  await expect(menu).toHaveCount(0);
+  await terminalRowCanReceiveTouch(page, { x: nano.x + nano.width / 2, y: rowMiddle });
 
   // A quick tap on the terminal drops the selection; a hold on blank cells selects nothing, so the menu
   // offers only Copy Text… and Paste.
