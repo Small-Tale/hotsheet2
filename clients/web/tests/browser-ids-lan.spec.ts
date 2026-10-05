@@ -233,6 +233,11 @@ for (const width of [390, 1280]) {
         await chat.getByRole('button', { name: 'Send message to Codex' }).click();
         await expect(chat).toContainText('Test tool is offline');
         await expect(chat).toContainText(`LAN turn ${index + 1}`);
+        const halted = page.getByRole('dialog', { name: 'AI session halted', exact: true });
+        await expect(halted).toBeVisible();
+        await expect(halted).toContainText('Test tool is offline');
+        await halted.getByRole('button', { name: 'Dismiss', exact: true }).click();
+        await expect(halted).toBeHidden();
       }
       expect(new Set(connections.map((connection) => connection.id)).size).toBe(2);
       expect(turns).toEqual(['LAN turn 1', 'LAN turn 2']);

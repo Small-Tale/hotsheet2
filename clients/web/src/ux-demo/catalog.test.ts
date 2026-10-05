@@ -135,6 +135,7 @@ describe('UX demo catalog', () => {
       'ai-content-label',
       'ai-tool-settings',
       'manual-model-dialog',
+      'halted-session-popup',
       'permission-request',
       'notification-center',
       'terminal-drawer',

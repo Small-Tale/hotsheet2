@@ -33,6 +33,7 @@ async function haltedSessionFixture(page: Page) {
     cursor = 0;
   const sockets: import('@playwright/test').WebSocketRoute[] = [];
   const terminalGets: string[] = [];
+  const events: Array<{ cursor: number; store: string; kind: string; id: string; slug: string }> = [];
   await page.route('**/terminals', (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     terminalGets.push(new URL(route.request().url()).pathname);
@@ -44,7 +45,8 @@ async function haltedSessionFixture(page: Page) {
   });
   await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
   await page.route('**/ws/poll*', (route) => {
-    return route.fulfill({ json: { cursor, events: [], overflow: false } });
+    const since = Number(new URL(route.request().url()).searchParams.get('since') ?? cursor);
+    return route.fulfill({ json: { cursor, events: events.filter((event) => event.cursor > since), overflow: false } });
   });
   await page.routeWebSocket(/\/ws\/sync(?:\?|$)/, (route) => {
     sockets.push(route);
@@ -59,7 +61,9 @@ async function haltedSessionFixture(page: Page) {
   const emit = async (kind: string, id = 'halt-worker') => {
     await expect.poll(() => sockets.length).toBeGreaterThan(0);
     cursor += 1;
-    for (const socket of sockets) socket.send(JSON.stringify({ cursor, store: '', kind, id, slug: '' }));
+    const event = { cursor, store: '', kind, id, slug: '' };
+    events.push(event);
+    for (const socket of sockets) socket.send(JSON.stringify(event));
   };
   return {
     terminalGets: () => [...terminalGets],
@@ -2137,6 +2141,9 @@ test('offers explicit identity-guarded recovery for an unresponsive local server
 test('always confirms before closing a project without running resources', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
+  await page.route('**/terminals', (route) =>
+    route.request().method() === 'GET' ? route.fulfill({ json: [] }) : route.fallback(),
+  );
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
