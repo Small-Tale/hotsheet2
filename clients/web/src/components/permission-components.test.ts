@@ -184,13 +184,9 @@ describe('permission presentation components', () => {
   });
 
   it('uses the same canonical card gap within and between pending/history groups (HS2-D38KZF)', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'notification-center.css'), 'utf8');
-    expect(css).toMatch(/\.notification-center \{[^}]*display: grid;[^}]*gap: var\(--kui-space-s\);/);
-    expect(css).toMatch(/\.notification-center__items \{[^}]*display: grid;[^}]*gap: var\(--kui-space-s\);/);
-    expect(css).not.toContain('notification-center__section');
-    expect(css).not.toContain('notification-center__header');
     const markup = String(NotificationCenter({ pending: [pending], history: [history] }));
-    expect(markup.match(/class="notification-center__items"/g)).toHaveLength(2);
+    // Preserve the established 12px notification rhythm within and between groups.
+    expect(markup.match(/data-component="list"/g)).toHaveLength(3);
     expect(markup.indexOf('data-state="pending"')).toBeLessThan(markup.indexOf('data-state="external"'));
   });
 
@@ -209,8 +205,10 @@ describe('permission presentation components', () => {
     expect(String(NotificationCenter({ pending: [], history: [], inset: 'flush' }))).toContain(
       'class="notification-center" data-component="notification-center" data-inset="flush"',
     );
-    const css = readFileSync(resolve(import.meta.dirname, 'notification-center.css'), 'utf8');
-    expect(css).toContainSource(".notification-center[data-inset='flush'] { padding: 0; }");
+    expect(String(NotificationCenter({ pending: [], history: [] }))).toContain('data-control-insets="trbl"');
+    expect(String(NotificationCenter({ pending: [], history: [], inset: 'flush' }))).not.toContain(
+      'data-control-insets',
+    );
     // The ticket rail asks for the flush inset instead of restyling the center from its stylesheet.
     expect(readFileSync(resolve(import.meta.dirname, 'terminal-ticket-rail.css'), 'utf8')).not.toContain(
       'notification-center',
@@ -229,12 +227,12 @@ describe('permission presentation components', () => {
     expect(markup).toContain('data-component="list"');
     expect(markup).not.toContain('divider-sides');
     for (const label of ['Pending', 'Last 24 Hours', 'Last 7 Days']) expect(markup).toContain(label);
-    expect(markup.match(/class="notification-navigation__count"/g)).toHaveLength(3);
-    expect(markup).toContain('class="notification-navigation__count" data-attention="true">2</small>');
+    expect(markup.match(/notification-navigation__count/g)).toHaveLength(3);
+    expect(markup).toMatch(/data-attention="true"[^>]*>2<\/span>/);
     expect(markup).toContain('data-item-id="day"');
     expect(markup).toContain('aria-current="page"');
-    expect(String(NotificationNavigation({ selected: 'pending', counts: { pending: 0, day: 0, week: 0 } }))).toContain(
-      'class="notification-navigation__count" data-attention="false">0</small>',
+    expect(String(NotificationNavigation({ selected: 'pending', counts: { pending: 0, day: 0, week: 0 } }))).toMatch(
+      /data-attention="false"[^>]*>0<\/span>/,
     );
   });
 });

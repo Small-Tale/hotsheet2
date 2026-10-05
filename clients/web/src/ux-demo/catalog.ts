@@ -192,7 +192,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'notification-navigation',
         'NotificationNavigation',
-        'Notification views with attention counts arranged by Kerf List in an unpadded sidebar pane.',
+        'Notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane.',
         'feature-floor',
         true,
         ['list', 'list-item', 'toolbar'],
@@ -665,7 +665,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'app-empty-state',
         'AppEmptyState',
-        'Initial project-opening and remembered-project restoration states.',
+        'Initial project-opening, busy restoration, and action-free messages composed from Kerf EmptyState and List.',
         'feature-floor',
         true,
       ),

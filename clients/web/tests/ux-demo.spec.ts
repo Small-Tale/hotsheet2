@@ -39,7 +39,7 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
 test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', async ({ page }) => {
   test.setTimeout(90_000);
   for (const width of [1280, 390]) {
-    await page.setViewportSize({ width, height: 844 });
+    await page.setViewportSize({ width, height: width === 390 ? 1200 : 844 });
     for (const [component, label, count] of [
       ['settings-navigation', 'Project Settings', 7],
       ['notification-navigation', 'Notification views', 3],
@@ -48,7 +48,7 @@ test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', asy
       // The navigator's Pane content is the navigation landmark; its group list sits in an app wrapper.
       // The notification demo also shows a paused variant (HS2-QYA9SC); measure the first navigator.
       const navigation = page.getByRole('navigation', { name: label, exact: true }).first(),
-        list = navigation.locator('[data-component="list"]').first(),
+        list = navigation.locator('[data-component="list"]:has(> [data-component="list-item"])').first(),
         rows = list.getByRole('button');
       await expect(rows).toHaveCount(count);
       await expect(list).toHaveCSS('display', 'flex');
@@ -367,8 +367,8 @@ test('represents the application states extracted from main.tsx in the UX catalo
   await narrowRenameSurface.screenshot({ path: '/private/tmp/hs2-737h3x-terminal-rename-narrow.png' });
 
   await page.goto('/ux-demo?component=app-empty-state');
-  await expect(page.getByRole('heading', { name: 'Open a Hot Sheet project' })).toBeVisible();
-  await expect(page.locator('[data-component="project-restore-state"]')).toContainText(
+  await expect(page.getByText('Open a Hot Sheet project', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-project-restore-state="true"]')).toContainText(
     'Restoring projects, tickets, and terminals',
   );
   await page.screenshot({ path: '/private/tmp/hs2-vbrc6a-app-empty-states.png', fullPage: true });
@@ -943,8 +943,17 @@ test('represents aggregate and per-project terminal operations in the UX catalog
   await expect(hotsheet.locator('[data-background-bar="5"]')).toHaveAttribute('style', '--bar-height:100%');
   await expect(hotsheet.locator('[data-bar="4"]')).toHaveAttribute('style', '--bar-height:56%');
   await expect(kerf.locator('[data-bar="5"]')).toHaveAttribute('style', '--bar-height:56%');
+  for (const group of await sidebar.locator('.terminal-operations-sidebar__group').all()) {
+    const heading = await group.getByRole('heading').evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return { x: range.getBoundingClientRect().x };
+    });
+    const chart = await group.locator('.project-summary__chart').boundingBox();
+    expect(Math.abs(heading.x - chart!.x)).toBeLessThanOrEqual(1);
+  }
   await sidebar.screenshot({ path: '/private/tmp/hs2-737h3x-terminal-operations-wide.png' });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 390, height: 1200 });
   await expect(sidebar).toBeVisible();
   await sidebar.screenshot({ path: '/private/tmp/hs2-737h3x-terminal-operations-narrow.png' });
 });
@@ -5270,7 +5279,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(summaries).toHaveCount(3);
   // The compact size is the terminal operations sidebar's per-project summary (HS2-4APEJP).
   const compactSummary = page.locator('[data-component="project-summary"][data-size="compact"]');
-  await expect(compactSummary).toHaveCSS('padding', '12px');
+  await expect(compactSummary).toHaveCSS('padding', '8px');
   await expect(compactSummary).toHaveCSS('min-height', '68px');
   await expect(compactSummary.locator('.project-summary__chart')).toHaveCSS('height', '44px');
   await expect(compactSummary.locator('[data-background-bar]')).toHaveCount(7);
@@ -6509,7 +6518,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
   await expect(shell.getByRole('region', { name: 'Project settings' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(0);
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
-  await expect(shell.locator('#app-right-rail [data-component="ticket-inspector-placeholder"]')).toBeVisible();
+  await expect(shell.locator('#app-right-rail [data-ticket-inspector-placeholder="true"]')).toBeVisible();
   for (const name of ['Sort tickets', 'Favorite view', 'More workspace actions', 'Search tickets']) {
     const control = shell.getByRole('button', { name });
     if (await control.count()) await expect(control).toHaveAttribute('disabled', '');
@@ -7729,7 +7738,7 @@ test('keeps equal notification card gaps across pending and history groups (HS2-
     );
     expect(geometry[1].top - geometry[0].bottom).toBeCloseTo(12, 1);
     expect(geometry[2].top - geometry[1].bottom).toBeCloseTo(12, 1);
-    await expect(center).toHaveCSS('gap', '12px');
+    await expect(center.locator(':scope > [data-component="list"]')).toHaveCSS('gap', '12px');
     await center.screenshot({
       path: `/private/tmp/hs2-d38kzf-notification-spacing-${width}.png`,
       animations: 'disabled',
@@ -8272,5 +8281,36 @@ test('pushes and pops ticket detail on the TerminalTicketRail NavStack with one 
     await expect(pushed).toHaveCount(0);
     await expect(rail.locator('wa-select[name="terminal-rail-project"]')).toBeVisible();
     await page.screenshot({ path: `/private/tmp/hs2-fy06n4-rail-root-${width}.png` });
+  }
+});
+
+test('composes startup and inspector feedback without app CSS (HS2-JMYRT3)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=app-empty-state&dev-review=false');
+    const variants = page.getByRole('region', { name: 'Application empty state variants' });
+    await expect(variants.locator('[data-component="empty-state"]')).toHaveCount(3);
+    await expect(variants.locator('[data-busy="true"]')).toContainText('Opening Hot Sheet');
+    await expect(variants.locator('[data-busy="true"] [data-component="loading-spinner"]')).toBeVisible();
+    await expect(variants.getByRole('button', { name: 'Open project' })).toBeVisible();
+    await expect(variants).toContainText('Project unavailable');
+    const bounds = await variants.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+    if (width === 390) {
+      for (const [index, state] of (await variants.locator('[data-component="empty-state"]').all()).entries()) {
+        await state.scrollIntoViewIfNeeded();
+        await expect(state).toBeVisible();
+        await state.screenshot({
+          path: test.info().outputPath(`hs2-jmyrt3-empty-${width}-${index}.png`),
+          animations: 'disabled',
+        });
+      }
+    } else {
+      await variants.screenshot({
+        path: test.info().outputPath(`hs2-jmyrt3-empty-${width}.png`),
+        animations: 'disabled',
+      });
+    }
   }
 });

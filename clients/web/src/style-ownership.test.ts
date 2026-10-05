@@ -17,9 +17,6 @@ describe('global stylesheet ownership', () => {
       ['provider setup', 'provider-setup-form.css', ['.provider-setup-form']],
       ['ticket-source settings', 'ticket-sources-settings.css', ['.ticket-provider-settings']],
       ['settings workspace', 'settings-workspace.css', ['.project-settings']],
-      ['notification inspector', 'notification-inspector.css', ['.notification-inspector-empty']],
-      // AppEmptyState owns its full-surface message presentation (HS2-EWYDH7).
-      ['app empty state', 'app-empty-state.css', ['.app-empty']],
       // TicketPageMore owns the paged list/column continuation button (HS2-WP69TD).
       ['ticket page continuation', 'ticket-page-more.css', ['.ticket-page-more']],
     ] as const;
@@ -34,6 +31,9 @@ describe('global stylesheet ownership', () => {
 
   it('keeps the intentionally global app-shell rules in style.css', () => {
     const global = read('./style.css');
+    expect(global).toContain("@import '@kerfjs/ui/document.css'");
+    expect(global).not.toContain('font-family:');
+    expect(global).not.toContain('box-sizing:');
     for (const selector of [':root', 'html, body, #app', '.app-loading, .app-toast'])
       expect(global).toContainSource(selector);
     // The application root's edge-to-edge shell is AppShell's own `viewport` presentation (HS2-DR549A).

@@ -1,5 +1,4 @@
 import '@kerfjs/ui/layout.css';
-import './terminal-operations-sidebar.css';
 
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
@@ -36,27 +35,27 @@ export function terminalOperationsPanel({
   const groups = aggregate ? [aggregate, ...projects] : projects;
   const chartMaximum = aggregate ? chartDomainMaximum(aggregate.trend) : undefined;
   const content = (
-    <div class="terminal-operations-sidebar__groups">
-      <List gap="m">
-        {groups.map((group) => (
-          <section class="terminal-operations-sidebar__group" data-project-id={group.id}>
-            <div class="terminal-operations-sidebar__group-heading">
-              <ListHeader label={group.name} inline />
-            </div>
-            <ProjectSummary
-              completedToday={group.completedToday}
-              inProgress={group.inProgress}
-              trend={group.trend}
-              projectId={group.id}
-              size="compact"
-              chartTone={group.id === 'all' ? 'success' : 'brand'}
-              chartMaximum={chartMaximum}
-              backgroundTrend={group.id === 'all' ? undefined : aggregate?.trend}
-            />
-          </section>
-        ))}
-      </List>
-    </div>
+    <List gap="m" controlInsets="trbl">
+      {groups.map((group) => (
+        <List
+          className="terminal-operations-sidebar__group"
+          rootAttributes={{ 'data-project-id': group.id }}
+          dividerSides={group.id === 'all' ? 'b' : ''}
+        >
+          <ListHeader label={group.name} inline />
+          <ProjectSummary
+            completedToday={group.completedToday}
+            inProgress={group.inProgress}
+            trend={group.trend}
+            projectId={group.id}
+            size="compact"
+            chartTone={group.id === 'all' ? 'success' : 'brand'}
+            chartMaximum={chartMaximum}
+            backgroundTrend={group.id === 'all' ? undefined : aggregate?.trend}
+          />
+        </List>
+      ))}
+    </List>
   );
   return {
     label: 'Terminal operations sidebar',

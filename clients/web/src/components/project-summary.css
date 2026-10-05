@@ -13,7 +13,6 @@
 }
 .project-summary[data-size='compact'] {
   min-height: remify(68px);
-  padding: var(--kui-space-s);
 }
 .project-summary__content {
   display: grid;

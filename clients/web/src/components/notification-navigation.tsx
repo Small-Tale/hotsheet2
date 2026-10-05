@@ -1,12 +1,11 @@
 import '@kerfjs/ui/layout.css';
-import './settings-navigation.css';
-import './notification-navigation.css';
 
 import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Text } from '@kerfjs/ui/text';
 import { Bell, BellOff, CalendarDays, Clock3 } from 'lucide';
 
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
@@ -36,36 +35,37 @@ export function notificationNavigationPanel({
   paused?: boolean;
 }): SidebarPanelParts {
   const content = (
-    <div class="settings-navigation__content">
+    <List controlInsets="tb">
       <section>
         <ListHeader label="Notifications" />
-        <div>
-          <List gap={rem(0.125)}>
-            {views.map((item) => (
-              <ListItem
-                action="select-notification-view"
-                itemId={item.id}
-                selected={selected === item.id}
-                icon={<LucideIcon icon={item.icon} name={item.iconName} />}
-                label={item.label}
-                trailing={
-                  <small
-                    class="notification-navigation__count"
-                    data-attention={String(item.id === 'pending' && counts.pending > 0)}
-                  >
-                    {counts[item.id]}
-                  </small>
-                }
-              />
-            ))}
-          </List>
-        </div>
+        <List gap={rem(0.125)}>
+          {views.map((item) => (
+            <ListItem
+              action="select-notification-view"
+              itemId={item.id}
+              selected={selected === item.id}
+              icon={<LucideIcon icon={item.icon} name={item.iconName} />}
+              label={item.label}
+              trailing={
+                <Text
+                  variant="span"
+                  size="compact"
+                  tone="quiet"
+                  className="notification-navigation__count"
+                  data-attention={String(item.id === 'pending' && counts.pending > 0)}
+                >
+                  {counts[item.id]}
+                </Text>
+              }
+            />
+          ))}
+        </List>
       </section>
-    </div>
+    </List>
   );
   // Kerf's Pane owns its footer's safe-area edges, so the inset lives on this inner box (HS2-KMDJRH).
   const footer = (
-    <div class="notification-navigation__footer-content" data-paused={String(paused)}>
+    <List controlInsets="trbl" rootAttributes={{ 'data-paused': String(paused) }}>
       <wa-button
         size="small"
         appearance="outlined"
@@ -81,7 +81,7 @@ export function notificationNavigationPanel({
         <LucideIcon size="s" slot="start" icon={paused ? Bell : BellOff} name={paused ? 'bell' : 'bell-off'} />
         {paused ? 'Resume notifications' : 'Pause notifications'}
       </wa-button>
-    </div>
+    </List>
   );
   return {
     label: 'Notification views',

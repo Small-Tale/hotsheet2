@@ -1,4 +1,5 @@
-import './ticket-inspector-placeholder.css';
+import { EmptyState } from '@kerfjs/ui/empty-state';
+import { List } from '@kerfjs/ui/list';
 
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
@@ -9,13 +10,21 @@ export function ticketInspectorPlaceholderPanel({ selectionCount }: { selectionC
     toolbar: { label: 'Ticket inspector toolbar', dividerSides: '' },
     toggle: inspectorToggle(),
     content: (
-      <div class="ticket-inspector-placeholder" data-component="ticket-inspector-placeholder">
-        <p>
-          {selectionCount === 0
-            ? 'Select a ticket to see and edit its details'
-            : `${selectionCount} items selected — use batch actions to edit them together`}
-        </p>
-      </div>
+      <List
+        fill
+        hAlign="center"
+        vAlign="middle"
+        className="ticket-inspector-placeholder"
+        rootAttributes={{ 'data-ticket-inspector-placeholder': 'true' }}
+      >
+        <EmptyState
+          title={
+            selectionCount === 0
+              ? 'Select a ticket to see and edit its details'
+              : `${selectionCount} items selected — use batch actions to edit them together`
+          }
+        />
+      </List>
     ),
     pane: {},
   };

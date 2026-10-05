@@ -169,7 +169,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
   });
   const video = page.video();
   await page.goto('/?dev-review=false');
-  const restoring = page.locator('[data-component="project-restore-state"]');
+  const restoring = page.locator('[data-project-restore-state="true"]');
   await expect(restoring).toBeVisible();
   await page.waitForTimeout(450);
   await expect(restoring).toBeVisible();
@@ -228,7 +228,8 @@ test('reveals a restored terminal workspace atomically and separates All Project
     dashboard.locator('[data-component="terminal-tile"]:has([data-project-id="other-checkout"])'),
   ).toHaveCount(1);
   await expect(sidebar.locator('.terminal-operations-sidebar__group')).toHaveCount(3);
-  await expect(all).toHaveCSS('border-bottom-width', '1px');
+  await expect(all).toHaveAttribute('divider-sides', 'b');
+  await expect(all).not.toHaveCSS('box-shadow', 'none');
   for (const summary of await summaries.all()) await expect(summary).toHaveAttribute('data-chart-maximum', '5');
   await expect(all.locator('[data-component="project-summary"]')).toHaveAttribute('data-chart-background', 'false');
   await expect(demoSummary).toHaveAttribute('data-chart-background', 'true');
@@ -249,7 +250,8 @@ test('reveals a restored terminal workspace atomically and separates All Project
   expect(Math.abs(layers[0]!.y + layers[0]!.height - (layers[1]!.y + layers[1]!.height))).toBeLessThan(1);
   await page.screenshot({ path: '/private/tmp/hs2-hph6c5-workspace-scale-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 650 });
-  await expect(all).toHaveCSS('border-bottom-width', '1px');
+  await expect(all).toHaveAttribute('divider-sides', 'b');
+  await expect(all).not.toHaveCSS('box-shadow', 'none');
   await expect(demoSummary).toHaveAttribute('data-chart-background', 'true');
   await page.screenshot({ path: '/private/tmp/hs2-hph6c5-workspace-scale-narrow.png', fullPage: true });
   await page.close();

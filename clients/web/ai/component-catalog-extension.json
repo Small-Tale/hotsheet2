@@ -415,9 +415,9 @@
       "name": "NotificationNavigation",
       "source": "src/components/notification-navigation.tsx",
       "kind": "component",
-      "purpose": "Notification views with attention counts arranged by Kerf List in an unpadded sidebar pane.",
+      "purpose": "Notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane.",
       "useWhen": [
-        "Hot Sheet needs notification views with attention counts arranged by Kerf List in an unpadded sidebar pane."
+        "Hot Sheet needs notification views with attention counts and a pause footer composed from Kerf List and Text in an unpadded sidebar pane."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific NotificationNavigation behavior."
@@ -1639,9 +1639,9 @@
       "name": "AppEmptyState",
       "source": "src/components/app-empty-state.tsx",
       "kind": "component",
-      "purpose": "Initial project-opening and remembered-project restoration states.",
+      "purpose": "Initial project-opening, busy restoration, and action-free messages composed from Kerf EmptyState and List.",
       "useWhen": [
-        "Hot Sheet needs initial project-opening and remembered-project restoration states."
+        "Hot Sheet needs initial project-opening, busy restoration, and action-free messages composed from Kerf EmptyState and List."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific AppEmptyState behavior."

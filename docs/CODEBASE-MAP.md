@@ -488,3 +488,5 @@ migration and backup routes retain their existing response contracts.
 Heading compositions use `clients/web/src/components/heading.css` for app-owned icon tone
 and supporting-copy alignment; the page, dialog, and Dev Review owners compose canonical
 Kerf Toolbar/ToolbarText primitives directly (HS2-AGDJ6E).
+
+- `docs/CSS-OWNERSHIP-AUDIT.md` — source stylesheet ownership inventory and Kerf migration boundaries (HS2-JMYRT3).

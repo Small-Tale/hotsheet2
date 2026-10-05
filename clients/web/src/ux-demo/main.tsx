@@ -42,7 +42,7 @@ import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from '
 
 import type { ProviderAccount } from '../api';
 import type { CommandDropTarget } from '../command-order';
-import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
+import { AppEmptyState, AppMessageState, ProjectRestoreState } from '../components/app-empty-state';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
@@ -1326,6 +1326,7 @@ function demoContent(item: DemoDefinition) {
       <section class="empty-state-demo-stack" aria-label="Application empty state variants">
         <AppEmptyState />
         <ProjectRestoreState />
+        <AppMessageState title="Project unavailable" message="Open another project to continue working." />
       </section>
     );
   if (item.id === 'note-card') return <NoteCardDemo />;

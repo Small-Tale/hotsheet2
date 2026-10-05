@@ -58,7 +58,7 @@ describe('application shell components', () => {
     expect(css).not.toContain('kui-resizable-region');
     expect(css).not.toContain('kui-workbench__');
     expect(css).toContainSource(".app-shell[data-terminal-focus-mode='true'] { --kui-workbench-popup-z: 200; }");
-    expect(productionCss).toMatchSource(/html, body, #app \{[^}]*height: 100%; height: 100dvh;/);
+    expect(productionCss).toMatchSource(/html, body, #app \{[^}]*height: 100dvh;/);
     expect(productionCss).toContain('--hotsheet-safe-area-top: env(safe-area-inset-top, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-bottom: env(safe-area-inset-bottom, 0px)');
     expect(productionCss).toContain('--hotsheet-safe-area-left: env(safe-area-inset-left, 0px)');
@@ -711,6 +711,7 @@ describe('application shell components', () => {
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).toContain('data-component="state-banner"');
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).toContain('role="status"');
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).not.toContain('<button');
+    expect(String(ConnectionStateBanner({ state: 'connecting' }))).toContain('data-component="loading-spinner"');
     expect(String(ConnectionStateBanner({ state: 'offline' }))).toContain('data-action="retry-connection"');
     expect(String(ConnectionStateBanner({ state: 'authentication' }))).toContain(
       'data-action="authenticate-connection"',

@@ -1,5 +1,4 @@
-import './connection-state-banner.css';
-
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { CloudOff, KeyRound, LoaderCircle, RefreshCw, ShieldAlert } from 'lucide';
@@ -111,13 +110,7 @@ export function ConnectionStateBanner({ state, detail }: ConnectionStateBannerPr
       tone={item.tone}
       urgency={state === 'connecting' ? 'status' : 'alert'}
       className={`connection-state-banner connection-state-banner--${state}`}
-      icon={
-        <LucideIcon
-          icon={item.icon}
-          name={item.iconName}
-          className={state === 'connecting' ? 'connection-state-banner__spinner' : undefined}
-        />
-      }
+      icon={state === 'connecting' ? <LoadingSpinner /> : <LucideIcon icon={item.icon} name={item.iconName} />}
       action={action}
     />
   );

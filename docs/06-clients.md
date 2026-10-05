@@ -3270,3 +3270,23 @@ even when multiple disjoint ticket ranges are present.
 - Remote/mTLS + mobile pairing: [08-distributed-and-remote.md](08-distributed-and-remote.md)
 - Leased-claim pattern reused for size claims: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7
 - Why clients don't embed the core / language rationale: [09-technology-decisions.md](09-technology-decisions.md) §9.2
+
+### Composition and stylesheet ownership (HS2-JMYRT3)
+
+The [source CSS audit](CSS-OWNERSHIP-AUDIT.md) records every original stylesheet, ownership
+rationale, remaining migration ticket, and exact upstream API blocker.
+
+The client opts into Kerf's document baseline and marks its single mount container with
+`kui-app-root`. Application CSS owns viewport clipping/dynamic viewport height and the
+physical-to-logical safe-area bridge. Kerf owns document font metrics, surface, box sizing,
+body margin, and the definite height chain.
+
+Startup, restoration, action-free messages, and inspector selection placeholders compose
+`EmptyState` with a centered filling `List`. Connection feedback uses `StateBanner` and
+`LoadingSpinner`; it carries no application animation stylesheet. Settings, notification,
+and terminal operations navigation use `List` insets and dividers. Compact operation
+summary headings and charts share the standard control gutter.
+
+Notification queues use `List` for the same 12px spacing within and between pending/history
+groups. Their page presentation uses standard control insets without an arbitrary width cap;
+flush presentation adds no host inset. Empty queues use `EmptyState`.

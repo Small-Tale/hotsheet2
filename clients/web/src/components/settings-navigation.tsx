@@ -1,5 +1,4 @@
 import '@kerfjs/ui/layout.css';
-import './settings-navigation.css';
 
 import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
@@ -126,10 +125,10 @@ export function settingsNavigationPanel({ selected }: { selected: SettingsCatego
     toolbar: { label: 'Settings sidebar toolbar', dividerSides: '' },
     toggle: { action: 'toggle-project-sidebar', name: 'settings sidebar' },
     content: (
-      <div class="settings-navigation__content">
+      <List gap="m" controlInsets="tb">
         {renderGroup('Project Settings', projectCategories)}
         {renderGroup('App Settings', appCategories)}
-      </div>
+      </List>
     ),
     pane: { contentElement: 'nav', contentLabel: 'Settings categories' },
   };

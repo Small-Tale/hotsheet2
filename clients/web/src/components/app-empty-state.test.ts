@@ -11,7 +11,7 @@ describe('app empty states', () => {
 
   it('announces remembered-project restoration as busy', () => {
     const markup = String(ProjectRestoreState());
-    expect(markup).toContain('data-component="project-restore-state"');
+    expect(markup).toContain('data-project-restore-state="true"');
     expect(markup).toContain('role="status"');
     expect(markup).toContain('aria-busy="true"');
   });

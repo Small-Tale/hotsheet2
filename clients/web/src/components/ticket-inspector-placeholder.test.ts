@@ -18,7 +18,7 @@ describe('TicketInspectorPlaceholder', () => {
 
     const parts = ticketInspectorPlaceholderPanel({ selectionCount: 1 });
     expect(parts.toggle).toEqual({ action: 'toggle-ticket-inspector', name: 'ticket inspector' });
-    expect(String(parts.content)).toContain('data-component="ticket-inspector-placeholder"');
+    expect(String(parts.content)).toContain('data-ticket-inspector-placeholder="true"');
     expect(String(parts.content)).toContain('1 items selected');
   });
 });

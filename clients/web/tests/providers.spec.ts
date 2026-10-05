@@ -8882,7 +8882,7 @@ test('keeps remembered-project startup atomic and does not report its intentiona
   }, project.root);
   await page.goto('/');
   await page.waitForTimeout(5_200);
-  await expect(page.locator('[data-component="project-restore-state"]')).toBeVisible();
+  await expect(page.locator('[data-project-restore-state="true"]')).toBeVisible();
   await expect(page.locator('[data-component="app-shell"]')).toHaveCount(0);
   await resetRenderMetrics(page);
   for (let index = 0; index < 14; index += 1) {
@@ -8891,7 +8891,7 @@ test('keeps remembered-project startup atomic and does not report its intentiona
   }
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator('[data-component="project-restore-state"]')).toHaveCount(0);
+  await expect(page.locator('[data-project-restore-state="true"]')).toHaveCount(0);
   await page.waitForTimeout(500);
   expect(submissions).toEqual([]);
 });
@@ -14557,7 +14557,7 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await expect(page.getByRole('region', { name: 'demo project statistics' })).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-y51ehn-project-stats-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Cross-project stats' }).click();
-  await expect(page.getByRole('heading', { name: 'Cross-project stats' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Cross-project stats' })).toBeVisible();
 });
 
 test('uses the compact workspace title and project-tab action on desktop while preserving mobile (HS2-9R1F91)', async ({
@@ -17405,7 +17405,7 @@ test('shows new-project feedback when a project has no tickets', async ({ page }
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const empty = page.locator('[data-component="empty-state"]');
+  const empty = page.locator('.ticket-empty-state[data-component="empty-state"]');
   await expect(empty).toHaveClass(/ticket-empty-state--project/);
   await expect(empty).toContainText('No tickets yet');
   await expect(empty).toContainText('Create a ticket to start planning this project.');
@@ -17424,7 +17424,7 @@ test('shows view-specific feedback when a populated project has no tickets in th
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const empty = page.locator('[data-component="empty-state"]');
+  const empty = page.locator('.ticket-empty-state[data-component="empty-state"]');
   await expect(empty).toHaveClass(/ticket-empty-state--view/);
   await expect(empty).toContainText('No tickets in Queue');
   await expect(empty).toContainText('Tickets will appear here when they enter this view.');
@@ -19528,6 +19528,8 @@ test('shows and resolves cross-project permission notifications with badges and 
   await expect(page.locator('[data-tab-kind="project"] .project-tab__notification')).toContainText('1');
   const notificationsButton = page.getByRole('button', { name: /Notifications view/ });
   await notificationsButton.click();
+  // The shell must fill its host independently of the queue's intrinsic width (HS2-JMYRT3).
+  await expect.poll(async () => (await page.locator('[data-component="workbench"]').boundingBox())?.width).toBe(1280);
   await expect(notificationsButton).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#app-left-rail nav[aria-label="Notification views"]')).toBeVisible();

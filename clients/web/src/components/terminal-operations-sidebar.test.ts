@@ -28,7 +28,7 @@ describe('TerminalOperationsSidebar', () => {
     expect(multiple).toContain(
       '<section class="kui-pane__content kui-content" aria-label="Terminal operations sidebar">',
     );
-    expect(multiple).toContain('<div class="terminal-operations-sidebar__groups">');
+    expect(multiple).toContain('data-control-insets="trbl"');
     expect(multiple).toContain('All projects');
     expect(multiple).toContain('data-chart-tone="success"');
     expect(multiple.match(/data-chart-tone="brand"/g)).toHaveLength(2);
@@ -47,30 +47,23 @@ describe('TerminalOperationsSidebar', () => {
     expect(single).not.toContain('data-background-bar=');
   });
 
-  it('separates the multi-project aggregate from individual projects', () => {
-    const css = readFileSync(new URL('./terminal-operations-sidebar.css', import.meta.url), 'utf8');
-    expect(css).toMatchSource(
-      /terminal-operations-sidebar__group\[data-project-id="all"\] \{[^}]*padding-bottom: var\(--kui-space-m\);[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/,
-    );
+  it('separates only the multi-project aggregate through the List divider API', () => {
+    const multiple = String(TerminalOperationsSidebar({ projects }));
+    expect(multiple).toContain('data-project-id="all"');
+    expect(multiple.match(/divider-sides="b"/g)).toHaveLength(1);
+    expect(String(TerminalOperationsSidebar({ projects: [projects[0]] }))).not.toContain('divider-sides="b"');
   });
 
   it('aligns the group ListHeader label with the ProjectSummary content on one gutter (HS2-RSJ796)', () => {
     const markup = String(TerminalOperationsSidebar({ projects }));
-    const css = readFileSync(new URL('./terminal-operations-sidebar.css', import.meta.url), 'utf8');
-    expect(markup).toContain('class="terminal-operations-sidebar__group-heading"><header class="kui-list-header"');
+    expect(markup).not.toContain('data-control-insets="rl"');
     expect(markup).toContain('data-inline="true"');
-    expect(css).toMatch(/terminal-operations-sidebar__group-heading \{[^}]*padding-inline: var\(--kui-space-s\)/);
-    expect(css).not.toContain('--kui-layout-inline-margin');
-    expect(css).not.toContain('--kui-layout-item-padding');
-    // Each group's summary is ProjectSummary's compact size; the sidebar styles no child component (HS2-4APEJP).
-    expect(css).not.toContain('project-summary');
+    // ListHeader owns its text inset; no wrapper doubles that gutter.
     expect(markup.match(/class="project-summary" data-component="project-summary" data-size="compact"/g)).toHaveLength(
       projects.length + 1,
     );
     const summaryCss = readFileSync(new URL('./project-summary.css', import.meta.url), 'utf8');
-    expect(summaryCss).toMatch(
-      /\.project-summary\[data-size='compact'\] \{[^}]*min-height: remify\(68px\);[^}]*padding: var\(--kui-space-s\)/,
-    );
+    expect(summaryCss).toMatch(/\.project-summary\[data-size='compact'\] \{[^}]*min-height: remify\(68px\);/);
     expect(summaryCss).toMatch(
       /\.project-summary\[data-size='compact'\] \.project-summary__chart \{[^}]*height: remify\(44px\)/,
     );

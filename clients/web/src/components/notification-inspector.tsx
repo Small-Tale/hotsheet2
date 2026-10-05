@@ -1,4 +1,4 @@
-import './notification-inspector.css';
+import { List } from '@kerfjs/ui/list';
 
 import { inspectorToggle, SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
@@ -8,7 +8,7 @@ export function notificationInspectorPanel(): SidebarPanelParts {
     label: 'Notification inspector',
     toolbar: { label: 'Notification inspector toolbar', dividerSides: '' },
     toggle: inspectorToggle('notification inspector'),
-    content: <div class="notification-inspector-empty" data-component="notification-inspector" />,
+    content: <List fill className="notification-inspector-empty" />,
     pane: {},
   };
 }

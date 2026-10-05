@@ -1,5 +1,0 @@
-/* The pause toggle sits in the notification sidebar's footer; the grid stretches it (HS2-QYA9SC). */
-.notification-navigation__footer-content {
-  display: grid;
-  padding: var(--kui-space-xs);
-}

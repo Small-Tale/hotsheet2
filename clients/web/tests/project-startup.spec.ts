@@ -226,7 +226,7 @@ test('opens remembered projects concurrently, wires original order, and restores
       ['beta', 1],
       ['gamma', 1],
     ]);
-  const restoring = page.locator('[data-component="project-restore-state"]');
+  const restoring = page.locator('[data-project-restore-state="true"]');
   await expect(restoring).toBeVisible();
   fixture.pending.get('gamma')!.release();
   fixture.pending.get('beta')!.release();
@@ -276,7 +276,7 @@ test('shows the active project while other remembered projects are still opening
   for (const name of ['alpha', 'beta', 'gamma']) fixture.pending.set(name, gate());
   await page.goto('/?dev-review=false');
   await expect.poll(() => fixture.attempts.size).toBe(3);
-  const restoring = page.locator('[data-component="project-restore-state"]'),
+  const restoring = page.locator('[data-project-restore-state="true"]'),
     tabs = page.locator('.project-tab-bar [role="tab"]');
   await expect(restoring).toBeVisible();
   // Only the active project opens; the slow alpha stays pending.

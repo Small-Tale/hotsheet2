@@ -7,7 +7,7 @@ describe('SettingsNavigation', () => {
     const markup = String(SettingsNavigation({ selected: 'permissions', collapseControl: true }));
     expect(markup).toContain('aria-label="Settings categories"');
     expect(markup).toContain('data-component="pane"');
-    expect(markup.match(/data-component="list"/g)).toHaveLength(2);
+    expect(markup.match(/data-component="list"/g)).toHaveLength(3);
     expect(markup).toContain('<nav aria-label="Project Settings">');
     expect(markup).toContain('<nav aria-label="App Settings">');
     expect(markup).not.toContain('divider-sides');
