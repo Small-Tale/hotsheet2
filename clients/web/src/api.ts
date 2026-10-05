@@ -517,6 +517,17 @@ export interface TerminalInfo {
   progress?: number;
   /** The saved tab name shared by every client of this server (HS2-89FPV1); absent until renamed. */
   name?: string;
+  /** The terminal's AI session stopped on an API error and waits for the user (HS2-HJ4D1H). */
+  halt?: TerminalHalt;
+}
+/** Why a terminal's AI session halted, as its hook reported it (`POST /terminals/{id}/halt`). */
+export interface TerminalHalt {
+  /** The tool's error category, for example Claude Code's `overloaded` or `rate_limit`. */
+  error_type: string;
+  message: string;
+  agent?: string;
+  /** RFC 3339 time the halt was reported. */
+  at: string;
 }
 /** `PUT /terminals/{id}/name` response; `name` is absent after a clear. */
 export interface TerminalName {

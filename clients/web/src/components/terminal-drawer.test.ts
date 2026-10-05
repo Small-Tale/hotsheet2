@@ -439,3 +439,35 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('data-provider="claude"');
   });
 });
+
+describe('halted AI sessions (HS2-HJ4D1H)', () => {
+  const halt = {
+    error_type: 'overloaded',
+    message: 'Selected model is at capacity. Please try a different model.',
+    agent: 'claude',
+    at: '2026-10-05T08:00:00Z',
+  };
+  it('marks a halted terminal tab with the error, outranking busy, and clears with the halt', () => {
+    const markup = (busy: boolean, withHalt: boolean) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions: [{ ...sessions[0], busy, ...(withHalt ? { halt } : {}) }],
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId: 'grid',
+        }),
+      );
+    const halted = markup(true, true);
+    expect(halted).toContain('class="terminal-drawer__halt"');
+    expect(halted).toContain(`title="Stopped: ${halt.message}"`);
+    expect(halted).toContain('data-lucide="triangle-alert"');
+    expect(halted).not.toContain('terminal-drawer__busy-dot');
+    const resumed = markup(true, false);
+    expect(resumed).not.toContain('terminal-drawer__halt');
+    expect(resumed).toContain('terminal-drawer__busy-dot');
+  });
+});

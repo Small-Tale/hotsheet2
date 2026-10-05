@@ -75,7 +75,10 @@ machine_local = true
 # Headless `-p` sessions still require PreToolUse; the launcher marks those sessions so
 # the shared adapter ignores ordinary PreToolUse events in an interactive terminal.
 event = "PermissionRequest"
-additional_events = ["PreToolUse"]
+# StopFailure reports a turn that ended on an API error (for example "Selected model is at
+# capacity") as a halted session on the Hot Sheet terminal; UserPromptSubmit clears it when the
+# user prompts again (HS2-HJ4D1H). Older Claude versions ignore unknown hook events.
+additional_events = ["PreToolUse", "StopFailure", "UserPromptSubmit"]
 command = "hotsheet-cli permission-hook --agent claude"
 timeout_seconds = 86430
 

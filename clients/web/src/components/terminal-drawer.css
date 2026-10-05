@@ -159,6 +159,10 @@
   background: var(--wa-color-success-fill-loud);
   flex: none;
 }
+.terminal-drawer__halt {
+  display: inline-flex;
+  flex: none;
+}
 .terminal-drawer__create-wrap {
   position: relative;
   flex: none;

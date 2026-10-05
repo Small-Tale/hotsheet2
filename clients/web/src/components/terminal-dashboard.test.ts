@@ -402,3 +402,24 @@ describe('TerminalDashboard', () => {
     expect(demoCss).not.toMatch(/\.fixed-aspect-terminal-card-demo[^{]*\.terminal-/);
   });
 });
+
+describe('halted AI sessions on dashboard tiles (HS2-HJ4D1H)', () => {
+  it('replaces the state dot with the halt warning while the session is halted', () => {
+    const session = { id: 't1', projectId: 'p', projectName: 'P', alive: true, busy: false, scrollback: '' };
+    const halted = String(
+      FixedAspectTerminalCard({
+        session: {
+          ...session,
+          halt: { error_type: 'rate_limit', message: 'Rate limit reached.', at: '2026-10-05T08:00:00Z' },
+        },
+      }),
+    );
+    expect(halted).toContain('data-halted="true"');
+    expect(halted).toContain('class="terminal-tile__halt"');
+    expect(halted).toContain('title="Stopped: Rate limit reached."');
+    expect(halted).not.toContain('class="terminal-tile__state"');
+    const running = String(FixedAspectTerminalCard({ session }));
+    expect(running).not.toContain('data-halted');
+    expect(running).toContain('class="terminal-tile__state"');
+  });
+});

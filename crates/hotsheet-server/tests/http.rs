@@ -1020,6 +1020,156 @@ async fn terminal_rename_persists_announces_and_is_forgotten_on_kill() {
 }
 
 #[tokio::test]
+async fn terminal_halt_is_reported_listed_announced_cleared_and_forgotten_on_kill() {
+    // HS2-HJ4D1H: an AI session's StopFailure hook marks its terminal halted until the user
+    // prompts again (UserPromptSubmit → DELETE) or the terminal is killed.
+    let (_dir, state) = state();
+    let router = app(state);
+    let send = |method: &'static str, path: &'static str, body: Option<&'static str>| {
+        let router = router.clone();
+        async move { router.oneshot(authed(method, path, body)).await.unwrap() }
+    };
+    let halt = r#"{"error_type":"overloaded","message":"Selected model is at capacity. Please try a different model.","agent":"claude"}"#;
+    assert_eq!(
+        send("POST", "/terminals/nope/halt", Some(halt))
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let opened = send(
+        "POST",
+        "/terminals",
+        Some(r#"{"command":"cat","id":"halt-me"}"#),
+    )
+    .await;
+    assert_eq!(opened.status(), StatusCode::OK);
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("halt")
+            .is_none()
+    );
+    let cursor = body_json(send("GET", "/ws/poll?timeout_ms=0", None).await).await["cursor"]
+        .as_u64()
+        .unwrap();
+    let poll = |cursor: u64| {
+        let router = router.clone();
+        async move {
+            let events = body_json(
+                router
+                    .oneshot(authed(
+                        "GET",
+                        &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                        None,
+                    ))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            events["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|event| event["kind"] == "terminal_halted")
+                .cloned()
+                .collect::<Vec<_>>()
+        }
+    };
+
+    // Report, then repeat the same report: listed once, announced once.
+    for _ in 0..2 {
+        assert_eq!(
+            send("POST", "/terminals/halt-me/halt", Some(halt))
+                .await
+                .status(),
+            StatusCode::NO_CONTENT
+        );
+    }
+    let listed = body_json(send("GET", "/terminals", None).await).await;
+    assert_eq!(listed[0]["halt"]["error_type"], "overloaded");
+    assert_eq!(
+        listed[0]["halt"]["message"],
+        "Selected model is at capacity. Please try a different model."
+    );
+    assert_eq!(listed[0]["halt"]["agent"], "claude");
+    assert!(
+        listed[0]["halt"]["at"]
+            .as_str()
+            .is_some_and(|at| !at.is_empty())
+    );
+    assert_eq!(
+        body_json(send("GET", "/terminals/halt-me", None).await).await["halt"]["error_type"],
+        "overloaded"
+    );
+    let announced = poll(cursor).await;
+    assert_eq!(announced.len(), 1, "{announced:?}");
+    assert_eq!(announced[0]["id"], "halt-me");
+    assert_eq!(
+        announced[0]["message"],
+        "Selected model is at capacity. Please try a different model."
+    );
+
+    // Resuming clears it and announces the clear; clearing again is a silent no-op.
+    let resumed_at = body_json(send("GET", "/ws/poll?timeout_ms=0", None).await).await["cursor"]
+        .as_u64()
+        .unwrap();
+    for _ in 0..2 {
+        assert_eq!(
+            send("DELETE", "/terminals/halt-me/halt", None)
+                .await
+                .status(),
+            StatusCode::NO_CONTENT
+        );
+    }
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("halt")
+            .is_none()
+    );
+    let cleared = poll(resumed_at).await;
+    assert_eq!(cleared.len(), 1, "{cleared:?}");
+    assert!(
+        cleared[0]
+            .get("message")
+            .is_none_or(serde_json::Value::is_null)
+    );
+
+    // A blank report still records a halt with fallback text; a kill forgets it, so a reused
+    // id starts clean.
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/halt-me/halt",
+            Some(r#"{"message":"  "}"#)
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let blank = body_json(send("GET", "/terminals", None).await).await;
+    assert_eq!(blank[0]["halt"]["error_type"], "unknown");
+    assert_eq!(
+        blank[0]["halt"]["message"],
+        "The AI session stopped on an error."
+    );
+    assert_eq!(
+        send("DELETE", "/terminals/halt-me", None).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    let reopened = send(
+        "POST",
+        "/terminals",
+        Some(r#"{"command":"cat","id":"halt-me"}"#),
+    )
+    .await;
+    assert_eq!(reopened.status(), StatusCode::OK);
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("halt")
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn a_restart_prunes_names_of_terminals_that_did_not_survive() {
     use hotsheet_server::terminal_broker::TerminalBroker;
 

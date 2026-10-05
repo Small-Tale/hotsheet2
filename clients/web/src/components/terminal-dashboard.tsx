@@ -20,9 +20,11 @@ import {
   MessageSquare,
   Minus,
   Plus,
+  TriangleAlert,
   X,
 } from 'lucide';
 
+import type { TerminalHalt } from '../api';
 import { contextPopupMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
@@ -51,6 +53,8 @@ export interface TerminalDashboardSession {
   busy: boolean;
   cwd?: string;
   progress?: number;
+  /** The AI session halted on an API error (HS2-HJ4D1H). */
+  halt?: TerminalHalt;
   scrollback: string;
 }
 
@@ -259,6 +263,7 @@ function TerminalCard({
       data-terminal-key={key}
       data-busy={String(session.busy)}
       data-alive={String(session.alive)}
+      data-halted={session.halt ? 'true' : undefined}
       data-magnified={String(magnified)}
       data-mobile-chrome={magnified && mobile ? 'true' : undefined}
       data-keyboard-visible={magnified && mobile ? String(mobile.keyboardVisible) : undefined}
@@ -285,11 +290,23 @@ function TerminalCard({
             <LucideIcon size="s" icon={X} name="x" />
           </button>
         )}
-        <span
-          class="terminal-tile__state"
-          aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
-          title={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
-        />
+        {session.halt ? (
+          // A halted AI session (HS2-HJ4D1H) replaces the state dot: it is waiting for the user.
+          <span
+            class="terminal-tile__halt"
+            role="img"
+            aria-label={`Stopped: ${session.halt.message}`}
+            title={`Stopped: ${session.halt.message}`}
+          >
+            <LucideIcon size="s" icon={TriangleAlert} name="triangle-alert" color={uiColor('danger-on-quiet')} />
+          </span>
+        ) : (
+          <span
+            class="terminal-tile__state"
+            aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
+            title={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}
+          />
+        )}
         <button
           type="button"
           class="terminal-tile__identity"

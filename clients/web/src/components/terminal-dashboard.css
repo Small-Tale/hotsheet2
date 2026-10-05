@@ -366,6 +366,10 @@
 .terminal-tile[data-alive='false'] .terminal-tile__state {
   background: var(--wa-color-danger-fill-loud);
 }
+.terminal-tile__halt {
+  display: inline-flex;
+  flex: none;
+}
 .terminal-tile__identity {
   display: flex;
   min-width: 0;

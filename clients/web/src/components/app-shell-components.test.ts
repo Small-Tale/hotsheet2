@@ -874,4 +874,24 @@ describe('application shell components', () => {
     resizeDemoCollapsed.value = false;
     expect(resizeDemoWidth.value).toBe(250);
   });
+
+  it('keeps project attention visible beside its counts, with a reason (HS2-HJ4D1H)', () => {
+    const counted = String(
+      ProjectTab({
+        id: 'demo',
+        name: 'demo',
+        location: 'local',
+        notificationCount: 1,
+        activeTicketCount: 2,
+        attention: true,
+        attentionLabel: 'An AI session stopped on an error',
+      }),
+    );
+    expect(counted).toContain('project-tab__indicators');
+    expect(counted).toContain('project-tab__state--attention');
+    expect(counted).toContain('aria-label="An AI session stopped on an error"');
+    expect(counted.indexOf('project-tab__state--attention')).toBeLessThan(counted.indexOf('project-tab__notification'));
+    const calm = String(ProjectTab({ id: 'demo', name: 'demo', location: 'local', notificationCount: 1 }));
+    expect(calm).not.toContain('project-tab__state--attention');
+  });
 });

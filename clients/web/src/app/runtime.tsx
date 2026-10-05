@@ -3671,6 +3671,8 @@ export async function startHotSheetWebClient() {
             if (response.events.some((event) => event.kind === 'views_updated')) await refreshCustomViews(current);
             for (const event of response.events)
               if (event.kind === 'terminal_renamed') applyTerminalRenamed(current, event.id, event.message);
+            // A terminal's AI session halted or resumed (HS2-HJ4D1H): refetch so its tab marks it.
+            if (response.events.some((event) => event.kind === 'terminal_halted')) void refreshTerminalDashboard();
             if (containsRepositoryChange(response, current.id)) scheduleRepositoryRefresh(current);
           },
         });
@@ -4557,6 +4559,12 @@ export async function startHotSheetWebClient() {
           location: 'local' as const,
           selected: !restoreFailure && item.id === selectedProjectId.value,
           notificationCount: permissionCount(item.id),
+          // A halted AI session in one of this project's terminals needs the user (HS2-HJ4D1H).
+          ...(terminalGroups.value.some(
+            (group) => group.projectId === item.id && group.sessions.some((session) => Boolean(session.halt)),
+          )
+            ? { attention: true, attentionLabel: 'An AI session stopped on an error' }
+            : {}),
           upNextCount: counts.up_next,
           activeTicketCount: counts.active,
           operation:

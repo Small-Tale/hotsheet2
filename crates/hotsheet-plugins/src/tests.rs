@@ -659,3 +659,26 @@ fn per_provider_ai_defaults_merge_validate_and_sanitize() {
         r#"{"tool":"codex","model":"gpt","effort":"medium"}"#
     );
 }
+
+#[test]
+fn claude_hook_reports_halted_and_resumed_sessions() {
+    // HS2-HJ4D1H: the same adapter that bridges permissions also reports a turn that ended on an
+    // API error (StopFailure) and clears it when the user prompts again (UserPromptSubmit).
+    let claude = builtin_plugins()
+        .into_iter()
+        .find(|plugin| plugin.manifest.id == "claude")
+        .expect("bundled claude plugin");
+    let hooks = claude
+        .manifest
+        .hooks
+        .expect("claude installs lifecycle hooks");
+    assert_eq!(hooks.event, "PermissionRequest");
+    for event in ["PreToolUse", "StopFailure", "UserPromptSubmit"] {
+        assert!(
+            hooks.additional_events.iter().any(|value| value == event),
+            "{event} missing from {:?}",
+            hooks.additional_events
+        );
+    }
+    assert_eq!(hooks.command, "hotsheet-cli permission-hook --agent claude");
+}

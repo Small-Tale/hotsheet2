@@ -1,9 +1,12 @@
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import WebSocket from 'ws';
 
+import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { ConversationMessage } from '../src/ai-conversation';
 import type { FullTicket, MediaAnnotation, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
@@ -5253,6 +5256,110 @@ async function settledAnimations(surface: Locator) {
     )
     .toBe(true);
 }
+
+test('marks a terminal whose AI session halted on an API error and clears it on the next prompt (HS2-HJ4D1H)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer(),
+    cli =
+      process.env.HOTSHEET_TEST_CLI_BIN ??
+      fileURLToPath(
+        new URL(`../../../target/debug/hotsheet-cli${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url),
+      );
+  // The Claude hook adapter exactly as a Hot Sheet terminal runs it: its env names the terminal.
+  const hook = (input: Record<string, string>) => {
+    const result = spawnSync(cli, ['permission-hook', '--agent', 'claude'], {
+      input: JSON.stringify(input),
+      env: {
+        ...withoutGitRepositoryEnv(process.env),
+        HOTSHEET_HOME: server.home,
+        HOTSHEET_SERVER: server.url,
+        HOTSHEET_SECRET: server.secret,
+        HOTSHEET_TERMINAL_ID: 'claude-session',
+      },
+      encoding: 'utf8',
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe('');
+  };
+  try {
+    await server.request('/terminals', 'POST', {
+      id: 'claude-session',
+      command: '/bin/sh',
+      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      cwd: server.root,
+    });
+    await expect
+      .poll(async () => (await server.request<Array<{ id: string; cwd?: string }>>('/terminals'))[0]?.cwd)
+      .toBe('/work/demo');
+    await mockProject(page);
+    for (const pattern of [
+      '**/__hotsheet/project-api/demo-checkout/terminals**',
+      '**/__hotsheet/project-api/demo-checkout/ws/poll*',
+    ])
+      await page.route(pattern, async (route) => {
+        const incoming = new URL(route.request().url()),
+          path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
+        try {
+          const response = await route.fetch({
+            url: `${server.url}${path}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          await route.fulfill({ response });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      });
+    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]'),
+      tab = drawer.locator('[data-tab-kind="terminal"][data-terminal-id="claude-session"]'),
+      halted = tab.locator('.terminal-drawer__halt'),
+      projectAttention = page.locator('[data-tab-kind="project"] [data-lucide="circle-alert"]');
+    await expect(tab).toBeVisible();
+    await expect(halted).toHaveCount(0);
+    await expect(projectAttention).toHaveCount(0);
+
+    // Claude Code's StopFailure: the real server records the halt and the change stream marks the
+    // tab and its project without a reload.
+    hook({
+      hook_event_name: 'StopFailure',
+      session_id: 'session-1',
+      error_type: 'overloaded',
+      error_message: 'Selected model is at capacity. Please try a different model.',
+    });
+    await expect(halted).toBeVisible();
+    await expect(halted).toHaveAttribute(
+      'title',
+      'Stopped: Selected model is at capacity. Please try a different model.',
+    );
+    await expect(halted.locator('[data-lucide="triangle-alert"]')).toHaveCSS('color', /rgb\(/);
+    await expect(tab.locator('.terminal-drawer__busy-dot')).toHaveCount(0);
+    await expect(projectAttention).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath('hs2-hj4d1h-halted-1280.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(halted).toBeVisible();
+    await settledAnimations(page.locator('[data-component="app-shell"]'));
+    await page.screenshot({ path: test.info().outputPath('hs2-hj4d1h-halted-390.png') });
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    // The user prompts again: UserPromptSubmit clears it everywhere.
+    hook({ hook_event_name: 'UserPromptSubmit', session_id: 'session-1', prompt: 'try again' });
+    await expect(halted).toHaveCount(0);
+    await expect(projectAttention).toHaveCount(0);
+    expect((await server.request<Array<{ halt?: unknown }>>('/terminals'))[0].halt).toBeUndefined();
+  } finally {
+    await server.stop();
+  }
+});
 
 test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through the real server (HS2-7Y1BQ2)', async ({
   page,

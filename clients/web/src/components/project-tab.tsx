@@ -19,6 +19,8 @@ export interface ProjectTabProps {
   busy?: boolean;
   disconnected?: boolean;
   attention?: boolean;
+  /** Why the project needs attention; names the alert icon (for example a halted AI session). */
+  attentionLabel?: string;
   restoreFailure?: boolean;
   /**
    * A remembered project that is still opening in the background after startup revealed the active
@@ -79,6 +81,7 @@ export function ProjectTab({
   busy = false,
   disconnected = false,
   attention = false,
+  attentionLabel,
   restoreFailure = false,
   pending = false,
   closable = true,
@@ -124,12 +127,24 @@ export function ProjectTab({
         <span aria-hidden="true">{notificationCount}</span>
       </span>
     ) : undefined;
+  const attentionIcon = (
+    <span
+      class="project-tab__state project-tab__state--attention"
+      role={attentionLabel ? 'img' : undefined}
+      aria-label={attentionLabel}
+      title={attentionLabel}
+    >
+      <LucideIcon icon={CircleAlert} name="circle-alert" color={uiColor('danger-on-quiet')} />
+    </span>
+  );
   const trailing = pending ? (
     <span class="project-tab__busy">
       <LoadingSpinner label={`Opening ${name}`} size={PROJECT_TAB_SPINNER_SIZE} />
     </span>
   ) : work || notification ? (
     <span class="project-tab__indicators">
+      {/* Attention stays visible beside counts, so a halted AI session is never hidden (HS2-HJ4D1H). */}
+      {attention && attentionIcon}
       {notification}
       {work}
     </span>
@@ -142,9 +157,7 @@ export function ProjectTab({
       <LucideIcon icon={WifiOff} name="wifi-off" color={uiColor('neutral-on-quiet')} />
     </span>
   ) : attention ? (
-    <span class="project-tab__state project-tab__state--attention">
-      <LucideIcon icon={CircleAlert} name="circle-alert" color={uiColor('danger-on-quiet')} />
-    </span>
+    attentionIcon
   ) : undefined;
   return (
     <AppTab

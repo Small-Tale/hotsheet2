@@ -107,6 +107,129 @@ fn retained_permission_hook_uses_restarted_server_route() {
     );
 }
 
+/// Accept one HTTP request on `listener`, answer 204, and return its request line, secret, and body.
+fn capture_one_request(listener: std::net::TcpListener) -> (String, String, String) {
+    use std::io::{BufRead, BufReader, Read, Write};
+    listener.set_nonblocking(true).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let stream = loop {
+        match listener.accept() {
+            Ok((stream, _)) => break stream,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "hook never reached the server"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(error) => panic!("accept failed: {error}"),
+        }
+    };
+    stream.set_nonblocking(false).unwrap();
+    let mut reader = BufReader::new(stream);
+    let mut request = String::new();
+    reader.read_line(&mut request).unwrap();
+    let (mut length, mut secret, mut line) = (0, String::new(), String::new());
+    loop {
+        line.clear();
+        reader.read_line(&mut line).unwrap();
+        if line == "\r\n" {
+            break;
+        }
+        let lower = line.to_ascii_lowercase();
+        if let Some(value) = lower.strip_prefix("content-length:") {
+            length = value.trim().parse().unwrap();
+        }
+        if let Some(value) = lower.strip_prefix("x-hotsheet-secret:") {
+            secret = value.trim().to_string();
+        }
+    }
+    let mut body = vec![0; length];
+    reader.read_exact(&mut body).unwrap();
+    write!(
+        reader.get_mut(),
+        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n"
+    )
+    .unwrap();
+    (
+        request.trim_end().to_string(),
+        secret,
+        String::from_utf8(body).unwrap(),
+    )
+}
+
+#[test]
+fn permission_hook_reports_halted_and_resumed_sessions_to_its_terminal() {
+    // HS2-HJ4D1H: StopFailure marks the hook's Hot Sheet terminal halted; UserPromptSubmit clears
+    // it. Neither prints a decision, and outside a Hot Sheet terminal nothing is sent.
+    let home = tempfile::tempdir().unwrap();
+    let hook = |listener: std::net::TcpListener, input: &'static str, terminal: Option<&str>| {
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || capture_one_request(listener));
+        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        command
+            .env("HOTSHEET_HOME", home.path())
+            .env_remove("HOTSHEET_PROJECT")
+            .env("HOTSHEET_SERVER", &url)
+            .env("HOTSHEET_SECRET", "terminal-secret")
+            .args(["permission-hook", "--agent", "claude"])
+            .write_stdin(input);
+        match terminal {
+            Some(id) => command.env("HOTSHEET_TERMINAL_ID", id),
+            None => command.env_remove("HOTSHEET_TERMINAL_ID"),
+        };
+        let output = command.assert().success().get_output().stdout.clone();
+        assert!(output.is_empty(), "session events print no decision");
+        server
+    };
+    let halted = hook(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        r#"{"hook_event_name":"StopFailure","session_id":"s-1","error_type":"overloaded","error_message":"Selected model is at capacity. Please try a different model."}"#,
+        Some("term 7"),
+    )
+    .join()
+    .unwrap();
+    assert_eq!(halted.0, "POST /terminals/term%207/halt HTTP/1.1");
+    assert_eq!(halted.1, "terminal-secret");
+    let body: serde_json::Value = serde_json::from_str(&halted.2).unwrap();
+    assert_eq!(body["error_type"], "overloaded");
+    assert_eq!(
+        body["message"],
+        "Selected model is at capacity. Please try a different model."
+    );
+    assert_eq!(body["agent"], "claude");
+
+    let resumed = hook(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"s-1","prompt":"try again"}"#,
+        Some("term 7"),
+    )
+    .join()
+    .unwrap();
+    assert_eq!(resumed.0, "DELETE /terminals/term%207/halt HTTP/1.1");
+
+    // No Hot Sheet terminal: the hook exits quietly and the listener never hears from it.
+    let quiet = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    quiet.set_nonblocking(true).unwrap();
+    let url = format!("http://{}", quiet.local_addr().unwrap());
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .env_remove("HOTSHEET_PROJECT")
+        .env_remove("HOTSHEET_TERMINAL_ID")
+        .env("HOTSHEET_SERVER", &url)
+        .env("HOTSHEET_SECRET", "terminal-secret")
+        .args(["permission-hook", "--agent", "claude"])
+        .write_stdin(r#"{"hook_event_name":"StopFailure","error_type":"overloaded"}"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+    assert!(
+        quiet.accept().is_err(),
+        "no request without HOTSHEET_TERMINAL_ID"
+    );
+}
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 

@@ -2336,7 +2336,21 @@ default without a refetch. A terminal still on its default name shows no reset a
 terminal's name writes (rename, reset, and legacy uploads) run one at a time in user order; an
 intent made while a write is in flight replaces any older queued one, so the last rename or reset
 always reaches the server last, and the terminal counts as pending until its queue drains
-(HS2-0E7Q6E). Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
+(HS2-0E7Q6E).
+
+A terminal whose AI session halted on an API error (HS2-HJ4D1H; see
+[`05`](05-ai-tool-plugins.md)) carries `halt {error_type, message, agent, at}` in
+`GET /terminals`, set by `POST /terminals/{id}/halt` and cleared by
+`DELETE /terminals/{id}/halt` or by killing the terminal. Each change emits a
+`terminal_halted` event (with the message when set, without it when cleared), and the client
+refetches its terminals on that event. A halted terminal's drawer tab replaces its busy dot
+with a danger `triangle-alert` icon, and its dashboard tile replaces the state dot the same
+way. Both name the error ("Stopped: …") in the icon's label and tooltip. Its project tab
+shows the attention icon ("An AI session stopped on an error") even beside notification and
+work counts. The phone project picker does not show it yet (`HS2-34VG07`). Popups,
+Notifications entries, and OS notifications for halts are `HS2-E6KAWY`.
+
+Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
 one mixed drawer strip by dragging across either kind. Both strips use Kerf's controlled
 `TabBar`/`AppTab` composition and one `wireTabBars` delegation. Both use manual activation:
 Left/Right/Home/End move focus without replacing the focused controlled tab node, and

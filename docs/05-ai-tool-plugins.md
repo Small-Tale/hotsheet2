@@ -745,6 +745,19 @@ Running `claude` or `codex` by hand in an app shell therefore raises its permiss
 prompts in the app, as long as the project's setup has installed the tool's
 `PermissionRequest` hook. Without the hook, the variables go unused and the tool's
 native prompt stays in charge.
+
+**Halted sessions (HS2-HJ4D1H).** Every Hot Sheet terminal also carries
+`HOTSHEET_TERMINAL_ID`. The Claude manifest's lifecycle hook additionally listens to
+`StopFailure` and `UserPromptSubmit` through the same `hotsheet-cli permission-hook`
+adapter. `StopFailure` fires when a turn ends on an API error. Its `error_type` is one of
+`overloaded` ("Selected model is at capacity"), `rate_limit`, `authentication_failed`,
+`billing_error`, `model_not_found`, `server_error`, and so on, and it carries an
+`error_message`. The adapter POSTs both to `/terminals/{id}/halt`. `UserPromptSubmit` means
+the user prompted again, so the adapter sends `DELETE /terminals/{id}/halt`. Neither event
+prints a hook decision, and outside a Hot Sheet terminal (no `HOTSHEET_TERMINAL_ID`) or
+without a reachable server they do nothing. Older Claude versions ignore the unknown event
+names. Codex has no equivalent hook yet (`HS2-5ZQ7J8`). Driven sessions still report only a
+generic failure (`HS2-AZVE3P`).
 Because the detached broker retains terminals across a server restart, the hook resolves
 the current registered server URL and secret for `HOTSHEET_PROJECT` on each permission
 request. Launch-time route-back variables remain a fallback when no instance record is

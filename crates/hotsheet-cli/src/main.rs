@@ -3195,6 +3195,19 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     let input: serde_json::Value =
         serde_json::from_reader(std::io::stdin()).unwrap_or(serde_json::Value::Null);
 
+    // Session lifecycle events report a halted or resumed AI session to the Hot Sheet terminal
+    // this hook runs in (HS2-HJ4D1H). They never print a decision, and outside a Hot Sheet
+    // terminal or without a reachable server they do nothing.
+    if let Some(session) = hotsheet_cli::permission_hook::session_hook_event(&input) {
+        let terminal = std::env::var("HOTSHEET_TERMINAL_ID").unwrap_or_default();
+        if let (false, Some((url, secret))) = (terminal.is_empty(), hook_server_route()) {
+            let env_agent = std::env::var("HOTSHEET_AGENT").ok();
+            let agent = installed_agent.or(env_agent.as_deref());
+            let _ = report_terminal_session(&url, &secret, &terminal, &session, agent);
+        }
+        return Ok(());
+    }
+
     let event = permission_hook_event(&input);
     let headless_pre_tool = event == PermissionHookEvent::PreToolUse
         && std::env::var("HOTSHEET_CLAUDE_PRETOOLUSE").as_deref() == Ok("1");
@@ -3206,23 +3219,7 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     }
 
     let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
-    let current = (!project.is_empty())
-        .then(|| {
-            hotsheet_cli::external_launch::discover_running_server(
-                Path::new(&project),
-                &hotsheet_plugins::hotsheet_home(),
-            )
-            .ok()
-        })
-        .flatten();
-    let route = current
-        .map(|server| (server.url, server.secret))
-        .or_else(|| {
-            Some((
-                std::env::var("HOTSHEET_SERVER").ok()?,
-                std::env::var("HOTSHEET_SECRET").ok()?,
-            ))
-        });
+    let route = hook_server_route();
     let Some(decision) = (match route {
         // Governed by a Hot Sheet server: raise a blocking request and honor the answer.
         Some((url, secret)) => {
@@ -3419,6 +3416,80 @@ fn choose_launch_source(project: &Path, candidates: &[PathBuf]) -> Result<PathBu
 }
 
 /// POST the ask to the server's `/permissions/ask`, returning its JSON reply.
+/// The running Hot Sheet server a hook should talk to: the project's discovered instance, else
+/// the URL and secret the terminal was launched with.
+fn hook_server_route() -> Option<(String, String)> {
+    let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
+    let current = (!project.is_empty())
+        .then(|| {
+            hotsheet_cli::external_launch::discover_running_server(
+                Path::new(&project),
+                &hotsheet_plugins::hotsheet_home(),
+            )
+            .ok()
+        })
+        .flatten();
+    current
+        .map(|server| (server.url, server.secret))
+        .or_else(|| {
+            Some((
+                std::env::var("HOTSHEET_SERVER").ok()?,
+                std::env::var("HOTSHEET_SECRET").ok()?,
+            ))
+        })
+}
+
+/// `POST` (halted) or `DELETE` (resumed) `/terminals/{id}/halt` for the hook's terminal.
+fn report_terminal_session(
+    url: &str,
+    secret: &str,
+    terminal: &str,
+    session: &hotsheet_cli::permission_hook::SessionHookEvent,
+    agent: Option<&str>,
+) -> Result<()> {
+    use hotsheet_cli::permission_hook::SessionHookEvent;
+    let endpoint = format!(
+        "{}/terminals/{}/halt",
+        url.trim_end_matches('/'),
+        urlencoding_component(terminal)
+    );
+    match session {
+        SessionHookEvent::Halted {
+            error_type,
+            message,
+        } => {
+            let body = serde_json::json!({
+                "error_type": error_type, "message": message, "agent": agent,
+            });
+            ureq::post(&endpoint)
+                .set("X-Hotsheet-Secret", secret)
+                .set("Content-Type", "application/json")
+                .timeout(std::time::Duration::from_secs(5))
+                .send_string(&body.to_string())?;
+        }
+        SessionHookEvent::Resumed => {
+            ureq::delete(&endpoint)
+                .set("X-Hotsheet-Secret", secret)
+                .timeout(std::time::Duration::from_secs(5))
+                .call()?;
+        }
+    }
+    Ok(())
+}
+
+/// Percent-encode a terminal id for one URL path segment.
+fn urlencoding_component(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
+}
+
 fn ask_server(
     url: &str,
     secret: &str,

@@ -1,6 +1,7 @@
 import './terminal-drawer.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { TabBar } from '@kerfjs/ui/tab-bar';
@@ -18,6 +19,7 @@ import {
   PanelBottomClose,
   Plus,
   SquareTerminal,
+  TriangleAlert,
   X,
 } from 'lucide';
 
@@ -200,7 +202,26 @@ export function TerminalDrawer({
               closeIcon={<LucideIcon icon={X} name="x" />}
               rootAttributes={{ 'data-tab-kind': 'terminal', 'data-terminal-id': session.id }}
               leading={<LucideIcon icon={SquareTerminal} name="square-terminal" />}
-              trailing={session.busy ? <i class="terminal-drawer__busy-dot" aria-label="Busy" /> : undefined}
+              trailing={
+                session.halt ? (
+                  // A halted AI session (HS2-HJ4D1H) outranks busy: it is waiting for the user.
+                  <span
+                    class="terminal-drawer__halt"
+                    role="img"
+                    aria-label={`Stopped: ${session.halt.message}`}
+                    title={`Stopped: ${session.halt.message}`}
+                  >
+                    <LucideIcon
+                      size="s"
+                      icon={TriangleAlert}
+                      name="triangle-alert"
+                      color={uiColor('danger-on-quiet')}
+                    />
+                  </span>
+                ) : session.busy ? (
+                  <i class="terminal-drawer__busy-dot" aria-label="Busy" />
+                ) : undefined
+              }
             />
           );
         const chat = chatsById.get(id)!;

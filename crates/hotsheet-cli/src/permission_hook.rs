@@ -40,6 +40,38 @@ pub fn permission_hook_event(input: &Value) -> PermissionHookEvent {
     }
 }
 
+/// A session lifecycle event the same adapter reports to the terminal it runs in (HS2-HJ4D1H).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionHookEvent {
+    /// Claude Code's `StopFailure`: the turn ended on an API error (for example `overloaded`,
+    /// "Selected model is at capacity") and the session is waiting for the user.
+    Halted { error_type: String, message: String },
+    /// `UserPromptSubmit`: the user sent a new prompt, so any earlier halt is over.
+    Resumed,
+}
+
+/// Classify a session lifecycle event; `None` for permission and unrelated events.
+pub fn session_hook_event(input: &Value) -> Option<SessionHookEvent> {
+    let text = |key: &str| {
+        input
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    match input.get("hook_event_name").and_then(Value::as_str) {
+        Some("StopFailure") => Some(SessionHookEvent::Halted {
+            error_type: text("error_type").unwrap_or_else(|| "unknown".to_owned()),
+            message: text("error_message")
+                .or_else(|| text("error"))
+                .unwrap_or_else(|| "The AI session stopped on an error.".to_owned()),
+        }),
+        Some("UserPromptSubmit") => Some(SessionHookEvent::Resumed),
+        _ => None,
+    }
+}
+
 /// Whether Hot Sheet should replace Claude's permission handling for this event.
 pub fn should_bridge_permission(event: PermissionHookEvent, headless_pre_tool: bool) -> bool {
     event == PermissionHookEvent::PermissionRequest
@@ -187,6 +219,43 @@ mod tests {
             PermissionHookEvent::PreToolUse,
             true
         ));
+    }
+
+    #[test]
+    fn classifies_halting_errors_and_resumed_prompts() {
+        assert_eq!(
+            session_hook_event(&json!({
+                "hook_event_name": "StopFailure",
+                "error_type": "overloaded",
+                "error_message": "Selected model is at capacity. Please try a different model.",
+            })),
+            Some(SessionHookEvent::Halted {
+                error_type: "overloaded".into(),
+                message: "Selected model is at capacity. Please try a different model.".into(),
+            })
+        );
+        // Missing or blank fields fall back instead of reporting an empty halt.
+        assert_eq!(
+            session_hook_event(&json!({ "hook_event_name": "StopFailure", "error_type": " " })),
+            Some(SessionHookEvent::Halted {
+                error_type: "unknown".into(),
+                message: "The AI session stopped on an error.".into(),
+            })
+        );
+        assert_eq!(
+            session_hook_event(&json!({ "hook_event_name": "UserPromptSubmit", "prompt": "go" })),
+            Some(SessionHookEvent::Resumed)
+        );
+        // Permission and unrelated events are not session events, and vice versa.
+        assert_eq!(
+            session_hook_event(&json!({ "hook_event_name": "PermissionRequest" })),
+            None
+        );
+        assert_eq!(session_hook_event(&json!({})), None);
+        assert_eq!(
+            permission_hook_event(&json!({ "hook_event_name": "StopFailure" })),
+            PermissionHookEvent::Other
+        );
     }
 
     #[test]
