@@ -1,5 +1,6 @@
 import './permission-request-card.css';
 
+import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Bot, Check, CircleAlert, Clock3, ExternalLink, Pause, ShieldCheck, X } from 'lucide';
 
@@ -96,6 +97,15 @@ export function PermissionRequestCard({
       : state === 'resolving'
         ? 'clock-3'
         : 'shield-check';
+  // The summary icon takes the card's accent, or a danger/neutral tone for refused, failed, and
+  // externally resolved requests (HS2-GQ57YW: through LucideIcon's color prop, not wrapper CSS).
+  const summaryState = history ? item.decision : state;
+  const summaryColor =
+    summaryState === 'deny' || summaryState === 'failed' || summaryState === 'disconnected'
+      ? uiColor('danger-on-quiet')
+      : summaryState === 'external'
+        ? uiColor('neutral-on-quiet')
+        : foregroundColorVar('--permission-accent');
 
   return (
     <article
@@ -108,7 +118,7 @@ export function PermissionRequestCard({
       <header class="permission-request-card__header">
         <span class="permission-request-card__identity">
           <span class="permission-request-card__identity-icon">
-            <LucideIcon icon={Bot} name="bot" size="s" />
+            <LucideIcon icon={Bot} name="bot" size="s" color={foregroundColorVar('--wa-color-success-fill-loud')} />
           </span>
           <strong>{item.agent}</strong>
           {item.role && <span aria-hidden="true">·</span>}
@@ -121,7 +131,7 @@ export function PermissionRequestCard({
       </header>
       <div class="permission-request-card__summary">
         <span class="permission-request-card__summary-icon">
-          <LucideIcon icon={stateIcon} name={iconName} size={17.6} />
+          <LucideIcon icon={stateIcon} name={iconName} size={17.6} color={summaryColor} />
         </span>
         <strong>{statusLabel}</strong>
       </div>

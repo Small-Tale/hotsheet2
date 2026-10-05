@@ -1,5 +1,6 @@
 import './ticket-sources-settings.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -116,7 +117,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                 return source.provider === 'git' ? (
                   <div class="ticket-provider-settings__store" data-source-id={source.connectionId}>
                     <span class="ticket-provider-settings__store-icon">
-                      <LucideIcon icon={Database} name="database" size="s" />
+                      <LucideIcon icon={Database} name="database" size="s" color={uiColor('neutral-on-quiet')} />
                     </span>
                     {copy}
                   </div>
@@ -238,7 +239,7 @@ export function AccountsSettings({ accounts, error = '', signingOut }: AccountsS
                     account.sources.map((source) => (
                       <div class="ticket-provider-settings__store" data-source-id={source.connection_id}>
                         <span class="ticket-provider-settings__store-icon">
-                          <LucideIcon icon={Cable} name="cable" size="s" />
+                          <LucideIcon icon={Cable} name="cable" size="s" color={uiColor('neutral-on-quiet')} />
                         </span>
                         <span class="ticket-provider-settings__connection-copy">
                           <strong>

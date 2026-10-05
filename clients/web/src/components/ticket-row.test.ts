@@ -110,7 +110,11 @@ describe('TicketRow', () => {
     expect(tokenCss).toContain('--hs-ticket-state-up-next: var(--wa-color-warning-fill-loud)');
     expect(tokenCss).toContain('--hs-ticket-state-needs-review: #cb30e0');
     expect(rowCss.match(/var\(--hs-ticket-state-up-next\)/g)).toHaveLength(4);
-    expect(inspectorCss).toContain('color: var(--hs-ticket-state-up-next)');
+    // The inspector star takes the token through LucideIcon's color prop, not CSS (HS2-GQ57YW).
+    expect(inspectorCss).not.toContain('--hs-ticket-state-up-next');
+    expect(readFileSync(resolve(import.meta.dirname, 'ticket-inspector.tsx'), 'utf8')).toContain(
+      "color={upNext ? foregroundColorVar('--hs-ticket-state-up-next') : undefined}",
+    );
   });
 
   it('renders a live claim ETA as a progress ring with time left, or as Soon once overrun (HS2-XQMDQB)', () => {

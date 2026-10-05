@@ -40,7 +40,6 @@
 .ticket-provider-settings__store-icon {
   display: flex;
   flex: none;
-  color: var(--wa-color-neutral-on-quiet);
 }
 .ticket-provider-settings__link {
   padding: 0;

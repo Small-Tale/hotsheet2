@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './ticket-field-conflict.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { GitMerge, RotateCcw } from 'lucide';
 
@@ -22,7 +23,7 @@ export function TicketFieldConflict({ conflict, resolution }: TicketFieldConflic
     >
       <header>
         <span class="ticket-field-conflict__icon">
-          <LucideIcon icon={GitMerge} name="git-merge" size="s" />
+          <LucideIcon icon={GitMerge} name="git-merge" size="s" color={uiColor('warning-on-quiet')} />
         </span>
         <span>
           <strong>Resolve {conflict.label.toLocaleLowerCase()} conflict</strong>

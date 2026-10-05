@@ -29,6 +29,7 @@ const OVERLAY_SELECTOR = `[${TOP_LAYER_OVERLAY_ATTRIBUTE}][popover]`;
 const MODAL_HOST_SELECTOR = 'dialog, wa-dialog[open], wa-drawer[open]';
 /** Web Awesome opens and closes its modal dialog after these events, outside any DOM mutation. */
 const MODAL_LIFECYCLE_EVENTS = ['wa-show', 'wa-after-show', 'wa-after-hide'] as const;
+const EDITING_CONTROL_SELECTOR = 'input, textarea, select, [role="textbox"], [role="combobox"]';
 
 type OverlayElement = HTMLElement & {
   showModal?: () => void;
@@ -40,6 +41,16 @@ const liftedAbove = new WeakMap<Element, ReadonlySet<Element>>();
 
 function isOverlay(target: EventTarget | null): target is OverlayElement {
   return (target as Partial<Element> | null)?.hasAttribute?.(TOP_LAYER_OVERLAY_ATTRIBUTE) === true;
+}
+
+/** Follow focus into custom-element shadow roots, where Web Awesome keeps its form controls. */
+function isEditingFieldFocused(root: ParentNode): boolean {
+  let active = (root as Node).ownerDocument?.activeElement;
+  while (active) {
+    if (active.matches(EDITING_CONTROL_SELECTOR) || (active as HTMLElement).isContentEditable) return true;
+    active = active.shadowRoot?.activeElement ?? null;
+  }
+  return false;
 }
 
 /** Every open modal dialog under `root` other than a marked overlay, as its host element. */
@@ -75,6 +86,9 @@ export function openTopLayerOverlays(root: ParentNode): void {
     if (typeof overlay.showModal === 'function') {
       modals ??= openModalDialogs(root);
       if (modals.length > 0) {
+        // A modal lift moves focus into this dialog. Keep a pending request out of the way while
+        // someone is editing another modal's form, then lift it when editing focus leaves.
+        if (isEditingFieldFocused(root)) continue;
         liftAboveModals(overlay, modals);
         continue;
       }
@@ -119,6 +133,9 @@ export function wireTopLayerOverlays(root: HTMLElement): () => void {
     escape = (event: KeyboardEvent) => {
       dismissLiftedOverlay(root, event);
     },
+    editingFocusLeft = () => {
+      queueMicrotask(reopen);
+    },
     observer = new MutationObserver(reopen);
   observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
   for (const type of MODAL_LIFECYCLE_EVENTS) root.addEventListener(type, reopenSoon);
@@ -126,6 +143,7 @@ export function wireTopLayerOverlays(root: HTMLElement): () => void {
   root.addEventListener('cancel', preventCancel, true);
   root.addEventListener('close', reopenSoon, true);
   root.addEventListener('keydown', escape, true);
+  root.addEventListener('focusout', editingFocusLeft, true);
   openTopLayerOverlays(root);
   return () => {
     observer.disconnect();
@@ -133,5 +151,6 @@ export function wireTopLayerOverlays(root: HTMLElement): () => void {
     root.removeEventListener('cancel', preventCancel, true);
     root.removeEventListener('close', reopenSoon, true);
     root.removeEventListener('keydown', escape, true);
+    root.removeEventListener('focusout', editingFocusLeft, true);
   };
 }

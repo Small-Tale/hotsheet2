@@ -2,6 +2,7 @@ import './heading.css';
 import './repository-status-popover.css';
 import './native-popover-dialog.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -188,6 +189,13 @@ export function RepositoryStatusPopover({
               <ToolbarControlGroup single className="app-heading__icon repository-status-popover__icon">
                 <LucideIcon
                   className="app-heading__symbol"
+                  color={
+                    state === 'clean'
+                      ? uiColor('success-on-quiet')
+                      : state === 'error' || state === 'conflicted'
+                        ? uiColor('danger-on-quiet')
+                        : uiColor('brand-on-quiet')
+                  }
                   icon={
                     state === 'clean'
                       ? CircleCheck
@@ -238,9 +246,7 @@ export function RepositoryStatusPopover({
                     label="Ahead"
                     value={
                       <>
-                        <span class="repository-status-popover__sync-icon">
-                          <LucideIcon icon={ArrowUp} name="arrow-up" size={14.4} />
-                        </span>
+                        <LucideIcon icon={ArrowUp} name="arrow-up" size={14.4} color={uiColor('text-quiet')} />
                         {status.ahead}
                       </>
                     }
@@ -249,9 +255,7 @@ export function RepositoryStatusPopover({
                     label="Behind"
                     value={
                       <>
-                        <span class="repository-status-popover__sync-icon">
-                          <LucideIcon icon={ArrowDown} name="arrow-down" size={14.4} />
-                        </span>
+                        <LucideIcon icon={ArrowDown} name="arrow-down" size={14.4} color={uiColor('text-quiet')} />
                         {status.behind}
                       </>
                     }
@@ -356,7 +360,7 @@ function RepositoryFileList({
     return (
       <div class="repository-status-popover__empty">
         <span class="repository-status-popover__empty-icon">
-          <LucideIcon icon={CircleCheck} name="circle-check" size="l" />
+          <LucideIcon icon={CircleCheck} name="circle-check" size="l" color={uiColor('success-on-quiet')} />
         </span>
         <p>No {view} files.</p>
       </div>
@@ -447,7 +451,12 @@ export function ChangeEvidenceDialog({
           leading={
             <>
               <ToolbarControlGroup single className="app-heading__icon repository-status-popover__icon">
-                <LucideIcon className="app-heading__symbol" icon={GitCompare} name="git-compare" />
+                <LucideIcon
+                  className="app-heading__symbol"
+                  color={uiColor('brand-on-quiet')}
+                  icon={GitCompare}
+                  name="git-compare"
+                />
               </ToolbarControlGroup>
               <ToolbarText text="Change evidence" id="change-evidence-title" size="xlarge" />
             </>
@@ -500,7 +509,7 @@ function CodeReviewFileList({
     return (
       <div class="repository-status-popover__empty">
         <span class="repository-status-popover__empty-icon">
-          <LucideIcon icon={CircleCheck} name="circle-check" size="l" />
+          <LucideIcon icon={CircleCheck} name="circle-check" size="l" color={uiColor('success-on-quiet')} />
         </span>
         <p>No {view} files.</p>
       </div>

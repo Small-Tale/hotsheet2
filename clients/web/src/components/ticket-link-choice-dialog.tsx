@@ -2,6 +2,7 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './ticket-link-choice-dialog.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ArrowRight, CircleDot, GitBranch } from 'lucide';
 
@@ -36,7 +37,18 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
                 data-ticket-qualified-id={match.qualifiedId}
               >
                 <span class="ticket-link-choice-dialog__status" data-status={match.status}>
-                  <LucideIcon size={13.6} icon={CircleDot} name="circle-dot" />
+                  <LucideIcon
+                    size={13.6}
+                    icon={CircleDot}
+                    name="circle-dot"
+                    color={
+                      match.status === 'started'
+                        ? uiColor('brand-on-quiet')
+                        : match.status === 'completed' || match.status === 'verified'
+                          ? uiColor('success-on-quiet')
+                          : uiColor('neutral-on-quiet')
+                    }
+                  />
                 </span>
                 <span class="ticket-link-choice-dialog__ticket">
                   <strong>{match.slug}</strong>
@@ -50,7 +62,7 @@ export function TicketLinkChoiceDialog({ choice }: { choice?: TicketLinkChoice }
                   <small>{match.projectName}</small>
                 </span>
                 <span class="ticket-link-choice-dialog__arrow">
-                  <LucideIcon icon={ArrowRight} name="arrow-right" size="s" />
+                  <LucideIcon icon={ArrowRight} name="arrow-right" size="s" color={uiColor('neutral-on-quiet')} />
                 </span>
               </button>
             </li>

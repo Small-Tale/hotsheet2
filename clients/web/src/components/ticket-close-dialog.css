@@ -15,7 +15,6 @@
 }
 .ticket-close-dialog__duplicate wa-input [slot='start'] {
   display: inline-flex;
-  color: var(--wa-color-neutral-on-quiet);
 }
 .ticket-close-dialog__results {
   min-height: remify(68px);

@@ -204,7 +204,6 @@
   align-self: start;
   padding: var(--wa-space-2xs);
   border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-brand-on-quiet);
   background: var(--wa-color-brand-fill-quiet);
 }
 .workspace-chat-tile__preview-surface > div {

@@ -1,5 +1,6 @@
 import './lucide-icon-picker.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Search } from 'lucide';
 
@@ -45,7 +46,7 @@ export function LucideIconPicker({ value, query = '', searchName, selectAction }
     <div class="lucide-icon-picker" data-component="lucide-icon-picker">
       <label class="lucide-icon-picker__search">
         <span class="lucide-icon-picker__search-icon" aria-hidden="true">
-          <LucideIcon size="s" icon={Search} name="search" />
+          <LucideIcon size="s" icon={Search} name="search" color={uiColor('neutral-on-quiet')} />
         </span>
         <input
           type="search"

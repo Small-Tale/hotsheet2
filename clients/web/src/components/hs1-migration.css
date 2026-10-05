@@ -10,7 +10,6 @@
 }
 .hs1-migration-dialog__intro-icon {
   display: flex;
-  color: var(--wa-color-brand-on-quiet);
 }
 .hs1-migration-dialog__intro p {
   margin: var(--kui-space-2xs) 0 0;

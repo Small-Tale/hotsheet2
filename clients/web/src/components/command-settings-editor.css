@@ -149,7 +149,6 @@
 .command-settings-editor__row-grip {
   display: inline-flex;
   flex: 0 0 auto;
-  color: var(--wa-color-neutral-on-quiet);
   cursor: grab;
   opacity: 0.55;
 }
@@ -159,13 +158,11 @@
   height: remify(32px);
   flex: 0 0 auto;
   border-radius: var(--wa-border-radius-m);
-  color: var(--command-text-color);
   background: var(--command-color);
   place-items: center;
 }
 .command-settings-editor__row-icon[data-transparent='true'],
 .command-settings-editor__dialog-icon[data-transparent='true'] {
-  color: var(--wa-color-neutral-on-normal);
   background: var(--wa-color-neutral-fill-normal);
 }
 .command-settings-editor__swatch[data-transparent='true'] span[aria-hidden='true'] {
@@ -234,7 +231,6 @@
   width: remify(28px);
   height: remify(28px);
   border-radius: var(--wa-border-radius-m);
-  color: var(--command-text-color);
   background: var(--command-color);
   place-items: center;
 }

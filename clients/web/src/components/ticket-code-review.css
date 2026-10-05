@@ -97,11 +97,9 @@
   align-items: center;
   gap: var(--kui-space-2xs);
 }
-/* An own wrapper tints the icon: LucideIcon draws with currentColor and is configured, not restyled. */
 .ticket-code-review__compare-icon {
   display: inline-flex;
   flex: none;
-  color: var(--hs-ticket-state-needs-review);
 }
 .ticket-code-review__compare-banner > button {
   display: inline-flex;
@@ -194,7 +192,6 @@
   width: remify(20px);
   height: remify(20px);
   margin-top: remify(0.8px);
-  color: var(--wa-color-neutral-on-quiet);
   place-items: center;
 }
 .ticket-code-review__commit-summary {

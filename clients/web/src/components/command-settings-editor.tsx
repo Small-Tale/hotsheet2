@@ -2,6 +2,7 @@ import './heading.css';
 import './command-settings-editor.css';
 import './native-popover-dialog.css';
 
+import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -73,7 +74,7 @@ function CommandRow({
       draggable="true"
     >
       <span class="command-settings-editor__row-grip" aria-hidden="true">
-        <LucideIcon size="s" icon={GripVertical} name="grip-vertical" />
+        <LucideIcon size="s" icon={GripVertical} name="grip-vertical" color={uiColor('neutral-on-quiet')} />
       </span>
       <span
         class="command-settings-editor__row-icon"
@@ -81,7 +82,12 @@ function CommandRow({
         style={commandIconStyle(command)}
         aria-hidden="true"
       >
-        <LucideIcon size={18} icon={icon.icon} name={icon.name} />
+        <LucideIcon
+          size={18}
+          icon={icon.icon}
+          name={icon.name}
+          color={transparent ? uiColor('neutral-on-normal') : foregroundColorVar('--command-text-color')}
+        />
       </span>
       <span class="command-settings-editor__row-text">
         <strong>{label}</strong>
@@ -478,7 +484,16 @@ export function CommandSettingsEditor({
                         }
                         style={commandIconStyle(editing)}
                       >
-                        <LucideIcon size="s" icon={editingIcon.icon} name={editingIcon.name} />
+                        <LucideIcon
+                          size="s"
+                          icon={editingIcon.icon}
+                          name={editingIcon.name}
+                          color={
+                            resolveCommandColor(editing.color) === TRANSPARENT_CUSTOMIZATION_COLOR
+                              ? uiColor('neutral-on-normal')
+                              : foregroundColorVar('--command-text-color')
+                          }
+                        />
                       </span>
                     </ToolbarControlGroup>
                     <ToolbarText text="Edit command" id="command-editor-title" size="xlarge" />

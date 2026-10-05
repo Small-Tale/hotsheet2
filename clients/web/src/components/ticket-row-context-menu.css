@@ -8,8 +8,4 @@
 }
 .ticket-context-menu__icon {
   display: inline-flex;
-  color: var(--wa-color-neutral-on-quiet);
-}
-wa-dropdown-item[variant='danger'] .ticket-context-menu__icon {
-  color: var(--wa-color-danger-on-quiet);
 }

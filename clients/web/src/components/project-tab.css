@@ -16,10 +16,6 @@
 }
 .project-tab__state {
   display: inline-flex;
-  color: var(--wa-color-neutral-on-quiet);
-}
-.project-tab__state--attention {
-  color: var(--wa-color-danger-on-quiet);
 }
 .project-tab__indicators {
   display: flex;

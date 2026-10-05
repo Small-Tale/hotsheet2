@@ -1,5 +1,6 @@
 import './repository-setup.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CircleCheck } from 'lucide';
 
@@ -26,7 +27,7 @@ export function RepositorySetup({
       >
         <div class="repository-setup__message">
           <span class="repository-setup__icon">
-            <LucideIcon size="m" icon={CircleCheck} name="circle-check" />
+            <LucideIcon size="m" icon={CircleCheck} name="circle-check" color={uiColor('brand-on-quiet')} />
           </span>
           <div>
             <strong>Git is ready</strong>

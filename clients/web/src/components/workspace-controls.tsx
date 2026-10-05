@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './workspace-header.css';
 
+import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { SegmentedControl, type SegmentedControlChoice } from '@kerfjs/ui/segmented-control';
@@ -44,12 +45,14 @@ export function workspaceUpNextState(values: readonly boolean[]): WorkspaceUpNex
 }
 
 function WorkspaceUpNextIcon({ state }: { state: WorkspaceUpNextState }) {
+  // Starred selections take the Up Next color; an unstarred one inherits the control's text color.
+  const color = state === 'none' ? undefined : foregroundColorVar('--hs-ticket-state-up-next');
   return (
     <span class="workspace-header__up-next-icon" data-up-next-state={state} aria-hidden="true">
-      <LucideIcon icon={Star} name="star" appearance={state === 'all' ? 'solid' : 'outline'} />
+      <LucideIcon icon={Star} name="star" appearance={state === 'all' ? 'solid' : 'outline'} color={color} />
       {state === 'mixed' && (
         <span class="workspace-header__up-next-fill">
-          <LucideIcon icon={Star} name="star" appearance="solid" />
+          <LucideIcon icon={Star} name="star" appearance="solid" color={color} />
         </span>
       )}
     </span>

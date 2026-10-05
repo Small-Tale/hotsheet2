@@ -3,7 +3,7 @@ import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
-import { pct, rem } from '@kerfjs/ui/css-values';
+import { foregroundColorVar, pct, rem } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { TabBar } from '@kerfjs/ui/tab-bar';
@@ -192,7 +192,12 @@ export function ticketInspectorPanel({
           {...INSPECTOR_AND_EDITOR_ACTIONS.toggleInspectorUpNext.attrs}
           aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}
         >
-          <LucideIcon icon={Star} name="star" appearance={upNext ? 'solid' : 'outline'} />
+          <LucideIcon
+            icon={Star}
+            name="star"
+            appearance={upNext ? 'solid' : 'outline'}
+            color={upNext ? foregroundColorVar('--hs-ticket-state-up-next') : undefined}
+          />
         </button>
       )}
     </>

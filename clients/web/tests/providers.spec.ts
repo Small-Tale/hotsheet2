@@ -10827,6 +10827,51 @@ for (const viewport of [
   });
 }
 
+for (const width of [1280, 390]) {
+  test(`keeps the Create ticket title focused when a permission arrives during editing at ${width}px (HS2-HZK70N)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockProject(page);
+    let pending: Array<Record<string, unknown>> = [];
+    await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+    const polls: Array<import('@playwright/test').Route> = [];
+    let cursor = 0;
+    await page.route(/\/ws\/poll/, (route) => {
+      if (!new URL(route.request().url()).searchParams.has('since'))
+        return route.fulfill({ json: { cursor, events: [], overflow: false } });
+      polls.push(route);
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator('[data-component="quick-ticket-composer-launcher"]:visible').first().click();
+    const composer = page.locator('[data-component="quick-ticket-composer"]'),
+      title = composer.locator('wa-input[name="new-ticket-title"] input'),
+      popup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
+    await title.fill('Writing a ticket');
+    await expect(title).toBeFocused();
+    pending = [{ id: 64, connection: 'codex-session', tool: 'Bash', action: 'cargo test', agent: 'codex' }];
+    await expect.poll(() => polls.length).toBeGreaterThan(0);
+    cursor += 1;
+    await polls.shift()!.fulfill({
+      json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '64', slug: 'Bash' }], overflow: false },
+    });
+    await expect(popup).toContainText('cargo test');
+    await expect(title).toBeFocused();
+    await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(false);
+    await title.press('!');
+    await expect(title).toHaveValue('Writing a ticket!');
+    await page.screenshot({ path: `/private/tmp/hs2-hzk70n-editing-${width}.png` });
+    await title.evaluate((element) => {
+      (element as HTMLElement).blur();
+    });
+    await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
+    await expect(popup).toBeFocused();
+    await page.screenshot({ path: `/private/tmp/hs2-hzk70n-permission-${width}.png` });
+  });
+}
+
 test('switches settings categories from the project sidebar', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');
@@ -18207,21 +18252,23 @@ for (const surface of ['workspace', 'rail'] as const) {
         await expect(star).toHaveAttribute('aria-pressed', state === 'mixed' ? 'mixed' : String(state === 'all'));
         await expect(icon).toHaveAttribute('data-up-next-state', state);
         await expect(icon.locator('svg')).toHaveCount(state === 'mixed' ? 2 : 1);
-        await expect(icon.locator('svg').first()).toHaveCSS(
+        // The stars carry the Up Next color through LucideIcon's color prop (HS2-GQ57YW), so the
+        // solid fill matches each svg's own color rather than a tinting wrapper's.
+        const outline = icon.locator('svg').first();
+        await expect(outline).toHaveCSS(
           'fill',
-          state === 'all' ? await icon.evaluate((node) => getComputedStyle(node).color) : 'none',
+          state === 'all' ? await outline.evaluate((node) => getComputedStyle(node).color) : 'none',
         );
         if (state === 'mixed') {
           await expect(icon.locator('.workspace-header__up-next-fill')).toHaveCSS(
             'clip-path',
             'inset(0px 50% 0px 0px)',
           );
-          await expect(icon.locator('.workspace-header__up-next-fill svg')).toHaveCSS(
-            'fill',
-            await icon.evaluate((node) => getComputedStyle(node).color),
-          );
+          const fill = icon.locator('.workspace-header__up-next-fill svg');
+          await expect(fill).toHaveCSS('fill', await fill.evaluate((node) => getComputedStyle(node).color));
+          await expect(fill).toHaveCSS('color', 'rgb(255, 204, 0)');
         }
-        if (state !== 'none') await expect(icon).toHaveCSS('color', 'rgb(255, 204, 0)');
+        if (state !== 'none') await expect(outline).toHaveCSS('color', 'rgb(255, 204, 0)');
       };
       await expect(star).toBeDisabled();
       await expect(controls.locator('.workspace-header__utility-group wa-button')).toHaveCount(0);

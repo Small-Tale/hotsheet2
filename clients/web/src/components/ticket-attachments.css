@@ -240,7 +240,6 @@
 }
 .ticket-attachments__drop-icon {
   display: flex;
-  color: var(--wa-color-focus);
 }
 .ticket-attachments__image-grid {
   display: flex;
@@ -285,7 +284,6 @@
   width: remify(28px);
   height: remify(28px);
   border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-brand-on-loud);
   background: var(--wa-color-brand-fill-loud);
   box-shadow: var(--wa-shadow-s);
   place-items: center;

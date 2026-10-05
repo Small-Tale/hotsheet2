@@ -3,6 +3,7 @@ import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ai-conversation.css';
 import './native-popover-dialog.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import { Toolbar } from '@kerfjs/ui/toolbar';
@@ -372,7 +373,7 @@ export function AIConversation({
       <div class="ai-conversation__model" data-component="conversation-model-control" aria-label="AI session settings">
         <span class="ai-conversation__model-current">
           <span class="ai-conversation__model-icon">
-            <LucideIcon icon={Brain} name="brain" />
+            <LucideIcon icon={Brain} name="brain" color={uiColor('neutral-on-quiet')} />
           </span>
           {canChangeModel && currentModelLabel && (
             <span class="ai-conversation__model-name" title={model}>
@@ -507,7 +508,7 @@ export function AIConversation({
           leading={
             <>
               <ToolbarControlGroup single className="app-heading__icon">
-                <LucideIcon className="app-heading__symbol" icon={Bot} name="bot" />
+                <LucideIcon className="app-heading__symbol" color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
               </ToolbarControlGroup>
               <ToolbarText text={`${tool} conversation`} id="ai-conversation-title" size="xlarge" />
             </>

@@ -80,6 +80,7 @@ function root(overlays: FakeOverlay[], modals: FakeModal[] = []) {
     overlays,
     modals,
     listeners,
+    ownerDocument: { activeElement: null as Element | null },
     querySelectorAll(selector: string) {
       selectors.push(selector);
       return selector.includes(TOP_LAYER_OVERLAY_ATTRIBUTE) ? this.overlays : [...this.overlays, ...this.modals];
@@ -165,6 +166,54 @@ describe('top-layer overlays (HS2-Z9PQSC)', () => {
 });
 
 describe('top-layer overlays above modal dialogs (HS2-MAE27T)', () => {
+  it('defers a permission lift while a shadow-root form field has focus, then lifts after focus leaves', async () => {
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
+    const popup = overlay({ dialog: true }),
+      container = root([popup], [modalHost()]),
+      input = { matches: (selector: string) => selector.includes('input'), isContentEditable: false },
+      host = {
+        matches: () => false,
+        isContentEditable: false,
+        shadowRoot: { activeElement: input },
+      };
+    container.ownerDocument.activeElement = host as unknown as Element;
+    const dispose = wireTopLayerOverlays(container as unknown as HTMLElement);
+    expect(popup.calls).toEqual([]);
+    container.dispatch('focusout');
+    await Promise.resolve();
+    expect(popup.calls).toEqual([]);
+    container.ownerDocument.activeElement = null;
+    container.dispatch('focusout');
+    await Promise.resolve();
+    expect(popup.calls).toEqual(['showModal', 'focus']);
+    dispose();
+    vi.unstubAllGlobals();
+  });
+
+  it('does not re-lift an existing popup over a newer modal while its text field is focused', () => {
+    const popup = overlay({ dialog: true }),
+      container = root([popup], [modalHost()]);
+    open(container);
+    const initialCalls = popup.calls.length;
+    container.modals.push(modalHost({ kind: 'dialog' }));
+    container.ownerDocument.activeElement = {
+      matches: (selector: string) => selector.includes('textarea'),
+      isContentEditable: false,
+      shadowRoot: null,
+    } as unknown as Element;
+    open(container);
+    expect(popup.calls).toHaveLength(initialCalls);
+    container.ownerDocument.activeElement = null;
+    open(container);
+    expect(popup.calls.slice(initialCalls)).toEqual(['close', 'showModal', 'focus']);
+  });
+
   it('finds open native and Web Awesome modal dialogs but never a marked overlay', () => {
     const lifted = overlay({ dialog: true, layer: 'modal' }),
       native = modalHost({ kind: 'dialog' }),

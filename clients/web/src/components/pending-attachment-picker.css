@@ -51,7 +51,6 @@
 .pending-attachment-picker__item-icon {
   display: flex;
   flex: none;
-  color: var(--wa-color-neutral-on-quiet);
 }
 .pending-attachment-picker__item-name {
   min-width: 0;

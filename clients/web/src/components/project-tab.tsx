@@ -1,6 +1,7 @@
 import './project-tab.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ArchiveRestore, Bell, CircleAlert, Cloud, WifiOff, X } from 'lucide';
@@ -138,11 +139,11 @@ export function ProjectTab({
     </span>
   ) : disconnected ? (
     <span class="project-tab__state">
-      <LucideIcon icon={WifiOff} name="wifi-off" />
+      <LucideIcon icon={WifiOff} name="wifi-off" color={uiColor('neutral-on-quiet')} />
     </span>
   ) : attention ? (
     <span class="project-tab__state project-tab__state--attention">
-      <LucideIcon icon={CircleAlert} name="circle-alert" />
+      <LucideIcon icon={CircleAlert} name="circle-alert" color={uiColor('danger-on-quiet')} />
     </span>
   ) : undefined;
   return (

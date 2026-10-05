@@ -25,10 +25,6 @@
   width: 1rem;
   height: 1rem;
 }
-.workspace-header__up-next-icon[data-up-next-state='mixed'],
-.workspace-header__up-next-icon[data-up-next-state='all'] {
-  color: var(--hs-ticket-state-up-next);
-}
 /* The half fill is an app-owned span clipping a solid LucideIcon star (HS2-EZ1N7Z, HS2-ZFFCHW). */
 .workspace-header__up-next-fill {
   position: absolute;

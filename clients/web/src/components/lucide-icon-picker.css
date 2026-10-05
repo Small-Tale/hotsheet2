@@ -15,7 +15,6 @@
   position: absolute;
   left: remify(10px);
   display: inline-flex;
-  color: var(--wa-color-neutral-on-quiet);
   pointer-events: none;
 }
 .lucide-icon-picker__search input {

@@ -2,6 +2,7 @@ import './heading.css';
 import './connection-details-dialog.css';
 import './native-popover-dialog.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -70,7 +71,12 @@ export function ConnectionDetailsDialog({
           leading={
             <>
               <ToolbarControlGroup single className="app-heading__icon">
-                <LucideIcon className="app-heading__symbol" icon={ServerCog} name="server-cog" />
+                <LucideIcon
+                  className="app-heading__symbol"
+                  color={uiColor('brand-on-quiet')}
+                  icon={ServerCog}
+                  name="server-cog"
+                />
               </ToolbarControlGroup>
               <ToolbarText text="Server build details" id="connection-details-title" size="xlarge" />
             </>

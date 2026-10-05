@@ -27,7 +27,6 @@
   width: remify(40px);
   height: remify(40px);
   border-radius: var(--wa-border-radius-circle);
-  color: var(--wa-color-brand-on-quiet);
   background: var(--wa-color-brand-fill-quiet);
   place-items: center;
 }

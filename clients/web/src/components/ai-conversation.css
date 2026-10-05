@@ -95,7 +95,6 @@
 .ai-conversation__model-icon {
   display: inline-flex;
   flex: none;
-  color: var(--wa-color-neutral-on-quiet);
 }
 .ai-conversation__model-name {
   min-width: 0;

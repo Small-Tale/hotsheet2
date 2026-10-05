@@ -2,6 +2,7 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@kerfjs/ui/floating-toolbar.css';
 import './terminal-dashboard.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
@@ -500,7 +501,7 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
           style={`--workspace-chat-preview-scale:${scale};--workspace-chat-preview-natural-width:${WORKSPACE_CHAT_PREVIEW_NATURAL_WIDTH}px;--workspace-chat-preview-natural-height:${WORKSPACE_CHAT_PREVIEW_NATURAL_HEIGHT}px`}
         >
           <span class="workspace-chat-tile__preview-icon">
-            <LucideIcon icon={MessageSquare} name="message-square" size={8} />
+            <LucideIcon icon={MessageSquare} name="message-square" size={8} color={uiColor('brand-on-quiet')} />
           </span>
           <div>
             <strong>{chat.tool} AI chat</strong>

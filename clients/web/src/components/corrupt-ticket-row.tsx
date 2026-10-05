@@ -1,5 +1,6 @@
 import './corrupt-ticket-row.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Bot, FileWarning, FolderOpen, RefreshCw } from 'lucide';
 
@@ -84,6 +85,7 @@ export function CorruptTicketRow({
           icon={upgradeRequired ? RefreshCw : FileWarning}
           name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
           size={26.4}
+          color={uiColor('danger-on-quiet')}
         />
       </span>
       <div class="corrupt-ticket-row__content">
@@ -134,6 +136,7 @@ export function corruptTicketInspectorPanel({
             icon={upgradeRequired ? RefreshCw : FileWarning}
             name={upgradeRequired ? 'refresh-cw' : 'file-warning'}
             size="s"
+            color={uiColor('danger-on-quiet')}
           />
         </span>
         <div>

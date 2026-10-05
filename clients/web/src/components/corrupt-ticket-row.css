@@ -57,7 +57,6 @@
 }
 .corrupt-ticket-row__icon {
   display: inline-flex;
-  color: var(--wa-color-danger-on-quiet);
   width: remify(26.4px);
   height: remify(26.4px);
 }
@@ -133,7 +132,6 @@
   display: flex;
   width: remify(19.2px);
   justify-content: center;
-  color: var(--wa-color-danger-on-quiet);
 }
 .corrupt-ticket-inspector__header span,
 .corrupt-ticket-inspector__body h2 {

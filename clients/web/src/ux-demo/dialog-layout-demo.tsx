@@ -1,6 +1,7 @@
 import '../components/heading.css';
 import '../components/native-popover-dialog.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -20,7 +21,12 @@ export function DialogHeaderDemo() {
           leading={
             <>
               <ToolbarControlGroup single className="app-heading__icon">
-                <LucideIcon className="app-heading__symbol" icon={ServerCog} name="server-cog" />
+                <LucideIcon
+                  className="app-heading__symbol"
+                  color={uiColor('brand-on-quiet')}
+                  icon={ServerCog}
+                  name="server-cog"
+                />
               </ToolbarControlGroup>
               <ToolbarText text="Dialog title" id="dialog-header-demo-title" size="xlarge" />
             </>
@@ -40,7 +46,12 @@ export function ValueTableDemo() {
           leading={
             <>
               <ToolbarControlGroup single className="app-heading__icon">
-                <LucideIcon className="app-heading__symbol" icon={AppWindow} name="app-window" />
+                <LucideIcon
+                  className="app-heading__symbol"
+                  color={uiColor('brand-on-quiet')}
+                  icon={AppWindow}
+                  name="app-window"
+                />
               </ToolbarControlGroup>
               <ToolbarText text="Value table" id="value-table-demo-title" size="xlarge" />
             </>

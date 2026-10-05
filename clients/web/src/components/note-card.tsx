@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './note-card.css';
 
+import { foregroundColor, uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Activity, Check, CircleAlert, FilePenLine, MessageSquareText, RefreshCw, Trash2, X } from 'lucide';
 
@@ -149,7 +150,12 @@ export function FeedbackPrompt({
                 aria-pressed={selected.has(choice.id) ? 'true' : 'false'}
               >
                 <span class="note-card__choice-check" aria-hidden="true">
-                  <LucideIcon size="xs" icon={Check} name="check" />
+                  <LucideIcon
+                    size="xs"
+                    icon={Check}
+                    name="check"
+                    color={selected.has(choice.id) ? uiColor('neutral-on-loud') : foregroundColor('transparent')}
+                  />
                 </span>
                 <span>
                   <MarkdownPreview

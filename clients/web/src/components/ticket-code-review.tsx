@@ -1,5 +1,6 @@
 import './ticket-code-review.css';
 
+import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -118,7 +119,12 @@ export function TicketCodeReview({
             <div class="ticket-code-review__compare-banner" role="status">
               <div class="ticket-code-review__compare-prompt">
                 <span class="ticket-code-review__compare-icon">
-                  <LucideIcon icon={GitCompare} name="git-compare" size={16} />
+                  <LucideIcon
+                    icon={GitCompare}
+                    name="git-compare"
+                    size={16}
+                    color={foregroundColorVar('--hs-ticket-state-needs-review')}
+                  />
                 </span>
                 <span>
                   Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.
@@ -204,7 +210,12 @@ export function TicketCodeReview({
                   data-compared={labels.length ? labels.join('').toLowerCase() : undefined}
                 >
                   <span class="ticket-code-review__graph" aria-hidden="true">
-                    <LucideIcon size="s" icon={GitCommitHorizontal} name="git-commit-horizontal" />
+                    <LucideIcon
+                      size="s"
+                      icon={GitCommitHorizontal}
+                      name="git-commit-horizontal"
+                      color={uiColor('neutral-on-quiet')}
+                    />
                   </span>
                   <div
                     class="ticket-code-review__commit-summary"

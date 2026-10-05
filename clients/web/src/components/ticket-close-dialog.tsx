@@ -3,6 +3,7 @@ import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './ticket-close-dialog.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
@@ -59,7 +60,7 @@ export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState })
               value={state.query}
             >
               <span slot="start">
-                <LucideIcon icon={Search} name="search" size={16} />
+                <LucideIcon icon={Search} name="search" size={16} color={uiColor('neutral-on-quiet')} />
               </span>
             </wa-input>
             {state.selected && (

@@ -232,12 +232,10 @@
   height: remify(24px);
   border: 1px solid var(--wa-color-neutral-border-normal);
   border-radius: var(--wa-border-radius-pill);
-  color: transparent;
   place-items: center;
 }
 .note-card__choice[aria-pressed='true'] .note-card__choice-check {
   border-color: var(--wa-color-success-fill-loud);
-  color: var(--wa-color-neutral-on-loud);
   background: var(--wa-color-success-fill-normal);
 }
 .note-card[data-kind='status'] {

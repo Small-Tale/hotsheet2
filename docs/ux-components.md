@@ -52,6 +52,18 @@ Rules for both clients:
   other font glyphs as icons. Hide decorative icons from accessibility when adjacent
   text carries the meaning, and name icon-only controls. Ask the maintainer when
   multiple Lucide metaphors are materially plausible.
+- A tinted web icon takes its color through the `LucideIcon` `color` prop (Kerf
+  5.0.0-beta.75; HS2-GQ57YW), never through CSS `color` on the icon or on a wrapper
+  that exists only to tint it. Use `uiColor('<x>-on-<y>' | 'text-quiet' | …)` for
+  semantic foreground tokens, `foregroundColorVar('--var')` for fill tokens and
+  app state variables such as `--hs-ticket-state-up-next`, `--command-text-color`,
+  or `--permission-accent`, and `foregroundColor(value)` for a stored customization
+  color. Compute state-dependent tones in the component rather than with
+  `[data-state]` selectors. An icon that should match its surrounding text, or an
+  interactive control's own hover, pressed, or danger states, keeps inheriting
+  `currentColor`. `icon-policy.test.ts` rejects a CSS `color` on a single-icon
+  wrapper. `LoadingSpinner` has no color prop yet (`KF-T7KCGB`), so the live-claim
+  spinner keeps its app-owned tint wrapper.
 - Cursor semantics communicate the interaction under the pointer: pointer for
   clickable/selectable targets, text for editing, not-allowed for disabled controls,
   appropriate grab/resize cursors for direct manipulation, and platform default for
@@ -2566,8 +2578,8 @@ an own class or configures the child through its props:
 - `NoteCard`: `note-card__time` and `note-card__footer`.
 - `MarkdownEditor`: `markdown-editor__source` on the source textarea, so the editor no longer
   reaches into `MarkdownPreview`.
-- `TicketCodeReview`: an own `compare-prompt` and an icon wrapper that tints the icon. The icon is
-  sized by LucideIcon `size`. Commit-summary rules use child combinators, so a commit body's
+- `TicketCodeReview`: an own `compare-prompt` and an icon wrapper for layout. The icon is
+  sized by LucideIcon `size` and tinted by its `color` prop (HS2-GQ57YW). Commit-summary rules use child combinators, so a commit body's
   Markdown bold and code keep `MarkdownPreview`'s own inherited tone.
 - `ConfidenceCalibration`: `recent-title`, `recent-list`, and `recent-item`.
 - The project statistics page: `project-statistics__title`.

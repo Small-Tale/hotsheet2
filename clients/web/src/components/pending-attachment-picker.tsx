@@ -1,5 +1,6 @@
 import './pending-attachment-picker.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Paperclip, Plus, Trash2, Upload } from 'lucide';
 
@@ -37,7 +38,7 @@ export function PendingAttachmentPicker({
           {attachments.map((item) => (
             <div class="pending-attachment-picker__item" data-pending-attachment-id={item.id}>
               <span class="pending-attachment-picker__item-icon">
-                <LucideIcon icon={Paperclip} name="paperclip" size={14.4} />
+                <LucideIcon icon={Paperclip} name="paperclip" size={14.4} color={uiColor('neutral-on-quiet')} />
               </span>
               <span class="pending-attachment-picker__item-name" title={item.name}>
                 {item.name}

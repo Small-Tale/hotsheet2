@@ -17,7 +17,6 @@
   display: flex;
   flex: none;
   margin-top: remify(2.4px);
-  color: var(--wa-color-warning-on-quiet);
 }
 .ticket-field-conflict > header span {
   display: grid;

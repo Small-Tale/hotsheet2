@@ -44,18 +44,9 @@
 }
 .ticket-link-choice-dialog__arrow {
   display: flex;
-  color: var(--wa-color-neutral-on-quiet);
 }
 .ticket-link-choice-dialog__status {
   display: inline-flex;
-  color: var(--wa-color-neutral-on-quiet);
-}
-.ticket-link-choice-dialog__status[data-status='started'] {
-  color: var(--wa-color-brand-on-quiet);
-}
-.ticket-link-choice-dialog__status[data-status='completed'],
-.ticket-link-choice-dialog__status[data-status='verified'] {
-  color: var(--wa-color-success-on-quiet);
 }
 .ticket-link-choice-dialog__ticket,
 .ticket-link-choice-dialog__source {

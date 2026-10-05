@@ -1,5 +1,6 @@
 import './ticket-attachments.css';
 
+import { foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
 
@@ -294,7 +295,7 @@ export function TicketAttachments({
                             title={`${item.annotationCount} ${item.annotationCount === 1 ? 'annotation' : 'annotations'}`}
                             aria-hidden="true"
                           >
-                            <LucideIcon size="s" icon={Pencil} name="pencil" />
+                            <LucideIcon size="s" icon={Pencil} name="pencil" color={uiColor('brand-on-loud')} />
                           </span>
                         )}
                       </button>
@@ -314,7 +315,7 @@ export function TicketAttachments({
         {enabled ? (
           <label class="ticket-attachments__drop">
             <span class="ticket-attachments__drop-icon">
-              <LucideIcon icon={Upload} name="upload" size="s" />
+              <LucideIcon icon={Upload} name="upload" size="s" color={foregroundColorVar('--wa-color-focus')} />
             </span>
             <span>Drop attachments here or browse</span>
             <input type="file" name="ticket-attachments" multiple aria-label="Drop or browse attachments" />

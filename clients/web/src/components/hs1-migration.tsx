@@ -1,6 +1,7 @@
 import './hs1-migration.css';
 import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { StateBanner } from '@kerfjs/ui/state-banner';
 import { ValueTable, ValueTableRow } from '@kerfjs/ui/value-table';
@@ -42,7 +43,7 @@ export function Hs1MigrationDialog({
       <form class="hs1-migration-dialog" {...PROJECT_LIFECYCLE_ACTIONS.importHs1Project.attrs}>
         <div class="hs1-migration-dialog__intro">
           <span class="hs1-migration-dialog__intro-icon">
-            <LucideIcon icon={ArchiveRestore} name="archive-restore" size="l" />
+            <LucideIcon icon={ArchiveRestore} name="archive-restore" size="l" color={uiColor('brand-on-quiet')} />
           </span>
           <div>
             <strong>Hot Sheet 1 data found in {projectName}</strong>

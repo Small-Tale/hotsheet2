@@ -33,7 +33,6 @@
 }
 .permission-request-card__identity-icon {
   display: flex;
-  color: var(--wa-color-success-fill-loud);
 }
 .permission-request-card__project {
   overflow: hidden;
@@ -58,15 +57,6 @@
 }
 .permission-request-card__summary-icon {
   display: flex;
-  color: var(--permission-accent);
-}
-.permission-request-card[data-state='deny'] .permission-request-card__summary-icon,
-.permission-request-card[data-state='failed'] .permission-request-card__summary-icon,
-.permission-request-card[data-state='disconnected'] .permission-request-card__summary-icon {
-  color: var(--wa-color-danger-on-quiet);
-}
-.permission-request-card[data-state='external'] .permission-request-card__summary-icon {
-  color: var(--wa-color-neutral-on-quiet);
 }
 .permission-request-card__details {
   overflow: auto;

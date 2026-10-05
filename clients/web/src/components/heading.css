@@ -8,7 +8,6 @@
 .app-heading .app-heading__icon {
   --kui-toolbar-control-background: var(--kui-color-brand-fill-quiet);
   --kui-toolbar-control-border: var(--kui-color-brand-fill-quiet);
-  color: var(--kui-color-brand-on-quiet);
   justify-content: center;
 }
 /* The heading glyph is Kerf's icon tile (a direct icon in the ToolbarControlGroup): a 16px icon

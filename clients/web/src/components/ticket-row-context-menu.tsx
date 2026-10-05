@@ -1,5 +1,6 @@
 import './ticket-row-context-menu.css';
 
+import { foregroundColor, uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import {
@@ -87,7 +88,12 @@ function contextEntry(
       : undefined,
     icon: (
       <span class="ticket-context-menu__icon">
-        <LucideIcon size="s" icon={item.icon} name={item.iconName} />
+        <LucideIcon
+          size="s"
+          icon={item.icon}
+          name={item.iconName}
+          color={item.danger ? uiColor('danger-on-quiet') : uiColor('neutral-on-quiet')}
+        />
       </span>
     ),
     attributes: { 'data-context-action': item.action },
@@ -130,7 +136,7 @@ function metadataSubmenu({
     disabledReason: disabled ? 'One or more selected ticket providers do not support updates.' : undefined,
     icon: (
       <span class="ticket-context-menu__icon">
-        <LucideIcon size="s" icon={icon} name={iconName} />
+        <LucideIcon size="s" icon={icon} name={iconName} color={uiColor('neutral-on-quiet')} />
       </span>
     ),
     // PopupMenu submenus hold items only, so a choice's `separatorBefore` has no counterpart here
@@ -141,8 +147,13 @@ function metadataSubmenu({
       checked: choice.value === selected,
       icon:
         choice.icon && choice.iconName ? (
-          <span class="ticket-context-menu__icon" style={choice.color ? `color:${choice.color}` : undefined}>
-            <LucideIcon size="s" icon={choice.icon} name={choice.iconName} />
+          <span class="ticket-context-menu__icon">
+            <LucideIcon
+              size="s"
+              icon={choice.icon}
+              name={choice.iconName}
+              color={choice.color ? foregroundColor(choice.color) : uiColor('neutral-on-quiet')}
+            />
           </span>
         ) : undefined,
       attributes: { 'data-context-field': field, 'data-context-value': choice.value },
