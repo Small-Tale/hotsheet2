@@ -24,6 +24,8 @@ export interface Project {
   hs1PostgresVersion?: string;
   /** Why opening skipped the project's setup refresh; shown as a dismissible warning (HS2-0TXM8S). */
   setupWarning?: string;
+  /** Changed Codex hooks require a new trust review (HS2-4AR09Z). */
+  codexHooksChanged?: string;
 }
 
 export type Control = HTMLElement & { value: string; open?: boolean; show?(): void; hide?(): void };

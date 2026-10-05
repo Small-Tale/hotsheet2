@@ -580,6 +580,68 @@ fn concurrent_checkout_register_processes_preserve_every_entry() {
 }
 
 #[test]
+fn setup_reports_changed_codex_hooks_for_review_and_omits_noop_notices() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&store).unwrap();
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let setup = |json: bool| {
+        let mut cmd = hs(&store);
+        cmd.env("HOTSHEET_HOME", &home)
+            .args(["setup", "codex", "--project"])
+            .arg(&project);
+        if json {
+            cmd.arg("--json");
+        }
+        cmd.assert().success().get_output().stdout.clone()
+    };
+    let first: serde_json::Value = serde_json::from_slice(&setup(true)).unwrap();
+    assert_eq!(
+        first["set_up"][0]["notices"][0]["kind"],
+        "codex_hooks_changed"
+    );
+    assert_eq!(
+        first["set_up"][0]["notices"][0]["path"],
+        ".codex/hooks.json"
+    );
+    let second: serde_json::Value = serde_json::from_slice(&setup(true)).unwrap();
+    assert!(second["set_up"][0].get("notices").is_none());
+    let path = project.join(".codex/hooks.json");
+    let mut hooks: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    hooks["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"] = serde_json::json!(1);
+    std::fs::write(&path, serde_json::to_vec(&hooks).unwrap()).unwrap();
+    let changed = String::from_utf8(setup(false)).unwrap();
+    assert!(changed.contains("Run /hooks in Codex for this checkout"));
+    assert!(!String::from_utf8(setup(false)).unwrap().contains("Notice:"));
+    let refresh = hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["setup", "--refresh", "--json", "--project"])
+        .arg(&project)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let refresh: serde_json::Value = serde_json::from_slice(&refresh).unwrap();
+    assert!(
+        refresh["set_up"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|tool| tool.get("notices").is_none())
+    );
+}
+
+#[test]
 fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("tickets.hs2");

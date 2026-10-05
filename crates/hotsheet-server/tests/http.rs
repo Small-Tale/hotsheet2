@@ -9936,13 +9936,21 @@ async fn setup_endpoint_prepares_the_project_like_the_cli() {
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     let st = AppState::new(store, SECRET.into()).unwrap();
 
-    let resp = app(st)
+    let resp = app(st.clone())
         .oneshot(authed("POST", "/setup/codex", None))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let reports = body_json(resp).await;
     assert_eq!(reports[0]["tool"], "Codex CLI");
+    assert_eq!(reports[0]["notices"][0]["kind"], "codex_hooks_changed");
+    assert_eq!(reports[0]["notices"][0]["path"], ".codex/hooks.json");
+    let unchanged = app(st)
+        .oneshot(authed("POST", "/setup/codex", None))
+        .await
+        .unwrap();
+    assert_eq!(unchanged.status(), StatusCode::OK);
+    assert!(body_json(unchanged).await[0].get("notices").is_none());
 
     // Same artifacts the CLI's `setup codex` writes, into the served store.
     let agents = std::fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();

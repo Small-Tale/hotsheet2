@@ -22,6 +22,7 @@ export const PROJECT_LIFECYCLE_ACTIONS = {
   backupMigrationJob: action('backup-migration-job'),
   removeHs1Data: action('remove-hs1-data'),
   dismissProjectSetupWarning: action('dismiss-project-setup-warning'),
+  dismissCodexHooksNotice: action('dismiss-codex-hooks-notice'),
   dismissHs1Cleanup: action('dismiss-hs1-cleanup'),
   dismissTicketSourceSetup: action('dismiss-ticket-source-setup'),
   submitTicketStoreRemote: action('submit-ticket-store-remote'),

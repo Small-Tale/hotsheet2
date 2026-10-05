@@ -242,3 +242,8 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
   change.
 - Follow-up work is tracked as Hot Sheet tickets (see the worklist), not TODOs
   buried in prose.
+
+**Shipped — changed Codex hook review (`HS2-4AR09Z`):** successful setup reports a
+checkout-specific `/hooks` review notice only when hooks bytes change. CLI human/JSON,
+shared server setup reports and the local app project-open banner use the same core result.
+See [05](05-ai-tool-plugins.md) §5.7.

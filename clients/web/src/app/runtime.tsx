@@ -81,6 +81,7 @@ import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-stat
 import { AppError } from '../components/app-error';
 import { APP_WORKBENCH_ID, type AppShellMobileView } from '../components/app-shell';
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
+import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { corruptTicketKey, type CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
@@ -4788,6 +4789,7 @@ export async function startHotSheetWebClient() {
             {current.hs1CleanupEligible &&
               !hs1CleanupPromptDismissed(localStorage, current.id, hs1SourceIdentity(current)) && <Hs1CleanupBanner />}
             {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
+            {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
             {notificationsPaused.value && <NotificationsPausedBanner waiting={pendingPermissions().length} />}
           </>
         }

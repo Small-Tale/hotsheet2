@@ -8,7 +8,7 @@ describe('ProjectSetupWarningBanner (HS2-0TXM8S)', () => {
   it('explains the skipped setup with a dismiss action and owns its styles through Kerf tokens', () => {
     const markup = String(ProjectSetupWarningBanner({ detail: 'Run cargo build -p hotsheet-cli.' }));
     expect(markup).toContain('data-component="project-setup-warning-banner"');
-    expect(markup).toContain('Project setup was skipped');
+    expect(markup).toContain('Project setup needs attention');
     expect(markup).toContain('Run cargo build -p hotsheet-cli.');
     expect(markup).toContain('data-lucide="triangle-alert"');
     expect(markup).toContain('<button type="button" data-action="dismiss-project-setup-warning">Dismiss</button>');

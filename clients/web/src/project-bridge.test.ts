@@ -12,6 +12,7 @@ import {
   connectGitTicketStoreRemote,
   createLocalGitTicketStore,
   createServerHealthProbe,
+  deliverProjectSetupNotice,
   describeGitRemoteFailure,
   developmentRepositoryRoot,
   developmentSetupAssetsFingerprint,
@@ -38,6 +39,7 @@ import {
   revealCommand,
   runGitCommand,
   safelyRestartServer,
+  setupRefreshNotices,
   storeNeedsServerUpgrade,
   superviseServer,
 } from './project-bridge';
@@ -113,7 +115,7 @@ describe('project setup compatibility', () => {
       runner = vi
         .fn()
         .mockResolvedValueOnce(JSON.stringify({ ...cli, setup_assets_fingerprint: fingerprint }))
-        .mockResolvedValueOnce('');
+        .mockResolvedValueOnce(JSON.stringify({ set_up: [], removed: [] }));
     await refreshLocalProjectSetup('/work/code', '/work/tickets.hs2', runner);
     expect(runner).toHaveBeenNthCalledWith(
       1,
@@ -124,7 +126,7 @@ describe('project setup compatibility', () => {
     expect(runner).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('hotsheet-cli'),
-      ['-C', '/work/tickets.hs2', 'setup', '--refresh', '--project', '/work/code'],
+      ['-C', '/work/tickets.hs2', 'setup', '--refresh', '--project', '/work/code', '--json'],
       expect.any(String),
     );
   });
@@ -133,16 +135,16 @@ describe('project setup compatibility', () => {
     expect(
       await refreshProjectSetupOnOpen('/work/code', '/work/tickets.hs2', (root, store) => {
         refreshed.push(`${root}|${store}`);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       }),
-    ).toBeUndefined();
+    ).toEqual({});
     expect(refreshed).toEqual(['/work/code|/work/tickets.hs2']);
     // The stale-CLI guard still refuses to write, but opening continues with its explanation.
     const staleRunner = vi.fn().mockResolvedValue(JSON.stringify(cli));
     const warning = await refreshProjectSetupOnOpen('/work/code', '/work/tickets.hs2', (root, store) =>
       refreshLocalProjectSetup(root, store, staleRunner),
     );
-    expect(warning).toMatch(/does not report.*cargo build -p hotsheet-cli.*No setup files were changed/i);
+    expect(warning.warning).toMatch(/does not report.*cargo build -p hotsheet-cli.*No setup files were changed/i);
     expect(staleRunner).not.toHaveBeenCalledWith(
       expect.anything(),
       expect.arrayContaining(['setup']),
@@ -152,7 +154,82 @@ describe('project setup compatibility', () => {
       await refreshProjectSetupOnOpen('/work/code', '/work/tickets.hs2', () =>
         Promise.reject(new Error('plain failure')),
       ),
-    ).toBe('plain failure');
+    ).toEqual({ warning: 'plain failure' });
+  });
+  it('carries changed-hook notices separately from failures and ignores no-op or unrelated notices (HS2-4AR09Z)', async () => {
+    const changed = {
+      set_up: [{ tool: 'Codex', notices: [{ kind: 'codex_hooks_changed', path: '.codex/hooks.json' }] }],
+      removed: [],
+    };
+    expect(setupRefreshNotices(changed)).toEqual({ codexHooksChanged: '.codex/hooks.json' });
+    expect(setupRefreshNotices({ set_up: [{ tool: 'Codex', wrote: ['.codex/hooks.json'] }] })).toEqual({});
+    expect(
+      setupRefreshNotices({
+        set_up: [
+          {
+            notices: [
+              { kind: 'future_notice', path: 'other' },
+              { kind: 'codex_hooks_changed', path: '' },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({});
+    expect(() => setupRefreshNotices(null)).toThrow('invalid setup report');
+    const fingerprint = await developmentSetupAssetsFingerprint();
+    const runner = vi
+      .fn()
+      .mockResolvedValueOnce(JSON.stringify({ ...cli, setup_assets_fingerprint: fingerprint }))
+      .mockResolvedValueOnce(JSON.stringify(changed));
+    expect(
+      await refreshProjectSetupOnOpen('/work/code', '/work/tickets.hs2', (root, store) =>
+        refreshLocalProjectSetup(root, store, runner),
+      ),
+    ).toEqual({ codexHooksChanged: '.codex/hooks.json' });
+    expect(await refreshProjectSetupOnOpen('/work/code', '/work/tickets.hs2', async () => ({}))).toEqual({});
+  });
+  it('retains changed-hook review across failed opens, isolates roots, and clears after delivery (HS2-4AR09Z)', async () => {
+    const pending = new Map<string, { warning?: string; codexHooksChanged?: string }>();
+    const changed = { codexHooksChanged: '.codex/hooks.json' };
+    await expect(
+      deliverProjectSetupNotice(
+        '/one',
+        changed,
+        async () => {
+          throw new Error('server unavailable');
+        },
+        pending,
+      ),
+    ).rejects.toThrow('server unavailable');
+    expect(await deliverProjectSetupNotice('/two', {}, async (result) => result, pending)).toEqual({});
+    await expect(
+      deliverProjectSetupNotice(
+        '/one',
+        {},
+        async () => {
+          throw new Error('still unavailable');
+        },
+        pending,
+      ),
+    ).rejects.toThrow('still unavailable');
+    expect(
+      await deliverProjectSetupNotice('/one', { warning: 'refresh refused' }, async (result) => result, pending),
+    ).toEqual({ ...changed, warning: 'refresh refused' });
+    expect(await deliverProjectSetupNotice('/one', {}, async (result) => result, pending)).toEqual({});
+    expect(pending.size).toBe(0);
+    const partial = { warning: 'Later setup failed. Run /hooks in Codex for this checkout.' };
+    await expect(
+      deliverProjectSetupNotice(
+        '/one',
+        partial,
+        async () => {
+          throw new Error('open failed');
+        },
+        pending,
+      ),
+    ).rejects.toThrow('open failed');
+    expect(await deliverProjectSetupNotice('/one', {}, async (result) => result, pending)).toEqual(partial);
+    expect(await deliverProjectSetupNotice('/one', {}, async (result) => result, pending)).toEqual({});
   });
   it('refuses missing or mismatched compiled setup assets with rebuild guidance before writing', async () => {
     const fingerprint = await developmentSetupAssetsFingerprint();

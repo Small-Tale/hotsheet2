@@ -35,9 +35,11 @@ export interface ProjectSession {
   hs1PostgresVersion?: string;
   /**
    * Why opening skipped the project's setup refresh (HS2-0TXM8S). The project is fully usable;
-   * only its AI-tool guidance files were left as they were.
+   * its AI-tool setup may be unchanged or only partially updated.
    */
   setupWarning?: string;
+  /** Codex hook bytes changed; the user must review them in this checkout (HS2-4AR09Z). */
+  codexHooksChanged?: string;
 }
 
 export interface InstanceInfo {
@@ -71,7 +73,10 @@ export type RevealLauncher = (command: string, args: string[]) => Promise<void>;
 export type FolderChooserRunner = (command: string, args: string[]) => Promise<string | undefined>;
 export type GitRunner = (command: string, args: string[]) => Promise<void>;
 
-type ProjectBridgeProcess = typeof process & { __hotsheetProjectSessions?: Map<string, SessionTarget> };
+type ProjectBridgeProcess = typeof process & {
+  __hotsheetProjectSessions?: Map<string, SessionTarget>;
+  __hotsheetPendingHookNotices?: Map<string, ProjectSetupRefreshResult>;
+};
 
 /** Vite evaluates config plugins and its SSR dev entry in separate module graphs. Keep the
  * authenticated project-session registry on their shared process object so HTTP opens and
@@ -322,22 +327,62 @@ function sessionForRoot(root: string): SessionTarget | undefined {
   return [...sessions.values()].find((target) => target.root === root);
 }
 
+export interface ProjectSetupRefreshResult {
+  warning?: string;
+  codexHooksChanged?: string;
+}
+
+export function setupRefreshNotices(report: unknown): ProjectSetupRefreshResult {
+  if (!report || typeof report !== 'object' || !('set_up' in report) || !Array.isArray(report.set_up))
+    throw new Error('The Hot Sheet CLI returned an invalid setup report.');
+  for (const tool of report.set_up as unknown[]) {
+    if (!tool || typeof tool !== 'object' || !('notices' in tool) || !Array.isArray(tool.notices)) continue;
+    for (const notice of tool.notices as unknown[]) {
+      if (
+        notice &&
+        typeof notice === 'object' &&
+        'kind' in notice &&
+        notice.kind === 'codex_hooks_changed' &&
+        'path' in notice &&
+        typeof notice.path === 'string' &&
+        notice.path.trim()
+      )
+        return { codexHooksChanged: notice.path };
+    }
+  }
+  return {};
+}
+
+/** Retain an undelivered notice when the server/open step fails after setup already wrote hooks. */
+export async function deliverProjectSetupNotice<T>(
+  root: string,
+  result: ProjectSetupRefreshResult,
+  open: (result: ProjectSetupRefreshResult) => Promise<T>,
+  pending: Map<string, ProjectSetupRefreshResult> = ((process as ProjectBridgeProcess).__hotsheetPendingHookNotices ??=
+    new Map<string, ProjectSetupRefreshResult>()),
+): Promise<T> {
+  if (result.codexHooksChanged || result.warning) pending.set(root, { ...pending.get(root), ...result });
+  const notice = pending.get(root);
+  const opened = await open({ ...notice, ...result });
+  if (pending.get(root) === notice) pending.delete(root);
+  return opened;
+}
+
 /**
  * Refresh a project's setup while opening it, without letting a refusal block the project
  * (HS2-0TXM8S). The refresh only rewrites AI-tool guidance; a stale development CLI must not
  * write it, but that is no reason to keep the user out of their tickets. Returns the reason the
- * refresh was skipped, for a warning banner.
+ * refresh was skipped or changed Codex hooks, for the respective banner.
  */
 export async function refreshProjectSetupOnOpen(
   root: string,
   store: string,
-  refresh: (root: string, store: string) => Promise<void> = refreshLocalProjectSetup,
-): Promise<string | undefined> {
+  refresh: (root: string, store: string) => Promise<ProjectSetupRefreshResult | undefined> = refreshLocalProjectSetup,
+): Promise<ProjectSetupRefreshResult> {
   try {
-    await refresh(root, store);
-    return undefined;
+    return (await refresh(root, store)) ?? {};
   } catch (reason) {
-    return reason instanceof Error ? reason.message : String(reason);
+    return { warning: reason instanceof Error ? reason.message : String(reason) };
   }
 }
 
@@ -347,9 +392,14 @@ export async function refreshLocalProjectSetup(
   root: string,
   store: string,
   runner: ProcessRunner = runProcess,
-): Promise<void> {
+): Promise<ProjectSetupRefreshResult> {
   await requireCurrentSetupCli(store, runner);
-  await runner(toolBinary(), ['-C', store, 'setup', '--refresh', '--project', root], developmentRepositoryRoot());
+  const output = await runner(
+    toolBinary(),
+    ['-C', store, 'setup', '--refresh', '--project', root, '--json'],
+    developmentRepositoryRoot(),
+  );
+  return setupRefreshNotices(JSON.parse(output));
 }
 
 export async function migrateHs1Project(
@@ -993,7 +1043,15 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   const ticketStore = ticketStoreInput?.trim()
     ? await realpath(ticketStoreInput.trim())
     : ((await linkedTicketStore(root)) ?? (await suggestedTicketStore(root)));
-  const setupWarning = ticketStore ? await refreshProjectSetupOnOpen(root, ticketStore) : undefined;
+  const setupResult = ticketStore ? await refreshProjectSetupOnOpen(root, ticketStore) : {};
+  return deliverProjectSetupNotice(root, setupResult, (result) => openPreparedLocalProject(root, ticketStore, result));
+}
+
+async function openPreparedLocalProject(
+  root: string,
+  ticketStore: string | undefined,
+  setupResult: ProjectSetupRefreshResult,
+): Promise<ProjectSession> {
   const plan = projectServerPlan(await bootstrapStore(), root, ticketStore);
   let instance = await ensureServer(plan.serverStore),
     target: SessionTarget = { url: instance.url, secret: instance.secret, root, serverStore: plan.serverStore };
@@ -1032,7 +1090,8 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
     stores: opened.checkout.stores,
     apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`,
     compatibility,
-    ...(setupWarning ? { setupWarning } : {}),
+    ...(setupResult.warning ? { setupWarning: setupResult.warning } : {}),
+    ...(setupResult.codexHooksChanged ? { codexHooksChanged: setupResult.codexHooksChanged } : {}),
     needsTicketSetup: opened.checkout.sources.length === 0,
     needsHs1Migration: hs1DataPresent && !imported,
     hs1ImportCompleted: imported,

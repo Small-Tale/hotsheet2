@@ -219,6 +219,15 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     }),
   );
   lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissCodexHooksNotice.selector, () => {
+      const current = project();
+      if (!current) return;
+      projects.value = projects.value.map((item) =>
+        item.id === current.id ? { ...item, codexHooksChanged: undefined } : item,
+      );
+    }),
+  );
+  lifetime.add(
     delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.dismissHs1Cleanup.selector, () => {
       const current = project();
       if (!current) return;

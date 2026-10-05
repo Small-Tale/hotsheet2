@@ -401,6 +401,9 @@ enum Cmd {
         /// Project directory to write the tool config into (defaults to the store path).
         #[arg(long)]
         project: Option<PathBuf>,
+        /// Print the structured setup report, including user-action notices.
+        #[arg(long)]
+        json: bool,
     },
     /// Manage AI-tool plugins (list built-in + installed; install/remove external ones).
     Plugin {
@@ -1377,7 +1380,8 @@ fn main() -> Result<()> {
             detect,
             refresh,
             project,
-        } => cmd_setup(&cli.path, tool, detect, refresh, project),
+            json,
+        } => cmd_setup(&cli.path, tool, detect, refresh, project, json),
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
         Cmd::AiTools { json } => cmd_ai_tools(json),
         Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, &cwd, cmd),
@@ -4743,6 +4747,7 @@ fn cmd_setup(
     detect: bool,
     refresh: bool,
     project: Option<PathBuf>,
+    json: bool,
 ) -> Result<()> {
     let project_dir = project.unwrap_or_else(|| store.to_path_buf());
     // Setup also makes the checkout discoverable to server/MCP consumers. This records
@@ -4767,7 +4772,7 @@ fn cmd_setup(
     .register(&project_dir, None, repository, vec![store.to_path_buf()])?;
     let (reports, removed) = if refresh {
         let report = hotsheet_cli::setup::refresh_setup(store, &project_dir)?;
-        if report.is_empty() {
+        if report.is_empty() && !json {
             println!("Setup is current; no applicable AI-tool integrations found.");
         }
         (report.set_up, report.removed)
@@ -4777,10 +4782,23 @@ fn cmd_setup(
             Vec::new(),
         )
     };
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(&hotsheet_plugins::setup::RefreshReport {
+                set_up: reports,
+                removed
+            })?
+        );
+        return Ok(());
+    }
     for r in &reports {
         println!("Set up {} in {}:", r.tool, project_dir.display());
         for w in &r.wrote {
             println!("  wrote {w}");
+        }
+        for notice in &r.notices {
+            println!("  Notice: {}", notice.message());
         }
     }
     // Disabled tools whose managed artifacts refresh removed (HS2-CAM9J5).

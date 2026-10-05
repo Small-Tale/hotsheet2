@@ -80,6 +80,7 @@ event = "PermissionRequest"
 additional_events = ["SessionStart", "SessionEnd"]
 command = "hotsheet-cli permission-hook --agent codex"
 timeout_seconds = 86430
+change_notice = "codex_hooks_changed"
 
 [activity]
 # Codex's app-server turn transcript (start/item/end) maps to activity events (docs/15,

@@ -686,6 +686,7 @@ hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-t
 ```
 hotsheet setup claude          # write CLAUDE.md/skills/MCP config for a tool   [built: HS2-98]
 hotsheet setup --detect        # set up every AI tool detected on this machine   [built: HS2-98]
+hotsheet setup --refresh --json --project <code-repo> # structured paths/notices [HS2-4AR09Z]
 hotsheet plugin list           # installed + detected AI-tool plugins            [HS2-92]
 hotsheet plugin install <path|url>   # add an external plugin (trust-gated)      [HS2-93]
 hotsheet plugin verify <id>    # run the conformance suite against a plugin      [HS2-93]
@@ -708,12 +709,19 @@ tools that are detected or already have Hot Sheet-managed setup. The server sche
 that same core refresh in the background whenever a project opens or reopens (including
 remembered projects restored at client startup), so opening is not blocked by filesystem
 work. Clean bytes are never rewritten; instruction content outside managed blocks and
-unrelated MCP configuration remain user-owned. The local development bridge also starts
-the current CLI refresh without awaiting it; this repairs projects attached to a still-
-compatible detached server built before the server hook existed. Bundled managed skills
+unrelated MCP configuration remain user-owned. The local development bridge awaits
+the current CLI refresh report before opening, preserving project access if refresh fails.
+This repairs projects attached to a still-compatible detached server built before the
+server hook existed. Bundled managed skills
 carry the same workflow version as the repository adapters, preventing a refresh from
 downgrading current instructions. Executable detection includes Windows `PATHEXT`
 wrappers such as `.cmd` as well as native binaries.
+
+`setup --json` (explicit, detected, or refresh setup) returns `{set_up, removed}` without
+human progress text. Successful setup reports contain `tool`, `wrote`, and optional `notices`.
+When Codex hooks bytes change, `codex_hooks_changed` carries their project-relative `path`;
+the human CLI prints a checkout-specific `/hooks` review instruction. Byte-identical setup
+omits the notice. See [05](05-ai-tool-plugins.md) §5.7 for the trust-review behavior.
 Setup writes Claude's machine-specific permission hook to `settings.local.json`. When it
 creates a tool's project MCP config (or recognizes that the complete existing config is
 Hot Sheet-owned), it records only that exact path in the checkout-local `.git/info/exclude`;

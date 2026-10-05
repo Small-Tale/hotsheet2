@@ -769,7 +769,23 @@ A tool runs a project hook only once it is installed and, for Codex, trusted. A 
 connection therefore shows that the session's hooks are live, and its permission prompts reach
 the app. A missing report means they stay in the terminal. Codex trusts each hook entry by
 content hash, so a setup refresh that changes `.codex/hooks.json` makes Codex skip the changed
-entries until the user reviews them with `/hooks`. Setup does not yet say so (`HS2-4AR09Z`).
+entries until the user reviews them with `/hooks`. Setup compares the final file bytes with
+what was present before writing. A changed or newly created Codex hooks file emits a
+`codex_hooks_changed` notice containing its project-relative path (`HS2-4AR09Z`). An unchanged
+file emits no notice; changes to instruction or MCP files alone do not trigger it. The Codex
+plugin declares this review requirement with `hooks.change_notice`, rather than setup
+branching on a tool identity. Setup never edits Codex's trust records.
+
+The headless CLI prints the notice and tells the user to run `/hooks` in Codex for that
+checkout. `setup --json` and `setup --refresh --json` return `{set_up, removed}`; each setup
+report includes `notices` only when present. `POST /setup/{tool}` carries the same notices in
+its shared setup reports. The local app's project-open refresh consumes the CLI JSON and shows
+**Review updated Codex hooks**, separately from setup-failure warnings. Dismissing it clears
+only that project's current notice. A subsequent unchanged refresh does not show it again;
+a later changed refresh requires a fresh review notice. If a later setup step fails after
+hooks were written, the failure also includes the review instruction. If project opening
+fails after a successful refresh, the bridge retains the notice for that checkout until
+a successful open delivers it.
 
 **Halted sessions (HS2-HJ4D1H).** Every Hot Sheet terminal also carries
 `HOTSHEET_TERMINAL_ID`. The Claude manifest's lifecycle hook additionally listens to

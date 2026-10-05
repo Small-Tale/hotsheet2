@@ -16,6 +16,7 @@ project-lifecycle	delegate	document.body	'click'	'[data-action="retry-migration-
 project-lifecycle	delegate	document.body	'click'	'[data-action="backup-migration-job"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="remove-hs1-data"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-project-setup-warning"]'
+project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-codex-hooks-notice"]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-hs1-cleanup"]'
 project-lifecycle	delegate	document.body	'wa-hide'	'[data-ticket-source-setup-dialog]'
 project-lifecycle	delegate	document.body	'click'	'[data-action="dismiss-ticket-source-setup"]'

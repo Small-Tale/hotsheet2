@@ -1844,7 +1844,7 @@ test('opens a project whose setup refresh was skipped and explains it in a dismi
       await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     }
     const banner = page.locator('[data-component="project-setup-warning-banner"]');
-    await expect(banner).toContainText('Project setup was skipped');
+    await expect(banner).toContainText('Project setup needs attention');
     await expect(banner).toContainText('Run cargo build -p hotsheet-cli');
     // The project is fully usable: its tickets load and nothing reports it unavailable.
     await expect(page.getByText('Use real project tickets').first()).toBeVisible();
@@ -1855,6 +1855,43 @@ test('opens a project whose setup refresh was skipped and explains it in a dismi
     await expect(banner).toHaveCount(0);
     await expect(page.getByText('Use real project tickets').first()).toBeVisible();
   }
+});
+
+test('explains changed Codex hooks without a setup-failure warning and dismisses per project (HS2-4AR09Z)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  let changed = true;
+  await page.route('**/__hotsheet/projects/open', (route) =>
+    route.fulfill({
+      status: 201,
+      json: { ...project, ...(changed ? { codexHooksChanged: '.codex/hooks.json' } : {}) },
+    }),
+  );
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    if (width === 1280) {
+      await page.getByRole('button', { name: 'Open project' }).click();
+      await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    }
+    const banner = page.locator('[data-codex-hooks-notice="true"]');
+    await expect(banner).toContainText('Review updated Codex hooks');
+    await expect(banner).toContainText('Run /hooks in Codex for this checkout');
+    await expect(banner).toContainText('.codex/hooks.json');
+    await expect(page.getByText('Use real project tickets').first()).toBeVisible();
+    await expect(page.locator('[data-component="project-setup-warning-banner"]')).toHaveCount(0);
+    const bounds = await banner.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: test.info().outputPath(`codex-hooks-notice-${width}.png`) });
+    await banner.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(banner).toHaveCount(0);
+  }
+  changed = false;
+  await page.reload();
+  await expect(page.getByText('Use real project tickets').first()).toBeVisible();
+  await expect(page.locator('[data-codex-hooks-notice="true"]')).toHaveCount(0);
 });
 
 test('clears a failed project-open error when retrying successfully', async ({ page }) => {

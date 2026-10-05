@@ -1773,6 +1773,29 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "codex-hooks-notice-banner",
+      "name": "CodexHooksNoticeBanner",
+      "source": "src/components/codex-hooks-notice-banner.tsx",
+      "kind": "component",
+      "purpose": "Successful setup changed Codex hooks; review their trust with /hooks for this checkout, or dismiss the notice.",
+      "useWhen": [
+        "Hot Sheet needs successful setup changed Codex hooks; review their trust with /hooks for this checkout, or dismiss the notice."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific CodexHooksNoticeBanner behavior."
+      ],
+      "publicClasses": [
+        "codex-hooks-notice-banner"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "project-setup-warning-banner",
       "name": "ProjectSetupWarningBanner",
       "source": "src/components/project-setup-warning-banner.tsx",

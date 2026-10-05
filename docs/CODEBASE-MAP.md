@@ -490,3 +490,8 @@ and supporting-copy alignment; the page, dialog, and Dev Review owners compose c
 Kerf Toolbar/ToolbarText primitives directly (HS2-AGDJ6E).
 
 - `docs/CSS-OWNERSHIP-AUDIT.md` — source stylesheet ownership inventory and Kerf migration boundaries (HS2-JMYRT3).
+
+Changed Codex hook review (`HS2-4AR09Z`): `crates/hotsheet-plugins/src/setup.rs` emits the
+manifest-declared changed-byte notice; CLI `setup --json` returns the shared refresh envelope.
+`clients/web/src/project-bridge.ts` carries it to the project;
+`components/codex-hooks-notice-banner.tsx` renders it and project lifecycle handles dismissal.

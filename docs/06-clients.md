@@ -3290,3 +3290,18 @@ summary headings and charts share the standard control gutter.
 Notification queues use `List` for the same 12px spacing within and between pending/history
 groups. Their page presentation uses standard control insets without an arbitrary width cap;
 flush presentation adds no host inset. Empty queues use `EmptyState`.
+
+### Changed Codex hook review notice (HS2-4AR09Z)
+
+The local project-open bridge consumes the current CLI's structured setup report. When
+Codex hooks change, the project carries `codexHooksChanged` with the project-relative hooks
+path. `CodexHooksNoticeBanner` uses Kerf `List`/`StateBanner` to explain that setup succeeded
+and instruct the user to run `/hooks` in Codex for this checkout. It has no application CSS.
+The dismiss action clears that project's notice and leaves tickets available. Reopening
+after a byte-identical refresh shows no notice; a later changed refresh shows it again.
+A failed server/open step retains the undelivered notice across retries in the bridge
+process; another checkout does not inherit it.
+Setup failures use the separate **Project setup needs attention** warning, including
+review instructions if a partial setup changed hooks. Failed opens retain that warning
+until it can be delivered. See
+[05](05-ai-tool-plugins.md) §5.7 for the shared CLI/server report and trust boundary.

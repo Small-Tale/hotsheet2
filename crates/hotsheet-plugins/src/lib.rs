@@ -126,6 +126,13 @@ pub struct ActivitySpec {
     pub source: String,
 }
 
+/// Provider-declared user review required when hook configuration changes.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookChangeNotice {
+    CodexHooksChanged,
+}
+
 /// A tool's permission-hook declaration (`docs/05` §5.7). Declarative — `setup` merges it
 /// into the tool's config; the hook `command` (its first token resolved to the sibling
 /// binary) routes the prompt to the Hot Sheet server.
@@ -157,6 +164,9 @@ pub struct HooksSpec {
     /// timeout so the adapter can emit that terminal denial instead of being killed first.
     #[serde(default)]
     pub timeout_seconds: Option<u64>,
+    /// Provider review required after a changed hook configuration (HS2-4AR09Z).
+    #[serde(default)]
+    pub change_notice: Option<HookChangeNotice>,
 }
 
 fn default_hook_format() -> String {

@@ -165,6 +165,7 @@ describe('UX demo catalog', () => {
       'pending-attachment-picker',
       'hs1-migration-dialog',
       'hs1-migration-banner',
+      'codex-hooks-notice-banner',
       'project-setup-warning-banner',
       'notifications-paused-banner',
       'provider-icon',
@@ -253,9 +254,11 @@ describe('UX demo catalog', () => {
     expect(findDemo('change-evidence-dialog')?.uses).toEqual(['dialog-header', 'list-item', 'list-header']);
     expect(findDemo('connection-details-dialog')?.uses).toEqual(['dialog-header', 'value-table']);
     expect(demosUsing('note-card').map((entry) => entry.id)).toEqual(['ticket-inspector', 'ticket-info-panel']);
-    expect(entries.flatMap((entry) => entry.uses ?? []).every((id) => findDemo(id) || id === 'loading-spinner')).toBe(
-      true,
-    );
+    expect(
+      entries
+        .flatMap((entry) => entry.uses ?? [])
+        .every((id) => findDemo(id) || ['loading-spinner', 'state-banner'].includes(id)),
+    ).toBe(true);
   });
 
   it('maps nested categories and relationship metadata into the flat kerf catalog contract', () => {

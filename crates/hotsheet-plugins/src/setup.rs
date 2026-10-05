@@ -19,6 +19,25 @@ use crate::{Plugin, all_plugins, default_dirs};
 pub struct SetupReport {
     pub tool: String,
     pub wrote: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<SetupNotice>,
+}
+
+/// A successful setup change that requires the user's attention (HS2-4AR09Z).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SetupNotice {
+    CodexHooksChanged { path: String },
+}
+
+impl SetupNotice {
+    pub fn message(&self) -> String {
+        match self {
+            Self::CodexHooksChanged { path } => format!(
+                "Codex hooks changed in {path}. Run /hooks in Codex for this checkout to review and trust the updated hooks."
+            ),
+        }
+    }
 }
 
 /// What a refresh changed (HS2-CAM9J5): the tools it set up or repaired, and the managed
@@ -72,6 +91,11 @@ enum Change {
 /// A setup failure.
 #[derive(Debug, thiserror::Error)]
 pub enum SetupError {
+    #[error("{source}\n{review}")]
+    Partial {
+        source: Box<SetupError>,
+        review: String,
+    },
     #[error("unknown tool '{0}' (no such plugin)")]
     UnknownTool(String),
     #[error("specify a tool (e.g. `setup claude`) or pass detect=true")]
@@ -95,6 +119,25 @@ pub enum SetupError {
         path: String,
         source: std::io::Error,
     },
+}
+
+impl SetupError {
+    fn with_notices(self, reports: &[SetupReport]) -> Self {
+        let review = reports
+            .iter()
+            .flat_map(|report| &report.notices)
+            .map(SetupNotice::message)
+            .collect::<Vec<_>>()
+            .join("\n");
+        if review.is_empty() {
+            self
+        } else {
+            Self::Partial {
+                source: Box::new(self),
+                review,
+            }
+        }
+    }
 }
 
 /// Resolve the project's `enabled_plugins` shared setting (HS2-94) into the `enabled` set
@@ -240,7 +283,8 @@ pub fn refresh_setup_in(
     };
     let mut removed = Vec::new();
     for plugin in &excluded {
-        let mut report = remove_disabled_tool_artifacts(project_dir, plugin, &claimed)?;
+        let mut report = remove_disabled_tool_artifacts(project_dir, plugin, &claimed)
+            .map_err(|error| error.with_notices(&set_up))?;
         let target = &plugin.manifest.instructions.target;
         let was_member = members_before
             .iter()
@@ -606,23 +650,40 @@ fn setup_plugins(
     }
 
     let mut reports = Vec::new();
-    for (p, preserve_installed_workflow) in plugins.iter().zip(preserved) {
-        let mut wrote = Vec::new();
-        if !preserve_installed_workflow {
-            wrote.push(p.manifest.instructions.target.clone());
-            if let Some(skill) = write_skill(project_dir, p)? {
-                wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
+    let result = (|| -> Result<(), SetupError> {
+        for (p, preserve_installed_workflow) in plugins.iter().zip(preserved) {
+            let mut wrote = Vec::new();
+            if !preserve_installed_workflow {
+                wrote.push(p.manifest.instructions.target.clone());
+                if let Some(skill) = write_skill(project_dir, p)? {
+                    wrote.push(skill); // absent for tools with no skills concept (e.g. Antigravity)
+                }
             }
+            wrote.push(write_mcp(project_dir, &store_abs, p)?);
+            let mut notices = Vec::new();
+            if let Some((hook, changed)) = write_hooks(project_dir, p)? {
+                if changed
+                    && matches!(
+                        p.manifest
+                            .hooks
+                            .as_ref()
+                            .and_then(|spec| spec.change_notice.as_ref()),
+                        Some(crate::HookChangeNotice::CodexHooksChanged)
+                    )
+                {
+                    notices.push(SetupNotice::CodexHooksChanged { path: hook.clone() });
+                }
+                wrote.push(hook); // absent when no native interactive adapter is declared
+            }
+            reports.push(SetupReport {
+                tool: p.manifest.product_name.clone(),
+                wrote,
+                notices,
+            });
         }
-        wrote.push(write_mcp(project_dir, &store_abs, p)?);
-        if let Some(hook) = write_hooks(project_dir, p)? {
-            wrote.push(hook); // absent when no native interactive adapter is declared
-        }
-        reports.push(SetupReport {
-            tool: p.manifest.product_name.clone(),
-            wrote,
-        });
-    }
+        Ok(())
+    })();
+    result.map_err(|error| error.with_notices(&reports))?;
     Ok(reports)
 }
 
@@ -1142,7 +1203,7 @@ fn remove_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError>
 /// `{ "hooks": { "<event>": [ { "matcher": "*", "hooks": [ { "type": "command", "command": … } ] } ] } }`.
 /// Merge-safe + idempotent: an existing Hot Sheet hook (same resolved command) is not
 /// duplicated. Returns the written path when a hook was registered.
-fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError> {
+fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<(String, bool)>, SetupError> {
     let Some(spec) = &p.manifest.hooks else {
         return Ok(None);
     };
@@ -1202,14 +1263,13 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError>
         event.as_array_mut().unwrap().push(entry.clone());
     }
 
-    write_file(
-        &target,
-        &(serde_json::to_string_pretty(&root).unwrap() + "\n"),
-    )?;
+    let rendered = serde_json::to_string_pretty(&root).unwrap() + "\n";
+    let changed = !std::fs::read(&target).is_ok_and(|existing| existing == rendered.as_bytes());
     if locally_owned {
         ensure_local_git_exclude(project, &spec.target)?;
     }
-    Ok(Some(spec.target.clone()))
+    write_file(&target, &rendered)?;
+    Ok(Some((spec.target.clone(), changed)))
 }
 
 /// Whether a hook-array entry is a Hot Sheet permission hook (any of its commands ends with
@@ -1929,6 +1989,172 @@ args = ["--path", "{{store}}"]
         assert!(
             refreshed.contains(&per_tool("alpha", SHARED_BODY)),
             "{refreshed}"
+        );
+    }
+
+    #[test]
+    fn codex_hook_notices_follow_changed_bytes_and_remain_tool_specific() {
+        let fixture = Sharing::new();
+        for id in ["codex", "claude"] {
+            let notice = if id == "codex" {
+                "change_notice = \"codex_hooks_changed\""
+            } else {
+                ""
+            };
+            custom_tool(
+                fixture.plugins.path(),
+                id,
+                true,
+                &format!(
+                    r#"
+[mcp]
+target = ".{id}/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{{{store}}}}"]
+[hooks]
+target = ".{id}/hooks.json"
+format = "lifecycle-json"
+event = "PermissionRequest"
+command = "hotsheet-cli permission-hook"
+timeout_seconds = 30
+{notice}
+"#
+                ),
+            );
+        }
+        let created = fixture.setup("codex");
+        assert_eq!(
+            created[0].notices,
+            vec![SetupNotice::CodexHooksChanged {
+                path: ".codex/hooks.json".into()
+            }]
+        );
+        assert!(
+            created[0].notices[0]
+                .message()
+                .contains("Run /hooks in Codex for this checkout")
+        );
+        let unchanged = fixture.setup("codex");
+        assert!(unchanged[0].notices.is_empty());
+        assert!(
+            serde_json::to_value(&unchanged[0])
+                .unwrap()
+                .get("notices")
+                .is_none()
+        );
+
+        let path = fixture.path(".codex/hooks.json");
+        let mut hooks: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        hooks["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"] = serde_json::json!(99);
+        hooks["hooks"]["SessionStart"] =
+            serde_json::json!([{ "hooks": [{ "command": "old-binary permission-hook" }] }]);
+        std::fs::write(&path, serde_json::to_vec(&hooks).unwrap()).unwrap();
+        assert_eq!(fixture.setup("codex")[0].notices, created[0].notices);
+        assert!(fixture.setup("codex")[0].notices.is_empty());
+        assert!(fixture.setup("claude")[0].notices.is_empty());
+        assert!(fixture.setup("claude")[0].notices.is_empty());
+
+        // Refresh carries the same notices; changes in unrelated setup files do not warn.
+        std::fs::write(&path, "{}").unwrap();
+        let refresh = fixture.refresh(&["codex"]);
+        assert_eq!(refresh.set_up[0].notices, created[0].notices);
+        fixture.write("AGENTS.md", "user instructions\n");
+        assert!(fixture.refresh(&["codex"]).set_up[0].notices.is_empty());
+    }
+
+    #[test]
+    fn changed_hook_notice_survives_later_setup_and_removal_failures() {
+        let fixture = Sharing::new();
+        custom_tool(
+            fixture.plugins.path(),
+            "codex",
+            true,
+            r#"
+[mcp]
+target = ".codex/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = []
+[hooks]
+target = ".codex/hooks.json"
+format = "lifecycle-json"
+event = "SessionStart"
+command = "hotsheet-cli permission-hook"
+change_notice = "codex_hooks_changed"
+"#,
+        );
+        custom_tool(
+            fixture.plugins.path(),
+            "broken",
+            true,
+            r#"
+[mcp]
+target = ".broken/mcp.json"
+format = "unknown-format"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = []
+"#,
+        );
+        let error = setup_plugins(
+            fixture.store.path(),
+            fixture.project.path(),
+            vec![fixture.plugin("codex"), fixture.plugin("broken")],
+            None,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("unknown MCP config format"));
+        assert!(
+            error
+                .to_string()
+                .contains("Run /hooks in Codex for this checkout")
+        );
+        assert!(fixture.path(".codex/hooks.json").is_file());
+        // Once the instruction has been reported, a genuine no-op has no review notice.
+        assert!(fixture.setup("codex")[0].notices.is_empty());
+
+        // A disabled tool's unwritable config can fail refresh after Codex was updated.
+        custom_tool(
+            fixture.plugins.path(),
+            "disabled",
+            false,
+            r#"
+[mcp]
+target = ".disabled/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = []
+"#,
+        );
+        fixture.write(
+            ".disabled/mcp.json",
+            r#"{"keep": true, "mcpServers": {"hotsheet": {"command": "hotsheet-mcp"}}}"#,
+        );
+        let disabled_path = fixture.path(".disabled/mcp.json");
+        let original_permissions = std::fs::metadata(&disabled_path).unwrap().permissions();
+        let mut readonly = original_permissions.clone();
+        readonly.set_readonly(true);
+        std::fs::set_permissions(&disabled_path, readonly).unwrap();
+        fixture.write(".codex/hooks.json", "{}");
+        let enabled = HashSet::from(["codex".to_string()]);
+        let refreshed = refresh_setup_in(
+            fixture.store.path(),
+            fixture.project.path(),
+            Some(&enabled),
+            &[fixture.plugins.path().to_path_buf()],
+        );
+        std::fs::set_permissions(&disabled_path, original_permissions).unwrap();
+        let error = refreshed.unwrap_err();
+        assert!(error.to_string().contains(".disabled/mcp.json"));
+        assert!(
+            error
+                .to_string()
+                .contains("Run /hooks in Codex for this checkout")
         );
     }
 

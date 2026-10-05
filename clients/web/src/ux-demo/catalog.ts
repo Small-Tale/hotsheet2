@@ -781,6 +781,14 @@ export const demoCatalog: DemoCategory[] = [
         true,
       ),
       demo(
+        'codex-hooks-notice-banner',
+        'CodexHooksNoticeBanner',
+        'Successful setup changed Codex hooks; review their trust with /hooks for this checkout, or dismiss the notice.',
+        'feature-floor',
+        true,
+        ['list', 'state-banner'],
+      ),
+      demo(
         'project-setup-warning-banner',
         'ProjectSetupWarningBanner',
         'Dismissible warning that a project opened but skipped its setup refresh, with the reason and fix.',

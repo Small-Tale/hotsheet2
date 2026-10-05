@@ -44,6 +44,7 @@ import type { ProviderAccount } from '../api';
 import type { CommandDropTarget } from '../command-order';
 import { AppEmptyState, AppMessageState, ProjectRestoreState } from '../components/app-empty-state';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
+import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { KeyboardSettings } from '../components/keyboard-settings';
@@ -646,6 +647,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'provider-icon') return <ProviderIconDemo />;
   if (item.id === 'hs1-migration-dialog') return <Hs1MigrationDialogDemo />;
   if (item.id === 'hs1-migration-banner') return <Hs1MigrationBannerDemo />;
+  if (item.id === 'codex-hooks-notice-banner') return <CodexHooksNoticeBanner path=".codex/hooks.json" />;
   if (item.id === 'project-setup-warning-banner')
     return (
       <ProjectSetupWarningBanner detail="The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed." />
