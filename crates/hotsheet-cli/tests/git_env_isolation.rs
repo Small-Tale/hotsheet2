@@ -44,20 +44,43 @@ fn sentinel(root: &Path) -> PathBuf {
 
 /// Every file under `dir` (worktree and `.git`) with its bytes.
 fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
-    fn walk(base: &Path, dir: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
-        for entry in std::fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                walk(base, &path, out);
+    fn walk(
+        base: &Path,
+        dir: &Path,
+        out: &mut BTreeMap<PathBuf, Vec<u8>>,
+    ) -> Result<(), (PathBuf, std::io::Error)> {
+        let entries = std::fs::read_dir(dir).map_err(|error| (dir.to_owned(), error))?;
+        for entry in entries {
+            let path = entry.map_err(|error| (dir.to_owned(), error))?.path();
+            let metadata = std::fs::metadata(&path).map_err(|error| (path.clone(), error))?;
+            if metadata.is_dir() {
+                walk(base, &path, out)?;
             } else {
-                let bytes = std::fs::read(&path).unwrap();
+                let bytes = std::fs::read(&path).map_err(|error| (path.clone(), error))?;
                 out.insert(path.strip_prefix(base).unwrap().to_owned(), bytes);
             }
         }
+        Ok(())
     }
-    let mut out = BTreeMap::new();
-    walk(dir, dir, &mut out);
-    out
+
+    // A temporary Git entry can disappear after enumeration. Retry the complete
+    // walk so a partial snapshot never weakens the sentinel byte comparison.
+    const ATTEMPTS: usize = 4;
+    for attempt in 1..=ATTEMPTS {
+        let mut out = BTreeMap::new();
+        match walk(dir, dir, &mut out) {
+            Ok(()) => return out,
+            Err((_, error))
+                if error.kind() == std::io::ErrorKind::NotFound && attempt < ATTEMPTS => {}
+            Err((path, error)) => {
+                panic!(
+                    "could not snapshot {} after {attempt} attempt(s): {error}",
+                    path.display()
+                );
+            }
+        }
+    }
+    unreachable!()
 }
 
 /// `hotsheet-cli` with the sentinel exported the way a git hook would.

@@ -35,20 +35,76 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
-    fn walk(base: &Path, dir: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
-        for entry in std::fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                walk(base, &path, out);
+    snapshot_with_observer(dir, |_| {})
+}
+
+fn snapshot_with_observer(
+    dir: &Path,
+    mut observed: impl FnMut(&Path),
+) -> BTreeMap<PathBuf, Vec<u8>> {
+    fn walk(
+        base: &Path,
+        dir: &Path,
+        out: &mut BTreeMap<PathBuf, Vec<u8>>,
+        observed: &mut impl FnMut(&Path),
+    ) -> Result<(), (PathBuf, std::io::Error)> {
+        let entries = std::fs::read_dir(dir).map_err(|error| (dir.to_owned(), error))?;
+        for entry in entries {
+            let path = entry.map_err(|error| (dir.to_owned(), error))?.path();
+            observed(&path);
+            let metadata = std::fs::metadata(&path).map_err(|error| (path.clone(), error))?;
+            if metadata.is_dir() {
+                walk(base, &path, out, observed)?;
             } else {
-                let bytes = std::fs::read(&path).unwrap();
+                let bytes = std::fs::read(&path).map_err(|error| (path.clone(), error))?;
                 out.insert(path.strip_prefix(base).unwrap().to_owned(), bytes);
             }
         }
+        Ok(())
     }
-    let mut out = BTreeMap::new();
-    walk(dir, dir, &mut out);
-    out
+
+    // Git can remove a temporary repository entry after read_dir returns it. Restart
+    // the whole walk so no partial snapshot can weaken the byte-for-byte comparison.
+    const ATTEMPTS: usize = 4;
+    for attempt in 1..=ATTEMPTS {
+        let mut out = BTreeMap::new();
+        match walk(dir, dir, &mut out, &mut observed) {
+            Ok(()) => return out,
+            Err((_, error))
+                if error.kind() == std::io::ErrorKind::NotFound && attempt < ATTEMPTS => {}
+            Err((path, error)) => {
+                panic!(
+                    "could not snapshot {} after {attempt} attempt(s): {error}",
+                    path.display()
+                );
+            }
+        }
+    }
+    unreachable!()
+}
+
+#[test]
+fn snapshot_restarts_after_a_vanishing_entry_without_hiding_sentinel_changes() {
+    let root = tempfile::tempdir().unwrap();
+    let git_dir = root.path().join(".git");
+    std::fs::create_dir(&git_dir).unwrap();
+    std::fs::write(root.path().join("README"), b"sentinel\n").unwrap();
+    let before = snapshot(root.path());
+
+    let transient = git_dir.join("index.lock");
+    std::fs::write(&transient, b"temporary").unwrap();
+    let mut removed = false;
+    let after = snapshot_with_observer(root.path(), |path| {
+        if path == transient && !removed {
+            std::fs::remove_file(path).unwrap();
+            removed = true;
+        }
+    });
+    assert!(removed, "the disappearing-entry boundary was exercised");
+    assert_eq!(before, after);
+
+    std::fs::write(root.path().join("README"), b"changed\n").unwrap();
+    assert_ne!(before, snapshot(root.path()));
 }
 
 struct Server(Child);
