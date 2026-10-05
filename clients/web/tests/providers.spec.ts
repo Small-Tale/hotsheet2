@@ -17821,6 +17821,21 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
     )
     .toBe(true);
   await page.screenshot({ path: '/private/tmp/hs2-7efj3e-search-help-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(help).toBeVisible();
+  expect(
+    await help.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      return box.left >= 0 && box.right <= innerWidth && node.scrollWidth <= node.clientWidth + 1;
+    }),
+  ).toBe(true);
+  await help.screenshot({ path: '/private/tmp/hs2-pv2ag1-production-help-panel-phone.png' });
+  await page.getByRole('button', { name: 'Search syntax help' }).click();
+  await query.fill('created-after:');
+  await expect(helper).toBeVisible();
+  expect(await helper.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  await expect(helper.getByRole('button', { name: 'Apply' })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-pv2ag1-production-date-phone.png', fullPage: true });
 });
 
 test('distinguishes pending and empty ticket search feedback in list and board views', async ({ page }) => {

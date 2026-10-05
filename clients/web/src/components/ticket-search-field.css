@@ -168,4 +168,22 @@
   .ticket-search-field__help {
     width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s)));
   }
+  .ticket-search-field__date {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ticket-search-field__date input {
+    width: 100%;
+    min-width: 0;
+  }
+  .ticket-search-field__date button {
+    grid-column: 1 / -1;
+  }
+  .ticket-search-field__help code {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .ticket-search-field__help {
+    max-height: min(remify(448px), calc(100dvh - remify(384px)));
+  }
 }

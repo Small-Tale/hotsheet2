@@ -3653,9 +3653,27 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
       }),
     )
     .toBe(true);
+  expect(await help.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   await page.screenshot({ path: '/private/tmp/hs2-pv2ag1-search-phone.png', fullPage: true });
+  await help.evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  await expect.poll(() => help.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  expect(
+    await help.evaluate((node) => {
+      const panel = node.getBoundingClientRect(),
+        finalNote = node.lastElementChild!.getBoundingClientRect();
+      return panel.bottom <= innerHeight - 120 && finalNote.bottom <= panel.bottom - 4;
+    }),
+  ).toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-pv2ag1-search-phone-bottom.png', fullPage: true });
   await header.getByRole('button', { name: 'Search syntax help' }).click();
   await expect(help).toHaveCount(0);
+  await header.getByRole('searchbox', { name: 'Search tickets' }).fill('updated-after:');
+  const date = header.getByRole('group', { name: 'Date and time helper' });
+  await expect(date).toBeVisible();
+  expect(await date.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-pv2ag1-date-phone.png', fullPage: true });
 });
 
 test('centers search controls on the first line while the query wraps', async ({ page }) => {

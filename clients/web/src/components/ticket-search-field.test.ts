@@ -259,8 +259,18 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(css).toMatch(
       /\.ticket-search-field__date,\s*\.ticket-search-field__help \{[^}]*z-index: 1300;[^}]*box-sizing: border-box;/,
     );
+    expect(css).toContain('@media (max-width: remify(480px))');
     expect(css).toContainSource(
-      '@media (max-width: remify(480px)) { .ticket-search-field__date, .ticket-search-field__help { width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s))); } }',
+      '.ticket-search-field__date, .ticket-search-field__help { width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s))); }',
+    );
+    expect(css).toContainSource('.ticket-search-field__date { grid-template-columns: repeat(2, minmax(0, 1fr)); }');
+    expect(css).toContainSource('.ticket-search-field__date input { width: 100%; min-width: 0; }');
+    expect(css).toContainSource('.ticket-search-field__date button { grid-column: 1 / -1; }');
+    expect(css).toContainSource(
+      '.ticket-search-field__help code { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }',
+    );
+    expect(css).toContainSource(
+      '.ticket-search-field__help { max-height: min(remify(448px), calc(100dvh - remify(384px))); }',
     );
     expect(css).toContainSource(
       '@media (max-height: remify(704px)) { .ticket-search-field__help { max-height: calc(100vh - remify(368px)); } }',

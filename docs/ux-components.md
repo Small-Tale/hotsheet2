@@ -958,8 +958,10 @@ No layout styles the group from `ticket-search-field.css`; the former app grow-f
 `expandedOverflow="visible"` (HS2-PV2AG1, KF-M8SV15), so the expanded search lets the app-owned
 date and syntax-help surfaces extend below its group while the collapsed animation stays clipped.
 The app styles the surfaces themselves, narrowing their floating width to 19rem below a 480px
-viewport so the right-anchored help and date panels remain inside a phone screen, with no height,
-position, or overflow override on the Kerf group.
+viewport so the right-anchored help and date panels remain inside a phone screen. Long help examples
+wrap, the help panel scrolls within the phone viewport, and the date helper puts Apply on its own row.
+No height, position, or
+overflow override remains on the Kerf group.
 
 Both presentations share one quieter chip tint (`--wa-color-brand-fill-quiet`): it is set on the
 `ticket-search-field__query` hook that Kerf renders on the root of the grouped field and of the
