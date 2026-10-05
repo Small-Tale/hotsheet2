@@ -723,7 +723,11 @@ engine** so the user effectively never runs git by hand:
   commits it — the user doesn't stage/commit tickets manually).
   Concurrent Git index/ref lock collisions retry the complete local stage/check/commit
   transaction up to 20 times with capped backoff (4.375 seconds of total retry waits).
-  Retrying rechecks for an already-committed no-op and preserves path-scoped commits.
+  Hot Sheet writers also hold an OS-backed, per-Git-directory lock during each complete
+  stage/check/commit attempt, so one writer cannot replace the shared index between
+  another writer's stage and no-op check. The lock releases before retry backoff and
+  automatically on process exit. Retrying rechecks for an already-committed no-op and
+  preserves path-scoped commits.
   Hot Sheet never deletes another process's Git lock. Exhausted contention or any
   other Git failure warns while preserving the successful ticket write; network
   publication remains asynchronous (HS2-C71XN1).

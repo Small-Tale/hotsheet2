@@ -130,4 +130,5 @@ pub mod auto_context;
 pub mod checkouts;
 pub mod commands;
 pub mod connection_removal;
+mod file_lock;
 pub mod repository_status;

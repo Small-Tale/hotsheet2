@@ -22,6 +22,8 @@ use hotsheet_model::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 
+use crate::file_lock::FileLock;
+
 /// The store metadata file at a store root.
 pub const STORE_METADATA_FILE: &str = "hotsheet-store.json";
 /// Current store version. Schema 3 replaces time-prefix sharding with random-suffix
@@ -546,10 +548,60 @@ impl FsStore {
             return Ok(false);
         }
         retry_autocommit(
-            || self.autocommit_attempt(message, paths),
+            || {
+                // Git locks each subcommand, not the stage/check/commit sequence. A
+                // second Hot Sheet writer can otherwise replace the shared index
+                // after `git add`, making `diff --cached` report a false no-op.
+                let _lock = self.lock_autocommit()?;
+                self.autocommit_attempt(message, paths)
+            },
             std::thread::sleep,
             20,
         )
+    }
+
+    /// Serialize one complete local Git transaction across processes and aliases of
+    /// this store. The OS releases the lock if a writer exits unexpectedly. The file
+    /// lives in Git's private directory and is never staged as ticket content.
+    fn lock_autocommit(&self) -> Result<FileLock, StoreError> {
+        let out = crate::git::command()
+            .arg("-C")
+            .arg(&self.root)
+            .args(["rev-parse", "--absolute-git-dir"])
+            .output()?;
+        if !out.status.success() {
+            return Err(StoreError::Git(format!(
+                "`git rev-parse --absolute-git-dir` failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            )));
+        }
+        let git_dir = PathBuf::from(
+            String::from_utf8_lossy(&out.stdout)
+                .trim_end_matches(['\n', '\r'])
+                .to_string(),
+        );
+        let git_dir = fs::canonicalize(&git_dir).map_err(|source| StoreError::IoAt {
+            operation: "resolving Git directory",
+            path: git_dir,
+            source,
+        })?;
+        let path = git_dir.join("hotsheet-autocommit.lock");
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .map_err(|source| StoreError::IoAt {
+                operation: "opening autocommit lock",
+                path: path.clone(),
+                source,
+            })?;
+        FileLock::acquire(file).map_err(|source| StoreError::IoAt {
+            operation: "locking autocommit transaction",
+            path,
+            source,
+        })
     }
 
     fn autocommit_attempt(
@@ -2314,6 +2366,54 @@ mod tests {
             store
                 .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
                 .is_ok()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn autocommit_lock_serializes_aliases_and_releases_for_the_next_writer() {
+        use std::sync::mpsc::{RecvTimeoutError, sync_channel};
+
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        assert!(store.autocommit("initial store").unwrap());
+        let aliases = tempfile::tempdir().unwrap();
+        let alias = aliases.path().join("same-store");
+        std::os::unix::fs::symlink(dir.path(), &alias).unwrap();
+        let other = FsStore::open(&alias).unwrap();
+        fs::write(dir.path().join("extra.txt"), "one more path\n").unwrap();
+
+        let held = store.lock_autocommit().unwrap();
+        let (started_sender, started_receiver) = sync_channel(1);
+        let (sender, receiver) = sync_channel(1);
+        let worker = std::thread::spawn(move || {
+            started_sender.send(()).unwrap();
+            sender
+                .send(other.autocommit_paths("extra path", &[alias.join("extra.txt")]))
+                .unwrap();
+        });
+        started_receiver
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        assert!(matches!(
+            receiver.recv_timeout(Duration::from_millis(100)),
+            Err(RecvTimeoutError::Timeout)
+        ));
+        assert!(dir.path().join(".git/hotsheet-autocommit.lock").is_file());
+        drop(held);
+        assert!(
+            receiver
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .unwrap()
+        );
+        worker.join().unwrap();
+        assert!(git_ok(dir.path(), &["diff", "--quiet"]));
+        assert!(git_ok(dir.path(), &["diff", "--cached", "--quiet"]));
+        assert!(
+            git_stdout(dir.path(), &["status", "--porcelain"])
+                .unwrap()
+                .is_empty()
         );
     }
 

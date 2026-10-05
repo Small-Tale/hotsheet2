@@ -3,13 +3,15 @@
 //! may use several ticket stores (and vice versa).
 
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::file_lock::FileLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Checkout {
@@ -97,81 +99,6 @@ const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 3;
 const fn registry_schema_version() -> u64 {
     CHECKOUT_REGISTRY_SCHEMA_VERSION
 }
-
-#[derive(Debug)]
-struct RegistryLock {
-    file: File,
-}
-
-impl Drop for RegistryLock {
-    fn drop(&mut self) {
-        unlock_file(&self.file);
-    }
-}
-
-#[cfg(unix)]
-fn lock_file(file: &File) -> io::Result<()> {
-    use std::os::fd::AsRawFd;
-
-    // SAFETY: flock only borrows this live file descriptor for the duration of the call.
-    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-#[cfg(unix)]
-fn unlock_file(file: &File) {
-    use std::os::fd::AsRawFd;
-
-    // SAFETY: the descriptor remains live until RegistryLock is dropped.
-    let _ = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) };
-}
-
-#[cfg(target_os = "windows")]
-fn lock_file(file: &File) -> io::Result<()> {
-    use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::Storage::FileSystem::{LOCKFILE_EXCLUSIVE_LOCK, LockFileEx};
-    use windows_sys::Win32::System::IO::OVERLAPPED;
-
-    // SAFETY: the handle is live and OVERLAPPED is initialized for a synchronous byte-range lock.
-    let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
-    let result = unsafe {
-        LockFileEx(
-            file.as_raw_handle(),
-            LOCKFILE_EXCLUSIVE_LOCK,
-            0,
-            u32::MAX,
-            u32::MAX,
-            &mut overlapped,
-        )
-    };
-    if result != 0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn unlock_file(file: &File) {
-    use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::Storage::FileSystem::UnlockFileEx;
-    use windows_sys::Win32::System::IO::OVERLAPPED;
-
-    // SAFETY: this unlocks the same live handle and byte range acquired by lock_file.
-    let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
-    let _ = unsafe { UnlockFileEx(file.as_raw_handle(), 0, u32::MAX, u32::MAX, &mut overlapped) };
-}
-
-#[cfg(not(any(unix, target_os = "windows")))]
-fn lock_file(_file: &File) -> io::Result<()> {
-    Ok(())
-}
-
-#[cfg(not(any(unix, target_os = "windows")))]
-fn unlock_file(_file: &File) {}
 
 impl Default for RegistryFile {
     fn default() -> Self {
@@ -261,7 +188,7 @@ impl CheckoutRegistry {
         Ok(entries)
     }
 
-    fn acquire_lock(&self) -> Result<RegistryLock, CheckoutError> {
+    fn acquire_lock(&self) -> Result<FileLock, CheckoutError> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -272,8 +199,7 @@ impl CheckoutRegistry {
             .create(true)
             .truncate(false)
             .open(path)?;
-        lock_file(&file)?;
-        Ok(RegistryLock { file })
+        Ok(FileLock::acquire(file)?)
     }
 
     pub fn register(

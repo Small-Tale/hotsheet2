@@ -409,11 +409,26 @@ fn concurrent_edits_retry_external_git_locks_without_losing_history() {
         .output()
         .unwrap();
     assert!(status.status.success());
-    assert!(
-        status.stdout.is_empty(),
-        "{}",
-        String::from_utf8_lossy(&status.stdout)
-    );
+    if !status.stdout.is_empty() {
+        let diff = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(root)
+            .args(["diff", "--", "tickets"])
+            .output()
+            .unwrap();
+        let staged = hotsheet_ticketing::git::command()
+            .arg("-C")
+            .arg(root)
+            .args(["diff", "--cached", "--", "tickets"])
+            .output()
+            .unwrap();
+        panic!(
+            "git status:\n{}\nworktree vs index:\n{}\nindex vs HEAD:\n{}",
+            String::from_utf8_lossy(&status.stdout),
+            String::from_utf8_lossy(&diff.stdout),
+            String::from_utf8_lossy(&staged.stdout)
+        );
+    }
     let history = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
@@ -455,6 +470,17 @@ fn exhausted_git_lock_retries_preserve_the_edit_and_external_lock() {
         .assert()
         .success()
         .stderr(predicate::str::contains("autocommit failed").not());
+    let status = hotsheet_ticketing::git::command()
+        .arg("-C")
+        .arg(root)
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(status.status.success());
+    assert!(
+        status.stdout.is_empty(),
+        "the recovered edit must leave a clean store"
+    );
 }
 
 #[test]
