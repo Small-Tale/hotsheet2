@@ -10862,13 +10862,13 @@ for (const width of [1280, 390]) {
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(false);
     await title.press('!');
     await expect(title).toHaveValue('Writing a ticket!');
-    await page.screenshot({ path: `/private/tmp/hs2-hzk70n-editing-${width}.png` });
+    await page.screenshot({ path: test.info().outputPath(`hzk70n-editing-${width}.png`) });
     await title.evaluate((element) => {
       (element as HTMLElement).blur();
     });
     await expect.poll(() => popup.evaluate((element) => element.matches(':modal'))).toBe(true);
     await expect(popup).toBeFocused();
-    await page.screenshot({ path: `/private/tmp/hs2-hzk70n-permission-${width}.png` });
+    await page.screenshot({ path: test.info().outputPath(`hzk70n-permission-${width}.png`) });
   });
 }
 
