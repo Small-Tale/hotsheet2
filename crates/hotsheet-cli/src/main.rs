@@ -3195,8 +3195,9 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     let input: serde_json::Value =
         serde_json::from_reader(std::io::stdin()).unwrap_or(serde_json::Value::Null);
 
-    // Session lifecycle events report a halted or resumed AI session to the Hot Sheet terminal
-    // this hook runs in (HS2-HJ4D1H). They never print a decision, and outside a Hot Sheet
+    // Session lifecycle events report a halted or resumed AI session (HS2-HJ4D1H), and a session
+    // that started or ended with these hooks active (HS2-EV1XK3), to the Hot Sheet terminal this
+    // hook runs in. They never print a decision or context, and outside a Hot Sheet
     // terminal or without a reachable server they do nothing.
     if let Some(session) = hotsheet_cli::permission_hook::session_hook_event(&input) {
         let terminal = std::env::var("HOTSHEET_TERMINAL_ID").unwrap_or_default();
@@ -3439,7 +3440,9 @@ fn hook_server_route() -> Option<(String, String)> {
         })
 }
 
-/// `POST` (halted) or `DELETE` (resumed) `/terminals/{id}/halt` for the hook's terminal.
+/// Report a session lifecycle event against the hook's terminal: `POST` (halted) or `DELETE`
+/// (resumed) `/terminals/{id}/halt`, and `POST` (session started) or `DELETE` (ended)
+/// `/terminals/{id}/ai-connection`.
 fn report_terminal_session(
     url: &str,
     secret: &str,
@@ -3448,33 +3451,40 @@ fn report_terminal_session(
     agent: Option<&str>,
 ) -> Result<()> {
     use hotsheet_cli::permission_hook::SessionHookEvent;
-    let endpoint = format!(
-        "{}/terminals/{}/halt",
-        url.trim_end_matches('/'),
-        urlencoding_component(terminal)
-    );
+    let endpoint = |route: &str| {
+        format!(
+            "{}/terminals/{}/{route}",
+            url.trim_end_matches('/'),
+            urlencoding_component(terminal)
+        )
+    };
+    let post = |route: &str, body: serde_json::Value| -> Result<()> {
+        ureq::post(&endpoint(route))
+            .set("X-Hotsheet-Secret", secret)
+            .set("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(5))
+            .send_string(&body.to_string())?;
+        Ok(())
+    };
+    let delete = |route: &str| -> Result<()> {
+        ureq::delete(&endpoint(route))
+            .set("X-Hotsheet-Secret", secret)
+            .timeout(std::time::Duration::from_secs(5))
+            .call()?;
+        Ok(())
+    };
     match session {
         SessionHookEvent::Halted {
             error_type,
             message,
-        } => {
-            let body = serde_json::json!({
-                "error_type": error_type, "message": message, "agent": agent,
-            });
-            ureq::post(&endpoint)
-                .set("X-Hotsheet-Secret", secret)
-                .set("Content-Type", "application/json")
-                .timeout(std::time::Duration::from_secs(5))
-                .send_string(&body.to_string())?;
-        }
-        SessionHookEvent::Resumed => {
-            ureq::delete(&endpoint)
-                .set("X-Hotsheet-Secret", secret)
-                .timeout(std::time::Duration::from_secs(5))
-                .call()?;
-        }
+        } => post(
+            "halt",
+            serde_json::json!({ "error_type": error_type, "message": message, "agent": agent }),
+        ),
+        SessionHookEvent::Resumed => delete("halt"),
+        SessionHookEvent::Connected => post("ai-connection", serde_json::json!({ "agent": agent })),
+        SessionHookEvent::Disconnected => delete("ai-connection"),
     }
-    Ok(())
 }
 
 /// Percent-encode a terminal id for one URL path segment.

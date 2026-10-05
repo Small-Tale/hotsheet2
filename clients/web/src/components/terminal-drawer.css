@@ -163,6 +163,16 @@
   display: inline-flex;
   flex: none;
 }
+.terminal-drawer__status {
+  display: inline-flex;
+  align-items: center;
+  gap: remify(4px);
+  flex: none;
+}
+.terminal-drawer__ai-connection {
+  display: inline-flex;
+  flex: none;
+}
 .terminal-drawer__create-wrap {
   position: relative;
   flex: none;

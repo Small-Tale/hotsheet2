@@ -5361,6 +5361,168 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
   }
 });
 
+test('shows a terminal connected to Hot Sheet while its Codex session runs with trusted hooks (HS2-EV1XK3)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer(),
+    cli =
+      process.env.HOTSHEET_TEST_CLI_BIN ??
+      fileURLToPath(
+        new URL(`../../../target/debug/hotsheet-cli${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url),
+      );
+  // The Codex hook adapter exactly as a Hot Sheet terminal runs it: its env names the terminal.
+  const hook = (input: Record<string, string>) => {
+    const result = spawnSync(cli, ['permission-hook', '--agent', 'codex'], {
+      input: JSON.stringify(input),
+      env: {
+        ...withoutGitRepositoryEnv(process.env),
+        HOTSHEET_HOME: server.home,
+        HOTSHEET_SERVER: server.url,
+        HOTSHEET_SECRET: server.secret,
+        HOTSHEET_TERMINAL_ID: 'codex-shell',
+      },
+      encoding: 'utf8',
+    });
+    expect(result.status, result.stderr).toBe(0);
+    // A SessionStart hook's output would become model context, so it prints nothing.
+    expect(result.stdout).toBe('');
+  };
+  try {
+    await server.request('/terminals', 'POST', {
+      id: 'codex-shell',
+      command: '/bin/sh',
+      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      cwd: server.root,
+    });
+    await expect
+      .poll(async () => (await server.request<Array<{ id: string; cwd?: string }>>('/terminals'))[0]?.cwd)
+      .toBe('/work/demo');
+    await mockProject(page);
+    for (const pattern of [
+      '**/__hotsheet/project-api/demo-checkout/terminals**',
+      '**/__hotsheet/project-api/demo-checkout/ws/poll*',
+    ])
+      await page.route(pattern, async (route) => {
+        const incoming = new URL(route.request().url()),
+          path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
+        try {
+          const response = await route.fetch({
+            url: `${server.url}${path}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          await route.fulfill({ response });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      });
+    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+      void route.close();
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]'),
+      tab = drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-shell"]'),
+      connection = tab.locator('.terminal-drawer__ai-connection');
+    await expect(tab).toBeVisible();
+    // A plain shell that never ran an AI tool shows no connection state.
+    await expect(connection).toHaveCount(0);
+
+    // Codex starts in the shell with Hot Sheet's hooks trusted: its SessionStart reaches the real
+    // server and the change stream marks the tab without a reload.
+    hook({ hook_event_name: 'SessionStart', session_id: 'session-1', source: 'startup' });
+    await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
+    await expect(connection).toHaveAttribute(
+      'title',
+      'Codex is connected to Hot Sheet: its permission prompts come to the app',
+    );
+    await expect(connection.locator('[data-lucide="plug"]')).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath('hs2-ev1xk3-connected-1280.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(connection).toBeVisible();
+    await settledAnimations(page.locator('[data-component="app-shell"]'));
+    await page.screenshot({ path: test.info().outputPath('hs2-ev1xk3-connected-390.png') });
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    // Codex exits: SessionEnd clears it everywhere.
+    hook({ hook_event_name: 'SessionEnd', session_id: 'session-1', reason: 'exit' });
+    await expect(connection).toHaveCount(0);
+    expect((await server.request<Array<{ ai_connection?: unknown }>>('/terminals'))[0].ai_connection).toBeUndefined();
+  } finally {
+    await server.stop();
+  }
+});
+
+test('warns when an AI tab never connects to Hot Sheet, and clears once it does (HS2-EV1XK3)', async ({ page }) => {
+  await page.clock.install();
+  await mockProject(page);
+  let connected = false;
+  const polls: Array<import('@playwright/test').Route> = [];
+  let cursor = 0;
+  await page.route(/\/ws\/poll/, (route) => {
+    if (!new URL(route.request().url()).searchParams.has('since'))
+      return route.fulfill({ json: { cursor, events: [], overflow: false } });
+    polls.push(route);
+  });
+  await page.route('**/__hotsheet/project-api/demo-checkout/terminals', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({
+          json: [
+            {
+              id: 'codex-01TAB',
+              kind: 'ai',
+              tool: 'codex',
+              alive: true,
+              busy: false,
+              cwd: '/work/demo',
+              ...(connected ? { ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' } } : {}),
+            },
+          ],
+        })
+      : route.fallback(),
+  );
+  await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+    void route.close();
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const tab = page.locator('[data-tab-kind="terminal"][data-terminal-id="codex-01TAB"]'),
+    connection = tab.locator('.terminal-drawer__ai-connection');
+  await expect(tab).toBeVisible();
+  // A freshly started session gets a grace period to report in before it is flagged.
+  await expect(connection).toHaveCount(0);
+  await page.clock.fastForward(16_000);
+  await expect(connection).toHaveAttribute('data-ai-connection', 'missing');
+  await expect(connection).toHaveAttribute('title', /^Codex is not connected to Hot Sheet: .*Run \/hooks in Codex/);
+  await expect(connection.locator('[data-lucide="unplug"]')).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('hs2-ev1xk3-missing-1280.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(connection).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('hs2-ev1xk3-missing-390.png') });
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // After /hooks the restarted session reports in; the change event refetches and clears the warning.
+  connected = true;
+  await expect.poll(() => polls.length).toBeGreaterThan(0);
+  cursor += 1;
+  await polls.shift()!.fulfill({
+    json: {
+      cursor,
+      events: [{ store: '', kind: 'terminal_ai_connection', id: 'codex-01TAB', slug: '', message: 'codex' }],
+      overflow: false,
+    },
+  });
+  await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
+  await expect(connection.locator('[data-lucide="plug"]')).toBeVisible();
+});
+
 test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through the real server (HS2-7Y1BQ2)', async ({
   page,
 }) => {

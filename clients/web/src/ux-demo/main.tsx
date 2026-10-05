@@ -1043,6 +1043,55 @@ function demoContent(item: DemoDefinition) {
             />
           </div>
         </section>
+        {/* Tab status: a halted AI session (HS2-HJ4D1H), and whether an AI session reaches Hot Sheet (HS2-EV1XK3). */}
+        <section class="terminal-drawer-provider-demo" aria-label="Terminal tab states">
+          <h2 class="terminal-drawer-provider-demo__caption">Terminal tab states</h2>
+          <div class="terminal-drawer-provider-demo__stage">
+            <TerminalDrawer
+              projectId="demo-states"
+              projectName="Demo project"
+              sessions={[
+                {
+                  ...shell,
+                  id: 'connected',
+                  projectId: 'demo-states',
+                  title: 'Connected',
+                  tool: 'codex',
+                  ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' },
+                  aiConnection: 'connected',
+                },
+                {
+                  ...shell,
+                  id: 'missing',
+                  projectId: 'demo-states',
+                  title: 'Not connected',
+                  kind: 'ai',
+                  tool: 'codex',
+                  busy: false,
+                  aiConnection: 'missing',
+                },
+                {
+                  ...shell,
+                  id: 'halted',
+                  projectId: 'demo-states',
+                  title: 'Halted',
+                  kind: 'ai',
+                  tool: 'claude',
+                  halt: {
+                    error_type: 'overloaded',
+                    message: 'Selected model is at capacity. Please try a different model.',
+                    at: '2026-10-05T08:00:00Z',
+                  },
+                },
+              ]}
+              width={900}
+              height={96}
+              fitAcross={2}
+              fitHigh={2}
+              selectedId="connected"
+            />
+          </div>
+        </section>
         {/* A touch-first desktop (coarse primary pointer) adds rail Copy and Paste (HS2-5DHHPV). */}
         <section class="terminal-drawer-provider-demo" aria-label="Touch-first desktop">
           <h2 class="terminal-drawer-provider-demo__caption">Touch-first desktop</h2>

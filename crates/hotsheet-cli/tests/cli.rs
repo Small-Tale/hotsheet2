@@ -230,6 +230,40 @@ fn permission_hook_reports_halted_and_resumed_sessions_to_its_terminal() {
     );
 }
 
+#[test]
+fn permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection() {
+    // HS2-EV1XK3: a Codex (or Claude) session that starts with Hot Sheet's hooks trusted reports
+    // its terminal connected; SessionEnd disconnects it. Neither prints anything, because a
+    // SessionStart hook's output would otherwise become model context.
+    let home = tempfile::tempdir().unwrap();
+    let hook = |input: &'static str| {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || capture_one_request(listener));
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", home.path())
+            .env_remove("HOTSHEET_PROJECT")
+            .env("HOTSHEET_SERVER", &url)
+            .env("HOTSHEET_SECRET", "terminal-secret")
+            .env("HOTSHEET_TERMINAL_ID", "codex-7")
+            .args(["permission-hook", "--agent", "codex"])
+            .write_stdin(input)
+            .assert()
+            .success()
+            .stdout(predicate::str::is_empty());
+        server.join().unwrap()
+    };
+    let started =
+        hook(r#"{"hook_event_name":"SessionStart","session_id":"s-1","source":"startup"}"#);
+    assert_eq!(started.0, "POST /terminals/codex-7/ai-connection HTTP/1.1");
+    assert_eq!(started.1, "terminal-secret");
+    let body: serde_json::Value = serde_json::from_str(&started.2).unwrap();
+    assert_eq!(body["agent"], "codex");
+    let ended = hook(r#"{"hook_event_name":"SessionEnd","session_id":"s-1","reason":"exit"}"#);
+    assert_eq!(ended.0, "DELETE /terminals/codex-7/ai-connection HTTP/1.1");
+}
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 

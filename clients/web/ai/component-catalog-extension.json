@@ -1374,9 +1374,9 @@
       "name": "TerminalDrawer",
       "source": "src/components/terminal-drawer.tsx",
       "kind": "composition",
-      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu.",
+      "purpose": "Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted, and Hot Sheet-connected or unconnected AI sessions.",
       "useWhen": [
-        "Hot Sheet needs project grid, terminal, and embedded AI-chat tabs with a typed creation menu."
+        "Hot Sheet needs project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted, and Hot Sheet-connected or unconnected AI sessions."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalDrawer behavior."

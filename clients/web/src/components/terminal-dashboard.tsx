@@ -24,10 +24,11 @@ import {
   X,
 } from 'lucide';
 
-import type { TerminalHalt } from '../api';
+import type { TerminalAiConnection, TerminalHalt } from '../api';
 import { contextPopupMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
+import type { AiConnectionState } from '../terminal-ai-connection';
 import {
   TERMINAL_TILE_HORIZONTAL_CHROME,
   TERMINAL_TILE_VERTICAL_CHROME,
@@ -55,6 +56,12 @@ export interface TerminalDashboardSession {
   progress?: number;
   /** The AI session halted on an API error (HS2-HJ4D1H). */
   halt?: TerminalHalt;
+  /** The AI tool an `ai` terminal launched (for example `codex`). */
+  tool?: string;
+  /** The session's own `SessionStart` report (HS2-EV1XK3). */
+  ai_connection?: TerminalAiConnection;
+  /** Whether the terminal's AI session reaches Hot Sheet, derived by `deriveAiConnectionStates`. */
+  aiConnection?: AiConnectionState;
   scrollback: string;
 }
 

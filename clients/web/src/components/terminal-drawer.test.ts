@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { AIConversation } from './ai-conversation';
+import type { TerminalDashboardSession } from './terminal-dashboard';
 import { aiShellMenuItem, TerminalDrawer } from './terminal-drawer';
 
 const sessions = [
@@ -469,5 +470,49 @@ describe('halted AI sessions (HS2-HJ4D1H)', () => {
     const resumed = markup(true, false);
     expect(resumed).not.toContain('terminal-drawer__halt');
     expect(resumed).toContain('terminal-drawer__busy-dot');
+  });
+});
+
+describe('AI connection to Hot Sheet (HS2-EV1XK3)', () => {
+  const markup = (session: Partial<TerminalDashboardSession>) =>
+    String(
+      TerminalDrawer({
+        projectId: 'project',
+        projectName: 'Project',
+        sessions: [{ ...sessions[0], ...session }],
+        width: 900,
+        height: 320,
+        fitAcross: 2,
+        fitHigh: 2,
+        selectedId: 'grid',
+      }),
+    );
+  it('marks connected and unconnected AI tabs beside busy, and nothing for an unknown state', () => {
+    const connected = markup({
+      busy: true,
+      tool: 'codex',
+      aiConnection: 'connected',
+      ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' },
+    });
+    expect(connected).toContain('data-ai-connection="connected"');
+    expect(connected).toContain('data-lucide="plug"');
+    expect(connected).toContain('Codex is connected to Hot Sheet');
+    expect(connected).toContain('terminal-drawer__busy-dot');
+    const missing = markup({ busy: false, kind: 'ai', tool: 'codex', aiConnection: 'missing' });
+    expect(missing).toContain('data-ai-connection="missing"');
+    expect(missing).toContain('data-lucide="unplug"');
+    expect(missing).toContain('Run /hooks in Codex');
+    expect(missing).not.toContain('terminal-drawer__busy-dot');
+    const plain = markup({ busy: false });
+    expect(plain).not.toContain('terminal-drawer__status');
+    expect(plain).not.toContain('data-ai-connection');
+  });
+  it('lets a halt outrank the connection state', () => {
+    const halted = markup({
+      aiConnection: 'connected',
+      halt: { error_type: 'overloaded', message: 'At capacity', at: '2026-10-05T08:00:00Z' },
+    });
+    expect(halted).toContain('terminal-drawer__halt');
+    expect(halted).not.toContain('data-ai-connection');
   });
 });

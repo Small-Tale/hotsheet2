@@ -170,6 +170,8 @@ pub struct AppState {
     terminal_server_url: Arc<Mutex<Option<String>>>,
     /// AI sessions in terminals that halted on an API error, by terminal id (HS2-HJ4D1H).
     terminal_halts: Arc<Mutex<std::collections::HashMap<String, TerminalHalt>>>,
+    /// AI sessions whose Hot Sheet hooks reported in from a terminal, by terminal id (HS2-EV1XK3).
+    terminal_ai_connections: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
     /// Machine-local checkout discovery. Checkout ids identify working directories and
     /// are intentionally separate from store ids and server authentication tokens.
     checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
@@ -359,6 +361,7 @@ impl AppState {
             setup_refreshes: Arc::new(Mutex::new(std::collections::HashSet::new())),
             terminal_server_url: Arc::new(Mutex::new(None)),
             terminal_halts: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_ai_connections: Arc::new(Mutex::new(std::collections::HashMap::new())),
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
                 machine_home.join("checkouts.json"),
             ),
@@ -1917,6 +1920,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/terminals/{id}/halt",
             post(halt_terminal).delete(clear_terminal_halt),
+        )
+        .route(
+            "/terminals/{id}/ai-connection",
+            post(connect_terminal_ai).delete(disconnect_terminal_ai),
         )
         // Activity timeline (HS2-KP31ZE): ingest a tool's activity event, and read the
         // per-ticket/session "what happened" window (docs/15). The Announcer/timeline consumer.
@@ -8335,6 +8342,21 @@ struct TerminalInfo {
     /// (HS2-HJ4D1H); absent while it is running normally.
     #[serde(skip_serializing_if = "Option::is_none")]
     halt: Option<TerminalHalt>,
+    /// An AI session in this terminal started with Hot Sheet's hooks active, so its permission
+    /// prompts come to Hot Sheet (HS2-EV1XK3); absent when no session has reported in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ai_connection: Option<TerminalAiConnection>,
+}
+
+/// An AI session whose `SessionStart` hook reported in from a terminal (HS2-EV1XK3). A tool runs
+/// a project hook only once it is installed and trusted, so this proves the hook is live.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TerminalAiConnection {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    agent: Option<String>,
+    /// RFC 3339 time the session reported in.
+    #[serde(default)]
+    at: String,
 }
 
 /// Why a terminal's AI session stopped: the tool's error category and message (for example
@@ -8385,6 +8407,7 @@ fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
         tool: ai_terminal_tool(term.kind(), term.worker_id(), id),
         name: None,
         halt: None,
+        ai_connection: None,
     }
 }
 
@@ -8402,6 +8425,7 @@ fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInfo {
         tool,
         name: None,
         halt: None,
+        ai_connection: None,
     }
 }
 
@@ -9329,9 +9353,11 @@ async fn live_terminal_infos(state: &AppState) -> Vec<TerminalInfo> {
 fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<TerminalInfo> {
     let names = terminal_names::all(&Settings::new(state.store.root())).unwrap_or_default();
     let halts = state.terminal_halts.lock().unwrap().clone();
+    let connections = state.terminal_ai_connections.lock().unwrap().clone();
     for info in &mut infos {
         info.name = names.get(&info.id).cloned();
         info.halt = halts.get(&info.id).cloned();
+        info.ai_connection = connections.get(&info.id).cloned();
     }
     infos
 }
@@ -9405,6 +9431,86 @@ async fn clear_terminal_halt(State(state): State<AppState>, Path(id): Path<Strin
 
 fn forget_terminal_halt(state: &AppState, id: &str) -> bool {
     state.terminal_halts.lock().unwrap().remove(id).is_some()
+}
+
+/// Body for `POST /terminals/{id}/ai-connection`, sent by the AI tool's `SessionStart` hook.
+#[derive(Deserialize)]
+struct TerminalAiConnectionReq {
+    #[serde(default)]
+    agent: Option<String>,
+}
+
+/// `POST /terminals/{id}/ai-connection` — an AI session in the terminal started with Hot Sheet's
+/// hooks active (HS2-EV1XK3), announced with a `terminal_ai_connection` change event (`message` =
+/// the agent) so every client shows the tab as connected. Repeating the same agent is not
+/// re-announced.
+async fn connect_terminal_ai(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<TerminalAiConnectionReq>,
+) -> Result<StatusCode, ApiError> {
+    if !live_terminal_infos(&state)
+        .await
+        .iter()
+        .any(|info| info.id == id)
+    {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "no such terminal"));
+    }
+    let agent = body
+        .agent
+        .map(|agent| agent.trim().chars().take(64).collect::<String>())
+        .filter(|agent| !agent.is_empty());
+    let connection = TerminalAiConnection {
+        agent: agent.clone(),
+        at: OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .unwrap_or_default(),
+    };
+    let changed = state
+        .terminal_ai_connections
+        .lock()
+        .unwrap()
+        .insert(id.clone(), connection)
+        .is_none_or(|previous| previous.agent != agent);
+    if changed {
+        emit_terminal_ai_connection(&state, &id, Some(agent.unwrap_or_default()));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /terminals/{id}/ai-connection` — the terminal's AI session ended (`SessionEnd`). A
+/// terminal that was not connected is a no-op without an event.
+async fn disconnect_terminal_ai(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> StatusCode {
+    if forget_terminal_ai_connection(&state, &id) {
+        emit_terminal_ai_connection(&state, &id, None);
+    }
+    StatusCode::NO_CONTENT
+}
+
+fn forget_terminal_ai_connection(state: &AppState, id: &str) -> bool {
+    state
+        .terminal_ai_connections
+        .lock()
+        .unwrap()
+        .remove(id)
+        .is_some()
+}
+
+fn emit_terminal_ai_connection(state: &AppState, id: &str, message: Option<String>) {
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: String::new(),
+        kind: "terminal_ai_connection".into(),
+        id: id.to_owned(),
+        slug: String::new(),
+        message,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
 }
 
 fn emit_terminal_halted(state: &AppState, id: &str, message: Option<String>) {
@@ -9582,6 +9688,7 @@ async fn kill_terminal(
             | hotsheet_terminals::BrokerResponse::NotFound => {
                 forget_terminal_name(&state, &id);
                 forget_terminal_halt(&state, &id);
+                forget_terminal_ai_connection(&state, &id);
                 Ok(StatusCode::NO_CONTENT)
             }
             other => Err(broker_err(other)),
@@ -9593,6 +9700,7 @@ async fn kill_terminal(
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     forget_terminal_name(&state, &id);
     forget_terminal_halt(&state, &id);
+    forget_terminal_ai_connection(&state, &id);
     Ok(StatusCode::NO_CONTENT)
 }
 

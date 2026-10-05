@@ -223,6 +223,20 @@ a command that needs approval. The permission prompt must appear in the Hot Shee
 the shell, and the app's answer must be honored (HS2-HE4AVD). Real interactive tools can't run
 in CI; the automated tests prove the route-back environment reaches the shell.
 
+### Codex hook trust and the terminal connection state (HS2-EV1XK3)
+
+In the app, open a project's AI shell with Codex after `hotsheet-cli setup --refresh`.
+
+1. Before reviewing the changed hooks with `/hooks`, the drawer tab shows the warning `unplug`
+   icon after about 15 seconds, and a command needing approval prompts in the terminal.
+2. Run `/hooks` and trust Hot Sheet's hooks, then restart Codex. The tab shows `plug`, and the
+   next approval appears in the app.
+3. Exit Codex. The `plug` icon goes away.
+
+Repeat with `codex` run by hand in a plain shell terminal (only the `plug` state applies there).
+Real interactive Codex trust cannot run in CI; the automated tests drive the same hook adapter
+and server routes.
+
 ### AI completion confidence rubric compliance (HS2-DWTJ43)
 
 The storage, write surfaces, and display are automated; whether a live agent follows the

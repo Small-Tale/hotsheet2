@@ -60,3 +60,34 @@ test('keeps the hide-drawer action at the trailing edge of the drawer toolbar (H
     await rail.screenshot({ path: test.info().outputPath(`terminal-drawer-hide-trailing-${width}.png`) });
   }
 });
+
+for (const width of [1280, 390]) {
+  test(`shows busy, halted, and Hot Sheet connection states on terminal tabs at ${width}px (HS2-EV1XK3)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto('/ux-demo?component=terminal-drawer');
+    const states = page.locator('[aria-label="Terminal tab states"] [data-component="terminal-drawer"]'),
+      tab = (id: string) => states.locator(`[data-tab-kind="terminal"][data-terminal-id="${id}"]`);
+    await expect(tab('connected').locator('[data-ai-connection="connected"] [data-lucide="plug"]')).toBeVisible();
+    await expect(tab('connected').locator('.terminal-drawer__busy-dot')).toBeVisible();
+    await expect(tab('missing').locator('[data-ai-connection="missing"] [data-lucide="unplug"]')).toBeVisible();
+    await expect(tab('missing').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
+      'title',
+      /Run \/hooks in Codex/,
+    );
+    await expect(tab('halted').locator('.terminal-drawer__halt [data-lucide="triangle-alert"]')).toBeVisible();
+    // The status icons sit on the tab label's center line.
+    for (const [id, name] of [
+      ['connected', 'Connected'],
+      ['missing', 'Not connected'],
+    ] as const) {
+      const [label, icon] = await Promise.all([
+        tab(id).getByText(name, { exact: true }).boundingBox(),
+        tab(id).locator('.terminal-drawer__ai-connection svg').boundingBox(),
+      ]);
+      expect(Math.abs(label!.y + label!.height / 2 - (icon!.y + icon!.height / 2))).toBeLessThanOrEqual(1.5);
+    }
+    await states.screenshot({ path: test.info().outputPath(`hs2-ev1xk3-tab-states-${width}.png`) });
+  });
+}

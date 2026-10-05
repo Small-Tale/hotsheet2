@@ -519,6 +519,15 @@ export interface TerminalInfo {
   name?: string;
   /** The terminal's AI session stopped on an API error and waits for the user (HS2-HJ4D1H). */
   halt?: TerminalHalt;
+  /** An AI session in the terminal started with Hot Sheet's hooks active, so its permission
+   * prompts come to Hot Sheet (HS2-EV1XK3); absent when none has reported in. */
+  ai_connection?: TerminalAiConnection;
+}
+/** An AI session's `SessionStart` hook report (`POST /terminals/{id}/ai-connection`). */
+export interface TerminalAiConnection {
+  agent?: string;
+  /** RFC 3339 time the session reported in. */
+  at: string;
 }
 /** Why a terminal's AI session halted, as its hook reported it (`POST /terminals/{id}/halt`). */
 export interface TerminalHalt {

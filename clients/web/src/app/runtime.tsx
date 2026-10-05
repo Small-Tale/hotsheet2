@@ -273,6 +273,7 @@ import { createRenderMetrics } from '../render-metrics';
 import { customViewSearch } from '../saved-views';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
+import { deriveAiConnectionStates } from '../terminal-ai-connection';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
 import {
@@ -1358,6 +1359,17 @@ export async function startHotSheetWebClient() {
       }),
     );
   }
+  // When each terminal first appeared, for the AI-connection grace period (HS2-EV1XK3).
+  const terminalFirstSeen = new Map<string, number>();
+  let aiConnectionTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Mark each terminal connected to Hot Sheet or not; re-derives locally (no request) when a grace ends. */
+  function applyAiConnectionStates() {
+    clearTimeout(aiConnectionTimer);
+    aiConnectionTimer = undefined;
+    const { groups, nextCheckInMs } = deriveAiConnectionStates(terminalGroups.value, terminalFirstSeen, Date.now());
+    terminalGroups.value = groups;
+    if (nextCheckInMs !== undefined) aiConnectionTimer = setTimeout(applyAiConnectionStates, nextCheckInMs);
+  }
   async function refreshTerminalDashboard() {
     const generation = ++terminalDashboardGeneration,
       openProjects = [...projects.value];
@@ -1399,6 +1411,7 @@ export async function startHotSheetWebClient() {
     );
     if (generation !== terminalDashboardGeneration) return;
     terminalGroups.value = results.flatMap((group) => (group ? [group] : []));
+    applyAiConnectionStates();
     terminalDashboardMessage.value =
       openProjects.length > 0 && terminalGroups.value.length === 0 ? 'Terminal snapshots could not be loaded.' : '';
     terminalDashboardLoading.value = false;
@@ -3671,8 +3684,14 @@ export async function startHotSheetWebClient() {
             if (response.events.some((event) => event.kind === 'views_updated')) await refreshCustomViews(current);
             for (const event of response.events)
               if (event.kind === 'terminal_renamed') applyTerminalRenamed(current, event.id, event.message);
-            // A terminal's AI session halted or resumed (HS2-HJ4D1H): refetch so its tab marks it.
-            if (response.events.some((event) => event.kind === 'terminal_halted')) void refreshTerminalDashboard();
+            // A terminal's AI session halted or resumed (HS2-HJ4D1H), or connected to or left Hot Sheet
+            // (HS2-EV1XK3): refetch so its tab marks it.
+            if (
+              response.events.some(
+                (event) => event.kind === 'terminal_halted' || event.kind === 'terminal_ai_connection',
+              )
+            )
+              void refreshTerminalDashboard();
             if (containsRepositoryChange(response, current.id)) scheduleRepositoryRefresh(current);
           },
         });

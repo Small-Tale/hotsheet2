@@ -684,6 +684,31 @@ fn claude_hook_reports_halted_and_resumed_sessions() {
 }
 
 #[test]
+fn claude_and_codex_hooks_report_session_connections() {
+    // HS2-EV1XK3: both tools' hooks report SessionStart/SessionEnd so a Hot Sheet terminal knows
+    // whether its AI session runs with Hot Sheet's (trusted) hooks.
+    for id in ["claude", "codex"] {
+        let plugin = builtin_plugins()
+            .into_iter()
+            .find(|plugin| plugin.manifest.id == id)
+            .expect("bundled plugin");
+        let hooks = plugin.manifest.hooks.expect("installs lifecycle hooks");
+        assert_eq!(hooks.event, "PermissionRequest");
+        for event in ["SessionStart", "SessionEnd"] {
+            assert!(
+                hooks.additional_events.iter().any(|value| value == event),
+                "{id}: {event} missing from {:?}",
+                hooks.additional_events
+            );
+        }
+        assert_eq!(
+            hooks.command,
+            format!("hotsheet-cli permission-hook --agent {id}")
+        );
+    }
+}
+
+#[test]
 fn bundled_guidance_requires_integrating_worktree_and_delegated_work() {
     // HS2-YVV6A0: a sub-agent finished a ticket in a git worktree, it was marked completed, and
     // the work never reached main. Every instruction body and the shared skill forbid that.

@@ -17,15 +17,18 @@ import {
   MessageSquare,
   Minimize2,
   PanelBottomClose,
+  Plug,
   Plus,
   SquareTerminal,
   TriangleAlert,
+  Unplug,
   X,
 } from 'lucide';
 
 import { orderedDrawerTabIds } from '../drawer-tab-order';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
+import { aiConnectionLabel } from '../terminal-ai-connection';
 import { terminalGridContentSize } from '../terminal-grid-layout';
 import {
   type MobileMagnifiedTerminal,
@@ -217,6 +220,24 @@ export function TerminalDrawer({
                       name="triangle-alert"
                       color={uiColor('danger-on-quiet')}
                     />
+                  </span>
+                ) : session.aiConnection ? (
+                  <span class="terminal-drawer__status">
+                    {/* Whether the tab's AI session reaches Hot Sheet (HS2-EV1XK3). */}
+                    <span
+                      class="terminal-drawer__ai-connection"
+                      data-ai-connection={session.aiConnection}
+                      role="img"
+                      aria-label={aiConnectionLabel(session.aiConnection, session.ai_connection?.agent, session.tool)}
+                      title={aiConnectionLabel(session.aiConnection, session.ai_connection?.agent, session.tool)}
+                    >
+                      {session.aiConnection === 'connected' ? (
+                        <LucideIcon size="s" icon={Plug} name="plug" color={uiColor('neutral-on-quiet')} />
+                      ) : (
+                        <LucideIcon size="s" icon={Unplug} name="unplug" color={uiColor('warning-on-quiet')} />
+                      )}
+                    </span>
+                    {session.busy ? <i class="terminal-drawer__busy-dot" aria-label="Busy" /> : undefined}
                   </span>
                 ) : session.busy ? (
                   <i class="terminal-drawer__busy-dot" aria-label="Busy" />

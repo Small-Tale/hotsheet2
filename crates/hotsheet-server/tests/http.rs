@@ -1170,6 +1170,148 @@ async fn terminal_halt_is_reported_listed_announced_cleared_and_forgotten_on_kil
 }
 
 #[tokio::test]
+async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgotten_on_kill() {
+    // HS2-EV1XK3: a session whose Hot Sheet SessionStart hook ran marks its terminal connected
+    // until SessionEnd (DELETE) or the terminal is killed.
+    let (_dir, state) = state();
+    let router = app(state);
+    let send = |method: &'static str, path: &'static str, body: Option<&'static str>| {
+        let router = router.clone();
+        async move { router.oneshot(authed(method, path, body)).await.unwrap() }
+    };
+    let connect = r#"{"agent":"codex"}"#;
+    assert_eq!(
+        send("POST", "/terminals/nope/ai-connection", Some(connect))
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let opened = send(
+        "POST",
+        "/terminals",
+        Some(r#"{"command":"cat","id":"hooked"}"#),
+    )
+    .await;
+    assert_eq!(opened.status(), StatusCode::OK);
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("ai_connection")
+            .is_none()
+    );
+    let announced_since = |cursor: u64| {
+        let router = router.clone();
+        async move {
+            let events = body_json(
+                router
+                    .oneshot(authed(
+                        "GET",
+                        &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                        None,
+                    ))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            events["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|event| event["kind"] == "terminal_ai_connection")
+                .cloned()
+                .collect::<Vec<_>>()
+        }
+    };
+    let cursor = || async {
+        body_json(send("GET", "/ws/poll?timeout_ms=0", None).await).await["cursor"]
+            .as_u64()
+            .unwrap()
+    };
+
+    // Connect, then repeat (a resumed session): listed once, announced once.
+    let before = cursor().await;
+    for _ in 0..2 {
+        assert_eq!(
+            send("POST", "/terminals/hooked/ai-connection", Some(connect))
+                .await
+                .status(),
+            StatusCode::NO_CONTENT
+        );
+    }
+    let listed = body_json(send("GET", "/terminals", None).await).await;
+    assert_eq!(listed[0]["ai_connection"]["agent"], "codex");
+    assert!(
+        listed[0]["ai_connection"]["at"]
+            .as_str()
+            .is_some_and(|at| !at.is_empty())
+    );
+    assert_eq!(
+        body_json(send("GET", "/terminals/hooked", None).await).await["ai_connection"]["agent"],
+        "codex"
+    );
+    let announced = announced_since(before).await;
+    assert_eq!(announced.len(), 1, "{announced:?}");
+    assert_eq!(announced[0]["id"], "hooked");
+    assert_eq!(announced[0]["message"], "codex");
+
+    // A different agent in the same shell re-announces.
+    let before = cursor().await;
+    send(
+        "POST",
+        "/terminals/hooked/ai-connection",
+        Some(r#"{"agent":"claude"}"#),
+    )
+    .await;
+    assert_eq!(announced_since(before).await.len(), 1);
+
+    // Ending clears it and announces once; ending again is a silent no-op.
+    let before = cursor().await;
+    for _ in 0..2 {
+        assert_eq!(
+            send("DELETE", "/terminals/hooked/ai-connection", None)
+                .await
+                .status(),
+            StatusCode::NO_CONTENT
+        );
+    }
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("ai_connection")
+            .is_none()
+    );
+    let cleared = announced_since(before).await;
+    assert_eq!(cleared.len(), 1, "{cleared:?}");
+    assert!(
+        cleared[0]
+            .get("message")
+            .is_none_or(serde_json::Value::is_null)
+    );
+
+    // A kill forgets a connection, so a reused id starts disconnected.
+    send("POST", "/terminals/hooked/ai-connection", Some(r#"{}"#)).await;
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]["ai_connection"]
+            .get("agent")
+            .is_none()
+    );
+    assert_eq!(
+        send("DELETE", "/terminals/hooked", None).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    let reopened = send(
+        "POST",
+        "/terminals",
+        Some(r#"{"command":"cat","id":"hooked"}"#),
+    )
+    .await;
+    assert_eq!(reopened.status(), StatusCode::OK);
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("ai_connection")
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn a_restart_prunes_names_of_terminals_that_did_not_survive() {
     use hotsheet_server::terminal_broker::TerminalBroker;
 

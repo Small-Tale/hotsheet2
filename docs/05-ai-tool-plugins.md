@@ -759,6 +759,18 @@ prompts in the app, as long as the project's setup has installed the tool's
 `PermissionRequest` hook. Without the hook, the variables go unused and the tool's
 native prompt stays in charge.
 
+**Connected sessions (HS2-EV1XK3).** Both the Claude and Codex manifests also route
+`SessionStart` and `SessionEnd` through the same adapter. In a Hot Sheet terminal
+(`HOTSHEET_TERMINAL_ID`), `SessionStart` POSTs `/terminals/{id}/ai-connection` with the agent,
+and `SessionEnd` DELETEs it. Neither prints anything, because a `SessionStart` hook's output
+would otherwise become model context.
+
+A tool runs a project hook only once it is installed and, for Codex, trusted. A reported
+connection therefore shows that the session's hooks are live, and its permission prompts reach
+the app. A missing report means they stay in the terminal. Codex trusts each hook entry by
+content hash, so a setup refresh that changes `.codex/hooks.json` makes Codex skip the changed
+entries until the user reviews them with `/hooks`. Setup does not yet say so (`HS2-4AR09Z`).
+
 **Halted sessions (HS2-HJ4D1H).** Every Hot Sheet terminal also carries
 `HOTSHEET_TERMINAL_ID`. The Claude manifest's lifecycle hook additionally listens to
 `StopFailure` and `UserPromptSubmit` through the same `hotsheet-cli permission-hook`

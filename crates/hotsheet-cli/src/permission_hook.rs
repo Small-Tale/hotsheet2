@@ -48,6 +48,12 @@ pub enum SessionHookEvent {
     Halted { error_type: String, message: String },
     /// `UserPromptSubmit`: the user sent a new prompt, so any earlier halt is over.
     Resumed,
+    /// `SessionStart`: an AI session began (or resumed) with Hot Sheet's hooks active, so the
+    /// terminal is connected to Hot Sheet (HS2-EV1XK3). A tool skips an untrusted or missing
+    /// hook, so a terminal whose session never reports this keeps its prompts to itself.
+    Connected,
+    /// `SessionEnd`: the AI session ended, so the terminal is no longer connected.
+    Disconnected,
 }
 
 /// Classify a session lifecycle event; `None` for permission and unrelated events.
@@ -68,6 +74,8 @@ pub fn session_hook_event(input: &Value) -> Option<SessionHookEvent> {
                 .unwrap_or_else(|| "The AI session stopped on an error.".to_owned()),
         }),
         Some("UserPromptSubmit") => Some(SessionHookEvent::Resumed),
+        Some("SessionStart") => Some(SessionHookEvent::Connected),
+        Some("SessionEnd") => Some(SessionHookEvent::Disconnected),
         _ => None,
     }
 }
@@ -245,6 +253,19 @@ mod tests {
         assert_eq!(
             session_hook_event(&json!({ "hook_event_name": "UserPromptSubmit", "prompt": "go" })),
             Some(SessionHookEvent::Resumed)
+        );
+        // Session start and end report the terminal's connection to Hot Sheet (HS2-EV1XK3).
+        assert_eq!(
+            session_hook_event(&json!({ "hook_event_name": "SessionStart", "source": "startup" })),
+            Some(SessionHookEvent::Connected)
+        );
+        assert_eq!(
+            session_hook_event(&json!({ "hook_event_name": "SessionEnd", "reason": "exit" })),
+            Some(SessionHookEvent::Disconnected)
+        );
+        assert_eq!(
+            permission_hook_event(&json!({ "hook_event_name": "SessionStart" })),
+            PermissionHookEvent::Other
         );
         // Permission and unrelated events are not session events, and vice versa.
         assert_eq!(

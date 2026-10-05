@@ -2353,6 +2353,24 @@ shows the attention icon ("An AI session stopped on an error") even beside notif
 work counts. The phone project picker does not show it yet (`HS2-34VG07`). Popups,
 Notifications entries, and OS notifications for halts are `HS2-E6KAWY`.
 
+A terminal whose AI session runs with Hot Sheet's hooks active (HS2-EV1XK3; see
+[`05`](05-ai-tool-plugins.md)) carries `ai_connection {agent, at}` in `GET /terminals`. It is
+set by `POST /terminals/{id}/ai-connection` from the session's `SessionStart` hook and cleared
+by `DELETE` from `SessionEnd` or by killing the terminal. Each change emits a
+`terminal_ai_connection` event, and the client refetches its terminals on that event.
+
+- **Connected:** the drawer tab shows a neutral Lucide `plug` icon ("Codex is connected to Hot
+  Sheet: its permission prompts come to the app"). This applies to any terminal, including a
+  plain shell where someone ran `codex` or `claude` by hand.
+- **Not connected:** an `ai` terminal that is still running without a report after a 15-second
+  grace period shows a warning `unplug` icon. Its label explains that the session's permission
+  prompts stay in the terminal and how to fix it: run `/hooks` in Codex, or run
+  `hotsheet-cli setup --refresh` for other tools. The grace period is a local timer that only
+  re-derives existing data; it sends no request.
+- **Combined states:** both icons sit beside the busy dot, and a halt outranks them. Plain
+  shells that never reported in show nothing. Dashboard tiles do not show the state yet
+  (`HS2-8WEY8X`).
+
 Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
 one mixed drawer strip by dragging across either kind. Both strips use Kerf's controlled
 `TabBar`/`AppTab` composition and one `wireTabBars` delegation. Both use manual activation:
