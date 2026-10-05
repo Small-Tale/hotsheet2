@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -269,7 +269,10 @@ it('serves the app without a Vite reconnect client, HMR websocket, or reconnect 
         (message) => message.includes('[vite] connecting') || message.includes('[vite] connected'),
       ),
     ).toEqual([]);
-    await page.screenshot({ path: '/private/tmp/hs2-8jv12r-stable-client-after.png', fullPage: true });
+    const captureDir = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-capture-'));
+    const capturePath = resolve(captureDir, 'hs2-8jv12r-stable-client-after.png');
+    const screenshotBytes = await page.screenshot({ path: capturePath, fullPage: true });
+    expect(await readFile(capturePath)).toEqual(screenshotBytes);
   } finally {
     await browser.close();
     await stopChild(child);
