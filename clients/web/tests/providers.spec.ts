@@ -17667,7 +17667,8 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   expect(emptyRequests).toHaveLength(1);
   await page.screenshot({ path: '/private/tmp/hs2-rdvwzx-empty-trash-optimistic.png', fullPage: true });
   releaseEmptyTrash();
-  await expect(page.getByText('Emptied Trash — 1 ticket permanently removed.')).toBeVisible();
+  await expect(page.locator('wa-toast-item .app-toast')).toHaveText('Emptied Trash — 1 ticket permanently removed.');
+  await expect(page.locator('wa-toast-item .app-toast')).toBeVisible();
   await page.setViewportSize({ width: 780, height: 760 });
   await page.screenshot({ path: '/private/tmp/hs2-rdvwzx-empty-trash-complete-narrow.png', fullPage: true });
 });

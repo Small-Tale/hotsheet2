@@ -82,6 +82,8 @@ describe('CommandSettingsEditor', () => {
     const open = String(CommandSettingsEditor({ ...props, editingId: 'c' }));
     expect(open).toContain('data-editing="true"');
     expect(open).toContain('Edit command');
+    expect(open).toMatch(/data-appearance="borderless"[^>]*><span class="command-settings-editor__dialog-icon"/);
+    expect(css).toMatch(/\.command-settings-editor__dialog-icon\s*\{[^}]*margin-inline:\s*auto;/);
     expect(open).toContain('data-action="close-command-editor"');
     expect(open).toMatch(/data-command-id="c"[^]*name="command"/);
   });

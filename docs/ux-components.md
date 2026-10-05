@@ -2377,7 +2377,7 @@ tone. HS2-X0FS92 pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` in the 
 plus `kerfjs` and the ESLint plugin in the compatibility spike, to the published 5.0.0-beta.77.
 Kerf beta.77's `ToolbarControlGroup.tileTone` (HS2-RXXXPH, KF-VH4B52) now paints direct
 decorative heading icons in brand, success, or danger quiet tones. The command editor retains its
-app-owned custom-color icon span inside an unstyled Kerf group; the generic heading root styling
+app-owned custom-color icon span centered inside a borderless Kerf group; the generic heading root styling
 and all five heading suppressions are gone. The remaining three exact per-file suppressions name
 `KF-MXE9YV`, `KF-M8SV15`, and `KF-7288MD`; `src/kerf-ui-profile.test.ts` pins the list so it can
 only change deliberately.

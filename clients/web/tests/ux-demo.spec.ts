@@ -677,11 +677,17 @@ test('represents the shared repository-status composition in the UX catalog', as
     }, value);
     await expect(dialog).toHaveAttribute('data-state', state);
     await expect(dialog.locator('.app-heading__summary')).toHaveText(copy);
-    await expect(dialog.locator(`.repository-status-popover__icon [data-lucide="${icon}"]`)).toHaveCount(1);
+    const iconTile = dialog.locator('.app-heading [data-component="toolbar-control-group"]').first();
+    await expect(iconTile.locator(`[data-lucide="${icon}"]`)).toHaveCount(1);
+    await expect(iconTile).toHaveAttribute(
+      'data-tile-tone',
+      state === 'clean' ? 'success' : state === 'conflicted' || state === 'error' ? 'danger' : 'brand',
+    );
   }
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(scenario).toHaveJSProperty('value', 'conflicted');
   await expect(dialog).toHaveAttribute('data-state', 'conflicted');
+  await expect(dialog.locator('.app-heading [data-tile-tone="danger"] [data-lucide="triangle-alert"]')).toHaveCount(1);
   await page.screenshot({ path: '/private/tmp/hs2-s6f817-repository-scenario-settings.png', fullPage: true });
   await page.locator('[data-action="toggle-settings"]').click();
   await dialog.getByRole('button', { name: /Unstaged 2/ }).click();
@@ -7304,7 +7310,16 @@ test('edits custom command color and icon in the command settings editor', async
   await expect(dialog).toBeVisible();
   const commandHeadingGroup = dialog.locator('.app-heading [data-component="toolbar-control-group"]').first();
   await expect(commandHeadingGroup).not.toHaveClass(/app-heading__icon/);
+  await expect(commandHeadingGroup).toHaveAttribute('data-appearance', 'borderless');
   await expect(commandHeadingGroup.locator('.command-settings-editor__dialog-icon > svg')).toBeVisible();
+  const iconInset = () =>
+    commandHeadingGroup.evaluate((group) => {
+      const outer = group.getBoundingClientRect(),
+        inner = group.querySelector('.command-settings-editor__dialog-icon')!.getBoundingClientRect();
+      return { left: inner.left - outer.left, right: outer.right - inner.right };
+    });
+  const wideIconInset = await iconInset();
+  expect(Math.abs(wideIconInset.left - wideIconInset.right)).toBeLessThan(1);
   await expect(dialog.locator('.command-settings-editor__swatch')).toHaveCount(9);
   // The icon field is the reusable searchable Lucide picker (HS2-5VSNV3), not a fixed radio grid.
   await expect(dialog.locator('[data-component="lucide-icon-picker"]')).toBeVisible();
@@ -7325,6 +7340,8 @@ test('edits custom command color and icon in the command settings editor', async
   await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-editor-color-icon.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(commandHeadingGroup.locator('.command-settings-editor__dialog-icon > svg')).toBeVisible();
+  const phoneIconInset = await iconInset();
+  expect(Math.abs(phoneIconInset.left - phoneIconInset.right)).toBeLessThan(1);
   await page.screenshot({ path: '/private/tmp/hs2-rxxxph-command-editor-phone.png' });
   await dialog.getByRole('button', { name: 'Done' }).click();
   await expect.poll(() => dialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);

@@ -476,7 +476,7 @@ export function CommandSettingsEditor({
                 dividerSides=""
                 leading={
                   <>
-                    <ToolbarControlGroup single>
+                    <ToolbarControlGroup single appearance="borderless">
                       <span
                         class="command-settings-editor__dialog-icon"
                         data-transparent={

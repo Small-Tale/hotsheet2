@@ -15,12 +15,6 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/ux-demo?component=connection-details-dialog');
-    // The catalog has a desktop-only shell; inspect its production dialog at the actual viewport width.
-    if (width < 600)
-      await page.addStyleTag({
-        content:
-          'body{min-width:0}.demo-shell{display:block}.kui-workbench__rail--left,.kui-workbench__main > .kui-pane > .kui-pane__header,.kui-workbench__main > .kui-pane > .kui-pane__footer,.settings-toggle{display:none}.kui-workbench__main{min-height:0;padding:12px}',
-      });
     const dialog = page.getByRole('dialog', { name: 'Server build details' });
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute('aria-describedby', 'connection-details-summary');
@@ -30,8 +24,10 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
     await expect(dialog.getByRole('heading', { name: 'Server build details' })).toHaveCount(0);
     await expect(dialog.locator('#connection-details-summary')).not.toHaveText('');
     // Kerf's icon tile: a 16px glyph centered in the group's control slot, like an icon button.
-    await expect(toolbar.locator('.app-heading__symbol')).toHaveCSS('width', '16px');
-    await expect(toolbar.locator('.app-heading__symbol')).toHaveCSS('height', '16px');
+    const iconTile = toolbar.locator('[data-component="toolbar-control-group"]').first();
+    await expect(iconTile).toHaveAttribute('data-tile-tone', 'brand');
+    await expect(iconTile.locator(':scope > svg')).toHaveCSS('width', '16px');
+    await expect(iconTile.locator(':scope > svg')).toHaveCSS('height', '16px');
     expect(
       await toolbar.evaluate((node) => {
         const title = node.querySelector('[data-component="toolbar-text"]')!.getBoundingClientRect();

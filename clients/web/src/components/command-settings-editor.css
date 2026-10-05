@@ -230,6 +230,7 @@
   display: grid;
   width: remify(28px);
   height: remify(28px);
+  margin-inline: auto;
   border-radius: var(--wa-border-radius-m);
   background: var(--command-color);
   place-items: center;
