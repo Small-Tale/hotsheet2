@@ -30,36 +30,6 @@
   "failOn": "warning",
   "suppressions": [
     {
-      "id": "kf-vh4b52-ai-conversation-heading",
-      "rules": ["KUI-L022"],
-      "target": "src/components/ai-conversation.tsx",
-      "rationale": "Heading icon tile keeps its brand quiet fill through ToolbarControlGroup tokens (heading.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
-    },
-    {
-      "id": "kf-vh4b52-command-settings-heading",
-      "rules": ["KUI-L022"],
-      "target": "src/components/command-settings-editor.tsx",
-      "rationale": "Heading icon tile keeps its brand quiet fill through ToolbarControlGroup tokens (heading.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
-    },
-    {
-      "id": "kf-vh4b52-connection-details-heading",
-      "rules": ["KUI-L022"],
-      "target": "src/components/connection-details-dialog.tsx",
-      "rationale": "Heading icon tile keeps its brand quiet fill through ToolbarControlGroup tokens (heading.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
-    },
-    {
-      "id": "kf-vh4b52-dialog-layout-demo-heading",
-      "rules": ["KUI-L022"],
-      "target": "src/ux-demo/dialog-layout-demo.tsx",
-      "rationale": "Heading icon tile keeps its brand quiet fill through ToolbarControlGroup tokens (heading.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
-    },
-    {
-      "id": "kf-vh4b52-repository-status-heading",
-      "rules": ["KUI-L022"],
-      "target": "src/components/repository-status-popover.tsx",
-      "rationale": "Repository-status heading icon tile keeps its brand fill (heading.css) and its success/danger state fill (repository-status-popover.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
-    },
-    {
       "id": "kf-mxe9yv-workspace-header-width-visibility",
       "rules": ["KUI-L022"],
       "target": "src/components/workspace-controls.tsx",

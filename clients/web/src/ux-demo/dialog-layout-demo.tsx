@@ -21,13 +21,8 @@ export function DialogHeaderDemo() {
           dividerSides=""
           leading={
             <>
-              <ToolbarControlGroup single className="app-heading__icon">
-                <LucideIcon
-                  className="app-heading__symbol"
-                  color={uiColor('brand-on-quiet')}
-                  icon={ServerCog}
-                  name="server-cog"
-                />
+              <ToolbarControlGroup single tileTone="brand">
+                <LucideIcon color={uiColor('brand-on-quiet')} icon={ServerCog} name="server-cog" />
               </ToolbarControlGroup>
               <ToolbarText text="Dialog title" id="dialog-header-demo-title" size="xlarge" />
             </>
@@ -46,13 +41,8 @@ export function ValueTableDemo() {
           dividerSides=""
           leading={
             <>
-              <ToolbarControlGroup single className="app-heading__icon">
-                <LucideIcon
-                  className="app-heading__symbol"
-                  color={uiColor('brand-on-quiet')}
-                  icon={AppWindow}
-                  name="app-window"
-                />
+              <ToolbarControlGroup single tileTone="brand">
+                <LucideIcon color={uiColor('brand-on-quiet')} icon={AppWindow} name="app-window" />
               </ToolbarControlGroup>
               <ToolbarText text="Value table" id="value-table-demo-title" size="xlarge" />
             </>

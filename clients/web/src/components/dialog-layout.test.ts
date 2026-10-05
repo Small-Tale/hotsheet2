@@ -28,7 +28,8 @@ describe('dialog layout primitives', () => {
     expect(markup).toContain('data-size="xlarge"');
     expect(markup).toContain('>Server build details<');
     expect(markup).toContain('<p class="app-heading__summary" id="connection-details-summary">Current state</p>');
-    expect(markup).toContain('app-heading__icon');
+    expect(markup).toContain('data-tile-tone="brand"');
+    expect(markup).not.toContain('app-heading__icon');
     expect(markup).not.toContain('role="heading"');
     const table = String(
       ValueTable({ label: 'Build metadata', children: ValueTableRow({ label: 'Version', value: '1' }) }),
@@ -39,6 +40,7 @@ describe('dialog layout primitives', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'heading.css'), 'utf8');
     expect(css).not.toContain('border-bottom');
     expect(css).not.toContain('.kui-toolbar {');
+    expect(css).not.toContain('.app-heading__icon');
     const commandCss = readFileSync(resolve(import.meta.dirname, 'command-settings-editor.css'), 'utf8');
     // The editor styles only its own classed buttons, never a descendant `button` such as the Done control
     // inside the Kerf ToolbarControlGroup or a nested component's buttons (HS2-JSSMFY).

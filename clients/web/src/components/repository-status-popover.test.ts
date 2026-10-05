@@ -102,6 +102,17 @@ describe('RepositoryStatusPopover', () => {
     expect(repositoryStatusState(null, 'git failed')).toBe('error');
   });
 
+  it('maps repository heading icon tiles to the shipped Kerf tones', () => {
+    const clean = String(
+      RepositoryStatusPopover({ status: status({ conflicted: 0, staged: 0, unstaged: 0, untracked: 0 }) }),
+    );
+    const conflicted = String(RepositoryStatusPopover({ status: status() }));
+    const dirty = String(RepositoryStatusPopover({ status: status({ conflicted: 0 }) }));
+    expect(clean).toContain('data-tile-tone="success"');
+    expect(conflicted).toContain('data-tile-tone="danger"');
+    expect(dirty).toContain('data-tile-tone="brand"');
+  });
+
   it('renders typed no-Git recovery instead of a raw repository error', () => {
     const markup = String(
       RepositoryStatusPopover({

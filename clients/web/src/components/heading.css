@@ -1,14 +1,9 @@
-/* Toolbar owns heading-row geometry. Hot Sheet owns icon tone and supporting copy. */
+/* Toolbar and its icon tile own heading-row geometry and tone. Hot Sheet owns supporting copy. */
 .app-heading {
   display: grid;
   width: 100%;
   min-width: 0;
   gap: 0;
-}
-.app-heading .app-heading__icon {
-  --kui-toolbar-control-background: var(--kui-color-brand-fill-quiet);
-  --kui-toolbar-control-border: var(--kui-color-brand-fill-quiet);
-  justify-content: center;
 }
 /* The heading glyph is Kerf's icon tile (a direct icon in the ToolbarControlGroup): a 16px icon
    centered in the group's control slot, like an icon button (Kerf 5.0.0-beta.55). */

@@ -2373,8 +2373,14 @@ APIs, and HS2-AEK8GK removed the `KUI-L022` grow-floor hook on `TicketSearchFiel
 `sizing="grow"` once Kerf 5.0.0-beta.70 kept its basis floor (`KF-K4VBTS`). Beta.76's stricter
 `KUI-L022` analysis identified eight remaining component files that need Kerf APIs for heading
 icon-tile tone, workspace-header width visibility, grouped-search anchors, or gallery filename
-tone. Each has an exact per-file suppression naming `KF-VH4B52`, `KF-MXE9YV`, `KF-M8SV15`, or
-`KF-7288MD`; `src/kerf-ui-profile.test.ts` pins the list so it can only change deliberately.
+tone. HS2-X0FS92 pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` in the web client,
+plus `kerfjs` and the ESLint plugin in the compatibility spike, to the published 5.0.0-beta.77.
+Kerf beta.77's `ToolbarControlGroup.tileTone` (HS2-RXXXPH, KF-VH4B52) now paints direct
+decorative heading icons in brand, success, or danger quiet tones. The command editor retains its
+app-owned custom-color icon span inside an unstyled Kerf group; the generic heading root styling
+and all five heading suppressions are gone. The remaining three exact per-file suppressions name
+`KF-MXE9YV`, `KF-M8SV15`, and `KF-7288MD`; `src/kerf-ui-profile.test.ts` pins the list so it can
+only change deliberately.
 
 Kerf 5.0.0-beta.70 (HS2-1GPHS5) added `KUI-L023`, the markup-borrowing rule. It flags a module that
 renders markup owned by another component. On beta.70 it also read HTML string literals in unit-test

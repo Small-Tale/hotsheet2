@@ -70,13 +70,8 @@ export function ConnectionDetailsDialog({
           dividerSides=""
           leading={
             <>
-              <ToolbarControlGroup single className="app-heading__icon">
-                <LucideIcon
-                  className="app-heading__symbol"
-                  color={uiColor('brand-on-quiet')}
-                  icon={ServerCog}
-                  name="server-cog"
-                />
+              <ToolbarControlGroup single tileTone="brand">
+                <LucideIcon color={uiColor('brand-on-quiet')} icon={ServerCog} name="server-cog" />
               </ToolbarControlGroup>
               <ToolbarText text="Server build details" id="connection-details-title" size="xlarge" />
             </>

@@ -7370,6 +7370,10 @@ test('browses repository files and commits with host-native actions', async ({ p
   await compareToggle.click();
   await expect(compareToggle).toHaveAttribute('aria-pressed', 'true');
   await expect(popover.locator('.ticket-code-review__compare-banner')).toContainText('Select the A side');
+  await expect(popover.locator('.app-heading [data-component="toolbar-control-group"]').first()).toHaveAttribute(
+    'data-tile-tone',
+    'danger',
+  );
   const compareBanner = popover.locator('.ticket-code-review__compare-banner');
   await expect(
     compareBanner.locator('.ticket-code-review__compare-toolbar [data-component="toolbar-control-group"]'),
@@ -7400,13 +7404,21 @@ test('browses repository files and commits with host-native actions', async ({ p
   await expect(back).toBeInViewport({ ratio: 1 });
   await back.click();
   const repositoryNavigation = popover.locator('.repository-status-popover__navigation');
+  // Re-push the same detail key while the popped view is still animating out. Kerf beta.77
+  // cancels the old removal timer before the live detail can be reused (KF-8ESDJD, HS2-BED455).
+  await repositoryNavigation.getByRole('button', { name: /Commits 24/ }).evaluate((button) => {
+    (button as HTMLButtonElement).click();
+  });
+  await expect(back).toBeInViewport({ ratio: 1 });
+  await expect(
+    popover.locator('[data-nav-chrome-copy], [data-nav-exiting="true"], [data-nav-revealed="true"]'),
+  ).toHaveCount(0);
+  await expect(popover.locator('.ticket-code-review__compare-banner')).toContainText('Select the A side');
+  await back.click();
   await expect(repositoryNavigation.getByRole('button', { name: /Staged 2/ })).toBeInViewport({ ratio: 1 });
   await expect(repositoryNavigation.getByRole('button', { name: /Commits 24/ })).toBeInViewport({ ratio: 1 });
   await repositoryNavigation.getByText('Branch').scrollIntoViewIfNeeded();
   await expect(repositoryNavigation.getByText('Branch')).toBeInViewport({ ratio: 1 });
-  // This ordinary navigation flow waits for Kerf's outgoing detail to leave before reopening it.
-  // Rapid pop/push view reuse is independently tracked by HS2-BED455.
-  await expect(popover.locator('[data-nav-exiting="true"]')).toHaveCount(0);
   // Choosing Commits pushes its detail again, with the comparison still active.
   await repositoryNavigation.getByRole('button', { name: /Commits 24/ }).click();
   await expect(back).toBeInViewport({ ratio: 1 });

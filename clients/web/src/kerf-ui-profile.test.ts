@@ -99,26 +99,8 @@ describe('Kerf application UI profile', () => {
       }),
     );
     // Known Kerf gaps are documented suppressions, never open-ended budgets: each names the KF ticket
-    // whose prop removes it. beta.76's stricter KUI-L022 found eight files whose styling no Kerf API
-    // expresses yet (HS2-170JC3); the set only shrinks as those tickets ship.
+    // whose prop removes it. beta.77's tileTone retired five heading exceptions (HS2-RXXXPH).
     expect(config.suppressions.map(({ id, rules, target }) => ({ id, rules, target }))).toEqual([
-      { id: 'kf-vh4b52-ai-conversation-heading', rules: ['KUI-L022'], target: 'src/components/ai-conversation.tsx' },
-      {
-        id: 'kf-vh4b52-command-settings-heading',
-        rules: ['KUI-L022'],
-        target: 'src/components/command-settings-editor.tsx',
-      },
-      {
-        id: 'kf-vh4b52-connection-details-heading',
-        rules: ['KUI-L022'],
-        target: 'src/components/connection-details-dialog.tsx',
-      },
-      { id: 'kf-vh4b52-dialog-layout-demo-heading', rules: ['KUI-L022'], target: 'src/ux-demo/dialog-layout-demo.tsx' },
-      {
-        id: 'kf-vh4b52-repository-status-heading',
-        rules: ['KUI-L022'],
-        target: 'src/components/repository-status-popover.tsx',
-      },
       {
         id: 'kf-mxe9yv-workspace-header-width-visibility',
         rules: ['KUI-L022'],

@@ -836,6 +836,7 @@ test('represents every server-build details state with shared dialog geometry', 
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute('data-embedded', 'true');
   await expect(header).toBeVisible();
+  await expect(header.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tile-tone', 'brand');
   await expect(header).toHaveCSS('border-bottom-width', '0px');
   await expect(dialog.locator('[data-component="value-table"]')).toBeVisible();
   const rows = dialog.locator('.kui-value-table__row');
@@ -877,9 +878,11 @@ test('represents every server-build details state with shared dialog geometry', 
     (node as HTMLElement).hidden = true;
   });
   await dialog.screenshot({ path: '/private/tmp/hs2-1yabz8-connection-details-wide.png' });
+  await header.screenshot({ path: '/private/tmp/hs2-rxxxph-connection-heading-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(header).toHaveCSS('border-bottom-width', '0px');
   await dialog.screenshot({ path: '/private/tmp/hs2-1yabz8-connection-details-narrow.png' });
+  await header.screenshot({ path: '/private/tmp/hs2-rxxxph-connection-heading-phone.png' });
 });
 
 test('represents the production terminal dashboard and its shared context menu in the UX catalog', async ({ page }) => {
@@ -7299,6 +7302,9 @@ test('edits custom command color and icon in the command settings editor', async
   await verifyRow.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
   const dialog = page.locator('#command-editor-dialog');
   await expect(dialog).toBeVisible();
+  const commandHeadingGroup = dialog.locator('.app-heading [data-component="toolbar-control-group"]').first();
+  await expect(commandHeadingGroup).not.toHaveClass(/app-heading__icon/);
+  await expect(commandHeadingGroup.locator('.command-settings-editor__dialog-icon > svg')).toBeVisible();
   await expect(dialog.locator('.command-settings-editor__swatch')).toHaveCount(9);
   // The icon field is the reusable searchable Lucide picker (HS2-5VSNV3), not a fixed radio grid.
   await expect(dialog.locator('[data-component="lucide-icon-picker"]')).toBeVisible();
@@ -7317,6 +7323,9 @@ test('edits custom command color and icon in the command settings editor', async
   await expect(done).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
   await expect(done).toHaveCSS('height', '40px');
   await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-editor-color-icon.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(commandHeadingGroup.locator('.command-settings-editor__dialog-icon > svg')).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-rxxxph-command-editor-phone.png' });
   await dialog.getByRole('button', { name: 'Done' }).click();
   await expect.poll(() => dialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
   await expect(dialog).toBeEmpty();

@@ -202,8 +202,8 @@ export function RepositoryStatusPopover({
         dividerSides=""
         leading={
           <>
-            <ToolbarControlGroup single className="app-heading__icon repository-status-popover__icon">
-              <LucideIcon className="app-heading__symbol" color={stateColor} icon={stateIcon} name={stateIconName} />
+            <ToolbarControlGroup single tileTone={state === 'clean' ? 'success' : troubled ? 'danger' : 'brand'}>
+              <LucideIcon color={stateColor} icon={stateIcon} name={stateIconName} />
             </ToolbarControlGroup>
             <ToolbarText
               text={recoveryStep === 'initialize' ? 'This folder is not a Git repository' : 'Repository Status'}
@@ -496,13 +496,8 @@ export function ChangeEvidenceDialog({
           dividerSides=""
           leading={
             <>
-              <ToolbarControlGroup single className="app-heading__icon repository-status-popover__icon">
-                <LucideIcon
-                  className="app-heading__symbol"
-                  color={uiColor('brand-on-quiet')}
-                  icon={GitCompare}
-                  name="git-compare"
-                />
+              <ToolbarControlGroup single tileTone="brand">
+                <LucideIcon color={uiColor('brand-on-quiet')} icon={GitCompare} name="git-compare" />
               </ToolbarControlGroup>
               <ToolbarText text="Change evidence" id="change-evidence-title" size="xlarge" />
             </>

@@ -28,12 +28,6 @@
   overflow: visible;
   border-right: 0;
 }
-.repository-status-popover[data-state='clean'] .repository-status-popover__icon {
-  background: var(--wa-color-success-fill-quiet);
-}
-.repository-status-popover:is([data-state='error'], [data-state='conflicted']) .repository-status-popover__icon {
-  background: var(--wa-color-danger-fill-quiet);
-}
 .repository-status-popover__refresh:disabled {
   opacity: 0.5;
   cursor: wait;

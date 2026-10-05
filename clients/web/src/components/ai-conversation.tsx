@@ -507,8 +507,8 @@ export function AIConversation({
           dividerSides=""
           leading={
             <>
-              <ToolbarControlGroup single className="app-heading__icon">
-                <LucideIcon className="app-heading__symbol" color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
+              <ToolbarControlGroup single tileTone="brand">
+                <LucideIcon color={uiColor('brand-on-quiet')} icon={Bot} name="bot" />
               </ToolbarControlGroup>
               <ToolbarText text={`${tool} conversation`} id="ai-conversation-title" size="xlarge" />
             </>
