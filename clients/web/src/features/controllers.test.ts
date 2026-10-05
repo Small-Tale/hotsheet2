@@ -286,6 +286,63 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.permissionCount('b')).toBe(0);
   });
 
+  it('pauses popups in every project, freezes their countdown, and follows other windows (HS2-QYA9SC)', () => {
+    const listeners: ((event: { key: string | null; newValue: string | null }) => void)[] = [];
+    vi.stubGlobal('window', {
+      setInterval: vi.fn(() => 1),
+      addEventListener: (type: string, listener: (typeof listeners)[number]) => {
+        if (type === 'storage') listeners.push(listener);
+      },
+    });
+    const projects = signal([project('a'), project('b')]),
+      owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
+    owner.startPermissionUpdates();
+    fetchMock.mockResolvedValue(json([]));
+    owner.permissionAutomationByProject.value = { a: { action: 'allow', delayMs: 10_000 } };
+    owner.permissionInbox.reconcile(projects.value[0], [{ id: 1, connection: 'a', tool: 'Bash', action: 'one' }], []);
+    owner.updatePermissionTimer();
+    vi.advanceTimersByTime(4_000);
+    owner.updatePermissionTimer();
+    expect(owner.permissionCountdown).toMatchObject({ key: 'a:1', remainingMs: 6_000 });
+    expect(owner.permissionPopupSurface('top')).toBeDefined();
+
+    // Pausing hides the popup at once and freezes its countdown; the request stays counted.
+    owner.setNotificationsPaused(true);
+    expect(owner.notificationsPaused.value).toBe(true);
+    expect(localStorage.getItem('hotsheet.notifications-paused')).toBe('true');
+    expect(owner.permissionPopupSurface('top')).toBeUndefined();
+    expect(owner.permissionPopupSurface()).toBeUndefined();
+    vi.advanceTimersByTime(30_000);
+    owner.updatePermissionTimer();
+    expect(owner.permissionCountdown).toBeUndefined();
+    // A request from another project while paused is collected, not shown.
+    owner.permissionInbox.reconcile(projects.value[1], [{ id: 2, connection: 'b', tool: 'Read', action: 'two' }], []);
+    owner.updatePermissionTimer();
+    expect(owner.permissionPopupSurface('top')).toBeUndefined();
+    expect(owner.permissionCount()).toBe(2);
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toEqual([]);
+
+    // Resuming shows the oldest request again, continuing its countdown from where it froze.
+    owner.setNotificationsPaused(false);
+    expect(owner.permissionPopupSurface('top')).toBeDefined();
+    vi.advanceTimersByTime(1_000);
+    owner.updatePermissionTimer();
+    expect(owner.permissionCountdown).toMatchObject({ key: 'a:1', remainingMs: 5_000 });
+
+    // Another window pauses and then resumes; this one follows without writing the key itself.
+    for (const listener of listeners) listener({ key: 'hotsheet.notifications-paused', newValue: 'true' });
+    expect(owner.permissionPopupSurface('top')).toBeUndefined();
+    for (const listener of listeners) listener({ key: 'hotsheet.other', newValue: 'x' });
+    expect(owner.notificationsPaused.value).toBe(true);
+    for (const listener of listeners) listener({ key: 'hotsheet.notifications-paused', newValue: null });
+    expect(owner.permissionPopupSurface('top')).toBeDefined();
+
+    // A pause survives a reload: a new controller starts paused.
+    owner.setNotificationsPaused(true);
+    const reloaded = createPermissionsController({ projects, selectedProjectId: signal('a') });
+    expect(reloaded.notificationsPaused.value).toBe(true);
+  });
+
   it('removes stale permission popups when one project disconnects while reconciling another', async () => {
     const projects = signal([project('a'), project('b')]),
       owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
@@ -336,7 +393,7 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
   });
 
   it('reconciles once on start and makes no permission requests while idle (HS2-NKCXW4)', async () => {
-    vi.stubGlobal('window', { setInterval });
+    vi.stubGlobal('window', { setInterval, addEventListener: vi.fn() });
     const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
     const pending = [{ id: 1, connection: 'c', tool: 'Bash', action: 'old' }];
     fetchMock.mockImplementation(async (input) => {
@@ -475,7 +532,7 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
   });
 
   it('leaves ignored requests alone and falls back to the popup without retrying a failed immediate allow', async () => {
-    vi.stubGlobal('window', { setInterval });
+    vi.stubGlobal('window', { setInterval, addEventListener: vi.fn() });
     const projects = signal([project('a')]),
       owner = createPermissionsController({ projects, selectedProjectId: signal('a') });
     let posts = 0;

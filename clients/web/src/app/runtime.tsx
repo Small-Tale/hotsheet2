@@ -90,6 +90,7 @@ import { ManualModelDialog } from '../components/manual-model-dialog';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
 import { NotificationCenter } from '../components/notification-center';
 import { type NotificationView, notificationViewTitle } from '../components/notification-navigation';
+import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
 import {
   ProjectCloseDialog,
   type ProjectCloseDialogState,
@@ -958,6 +959,8 @@ export async function startHotSheetWebClient() {
     serverResolvedPermission,
     updatePermissionTimer,
     permissionPopupSurface,
+    notificationsPaused,
+    setNotificationsPaused,
   } = permissionsController;
   const projectLifecycleController = createProjectLifecycleController({
     projects,
@@ -3797,6 +3800,7 @@ export async function startHotSheetWebClient() {
           day: history.filter((item) => item.resolvedAt >= now - 24 * 60 * 60 * 1000).length,
           week: history.length,
         },
+        paused: notificationsPaused.value,
       };
     }
     const counts = projectTicketCounts(current.id),
@@ -4757,6 +4761,7 @@ export async function startHotSheetWebClient() {
             {current.hs1CleanupEligible &&
               !hs1CleanupPromptDismissed(localStorage, current.id, hs1SourceIdentity(current)) && <Hs1CleanupBanner />}
             {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
+            {notificationsPaused.value && <NotificationsPausedBanner waiting={pendingPermissions().length} />}
           </>
         }
         pageHeader={pageHeader}
@@ -5233,7 +5238,7 @@ export async function startHotSheetWebClient() {
     reorderCommandSettings, updateCommandSetting, updateCommandAiSelection, effectiveCommandAiSelection, showLoadingActivity, inheritGlobalShellHistory, terminalSettingsMessage, trashSettingsMessagesByProject,
     trashCleanupDaysByProject, resetProgressiveTicketRendering, viewMode, setSettingsCategory, refreshProviderConnections, refreshTerminalSettings, refreshTrashSettings, capturingShortcutId,
     saveAiDefaults, selectDefaultModel, selectDefaultEffort, selectDefaultProvider, restoreCommandEditorAfterManualModel, aiDefaults, providerConnections, githubAuth, cancelGitHubSignIn, startGitHubSignIn,
-    saveExternalProvider, providerRemovingId, requestProviderRemoval, cancelProviderRemoval, removeExternalProvider, toggleProviderDisabled, refreshGitHubRepositories, chooseGitHubEnterprise, copyGitHubCode, reopenGitHubSignIn, notificationView, permissionTimer, permissionAutomationByProject, updatePermissionTimer, permissionRevision, permissionInbox, pendingPermissions,
+    saveExternalProvider, providerRemovingId, requestProviderRemoval, cancelProviderRemoval, removeExternalProvider, toggleProviderDisabled, refreshGitHubRepositories, chooseGitHubEnterprise, copyGitHubCode, reopenGitHubSignIn, notificationView, permissionTimer, permissionAutomationByProject, updatePermissionTimer, permissionRevision, permissionInbox, pendingPermissions, setNotificationsPaused,
     resolvePermission, selectedProjectId, hideVerifiedByProject, selectLinkedTicket, ticketLinkChoice, openTicketLinkMatch, cancelTicketLinkChoice, searchOpen,
     workspaceSearchModel, workspaceSearchTokenOffset, searchHelpOpen,
     focusWorkspaceSearch, searchQuery, searchTokens, scheduleTicketSearch, sort, sortDirection, openTicketComposer, composerSubmitting,

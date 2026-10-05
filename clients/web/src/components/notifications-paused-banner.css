@@ -1,0 +1,11 @@
+/* A full-width status strip above the workspace, like the other shell banners (HS2-QYA9SC). */
+.notifications-paused-banner {
+  --kui-layout-inline-margin: 0;
+  --kui-layout-item-gap: var(--kui-space-m);
+  --kui-layout-item-padding: var(--kui-space-xs) var(--kui-space-m);
+  --kui-layout-rounded-radius: 0;
+  --kui-state-banner-border: transparent;
+  --kui-state-banner-copy-gap: var(--kui-space-2xs);
+  display: grid;
+  border-bottom: 1px solid var(--wa-color-brand-border-quiet);
+}

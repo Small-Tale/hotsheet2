@@ -166,6 +166,7 @@ describe('UX demo catalog', () => {
       'hs1-migration-dialog',
       'hs1-migration-banner',
       'project-setup-warning-banner',
+      'notifications-paused-banner',
       'provider-icon',
       'ticket-source-setup-dialog',
       'provider-setup-form',

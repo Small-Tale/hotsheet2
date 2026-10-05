@@ -10,6 +10,8 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   selectNotificationView: action('select-notification-view'),
   ignorePermission: action('ignore-permission'),
   cancelPermissionAutomation: action('cancel-permission-automation'),
+  pauseNotifications: action('pause-notifications'),
+  resumeNotifications: action('resume-notifications'),
   resolvePermission: action('resolve-permission'),
   dismissAppError: action('dismiss-app-error'),
   toggleVerifiedColumn: action('toggle-verified-column'),

@@ -19387,6 +19387,85 @@ test('counts permission automation only while its popup is visible', async ({ pa
   await expect.poll(() => answers).toBe(1);
 });
 
+test('pauses and resumes notifications app-wide from the popup, sidebar, and banner (HS2-QYA9SC)', async ({ page }) => {
+  await page.clock.install();
+  await mockProject(page);
+  let answers = 0;
+  const pending = [
+    {
+      id: 9,
+      connection: 'codex-session',
+      tool: 'item/commandExecution/requestApproval',
+      action: 'npm test',
+      always_allow_supported: true,
+    },
+  ];
+  await page.route('**/connections', (route) =>
+    route.fulfill({
+      json: [{ id: 'codex-session', tool: 'Codex', project: '/work/demo', role: 'worker', busy: true }],
+    }),
+  );
+  await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route('**/permissions/9', (route) => {
+    answers += 1;
+    return route.fulfill({ json: { connection: 'codex-session', decision: 'allow', persisted: false } });
+  });
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'hotsheet.project.demo-checkout.permission-automation',
+      JSON.stringify({ action: 'allow', delayMs: 60_000 }),
+    );
+  });
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const popup = page.locator('[data-component="permission-request-popup"]'),
+    banner = page.locator('[data-component="notifications-paused-banner"]');
+  await expect(popup).toContainText('Auto-allow in');
+  await expect(banner).toHaveCount(0);
+
+  // Pausing from the popup hides it, banners the pause with the waiting count, and freezes the
+  // auto-allow countdown, so nothing is answered while paused.
+  await popup.getByRole('button', { name: 'Pause notifications' }).click();
+  await expect(popup).toHaveCount(0);
+  await expect(banner).toContainText('Notifications paused');
+  await expect(banner).toContainText('1 permission request waiting.');
+  expect(await page.evaluate(() => localStorage.getItem('hotsheet.notifications-paused'))).toBe('true');
+  await page.clock.fastForward(120_000);
+  expect(answers).toBe(0);
+
+  // The request still waits in Notifications, whose sidebar footer now offers Resume.
+  await page.getByRole('button', { name: /Notifications view/ }).click();
+  const center = page.locator('[data-component="notification-center"]');
+  await expect(center).toContainText('npm test');
+  await expect(page.getByRole('button', { name: 'Resume notifications' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Pause notifications' })).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('notifications-paused-shell.png') });
+
+  // A reload restores the open project and keeps the pause.
+  await page.reload();
+  await expect(banner).toBeVisible();
+  await expect(popup).toHaveCount(0);
+
+  // Resuming from the sidebar brings the popup back with its countdown still running.
+  await page.getByRole('button', { name: /Notifications view/ }).click();
+  await page.getByRole('button', { name: 'Resume notifications' }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(popup).toContainText('Auto-allow in');
+  await expect(page.getByRole('button', { name: 'Pause notifications' }).first()).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('hotsheet.notifications-paused'))).toBeNull();
+
+  // Pause again from the sidebar, then resume from the banner.
+  await page.locator('wa-button[data-action="pause-notifications"]').click();
+  await expect(popup).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Resume notifications' })).toBeVisible();
+  await banner.getByRole('button', { name: 'Resume' }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(popup).toBeVisible();
+  await expect(page.locator('wa-button[data-action="pause-notifications"]')).toBeVisible();
+  expect(answers).toBe(0);
+});
+
 test('persists and restores per-project permission automation settings', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');

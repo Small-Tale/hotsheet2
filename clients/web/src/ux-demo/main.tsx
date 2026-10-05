@@ -232,6 +232,7 @@ import {
   DialogHeaderDemo,
   Hs1MigrationBannerDemo,
   Hs1MigrationDialogDemo,
+  NotificationsPausedBannerDemo,
   openHs1MigrationDialogDemo,
   ValueTableDemo,
 } from './dialog-layout-demo';
@@ -648,6 +649,7 @@ function demoContent(item: DemoDefinition) {
     return (
       <ProjectSetupWarningBanner detail="The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed." />
     );
+  if (item.id === 'notifications-paused-banner') return <NotificationsPausedBannerDemo />;
   if (item.id === 'content-transition') return <ContentTransitionDemo />;
   if (item.id === 'select') return <SelectDemo />;
   if (item.id === 'list') return <ListDemo />;

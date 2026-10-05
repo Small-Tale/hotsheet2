@@ -7,6 +7,11 @@ import { PermissionPopupSurface } from '../components/reader-overlay-surfaces';
 import { beginInteractionTiming } from '../interaction-performance';
 import type { Project } from '../interactions/types';
 import {
+  loadNotificationsPaused,
+  notificationsPausedFromStorageEvent,
+  saveNotificationsPaused,
+} from '../notification-pause';
+import {
   allowsImmediately,
   DEFAULT_PERMISSION_AUTOMATION,
   formatPermissionCountdown,
@@ -50,6 +55,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     permissionTimer = new VisiblePermissionTimer();
   const permissionAutomationByProject = signal<Record<string, PermissionAutomation>>({});
   const permissionResolutionErrors = signal<Record<string, string>>({});
+  // App-wide pause (HS2-QYA9SC): no popup in any project while set, so its countdown also freezes.
+  const notificationsPaused = signal(loadNotificationsPaused());
   let permissionPolling = false,
     permissionRefreshRequested = false,
     permissionResolutionEpoch = 0,
@@ -62,7 +69,7 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     pendingPermissions().filter((item) => item.projectId === projectId);
   const projectPermissionHistory = (projectId = selectedProjectId.value) =>
     permissionHistory().filter((item) => item.projectId === projectId);
-  const visiblePermission = () => permissionInbox.visible();
+  const visiblePermission = () => (notificationsPaused.value ? undefined : permissionInbox.visible());
   const permissionCount = (projectId?: string) =>
     pendingPermissions().filter((item) => !projectId || item.projectId === projectId).length;
   const permissionAutomation = (projectId: string) =>
@@ -142,9 +149,23 @@ export function createPermissionsController(dependencies: PermissionsDependencie
    * after a reconnect or overflow; there is no network polling timer (HS2-NKCXW4). The
    * 1 s interval below only re-renders the local countdown and never touches the network.
    */
+  function setNotificationsPaused(paused: boolean, persist = true) {
+    if (persist) saveNotificationsPaused(paused);
+    if (notificationsPaused.value === paused) return;
+    notificationsPaused.value = paused;
+    // Hide (and freeze) or show the popup now instead of on the next countdown tick.
+    updatePermissionTimer();
+  }
+
   function startPermissionUpdates() {
-    if (permissionTimerInterval === undefined)
+    if (permissionTimerInterval === undefined) {
       permissionTimerInterval = window.setInterval(updatePermissionTimer, 1_000);
+      // Another window paused or resumed; follow it without writing the key back.
+      window.addEventListener('storage', (event) => {
+        const paused = notificationsPausedFromStorageEvent(event);
+        if (paused !== undefined) setNotificationsPaused(paused, false);
+      });
+    }
     void refreshPermissions();
   }
 
@@ -295,6 +316,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     serverResolvedPermission,
     updatePermissionTimer,
     permissionPopupSurface,
+    notificationsPaused,
+    setNotificationsPaused,
     get permissionCountdown() {
       return permissionCountdown;
     },

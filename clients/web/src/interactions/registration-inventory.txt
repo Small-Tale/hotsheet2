@@ -281,6 +281,8 @@ commands-and-ai	delegate	document.body	'click'	'[data-action="submit-provider-se
 commands-and-ai	delegate	document.body	'submit'	'[data-action="save-provider-connection"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="select-notification-view"]'
 notifications-and-links	delegate	document.body	'change'	'[name="permission-automation-action"], [name="permission-automation-delay"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="pause-notifications"]'
+notifications-and-links	delegate	document.body	'click'	'[data-action="resume-notifications"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="ignore-permission"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="cancel-permission-automation"]'
 notifications-and-links	delegate	document.body	'click'	'[data-action="resolve-permission"]'

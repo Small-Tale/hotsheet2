@@ -148,16 +148,30 @@ export function PermissionRequestCard({
       )}
       {!history && (
         <footer class="permission-request-card__footer">
-          <button
-            type="button"
-            class="permission-request-card__quiet-action"
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.attrs}
-            // Escape activates Ignore while the shell popup is lifted above a modal (HS2-S8K9BG).
-            {...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }}
-            data-request-key={item.key}
-          >
-            Ignore
-          </button>
+          <div class="permission-request-card__quiet-actions">
+            <button
+              type="button"
+              class="permission-request-card__quiet-action"
+              {...NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.attrs}
+              // Escape activates Ignore while the shell popup is lifted above a modal (HS2-S8K9BG).
+              {...{ [TOP_LAYER_DISMISS_ATTRIBUTE]: '' }}
+              data-request-key={item.key}
+            >
+              Ignore
+            </button>
+            {presentation === 'popup' && (
+              // Pauses every interruptive notification in all projects; requests keep collecting in
+              // Notifications until Resume (HS2-QYA9SC).
+              <button
+                type="button"
+                class="permission-request-card__quiet-action"
+                {...NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs}
+                title="Stop permission popups in every project until you resume"
+              >
+                Pause notifications
+              </button>
+            )}
+          </div>
           <div class="permission-request-card__decision-area">
             {countdown && (
               <div class="permission-request-card__countdown" data-permission-countdown-key={item.key}>

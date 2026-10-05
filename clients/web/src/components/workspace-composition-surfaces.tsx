@@ -26,13 +26,21 @@ type TicketListProps = Parameters<typeof TicketList>[0];
 
 export type SidebarSurfaceProps =
   | { kind: 'settings'; selected: SettingsCategory }
-  | { kind: 'notifications'; selected: NotificationView; counts: { pending: number; day: number; week: number } }
+  | {
+      kind: 'notifications';
+      selected: NotificationView;
+      counts: { pending: number; day: number; week: number };
+      /** The app-wide notification pause (HS2-QYA9SC). */
+      paused?: boolean;
+    }
   | { kind: 'project'; sidebar: ProjectSidebarProps };
 
 export function SidebarSurface(props: SidebarSurfaceProps) {
   if (props.kind === 'settings') return <SettingsNavigation selected={props.selected} collapseControl />;
   if (props.kind === 'notifications')
-    return <NotificationNavigation selected={props.selected} counts={props.counts} collapseControl />;
+    return (
+      <NotificationNavigation selected={props.selected} counts={props.counts} paused={props.paused} collapseControl />
+    );
   return <ProjectSidebar {...props.sidebar} />;
 }
 
@@ -40,7 +48,7 @@ export function SidebarSurface(props: SidebarSurfaceProps) {
 export function sidebarSurfacePanel(props: SidebarSurfaceProps): SidebarPanelParts {
   if (props.kind === 'settings') return settingsNavigationPanel({ selected: props.selected });
   if (props.kind === 'notifications')
-    return notificationNavigationPanel({ selected: props.selected, counts: props.counts });
+    return notificationNavigationPanel({ selected: props.selected, counts: props.counts, paused: props.paused });
   return projectSidebarPanel(props.sidebar);
 }
 

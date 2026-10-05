@@ -7,6 +7,7 @@ import type { PermissionHistoryItem, PermissionItem } from '../permission-notifi
 import { TOP_LAYER_DISMISS_ATTRIBUTE, TOP_LAYER_OVERLAY_ATTRIBUTE } from '../top-layer-overlay';
 import { NotificationCenter } from './notification-center';
 import { NotificationNavigation } from './notification-navigation';
+import { NotificationsPausedBanner } from './notifications-paused-banner';
 import {
   PermissionRequestCard,
   PermissionRequestPopup,
@@ -235,5 +236,39 @@ describe('permission presentation components', () => {
     expect(String(NotificationNavigation({ selected: 'pending', counts: { pending: 0, day: 0, week: 0 } }))).toContain(
       'class="notification-navigation__count" data-attention="false">0</small>',
     );
+  });
+});
+
+describe('notification pause controls (HS2-QYA9SC)', () => {
+  it('offers Pause notifications in the popup only, beside Ignore', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(10);
+    const popup = String(PermissionRequestPopup({ item: pending, layer: 'top' }));
+    expect(popup).toContain('data-action="pause-notifications"');
+    expect(popup.indexOf('data-action="ignore-permission"')).toBeLessThan(
+      popup.indexOf('data-action="pause-notifications"'),
+    );
+    const listed = String(PermissionRequestCard({ item: pending, presentation: 'list' }));
+    expect(listed).toContain('data-action="ignore-permission"');
+    expect(listed).not.toContain('pause-notifications');
+  });
+
+  it('toggles the sidebar footer between Pause and Resume', () => {
+    const counts = { pending: 2, day: 1, week: 4 };
+    const active = String(NotificationNavigation({ selected: 'pending', counts }));
+    expect(active).toContain('data-action="pause-notifications"');
+    expect(active).toContain('Pause notifications');
+    expect(active).toContain('data-lucide="bell-off"');
+    const paused = String(NotificationNavigation({ selected: 'pending', counts, paused: true }));
+    expect(paused).toContain('data-action="resume-notifications"');
+    expect(paused).toContain('Resume notifications');
+    expect(paused).not.toContain('pause-notifications');
+  });
+
+  it('banners the pause with the waiting count and a Resume action', () => {
+    const banner = String(NotificationsPausedBanner({ waiting: 2 }));
+    expect(banner).toContain('Notifications paused');
+    expect(banner).toContain('2 permission requests waiting.');
+    expect(banner).toContain('data-action="resume-notifications"');
+    expect(banner).toContain('data-lucide="bell-off"');
   });
 });

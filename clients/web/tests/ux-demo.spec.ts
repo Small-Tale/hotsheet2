@@ -46,7 +46,8 @@ test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', asy
     ] as const) {
       await page.goto(`/ux-demo?component=${component}&dev-review=false`);
       // The navigator's Pane content is the navigation landmark; its group list sits in an app wrapper.
-      const navigation = page.getByRole('navigation', { name: label, exact: true }),
+      // The notification demo also shows a paused variant (HS2-QYA9SC); measure the first navigator.
+      const navigation = page.getByRole('navigation', { name: label, exact: true }).first(),
         list = navigation.locator('[data-component="list"]').first(),
         rows = list.getByRole('button');
       await expect(rows).toHaveCount(count);

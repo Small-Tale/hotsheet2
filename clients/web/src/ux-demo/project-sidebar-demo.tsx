@@ -351,6 +351,10 @@ export function NotificationNavigationDemo() {
         <div class="sidebar-demo-card">
           <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} collapseControl />
         </div>
+        {/* Paused: the footer offers Resume instead of Pause (HS2-QYA9SC). */}
+        <div class="sidebar-demo-card" data-demo-variant="paused">
+          <NotificationNavigation selected="pending" counts={{ pending: 3, day: 5, week: 12 }} paused collapseControl />
+        </div>
       </div>
     </section>
   );

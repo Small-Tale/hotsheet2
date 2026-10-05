@@ -30,6 +30,8 @@ export interface NotificationAndLinkInteractionsDependencies {
   readonly permissionRevision: Signal<number>;
   readonly permissionInbox: PermissionInbox;
   readonly pendingPermissions: () => PermissionItem[];
+  /** App-wide notification pause (HS2-QYA9SC). */
+  readonly setNotificationsPaused: (paused: boolean) => void;
   readonly resolvePermission: (
     item: PermissionItem,
     decision: PermissionDecision,
@@ -99,6 +101,16 @@ export function wireNotificationAndLinkInteractions(dependencies: NotificationAn
         permissionRevision.value += 1;
       },
     ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.selector, () => {
+      dependencies.setNotificationsPaused(true);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.resumeNotifications.selector, () => {
+      dependencies.setNotificationsPaused(false);
+    }),
   );
   lifetime.add(
     delegate(document.body, 'click', NOTIFICATIONS_AND_LINKS_ACTIONS.ignorePermission.selector, (_event, target) => {

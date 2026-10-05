@@ -137,6 +137,12 @@
 .permission-request-card .permission-request-card__primary:hover {
   background: var(--wa-color-brand-on-quiet);
 }
+.permission-request-card__quiet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: remify(16px);
+}
 .permission-request-card__decision-area {
   display: flex;
   min-width: 0;
@@ -275,9 +281,11 @@
     align-items: stretch;
     flex-direction: column;
   }
+  .permission-request-card__quiet-actions {
+    align-self: flex-start;
+  }
   .permission-request-card .permission-request-card__quiet-action {
     width: fit-content;
-    align-self: flex-start;
   }
   .permission-request-card__buttons {
     display: grid;

@@ -11,6 +11,7 @@ import { signal } from 'kerfjs';
 import { AppWindow, ServerCog } from 'lucide';
 
 import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
+import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
 
 export function DialogHeaderDemo() {
   return (
@@ -97,6 +98,16 @@ export function Hs1MigrationDialogDemo() {
     </section>
   );
 }
+/** Both detail variants of the app-wide notification pause banner (HS2-QYA9SC). */
+export function NotificationsPausedBannerDemo() {
+  return (
+    <section class="dialog-layout-demo dialog-surface">
+      <NotificationsPausedBanner waiting={0} />
+      <NotificationsPausedBanner waiting={3} />
+    </section>
+  );
+}
+
 export function Hs1MigrationBannerDemo() {
   return (
     <section class="dialog-layout-demo dialog-surface">

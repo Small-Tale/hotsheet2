@@ -1,13 +1,15 @@
 import '@kerfjs/ui/layout.css';
 import './settings-navigation.css';
+import './notification-navigation.css';
 
 import { rem } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Bell, CalendarDays, Clock3 } from 'lucide';
+import { Bell, BellOff, CalendarDays, Clock3 } from 'lucide';
 
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { SidebarPane, type SidebarPanelParts } from './sidebar-panel';
 
 export type NotificationView = 'pending' | 'day' | 'week';
@@ -26,9 +28,12 @@ export function notificationViewTitle(view: NotificationView): string {
 export function notificationNavigationPanel({
   selected,
   counts,
+  paused = false,
 }: {
   selected: NotificationView;
   counts: Record<NotificationView, number>;
+  /** The app-wide notification pause; the footer toggles it (HS2-QYA9SC). */
+  paused?: boolean;
 }): SidebarPanelParts {
   const content = (
     <div class="settings-navigation__content">
@@ -58,11 +63,32 @@ export function notificationNavigationPanel({
       </section>
     </div>
   );
+  // Kerf's Pane owns its footer's safe-area edges, so the inset lives on this inner box (HS2-KMDJRH).
+  const footer = (
+    <div class="notification-navigation__footer-content" data-paused={String(paused)}>
+      <wa-button
+        size="small"
+        appearance="outlined"
+        {...(paused
+          ? NOTIFICATIONS_AND_LINKS_ACTIONS.resumeNotifications.attrs
+          : NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications.attrs)}
+        title={
+          paused
+            ? 'Show permission popups again in every project'
+            : 'Stop permission popups in every project until you resume'
+        }
+      >
+        <LucideIcon size="s" slot="start" icon={paused ? Bell : BellOff} name={paused ? 'bell' : 'bell-off'} />
+        {paused ? 'Resume notifications' : 'Pause notifications'}
+      </wa-button>
+    </div>
+  );
   return {
     label: 'Notification views',
     toolbar: { label: 'Notification sidebar toolbar', dividerSides: '' },
     toggle: { action: 'toggle-project-sidebar', name: 'notification sidebar' },
     content,
+    footer,
     pane: { contentElement: 'nav', contentLabel: 'Notification views' },
   };
 }
@@ -70,15 +96,17 @@ export function notificationNavigationPanel({
 export function NotificationNavigation({
   selected,
   counts,
+  paused = false,
   collapseControl = false,
 }: {
   selected: NotificationView;
   counts: Record<NotificationView, number>;
+  paused?: boolean;
   collapseControl?: boolean;
 }) {
   return (
     <SidebarPane
-      parts={notificationNavigationPanel({ selected, counts })}
+      parts={notificationNavigationPanel({ selected, counts, paused })}
       className="settings-navigation"
       collapseControl={collapseControl}
     />

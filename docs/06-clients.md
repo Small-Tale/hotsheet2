@@ -1999,6 +1999,17 @@ without a details box or decision-button footer, keeping the summary away from t
 edge. The right inspector region remains present and manually collapsible in this
 view rather than changing the workspace width.
 
+**Pause notifications** (HS2-QYA9SC) is an app-wide, per-device switch that stops permission
+popups in every open project. It lives in the popup footer next to Ignore and in the
+Notifications sidebar footer, which offers Resume while paused. While paused, a "Notifications
+paused" status banner in the shell shows how many requests are waiting and resumes with one
+click. Requests still collect in Notifications and on project-tab badges, and an auto-Allow or
+auto-Deny countdown freezes because its popup is not presented. 0-second auto-Allow keeps
+running because it never interrupts. The pause is stored as `hotsheet.notifications-paused` in
+localStorage, survives a reload, and other windows follow it through the `storage` event.
+Toasts that confirm the user's own actions are unaffected. Any future interruptive notification
+surface, such as server `/notifications`, must honor the same pause unless it is an emergency.
+
 Ignore is client-only and hides the popup without answering. When the server advertises
 durable Always Allow support, actions are Ignore, Deny, Always Allow, and Allow Once;
 otherwise the final action is simply Allow. Per-project localStorage settings can turn

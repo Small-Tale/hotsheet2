@@ -782,6 +782,13 @@ export const demoCatalog: DemoCategory[] = [
         true,
       ),
       demo(
+        'notifications-paused-banner',
+        'NotificationsPausedBanner',
+        'App-wide status that notifications are paused, with the waiting request count and Resume.',
+        'feature-floor',
+        true,
+      ),
+      demo(
         'provider-icon',
         'ProviderIcon',
         'Provider brand marks for GitHub, GitLab, and Jira at the inline (m) and identity (l) sizes.',

@@ -1796,6 +1796,29 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "notifications-paused-banner",
+      "name": "NotificationsPausedBanner",
+      "source": "src/components/notifications-paused-banner.tsx",
+      "kind": "component",
+      "purpose": "App-wide status that notifications are paused, with the waiting request count and Resume.",
+      "useWhen": [
+        "Hot Sheet needs app-wide status that notifications are paused, with the waiting request count and Resume."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific NotificationsPausedBanner behavior."
+      ],
+      "publicClasses": [
+        "notifications-paused-banner"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "provider-icon",
       "name": "ProviderIcon",
       "source": "src/components/provider-icon.tsx",

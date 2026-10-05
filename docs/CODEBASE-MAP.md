@@ -120,6 +120,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with activation supersession and active-project promotion
     src/project-warm-cache.ts # Bounded LRU (default 8) of warm project ids whose resident projection + AI config make tab switches instant; eviction drops the projection (HS2-AZZ9TF)
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
+    src/notification-pause.ts # App-wide per-device notification pause (localStorage hotsheet.notifications-paused, storage-event sync, banner copy); gates the permission popup via features/permissions visiblePermission (HS2-QYA9SC)
     src/not-working-workflow.ts # Input validation + one atomic provider Not Working report request
     src/ticket-views.ts      #   Built-in plus collision-safe custom view identities and ticket collection semantics
     src/text-merge.ts        #   Three-way text merge (by line, then word within a region both changed) and tag set merge (HS2-A4XCXE, HS2-R8TYCG)
@@ -128,6 +129,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/saved-views.ts       #   Readable collision-free shared-view ids and case-insensitive name validation
     src/ai-provider-defaults.ts # Per-provider AI default model/effort resolution, save and default-switch helpers (HS2-EK24KF)
     src/components/project-setup-warning-banner.tsx # Dismissible warning when opening a project skipped its setup refresh (HS2-0TXM8S)
+    src/components/notifications-paused-banner.tsx # Kerf StateBanner shown in every project while notifications are paused, with the waiting count and Resume (HS2-QYA9SC)
     src/components/project-strip-actions.tsx # ProjectTabBar zone content: dashboard-mode and Add-project borderless Kerf control groups of native buttons, declared rendersAs toolbar-control-group in ai/component-composition-extension.json (HS2-PNCDAE)
     src/top-layer-overlay.ts # Opens marked manual-popover overlays (the magnified terminal) into the browser top layer as Kerf renders them (HS2-Z9PQSC)
     src/copy-text.ts         # Click-time text copy with an in-gesture selection fallback when Safari refuses the Clipboard API (HS2-1A2BQR)
