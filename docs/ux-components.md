@@ -2392,9 +2392,10 @@ Kerf beta.77's `ToolbarControlGroup.tileTone` (HS2-RXXXPH, KF-VH4B52) now paints
 decorative heading icons in brand, success, or danger quiet tones. The command editor retains its
 app-owned custom-color icon span centered inside a borderless Kerf group; the generic heading root styling
 and all five heading suppressions are gone. Kerf `expandedOverflow="visible"` also replaces the
-grouped-search root overflow override (HS2-PV2AG1, KF-M8SV15). The remaining two exact per-file
-suppressions name `KF-MXE9YV` and `KF-7288MD`; `src/kerf-ui-profile.test.ts` pins the list so it can
-only change deliberately.
+grouped-search root overflow override (HS2-PV2AG1, KF-M8SV15). The gallery filename now uses
+`ToolbarText tone="dark"` (HS2-V5VS0A, KF-7288MD), removing its cross-component color rule.
+The one remaining exact per-file suppression names `KF-MXE9YV`; `src/kerf-ui-profile.test.ts`
+pins the list so it can only change deliberately.
 
 Kerf 5.0.0-beta.70 (HS2-1GPHS5) added `KUI-L023`, the markup-borrowing rule. It flags a module that
 renders markup owned by another component. On beta.70 it also read HTML string literals in unit-test
@@ -2616,6 +2617,8 @@ an own class or configures the child through its props:
 - `ConfidenceCalibration`: `recent-title`, `recent-list`, and `recent-item`.
 - The project statistics page: `project-statistics__title`.
 - `AttachmentGallery`:
+  - Its filename is `ToolbarText tone="dark"` in the inverse gallery toolbar; Kerf supplies the
+    light text color while `fill` retains long-name truncation (HS2-V5VS0A, KF-7288MD).
   - Its toolbar buttons carry no app class: Kerf's `ToolbarControlGroup` owns their disabled
     cursor, dimming, and absent hover chrome (`KF-FTADQT`, adopted in HS2-0MH5V1).
   - The video carries `attachment-gallery__video`.

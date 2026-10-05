@@ -15749,6 +15749,8 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
   const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
+  await expect(gallery.locator('.attachment-gallery__filename')).toHaveAttribute('data-tone', 'dark');
+  await expect(gallery.locator('.attachment-gallery__filename')).toHaveCSS('color', 'rgb(255, 255, 255)');
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
   const footerToolbar = gallery.locator('.attachment-gallery__footer-actions');
   await expect(footerToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);

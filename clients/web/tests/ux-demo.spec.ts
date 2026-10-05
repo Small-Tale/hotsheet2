@@ -4943,6 +4943,32 @@ test('shows append-only and unsupported attachment variants in the TicketAttachm
   await appendOnly.screenshot({ path: '/private/tmp/hs2-hsa64d-demo-append-only-narrow.png' });
 });
 
+for (const theme of ['light', 'dark'] as const) {
+  test(`keeps the gallery filename legible with Kerf dark tone in ${theme} (HS2-V5VS0A)`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.addInitScript((value) => {
+      localStorage.setItem('hotsheet.ux-demo.theme', value);
+    }, theme);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
+    const gallery = page.locator('[data-component="attachment-gallery"]'),
+      filename = gallery.locator('.attachment-gallery__filename'),
+      filenameText = filename.locator('.kui-toolbar-text__text');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await expect(filename).toHaveAttribute('data-tone', 'dark');
+    await expect(filename).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await gallery.screenshot({ path: `/private/tmp/hs2-v5vs0a-gallery-${theme}-wide.png` });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await filenameText.evaluate((node) => {
+      node.textContent = 'a-very-long-attachment-filename-that-shows-its-ending-in-the-gallery.png';
+    });
+    await expect(filename).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(filenameText).toHaveCSS('text-overflow', 'ellipsis');
+    await expect.poll(() => filenameText.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
+    await gallery.screenshot({ path: `/private/tmp/hs2-v5vs0a-gallery-${theme}-phone.png` });
+  });
+}
+
 test('navigates and zooms the standalone attachment gallery demo', async ({ page }) => {
   await page.route('**/ux-gallery-preview.svg', async (route) => {
     if (new URL(route.request().url()).search) {

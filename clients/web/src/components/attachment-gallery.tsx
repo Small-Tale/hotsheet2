@@ -330,7 +330,7 @@ export function AttachmentGallery({
           // The full-screen gallery reaches the status bar and rounded corners: the toolbar claims
           // those device insets so its controls stay in the safe area (HS2-5TYNAS).
           safeAreaEdges={['block-start', 'inline-start', 'inline-end']}
-          leading={<ToolbarText className="attachment-gallery__filename" text={image.name} fill />}
+          leading={<ToolbarText className="attachment-gallery__filename" text={image.name} tone="dark" fill />}
           trailing={
             <>
               <ToolbarControlGroup label="Media navigation" tone="dark">

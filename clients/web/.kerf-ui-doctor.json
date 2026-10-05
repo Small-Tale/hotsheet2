@@ -34,12 +34,6 @@
       "rules": ["KUI-L022"],
       "target": "src/components/workspace-controls.tsx",
       "rationale": "Workspace-header groups and identity hide or reveal at toolbar container widths (workspace-header.css) until Kerf ships width-threshold visibility (KF-MXE9YV); remove when HS2 adopts it."
-    },
-    {
-      "id": "kf-7288md-gallery-filename-dark-tone",
-      "rules": ["KUI-L022"],
-      "target": "src/components/attachment-gallery.tsx",
-      "rationale": "The gallery filename ToolbarText uses light-on-dark text in the dark toolbar (attachment-gallery.css) until Kerf ships a ToolbarText tone (KF-7288MD); remove when HS2 adopts it."
     }
   ]
 }

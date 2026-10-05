@@ -31,11 +31,6 @@
 .attachment-gallery__toolbar {
   --kui-toolbar-trailing-gap: var(--kui-space-m);
 }
-/* ToolbarText `fill` truncates the name at the space the controls leave. Its light-on-dark color
-   awaits a ToolbarText tone (KF-7288MD); until then this is a recorded KUI-L022 exception. */
-.attachment-gallery__toolbar .attachment-gallery__filename {
-  color: var(--wa-color-neutral-on-loud);
-}
 .attachment-gallery__count {
   display: inline-grid;
   min-width: remify(60px);

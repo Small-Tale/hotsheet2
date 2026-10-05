@@ -99,17 +99,13 @@ describe('Kerf application UI profile', () => {
       }),
     );
     // Known Kerf gaps are documented suppressions, never open-ended budgets: each names the KF ticket
-    // whose prop removes it. beta.77's tileTone retired five heading exceptions (HS2-RXXXPH).
+    // whose prop removes it. beta.77's tileTone, expandedOverflow, and ToolbarText tone retired
+    // seven exceptions (HS2-RXXXPH, HS2-PV2AG1, HS2-V5VS0A).
     expect(config.suppressions.map(({ id, rules, target }) => ({ id, rules, target }))).toEqual([
       {
         id: 'kf-mxe9yv-workspace-header-width-visibility',
         rules: ['KUI-L022'],
         target: 'src/components/workspace-controls.tsx',
-      },
-      {
-        id: 'kf-7288md-gallery-filename-dark-tone',
-        rules: ['KUI-L022'],
-        target: 'src/components/attachment-gallery.tsx',
       },
     ]);
     for (const suppression of config.suppressions)

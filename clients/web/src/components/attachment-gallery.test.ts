@@ -90,13 +90,16 @@ describe('AttachmentGallery', () => {
     expect(markup).toContain('<div class="attachment-gallery__toolbar"><header class="kui-toolbar"');
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);
     // The header groups use dark tone; the floating footer inherits FloatingToolbar's dark scheme.
-    expect(markup.match(/data-tone="dark"/g)).toHaveLength(3);
+    expect(markup.match(/data-tone="dark"/g)).toHaveLength(4);
+    expect(markup).toMatch(/class="kui-toolbar-text attachment-gallery__filename"[^>]*data-tone="dark"/);
+    const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
+    expect(css).not.toContain('.attachment-gallery__filename {');
     const markupMode = String(AttachmentGallery({ images, activeUrl: '/b.svg', markup: true }));
     expect(markupMode).toContain(
       'data-position="bottom" data-placement="floating" role="toolbar" aria-label="Media markup"',
     );
     expect(markupMode.match(/data-component="toolbar-control-group"/g)).toHaveLength(5);
-    expect(markupMode.match(/data-tone="dark"/g)).toHaveLength(3);
+    expect(markupMode.match(/data-tone="dark"/g)).toHaveLength(4);
   });
   it('cycles previous and next from canonical URLs and aliases', () => {
     const aliased = [images[0], { ...images[1], aliases: ['/tickets/HS2-DEMO/attachments/by-name/b.svg'] }];
