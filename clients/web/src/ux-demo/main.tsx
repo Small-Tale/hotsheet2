@@ -90,6 +90,7 @@ import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
@@ -238,6 +239,7 @@ import {
   openHs1MigrationDialogDemo,
   ValueTableDemo,
 } from './dialog-layout-demo';
+import { haltedSessionDemoResult, haltedSessionDemoVisible, HaltedSessionPopupDemo } from './halted-session-demo';
 import { ListDemo } from './list-demo';
 import { ListHeaderDemo } from './list-header-demo';
 import { ListItemDemo } from './list-item-demo';
@@ -655,6 +657,7 @@ function demoContent(item: DemoDefinition) {
       <ProjectSetupWarningBanner detail="The development Hot Sheet CLI does not match the current setup templates and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed." />
     );
   if (item.id === 'notifications-paused-banner') return <NotificationsPausedBannerDemo />;
+  if (item.id === 'halted-session-popup') return <HaltedSessionPopupDemo />;
   if (item.id === 'content-transition') return <ContentTransitionDemo />;
   if (item.id === 'select') return <SelectDemo />;
   if (item.id === 'list') return <ListDemo />;
@@ -1721,6 +1724,25 @@ new MutationObserver(syncDemoRepositoryNavStack).observe(root, { childList: true
 queueMicrotask(syncDemoRepositoryNavStack);
 queueMicrotask(syncDemoTerminals);
 startPermissionRequestDemoCountdown(root, () => selectedId.value === 'permission-request');
+void delegate(root, 'click', '[data-reset-halt-demo]', () => {
+  haltedSessionDemoVisible.value = true;
+});
+for (const [action, result] of [
+  [
+    NOTIFICATIONS_AND_LINKS_ACTIONS.openHaltedSession,
+    'Open session returns to the originating project and session without clearing its halt indicator.',
+  ],
+  [NOTIFICATIONS_AND_LINKS_ACTIONS.dismissHaltedSession, 'Prompt dismissed. The session remains halted.'],
+  [
+    NOTIFICATIONS_AND_LINKS_ACTIONS.pauseNotifications,
+    'Notifications paused. Unseen halted sessions wait until Resume.',
+  ],
+] as const)
+  void delegate(root, 'click', action.selector, () => {
+    if (selectedId.value !== 'halted-session-popup') return;
+    haltedSessionDemoResult.value = result;
+    haltedSessionDemoVisible.value = false;
+  });
 if (import.meta.env.DEV)
   void fetch('/__hotsheet/demo-modified')
     .then((response) => response.json())

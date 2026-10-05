@@ -23,6 +23,375 @@ const project = {
   stores: ['/work/demo.hs2'],
   apiPath: '/__hotsheet/project-api/demo-checkout',
 };
+
+/** Real application + event-shaped fixtures; only transport is replaced. */
+async function haltedSessionFixture(page: Page) {
+  await mockProject(page);
+  let halt: { at: string; message: string; error_type: string } | undefined,
+    pending: Array<{ id: number; connection: string; project: string; tool: string; action: string }> = [],
+    failing = false,
+    cursor = 0;
+  const sockets: import('@playwright/test').WebSocketRoute[] = [];
+  const terminalGets: string[] = [];
+  await page.route('**/terminals', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    terminalGets.push(new URL(route.request().url()).pathname);
+    return failing
+      ? route.fulfill({ status: 500, json: { error: 'snapshot unavailable' } })
+      : route.fulfill({
+          json: [{ id: 'halt-worker', name: 'Claude worker', alive: true, busy: false, cwd: '/work/demo', halt }],
+        });
+  });
+  await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route('**/ws/poll*', (route) => {
+    return route.fulfill({ json: { cursor, events: [], overflow: false } });
+  });
+  await page.routeWebSocket(/\/ws\/sync(?:\?|$)/, (route) => {
+    sockets.push(route);
+    route.onClose(() => {
+      const index = sockets.indexOf(route);
+      if (index >= 0) sockets.splice(index, 1);
+    });
+  });
+  await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+    void route.close();
+  });
+  const emit = async (kind: string, id = 'halt-worker') => {
+    await expect.poll(() => sockets.length).toBeGreaterThan(0);
+    cursor += 1;
+    for (const socket of sockets) socket.send(JSON.stringify({ cursor, store: '', kind, id, slug: '' }));
+  };
+  return {
+    terminalGets: () => [...terminalGets],
+    socketCount: () => sockets.length,
+    beforeReload: () => {
+      sockets.splice(0);
+      pending = [];
+    },
+    halt: async (at?: string) => {
+      halt = at ? { at, message: `Selected model is at capacity (${at}).`, error_type: 'overloaded' } : undefined;
+      await emit('terminal_halted');
+    },
+    permission: async (connection = 'claude-worker') => {
+      pending = [{ id: 99, connection, project: '/work/demo', tool: 'Bash', action: 'cargo test' }];
+      await emit('permission_asked', '99');
+    },
+    failRefresh: async () => {
+      failing = true;
+      await emit('terminal_halted');
+    },
+    recover: async () => {
+      failing = false;
+      await emit('terminal_halted');
+    },
+  };
+}
+
+for (const width of [1280, 390]) {
+  test(`halts prompt through permission priority, pause/resume, resolution and reload dedupe at ${width}px (HS2-E6KAWY)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const fixture = await haltedSessionFixture(page);
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+    const popup = page.getByRole('dialog', { name: 'AI session halted' }),
+      permission = page.locator('[data-component="permission-request-popup"]');
+    await fixture.permission();
+    await expect(permission).toBeVisible();
+    await fixture.halt('first');
+    await expect(popup).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem('hotsheet.halted-session-seen'))).toBeNull();
+    await page.screenshot({ path: test.info().outputPath(`hs2-e6kawy-permission-${width}.png`) });
+    await permission.getByRole('button', { name: 'Ignore' }).click();
+    await expect(popup).toBeVisible();
+    await expect(popup).toBeInViewport({ ratio: 1 });
+    for (const name of ['Open session', 'Dismiss', 'Pause notifications'])
+      await expect(popup.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: test.info().outputPath(`hs2-e6kawy-alert-${width}.png`) });
+    await fixture.failRefresh();
+    await expect(popup).toBeVisible();
+    await expect(popup).toContainText('(first)');
+    await fixture.recover();
+    await popup.getByRole('button', { name: 'Pause notifications' }).click();
+    await expect(popup).toHaveCount(0);
+    await fixture.halt('resolved-while-paused');
+    await expect(page.locator('[data-component="notifications-paused-banner"]')).toContainText(
+      '1 halted session waits',
+    );
+    await fixture.halt();
+    await expect(page.locator('[data-component="notifications-paused-banner"]')).not.toContainText('1 halted');
+    await fixture.halt('queued');
+    await expect(popup).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath(`hs2-e6kawy-paused-${width}.png`) });
+    await page.getByRole('button', { name: 'Resume', exact: true }).click();
+    await expect(popup).toBeVisible();
+    await expect(popup).toContainText('(queued)');
+    await popup.getByRole('button', { name: 'Open session' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]'),
+      tab = drawer.locator('[data-tab-kind="terminal"][data-terminal-id="halt-worker"]');
+    await expect(drawer).toBeVisible();
+    await expect(tab).toHaveAttribute('data-selected', 'true');
+    await expect(tab.locator('.terminal-drawer__halt')).toBeVisible();
+    await expect(popup).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath(`hs2-e6kawy-open-${width}.png`) });
+    fixture.beforeReload();
+    await page.reload();
+    await expect(drawer).toBeVisible();
+    await expect(popup).toHaveCount(0);
+    await fixture.halt('new-episode');
+    await expect(popup).toBeVisible();
+    await popup.getByRole('button', { name: 'Dismiss', exact: true }).click();
+    await expect(popup).toHaveCount(0);
+    await expect(tab.locator('.terminal-drawer__halt')).toBeVisible();
+    await fixture.halt();
+    await expect(tab.locator('.terminal-drawer__halt')).toHaveCount(0);
+  });
+}
+
+test('acknowledges a halted prompt only after modal editing releases its top-layer presentation (HS2-E6KAWY)', async ({
+  page,
+}) => {
+  const fixture = await haltedSessionFixture(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'New ticket…', exact: true }).click();
+  const composer = page.getByRole('dialog', { name: 'Create ticket' });
+  await composer.getByRole('textbox', { name: 'Ticket title' }).fill('Keep this draft');
+  await fixture.halt('deferred');
+  const popup = page.locator('[data-component="halted-session-popup"]');
+  await expect(popup).toHaveCount(1);
+  await expect(popup).not.toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('hotsheet.halted-session-seen'))).toBeNull();
+  await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-deferred-modal.png') });
+  await composer.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(popup).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.halted-session-seen') ?? '[]').length))
+    .toBe(1);
+  await popup.getByRole('button', { name: 'Dismiss', exact: true }).click();
+});
+
+test('prioritizes an ignored foreground permission request over queued halts (HS2-E6KAWY)', async ({ page }) => {
+  const fixture = await haltedSessionFixture(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('button', { name: 'Open Codex conversation' }).click();
+  await fixture.permission('hotsheet-project-chat-codex-demo-checkout');
+  const conversation = page.locator('[data-component="ai-conversation"]'),
+    permission = conversation.locator('[data-component="permission-request-popup"]'),
+    popup = page.getByRole('dialog', { name: 'AI session halted' });
+  await expect(permission).toBeVisible();
+  await permission.getByRole('button', { name: 'Ignore' }).click();
+  await expect(conversation.locator('[data-component="permission-request-card"]')).toBeVisible();
+  await fixture.halt('foreground');
+  await expect(popup).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('hotsheet.halted-session-seen'))).toBeNull();
+  await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-foreground-permission.png') });
+  await page.keyboard.press('Escape');
+  await expect(popup).toBeVisible();
+});
+
+test('shows completed driven failures, preserves indicators on dismissal, and suppresses retry alerts (HS2-E6KAWY)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+  const host = drawer.locator('[data-component="ai-conversation"]'),
+    composer = host.getByLabel('Message Codex');
+  await composer.fill('Fail this turn.');
+  await composer.press('Enter');
+  const popup = page.getByRole('dialog', { name: 'AI session halted' });
+  await expect(popup).toBeVisible();
+  await expect(popup).toContainText('Selected model is at capacity');
+  await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-driven-failure.png') });
+  await popup.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toBeVisible();
+  await composer.fill('Retry successfully.');
+  await composer.press('Enter');
+  await expect(host).toContainText('Retry completed successfully.');
+  await expect(popup).toHaveCount(0);
+  await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toHaveCount(0);
+});
+
+test('opens a halted session in its originating project and follows another window acknowledgment while deferred (HS2-E6KAWY)', async ({
+  page,
+}) => {
+  const fixture = await haltedSessionFixture(page);
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  await page.route('**/__hotsheet/projects/open', (route) => {
+    const root = route.request().postDataJSON().root as string;
+    return route.fulfill({
+      status: 201,
+      json:
+        root === '/work/other'
+          ? { ...project, id: 'other-checkout', root, name: 'other', apiPath: '/__hotsheet/project-api/other-checkout' }
+          : project,
+    });
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add project' }).click();
+  await expect(page.getByRole('tab', { name: /^other/ })).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(() => fixture.terminalGets().length).toBe(2);
+  expect(new Set(fixture.terminalGets()).size).toBe(2);
+  await expect.poll(fixture.socketCount).toBe(2);
+  await fixture.halt('origin-project');
+  const popup = page.getByRole('dialog', { name: 'AI session halted' });
+  await expect(popup).toContainText('demo · Claude worker');
+  await expect.poll(() => fixture.terminalGets().length).toBe(4);
+  await popup.getByRole('button', { name: 'Open session' }).click();
+  await expect(page.getByRole('tab', { name: /^demo/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('[data-tab-kind="terminal"][data-terminal-id="halt-worker"]')).toHaveAttribute(
+    'data-selected',
+    'true',
+  );
+  await expect(page.locator('[data-terminal-id="halt-worker"] .terminal-drawer__halt')).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-origin-open.png') });
+  await page.getByRole('button', { name: 'New ticket…', exact: true }).click();
+  const composer = page.getByRole('dialog', { name: 'Create ticket' });
+  await composer.getByRole('textbox', { name: 'Ticket title' }).fill('Keep editing');
+  await fixture.halt('seen-in-peer');
+  const key = JSON.stringify(['terminal', 'demo-checkout', 'halt-worker', 'seen-in-peer']);
+  await expect(page.locator('[data-component="halted-session-popup"]')).toHaveCount(1);
+  const peer = await page.context().newPage();
+  await peer.goto('/ux-demo?component=halted-session-popup&dev-review=false');
+  await peer.evaluate((key) => {
+    localStorage.setItem('hotsheet.halted-session-seen', JSON.stringify([key]));
+  }, key);
+  await peer.close();
+  await expect(page.locator('[data-component="halted-session-popup"]')).toHaveCount(0);
+  await expect(composer.getByRole('textbox', { name: 'Ticket title' })).toHaveValue('Keep editing');
+  await expect
+    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.halted-session-seen') ?? '[]').length))
+    .toBe(2);
+  await composer.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(popup).toHaveCount(0);
+});
+
+test('keeps live halt dedupe when device storage is unavailable (HS2-E6KAWY)', async ({ page }) => {
+  await page.addInitScript(() => {
+    const get = Reflect.get(Storage.prototype, 'getItem'),
+      set = Reflect.get(Storage.prototype, 'setItem');
+    Storage.prototype.getItem = function (key) {
+      if (key === 'hotsheet.halted-session-seen') throw new Error('storage unavailable');
+      return get.call(this, key);
+    };
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'hotsheet.halted-session-seen') throw new Error('storage unavailable');
+      set.call(this, key, value);
+    };
+  });
+  const fixture = await haltedSessionFixture(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const popup = page.getByRole('dialog', { name: 'AI session halted' });
+  await fixture.halt('memory-only');
+  await expect(popup).toBeVisible();
+  await popup.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await fixture.halt('memory-only');
+  await expect(popup).toHaveCount(0);
+  await fixture.halt('next-memory');
+  await expect(popup).toBeVisible();
+});
+
+test('deduplicates actual server halt episodes, preserves duplicate timestamps, and opens a new clear/rehalt episode (HS2-E6KAWY)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer();
+  const mutateHalt = async (method: 'POST' | 'DELETE', path: string, body?: unknown) => {
+    const response = await fetch(`${server.url}${path}`, {
+      method,
+      headers: { 'X-Hotsheet-Secret': server.secret, 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    expect(response.status).toBe(204);
+  };
+  try {
+    await server.request('/terminals', 'POST', {
+      id: 'real-halt',
+      command: '/bin/sh',
+      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      cwd: server.root,
+    });
+    await expect
+      .poll(async () => (await server.request<Array<{ cwd?: string }>>('/terminals'))[0]?.cwd)
+      .toBe('/work/demo');
+    await mockProject(page);
+    for (const pattern of [
+      '**/__hotsheet/project-api/demo-checkout/terminals**',
+      '**/__hotsheet/project-api/demo-checkout/ws/poll*',
+    ])
+      await page.route(pattern, async (route) => {
+        const incoming = new URL(route.request().url()),
+          path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
+        try {
+          const response = await route.fetch({
+            url: `${server.url}${path}${incoming.search}`,
+            headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+            timeout: 60_000,
+          });
+          await route.fulfill({ response });
+        } catch {
+          await route.abort().catch(() => undefined);
+        }
+      });
+    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+      void route.close();
+    });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const report = { error_type: 'overloaded', message: 'Real Claude model capacity failure.', agent: 'claude' },
+      popup = page.getByRole('dialog', { name: 'AI session halted' });
+    await mutateHalt('POST', '/terminals/real-halt/halt', report);
+    await expect(popup).toBeVisible();
+    const first = (await server.request<Array<{ halt: { at: string } }>>('/terminals'))[0].halt.at;
+    await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-real-server-wide.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(popup).toBeInViewport({ ratio: 1 });
+    await expect(page.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
+    await page.evaluate(async () => {
+      await Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+          .map((animation) => animation.finished.catch(() => {})),
+      );
+    });
+    await page.screenshot({ path: test.info().outputPath('hs2-e6kawy-real-server-phone.png') });
+    await popup.getByRole('button', { name: 'Dismiss', exact: true }).click();
+    await mutateHalt('POST', '/terminals/real-halt/halt', report);
+    expect((await server.request<Array<{ halt: { at: string } }>>('/terminals'))[0].halt.at).toBe(first);
+    await page.reload();
+    await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+    await expect(popup).toHaveCount(0);
+    await mutateHalt('DELETE', '/terminals/real-halt/halt');
+    await mutateHalt('POST', '/terminals/real-halt/halt', report);
+    expect((await server.request<Array<{ halt: { at: string } }>>('/terminals'))[0].halt.at).not.toBe(first);
+    await expect(popup).toBeVisible();
+    await mutateHalt('DELETE', '/terminals/real-halt');
+    await expect(popup).toHaveCount(0);
+  } finally {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await server.stop();
+  }
+});
 const row = {
   connection_id: 'git-local',
   native_id: '01',
@@ -5394,6 +5763,12 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     await expect(tab.locator('.terminal-drawer__busy-dot')).toHaveCount(0);
     await expect(projectAttention).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('hs2-hj4d1h-halted-1280.png') });
+    // The halt prompt is now an interruptive top-layer surface (HS2-E6KAWY). Dismiss it before
+    // using the project picker below it; dismissal keeps the server/tab attention state intact.
+    const haltPrompt = page.getByRole('dialog', { name: 'AI session halted' });
+    await expect(haltPrompt).toBeVisible();
+    await haltPrompt.getByRole('button', { name: 'Dismiss', exact: true }).click();
+    await expect(halted).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(halted).toBeVisible();
     await settledAnimations(page.locator('[data-component="app-shell"]'));

@@ -1087,13 +1087,25 @@ async fn terminal_halt_is_reported_listed_announced_cleared_and_forgotten_on_kil
     };
 
     // Report, then repeat the same report: listed once, announced once.
-    for _ in 0..2 {
+    let mut episode_at = serde_json::Value::Null;
+    for attempt in 0..2 {
         assert_eq!(
             send("POST", "/terminals/halt-me/halt", Some(halt))
                 .await
                 .status(),
             StatusCode::NO_CONTENT
         );
+        let timestamp =
+            body_json(send("GET", "/terminals/halt-me", None).await).await["halt"]["at"].clone();
+        if attempt == 0 {
+            episode_at = timestamp;
+            tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+        } else {
+            assert_eq!(
+                timestamp, episode_at,
+                "identical reports preserve active episode identity"
+            );
+        }
     }
     let listed = body_json(send("GET", "/terminals", None).await).await;
     assert_eq!(listed[0]["halt"]["error_type"], "overloaded");
@@ -1118,6 +1130,23 @@ async fn terminal_halt_is_reported_listed_announced_cleared_and_forgotten_on_kil
         announced[0]["message"],
         "Selected model is at capacity. Please try a different model."
     );
+
+    // A different diagnostic is a new active episode even without an intervening clear.
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/halt-me/halt",
+            Some(r#"{"error_type":"rate_limit","message":"Slow down."}"#)
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let changed_halt = body_json(send("GET", "/terminals/halt-me", None).await).await;
+    assert_ne!(changed_halt["halt"]["at"], episode_at);
+    let changed_events = poll(cursor).await;
+    assert_eq!(changed_events.len(), 2);
+    assert_eq!(changed_events[1]["message"], "Slow down.");
 
     // Resuming clears it and announces the clear; clearing again is a silent no-op.
     let resumed_at = body_json(send("GET", "/ws/poll?timeout_ms=0", None).await).await["cursor"]
@@ -1158,13 +1187,31 @@ async fn terminal_halt_is_reported_listed_announced_cleared_and_forgotten_on_kil
     );
     let blank = body_json(send("GET", "/terminals", None).await).await;
     assert_eq!(blank[0]["halt"]["error_type"], "unknown");
+    assert_ne!(
+        blank[0]["halt"]["at"], episode_at,
+        "a clear followed by rehalt starts a new episode"
+    );
     assert_eq!(
         blank[0]["halt"]["message"],
         "The AI session stopped on an error."
     );
+    let before_kill = body_json(send("GET", "/ws/poll?timeout_ms=0", None).await).await["cursor"]
+        .as_u64()
+        .unwrap();
     assert_eq!(
         send("DELETE", "/terminals/halt-me", None).await.status(),
         StatusCode::NO_CONTENT
+    );
+    let killed = poll(before_kill).await;
+    assert_eq!(
+        killed.len(),
+        1,
+        "killing a halted terminal announces episode resolution"
+    );
+    assert!(
+        killed[0]
+            .get("message")
+            .is_none_or(serde_json::Value::is_null)
     );
     let reopened = send(
         "POST",

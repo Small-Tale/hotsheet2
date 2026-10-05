@@ -42,6 +42,14 @@ const selfGeometryIds = new Set([
 const intrinsicGeometryIds = new Set(['provider-icon']);
 // Components whose geometry fits none of the shared groups above.
 const geometryOverrides = {
+  'halted-session-popup': {
+    margin: 'self',
+    border: 'self',
+    padding: 'child',
+    notes: [
+      'Owns native top-layer viewport placement and framing; public List, Row, and Text own content geometry (HS2-E6KAWY).',
+    ],
+  },
   'ticket-page-more': {
     margin: 'self',
     border: 'self',

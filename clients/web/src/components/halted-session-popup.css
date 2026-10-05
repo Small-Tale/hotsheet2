@@ -1,0 +1,35 @@
+/* Owned native dialog/popover viewport contract; nested Kerf content configures itself. */
+.halted-session-popup {
+  position: fixed;
+  inset: auto remify(16px) auto auto;
+  top: calc(env(safe-area-inset-top) + remify(56px));
+  width: min(remify(560px), calc(100vw - remify(32px)));
+  max-width: none;
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - remify(72px));
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--wa-color-danger-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-surface-raised);
+  color: var(--wa-color-text-normal);
+  box-shadow: var(--wa-shadow-l);
+  transition: none;
+}
+.halted-session-popup[open] {
+  display: block;
+}
+.halted-session-popup:focus {
+  outline: none;
+}
+.halted-session-popup::backdrop {
+  background: transparent;
+}
+@media (max-width: remify(672px)) {
+  .halted-session-popup {
+    right: remify(8px);
+    left: remify(8px);
+    width: auto;
+  }
+}

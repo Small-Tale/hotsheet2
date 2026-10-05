@@ -1324,6 +1324,32 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "halted-session-popup",
+      "name": "HaltedSessionPopup",
+      "source": "src/components/halted-session-popup.tsx",
+      "kind": "component",
+      "purpose": "Acknowledged halted AI session prompt with Open session, Dismiss, and app-wide Pause notifications.",
+      "useWhen": [
+        "Hot Sheet needs acknowledged halted AI session prompt with Open session, Dismiss, and app-wide Pause notifications."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific HaltedSessionPopup behavior."
+      ],
+      "publicClasses": [
+        "halted-session-popup"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "self",
+        "border": "self",
+        "padding": "child",
+        "notes": [
+          "Owns native top-layer viewport placement and framing; public List, Row, and Text own content geometry (HS2-E6KAWY)."
+        ]
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "permission-request",
       "name": "PermissionRequestCard",
       "source": "src/components/permission-request-card.tsx",

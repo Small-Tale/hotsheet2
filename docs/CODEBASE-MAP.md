@@ -46,6 +46,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       commands.tsx            # Project command drafts, selection, autosave, kept (possibly empty) command groups, icons, and dialog composition
       repository.tsx          # Status/detail paging, stale-response guards, observer, review, and evidence projection
       permissions.tsx         # Permission inbox/history, polling/countdown, optimistic rollback, and popup
+      halted-sessions.tsx     # Halt prompt acknowledgment, cross-window persistence, and production Open/Dismiss wiring (HS2-E6KAWY)
       gallery.tsx             # Gallery gestures/playback/measurement, annotation sessions, and surfaces
       conversation-archive.tsx # Range selection, copy, export, and saved-chat opening
       saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion
@@ -120,6 +121,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with activation supersession and active-project promotion
     src/project-warm-cache.ts # Bounded LRU (default 8) of warm project ids whose resident projection + AI config make tab switches instant; eviction drops the projection (HS2-AZZ9TF)
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
+    src/halted-sessions.ts    # Pure terminal/failed-chat episode projection, pause/permission queue policy, active dedupe and bounded historical seen keys
+    src/terminal-snapshot-refresh.ts # Per-project response generations and authoritative snapshot merge; retains failed fetches and independent project results
     src/notification-pause.ts # App-wide per-device notification pause (localStorage hotsheet.notifications-paused, storage-event sync, banner copy); gates the permission popup via features/permissions visiblePermission (HS2-QYA9SC)
     src/not-working-workflow.ts # Input validation + one atomic provider Not Working report request
     src/ticket-views.ts      #   Built-in plus collision-safe custom view identities and ticket collection semantics

@@ -203,6 +203,7 @@ import { createAiConfigurationController } from '../features/ai-configuration';
 import { createCommandsController } from '../features/commands';
 import { createConversationArchiveController } from '../features/conversation-archive';
 import { createGalleryController } from '../features/gallery';
+import { createHaltedSessionsController } from '../features/halted-sessions';
 import { createPermissionsController } from '../features/permissions';
 import { createProjectLifecycleController } from '../features/project-lifecycle';
 import { createRepositoryController } from '../features/repository';
@@ -213,6 +214,7 @@ import { createTicketWorkflows } from '../features/ticket-workflows';
 import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
+import { projectHaltedSessions } from '../halted-sessions';
 import {
   effectiveSearch,
   type InlineSearchToken,
@@ -294,6 +296,7 @@ import {
   withoutTerminalName,
 } from '../terminal-names';
 import { terminalDrawerActivation, terminalProjectOwner } from '../terminal-project-scope';
+import { TerminalSnapshotRefresh } from '../terminal-snapshot-refresh';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT, type TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
@@ -544,6 +547,7 @@ export async function startHotSheetWebClient() {
   const pendingTerminalRenames = createTerminalNameWriteQueue();
   let terminalDashboardGeneration = 0,
     terminalCreateChain: Promise<unknown> = Promise.resolve();
+  const terminalSnapshotRefresh = new TerminalSnapshotRefresh();
   let terminalDrawerTransitionTimer: number | undefined, terminalPreviewClickTimer: number | undefined;
   let pendingTerminalFocus: TerminalFocusRequest | undefined;
   let drawerInputFocusGeneration = 0;
@@ -983,6 +987,37 @@ export async function startHotSheetWebClient() {
     notificationsPaused,
     setNotificationsPaused,
   } = permissionsController;
+  const haltedSessionsController = createHaltedSessionsController({
+    restoring: () => projectRestorePendingRoots.value.length > 0,
+    unresolvedProjects: () =>
+      projects.value
+        .filter(
+          (project) =>
+            !terminalGroups.value.some((group) => group.projectId === project.id) ||
+            !Object.hasOwn(driveConnectionsByProject.value, project.id),
+        )
+        .map((project) => project.id),
+    episodes: () =>
+      projectHaltedSessions(
+        projects.value,
+        terminalGroups.value,
+        terminalDrawerChatsByProject.value,
+        driveConnectionsByProject.value,
+        conversationStates.value,
+      ),
+    paused: () => notificationsPaused.value,
+    permissionVisible: () =>
+      !notificationsPaused.value &&
+      (Boolean(permissionInbox.visible()) ||
+        (conversationOpen.value &&
+          pendingPermissions().some(
+            (item) => item.projectId === selectedProjectId.value && item.connection === conversationConnectionId.value,
+          ))),
+    open: (episode) => {
+      if (episode.kind === 'chat') openGridAIChat(episode.projectId, episode.sessionId);
+      else openTerminalInProject(`${episode.projectId}:${episode.sessionId}`);
+    },
+  });
   const projectLifecycleController = createProjectLifecycleController({
     projects,
     selectedProjectId,
@@ -1390,18 +1425,22 @@ export async function startHotSheetWebClient() {
     terminalGroups.value = groups;
     if (nextCheckInMs !== undefined) aiConnectionTimer = setTimeout(applyAiConnectionStates, nextCheckInMs);
   }
-  async function refreshTerminalDashboard() {
-    const generation = ++terminalDashboardGeneration,
-      openProjects = [...projects.value];
-    terminalDashboardLoading.value = true;
-    terminalDashboardMessage.value = '';
+  async function refreshTerminalDashboard(quiet = false, targetProject?: Project) {
+    const generation = quiet ? terminalDashboardGeneration : ++terminalDashboardGeneration,
+      openProjects = [...projects.value],
+      fetchProjects = targetProject ? openProjects.filter((project) => project.id === targetProject.id) : openProjects,
+      versions = fetchProjects.map((project) => terminalSnapshotRefresh.begin(project.id));
+    if (!quiet) {
+      terminalDashboardLoading.value = true;
+      terminalDashboardMessage.value = '';
+    }
     const results: Array<TerminalDashboardGroup | undefined> = await Promise.all(
-      openProjects.map(async (current) => {
+      fetchProjects.map(async (current) => {
         try {
           const [infos] = await Promise.all([
-              new Api(current.apiPath).terminals(),
+              new Api(current.apiPath, '', { trackBusy: !quiet }).terminals(),
               ...(current.id !== selectedProjectId.value && !Object.hasOwn(driveConnectionsByProject.value, current.id)
-                ? [refreshDriveConnections(current, true)]
+                ? [refreshDriveConnections(current, true, quiet)]
                 : []),
             ]),
             owned = infos.filter((session) => terminalProjectOwner(openProjects, session.cwd) === current.id),
@@ -1429,12 +1468,19 @@ export async function startHotSheetWebClient() {
         }
       }),
     );
-    if (generation !== terminalDashboardGeneration) return;
-    terminalGroups.value = results.flatMap((group) => (group ? [group] : []));
+    if (!quiet && generation !== terminalDashboardGeneration) return;
+    // A failed fetch is not a resumed session. Keep the last snapshot for still-open projects.
+    terminalGroups.value = terminalSnapshotRefresh.merge(
+      terminalGroups.peek(),
+      results.map((group, index) => ({ projectId: fetchProjects[index].id, version: versions[index], group })),
+      projects.value.map((project) => project.id),
+    );
     applyAiConnectionStates();
-    terminalDashboardMessage.value =
-      openProjects.length > 0 && terminalGroups.value.length === 0 ? 'Terminal snapshots could not be loaded.' : '';
-    terminalDashboardLoading.value = false;
+    if (!quiet) {
+      terminalDashboardMessage.value =
+        openProjects.length > 0 && terminalGroups.value.length === 0 ? 'Terminal snapshots could not be loaded.' : '';
+      terminalDashboardLoading.value = false;
+    } else if (terminalGroups.peek().length > 0) terminalDashboardMessage.value = '';
   }
   // The workspace grid and drawer sizes follow whichever element currently renders them: a re-render
   // that replaces the measured node must re-bind the observer, or the size freezes (HS2-0PF13V).
@@ -3667,6 +3713,7 @@ export async function startHotSheetWebClient() {
           onResync: async (reason) => {
             await Promise.all([
               refreshPermissions(),
+              refreshTerminalDashboard(true, current),
               ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
             ]);
           },
@@ -3717,7 +3764,7 @@ export async function startHotSheetWebClient() {
                 (event) => event.kind === 'terminal_halted' || event.kind === 'terminal_ai_connection',
               )
             )
-              void refreshTerminalDashboard();
+              void refreshTerminalDashboard(true, current);
             if (containsRepositoryChange(response, current.id)) scheduleRepositoryRefresh(current);
           },
         });
@@ -4585,7 +4632,8 @@ export async function startHotSheetWebClient() {
     if (!current && !restoreFailure) return <AppEmptyState />;
     // The shell popup is a top-layer popover so the terminal drawer and the Workbench's main-pane clip
     // can never cover it (HS2-ZESCM2); the conversation's foreground keeps its own inline copy.
-    const popup = conversationOpen.value ? undefined : permissionPopupSurface('top'),
+    const haltPopup = haltedSessionsController.popup(),
+      popup = (conversationOpen.value ? undefined : permissionPopupSurface('top')) ?? haltPopup,
       currentJob = current && migrationJobsByRoot.value[current.root],
       currentBackupUnverified = Boolean(
         currentJob?.kind === 'backup' &&
@@ -4817,7 +4865,12 @@ export async function startHotSheetWebClient() {
               !hs1CleanupPromptDismissed(localStorage, current.id, hs1SourceIdentity(current)) && <Hs1CleanupBanner />}
             {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
             {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
-            {notificationsPaused.value && <NotificationsPausedBanner waiting={pendingPermissions().length} />}
+            {notificationsPaused.value && (
+              <NotificationsPausedBanner
+                waiting={pendingPermissions().length}
+                halted={haltedSessionsController.waiting()}
+              />
+            )}
           </>
         }
         pageHeader={pageHeader}
@@ -5560,6 +5613,7 @@ export async function startHotSheetWebClient() {
       toastHost.remove();
       toastLifetime.dispose();
       disposeInteractions();
+      haltedSessionsController.dispose();
     },
   };
 }

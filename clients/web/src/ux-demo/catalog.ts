@@ -567,6 +567,14 @@ export const demoCatalog: DemoCategory[] = [
       ),
       demo('busy-indicator', 'BusyIndicator', 'Tool and connection activity state.'),
       demo(
+        'halted-session-popup',
+        'HaltedSessionPopup',
+        'Acknowledged halted AI session prompt with Open session, Dismiss, and app-wide Pause notifications.',
+        'feature-floor',
+        true,
+        ['list', 'row', 'text'],
+      ),
+      demo(
         'permission-request',
         'PermissionRequestCard',
         'Human approval with timeout, project identity, and supported decision scopes.',

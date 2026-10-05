@@ -1,5 +1,17 @@
 # Feature Coverage Matrix
 
+HS2-E6KAWY pairs `clients/web/src/halted-sessions.test.ts` transition/adversarial tests
+(pause, permission priority, actual presentation, reload dedupe, active/history pruning,
+resolution, closed projects, retry suppression, malformed and unavailable storage) with
+`clients/web/tests/providers.spec.ts` production halt-prompt flows at wide/phone widths, including ignored foreground permission priority.
+`top-layer-overlay.test.ts` pins deferred acknowledgment and reuse of an already-open
+surface; `halted-session-popup.test.ts` checks accessible public composition and actions.
+The server HTTP halt transition test pins duplicate `at` preservation and clear/rehalt
+identity, plus kill resolution events. `terminal-snapshot-refresh.test.ts` covers independent
+project responses, failed/stale snapshots, authoritative empty state, and closed projects;
+the two-project browser flow pins one scoped snapshot per handshake/event. Durable remote
+failure identity remains HS2-DQ5Q92.
+
 HS2-8ZC1YB moved the workspace visibility type filter onto Kerf's multiple `Select` (choice
 icons, disabled reason, and bulk actions all owned by Kerf). The focused render test in
 `clients/web/src/components/terminal-visibility-dialog.test.ts` checks ownership; the

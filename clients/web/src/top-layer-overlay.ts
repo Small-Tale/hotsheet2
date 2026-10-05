@@ -23,6 +23,10 @@
 export const TOP_LAYER_OVERLAY_ATTRIBUTE = 'data-top-layer-overlay';
 /** Marks the control inside an overlay that Escape activates while the overlay is lifted above a modal. */
 export const TOP_LAYER_DISMISS_ATTRIBUTE = 'data-top-layer-dismiss';
+/** Fired only after the browser actually presents a marked overlay, never while deferred. */
+export const TOP_LAYER_PRESENTED_EVENT = 'top-layer-presented';
+/** Identity of newly rendered content in an already-open overlay. */
+export const TOP_LAYER_PRESENTATION_KEY_ATTRIBUTE = 'data-top-layer-presentation-key';
 
 const OVERLAY_SELECTOR = `[${TOP_LAYER_OVERLAY_ATTRIBUTE}][popover]`;
 /** Native dialogs plus the Web Awesome hosts whose modal dialog lives in their shadow root. */
@@ -38,6 +42,15 @@ type OverlayElement = HTMLElement & {
 
 /** The foreign modal dialogs each overlay was last lifted above. */
 const liftedAbove = new WeakMap<Element, ReadonlySet<Element>>();
+const presentedKeys = new WeakMap<Element, string>();
+
+function notifyPresented(overlay: OverlayElement): void {
+  if (!overlay.matches(':modal') && !overlay.matches(':popover-open')) return;
+  const key = overlay.getAttribute(TOP_LAYER_PRESENTATION_KEY_ATTRIBUTE) ?? '';
+  if (presentedKeys.get(overlay) === key) return;
+  presentedKeys.set(overlay, key);
+  overlay.dispatchEvent(new Event(TOP_LAYER_PRESENTED_EVENT, { bubbles: true }));
+}
 
 function isOverlay(target: EventTarget | null): target is OverlayElement {
   return (target as Partial<Element> | null)?.hasAttribute?.(TOP_LAYER_OVERLAY_ATTRIBUTE) === true;
@@ -68,10 +81,14 @@ export function openModalDialogs(root: ParentNode): Element[] {
 function liftAboveModals(overlay: OverlayElement, modals: readonly Element[]): void {
   const lifted = liftedAbove.get(overlay),
     modal = overlay.matches(':modal');
-  if (modal && lifted && modals.every((host) => lifted.has(host))) return;
+  if (modal && lifted && modals.every((host) => lifted.has(host))) {
+    notifyPresented(overlay);
+    return;
+  }
   if (overlay.matches(':popover-open')) overlay.hidePopover();
   if (modal) overlay.close?.();
   overlay.showModal?.();
+  notifyPresented(overlay);
   // Browsers ignore `autofocus` on the dialog itself and focus its first focusable descendant, which
   // could be a decision button armed for Enter; the overlay takes focus itself instead.
   overlay.focus({ preventScroll: true });
@@ -95,7 +112,11 @@ export function openTopLayerOverlays(root: ParentNode): void {
       if (overlay.matches(':modal')) overlay.close?.();
       liftedAbove.delete(overlay);
     }
-    if (overlay.matches(':popover-open') || typeof overlay.showPopover !== 'function') continue;
+    if (overlay.matches(':popover-open')) {
+      notifyPresented(overlay);
+      continue;
+    }
+    if (typeof overlay.showPopover !== 'function') continue;
     showPopoverWithoutFocus(overlay);
   }
 }
@@ -111,6 +132,7 @@ function showPopoverWithoutFocus(overlay: OverlayElement): void {
   overlay.inert = true;
   try {
     overlay.showPopover();
+    notifyPresented(overlay);
   } finally {
     overlay.inert = wasInert;
   }
@@ -153,7 +175,12 @@ export function wireTopLayerOverlays(root: HTMLElement): () => void {
       queueMicrotask(reopen);
     },
     observer = new MutationObserver(reopen);
-  observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
+  observer.observe(root, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['open', TOP_LAYER_PRESENTATION_KEY_ATTRIBUTE],
+  });
   for (const type of MODAL_LIFECYCLE_EVENTS) root.addEventListener(type, reopenSoon);
   // A modal overlay that still closes (a forced Escape) reopens; `cancel` and `close` do not bubble.
   root.addEventListener('cancel', preventCancel, true);

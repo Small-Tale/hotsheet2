@@ -9411,7 +9411,10 @@ async fn halt_terminal(
         let same = halts.get(&id).is_some_and(|current| {
             current.error_type == halt.error_type && current.message == halt.message
         });
-        halts.insert(id.clone(), halt.clone());
+        // Identical reports belong to the same active episode. Clients dedupe prompts by `at`.
+        if !same {
+            halts.insert(id.clone(), halt.clone());
+        }
         !same
     };
     if changed {
@@ -9687,7 +9690,9 @@ async fn kill_terminal(
             hotsheet_terminals::BrokerResponse::Ok
             | hotsheet_terminals::BrokerResponse::NotFound => {
                 forget_terminal_name(&state, &id);
-                forget_terminal_halt(&state, &id);
+                if forget_terminal_halt(&state, &id) {
+                    emit_terminal_halted(&state, &id, None);
+                }
                 forget_terminal_ai_connection(&state, &id);
                 Ok(StatusCode::NO_CONTENT)
             }
@@ -9699,7 +9704,9 @@ async fn kill_terminal(
         .kill(&term_key(&state, &id))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     forget_terminal_name(&state, &id);
-    forget_terminal_halt(&state, &id);
+    if forget_terminal_halt(&state, &id) {
+        emit_terminal_halted(&state, &id, None);
+    }
     forget_terminal_ai_connection(&state, &id);
     Ok(StatusCode::NO_CONTENT)
 }

@@ -797,8 +797,11 @@ adapter. `StopFailure` fires when a turn ends on an API error. Its `error_type` 
 the user prompted again, so the adapter sends `DELETE /terminals/{id}/halt`. Neither event
 prints a hook decision, and outside a Hot Sheet terminal (no `HOTSHEET_TERMINAL_ID`) or
 without a reachable server they do nothing. Older Claude versions ignore the unknown event
-names. Codex has no equivalent hook yet (`HS2-5ZQ7J8`). Driven sessions still report only a
-generic failure (`HS2-AZVE3P`).
+names. Codex has no equivalent hook yet (`HS2-5ZQ7J8`). Driven sessions report completed
+provider failure diagnostics (`HS2-AZVE3P`). Identical active halt error type/message reports
+retain their original `at` timestamp and emit no new halt event (HS2-E6KAWY); clearing and
+halting again starts a new episode. See [client prompt policy](06-clients.md) for pause,
+acknowledgment, and deduplication behavior.
 Because the detached broker retains terminals across a server restart, the hook resolves
 the current registered server URL and secret for `HOTSHEET_PROJECT` on each permission
 request. Launch-time route-back variables remain a fallback when no instance record is

@@ -2014,7 +2014,7 @@ edge. The right inspector region remains present and manually collapsible in thi
 view rather than changing the workspace width.
 
 **Pause notifications** (HS2-QYA9SC) is an app-wide, per-device switch that stops permission
-popups in every open project. It lives in the popup footer next to Ignore and in the
+popups and halted-session prompts in every open project. It lives in popup actions and in the
 Notifications sidebar footer, which offers Resume while paused. While paused, a "Notifications
 paused" status banner in the shell shows how many requests are waiting and resumes with one
 click. Requests still collect in Notifications and on project-tab badges, and an auto-Allow or
@@ -2363,8 +2363,32 @@ way. Both name the error ("Stopped: …") in the icon's label and tooltip. Its p
 shows the attention icon ("An AI session stopped on an error") even beside notification and
 work counts. The phone project picker shows the same labelled danger icon for the selected
 project and marks attention-bearing options with the icon and “Needs attention” (HS2-34VG07).
-The selected icon names the full reason. Popups,
-Notifications entries, and OS notifications for halts are `HS2-E6KAWY`.
+The selected icon names the full reason.
+
+**Halted-session prompts (HS2-E6KAWY).** An in-app top-layer prompt offers Open session,
+Dismiss, and Pause notifications. Open returns to the originating project and terminal or
+driven chat; neither Open nor Dismiss clears the stopped indicators or server halt. Permission
+requests take priority, including an ignored request still visible inside the foreground conversation. Modal form editing can
+defer the prompt; acknowledgment occurs only when the browser actually presents it.
+
+Terminal episodes use project id, terminal id, and `halt.at`; identical error type/message
+reports preserve `at` and do not repeat the prompt. A cleared or changed halt starts a new
+episode. Completed failed driven turns use the latest failed assistant message id and
+`conversationError`; retryable errors and in-flight retries do not prompt. Unseen active episodes
+wait during the app-wide pause; resolved sessions and closed projects leave the queue. Failed
+terminal snapshot requests retain the last state rather than implying resolution. Initial,
+reconnect, and overflow stream resyncs refresh only their project's terminal snapshot without
+loading chrome; independent project responses merge and stale responses cannot overwrite newer
+snapshots. Killing a halted terminal announces resolution to other clients. The pause
+banner counts waiting halted sessions, and Resume presents them after pending permissions.
+
+Acknowledged episode keys persist in `hotsheet.halted-session-seen` and merge across windows.
+Inactive history is capped at 256; active acknowledgments and those awaiting project snapshots
+are retained. Unavailable storage preserves this window's dedupe, but cannot promise reload
+dedupe. A new device with remote `last_error` and no corresponding local failed assistant id
+retains the stopped indicator without a prompt; durable cross-device failure identity is
+tracked by HS2-DQ5Q92, related to HS2-14X4AF. This prompt does not add OS notifications or a
+server-notifications-center view.
 
 Driven AI chats also retain provider failure text in their conversation alert and show the
 same labelled danger icon in their drawer tab and dashboard tile (HS2-AZVE3P). Restored

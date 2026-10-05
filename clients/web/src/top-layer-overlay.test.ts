@@ -6,6 +6,8 @@ import {
   openTopLayerOverlays,
   TOP_LAYER_DISMISS_ATTRIBUTE,
   TOP_LAYER_OVERLAY_ATTRIBUTE,
+  TOP_LAYER_PRESENTATION_KEY_ATTRIBUTE,
+  TOP_LAYER_PRESENTED_EVENT,
   wireTopLayerOverlays,
 } from './top-layer-overlay';
 
@@ -26,6 +28,9 @@ function overlay({
     /** Whether the overlay was `inert` at each `showPopover()`, when a `<dialog>` would focus a child. */
     inertAtShow: [] as boolean[],
     calls: [] as string[],
+    dispatchEvent: vi.fn((event: Event) => Boolean(event)),
+    presentationKey: '',
+    getAttribute: () => element.presentationKey,
     isConnected: connected,
     localName: dialog ? 'dialog' : 'div',
     hasAttribute: (name: string) => name === TOP_LAYER_OVERLAY_ATTRIBUTE,
@@ -109,6 +114,18 @@ function open(container: ReturnType<typeof root>) {
 }
 
 describe('top-layer overlays (HS2-Z9PQSC)', () => {
+  it('acknowledges new episode content in an already-open overlay without repeating the same presentation', () => {
+    const popup = overlay(),
+      container = root([popup]);
+    popup.presentationKey = 'first';
+    open(container);
+    open(container);
+    expect(popup.dispatchEvent).toHaveBeenCalledTimes(1);
+    popup.presentationKey = 'next';
+    open(container);
+    expect(popup.dispatchEvent).toHaveBeenCalledTimes(2);
+    expect(popup.showPopover).toHaveBeenCalledTimes(1);
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -122,6 +139,8 @@ describe('top-layer overlays (HS2-Z9PQSC)', () => {
     open(container);
     expect(container.selectors[0]).toBe(`[${TOP_LAYER_OVERLAY_ATTRIBUTE}][popover]`);
     expect(closed.showPopover).toHaveBeenCalledTimes(1);
+    expect(closed.dispatchEvent).toHaveBeenCalledTimes(1);
+    expect(closed.dispatchEvent.mock.calls[0][0].type).toBe(TOP_LAYER_PRESENTED_EVENT);
     expect(alreadyOpen.showPopover).not.toHaveBeenCalled();
     expect(detached.showPopover).not.toHaveBeenCalled();
   });
@@ -150,7 +169,7 @@ describe('top-layer overlays (HS2-Z9PQSC)', () => {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['open'],
+      attributeFilter: ['open', TOP_LAYER_PRESENTATION_KEY_ATTRIBUTE],
     });
     container.overlays = [first];
     notify?.();
@@ -189,6 +208,7 @@ describe('top-layer overlays above modal dialogs (HS2-MAE27T)', () => {
     container.ownerDocument.activeElement = host as unknown as Element;
     const dispose = wireTopLayerOverlays(container as unknown as HTMLElement);
     expect(popup.calls).toEqual([]);
+    expect(popup.dispatchEvent).not.toHaveBeenCalled();
     container.dispatch('focusout');
     await Promise.resolve();
     expect(popup.calls).toEqual([]);
@@ -196,6 +216,7 @@ describe('top-layer overlays above modal dialogs (HS2-MAE27T)', () => {
     container.dispatch('focusout');
     await Promise.resolve();
     expect(popup.calls).toEqual(['showModal', 'focus']);
+    expect(popup.dispatchEvent).toHaveBeenCalledTimes(1);
     dispose();
     vi.unstubAllGlobals();
   });
