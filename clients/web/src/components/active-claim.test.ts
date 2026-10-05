@@ -8,13 +8,14 @@ import { ACTIVE_CLAIM_SPINNER_SIZE, ActiveClaimSpinner, ClaimEta, LiveClaimNotic
 describe('active claim presentation (HS2-QKNQXC)', () => {
   it('renders a labeled spinner the row and header share', () => {
     const markup = String(ActiveClaimSpinner({ label: 'Codex is actively working on this ticket' }));
-    expect(markup).toContain('class="active-claim-spinner"');
     expect(markup).toContain('Codex is actively working on this ticket');
     // Kerf sizes the spinner through LoadingSpinner `size`; the app no longer reaches into its svg (HS2-JVPPVV).
     expect(ACTIVE_CLAIM_SPINNER_SIZE).toBe(16.8);
     expect(markup).toMatch(/<svg[^>]*class="kui-loading-spinner"[^>]*data-size/);
+    expect(markup).toContain('var(--hs-ticket-state-up-next)');
     const css = readFileSync(resolve(import.meta.dirname, 'active-claim.css'), 'utf8');
     expect(css).not.toContain('svg');
+    expect(css).not.toContain('.active-claim-spinner');
   });
 
   it('renders the ETA ring only for an estimate and the overrun as Soon', () => {
@@ -40,7 +41,7 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     expect(withEta).toContain('data-component="live-claim-notice"');
     expect(withEta).toContain('role="status"');
     expect(withEta).toContain('<span class="live-claim-notice__agent">Claude worker</span> is working on this');
-    expect(withEta).toContain('class="active-claim-spinner"');
+    expect(withEta).toContain('var(--kui-color-brand-on-quiet)');
     expect(withEta).toContain('data-claim-eta="estimate"');
     const withoutEta = String(LiveClaimNotice({ agentName: 'codex-01' }));
     expect(withoutEta).toContain('codex-01');
@@ -49,7 +50,7 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
 
   it('owns the spinner and ETA styles it renders', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'active-claim.css'), 'utf8');
-    for (const selector of ['.active-claim-spinner', '.claim-eta', '.claim-eta__ring', '.live-claim-notice'])
+    for (const selector of ['.claim-eta', '.claim-eta__ring', '.live-claim-notice'])
       expect(css).toContain(`${selector} {`);
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     expect(rowCss).not.toContain('.ticket-list-row__eta');

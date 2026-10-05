@@ -1,6 +1,7 @@
 import '@awesome.me/webawesome/dist/components/progress-ring/progress-ring.js';
 import './active-claim.css';
 
+import { type CssForegroundColor, foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
@@ -10,14 +11,16 @@ export const ACTIVE_CLAIM_SPINNER_SIZE = 16.8;
 
 /**
  * The live-claim activity spinner shared by ticket rows and the inspector/reader header (HS2-XQMDQB,
- * HS2-QKNQXC). Kerf sizes it through LoadingSpinner `size` (HS2-JVPPVV); the wrapper only tints it.
+ * HS2-QKNQXC). Kerf owns its size and color through LoadingSpinner props.
  */
-export function ActiveClaimSpinner({ label }: { label: string }) {
-  return (
-    <span class="active-claim-spinner">
-      <LoadingSpinner label={label} size={ACTIVE_CLAIM_SPINNER_SIZE} />
-    </span>
-  );
+export function ActiveClaimSpinner({
+  label,
+  color = foregroundColorVar('--hs-ticket-state-up-next'),
+}: {
+  label: string;
+  color?: CssForegroundColor;
+}) {
+  return <LoadingSpinner label={label} size={ACTIVE_CLAIM_SPINNER_SIZE} color={color} />;
 }
 
 /** Progress toward a live claim's ETA: a determinate ring plus time left, or "Soon" once overrun. */
@@ -41,7 +44,7 @@ export function LiveClaimNotice({ agentName, eta }: LiveClaimNoticeProps) {
   const label = `${agentName} is actively working on this ticket`;
   return (
     <div class="live-claim-notice" role="status" data-component="live-claim-notice" title={label}>
-      <ActiveClaimSpinner label={label} />
+      <ActiveClaimSpinner label={label} color={uiColor('brand-on-quiet')} />
       <span class="live-claim-notice__text">
         <span class="live-claim-notice__agent">{agentName}</span> is working on this
       </span>

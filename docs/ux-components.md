@@ -62,8 +62,8 @@ Rules for both clients:
   `[data-state]` selectors. An icon that should match its surrounding text, or an
   interactive control's own hover, pressed, or danger states, keeps inheriting
   `currentColor`. `icon-policy.test.ts` rejects a CSS `color` on a single-icon
-  wrapper. `LoadingSpinner` has no color prop yet (`KF-T7KCGB`), so the live-claim
-  spinner keeps its app-owned tint wrapper.
+  wrapper. `LoadingSpinner` also accepts a `color` prop (Kerf 5.0.0-beta.76;
+  `KF-T7KCGB`); the live-claim spinner uses it for row and notice tones.
 - Cursor semantics communicate the interaction under the pointer: pointer for
   clickable/selectable targets, text for editing, not-allowed for disabled controls,
   appropriate grab/resize cursors for direct manipulation, and platform default for

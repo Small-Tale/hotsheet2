@@ -1,9 +1,4 @@
 /* Live-claim presentation shared by ticket rows and the inspector/reader header (HS2-XQMDQB, HS2-QKNQXC). */
-.active-claim-spinner {
-  display: inline-flex;
-  color: var(--hs-ticket-state-up-next);
-  flex: none;
-}
 .claim-eta {
   display: inline-flex;
   align-items: center;
@@ -40,8 +35,4 @@
 }
 .live-claim-notice .claim-eta {
   margin-inline-start: auto;
-}
-/* Inside the brand-tinted notice the spinner follows the notice text rather than the row's Up Next tone. */
-.live-claim-notice .active-claim-spinner {
-  color: inherit;
 }

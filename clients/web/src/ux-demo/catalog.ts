@@ -231,7 +231,7 @@ export const demoCatalog: DemoCategory[] = [
             'Dense ticket summary and selection target, with a compact completion-confidence pill on completed/verified tickets.',
             'feature-floor',
             true,
-            ['status-badge', 'confidence-badge', 'tag-chip'],
+            ['status-badge', 'confidence-badge', 'tag-chip', 'loading-spinner'],
           ),
         ],
       },
@@ -279,6 +279,7 @@ export const demoCatalog: DemoCategory[] = [
               'ticket-attachments',
               'note-card',
               'note-composer',
+              'loading-spinner',
             ],
           ),
           demo(

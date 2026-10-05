@@ -2085,6 +2085,12 @@ test('switches the TicketInspector live-claim header through every claim state (
   const claimSpinner = await notice.locator('[data-component="loading-spinner"]').boundingBox();
   expect(claimSpinner!.width).toBeCloseTo(16.8, 1);
   expect(claimSpinner!.height).toBeCloseTo(16.8, 1);
+  // The public color prop preserves the notice tone without an app tint wrapper (HS2-TEM5XY).
+  const noticeColors = await notice.evaluate((node) => ({
+    notice: getComputedStyle(node).color,
+    spinner: getComputedStyle(node.querySelector('[data-component="loading-spinner"]')!).color,
+  }));
+  expect(noticeColors.spinner).toBe(noticeColors.notice);
   await expect(eta).toHaveText('~45m left');
   await expect(eta.locator('wa-progress-ring')).toHaveJSProperty('value', 25);
   // The notice leads the header notices and sits inside the inspector's width.
@@ -2103,6 +2109,29 @@ test('switches the TicketInspector live-claim header through every claim state (
   await expect(notice).toHaveCount(0);
   await setLiveClaim('estimate');
   await expect(eta).toHaveText('~45m left');
+  await page.locator('[data-action="toggle-settings"]').click();
+  await page.screenshot({ path: test.info().outputPath('live-claim-wide.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(notice).toBeVisible();
+  const narrowSpinner = await notice.locator('[data-component="loading-spinner"]').boundingBox();
+  expect(narrowSpinner!.width).toBeCloseTo(16.8, 1);
+  expect(narrowSpinner!.height).toBeCloseTo(16.8, 1);
+  await page.screenshot({ path: test.info().outputPath('live-claim-narrow.png') });
+});
+
+test('preserves the live-claim row spinner tone at wide and phone widths (HS2-TEM5XY)', async ({ page }) => {
+  await page.goto('/ux-demo?component=ticket-row');
+  const row = page.locator('[data-component="ticket-list-row"]');
+  const spinner = row.locator('[data-component="loading-spinner"]');
+  for (const width of [1100, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(spinner).toBeVisible();
+    await expect(spinner).toHaveAttribute('style', /color:var\(--hs-ticket-state-up-next\)/);
+    const box = await spinner.boundingBox();
+    expect(box!.width).toBeCloseTo(16.8, 1);
+    expect(box!.height).toBeCloseTo(16.8, 1);
+    await page.screenshot({ path: test.info().outputPath(`live-claim-row-${width}.png`) });
+  }
 });
 
 test('round-trips every TicketRow setting and selection action', async ({ page }) => {
