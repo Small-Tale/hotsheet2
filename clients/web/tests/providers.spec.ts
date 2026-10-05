@@ -6911,7 +6911,8 @@ test('browses repository files and commits with host-native actions', async ({ p
   await expect(popover.getByRole('navigation', { name: 'Repository views' })).toContainText('24');
   await expect(popover).toHaveAttribute('data-view', 'conflicted');
   await expect(popover.locator('[data-action="select-repository-file"][data-item-id="src/conflict.ts"]')).toBeVisible();
-  const master = popover.locator('aside');
+  // The list Pane of the list-detail SplitView owns the master scroll (HS2-3B8345).
+  const master = popover.locator('.repository-status-popover__split .kui-pane__content').first();
   await expect(master).toHaveCSS('overflow-y', 'auto');
   expect(await master.evaluate((element) => element.scrollHeight >= element.clientHeight)).toBe(true);
   await popover.getByRole('button', { name: /Staged 2/ }).click();
@@ -7016,27 +7017,20 @@ test('browses repository files and commits with host-native actions', async ({ p
   await compareBanner.screenshot({ path: '/private/tmp/hs2-8d3qse-compare-wide.png' });
   await popover.screenshot({ path: '/private/tmp/hs2-b2md8z-compare-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  const repositoryNavigation = popover.locator('.repository-status-popover__navigation'),
-    repositoryDetail = popover.locator('.repository-status-popover__detail');
-  await expect
-    .poll(async () => {
-      const [navigationBounds, detailBounds] = await Promise.all([
-        repositoryNavigation.boundingBox(),
-        repositoryDetail.boundingBox(),
-      ]);
-      return navigationBounds && detailBounds
-        ? Math.round(detailBounds.y - navigationBounds.y - navigationBounds.height)
-        : -1;
-    })
-    .toBeGreaterThanOrEqual(0);
+  // A phone is a compact device class: the list-detail layout becomes a drill-down (HS2-3B8345). The
+  // active comparison pushed the Commits detail, whose back control returns to the repository list.
+  await expect(popover.locator('[data-component="nav-stack"]')).toHaveCount(1);
+  const back = popover.getByRole('button', { name: 'Back to repository views' });
+  await expect(back).toBeInViewport({ ratio: 1 });
+  await back.click();
+  const repositoryNavigation = popover.locator('.repository-status-popover__navigation');
   await expect(repositoryNavigation.getByRole('button', { name: /Staged 2/ })).toBeInViewport({ ratio: 1 });
   await expect(repositoryNavigation.getByRole('button', { name: /Commits 24/ })).toBeInViewport({ ratio: 1 });
   await repositoryNavigation.getByText('Branch').scrollIntoViewIfNeeded();
   await expect(repositoryNavigation.getByText('Branch')).toBeInViewport({ ratio: 1 });
-  expect(await repositoryNavigation.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
-  await repositoryNavigation.evaluate((node) => {
-    node.scrollTop = 0;
-  });
+  // Choosing Commits pushes its detail again, with the comparison still active.
+  await repositoryNavigation.getByRole('button', { name: /Commits 24/ }).click();
+  await expect(back).toBeInViewport({ ratio: 1 });
   await expect(compareBanner.getByRole('button', { name: 'A', exact: true })).toBeInViewport({ ratio: 1 });
   await expect(compareBanner.getByRole('button', { name: 'B', exact: true })).toBeInViewport({ ratio: 1 });
   await expect(compareBanner).toContainText('Select the A side of the comparison.');
@@ -7066,7 +7060,8 @@ test('browses repository files and commits with host-native actions', async ({ p
   await compareToggle.click();
   await expect(compareToggle).toHaveAttribute('aria-pressed', 'false');
   await expect(popover.locator('.ticket-code-review__compare-banner')).toHaveCount(0);
-  const detail = popover.locator('.repository-status-popover__detail');
+  // The detail Pane owns the detail column's scroll.
+  const detail = popover.locator('.repository-status-popover__split .kui-pane__content').nth(1);
   await expect(detail).toHaveCSS('overflow-y', 'auto');
   failed = true;
   await popover.getByRole('button', { name: 'Refresh repository status' }).click();

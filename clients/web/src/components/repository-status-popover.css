@@ -2,6 +2,32 @@
   width: min(remify(1024px), calc(100vw - 2 * var(--kui-space-l)));
   height: min(remify(640px), calc(100vh - 2 * var(--kui-space-l)));
 }
+/* Repository Status is a list-detail layout that fills the popover: a SplitView of a list Pane and a
+   detail Pane whose header carries the title, summary, and actions (HS2-3B8345). Scoped to the open or
+   embedded popover so a closed native popover stays hidden; ChangeEvidenceDialog keeps its own grid. */
+.repository-status-popover[data-component='repository-status-popover']:is(:popover-open, [data-embedded='true']) {
+  /* At most half of a narrow popover, so the detail column always stays in view. */
+  --kui-split-view-list-width: min(remify(432px), 50%);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+.repository-status-popover__compact-summary {
+  display: flex;
+  margin: 0;
+  padding: var(--kui-space-xs) var(--kui-space-m);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-s);
+  align-items: center;
+  gap: var(--kui-space-xs);
+}
+/* Inside the split, the Panes own scrolling and SplitView draws the column divider, so the list and
+   detail content only keep an inset aligned with their toolbars' leading edge. */
+.repository-status-popover__split .repository-status-popover__navigation,
+.repository-status-popover__split .repository-status-popover__detail {
+  padding: var(--kui-space-xs) var(--kui-space-m) var(--kui-space-m);
+  overflow: visible;
+  border-right: 0;
+}
 .repository-status-popover[data-state='clean'] .repository-status-popover__icon {
   background: var(--wa-color-success-fill-quiet);
 }

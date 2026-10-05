@@ -3136,6 +3136,15 @@ so network or fixture latency cannot be mistaken for rendering work (HS2-126KNQ)
 ## 6.10 Repository status browser
 
 The project sidebar repository summary opens a viewport-bounded master/detail dialog.
+It is a list-detail layout built from Kerf's `recipe-list-detail-dialog` (HS2-3B8345): a
+`SplitView` whose list `Pane` has its own quiet "Repository" toolbar title and whose detail
+`Pane` header carries the dialog's icon, extra-large "Repository Status" title, state summary,
+and Compare and Refresh actions. Nothing spans both columns. The list column is at most 432px
+and at most half of a narrow dialog. On compact device classes (a handset or portrait tablet)
+the split becomes a `NavStack` drill-down: the list root's toolbar carries the title and
+actions above a one-line state summary, choosing a view (or starting a comparison) pushes its
+detail with a "Back to repository views" control, and back returns to the list. Setup,
+loading, and error states keep a single headed column on every device.
 When the selected project folder has not been initialized as a Git repository, the same
 dialog presents a typed recovery state instead of a raw Git diagnostic. Its explicit
 Initialize action runs `git init` only at that checkout root, leaves every existing file
@@ -3163,15 +3172,17 @@ copies relative or absolute paths, opens the file, or reveals it with host-speci
 Finder/File Explorer/file-manager wording. The server re-reads status and validates repository containment before any host
 launch. At roomy viewport heights the dialog is exactly tall enough for the complete
 master column; at constrained heights it caps to the viewport and scrolls that column.
-At phone widths up to 600px, the shared repository status and change evidence dialogs
-stack the view navigation above the detail pane. The view rows stay visible first, while
+At phone widths up to 600px, the change evidence dialog stacks the view navigation above
+the detail pane (Repository Status drills down instead, as above). The view rows stay visible first, while
 repository metadata remains reachable by scrolling the navigation pane. The detail pane
 keeps the comparison prompt, side selectors, and Open action usable at 390px (HS2-B2MD8Z).
 Value groups render each fact through the shared `ValueTableRow` contract, producing the
 canonical bordered surface, aligned label/value columns, and inset row separators while
 retaining a visible gap between repository identity and synchronization groups. Compare
 and Refresh remain separate sibling toolbar groups with the toolbar's standard gap rather
-than nesting inside one fused group (HS2-72Z7CB). The master/detail
+than nesting inside one fused group (HS2-72Z7CB). Repository Status
+column content is inset 8px below its toolbar and 16px at the sides and bottom, aligned with
+the toolbar's leading edge. The change evidence master/detail
 surface uses 24px roomy pane and viewport insets, 16px between homogeneous value groups
 and for constrained pane insets, 8px inside empty/menu-row groups, and 4px for connected
 path metadata and menu framing. Shared adjacent `ListItem` view rows remain gapless below

@@ -616,11 +616,24 @@ test('represents the shared repository-status composition in the UX catalog', as
     }),
   ).toBe(8);
   await expect(dialog).toHaveAttribute('data-embedded', 'true');
-  await expect(dialog.locator('.repository-status-popover__navigation')).toHaveCSS('overflow', 'auto');
+  // A list-detail SplitView (HS2-3B8345): each Pane's content owns its scrolling, and the detail
+  // column carries the heading.
+  await expect(dialog.locator('[data-component="split-view"]')).toHaveCount(1);
+  await expect(dialog.locator('.repository-status-popover__split .kui-pane__content').first()).toHaveCSS(
+    'overflow-y',
+    'auto',
+  );
+  expect(
+    await dialog.evaluate((node) => {
+      const heading = node.querySelector('.app-heading')!.getBoundingClientRect(),
+        navigation = node.querySelector('.repository-status-popover__navigation')!.getBoundingClientRect();
+      return heading.left >= navigation.right;
+    }),
+  ).toBe(true);
   await expect(dialog.locator('[data-component="list-header"]')).toContainText('Views');
   await expect(dialog.locator('[data-component="list-item"]')).not.toHaveCount(0);
   const paneSpacing = await dialog.evaluate((node) => {
-    const aside = node.querySelector<HTMLElement>('aside')!,
+    const aside = node.querySelector<HTMLElement>('.repository-status-popover__navigation')!,
       detail = node.querySelector<HTMLElement>('.repository-status-popover__detail')!,
       values = [...node.querySelectorAll<HTMLElement>('.repository-status-popover__values')],
       nav = node.querySelector<HTMLElement>('nav')!,
@@ -639,8 +652,8 @@ test('represents the shared repository-status composition in the UX catalog', as
     };
   });
   expect(paneSpacing).toEqual({
-    asidePadding: '24px',
-    detailPadding: '24px',
+    asidePadding: '8px 16px 16px',
+    detailPadding: '8px 16px 16px',
     valueGap: 16,
     headerGap: 4,
     rowGaps: [0, 0, 0, 0],
@@ -696,8 +709,8 @@ test('represents the shared repository-status composition in the UX catalog', as
   // Kerf 5.0.0-beta.56 keeps the catalog sidebar inline at 760px; hide it so the composition gets the
   // constrained stage width this check is about rather than the width left beside the sidebar.
   await page.getByRole('button', { name: 'Hide UX components catalog' }).click();
-  await expect(dialog.locator('aside')).toHaveCSS('padding', '16px');
-  await expect(dialog.locator('.repository-status-popover__detail')).toHaveCSS('padding', '16px');
+  await expect(dialog.locator('.repository-status-popover__navigation')).toHaveCSS('padding', '8px 16px 16px');
+  await expect(dialog.locator('.repository-status-popover__detail')).toHaveCSS('padding', '8px 16px 16px');
   await expect(dialog.locator('[aria-label="Repository identity"] dd').first()).toHaveCSS('white-space', 'normal');
   expect(
     await dialog

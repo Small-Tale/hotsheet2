@@ -1,3 +1,6 @@
+import '@kerfjs/ui/layout.css';
+import '@kerfjs/ui/nav-stack.css';
+import '@kerfjs/ui/split-view.css';
 import './heading.css';
 import './repository-status-popover.css';
 import './native-popover-dialog.css';
@@ -6,6 +9,8 @@ import { uiColor } from '@kerfjs/ui/css-values';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Pane } from '@kerfjs/ui/pane';
+import { SplitView } from '@kerfjs/ui/split-view';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
@@ -107,6 +112,8 @@ export function RepositoryStatusPopover({
   detailLoading = false,
   detailError = '',
   detailHasMore = false,
+  compact = false,
+  detailActive = false,
 }: {
   status: RepositoryStatus | null;
   error?: string;
@@ -126,6 +133,10 @@ export function RepositoryStatusPopover({
   detailLoading?: boolean;
   detailError?: string;
   detailHasMore?: boolean;
+  /** A compact device class: the list-detail layout becomes a NavStack drill-down (HS2-3B8345). */
+  compact?: boolean;
+  /** In compact mode, whether the selected view's detail is pushed over the list. */
+  detailActive?: boolean;
 }) {
   const recoveryStep = error ? undefined : (setupStep ?? (!initialized ? 'initialize' : undefined)),
     state = repositoryStatusState(status, error, initialized),
@@ -168,6 +179,139 @@ export function RepositoryStatusPopover({
       </ToolbarControlGroup>
     </>
   );
+  // The heading (icon, title, summary, and actions) belongs to the detail column of the list-detail
+  // layout, not to a header spanning both columns (HS2-3B8345, Kerf recipe-list-detail-dialog).
+  const troubled = state === 'error' || state === 'conflicted',
+    stateColor =
+      state === 'clean'
+        ? uiColor('success-on-quiet')
+        : troubled
+          ? uiColor('danger-on-quiet')
+          : uiColor('brand-on-quiet'),
+    stateIcon = state === 'clean' ? CircleCheck : troubled ? TriangleAlert : GitBranch,
+    stateIconName = state === 'clean' ? 'circle-check' : troubled ? 'triangle-alert' : 'git-branch',
+    summary =
+      recoveryStep === 'initialize'
+        ? 'Initialize Git here to enable repository status'
+        : recoveryStep === 'remote'
+          ? 'Git is ready; add an origin remote or skip for now'
+          : stateCopy[state];
+  const heading = (
+    <div class="app-heading" data-component="heading" data-has-icon="true">
+      <Toolbar
+        dividerSides=""
+        leading={
+          <>
+            <ToolbarControlGroup single className="app-heading__icon repository-status-popover__icon">
+              <LucideIcon className="app-heading__symbol" color={stateColor} icon={stateIcon} name={stateIconName} />
+            </ToolbarControlGroup>
+            <ToolbarText
+              text={recoveryStep === 'initialize' ? 'This folder is not a Git repository' : 'Repository Status'}
+              id="repository-status-title"
+              size="xlarge"
+            />
+          </>
+        }
+        trailing={actions}
+      />
+      <p class="app-heading__summary">{summary}</p>
+    </div>
+  );
+  const sidebar = (current: RepositoryStatus) => (
+    <>
+      <div class="repository-status-popover__metadata">
+        <div class="repository-status-popover__values">
+          <ValueTable label="Repository identity">
+            <ValueTableRow label="Branch" value={branch} />
+            <ValueTableRow label="Upstream" value={upstream} />
+          </ValueTable>
+        </div>
+        <div class="repository-status-popover__values">
+          <ValueTable label="Repository synchronization">
+            <ValueTableRow
+              label="Ahead"
+              value={
+                <>
+                  <LucideIcon icon={ArrowUp} name="arrow-up" size={14.4} color={uiColor('text-quiet')} />
+                  {current.ahead}
+                </>
+              }
+            />
+            <ValueTableRow
+              label="Behind"
+              value={
+                <>
+                  <LucideIcon icon={ArrowDown} name="arrow-down" size={14.4} color={uiColor('text-quiet')} />
+                  {current.behind}
+                </>
+              }
+            />
+          </ValueTable>
+        </div>
+      </div>
+      <nav class="repository-status-popover__nav" aria-label="Repository views">
+        <ListHeader label="Views" />
+        <div class="repository-status-popover__views">
+          {viewDefinitions.map((item) => (
+            <ListItem
+              action="select-repository-view"
+              itemId={item.id}
+              selected={view === item.id}
+              icon={
+                <LucideIcon
+                  icon={item.icon}
+                  name={
+                    item.id === 'commits'
+                      ? 'git-commit-horizontal'
+                      : item.id === 'untracked'
+                        ? 'square-pen'
+                        : item.id === 'conflicted'
+                          ? 'square-x'
+                          : item.id === 'staged'
+                            ? 'square-plus'
+                            : 'square-minus'
+                  }
+                />
+              }
+              label={item.label}
+              trailing={<small class="repository-status-popover__count">{repositoryViewCount(current, item.id)}</small>}
+            />
+          ))}
+        </div>
+      </nav>
+    </>
+  );
+  const detail = (
+    <>
+      {view === 'commits' ? (
+        <TicketCodeReview
+          embedded
+          title="Commits"
+          emptyMessage="No commits were found in this repository."
+          loadingMessage="Finding commits…"
+          action="open-repository-review"
+          review={review}
+          comparison={comparison}
+          expandedCommits={expandedCommits}
+          loading={detailLoading && review?.commits.length === 0}
+        />
+      ) : (
+        <RepositoryFileList files={files} view={view} selectedFiles={selectedFiles} loading={detailLoading} />
+      )}
+      {detailError && (
+        <p class="repository-status-popover__detail-error" role="alert">
+          {detailError}
+        </p>
+      )}
+      {(detailHasMore || detailLoading) && (
+        <div class="repository-status-popover__pagination" data-repository-pagination-sentinel="true" role="status">
+          {detailLoading ? 'Loading more…' : 'Load more'}
+        </div>
+      )}
+    </>
+  );
+  const compactSplit = compact && Boolean(status) && !recoveryStep;
+  const viewLabel = viewDefinitions.find((item) => item.id === view)?.label ?? 'Changes';
   return (
     <section
       popover={embedded ? undefined : 'auto'}
@@ -179,165 +323,67 @@ export function RepositoryStatusPopover({
       data-setup-step={recoveryStep}
       data-embedded={embedded ? 'true' : undefined}
       role="dialog"
-      aria-labelledby="repository-status-title"
+      aria-labelledby={compactSplit ? undefined : 'repository-status-title'}
+      aria-label={compactSplit ? 'Repository Status' : undefined}
     >
-      <div class="app-heading" data-component="heading" data-has-icon="true">
-        <Toolbar
-          dividerSides=""
-          leading={
-            <>
-              <ToolbarControlGroup single className="app-heading__icon repository-status-popover__icon">
-                <LucideIcon
-                  className="app-heading__symbol"
-                  color={
-                    state === 'clean'
-                      ? uiColor('success-on-quiet')
-                      : state === 'error' || state === 'conflicted'
-                        ? uiColor('danger-on-quiet')
-                        : uiColor('brand-on-quiet')
-                  }
-                  icon={
-                    state === 'clean'
-                      ? CircleCheck
-                      : state === 'error' || state === 'conflicted'
-                        ? TriangleAlert
-                        : GitBranch
-                  }
-                  name={
-                    state === 'clean'
-                      ? 'circle-check'
-                      : state === 'error' || state === 'conflicted'
-                        ? 'triangle-alert'
-                        : 'git-branch'
-                  }
-                />
-              </ToolbarControlGroup>
-              <ToolbarText
-                text={recoveryStep === 'initialize' ? 'This folder is not a Git repository' : 'Repository Status'}
-                id="repository-status-title"
-                size="xlarge"
-              />
-            </>
-          }
-          trailing={actions}
-        />
-        <p class="app-heading__summary">
-          {recoveryStep === 'initialize'
-            ? 'Initialize Git here to enable repository status'
-            : recoveryStep === 'remote'
-              ? 'Git is ready; add an origin remote or skip for now'
-              : stateCopy[state]}
-        </p>
-      </div>
-      {recoveryStep && <RepositorySetup step={recoveryStep} busy={setupBusy} error={setupError} />}
-      {status && !recoveryStep && (
-        <div class="repository-status-popover__layout">
-          <aside class="repository-status-popover__navigation">
-            <div class="repository-status-popover__metadata">
-              <div class="repository-status-popover__values">
-                <ValueTable label="Repository identity">
-                  <ValueTableRow label="Branch" value={branch} />
-                  <ValueTableRow label="Upstream" value={upstream} />
-                </ValueTable>
+      {status && !recoveryStep ? (
+        <SplitView
+          id="repository-status-split"
+          label="Repository status"
+          className="repository-status-popover__split"
+          compact={compact}
+          detailActive={detailActive}
+          listTitle={compact ? 'Repository Status' : 'Repository'}
+          detailTitle={viewLabel}
+          backLabel="Back to repository views"
+          compactStack={{ list: { toolbar: actions }, detail: { toolbar: actions } }}
+          list={
+            compact ? (
+              <div class="repository-status-popover__compact-list">
+                {/* The stack toolbar carries the title and actions on compact devices; the state stays visible. */}
+                <p class="repository-status-popover__compact-summary">
+                  <LucideIcon icon={stateIcon} name={stateIconName} color={stateColor} size="s" />
+                  {summary}
+                </p>
+                <div class="repository-status-popover__navigation">{sidebar(status)}</div>
               </div>
-              <div class="repository-status-popover__values">
-                <ValueTable label="Repository synchronization">
-                  <ValueTableRow
-                    label="Ahead"
-                    value={
-                      <>
-                        <LucideIcon icon={ArrowUp} name="arrow-up" size={14.4} color={uiColor('text-quiet')} />
-                        {status.ahead}
-                      </>
-                    }
-                  />
-                  <ValueTableRow
-                    label="Behind"
-                    value={
-                      <>
-                        <LucideIcon icon={ArrowDown} name="arrow-down" size={14.4} color={uiColor('text-quiet')} />
-                        {status.behind}
-                      </>
-                    }
-                  />
-                </ValueTable>
-              </div>
-            </div>
-            <nav class="repository-status-popover__nav" aria-label="Repository views">
-              <ListHeader label="Views" />
-              <div class="repository-status-popover__views">
-                {viewDefinitions.map((item) => (
-                  <ListItem
-                    action="select-repository-view"
-                    itemId={item.id}
-                    selected={view === item.id}
-                    icon={
-                      <LucideIcon
-                        icon={item.icon}
-                        name={
-                          item.id === 'commits'
-                            ? 'git-commit-horizontal'
-                            : item.id === 'untracked'
-                              ? 'square-pen'
-                              : item.id === 'conflicted'
-                                ? 'square-x'
-                                : item.id === 'staged'
-                                  ? 'square-plus'
-                                  : 'square-minus'
-                        }
-                      />
-                    }
-                    label={item.label}
-                    trailing={
-                      <small class="repository-status-popover__count">{repositoryViewCount(status, item.id)}</small>
-                    }
-                  />
-                ))}
-              </div>
-            </nav>
-          </aside>
-          <main class="repository-status-popover__detail" aria-live="polite">
-            {view === 'commits' ? (
-              <TicketCodeReview
-                embedded
-                title="Commits"
-                emptyMessage="No commits were found in this repository."
-                loadingMessage="Finding commits…"
-                action="open-repository-review"
-                review={review}
-                comparison={comparison}
-                expandedCommits={expandedCommits}
-                loading={detailLoading && review?.commits.length === 0}
-              />
             ) : (
-              <RepositoryFileList files={files} view={view} selectedFiles={selectedFiles} loading={detailLoading} />
-            )}
-            {detailError && (
-              <p class="repository-status-popover__detail-error" role="alert">
-                {detailError}
-              </p>
-            )}
-            {(detailHasMore || detailLoading) && (
-              <div
-                class="repository-status-popover__pagination"
-                data-repository-pagination-sentinel="true"
-                role="status"
+              <Pane
+                label="Repository"
+                header={<Toolbar label="Repository" leading={<ToolbarText text="Repository" />} />}
               >
-                {detailLoading ? 'Loading more…' : 'Load more'}
+                <div class="repository-status-popover__navigation">{sidebar(status)}</div>
+              </Pane>
+            )
+          }
+          detail={
+            compact ? (
+              <div class="repository-status-popover__detail" aria-live="polite">
+                {detail}
               </div>
-            )}
-          </main>
-        </div>
-      )}
-      {!recoveryStep && !status && !error && (
-        <p class="repository-status-popover__loading" role="status">
-          Loading repository status…
-        </p>
-      )}
-      {!recoveryStep && error && (
-        <p class="repository-status-popover__error" role="alert">
-          {error}
-        </p>
+            ) : (
+              <Pane label="Repository Status" header={heading}>
+                <div class="repository-status-popover__detail" aria-live="polite">
+                  {detail}
+                </div>
+              </Pane>
+            )
+          }
+        />
+      ) : (
+        <Pane label="Repository Status" header={heading}>
+          {recoveryStep && <RepositorySetup step={recoveryStep} busy={setupBusy} error={setupError} />}
+          {!recoveryStep && !status && !error && (
+            <p class="repository-status-popover__loading" role="status">
+              Loading repository status…
+            </p>
+          )}
+          {!recoveryStep && Boolean(error) && (
+            <p class="repository-status-popover__error" role="alert">
+              {error}
+            </p>
+          )}
+        </Pane>
       )}
       {fileMenu && <RepositoryFileContextMenu menu={fileMenu} platform={status?.platform} />}
     </section>

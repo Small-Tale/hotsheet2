@@ -1,5 +1,6 @@
+import { deviceClass } from '@kerfjs/ui/device-class';
 import { Select } from '@kerfjs/ui/select';
-import { signal } from 'kerfjs';
+import { computed, signal } from 'kerfjs';
 
 import type { CodeReview, RepositoryStatus } from '../api';
 import {
@@ -21,6 +22,10 @@ export const repositoryDemoExpandedCommits = signal<string[]>([]);
 export const repositoryDemoScenario = signal<RepositoryDemoScenario>('conflicted');
 export const changeEvidenceDemoView = signal<ChangeEvidenceView>('tests');
 export const repositoryDemoFileMenu = signal<RepositoryFileMenu | undefined>(undefined);
+/** Compact devices drill from the repository list into a view's detail, as in production (HS2-3B8345). */
+export const repositoryDemoDetailActive = signal(false);
+const repositoryDemoDevice = deviceClass(),
+  repositoryDemoCompact = computed(() => repositoryDemoDevice.value.compact);
 
 const status: RepositoryStatus = {
   branch: 'feature/repository-dialog',
@@ -101,6 +106,7 @@ export function repositoryStatusForScenario(scenario: RepositoryDemoScenario): R
 
 export function resetRepositoryStatusDemo(root?: ParentNode): void {
   repositoryDemoScenario.value = 'conflicted';
+  repositoryDemoDetailActive.value = false;
   if (root) syncSettingsControls(root, 'repository-status-popover', { values: { scenario: 'conflicted' } });
 }
 
@@ -113,6 +119,8 @@ export function RepositoryStatusPopoverDemo() {
         status={repositoryStatusForScenario(scenario)}
         error={scenario === 'error' ? 'git status failed: repository is unavailable' : ''}
         view={repositoryDemoView.value}
+        compact={repositoryDemoCompact.value}
+        detailActive={repositoryDemoDetailActive.value}
         comparison={repositoryDemoComparison.value}
         expandedCommits={repositoryDemoExpandedCommits.value}
         fileMenu={repositoryDemoFileMenu.value}

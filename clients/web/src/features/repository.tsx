@@ -1,5 +1,6 @@
+import { deviceClass } from '@kerfjs/ui/device-class';
 import type { Signal } from 'kerfjs';
-import { signal } from 'kerfjs';
+import { computed, signal } from 'kerfjs';
 
 import { Api, type CodeReview, type FullTicket, type RepositoryFile, type RepositoryStatus } from '../api';
 import { ChangeEvidenceSurface, RepositoryStatusSurface } from '../components/reader-overlay-surfaces';
@@ -23,6 +24,12 @@ export function createRepositoryController(dependencies: RepositoryDependencies)
   const repository = signal<RepositoryStatus | null>(null),
     repositoryError = signal(''),
     repositoryRefreshing = signal(false);
+  // Compact devices drill from the repository list into the selected view's detail (HS2-3B8345).
+  // Read only the compact flag: deviceClass() emits on every viewport resize, and an unchanged
+  // class must not re-render the shell (startup stays atomic).
+  const repositoryDetailActive = signal(false),
+    device = deviceClass(),
+    compactDevice = computed(() => device.value.compact);
   const repositoryView = signal<RepositoryStatusView>('unstaged'),
     repositoryFileMenu = signal<RepositoryFileMenu | undefined>(undefined),
     repositorySelectedFiles = signal<string[]>([]);
@@ -222,6 +229,8 @@ export function createRepositoryController(dependencies: RepositoryDependencies)
                 setupError: repositorySetupError.value,
                 refreshing: repositoryRefreshing.value,
                 view: repositoryView.value,
+                compact: compactDevice.value,
+                detailActive: repositoryDetailActive.value,
                 fileMenu: repositoryFileMenu.value,
                 selectedFiles: repositorySelectedFiles.value,
                 comparison: repositoryComparison.value,
@@ -257,6 +266,7 @@ export function createRepositoryController(dependencies: RepositoryDependencies)
     repository,
     repositoryError,
     repositoryView,
+    repositoryDetailActive,
     repositoryFileMenu,
     repositorySelectedFiles,
     repositorySetupStep,

@@ -4842,6 +4842,23 @@ export async function startHotSheetWebClient() {
         }
       : undefined;
   }
+  // The compact Repository Status drill-down (HS2-3B8345): its back control pops to the list.
+  let repositoryNavStack: { section: Element; dispose: () => void } | undefined;
+  function syncRepositoryNavStack() {
+    const section = appRoot.querySelector('#repository-status-popover [data-component="nav-stack"]');
+    if (section === (repositoryNavStack?.section ?? null)) return;
+    repositoryNavStack?.dispose();
+    repositoryNavStack = section
+      ? {
+          section,
+          dispose: wireNavStack(section, {
+            onBack: () => {
+              repositoryController.repositoryDetailActive.value = false;
+            },
+          }),
+        }
+      : undefined;
+  }
   const renderMetrics = import.meta.env.DEV ? createRenderMetrics(appRoot) : undefined;
   const activeTicketCollectionKey = () => `${selectedProjectId.value}:${selectedView.value}`;
   const ticketScrollRoot = () => appRoot.querySelector<HTMLElement>('.app-shell__workspace') ?? appRoot;
@@ -4903,6 +4920,7 @@ export async function startHotSheetWebClient() {
       animateTicketMotion(ticketMotion, appRoot, undefined, activeTicketCollectionKey());
       syncTerminalViewportMounts();
       syncTerminalRailNavStack();
+      syncRepositoryNavStack();
       terminalDrawerSizeObserver.sync();
       terminalDashboardSizeObserver.sync();
       syncRepositoryPaginationObserver();
@@ -5209,7 +5227,7 @@ export async function startHotSheetWebClient() {
     openProjectPicker, openRemoteProjectDialog, chooseAndOpenProject, unhealthyServerRecovery, projectDialogOpen, openRemoteCheckout, remoteProjectDialogOpen, importHs1Project,
     chooseHs1TicketStore, hs1MigrationProject, hs1MigrationBusy, hs1SourceIdentity, project, migrationJobDetails, migrationJobs, migrationConnectionErrors,
     migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, signOutProviderAccount, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource,
-    providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView,
+    providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView, repositoryDetailActive: repositoryController.repositoryDetailActive,
     repositorySetupStep, repositorySetupError, repositoryFileMenu, repositorySelectedFiles, repositoryComparison, expandedCodeReviewCommits, loadRepositoryDetail, refreshRepositoryStatus,
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,
     changeEvidenceReader, selectedTicket, codeReviewMessage, openProject, currentRememberedProjectRoots, persistDrawerTabOrder, currentDrawerTabIds, focusDrawerTab,

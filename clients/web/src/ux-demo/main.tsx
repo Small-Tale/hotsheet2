@@ -300,6 +300,7 @@ import {
   changeEvidenceDemoView,
   ChangeEvidenceDialogDemo,
   repositoryDemoComparison,
+  repositoryDemoDetailActive,
   repositoryDemoEvent,
   repositoryDemoExpandedCommits,
   repositoryDemoFileMenu,
@@ -1583,6 +1584,26 @@ function syncDemoRailNavStack() {
 }
 new MutationObserver(syncDemoRailNavStack).observe(root, { childList: true, subtree: true });
 queueMicrotask(syncDemoRailNavStack);
+// The compact Repository Status drill-down pops back to its list the same way (HS2-3B8345).
+let demoRepositoryNavStack: { section: Element; dispose: () => void } | undefined;
+function syncDemoRepositoryNavStack() {
+  const section = root.querySelector('.repository-status-demo [data-component="nav-stack"]');
+  if (section === (demoRepositoryNavStack?.section ?? null)) return;
+  demoRepositoryNavStack?.dispose();
+  demoRepositoryNavStack = section
+    ? {
+        section,
+        dispose: wireNavStack(section, {
+          onBack: () => {
+            repositoryDemoDetailActive.value = false;
+            repositoryDemoEvent.value = 'Back to repository views.';
+          },
+        }),
+      }
+    : undefined;
+}
+new MutationObserver(syncDemoRepositoryNavStack).observe(root, { childList: true, subtree: true });
+queueMicrotask(syncDemoRepositoryNavStack);
 queueMicrotask(syncDemoTerminals);
 startPermissionRequestDemoCountdown(root, () => selectedId.value === 'permission-request');
 if (import.meta.env.DEV)
@@ -2125,6 +2146,7 @@ demoListeners.add(
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.selectRepositoryView.selector, (_event, target) => {
     repositoryDemoView.value = (target as HTMLElement).dataset.itemId as typeof repositoryDemoView.value;
+    repositoryDemoDetailActive.value = true;
     repositoryDemoEvent.value = `${(target as HTMLElement).textContent.trim() || 'Repository view'} selected.`;
   }),
 );

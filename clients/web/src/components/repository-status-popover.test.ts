@@ -48,17 +48,47 @@ const status = (patch: Partial<RepositoryStatus> = {}): RepositoryStatus => ({
 });
 
 describe('RepositoryStatusPopover', () => {
-  it('assigns scroll ownership directly to the master and detail regions', () => {
+  it('lays Repository Status out as a list-detail SplitView whose detail column owns the heading (HS2-3B8345)', () => {
     const markup = String(RepositoryStatusPopover({ status: status() }));
     const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8');
-    expect(markup).toContain('<aside class="repository-status-popover__navigation">');
-    expect(markup).toContain('<div class="repository-status-popover__metadata">');
-    expect(css).toMatch(/\.repository-status-popover__navigation \{[^}]*overflow: auto/);
-    expect(css).not.toMatch(/\.repository-status-popover__layout > aside/);
-    expect(markup).toContain('<main class="repository-status-popover__detail" aria-live="polite">');
-    expect(css).toMatch(
-      /@media \(max-width: remify\(600px\)\)[\s\S]*grid-template-rows: minmax\(0, 39%\) minmax\(0, 1fr\)/,
+    expect(markup).toContain('data-component="split-view"');
+    expect(markup).not.toContain('data-component="nav-stack"');
+    // The list Pane has its own quiet toolbar title; the heading follows inside the detail column.
+    const list = markup.indexOf('>Repository<'),
+      metadata = markup.indexOf('repository-status-popover__metadata'),
+      heading = markup.indexOf('id="repository-status-title"'),
+      detail = markup.indexOf('class="repository-status-popover__detail" aria-live="polite"');
+    expect(list).toBeGreaterThan(-1);
+    expect(list).toBeLessThan(metadata);
+    expect(metadata).toBeLessThan(heading);
+    expect(heading).toBeLessThan(detail);
+    expect(markup).toContain('aria-labelledby="repository-status-title"');
+    // Panes own scrolling and SplitView the divider; the old grid stays only for ChangeEvidenceDialog.
+    expect(markup).not.toContain('<aside class="repository-status-popover__navigation">');
+    expect(css).toMatch(/\.repository-status-popover__split \.repository-status-popover__navigation,/);
+    expect(css).toMatch(/--kui-split-view-list-width: min\(remify\(432px\), 50%\)/);
+    expect(css).toMatch(/:is\(:popover-open, \[data-embedded='true'\]\)/);
+  });
+
+  it('drills from the repository list into the selected view on compact devices (HS2-3B8345)', () => {
+    const list = String(RepositoryStatusPopover({ status: status(), view: 'conflicted', compact: true }));
+    expect(list).toContain('data-component="nav-stack"');
+    // The stack toolbar carries the title and actions; the list keeps the state summary.
+    expect(list).toContain('Repository Status');
+    expect(list).toContain('repository-status-popover__compact-summary');
+    expect(list).not.toContain('id="repository-status-title"');
+    expect(list).toContain('aria-label="Repository Status"');
+    expect(list).toContain('aria-label="Refresh repository status"');
+    const detail = String(
+      RepositoryStatusPopover({ status: status(), view: 'conflicted', compact: true, detailActive: true }),
     );
+    expect(detail).toContain('Back to repository views');
+    expect(detail).toContain('Conflicted');
+    // Setup, loading, and error states keep one headed column on every device.
+    const failed = String(RepositoryStatusPopover({ status: null, error: 'git failed', compact: true }));
+    expect(failed).not.toContain('data-component="split-view"');
+    expect(failed).toContain('id="repository-status-title"');
+    expect(failed).toContain('git failed');
   });
 
   it('classifies every repository state without hiding orthogonal counts', () => {

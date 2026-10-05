@@ -21,6 +21,8 @@ import { type Control, type Project, type RepositoryDetailState } from './types'
 export interface RepositoryInteractionsDependencies {
   readonly repository: Signal<RepositoryStatus | null>;
   readonly repositoryView: Signal<RepositoryStatusView>;
+  /** Compact list-detail drill-down: the selected view's detail is pushed (HS2-3B8345). */
+  readonly repositoryDetailActive: Signal<boolean>;
   readonly repositorySetupStep: Signal<RepositorySetupStep | undefined>;
   readonly repositorySetupError: Signal<string>;
   readonly repositoryFileMenu: Signal<RepositoryFileMenu | undefined>;
@@ -57,6 +59,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
   const {
     repository,
     repositoryView,
+    repositoryDetailActive,
     repositorySetupStep,
     repositorySetupError,
     repositoryFileMenu,
@@ -81,7 +84,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
   } = dependencies;
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click',REPOSITORY_ACTIONS.openRepositoryStatus.selector,()=>{const status=repository.value,view=status?.conflicted?'conflicted':status?.unstaged?'unstaged':status?.staged?'staged':status?.untracked?'untracked':'commits';repositoryView.value=view;repositorySetupStep.value=status?.initialized===false?'initialize':undefined;repositorySetupError.value='';repositoryFileMenu.value=undefined;repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;repositoryComparison.value={active:false,side:'a'};expandedCodeReviewCommits.value=[];(document.querySelector('#repository-status-popover') as Control).showPopover?.();if(status?.initialized!==false)void loadRepositoryDetail(view,true)}));
+  lifetime.add(delegate(document.body,'click',REPOSITORY_ACTIONS.openRepositoryStatus.selector,()=>{const status=repository.value,view=status?.conflicted?'conflicted':status?.unstaged?'unstaged':status?.staged?'staged':status?.untracked?'untracked':'commits';repositoryView.value=view;repositoryDetailActive.value=false;repositorySetupStep.value=status?.initialized===false?'initialize':undefined;repositorySetupError.value='';repositoryFileMenu.value=undefined;repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;repositoryComparison.value={active:false,side:'a'};expandedCodeReviewCommits.value=[];(document.querySelector('#repository-status-popover') as Control).showPopover?.();if(status?.initialized!==false)void loadRepositoryDetail(view,true)}));
   lifetime.add(
     delegate(document.body, 'click', REPOSITORY_ACTIONS.refreshRepositoryStatus.selector, () => {
       void refreshRepositoryStatus();
@@ -107,6 +110,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     delegate(document.body, 'click', REPOSITORY_ACTIONS.selectRepositoryView.selector, (_event, target) => {
       const view = data(target).itemId as RepositoryStatusView;
       repositoryView.value = view;
+      repositoryDetailActive.value = true;
       repositoryFileMenu.value = undefined;
       repositorySelectedFiles.value = [];
       dependencies.repositoryFileSelectionAnchor = undefined;
@@ -129,6 +133,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
         return;
       }
       repositoryView.value = 'commits';
+      repositoryDetailActive.value = true;
       repositoryComparison.value = { active: true, side: 'a' };
       if (repositoryDetail.value.view !== 'commits') void loadRepositoryDetail('commits', true);
     }),

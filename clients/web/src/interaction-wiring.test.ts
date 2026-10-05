@@ -153,11 +153,14 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   });
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
-    expect(main.split('\n')).toHaveLength(19);
+    expect(main.split('\n')).toHaveLength(23);
     expect(main).toContain('const { appRoot } = await startHotSheetWebClient();');
     // The single page-lifetime scroll-divider instance lives at the entry (HS2-TF76Z2).
     expect(main).toContain('void wireScrollDividers(appRoot);');
     expect(runtime).not.toContain('wireScrollDividers(');
+    // SplitView's page-lifetime resize wiring contract lives beside it (HS2-3B8345).
+    expect(main).toContain('void wireResizableRegions(appRoot, { onCommit: () => undefined });');
+    expect(runtime).not.toContain('wireResizableRegions(');
     expect(main).not.toMatch(/\b(?:signal|mount|effect|wire\w+Interactions)\s*\(/);
     expect(runtime).not.toMatch(/from ['"][^'"]*\/main['"]/);
   });
