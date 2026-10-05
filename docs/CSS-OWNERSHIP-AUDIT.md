@@ -146,3 +146,15 @@ Read the consumer catalog and installed per-component pages/signatures before im
 Existing relevant coverage includes component unit tests, `tests/ux-demo.spec.ts`, `tests/providers.spec.ts`, `tests/project-startup.spec.ts`, and `tests/terminal-dashboard-startup.spec.ts`. Source/CSS-string assertions must be replaced with public composition and behavioral assertions when old markup disappears. Exercise production parents as well as isolated demos, preserve delegated actions and accessibility contracts, inspect wide/narrow rendered states and transitions, and attach representative screenshots before claiming visual completion.
 
 This is an ownership and migration inventory, not evidence that the follow-ups have been implemented or visually verified.
+
+## Dialog migration update (HS2-XB41PF)
+
+The preceding 103-file manifest records the original audit baseline. This migration removes
+`clients/web/src/components/bulk-ticket-dialog.css` and
+`clients/web/src/components/ticket-link-choice-dialog.css`: their generic copy, choices, sizing,
+and actions now use public compositions. `project-close-dialog.css` retains raw Web Awesome viewport
+geometry and owned asymmetric preview/canvas layout; warning, resource stack/metadata, prose, and
+footer styling now comes from public Kerf components. Its preview shell is deliberately not wrapped
+in `DialogSurface`, whose beta.76 props lack the modal gutter/max-height configuration required to
+preserve the existing phone preview behavior. `KF-E2J9ND` requests the missing configuration, and
+`HS2-FXAAA6` tracks downstream adoption. No Kerf component root or child styles are overridden.

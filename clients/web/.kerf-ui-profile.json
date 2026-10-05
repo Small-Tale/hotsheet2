@@ -59,7 +59,7 @@
       "id": "web-awesome-project-close-parts",
       "rules": ["KUI-L011"],
       "target": "src/components/project-close-dialog.css",
-      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
+      "rationale": "ProjectCloseDialog owns its raw Web Awesome modal body inset and 8px phone gutter/viewport cap; beta.76 DialogSurface lacks modal gutter/maximum-height configuration (KF-E2J9ND; adoption HS2-FXAAA6). No Kerf component is overridden."
     },
     {
       "id": "web-awesome-project-dialog-parts",
@@ -113,12 +113,6 @@
       "id": "web-awesome-ticket-inspector-parts",
       "rules": ["KUI-L011"],
       "target": "src/components/ticket-inspector-panel.css",
-      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
-    },
-    {
-      "id": "web-awesome-ticket-link-choice-parts",
-      "rules": ["KUI-L011"],
-      "target": "src/components/ticket-link-choice-dialog.css",
       "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
     },
     {
@@ -240,12 +234,6 @@
       "rules": ["KUI-L004"],
       "target": "src/components/permission-request-card.tsx",
       "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: permission-request-card__project."
-    },
-    {
-      "id": "intentional-nested-inset-project-close-dialog",
-      "rules": ["KUI-L004"],
-      "target": "src/components/project-close-dialog.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: project-close-dialog__empty."
     },
     {
       "id": "intentional-nested-inset-project-tab-bar",

@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 
 import { type TicketLinkChoice, TicketLinkChoiceDialog } from './ticket-link-choice-dialog';
@@ -48,16 +45,21 @@ describe('TicketLinkChoiceDialog', () => {
     expect(markup).not.toContain('save-search-as-view');
   });
 
-  it('stays absent without an ambiguous resolution and has a narrow layout', () => {
+  it('stays absent without an ambiguous resolution and renders wrapping public choice rows', () => {
     expect(String(TicketLinkChoiceDialog({}))).toBe('');
-    const css = readFileSync(resolve(import.meta.dirname, 'ticket-link-choice-dialog.css'), 'utf8');
-    expect(css).toContain('@media (max-width: remify(512px))');
-    expect(css).toContainSource('grid-template-areas: "status ticket arrow" ". source ."');
-    expect(css).not.toContain('--wa-space-');
-    expect(css).toMatch(/__matches \{[^}]*gap: var\(--kui-space-none\)/);
-    expect(css).toMatch(
-      /__matches > li > button \{[^}]*min-height: remify\(72px\)[^}]*padding: var\(--kui-space-xs\)[^}]*gap: var\(--kui-space-xs\)/,
-    );
-    expect(css).toMatchSource(/__ticket, \.ticket-link-choice-dialog__source \{[^}]*gap: var\(--kui-space-2xs\)/);
+    const markup = String(TicketLinkChoiceDialog({ choice }));
+    expect(markup).toContain('data-component="dialog-surface"');
+    expect(markup.match(/data-component="list-item"/g)).toHaveLength(2);
+    expect(markup).toContain('data-multiline="true"');
+    expect(markup).toContain('data-component="text"');
+    expect(markup).toContain('data-wrap="anywhere"');
+    expect(markup).toContain('data-status="started"');
+    expect(markup).toContain('data-status="completed"');
+    // The delegated action reads its metadata from the activated row, not a wrapper.
+    for (const qualifiedId of ['git:one', 'github:42']) {
+      const row = markup.match(new RegExp(`<button[^>]*data-ticket-qualified-id="${qualifiedId}"[^>]*>`))?.[0];
+      expect(row).toContain('data-action="select-ticket-link-match"');
+      expect(row).toContain('data-match-key="alpha-01::');
+    }
   });
 });

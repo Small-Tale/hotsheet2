@@ -1029,9 +1029,9 @@
       "name": "BulkTicketDialog",
       "source": "src/components/bulk-ticket-dialog.tsx",
       "kind": "component",
-      "purpose": "Confirm bulk tag, delete, and empty-trash actions across selected tickets.",
+      "purpose": "Confirm bulk tag, delete, and empty-trash actions through public dialog, text, and action compositions.",
       "useWhen": [
-        "Hot Sheet needs confirm bulk tag, delete, and empty-trash actions across selected tickets."
+        "Hot Sheet needs confirm bulk tag, delete, and empty-trash actions through public dialog, text, and action compositions."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific BulkTicketDialog behavior."
@@ -1075,9 +1075,9 @@
       "name": "TicketLinkChoiceDialog",
       "source": "src/components/ticket-link-choice-dialog.tsx",
       "kind": "component",
-      "purpose": "Disambiguate a ticket reference that matches more than one ticket.",
+      "purpose": "Disambiguate exact ticket references with wrapping public navigation rows and source metadata.",
       "useWhen": [
-        "Hot Sheet needs disambiguate a ticket reference that matches more than one ticket."
+        "Hot Sheet needs disambiguate exact ticket references with wrapping public navigation rows and source metadata."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketLinkChoiceDialog behavior."

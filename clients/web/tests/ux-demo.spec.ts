@@ -2733,7 +2733,7 @@ test('previews every BulkTicketDialog presentation through demo settings, then r
     // Default add-tag mode, then Cancel closes it so the demo settings are reachable.
     await expect(tagDialog).toHaveJSProperty('open', true);
     await expect(tagDialog.locator('form')).toHaveAttribute('data-tag-mode', 'add');
-    await expect(tagDialog.locator('.bulk-ticket-dialog__choice')).toHaveCount(0);
+    await expect(tagDialog.locator('[data-action="choose-bulk-tag"]')).toHaveCount(0);
     await tagDialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(tagDialog).toHaveCount(0);
     await expect(event).toHaveText('Cancelled; the selection is unchanged.');
@@ -2745,7 +2745,7 @@ test('previews every BulkTicketDialog presentation through demo settings, then r
     await expect(tagDialog).toHaveJSProperty('open', true);
     await expect(tagDialog).toHaveAttribute('label', 'Remove tag — 5 selected');
     await expect(tagDialog.locator('form')).toHaveAttribute('data-tag-mode', 'remove');
-    await expect(tagDialog.locator('.bulk-ticket-dialog__choice')).toHaveText(['bug', 'ui', 'backend', 'docs']);
+    await expect(tagDialog.locator('[data-action="choose-bulk-tag"]')).toHaveText(['bug', 'ui', 'backend', 'docs']);
     await shot('remove-tag');
     await tagDialog.getByRole('button', { name: 'backend' }).click();
     await expect(tagDialog.locator('wa-input[name="bulk-ticket-tag"]')).toHaveJSProperty('value', 'backend');
@@ -7503,7 +7503,7 @@ test('renders the ProjectCloseDialog TerminalPreview at a legible glyph size at 
       expect(result.rowHeight).toBeGreaterThan(7.5);
       expect(phone.bodyOverflow).toBeLessThanOrEqual(1);
       expect(phone.panelBottom).toBeLessThanOrEqual(844);
-      await expect(dialog.locator('.project-close-dialog__consequences')).toBeInViewport({ ratio: 1 });
+      await expect(dialog.locator('[data-project-close-consequences]')).toBeInViewport({ ratio: 1 });
       await expect(dialog.getByRole('button', { name: 'Stop & Close' })).toBeInViewport({ ratio: 1 });
     }
     await region.screenshot({ path: test.info().outputPath(`xhbdrv-close-preview-${width}.png`) });
@@ -7516,7 +7516,10 @@ test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKK
   const projectClose = page.locator('[data-component="project-close-dialog"]');
   await expect(projectClose).toHaveJSProperty('open', true);
   await expect(projectClose).toHaveAttribute('data-has-resources', 'true');
-  await expect(projectClose.locator('.project-close-dialog__resources')).toHaveCSS('overflow', 'auto');
+  await expect(projectClose.locator('.project-close-dialog__resources > [data-component="list"]')).toHaveCSS(
+    'overflow',
+    'auto',
+  );
   // The selected AI-chat resource renders its embedded conversation preview.
   await expect(projectClose.locator('[data-component="ai-conversation"]')).toBeVisible();
   // The embedded presentation fills the chat preview by itself; the dialog does not size it (HS2-29Q3XG).
@@ -7530,29 +7533,8 @@ test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKK
   await projectClose.evaluate((node) =>
     Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)),
   );
-  const closeSpacing = await projectClose.evaluate((node) => {
-    const intro = getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__intro')!),
-      aside = getComputedStyle(node.querySelector<HTMLElement>('aside')!),
-      nav = getComputedStyle(node.querySelector<HTMLElement>('nav')!),
-      consequences = getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__consequences')!),
-      actions = getComputedStyle(node.querySelector<HTMLElement>('.project-close-dialog__actions')!);
-    return {
-      introPadding: intro.padding,
-      introGap: intro.gap,
-      asidePadding: aside.padding,
-      navGap: nav.gap,
-      consequencesPadding: consequences.padding,
-      actionGap: actions.gap,
-    };
-  });
-  expect(closeSpacing).toEqual({
-    introPadding: '16px 24px',
-    introGap: '16px',
-    asidePadding: '8px',
-    navGap: '0px',
-    consequencesPadding: '16px 24px 0px',
-    actionGap: '8px',
-  });
+  await expect(projectClose.locator('[data-component="state-banner"]')).toHaveAttribute('data-tone', 'warning');
+  await expect(projectClose.locator('[slot="footer"][data-component="row"]')).toHaveAttribute('data-wrap', 'true');
   await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-project-close-wide.png', fullPage: true });
   await page.screenshot({ path: '/private/tmp/hs2-qkks05-project-close-dialog.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

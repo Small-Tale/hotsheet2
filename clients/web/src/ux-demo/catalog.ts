@@ -430,9 +430,10 @@ export const demoCatalog: DemoCategory[] = [
           demo(
             'bulk-ticket-dialog',
             'BulkTicketDialog',
-            'Confirm bulk tag, delete, and empty-trash actions across selected tickets.',
+            'Confirm bulk tag, delete, and empty-trash actions through public dialog, text, and action compositions.',
             'feature-floor',
             true,
+            ['surface-scaffold', 'list', 'text', 'row'],
           ),
           demo(
             'saved-view-dialog',
@@ -445,10 +446,10 @@ export const demoCatalog: DemoCategory[] = [
           demo(
             'ticket-link-choice-dialog',
             'TicketLinkChoiceDialog',
-            'Disambiguate a ticket reference that matches more than one ticket.',
+            'Disambiguate exact ticket references with wrapping public navigation rows and source metadata.',
             'feature-floor',
             true,
-            ['list-item'],
+            ['surface-scaffold', 'list', 'text', 'row', 'list-item'],
           ),
           demo(
             'project-dialog',
@@ -464,7 +465,16 @@ export const demoCatalog: DemoCategory[] = [
             'Warn about running terminals and AI chats before closing a project, with a live resource preview.',
             'feature-floor',
             true,
-            ['list-item', 'ai-conversation'],
+            [
+              'state-banner',
+              'list',
+              'text',
+              'row',
+              'list-header',
+              'list-item',
+              'ai-conversation',
+              'terminal-dashboard',
+            ],
           ),
           demo(
             'conversation-export-dialog',

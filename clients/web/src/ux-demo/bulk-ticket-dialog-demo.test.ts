@@ -47,7 +47,7 @@ describe('BulkTicketDialog demo (HS2-PS9BQV)', () => {
     setBulkTicketDialogScenario('remove-tag');
     const remove = String(BulkTicketDialogDemo());
     expect(remove).toContain('data-tag-mode="remove"');
-    expect(remove.match(/class="bulk-ticket-dialog__choice"/g)).toHaveLength(4);
+    expect(remove.match(/data-action="choose-bulk-tag"/g)).toHaveLength(4);
 
     closeBulkTicketDialogDemo('Delete 5 tickets requested.');
     const closed = String(BulkTicketDialogDemo());

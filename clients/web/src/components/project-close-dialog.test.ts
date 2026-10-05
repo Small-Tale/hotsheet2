@@ -141,50 +141,44 @@ describe('ProjectCloseDialog', () => {
     expect(markup).not.toContain('Running items');
   });
 
-  it('provides stable resource identity, selection, summary, and responsive two-column layout', () => {
+  it('preserves identity, fallback selection, summary, and owned asymmetric preview geometry', () => {
     expect(projectCloseResourceKey(resources[2])).toBe('ai-chat:chat-one');
     expect(selectedProjectCloseResource(resources, 'terminal:term-two')).toBe(resources[1]);
     expect(selectedProjectCloseResource(resources, 'unknown')).toBe(resources[0]);
+    expect(selectedProjectCloseResource([], 'unknown')).toBeUndefined();
     expect(projectCloseRunningSummary([resources[2]])).toBe('1 AI chat will stay active unless you close them first.');
     const css = readFileSync(resolve(import.meta.dirname, 'project-close-dialog.css'), 'utf8');
-    expect(css).toContainSource('[data-has-resources="false"]');
     expect(css).toMatchSource(/grid-template-columns:minmax\(remify\(224px\),remify\(288px\)\) minmax\(0,1fr\)/);
     expect(css).toMatchSource(/@media \(max-width:remify\(672px\)\)[\s\S]*grid-template-columns:1fr/);
-    expect(css).toContainSource('background:var(--wa-color-surface-default)');
-    // The live preview is the shared TerminalPreview; the dialog tunes only its public tokens (HS2-148B5C).
     expect(css).not.toContain('.terminal-viewport');
     expect(css).not.toContain('.terminal-tile');
-    // The embedded AIConversation presentation fills the preview itself (HS2-29Q3XG).
     expect(css).not.toContain('.ai-conversation');
+    expect(css).not.toContain('.kui-');
+    expect(css).not.toContain('__intro');
+    expect(css).not.toContain('__actions');
+    expect(css).not.toContain('__consequences');
   });
 
-  it('uses canonical dialog-region spacing while retaining preview and control geometry', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'project-close-dialog.css'), 'utf8');
-    expect(css).not.toContain('--wa-space-');
-    expect(css).toMatchSource(
-      /__intro \{[^}]*padding:var\(--kui-space-m\) var\(--kui-space-l\)[^}]*gap:var\(--kui-space-m\)/,
-    );
-    expect(css).toMatchSource(/__resources \{[^}]*padding:var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(/__resource-list \{ display:grid; gap:var\(--kui-space-none\)/);
-    expect(css).not.toContain('.kui-list-item__count');
-    expect(css).toMatchSource(/__terminal \{[^}]*--terminal-preview-inset:var\(--kui-space-l\)/);
-    expect(css).toMatchSource(/__consequences \{ padding:var\(--kui-space-m\) var\(--kui-space-l\) 0/);
-    expect(css).toMatchSource(/__actions \{[^}]*gap:var\(--kui-space-xs\)/);
-    expect(css).toMatchSource(/@media[\s\S]*__terminal \{ --terminal-preview-inset:var\(--kui-space-m\)/);
-    expect(css).toMatchSource(/__layout \{[^}]*min-height:remify\(352px\)/);
+  it('composes warnings, scrollable resources, metadata, consequences, and footer through public primitives', () => {
+    const markup = String(ProjectCloseDialog({ state: { projectId: 'demo', projectName: 'Demo', resources } }));
+    expect(markup).toContain('data-component="state-banner"');
+    expect(markup).toContain('data-tone="warning"');
+    expect(markup).toContain('id="project-close-dialog-summary"');
+    expect(markup).toContain('data-scrollable="true"');
+    expect(markup).toContain('data-control-insets="trbl"');
+    expect(markup).toContain('data-project-close-consequences');
+    expect(markup).toContain('slot="footer"');
+    expect(markup).toContain('data-component="row"');
   });
 
-  it('gives the phone preview frame the published grid aspect (5:3 fallback) and keeps the dialog unscrolled (HS2-28EVHV, HS2-RBS46R)', () => {
+  it('gives the phone preview frame its published grid aspect and retains the raw shell viewport cap', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'project-close-dialog.css'), 'utf8'),
       phone = css.slice(css.indexOf('@media (max-width: remify(672px))'));
-    // The list takes only its rows (capped, then scrolls); the preview's content box is the frame.
     expect(phone).toMatchSource(/__layout \{[^}]*grid-template-rows:auto minmax\(remify\(192px\), 1fr\)/);
     expect(phone).toMatchSource(/__resources \{[^}]*max-height:remify\(160px\)/);
     expect(phone).toMatchSource(
-      /__terminal \{[^}]*--terminal-preview-inset:var\(--kui-space-m\)[^}]*box-sizing:content-box[^}]*max-height:remify\(224px\)[^}]*aspect-ratio:var\(--terminal-preview-grid-aspect, 5 \/ 3\)/,
+      /__terminal \{[^}]*box-sizing:content-box[^}]*max-height:remify\(224px\)[^}]*aspect-ratio:var\(--terminal-preview-grid-aspect, 5 \/ 3\)/,
     );
-    // The frame equals the content box only while the phone detail padding matches the inset.
-    expect(phone).toMatchSource(/__detail \{ padding:var\(--kui-space-m\)/);
     expect(phone).toMatchSource(/::part\(dialog\) \{ max-height:calc\(100dvh - 2 \* var\(--kui-space-xs\)\)/);
   });
 });

@@ -5,6 +5,7 @@ import { BulkTicketDialog } from './bulk-ticket-dialog';
 describe('BulkTicketDialog', () => {
   it('renders add and remove tag workflows with stable action contracts', () => {
     const add = String(BulkTicketDialog({ state: { kind: 'tag', mode: 'add', count: 3, choices: [] } }));
+    expect(add).toContain('data-component="dialog-surface"');
     expect(add).toContain('label="Add tag — 3 selected"');
     expect(add).toContain('data-action="submit-bulk-tag" data-tag-mode="add"');
     const remove = String(
@@ -35,5 +36,8 @@ describe('BulkTicketDialog', () => {
     expect(markup).toContain('data-action="confirm-empty-trash"');
     expect(markup).toContain('Emptying…');
     expect(markup).toContain('Try again');
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('data-tone="danger"');
+    expect(markup.match(/ disabled/g)).toHaveLength(2);
   });
 });

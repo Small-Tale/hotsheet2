@@ -2,9 +2,13 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './project-close-dialog.css';
 
+import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { StateBanner } from '@kerfjs/ui/state-banner';
+import { Text } from '@kerfjs/ui/text';
 import { CircleAlert, MessageSquare, SquareTerminal } from 'lucide';
 
 import { type ConversationActivity, type ConversationMessage, type ConversationUsage } from '../ai-conversation';
@@ -130,70 +134,72 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
       open
     >
       {hasResources && (
-        <div class="project-close-dialog__intro">
-          <span>
-            <LucideIcon size={17.6} icon={CircleAlert} name="circle-alert" />
-          </span>
-          <p id="project-close-dialog-summary">{projectCloseRunningSummary(state.resources)}</p>
+        <div id="project-close-dialog-summary">
+          <StateBanner
+            tone="warning"
+            title={projectCloseRunningSummary(state.resources)}
+            icon={<LucideIcon size={17.6} icon={CircleAlert} name="circle-alert" />}
+          />
         </div>
       )}
       {hasResources ? (
         <div class="project-close-dialog__layout" aria-busy={String(busy)}>
           <aside class="project-close-dialog__resources" aria-label="Running terminals and AI chats">
-            <ListHeader label="Running items" />
-            {state.resources.length ? (
-              <nav class="project-close-dialog__resource-list">
-                {state.resources.map((resource) => {
-                  const key = projectCloseResourceKey(resource),
-                    terminal = resource.kind === 'terminal';
-                  return (
-                    <ListItem
-                      action="select-project-close-resource"
-                      itemId={key}
-                      selected={resource === selected}
-                      disabled={busy}
-                      icon={
-                        <LucideIcon
-                          icon={terminal ? SquareTerminal : MessageSquare}
-                          name={terminal ? 'square-terminal' : 'message-square'}
-                        />
-                      }
-                      label={resource.name}
-                      trailing={
-                        <small class="project-close-dialog__resource-kind">
-                          {terminal ? 'Terminal' : resource.tool} · {resource.busy ? 'Busy' : 'Running'}
-                        </small>
-                      }
-                    />
-                  );
-                })}
+            <List fill scrollable controlInsets="trbl">
+              <ListHeader label="Running items" />
+              <nav>
+                <List gap="none">
+                  {state.resources.map((resource) => {
+                    const key = projectCloseResourceKey(resource),
+                      terminal = resource.kind === 'terminal';
+                    return (
+                      <ListItem
+                        action="select-project-close-resource"
+                        itemId={key}
+                        selected={resource === selected}
+                        disabled={busy}
+                        icon={
+                          <LucideIcon
+                            icon={terminal ? SquareTerminal : MessageSquare}
+                            name={terminal ? 'square-terminal' : 'message-square'}
+                          />
+                        }
+                        label={resource.name}
+                        description={`${terminal ? 'Terminal' : resource.tool} · ${resource.busy ? 'Busy' : 'Running'}`}
+                        multiline
+                      />
+                    );
+                  })}
+                </List>
               </nav>
-            ) : (
-              <p class="project-close-dialog__empty">Nothing is running.</p>
-            )}
+            </List>
           </aside>
           {selected ? (
             <ResourceDetail resource={selected} projectId={state.projectId} />
           ) : (
-            <section class="project-close-dialog__detail project-close-dialog__detail--empty">
-              <p>Close this project tab?</p>
-            </section>
+            <List vAlign="middle" hAlign="center">
+              <Text flush>Close this project tab?</Text>
+            </List>
           )}
         </div>
       ) : (
-        <p class="project-close-dialog__simple">Close this project tab? You can reopen it later.</p>
+        <Text>Close this project tab? You can reopen it later.</Text>
       )}
-      {hasResources && (
-        <p class="project-close-dialog__consequences">
-          <strong>Keep running</strong> closes only this tab. Terminals and AI chat tabs return when reopened. Received
-          chat history and the latest durable provider session return after an app or server restart.{' '}
-          <strong>Stop all</strong> ends every item, then closes the tab.
-        </p>
-      )}
-      <p class="project-close-dialog__error" role="alert">
-        {state.error}
-      </p>
-      <div slot="footer" class="project-close-dialog__actions">
+      <List textInsets="rl" controlInsets="tb" gap="xs">
+        {hasResources && (
+          <Text flush size="compact" tone="quiet" data-project-close-consequences>
+            <strong>Keep running</strong> closes only this tab. Terminals and AI chat tabs return when reopened.
+            Received chat history and the latest durable provider session return after an app or server restart.{' '}
+            <strong>Stop all</strong> ends every item, then closes the tab.
+          </Text>
+        )}
+        {Boolean(state.error) && (
+          <Text flush size="compact" tone="danger" role="alert">
+            {state.error}
+          </Text>
+        )}
+      </List>
+      <Row slot="footer" hAlign="right" vAlign="middle" gap="xs" wrap>
         <wa-button
           type="button"
           size="small"
@@ -225,7 +231,7 @@ export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState 
             {closingAll ? 'Stopping…' : 'Stop & Close'}
           </wa-button>
         )}
-      </div>
+      </Row>
     </wa-dialog>
   );
 }

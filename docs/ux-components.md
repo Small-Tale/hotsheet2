@@ -1092,7 +1092,7 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
   composed-path containment keeps shadow-DOM menu interactions open and dismisses on every
   true outside pointer-down or Escape.
 - `BulkTicketDialog` — **demo built**: the add-tag and remove-tag dialogs (remove mode offers the
-  selection's tags as `.bulk-ticket-dialog__choice` pills that fill the field), the bulk delete
+  selection's tags as Web Awesome buttons that fill the field), the bulk delete
   confirmation, and the Empty Trash confirmation with its busy and error states. The
   `bulk-ticket-dialog` UX demo's Presentation setting previews each of these, and Reset returns to
   add-tag. Fixture stand-ins handle Cancel, choice, submit, confirm, and dismissal (HS2-PS9BQV).
@@ -2888,3 +2888,21 @@ identity shows the terminal name with the project as a subtitle (`terminal-tile_
 The separate open-in-drawer button is omitted there because More actions → Open and the identity
 already carry that action. Desktop magnified toolbars keep the single-line `project › terminal`
 identity and the open-in-drawer button.
+
+### Public dialog compositions (HS2-XB41PF)
+
+`BulkTicketDialog` and `TicketLinkChoiceDialog` use shipped Kerf `DialogSurface` around raw Web Awesome
+modal shells, `Text` for copy, `List` for vertical rhythm, and `Row` for action groups. Exact-match choices
+use multiline `ListItem` rows with ticket title and wrapping connection/project metadata below the slug.
+Each activated row retains its exact match key, project id, qualified ticket id, status, and delegated
+action. Bulk tag suggestions retain their delegated choice action; tag submission, deletion, cancellation,
+Trash busy/error state, and native modal dismissal stay application-owned. Neither adapter needs CSS.
+
+`ProjectCloseDialog` composes its warning through `StateBanner`, its scrolling resource list through
+`List`/`ListHeader`/`ListItem`, consequences and errors through `Text`, and its footer through wrapping
+`Row`. Its remaining stylesheet owns the raw dialog's resource-dependent width and phone viewport cap,
+the asymmetric resource/preview tracks, and the terminal preview's public canvas aspect/inset contract.
+The read-only `AIConversation` and `TerminalPreview` keep their own rendering and styles. Beta.76
+`DialogSurface` has size, presentation, body inset, and footer inset props, but no modal viewport gutter
+or maximum-height configuration; it cannot preserve this dialog's 8px phone gutter and visible,
+unscrolled terminal-preview contract. The raw shell therefore remains until that configuration exists (`KF-E2J9ND`; downstream adoption `HS2-FXAAA6`).

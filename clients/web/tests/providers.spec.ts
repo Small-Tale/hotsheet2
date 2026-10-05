@@ -1766,7 +1766,7 @@ test('always confirms before closing a project without running resources', async
   const dialog = page.locator('[data-component="project-close-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog).not.toContainText('No terminals or AI chats are currently running');
-  await expect(dialog.locator('.project-close-dialog__intro')).toHaveCount(0);
+  await expect(dialog.locator('[data-component="state-banner"]')).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: 'Close Project' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Stop & Close' })).toHaveCount(0);
   await expect
@@ -5266,7 +5266,7 @@ test('previews running project resources with shared menus and explicit keep-run
     await expect.poll(renderedRowHeight).toBeGreaterThanOrEqual(minimumRowHeight);
   };
   await expectPreviewFits(12);
-  await page.screenshot({ path: '/private/tmp/hs2-6c0wzn-project-close-wide-after.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-project-close-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog).toHaveJSProperty('open', true);
   await expectPreviewFits(6);
@@ -5278,8 +5278,8 @@ test('previews running project resources with shared menus and explicit keep-run
       }),
     )
     .toBe(true);
-  await expect(dialog.locator('.project-close-dialog__consequences')).toBeInViewport();
-  await page.screenshot({ path: '/private/tmp/hs2-6c0wzn-project-close-narrow-after.png', fullPage: true });
+  await expect(dialog.locator('[data-project-close-consequences]')).toBeInViewport();
+  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-project-close-phone.png', fullPage: true });
   await dialog.getByRole('button', { name: /Codex chat/ }).click();
   await expect(dialog.getByRole('region', { name: 'Codex chat chat preview' })).toContainText('gpt-6-astra');
   await expect(dialog.getByRole('region', { name: 'Codex chat chat preview' })).toContainText('medium');
@@ -17628,7 +17628,12 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   const dialog = page.locator('[data-component="empty-trash-dialog"]');
   await expect(dialog).toContainText('Permanently remove 1 ticket');
   await expect(dialog).toContainText('Git history will still contain the removed files');
-  await page.screenshot({ path: '/private/tmp/hs2-rdvwzx-empty-trash-confirmation.png', fullPage: true });
+  await settledAnimations(dialog);
+  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-empty-trash-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-empty-trash-phone.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
   expect(emptyRequests).toEqual([]);
@@ -18295,38 +18300,33 @@ test('resolves exact ticket links across projects and shows only a compact ambig
     )
     .toBe(0);
   const chooserGeometry = await choice.evaluate((node) => {
-    const intro = node.querySelector<HTMLElement>('.ticket-link-choice-dialog__body > p')!.getBoundingClientRect(),
-      list = node.querySelector<HTMLElement>('.ticket-link-choice-dialog__matches')!.getBoundingClientRect(),
-      rows = [...node.querySelectorAll<HTMLElement>('.ticket-link-choice-dialog__matches > li > button')].map((row) => {
-        const box = row.getBoundingClientRect(),
-          ticket = row.querySelector<HTMLElement>('.ticket-link-choice-dialog__ticket')!.getBoundingClientRect(),
-          source = row.querySelector<HTMLElement>('.ticket-link-choice-dialog__source')!.getBoundingClientRect();
-        return {
-          top: box.top,
-          bottom: box.bottom,
-          ticketTop: ticket.top,
-          ticketBottom: ticket.bottom,
-          sourceTop: source.top,
-          sourceBottom: source.bottom,
-        };
+    const intro = node.querySelector<HTMLElement>('[data-ticket-choice-intro]')!.getBoundingClientRect(),
+      list = node.querySelector<HTMLElement>('[data-ticket-matches]')!.getBoundingClientRect(),
+      rows = [...node.querySelectorAll<HTMLElement>('[data-action="select-ticket-link-match"]')].map((row) => {
+        const box = row.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom, overflow: row.scrollWidth - row.clientWidth };
       });
     return { introBottom: intro.bottom, listTop: list.top, rows };
   });
   expect(chooserGeometry.listTop - chooserGeometry.introBottom).toBeCloseTo(16, 0);
   expect(chooserGeometry.rows).toHaveLength(2);
   expect(chooserGeometry.rows[1].top).toBeGreaterThanOrEqual(chooserGeometry.rows[0].bottom - 1);
-  for (const row of chooserGeometry.rows) {
-    expect(row.ticketTop).toBeGreaterThanOrEqual(row.top);
-    expect(row.ticketBottom).toBeLessThanOrEqual(row.bottom);
-    expect(row.sourceTop).toBeGreaterThanOrEqual(row.top);
-    expect(row.sourceBottom).toBeLessThanOrEqual(row.bottom);
-  }
-  await page.screenshot({ path: '/private/tmp/hs2-e729wg-ticket-link-choice-wide.png', fullPage: true });
+  for (const row of chooserGeometry.rows) expect(row.overflow).toBeLessThanOrEqual(1);
+  await choice.locator('dialog').screenshot({ path: '/private/tmp/hs2-xb41pf-ticket-link-final-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-e729wg-ticket-link-choice-narrow.png', fullPage: true });
+  await settledAnimations(choice);
+  await expect(choice.locator('[data-component="list-item"]')).toHaveCount(2);
+  const phoneOverflow = await choice.evaluate((node) =>
+    [...node.querySelectorAll<HTMLElement>('[data-action="select-ticket-link-match"]')].map(
+      (row) => row.scrollWidth - row.clientWidth,
+    ),
+  );
+  expect(phoneOverflow.every((overflow) => overflow <= 1)).toBe(true);
+  await choice.locator('dialog').screenshot({ path: '/private/tmp/hs2-xb41pf-ticket-link-final-phone.png' });
   await page.setViewportSize({ width: 1180, height: 760 });
-  await choice.getByRole('button').filter({ hasText: 'Other shared ticket' }).click();
+  const chosenSource = choice.getByRole('button').filter({ hasText: 'Other shared ticket' });
+  await chosenSource.focus();
+  await page.keyboard.press('Enter');
   linked = page.getByRole('dialog', { name: 'Read and edit HS2-SHARED1 in other' });
   await expect(linked).toContainText('Chosen cross-project destination.');
   await expect(page.getByRole('tab', { name: 'demo' })).toHaveAttribute('aria-selected', 'true');
@@ -18472,6 +18472,8 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   await menu.locator('[data-context-action="Add tag"]').click();
   let dialog = page.locator('[data-component="bulk-tag-dialog"]');
   await expect(dialog).toContainText('Add tag — 2 selected');
+  await settledAnimations(dialog);
+  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-add-wide.png', fullPage: true });
   await page.getByRole('textbox', { name: 'Tag to add *' }).fill('regression');
   await dialog.getByRole('button', { name: 'Add tag' }).click();
   await expect
@@ -18485,6 +18487,12 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   await menu.locator('[data-context-action="Remove tag"]').click();
   dialog = page.locator('[data-component="bulk-tag-dialog"]');
   await expect(dialog).toContainText('Remove tag — 2 selected');
+  await settledAnimations(dialog);
+  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-remove-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-remove-phone.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await dialog.getByRole('button', { name: 'client' }).click();
   await dialog.getByRole('button', { name: 'Remove tag' }).click();
   await expect
@@ -18498,10 +18506,10 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   const deletion = page.locator('[data-component="bulk-delete-dialog"]');
   await expect(deletion).toContainText('Delete 2 tickets?');
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-x7vkyj-bulk-delete-wide.png' });
+  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-delete-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-x7vkyj-bulk-delete-narrow.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-delete-phone.png', fullPage: true });
   await deletion.getByRole('button', { name: 'Delete 2 tickets' }).click();
   await expect.poll(() => patches.filter((patch) => patch.status === 'deleted').length).toBe(2);
   await expect(first).toHaveCount(0);
