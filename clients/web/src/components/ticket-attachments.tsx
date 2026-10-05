@@ -114,6 +114,7 @@ export function TicketAttachments({
    * repository (HS2-HSA64D) adds files but shows existing ones read-only, opened by link.
    */
   editable?: boolean;
+  /** Operation status, or the reason attachment actions are disabled on this surface. */
   message?: string;
   presentation?: TicketInspectorPanelPresentation;
   /**
@@ -321,9 +322,11 @@ export function TicketAttachments({
             <input type="file" name="ticket-attachments" multiple aria-label="Drop or browse attachments" />
           </label>
         ) : (
-          <p class="ticket-attachments__unsupported">This provider does not support attachment actions.</p>
+          <p class="ticket-attachments__unsupported">
+            {message || 'This provider does not support attachment actions.'}
+          </p>
         )}
-        {message && (
+        {enabled && message && (
           <p class="ticket-attachments__status" role="status">
             {message}
           </p>

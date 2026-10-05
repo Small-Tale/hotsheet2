@@ -246,6 +246,38 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(appendOnly).toContain('data-action="open-attachment-gallery"');
   });
 
+  it('keeps labelled batches immutable on a disabled reader despite provider edit support (HS2-QZFZA8)', () => {
+    const markup = String(
+      TicketAttachments({
+        attachments: [
+          {
+            id: 'linked',
+            name: 'linked.png',
+            batch_id: 'batch',
+            batch_label: 'Linked evidence',
+            purpose: 'problem_evidence',
+          },
+        ],
+        enabled: false,
+        editable: true,
+        editingLabelBatch: 'batch',
+        editingLabelDraft: 'Unreachable draft',
+        message: 'Attachments are view-only in linked ticket readers.',
+      }),
+    );
+    expect(markup).toContain('<h3 class="ticket-attachments__batch-title">Linked evidence</h3>');
+    expect(markup).toContain('value="Linked evidence"');
+    expect(markup).not.toContain('Unreachable draft');
+    expect(markup).not.toContain('data-editing-label');
+    expect(markup).not.toContain('data-action="edit-attachment-batch-label"');
+    expect(markup).not.toContain('data-attachment-group-drop-target');
+    expect(markup).not.toContain('data-drag-attachment-id');
+    expect(markup).toMatch(/name="attachment-batch-label" disabled/);
+    expect(markup).toMatch(/name="attachment-batch-purpose"[^>]* disabled/);
+    expect(markup).toContain('Attachments are view-only in linked ticket readers.');
+    expect(markup).not.toContain('This provider does not support');
+  });
+
   it('shows videos in the media grid without starting playback', () => {
     const attachments = String(
       TicketAttachments({

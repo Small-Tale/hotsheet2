@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import type { Attachment } from '../src/api';
+
 const projects = {
   source: {
     id: 'source-project',
@@ -85,7 +87,7 @@ async function mockLayeredProjects(
   page: Page,
   mutations: Array<{ projectId: string; ticketId: string; patch: Record<string, unknown> }> = [],
   rejectMutations = false,
-  attachmentsFor: Record<string, Array<{ id: string; filename: string; created_at: string }>> = {},
+  attachmentsFor: Record<string, Attachment[]> = {},
 ) {
   const chooser = ['/work/target', '/work/deep'];
   await page.route('**/*', async (route) => {
@@ -117,6 +119,7 @@ async function mockLayeredProjects(
               note_edit: true,
               note_delete: true,
               attachments: true,
+              attachment_edit: true,
               assignment: true,
               review_requests: true,
               dependencies: true,
@@ -378,6 +381,73 @@ test('edits same-slug linked readers through their owning project and flushes be
     'data-ticket-slug',
     'KF-ROOT01',
   );
+});
+
+test('keeps linked reader attachment batches read-only even with an editable provider (HS2-QZFZA8)', async ({
+  page,
+}) => {
+  const attachmentWrites: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/attachments') && request.method() !== 'GET') attachmentWrites.push(request.url());
+  });
+  await mockLayeredProjects(page, [], false, {
+    source: [
+      {
+        id: 'SOURCE',
+        filename: 'source.png',
+        created_at: '2026-09-11T00:02:00Z',
+        batch_id: 'source-batch',
+        batch_label: 'Workspace evidence',
+        purpose: 'reference',
+      },
+    ],
+    target: [
+      {
+        id: 'LINKED',
+        filename: 'linked.png',
+        created_at: '2026-09-11T00:02:00Z',
+        batch_id: 'linked-batch',
+        batch_label: 'Linked evidence',
+        purpose: 'problem_evidence',
+      },
+    ],
+  });
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await openProjects(page);
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();
+  const workspaceReader = page.getByRole('dialog', { name: 'Read and edit KF-ROOT01 in Kerf' });
+  await workspaceReader.getByRole('link', { name: '@target-project/HS2-LINK01' }).click();
+  const linked = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Hot Sheet 2' });
+  await linked.getByRole('tab', { name: /Attachments/ }).click();
+  const batch = linked.locator('[data-attachment-batch="linked-batch"]');
+  await expect(linked.getByText('Attachments are view-only in linked ticket readers.')).toBeVisible();
+  await expect(linked.getByText('This provider does not support attachment actions.')).toHaveCount(0);
+  await expect(batch.getByRole('heading', { name: 'Linked evidence' })).toBeVisible();
+  await expect(batch.locator('[name="attachment-batch-label"]')).toBeDisabled();
+  await expect(batch.locator('[name="attachment-batch-purpose"]')).toBeDisabled();
+  await expect(batch.locator('[name="attachment-batch-purpose"]')).toHaveValue('problem_evidence');
+  await expect(linked.locator('[data-action="edit-attachment-batch-label"]')).toHaveCount(0);
+  await expect(
+    linked.locator(
+      '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target], [data-drag-attachment-id]',
+    ),
+  ).toHaveCount(0);
+  await batch.getByRole('heading', { name: 'Linked evidence' }).dblclick();
+  await expect(batch.locator('[name="attachment-batch-label"]')).not.toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('linked-batch-readonly-wide.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(batch.getByRole('heading', { name: 'Linked evidence' })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('linked-batch-readonly-phone.png') });
+  await linked.getByRole('button', { name: 'Close ticket reader' }).click();
+  await workspaceReader.getByRole('tab', { name: /Attachments/ }).click();
+  await expect(workspaceReader.getByRole('button', { name: 'Edit batch label Workspace evidence' })).toBeVisible();
+  await expect(workspaceReader.locator('[name="attachment-batch-purpose"]')).toBeEnabled();
+  await expect(workspaceReader.locator('[name="attachment-batch-purpose"]')).toHaveValue('reference');
+  await workspaceReader.getByRole('button', { name: 'Close ticket reader' }).click();
+  expect(attachmentWrites).toEqual([]);
+  expect(
+    await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes('attachment_label'))),
+  ).toEqual([]);
 });
 
 test('opens media from a stacked linked reader in the gallery for that reader ticket (HS2-97E0QR)', async ({

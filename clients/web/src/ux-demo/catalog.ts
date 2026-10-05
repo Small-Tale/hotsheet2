@@ -323,7 +323,7 @@ export const demoCatalog: DemoCategory[] = [
           demo(
             'ticket-attachments',
             'TicketAttachments',
-            'Ticket attachment inspector section.',
+            'Ticket attachment inspector section, including editable, append-only, unsupported, and linked-reader states.',
             'feature-floor',
             true,
             ['attachment-gallery'],

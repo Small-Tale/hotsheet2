@@ -706,9 +706,9 @@
       "name": "TicketAttachments",
       "source": "src/components/ticket-attachments.tsx",
       "kind": "component",
-      "purpose": "Ticket attachment inspector section.",
+      "purpose": "Ticket attachment inspector section, including editable, append-only, unsupported, and linked-reader states.",
       "useWhen": [
-        "Hot Sheet needs ticket attachment inspector section."
+        "Hot Sheet needs ticket attachment inspector section, including editable, append-only, unsupported, and linked-reader states."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketAttachments behavior."

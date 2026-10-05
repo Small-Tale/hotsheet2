@@ -4107,7 +4107,7 @@ export async function startHotSheetWebClient() {
         expandedCodeReviewCommits={editable ? expandedCodeReviewCommits.value : []}
         attachmentsEnabled={editable && canUseAttachments()}
         attachmentsEditable={editable && canEditAttachments()}
-        attachmentMessage={editable ? attachmentMessage.value : ''}
+        attachmentMessage={editable ? attachmentMessage.value : 'Attachments are view-only in linked ticket readers.'}
         attachmentLabelEditing={attachmentLabelEditingKey(attachmentLabelEditing.value, readerScope)}
         attachmentLabelDraft={attachmentLabelEditingDraft(attachmentLabelEditing.value, readerScope)}
         largeText={readerLargeText.value}

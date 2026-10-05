@@ -1439,6 +1439,9 @@ and identity-less legacy entries remain conservatively blocking.
   ordinary text so the legacy exception does not broaden the general slug grammar.
   Close or Escape removes one layer and restores focus to the link that opened it; unwinding
   the final linked layer returns to the unchanged inspector or editable workspace reader.
+  Linked reader attachment batches remain view-only even when their provider supports
+  editing: label and purpose controls are disabled, and no relabel or regroup action is
+  exposed (HS2-QZFZA8). Media still opens from that linked ticket in its own gallery.
   References already inside Markdown links, inline/fenced code, or attachment controls
   remain unchanged.
 

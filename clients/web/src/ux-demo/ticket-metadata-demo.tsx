@@ -278,6 +278,14 @@ export function TicketAttachmentsDemo() {
       <section class="inspector-panel-demo" aria-label="Unsupported TicketAttachments demo">
         <TicketAttachments attachments={appendOnlyAttachmentDemoItems} enabled={false} />
       </section>
+      <h2>Linked reader</h2>
+      <section class="inspector-panel-demo" aria-label="Linked reader TicketAttachments demo">
+        <TicketAttachments
+          attachments={appendOnlyAttachmentDemoItems}
+          enabled={false}
+          message="Attachments are view-only in linked ticket readers."
+        />
+      </section>
     </div>
   );
 }
