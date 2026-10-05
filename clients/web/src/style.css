@@ -23,18 +23,12 @@ body,
   height: 100dvh;
   overflow: clip;
 }
-/* Neutral floating chrome; the danger .app-error variant lives in components/app-error.css. */
-.app-loading,
-.app-toast {
+/* Fixed loading location; StateBanner owns its feedback presentation. */
+.app-loading {
   position: fixed;
   z-index: 1000;
   right: remify(16px);
   bottom: remify(16px);
-  padding: remify(10.4px) remify(13.6px);
-  border-radius: var(--wa-border-radius-m);
-  box-shadow: var(--wa-shadow-l);
-  background: var(--wa-color-neutral-fill-loud);
-  color: var(--wa-color-neutral-on-loud);
 }
 /* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
    (owned by ticket-inspector.tsx since HS2-XBHADT), which replaced the earlier dimmed-stale-inspector overlay

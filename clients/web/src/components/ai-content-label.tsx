@@ -1,6 +1,7 @@
 import './ai-content-label.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Text } from '@kerfjs/ui/text';
 import { Sparkles, ThumbsDown, ThumbsUp } from 'lucide';
 
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -59,8 +60,10 @@ export function AIContentLabel({
     >
       <span class="ai-content-label__attribution">
         <LucideIcon size="xs" icon={Sparkles} name="sparkles" />
-        {attribution}
-        {mayContainErrors && <span> · may contain errors</span>}
+        <Text variant="span" size="compact" tone={tone === 'quiet' ? 'quiet' : 'default'}>
+          {attribution}
+          {mayContainErrors && <span> · may contain errors</span>}
+        </Text>
       </span>
       {feedbackTarget && <AIContentFeedback tool={tool} feedbackTarget={feedbackTarget} />}
     </span>

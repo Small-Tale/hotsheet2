@@ -1,8 +1,9 @@
 import '@awesome.me/webawesome/dist/components/progress-ring/progress-ring.js';
 import './active-claim.css';
 
-import { type CssForegroundColor, foregroundColorVar, uiColor } from '@kerfjs/ui/css-values';
+import { type CssForegroundColor, foregroundColorVar } from '@kerfjs/ui/css-values';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
 
@@ -43,12 +44,14 @@ export interface LiveClaimNoticeProps {
 export function LiveClaimNotice({ agentName, eta }: LiveClaimNoticeProps) {
   const label = `${agentName} is actively working on this ticket`;
   return (
-    <div class="live-claim-notice" role="status" data-component="live-claim-notice" title={label}>
-      <ActiveClaimSpinner label={label} color={uiColor('brand-on-quiet')} />
-      <span class="live-claim-notice__text">
-        <span class="live-claim-notice__agent">{agentName}</span> is working on this
-      </span>
-      {eta && <ClaimEta eta={eta} />}
+    <div class="live-claim-notice" data-component="live-claim-notice" title={label}>
+      <StateBanner
+        title={`${agentName} is working on this`}
+        tone="info"
+        urgency="status"
+        icon={<ActiveClaimSpinner label={label} color={foregroundColorVar('--kui-state-banner-info-foreground')} />}
+        action={eta ? <ClaimEta eta={eta} /> : undefined}
+      />
     </div>
   );
 }

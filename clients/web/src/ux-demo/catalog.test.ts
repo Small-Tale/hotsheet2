@@ -149,6 +149,7 @@ describe('UX demo catalog', () => {
       'terminal-edit-menu',
       'terminal-rename-dialog',
       'app-empty-state',
+      'app-error',
       'content-transition',
       'app-tab',
       'select',
@@ -376,7 +377,6 @@ describe('UX demo catalog', () => {
     const EXEMPT: Record<string, string> = {
       'active-claim':
         'Live-claim spinner, ETA, and header notice rendered within TicketRow and TicketInspector (both demo every claim state).',
-      'app-error': 'Transient top-level error banner, not a standalone catalog surface.',
       'main-shell': 'Typed application configuration boundary around the cataloged AppShell.',
       'sidebar-panel': 'Panel-parts contract and standalone Pane wrapper behind the cataloged sidebars and AppShell.',
       'notification-inspector': 'Empty notification-mode inspector chrome rendered within the cataloged AppShell.',

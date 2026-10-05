@@ -1,7 +1,10 @@
 // The shell renders the shared app-heading presentation (main.tsx loads it first).
 import '../components/heading.css';
+import '@awesome.me/webawesome/dist/components/toast/toast.js';
 
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
@@ -339,6 +342,7 @@ import {
   type TicketView,
   ticketViewQuery,
 } from '../ticket-views';
+import { createToastLifetime } from '../toast-lifetime';
 import { createTrackedSizeObserver } from '../tracked-size-observer';
 import { createTrailingTask } from '../trailing-task';
 import { renderStormSuppressionReason } from '../ui-stability-diagnostics';
@@ -611,7 +615,6 @@ export async function startHotSheetWebClient() {
   const storedWorkspacePreferences = loadWorkspacePreferences(localStorage);
   const loading = signal(false),
     error = signal(''),
-    toastMessage = signal(''),
     viewMode = signal<WorkspaceViewMode>(storedWorkspacePreferences.viewMode),
     // The list/columns view the user last had open, so Notifications or Settings can hand back to it (HS2-42T028).
     ticketViewMode = signal<SortableWorkspaceViewMode>(storedWorkspacePreferences.ticketViewMode),
@@ -688,14 +691,28 @@ export async function startHotSheetWebClient() {
       };
     },
   };
-  let toastTimer: number | undefined;
+  const toastHost = document.createElement('wa-toast');
+  let activeToastItem: (HTMLElement & { hide(): Promise<void> }) | undefined;
+  const toastLifetime = createToastLifetime((state) => {
+    if (!toastHost.isConnected) return;
+    if (!state.message) {
+      if (activeToastItem) void activeToastItem.hide();
+      return;
+    }
+    activeToastItem?.remove();
+    const item = document.createElement('wa-toast-item');
+    item.duration = 0;
+    item.variant = 'neutral';
+    item.dataset.toastGeneration = String(state.generation);
+    const text = document.createElement('span');
+    text.className = 'app-toast';
+    text.textContent = state.message;
+    item.append(text);
+    activeToastItem = item;
+    toastHost.append(item);
+  });
   function showToast(message: string) {
-    toastMessage.value = message;
-    if (toastTimer !== undefined) window.clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => {
-      toastMessage.value = '';
-      toastTimer = undefined;
-    }, 2_500);
+    toastLifetime.show(message);
   }
   const activeTicketCount = signal(0),
     projectTabClaimClock = signal(Date.now()),
@@ -5105,13 +5122,13 @@ export async function startHotSheetWebClient() {
         <AttachmentContextMenuSurface menu={attachmentMenuSurfaceProps()} />
         <AppTabMenuSurface menu={appTabContextMenu.value} />
         {showCornerLoading && (
-          <div class="app-loading" role="status">
-            Loading…
-          </div>
-        )}
-        {toastMessage.value && (
-          <div class="app-toast" role="status">
-            {toastMessage.value}
+          <div class="app-loading">
+            <StateBanner
+              title="Loading…"
+              tone="neutral"
+              urgency="status"
+              icon={<LoadingSpinner label="Loading project" size={16.8} />}
+            />
           </div>
         )}
         {error.value && project() && <AppError message={error.value} />}
@@ -5119,6 +5136,17 @@ export async function startHotSheetWebClient() {
     );
   }
   mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
+  toastHost.className = 'app-toast-stack';
+  (toastHost as HTMLElement & { placement: string }).placement = 'bottom-end';
+  document.body.append(toastHost);
+  const onToastHide = (event: Event) => {
+    const item = event.target;
+    if (!(item instanceof HTMLElement) || !item.matches('wa-toast-item[data-toast-generation]')) return;
+    if (item !== activeToastItem) return;
+    activeToastItem = undefined;
+    toastLifetime.hide(Number(item.dataset.toastGeneration));
+  };
+  toastHost.addEventListener('wa-after-hide', onToastHide);
   // Kerf drives the shell rails' resizing and persistence (HS2-P289N2) and, through their `collapsed`
   // signals, the phone overlays' exclusivity, Escape/outside-press dismissal, focus trap, and focus
   // return (HS2-Y1B1Y1); the terminal drawer keeps the app's own drag for its measured maximum and
@@ -5527,5 +5555,13 @@ export async function startHotSheetWebClient() {
       projectRestorePendingRoots.value = [];
     }
   })();
-  return { appRoot, disposeInteractions };
+  return {
+    appRoot,
+    disposeInteractions: () => {
+      toastHost.removeEventListener('wa-after-hide', onToastHide);
+      toastHost.remove();
+      toastLifetime.dispose();
+      disposeInteractions();
+    },
+  };
 }

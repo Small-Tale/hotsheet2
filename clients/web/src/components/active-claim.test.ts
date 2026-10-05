@@ -40,8 +40,10 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     );
     expect(withEta).toContain('data-component="live-claim-notice"');
     expect(withEta).toContain('role="status"');
-    expect(withEta).toContain('<span class="live-claim-notice__agent">Claude worker</span> is working on this');
-    expect(withEta).toContain('var(--kui-color-brand-on-quiet)');
+    expect(withEta).toContain('data-component="state-banner"');
+    expect(withEta).toContain('data-tone="info"');
+    expect(withEta).toContain('<strong>Claude worker is working on this</strong>');
+    expect(withEta).toContain('var(--kui-state-banner-info-foreground)');
     expect(withEta).toContain('data-claim-eta="estimate"');
     const withoutEta = String(LiveClaimNotice({ agentName: 'codex-01' }));
     expect(withoutEta).toContain('codex-01');
@@ -52,6 +54,7 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'active-claim.css'), 'utf8');
     for (const selector of ['.claim-eta', '.claim-eta__ring', '.live-claim-notice'])
       expect(css).toContain(`${selector} {`);
+    expect(css).not.toContain('.kui-state-banner');
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     expect(rowCss).not.toContain('.ticket-list-row__eta');
   });

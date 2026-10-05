@@ -13,11 +13,12 @@ describe('AIContentLabel', () => {
     expect(markup).toContain('data-ai-feedback-target="note:one"');
   });
   it('exposes the inherit tone as a variant instead of consumer color overrides', () => {
-    expect(String(AIContentLabel({}))).not.toContain('data-tone');
-    expect(String(AIContentLabel({ tone: 'quiet' }))).not.toContain('data-tone');
+    expect(String(AIContentLabel({}))).toContain('data-component="text" data-tone="quiet"');
+    expect(String(AIContentLabel({ tone: 'quiet' }))).toContain('data-component="text" data-tone="quiet"');
     expect(String(AIContentLabel({ tone: 'inherit' }))).toContain('data-tone="inherit"');
+    expect(String(AIContentLabel({ tone: 'inherit' }))).toContain('data-component="text" data-tone="default"');
     const css = readFileSync(new URL('./ai-content-label.css', import.meta.url), 'utf8');
-    expect(css).toMatchSource(/\.ai-content-label\[data-tone='inherit'\] \{ color: inherit/);
+    expect(css).not.toContain('.kui-text');
   });
   it('uses semantic spacing while keeping feedback targets and glyphs explicit geometry', () => {
     const css = readFileSync(new URL('./ai-content-label.css', import.meta.url), 'utf8');

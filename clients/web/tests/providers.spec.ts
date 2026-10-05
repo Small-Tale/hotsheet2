@@ -7404,6 +7404,9 @@ test('browses repository files and commits with host-native actions', async ({ p
   await expect(repositoryNavigation.getByRole('button', { name: /Commits 24/ })).toBeInViewport({ ratio: 1 });
   await repositoryNavigation.getByText('Branch').scrollIntoViewIfNeeded();
   await expect(repositoryNavigation.getByText('Branch')).toBeInViewport({ ratio: 1 });
+  // This ordinary navigation flow waits for Kerf's outgoing detail to leave before reopening it.
+  // Rapid pop/push view reuse is independently tracked by HS2-BED455.
+  await expect(popover.locator('[data-nav-exiting="true"]')).toHaveCount(0);
   // Choosing Commits pushes its detail again, with the comparison still active.
   await repositoryNavigation.getByRole('button', { name: /Commits 24/ }).click();
   await expect(back).toBeInViewport({ ratio: 1 });
@@ -10413,7 +10416,7 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
     queue = sidebar.locator('[data-action="select-view"][data-item-id="all"]'),
     queueIcon = queue.locator('.kui-list-item__icon'),
     queueLabel = queue.locator('.kui-list-item__label'),
-    viewsTitle = sidebar.locator('.view-navigation > .kui-list-header h2'),
+    viewsTitle = sidebar.getByRole('heading', { name: 'Views', exact: true }),
     viewActionLayer = sidebar.getByRole('button', { name: 'Add view' }),
     hideLayer = sidebar.locator('.kui-pane__header > .kui-toolbar .kui-toolbar-control-group'),
     chat = sidebar.getByRole('button', { name: 'Open Codex conversation' });
@@ -12673,16 +12676,18 @@ test('shows Trash below Archive and restores deleted tickets through the real ti
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const navigation = page.locator('[data-component="view-navigation"]'),
     labels = () =>
-      navigation.locator('li').evaluateAll((items) => items.map((item) => item.textContent.replace(/\d+/g, '').trim()));
+      navigation
+        .locator('[data-action="select-view"]')
+        .evaluateAll((items) => items.map((item) => item.textContent.replace(/\d+/g, '').trim()));
   await expect.poll(labels).toEqual(expect.arrayContaining(['Archive', 'Trash']));
   const order = await labels();
   expect(order.indexOf('Trash')).toBe(order.indexOf('Archive') + 1);
-  const trashItem = navigation.locator('li').filter({ hasText: 'Trash' });
+  const trashItem = navigation.getByRole('button', { name: /^Trash/ });
   await expect(trashItem.locator('[data-lucide="trash-2"]')).toBeVisible();
   await expect(trashItem).toContainText('1');
-  await navigation.locator('li').filter({ hasText: 'Archive' }).getByRole('button').first().click();
+  await navigation.getByRole('button', { name: /^Archive/ }).click();
   await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toHaveCount(0);
-  await trashItem.getByRole('button').first().click();
+  await trashItem.click();
   const deleted = page.locator('[data-ticket-slug="HS2-DEL001"]');
   await expect(deleted).toBeVisible();
   await expect(deleted).toHaveAttribute('data-status', 'deleted');
@@ -12702,9 +12707,9 @@ test('shows Trash below Archive and restores deleted tickets through the real ti
   await expect(deleted).toHaveCount(0);
   // Trash stays while selected so restoring the last ticket does not yank the view away; leaving it hides the empty Trash.
   await expect(trashItem).toBeVisible();
-  await navigation.locator('li').filter({ hasText: 'Queue' }).getByRole('button').first().click();
+  await navigation.getByRole('button', { name: /^Queue/ }).click();
   await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
-  await expect(navigation.locator('li').filter({ hasText: 'Trash' })).toHaveCount(0);
+  await expect(trashItem).toHaveCount(0);
   await page.setViewportSize({ width: 760, height: 640 });
   await page.screenshot({ path: '/private/tmp/hs2-mwdr19-restored-queue-narrow.png' });
 });
@@ -14884,9 +14889,10 @@ test('generates video posters in the browser for uploads and lazy backfills with
     .setInputFiles({ name: 'uploaded.webm', mimeType: 'video/webm', buffer: Buffer.from(portableVideo) });
   await expect.poll(() => posters.has('VIDEO3')).toBe(true);
   expect(posters.get('VIDEO3')!.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
-  await expect(
-    page.getByRole('button', { name: 'Open uploaded.webm in media gallery' }).locator('video'),
-  ).toHaveAttribute('poster', /VIDEO3\/thumbnail$/);
+  const uploaded = page.getByRole('button', { name: 'Open uploaded.webm in media gallery' }).locator('video');
+  await expect(uploaded).toHaveAttribute('data-video-poster-url', /VIDEO3\/thumbnail$/);
+  await expect(uploaded).toHaveAttribute('poster', /^blob:/);
+  await expect(uploaded).not.toHaveAttribute('src', /.+/);
 });
 
 test('releases video resources and event work after repeated gallery playback cycles', async ({ page }) => {
@@ -20077,7 +20083,7 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
     'GET /__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/trash-settings',
     'PUT /__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/trash-settings',
   ]);
-  await expect(page.getByText('Trash retention saved.')).toBeVisible();
+  await expect(page.locator('wa-toast-item .app-toast')).toHaveText('Trash retention saved.');
   await page.screenshot({ path: '/private/tmp/hs2-ew2wxa-trash-retention-wide.png', fullPage: true });
   await page.getByLabel('List view').click();
   await page.getByLabel('Settings view').click();

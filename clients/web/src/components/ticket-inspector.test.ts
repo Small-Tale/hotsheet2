@@ -242,7 +242,8 @@ describe('TicketInspector', () => {
         },
       }),
     );
-    expect(working).toContain('<span class="live-claim-notice__agent">Codex</span> is working on this');
+    expect(working).toContain('Codex is working on this');
+    expect(working).toContain('data-component="state-banner"');
     expect(working).toContain('data-claim-eta="estimate"');
     // The live-work notice leads the header notices, above Needs review.
     expect(working.indexOf('data-component="live-claim-notice"')).toBeLessThan(

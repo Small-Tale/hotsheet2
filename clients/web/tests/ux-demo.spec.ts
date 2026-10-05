@@ -2067,6 +2067,26 @@ test('demonstrates the production Not Working dialog and pending evidence picker
   await expect(page.getByText('Ticket returned to Not Started and added to Up Next.')).toBeVisible();
 });
 
+test('previews and dismisses the application danger banner at wide and phone widths (HS2-KEHG7H)', async ({ page }) => {
+  await page.goto('/ux-demo?component=app-error');
+  const error = page.locator('[data-component="app-error"]');
+  for (const width of [1100, 390]) {
+    await page.setViewportSize({ width, height: 760 });
+    await expect(error).toHaveAttribute('data-component', 'app-error');
+    await expect(error.getByRole('alert')).toContainText('The project could not be opened.');
+    const box = await error.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    const copyBox = await error.locator('.kui-state-banner__copy').boundingBox();
+    const actionBox = await error.locator('.kui-state-banner__action').boundingBox();
+    expect(actionBox!.y).toBeGreaterThanOrEqual(copyBox!.y + copyBox!.height);
+    await page.screenshot({ path: test.info().outputPath(`app-error-${width}.png`) });
+    await error.getByRole('button', { name: 'Dismiss error' }).click();
+    await expect(error).toHaveCount(0);
+    await page.getByRole('button', { name: 'Show error' }).click();
+  }
+});
+
 test('switches the TicketInspector live-claim header through every claim state (HS2-QKNQXC)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
   await page.goto('/ux-demo?component=ticket-inspector');
@@ -2100,7 +2120,7 @@ test('switches the TicketInspector live-claim header through every claim state (
   expect(claimSpinner!.height).toBeCloseTo(16.8, 1);
   // The public color prop preserves the notice tone without an app tint wrapper (HS2-TEM5XY).
   const noticeColors = await notice.evaluate((node) => ({
-    notice: getComputedStyle(node).color,
+    notice: getComputedStyle(node.querySelector('[data-component="state-banner"]')!).color,
     spinner: getComputedStyle(node.querySelector('[data-component="loading-spinner"]')!).color,
   }));
   expect(noticeColors.spinner).toBe(noticeColors.notice);

@@ -263,8 +263,18 @@ test('exposes the phone text-size control in drawer focus mode, cycling with a t
   await drawer.screenshot({ path: testInfo.outputPath('drawer-focus-text-size.png') });
   const before = await textSize.getAttribute('data-columns');
   await textSize.click();
-  await expect(page.locator('.app-toast')).toHaveText(/^Terminal text size: \d+ columns$/);
+  const toast = page.locator('.app-toast');
+  await expect(toast).toHaveText(/^Terminal text size: \d+ columns$/);
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: testInfo.outputPath('app-toast-phone.png') });
   await expect(textSize).not.toHaveAttribute('data-columns', before!);
+  await page.waitForTimeout(1_000);
+  const firstMessage = await toast.textContent();
+  await textSize.click();
+  await expect(toast).not.toHaveText(firstMessage!);
+  await page.waitForTimeout(1_650);
+  await expect(toast).toBeVisible(); // The first toast's timeout cannot clear its replacement.
+  await expect(toast).toHaveCount(0, { timeout: 1_500 });
   // Hidden while the virtual keyboard is presented, then shown again when it hides.
   await page.evaluate(() => {
     (window as unknown as { __setVisualViewport: (h: number) => void }).__setVisualViewport(420);
@@ -274,6 +284,23 @@ test('exposes the phone text-size control in drawer focus mode, cycling with a t
     (window as unknown as { __setVisualViewport: (h: number) => void }).__setVisualViewport(844);
   });
   await expect(textSize).toBeVisible();
+  await textSize.click();
+  await expect(toast).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(toast).toHaveCount(0);
+});
+
+test('shows the application toast through Web Awesome at a wide viewport (HS2-KEHG7H)', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await openDemoProject(page);
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-M1"]').click();
+  await page.getByRole('button', { name: 'Copy ticket number HS2-M1' }).click();
+  const toast = page.locator('wa-toast-item:has(.app-toast)');
+  await expect(toast).toBeVisible();
+  await expect(toast.locator('.app-toast')).toContainText('HS2-M1');
+  await expect(page.locator('wa-toast')).toHaveAttribute('placement', 'bottom-end');
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: testInfo.outputPath('app-toast-wide.png') });
 });
 
 test('mobile viewport uses a single-column layout with overlay sidebars, one at a time (HS2-ZK51WP)', async ({

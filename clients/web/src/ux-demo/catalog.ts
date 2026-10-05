@@ -694,6 +694,14 @@ export const demoCatalog: DemoCategory[] = [
         true,
       ),
       demo(
+        'app-error',
+        'AppError',
+        'Dismissible application failure with Kerf danger feedback at the screen edge.',
+        'feature-floor',
+        true,
+        ['state-banner'],
+      ),
+      demo(
         'content-transition',
         'ContentTransition',
         'Reusable A/B push and crossfade transitions with block or end-aligned action-row side layouts.',

@@ -43,6 +43,7 @@ import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from '
 import type { ProviderAccount } from '../api';
 import type { CommandDropTarget } from '../command-order';
 import { AppEmptyState, AppMessageState, ProjectRestoreState } from '../components/app-empty-state';
+import { AppError } from '../components/app-error';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
@@ -515,6 +516,7 @@ const TERMINAL_DRAWER_DEMO_PROVIDERS = [
 const fromUrl = () => new URL(location.href).searchParams.get('component') ?? defaultDemo;
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
+const appErrorDemoVisible = signal(true);
 type TicketSourceScenario =
   | 'root'
   | 'signed-out'
@@ -1361,6 +1363,15 @@ function demoContent(item: DemoDefinition) {
         <AppMessageState title="Project unavailable" message="Open another project to continue working." />
       </section>
     );
+  if (item.id === 'app-error')
+    return (
+      <section aria-label="Application error feedback">
+        <button type="button" data-app-error-demo-show>
+          Show error
+        </button>
+        {appErrorDemoVisible.value && <AppError message="The project could not be opened. Try again." />}
+      </section>
+    );
   if (item.id === 'note-card') return <NoteCardDemo />;
   if (item.id === 'note-composer') return <NoteComposerDemo />;
   if (item.id === 'ticket-reader') return <TicketReaderDemo />;
@@ -1772,6 +1783,16 @@ demoListeners.add(
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.toggleDevReview.selector, () => {
     void setDevReview(!devReviewOn.value);
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', '[data-app-error-demo-show]', () => {
+    appErrorDemoVisible.value = true;
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', '[data-component="app-error"] [data-action="dismiss-app-error"]', () => {
+    appErrorDemoVisible.value = false;
   }),
 );
 function commandEditorRowId(target: Element): string | undefined {

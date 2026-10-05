@@ -16,23 +16,5 @@
   --track-color: var(--wa-color-neutral-fill-normal);
 }
 .live-claim-notice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--kui-space-xs);
   margin: 0 var(--kui-space-xs) var(--kui-space-m);
-  padding: var(--kui-space-xs);
-  border: 1px solid var(--wa-color-brand-border-quiet);
-  border-radius: remify(8px);
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 600;
-}
-.live-claim-notice__text {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.live-claim-notice .claim-eta {
-  margin-inline-start: auto;
 }

@@ -36,7 +36,7 @@ test('does not offer unsafe restart for an old server', async ({ page }) => {
     sourceStale: false,
     canRestartServer: false,
   });
-  const banner = page.locator('[data-component="state-banner"]');
+  const banner = page.locator('.connection-state-banner');
   await expect(banner).toContainText('Server update required');
   await expect(banner).toContainText('Safe restart is unavailable');
   await expect(banner.getByRole('button', { name: /Restart/ })).toHaveCount(0);
@@ -50,7 +50,7 @@ test('offers reload when the client is too old', async ({ page }) => {
     sourceStale: false,
     canRestartServer: false,
   });
-  await expect(page.locator('[data-component="state-banner"]')).toContainText('Client update required');
+  await expect(page.locator('.connection-state-banner')).toContainText('Client update required');
   await expect(page.getByRole('button', { name: 'Reload client' })).toBeVisible();
 });
 
@@ -62,7 +62,7 @@ test('surfaces unavailable compatibility metadata without blocking project data'
     sourceStale: false,
     canRestartServer: false,
   });
-  await expect(page.locator('[data-component="state-banner"]')).toContainText('Server compatibility unknown');
+  await expect(page.locator('.connection-state-banner')).toContainText('Server compatibility unknown');
   await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
 });
 
@@ -73,7 +73,7 @@ test('surfaces a compatible detached server from another development revision', 
     sourceStale: false,
     canRestartServer: false,
   });
-  const banner = page.locator('[data-component="state-banner"]');
+  const banner = page.locator('.connection-state-banner');
   await expect(banner).toContainText('Different server build is running');
   await expect(banner).toContainText('protocol is compatible');
 });
@@ -97,7 +97,7 @@ test('tells development users to restart a server built from older local source'
       started_at: '2026-09-02T08:00:00Z',
     },
   });
-  const banner = page.locator('[data-component="state-banner"]');
+  const banner = page.locator('.connection-state-banner');
   await expect(banner).toContainText('Different server build is running');
   await expect(banner).toContainText('Rebuild if needed, then restart it to pick up your latest build');
   await banner.getByRole('button', { name: 'View details' }).click();

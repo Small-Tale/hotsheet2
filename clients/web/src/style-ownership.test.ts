@@ -34,8 +34,8 @@ describe('global stylesheet ownership', () => {
     expect(global).toContain("@import '@kerfjs/ui/document.css'");
     expect(global).not.toContain('font-family:');
     expect(global).not.toContain('box-sizing:');
-    for (const selector of [':root', 'html, body, #app', '.app-loading, .app-toast'])
-      expect(global).toContainSource(selector);
+    for (const selector of [':root', 'html, body, #app', '.app-loading']) expect(global).toContainSource(selector);
+    expect(global).not.toContain('.app-toast');
     // The application root's edge-to-edge shell is AppShell's own `viewport` presentation (HS2-DR549A).
     expect(global).not.toContain('.app-shell');
   });

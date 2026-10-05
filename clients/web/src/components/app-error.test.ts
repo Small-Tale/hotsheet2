@@ -8,6 +8,9 @@ it('renders the error with an accessible dismissal action', () => {
   expect(markup).toContain('role="alert"');
   expect(markup).toContain('The operation failed.');
   expect(markup).toContain('data-action="dismiss-app-error"');
-  expect(markup).toContain('aria-label="Dismiss error"');
-  expect(markup).toContain('data-lucide="x"');
+  expect(markup).toContain('data-component="state-banner"');
+  expect(markup).toContain('data-tone="danger"');
+  expect(markup).toContain('data-action-placement="below"');
+  expect(markup).toContain('role="alert"');
+  expect(markup).toContain('>Dismiss error</button>');
 });

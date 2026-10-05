@@ -633,8 +633,13 @@ and identity-less legacy entries remain conservatively blocking.
   delegated event wiring and passes typed render data into those surfaces (HS2-HTB5RR).
   The remaining extracted project-open, terminal-rename, and notification-inspector
   surfaces likewise own their stylesheets. `style.css` is reserved for document/app-shell,
-  empty/loading/toast, and shared pagination rules; a source test enforces that boundary
+  operation-driven loading placement and shared pagination rules; a source test enforces that boundary
   so component selectors cannot drift back into the global sheet (HS2-JH0112).
+  Root loading follows the active operation through a neutral Kerf `StateBanner` and
+  labeled `LoadingSpinner`; application failures use a dismissible danger `StateBanner`.
+  Short confirmations use Web Awesome Toast/ToastItem, with Hot Sheet owning the 2.5-second
+  lifetime and replacement/dismissal state so an older hide cannot clear a newer message
+  (HS2-KEHG7H).
   The primary project and terminal layouts follow the same ownership boundary:
   `components/workspace-composition-surfaces.tsx` owns the sidebar, ticket workspace,
   terminal ticket rail, global terminal/statistics workspace, project terminal drawer,
@@ -1450,6 +1455,7 @@ and identity-less legacy entries remain conservatively blocking.
   formats, including SVG, MP4, MOV, M4V, OGV, and WebM. Grid videos do not preload
   media and never autoplay; once their poster is ready, the client removes and reloads
   their source so later application renders cannot leave a hidden decoder or request alive.
+  Loaded posters use revocable local blob URLs so the grid can release its video source.
   Their poster uses one predictable attachment `thumbnail`
   GET/PUT endpoint backed by a SHA-256 content-addressed host cache. Web clients seek and
   draw a frame with native video/canvas APIs and upload the JPEG during browser uploads;
@@ -3027,6 +3033,9 @@ left (or `Soon` once overrun) that list and column rows show (HS2-XQMDQB). It us
 local ETA clock, so the countdown never triggers network requests, and it disappears as soon as
 the claim is released, expires, or the ticket reaches a terminal status. The spinner and ETA
 come from one shared component (`components/active-claim.tsx`) so rows and headers cannot drift.
+The inspector and reader compose the holder and ETA as a Kerf `StateBanner` with a
+public-token-colored `LoadingSpinner`; the claim label and ETA progress ring retain their
+distinct accessible meanings (HS2-KEHG7H).
 
 **AI completion confidence (HS2-DWTJ43).** A note carrying a `confidence` score renders a
 compact Lucide `gauge` badge with the percentage in its header beside the timestamp,

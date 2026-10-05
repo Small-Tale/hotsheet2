@@ -1658,6 +1658,29 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "app-error",
+      "name": "AppError",
+      "source": "src/components/app-error.tsx",
+      "kind": "component",
+      "purpose": "Dismissible application failure with Kerf danger feedback at the screen edge.",
+      "useWhen": [
+        "Hot Sheet needs dismissible application failure with Kerf danger feedback at the screen edge."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AppError behavior."
+      ],
+      "publicClasses": [
+        "app-error"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "content-transition",
       "name": "ContentTransition",
       "source": "src/components/content-transition.tsx",

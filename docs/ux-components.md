@@ -1507,7 +1507,9 @@ icons; structural separators do not require icons.
   as an ordinary note; it is never a browser-only rating counter.
   `tone="inherit"` takes the surrounding heading color (the AIConversation message
   header) instead of the default quiet secondary color; the `AIContentLabel` UX demo
-  shows both tones with and without feedback (HS2-7RY5GK).
+  shows both tones with and without feedback (HS2-7RY5GK). Attribution uses Kerf's
+  inline `Text` variant so it remains valid inside a heading or note footer while the
+  consequence-labeled feedback buttons retain their original actions (HS2-KEHG7H).
 - `RegularNote`
 - `StatusNote`
 - `FeedbackNeededNote`
