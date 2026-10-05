@@ -257,8 +257,21 @@ describe('UX demo catalog', () => {
     expect(
       entries
         .flatMap((entry) => entry.uses ?? [])
-        .every((id) => findDemo(id) || ['loading-spinner', 'state-banner'].includes(id)),
-    ).toBe(true);
+        .filter(
+          (id) =>
+            !findDemo(id) &&
+            ![
+              'badge',
+              'list',
+              'list-action-row',
+              'loading-spinner',
+              'row',
+              'state-banner',
+              'surface-scaffold',
+              'text',
+            ].includes(id),
+        ),
+    ).toEqual([]);
   });
 
   it('maps nested categories and relationship metadata into the flat kerf catalog contract', () => {

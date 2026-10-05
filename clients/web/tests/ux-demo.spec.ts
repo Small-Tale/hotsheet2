@@ -5316,17 +5316,22 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(repository.locator('[data-lucide="git-branch"]')).toHaveCount(1);
   await expect(repository.locator('.repository-summary__branch-name')).toHaveCSS('direction', 'rtl');
   await expect(repository.locator('.repository-summary__branch-name')).toHaveCSS('text-overflow', 'ellipsis');
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await repository.screenshot({ path: `/private/tmp/hs2-8k7qk7-summary-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1280, height: 844 });
   await repository.click();
   await expect(page.getByText('Repository status requested.')).toBeVisible();
 
   await page.goto('/ux-demo?component=view-navigation');
   const views = page.locator('[data-component="view-navigation"]');
-  await expect(views).toHaveCSS('gap', '4px');
-  await expect(views.locator('ul')).toHaveCSS('gap', '0px');
+  await expect(views.locator(':scope > .kui-list')).toHaveCSS('gap', '4px');
+  await expect(views.locator('.view-navigation__list')).toHaveCSS('gap', '0px');
   const navigationGeometry = await views.evaluate((node) => {
     const header = node.querySelector('header')!.getBoundingClientRect();
-    const button = node.querySelector('li button')!.getBoundingClientRect();
-    const icon = node.querySelector('li button svg')!.getBoundingClientRect();
+    const button = node.querySelector('.view-navigation__list button')!.getBoundingClientRect();
+    const icon = node.querySelector('.view-navigation__list button svg')!.getBoundingClientRect();
     return {
       headerLeft: header.left,
       buttonLeft: button.left,
@@ -5339,7 +5344,10 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   expect(navigationGeometry.iconLeft - navigationGeometry.buttonLeft).toBeGreaterThan(8);
   expect(navigationGeometry.iconLeft - navigationGeometry.buttonLeft).toBeLessThan(11);
   await expect(views.getByRole('button', { name: /Queue/ })).toHaveAttribute('aria-current', 'page');
-  await expect(views.locator('.view-navigation__count').first()).toHaveCSS('font-variant-numeric', 'tabular-nums');
+  await expect(views.locator('.view-navigation__count').first().locator('[data-component="badge"]')).toHaveAttribute(
+    'data-tone',
+    'danger',
+  );
   await views.getByRole('button', { name: /Needs Review/ }).click();
   await expect(views.getByRole('button', { name: /Needs Review/ })).toHaveAttribute('aria-current', 'page');
   await expect(views.getByRole('button', { name: /Queue/ })).not.toHaveAttribute('aria-current', 'page');
@@ -5406,6 +5414,10 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
     'aria-pressed',
     'true',
   );
+  await expect(commands.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-busy', 'true');
+  await expect(
+    commands.getByRole('button', { name: /Running Verify project/ }).locator('[data-component="loading-spinner"]'),
+  ).toBeVisible();
   await commands.getByRole('button', { name: /Running Verify project/ }).click();
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveAttribute('aria-pressed', 'false');
   await qualityGroup.click();

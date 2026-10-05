@@ -79,74 +79,75 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
       data-component="command-navigation"
       data-icon-catalog={lucideCatalogVersion.value}
     >
-      <ListHeader
-        label={label}
-        action="toggle-command-group"
-        actionIcon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
-        expanded={expanded}
-        toggle
-      />
-      {expanded &&
-        [...groups].map(([group, items]) => {
-          const groupExpanded = !group || !collapsedGroups.includes(group);
-          return (
-            <div class="command-navigation__group" data-command-group={group || undefined}>
-              {group && (
-                <ListHeader
-                  label={group}
-                  density="compact"
-                  action="toggle-command-section"
-                  actionIcon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
-                  expanded={groupExpanded}
-                  toggle
-                />
-              )}
-              {groupExpanded && (
-                <List className="command-navigation__items" gap={rem(0.3)}>
-                  {items.map((command) => {
-                    const { icon, name } = resolveCommandIcon(command.icon),
-                      type =
-                        command.kind === 'shell'
-                          ? { icon: SquareTerminal, name: 'square-terminal', label: 'Shell command' }
-                          : command.kind === 'ai'
-                            ? { icon: Bot, name: 'bot', label: 'AI command' }
-                            : undefined;
-                    const color = resolveCommandColor(command.color);
-                    const palette = COMMAND_CUSTOMIZATION_COLORS.find(
-                      (option) => option.value === color,
-                    )!.label.toLowerCase();
-                    return (
-                      <div class="command-navigation__command" data-command-palette={palette}>
-                        <ListItem
-                          action="run-command"
-                          itemId={command.id}
-                          rootAttributes={{ 'data-command-color': color, 'data-command-palette': palette }}
-                          pressed={Boolean(command.running)}
-                          title={
-                            command.lastRun
-                              ? `Last run: ${command.lastRun}. Press and hold for output.`
-                              : 'Press and hold for command history.'
-                          }
-                          icon={<LucideIcon icon={icon} name={name} />}
-                          label={command.running ? `Running ${command.label}` : command.label}
-                          trailing={
-                            command.running ? (
-                              <i class="command-navigation__running" aria-hidden="true" />
-                            ) : type ? (
-                              <span class="command-navigation__type" aria-label={type.label} title={type.label}>
-                                <LucideIcon size="s" icon={type.icon} name={type.name} />
-                              </span>
-                            ) : undefined
-                          }
-                        />
-                      </div>
-                    );
-                  })}
-                </List>
-              )}
-            </div>
-          );
-        })}
+      <List gap="2xs">
+        <ListHeader
+          label={label}
+          action="toggle-command-group"
+          actionIcon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
+          expanded={expanded}
+          toggle
+        />
+        {expanded &&
+          [...groups].map(([group, items]) => {
+            const groupExpanded = !group || !collapsedGroups.includes(group);
+            return (
+              <List gap="2xs" rootAttributes={{ 'data-command-group': group || undefined }}>
+                {group ? (
+                  <ListHeader
+                    label={group}
+                    density="compact"
+                    action="toggle-command-section"
+                    actionIcon={<LucideIcon icon={ChevronDown} name="chevron-down" />}
+                    expanded={groupExpanded}
+                    toggle
+                  />
+                ) : null}
+                {groupExpanded && (
+                  <List className="command-navigation__items" gap={rem(0.3)}>
+                    {items.map((command) => {
+                      const { icon, name } = resolveCommandIcon(command.icon),
+                        type =
+                          command.kind === 'shell'
+                            ? { icon: SquareTerminal, name: 'square-terminal', label: 'Shell command' }
+                            : command.kind === 'ai'
+                              ? { icon: Bot, name: 'bot', label: 'AI command' }
+                              : undefined;
+                      const color = resolveCommandColor(command.color);
+                      const palette = COMMAND_CUSTOMIZATION_COLORS.find(
+                        (option) => option.value === color,
+                      )!.label.toLowerCase();
+                      return (
+                        <div class="command-navigation__command" data-command-palette={palette}>
+                          <ListItem
+                            action="run-command"
+                            itemId={command.id}
+                            rootAttributes={{ 'data-command-color': color, 'data-command-palette': palette }}
+                            pressed={Boolean(command.running)}
+                            busy={Boolean(command.running)}
+                            title={
+                              command.lastRun
+                                ? `Last run: ${command.lastRun}. Press and hold for output.`
+                                : 'Press and hold for command history.'
+                            }
+                            icon={<LucideIcon icon={icon} name={name} />}
+                            label={command.running ? `Running ${command.label}` : command.label}
+                            trailing={
+                              !command.running && type ? (
+                                <span class="command-navigation__type" aria-label={type.label} title={type.label}>
+                                  <LucideIcon size="s" icon={type.icon} name={type.name} />
+                                </span>
+                              ) : undefined
+                            }
+                          />
+                        </div>
+                      );
+                    })}
+                  </List>
+                )}
+              </List>
+            );
+          })}
+      </List>
     </section>
   );
 }

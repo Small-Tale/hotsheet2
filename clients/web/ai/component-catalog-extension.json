@@ -84,9 +84,9 @@
       "name": "RepositorySummary",
       "source": "src/components/repository-summary.tsx",
       "kind": "component",
-      "purpose": "Branch and working-copy status action.",
+      "purpose": "Branch and working-copy status action with Kerf metrics.",
       "useWhen": [
-        "Hot Sheet needs branch and working-copy status action."
+        "Hot Sheet needs branch and working-copy status action with Kerf metrics."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific RepositorySummary behavior."
@@ -156,9 +156,9 @@
       "name": "ViewNavigation",
       "source": "src/components/view-navigation.tsx",
       "kind": "component",
-      "purpose": "Selectable built-in and custom ticket views.",
+      "purpose": "Selectable built-in and custom ticket views with paired saved-view actions.",
       "useWhen": [
-        "Hot Sheet needs selectable built-in and custom ticket views."
+        "Hot Sheet needs selectable built-in and custom ticket views with paired saved-view actions."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific ViewNavigation behavior."

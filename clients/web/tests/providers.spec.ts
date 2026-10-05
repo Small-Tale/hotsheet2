@@ -7342,6 +7342,8 @@ test('browses repository files and commits with host-native actions', async ({ p
   await popover.screenshot({ path: '/private/tmp/hs2-stva92-repository-files-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await popover.screenshot({ path: '/private/tmp/hs2-stva92-repository-files-narrow.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await popover.screenshot({ path: '/private/tmp/hs2-8k7qk7-repository-390.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await popover.getByRole('button', { name: /Commits 24/ }).click();
   await expect(popover).toContainText('Finish repository status dialog');

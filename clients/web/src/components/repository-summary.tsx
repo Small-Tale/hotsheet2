@@ -1,7 +1,11 @@
 import './repository-summary.css';
 
+import { Badge } from '@kerfjs/ui/badge';
+import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
 import { ArrowDown, ArrowUp, CircleAlert, GitBranch } from 'lucide';
 
 /** The summary's icons render below Kerf's 18px ListItem icon default, through LucideIcon's own size (HS2-QM0C3T). */
@@ -56,30 +60,43 @@ export function RepositorySummary({
         }
         label={<span class="repository-summary__branch-name">{branch}</span>}
         trailing={
-          <>
+          <Row gap="xs" vAlign="middle">
             {error ? (
-              <span class="repository-summary__metric repository-summary__metric--error">Unavailable</span>
+              <Text variant="span" tone="danger" size="compact">
+                Unavailable
+              </Text>
             ) : (
               <>
-                <span class="repository-summary__metric" title={`${unpushed} unpushed commits`}>
+                <Row gap="2xs" vAlign="middle">
                   <LucideIcon icon={ArrowUp} name="arrow-up" size={REPOSITORY_SUMMARY_ICON_SIZE} />
-                  {unpushed}
-                </span>
+                  <Text
+                    variant="span"
+                    size="compact"
+                    color={foregroundColorVar('--wa-color-text-link')}
+                    title={`${unpushed} unpushed commits`}
+                  >
+                    {unpushed}
+                  </Text>
+                </Row>
                 {behind > 0 && (
-                  <span class="repository-summary__metric" title={`${behind} commits behind`}>
+                  <Row gap="2xs" vAlign="middle">
                     <LucideIcon icon={ArrowDown} name="arrow-down" size={REPOSITORY_SUMMARY_ICON_SIZE} />
-                    {behind}
-                  </span>
+                    <Text
+                      variant="span"
+                      size="compact"
+                      color={foregroundColorVar('--wa-color-text-link')}
+                      title={`${behind} commits behind`}
+                    >
+                      {behind}
+                    </Text>
+                  </Row>
                 )}
-                <span
-                  class="repository-summary__metric repository-summary__metric--changes"
-                  title={`${uncommitted} uncommitted changes`}
-                >
+                <Badge tone="neutral" appearance="quiet" size="compact" label={`${uncommitted} uncommitted changes`}>
                   {uncommitted}
-                </span>
+                </Badge>
               </>
             )}
-          </>
+          </Row>
         }
       />
     </div>

@@ -1,15 +1,7 @@
 .repository-summary {
-  /* Kerf beta.60 per-part tokens tint the icon and weight the label (KF-8SD2EP); the branch name
-     itself is app markup and carries the brand color. */
+  /* The icon and label use Kerf's public ListItem theme tokens. */
   --kui-list-item-icon-color: var(--wa-color-brand-on-quiet);
   --kui-list-item-label-weight: 650;
-  color: var(--wa-color-neutral-on-normal);
-}
-.repository-summary__metric {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: remify(4.8px);
 }
 .repository-summary__branch-name {
   min-width: 0;
@@ -20,24 +12,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.repository-summary__metric {
-  color: var(--wa-color-text-link);
-  font-size: var(--wa-font-size-xs);
-  font-variant-numeric: tabular-nums;
-}
-.repository-summary__metric--changes {
-  padding: remify(0.8px) remify(6.08px);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-border-quiet);
-}
 .repository-summary[data-state='conflicted'],
 .repository-summary[data-state='error'] {
   --kui-list-item-icon-color: var(--wa-color-danger-on-quiet);
-}
-.repository-summary__metric--error {
-  color: var(--wa-color-danger-on-quiet);
-}
-.repository-summary__metric--error {
-  font-size: var(--wa-font-size-2xs);
 }

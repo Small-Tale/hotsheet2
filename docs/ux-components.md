@@ -284,8 +284,8 @@ does not introduce polling or another network request.
   that project; the aggregate opens cross-project statistics. The component consumes
   the already-loaded ticket rows and does not introduce polling or network requests.
 - `RepositorySummary` — **production built**: one accessible branch/status action with
-  unpushed and uncommitted counts. The uncommitted count remains text-only to avoid
-  crowding the already icon-rich row.
+  Kerf `Row` and `Text` ahead/behind metrics and a compact `Badge` for uncommitted changes.
+  The branch tail keeps app-owned truncation so long paths remain identifiable.
   - `BranchChip`
   - unpushed and uncommitted counts
   - opens the production repository-status master/detail dialog with value-cell branch
@@ -326,14 +326,17 @@ does not introduce polling or another network request.
   concatenating a bare number into its label (HS2-FYCAZC). Its canonical standalone
   demo route is `/ux-demo?component=list-header`.
 - `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
-  action, and controlled selection through adjacent `ListItem` rows. The section uses
-  Kerf's 4px tight-cluster spacing while the shared rows remain gapless.
+  action, and controlled selection through a Kerf `List` of `ListItem` rows. Saved views
+  use `ListActionRow` for independent selection and More actions; counts use `Badge` and
+  pending searches use `LoadingSpinner`. The section uses Kerf's 4px tight-cluster spacing
+  while the shared rows remain gapless.
   - section heading and add-view action
   - `ViewNavigationItem` with icon, title, count, selection, and attention state
   - built-ins: Needs Review, Queue (active tickets), Backlog, Archive
   - user-defined views when custom-view support lands
 - `CommandNavigation` — **demo built**: collapsible group of palette-colored,
-  icon-bearing command actions with controlled running state. Colors are constrained
+  icon-bearing command actions with controlled running state. Kerf `List` owns group
+  spacing, and `ListItem.busy` owns the running indicator. Colors are constrained
   to the exact shared HS1 custom-command palette, including contrast-aware neutral.
   Configured HS1 Lucide names are preserved (`send`, `file-text`, `arrow-left-right`,
   `soap-dispenser-droplet`, `circle-check-big`, `balloon`, `git-compare`,
@@ -2552,8 +2555,8 @@ instead of borrowing the class.
 HS2-QM0C3T removed nine of its twelve list, navigation, tab, and popover entries (11 of 14
 findings) without changing a rendered pixel or computed style. Each fix gives app markup its own class or uses a child prop:
 
-- **Own classes.** `CommandNavigation`'s running indicator is `.command-navigation__running`.
-  `ViewNavigation` renders `.view-navigation__list` and `.view-navigation__entry`. Both popover
+- **Own classes.** `CommandNavigation` uses Kerf's `ListItem.busy` indicator.
+  `ViewNavigation` uses Kerf `List` and `ListActionRow` for its rows. Both popover
   `<nav>`s are `.repository-status-popover__nav`. The workspace header's utility buttons carry
   no app class: Kerf's `ToolbarControlGroup` owns their disabled cursor, dimming, and absent hover
   chrome (`KF-FTADQT`, adopted in HS2-0MH5V1).

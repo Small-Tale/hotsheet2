@@ -184,7 +184,7 @@ describe('ProjectSidebar component slice', () => {
       }),
     );
     expect(searching).toContain('aria-label="Searching this view"');
-    expect(searching).toContain('data-lucide="loader-circle"');
+    expect(searching).toContain('data-component="loading-spinner"');
     expect(searching).toContain('aria-label="3 search results"');
     expect(searching).toContain('data-lucide="search"');
     const custom = String(
@@ -195,6 +195,9 @@ describe('ProjectSidebar component slice', () => {
     );
     expect(custom).toContain('data-lucide="search"');
     expect(custom).toContain('aria-label="More actions for Needs docs"');
+    expect(custom).toContain('data-component="list-action-row"');
+    expect(custom).toContain('data-action="open-saved-view-menu"');
+    expect(custom).toContain('data-item-label="Needs docs"');
     expect(custom).not.toContain('aria-label="Rename Needs docs"');
     expect(custom).not.toContain('aria-label="Delete Needs docs"');
     const menu = String(SavedViewContextMenu({ id: 'custom:docs', label: 'Needs docs', x: 20, y: 30 }));
@@ -237,7 +240,8 @@ describe('ProjectSidebar component slice', () => {
     );
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain('Running Test');
-    expect(markup).toContain('<i class="command-navigation__running" aria-hidden="true"></i>');
+    expect(markup).toContain('data-busy="true"');
+    expect(markup).toContain('data-component="loading-spinner"');
     expect(markup).toContain('data-lucide="test-tube-2"');
     expect(markup).toContain('data-command-color="#3b82f6"');
     expect(markup).toContain('data-command-palette="blue"');

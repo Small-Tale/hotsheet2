@@ -1,22 +1,11 @@
-.command-navigation {
-  display: grid;
-  gap: remify(4px);
-}
-.command-navigation__group {
-  display: grid;
-  gap: var(--kui-space-2xs);
-}
-/* App-owned wrapper around each command's Kerf ListItem: it sizes the row and configures the row
-   through ListItem's public tokens (the item itself stays unstyled by app CSS, HS2-VABS08). Every
-   row, filled or transparent, drops the item's own inline margin so the wrapper alone sets the row's
-   extent and a transparent row is not inset from the filled ones (HS2-F9JKMJ). */
+/* The wrapper scopes each command's domain palette. Kerf List and ListItem own layout and row
+   chrome; every row drops its own inline margin so transparent and filled rows align. */
 .command-navigation__command {
   --kui-layout-inline-margin: 0;
   display: grid;
-  min-height: remify(40px);
   margin-inline: var(--kui-space-xs);
-  border-radius: var(--kui-layout-rounded-radius, calc(1px + 0.6875rem));
-  font-weight: 650;
+  --kui-list-item-label-weight: 650;
+  --kui-list-item-min-height: remify(40px);
 }
 /* A colored command row paints its own fill through Kerf's public ListItem tone tokens
    (KF-0PKY5K, HS2-Z5YQWT): resting, hover, and pressed all use the command color with transparent
@@ -56,30 +45,7 @@
 .command-navigation__command[data-command-palette='gray'] {
   --command-color: var(--hs-command-gray);
 }
-.command-navigation__command:hover {
-  filter: brightness(0.9);
-}
 .command-navigation__type {
   display: inline-flex;
   opacity: 0.5;
-}
-/* The running indicator is this module's own trailing markup, passed into the Kerf ListItem. */
-.command-navigation__running {
-  width: remify(8px);
-  height: remify(8px);
-  border: 2px solid color-mix(in srgb, var(--wa-color-neutral-on-loud) 45%, transparent);
-  border-top-color: var(--wa-color-neutral-on-loud);
-  border-radius: 50%;
-  animation: command-spin 0.8s linear infinite;
-}
-@keyframes command-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .command-navigation__running {
-    animation: none;
-    border-color: var(--wa-color-neutral-on-loud);
-  }
 }

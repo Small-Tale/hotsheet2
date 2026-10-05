@@ -1,7 +1,11 @@
 import './view-navigation.css';
 
+import { Badge } from '@kerfjs/ui/badge';
+import { List } from '@kerfjs/ui/list';
+import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu } from '@kerfjs/ui/popup-menu';
 import {
@@ -11,7 +15,6 @@ import {
   FileWarning,
   type IconNode,
   Layers3,
-  LoaderCircle,
   Pencil,
   Plus,
   Search,
@@ -20,7 +23,6 @@ import {
 } from 'lucide';
 
 import { contextPopupMenuAnchor } from '../context-menu-position';
-import { VIEWS_AND_SAVED_VIEWS_ACTIONS } from '../interaction-attrs/views-and-saved-views';
 
 export interface ViewNavigationItem {
   id: string;
@@ -54,89 +56,90 @@ const icons: Record<ViewNavigationItem['icon'], [IconNode, string]> = {
 export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
   return (
     <nav class="view-navigation" data-component="view-navigation" aria-label="Ticket views">
-      <ListHeader
-        label="Views"
-        action="add-view"
-        actionLabel="Add view"
-        actionIcon={<LucideIcon icon={Plus} name="plus" />}
-      />
-      <ul class="view-navigation__list">
-        {items.map((item) => {
-          const [icon, name] = icons[item.icon],
-            count =
-              item.countLoading || item.count !== undefined ? (
-                <small
-                  class="view-navigation__count"
-                  data-attention={String(Boolean(item.attention))}
-                  data-search-count={item.searchCount ? 'true' : undefined}
-                  aria-label={
-                    item.countLoading
-                      ? 'Searching this view'
-                      : item.searchCount
-                        ? `${item.count} search results`
-                        : undefined
-                  }
-                >
-                  {item.countLoading ? (
-                    <span class="view-navigation__count-spinner">
-                      <LucideIcon size={9.92} icon={LoaderCircle} name="loader-circle" />
-                    </span>
-                  ) : (
-                    <>
-                      {item.searchCount && <LucideIcon size={9.92} icon={Search} name="search" />}
-                      {item.count}
-                    </>
-                  )}
-                </small>
-              ) : undefined,
-            dropStatus =
-              item.id === 'backlog'
-                ? 'backlog'
-                : item.id === 'archive'
-                  ? 'archive'
-                  : item.id === 'trash'
-                    ? 'deleted'
-                    : item.id === 'all'
-                      ? 'not_started'
-                      : undefined;
-          return (
-            <li class="view-navigation__entry">
+      <List gap="2xs">
+        <ListHeader
+          label="Views"
+          action="add-view"
+          actionLabel="Add view"
+          actionIcon={<LucideIcon icon={Plus} name="plus" />}
+        />
+        <List gap="none" className="view-navigation__list">
+          {items.map((item) => {
+            const [icon, name] = icons[item.icon],
+              count =
+                item.countLoading || item.count !== undefined ? (
+                  <span
+                    class="view-navigation__count"
+                    data-attention={String(Boolean(item.attention))}
+                    data-search-count={item.searchCount ? 'true' : undefined}
+                  >
+                    {item.countLoading ? (
+                      <LoadingSpinner size={9.92} label="Searching this view" />
+                    ) : (
+                      <>
+                        {item.searchCount ? <LucideIcon size={9.92} icon={Search} name="search" /> : null}
+                        <Badge
+                          appearance="quiet"
+                          size="compact"
+                          tone={item.attention ? 'danger' : 'neutral'}
+                          label={item.searchCount ? `${item.count} search results` : undefined}
+                        >
+                          {String(item.count)}
+                        </Badge>
+                      </>
+                    )}
+                  </span>
+                ) : undefined,
+              dropStatus =
+                item.id === 'backlog'
+                  ? 'backlog'
+                  : item.id === 'archive'
+                    ? 'archive'
+                    : item.id === 'trash'
+                      ? 'deleted'
+                      : item.id === 'all'
+                        ? 'not_started'
+                        : undefined;
+            return (
               <div
                 class="view-navigation__item"
                 data-view-tone={item.id === 'errors' ? 'danger' : undefined}
                 data-saved-view-id={item.manageable ? item.id : undefined}
                 data-saved-view-label={item.manageable ? item.label : undefined}
               >
-                <ListItem
-                  action="select-view"
-                  itemId={item.id}
-                  rootAttributes={{ 'data-ticket-drop-status': dropStatus }}
-                  selected={item.id === selectedId}
-                  icon={<LucideIcon icon={icon} name={name} />}
-                  label={item.label}
-                  trailing={count}
-                />
-                {item.manageable && (
-                  <span class="view-navigation__meta">
-                    <button
-                      type="button"
-                      class="view-navigation__more"
-                      {...VIEWS_AND_SAVED_VIEWS_ACTIONS.openSavedViewMenu.attrs}
-                      data-item-id={item.id}
-                      data-item-label={item.label}
-                      aria-label={`More actions for ${item.label}`}
-                      title={`More actions for ${item.label}`}
-                      aria-haspopup="menu"
-                    >
-                      <LucideIcon size={14.4} icon={Ellipsis} name="ellipsis" />
-                    </button>
-                  </span>
+                {item.manageable ? (
+                  <ListActionRow
+                    action="select-view"
+                    itemId={item.id}
+                    selected={item.id === selectedId}
+                    icon={<LucideIcon icon={icon} name={name} />}
+                    label={item.label}
+                    status={count}
+                    trailingAction="open-saved-view-menu"
+                    trailingActionLabel={`More actions for ${item.label}`}
+                    trailingActionTitle={`More actions for ${item.label}`}
+                    trailingActionIcon={<LucideIcon size={14.4} icon={Ellipsis} name="ellipsis" />}
+                    trailingActionAttributes={{
+                      'data-item-label': item.label,
+                      'aria-haspopup': 'menu',
+                    }}
+                  />
+                ) : (
+                  <ListItem
+                    action="select-view"
+                    itemId={item.id}
+                    rootAttributes={{ 'data-ticket-drop-status': dropStatus }}
+                    selected={item.id === selectedId}
+                    icon={<LucideIcon icon={icon} name={name} />}
+                    label={item.label}
+                    trailing={count}
+                  />
                 )}
               </div>
-            </li>
-          );
-        })}
-      </ul>
+            );
+          })}
+        </List>
+      </List>
     </nav>
   );
 }
