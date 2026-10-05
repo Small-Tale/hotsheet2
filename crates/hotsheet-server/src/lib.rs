@@ -8134,8 +8134,8 @@ async fn send_drive_turn(
                 thread_state.emit_turn_event(&thread_store, &thread_id, None, &tool, event);
             }
         });
-        if result.is_err() {
-            for event in guard.transport_failed() {
+        if let Err(message) = &result {
+            for event in guard.transport_failed(message) {
                 thread_state.emit_turn_event(&thread_store, &thread_id, None, &tool, event);
             }
         }

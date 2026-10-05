@@ -1,6 +1,7 @@
 import type { Signal } from 'kerfjs';
 
 import {
+  conversationError,
   type ConversationMessage,
   type ConversationState,
   conversationUsage,
@@ -123,6 +124,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
             name: chat.name,
             tool: aiToolLabel(chat.tool),
             busy: connection?.busy ?? false,
+            error: conversationError(state, connection),
             summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
           };
         });
@@ -181,6 +183,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           name: chat.name,
           tool,
           busy: connection?.busy ?? false,
+          error: conversationError(state, connection),
           summary: state.progress ?? state.messages.at(-1)?.content ?? state.activity?.at(-1)?.summary,
           content: (
             <AIConversation
@@ -200,7 +203,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
               )}
               activity={state.activity}
               totalUsage={conversationUsage(state)}
-              error={state.error ?? connection?.last_error}
+              error={conversationError(state, connection)}
               providerId={chat.tool}
               providers={aiToolOptions()}
               canChangeProvider={!chat.readOnly && aiTools.value.length > 1}
@@ -276,7 +279,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
           ),
           activity: state.activity,
           totalUsage: conversationUsage(state),
-          error: state.error ?? connection.last_error,
+          error: conversationError(state, connection),
           feedbackAvailable: canGiveFeedback(),
           foreground: permissionPopupSurface(),
           providerId: connection.tool,

@@ -1635,7 +1635,12 @@ fn cmd_trigger(
             eprintln!("✔ {tool} turn completed");
             Ok(())
         }
-        DoneReason::Failed(code) => bail!("{tool} turn failed (exit {code})"),
+        DoneReason::Failed { exit_code, message } => bail!(
+            "{tool} turn failed (exit {exit_code}){}",
+            message
+                .map(|message| format!(": {message}"))
+                .unwrap_or_default()
+        ),
         DoneReason::Interrupted => bail!("{tool} turn interrupted"),
     }
 }
@@ -1711,7 +1716,12 @@ fn cmd_work(
         }
         match done.reason {
             DoneReason::Completed => {}
-            DoneReason::Failed(code) => eprintln!("⚠ turn {turn} failed (exit {code})"),
+            DoneReason::Failed { exit_code, message } => eprintln!(
+                "⚠ turn {turn} failed (exit {exit_code}){}",
+                message
+                    .map(|message| format!(": {message}"))
+                    .unwrap_or_default()
+            ),
             DoneReason::Interrupted => bail!("interrupted during turn {turn}"),
         }
 

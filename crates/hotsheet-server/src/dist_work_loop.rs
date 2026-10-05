@@ -173,7 +173,7 @@ pub fn outcome_from_turn(
 ) -> WorkOutcome {
     use hotsheet_aitools::DoneReason;
     match done {
-        DoneReason::Failed(_) | DoneReason::Interrupted => WorkOutcome::Failed,
+        DoneReason::Failed { .. } | DoneReason::Interrupted => WorkOutcome::Failed,
         DoneReason::Completed => {
             if !after_open {
                 WorkOutcome::Completed
@@ -354,7 +354,7 @@ fn drive_one_ticket(
         Ok(done) => done,
         Err(error) => {
             if let Some(sink) = &ctx.turn_sink {
-                for event in turn_guard.transport_failed() {
+                for event in turn_guard.transport_failed(&error.to_string()) {
                     sink(store, &conn, tool, Some(ticket_slug.clone()), event);
                 }
             }
@@ -564,7 +564,14 @@ mod tests {
         );
         // A failed / interrupted turn always releases.
         assert_eq!(
-            outcome_from_turn(DoneReason::Failed(1), false, true),
+            outcome_from_turn(
+                DoneReason::Failed {
+                    exit_code: 1,
+                    message: None
+                },
+                false,
+                true
+            ),
             WorkOutcome::Failed
         );
         assert_eq!(

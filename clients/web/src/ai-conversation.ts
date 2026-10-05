@@ -39,6 +39,30 @@ export type ConversationTimelineGroup =
 
 export const EMPTY_CONVERSATION: ConversationState = { messages: [] };
 
+/** Local and remote retries clear stale halt feedback while the next turn is running. */
+export function conversationError(
+  state: ConversationState,
+  connection?: { busy?: boolean; last_error?: string },
+): string | undefined {
+  if (state.activeAssistantId || connection?.busy) return;
+  return state.error ?? connection?.last_error;
+}
+
+/** Settle a turn whose terminal stream event was missed while disconnected or reloading. */
+export function reconcileConversationConnection(
+  state: ConversationState,
+  connection: { busy?: boolean; last_error?: string },
+  pendingStart = false,
+): ConversationState {
+  if (!state.activeAssistantId || connection.busy !== false || pendingStart) return state;
+  return applyConversationEvent(
+    state,
+    connection.last_error
+      ? { type: 'done', reason: 'failed', message: connection.last_error }
+      : { type: 'done', reason: 'interrupted' },
+  );
+}
+
 function normalizeConversationSequence(state: ConversationState): ConversationState {
   const maximum = Math.max(
     -1,
@@ -184,8 +208,10 @@ export function applyConversationEvent(state: ConversationState, event: ClientTu
     };
   }
   if (event.type === 'done') {
-    if (index < 0) return { ...ordered, activeAssistantId: undefined, progress: undefined };
     const reason = event.reason === 'failed' || event.reason === 'interrupted' ? event.reason : 'completed';
+    const message = typeof event.message === 'string' ? event.message.trim() : '';
+    const error = reason === 'failed' ? message || 'The tool turn failed.' : undefined;
+    if (index < 0) return { ...ordered, activeAssistantId: undefined, progress: undefined, error };
     const status: ConversationMessageStatus = reason;
     const sequence = ordered.nextSequence ?? 0,
       messages = ordered.messages.map((message, messageIndex) =>
@@ -208,7 +234,7 @@ export function applyConversationEvent(state: ConversationState, event: ClientTu
       nextSequence: ordered.messages[index]?.sequence === undefined ? sequence + 1 : ordered.nextSequence,
       activeAssistantId: undefined,
       progress: undefined,
-      error: reason === 'failed' ? 'The tool turn failed.' : undefined,
+      error,
     };
   }
   return state;

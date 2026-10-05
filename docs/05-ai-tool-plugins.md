@@ -1062,3 +1062,10 @@ metacharacters in a manually entered model id are never reparsed as shell syntax
 - The core that hosts the plugin registry + settings model: [04-core-server-cli.md](04-core-server-cli.md) §4.1, §4.9
 - Clients that render permission prompts / busy state / plugin preferences: [06-clients.md](06-clients.md)
 - AI-tool integration testing (fake agent, conformance gate, drift layer): [12-code-organization-and-testing.md](12-code-organization-and-testing.md) §12.7.7
+
+### Driven failure diagnostics (HS2-AZVE3P)
+
+Driven adapters preserve provider failure messages through terminal turn events and client
+connection state. Codex retryable error notifications keep the turn running; success and
+interruption clear the pending diagnostic. See [Drive transport](13-drive-transport-interface.md)
+and [Clients](06-clients.md) for protocol and user feedback.

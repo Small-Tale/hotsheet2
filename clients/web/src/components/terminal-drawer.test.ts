@@ -229,6 +229,35 @@ describe('TerminalDrawer', () => {
     expect(grid).toContain('Ready to discuss the project');
     expect(grid).toContain('data-action="open-grid-ai-chat"');
   });
+  it('marks failed AI chat tabs with the same accessible halted indicator as terminals (HS2-AZVE3P)', () => {
+    const content = AIConversation({
+      open: true,
+      presentation: 'embedded',
+      tool: 'Codex',
+      messages: [],
+      draft: '',
+      busy: false,
+      interruptible: false,
+    });
+    const draw = (error?: string) =>
+      String(
+        TerminalDrawer({
+          projectId: 'project',
+          projectName: 'Project',
+          sessions: [],
+          chatTabs: [{ id: 'chat:failed', name: 'Codex chat', tool: 'Codex', content, error }],
+          width: 900,
+          height: 320,
+          fitAcross: 2,
+          fitHigh: 2,
+          selectedId: 'chat:failed',
+        }),
+      );
+    expect(draw('Model at capacity')).toContain('aria-label="Stopped: Model at capacity"');
+    expect(draw('Model at capacity')).toContain('data-tab-kind="ai-chat"');
+    expect(draw()).not.toContain('Stopped:');
+  });
+
   it('reserves the shared trailing tab slot whether or not a terminal has state', () => {
     const markup = render();
     expect(markup.match(/kui-app-tab__trailing/g)).toHaveLength(2);

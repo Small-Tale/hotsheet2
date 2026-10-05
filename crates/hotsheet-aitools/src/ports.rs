@@ -109,6 +109,7 @@ pub trait AppServerTurn {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppServerOutcome {
     Completed,
+    Interrupted,
     Failed(String),
 }
 

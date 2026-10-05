@@ -193,14 +193,17 @@ impl TurnHandle for SpawnTurnHandle {
     }
 
     fn wait(&mut self) -> DoneReason {
-        if let Some(d) = self.done {
-            return d;
+        if let Some(d) = &self.done {
+            return d.clone();
         }
         let reason = match self.proc.wait() {
             0 => DoneReason::Completed,
-            code => DoneReason::Failed(code),
+            code => DoneReason::Failed {
+                exit_code: code,
+                message: None,
+            },
         };
-        self.done = Some(reason);
+        self.done = Some(reason.clone());
         reason
     }
 

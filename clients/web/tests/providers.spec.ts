@@ -756,8 +756,19 @@ async function mockProject(
       const id = decodeURIComponent(driveTurn[1]),
         current = toolConnections.find((item) => item.id === id)!,
         body = request.postDataJSON(),
-        running = { ...current, busy: true };
+        running = { ...current, busy: true, last_error: undefined };
       toolConnections = toolConnections.map((item) => (item.id === id ? running : item));
+      if (body.content === 'Fail this turn.' || body.content === 'Retry successfully.') {
+        driveEvent(running);
+        const failed = body.content === 'Fail this turn.',
+          message = 'Selected model is at capacity',
+          idle = { ...running, busy: false, ...(failed ? { last_error: message } : {}) };
+        toolConnections = toolConnections.map((item) => (item.id === id ? idle : item));
+        if (!failed) turnEvent(idle, { type: 'output', content: 'Retry completed successfully.', truncated: false });
+        turnEvent(idle, { type: 'done', reason: failed ? 'failed' : 'completed', ...(failed ? { message } : {}) });
+        driveEvent(idle);
+        return route.fulfill({ status: 202, json: running });
+      }
       if (body.content === 'background-output-only') {
         for (let index = 0; index < 20; index += 1)
           turnEvent(running, { type: 'output', content: `background event ${index}`, truncated: false });
@@ -22594,5 +22605,139 @@ test('surfaces a real server permission request through the live stream with no 
   } finally {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     await server.stop();
+  }
+});
+
+for (const width of [1280, 390]) {
+  test(`shows driven failure diagnostics and clears the stopped chat marker on retry at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockProject(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const drawer = page.locator('[data-component="terminal-drawer"]');
+    await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
+    await expect(drawer).toHaveAttribute('data-maximized', 'true');
+    await drawer.getByRole('button', { name: 'New drawer item' }).click();
+    await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+    const host = drawer.locator('[data-component="ai-conversation"]'),
+      composer = host.getByLabel('Message Codex');
+    await composer.fill('Fail this turn.');
+    await composer.press('Enter');
+    await expect(host.getByRole('alert')).toBeVisible();
+    await expect(host.getByRole('alert')).toContainText('Selected model is at capacity');
+    await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`hs2-azve3p-failed-${width}.png`) });
+    await composer.fill('Retry successfully.');
+    await composer.press('Enter');
+    await expect(host).toContainText('Retry completed successfully.');
+    await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toHaveCount(0);
+    await expect(host).not.toContainText('Selected model is at capacity');
+    await page.screenshot({ path: test.info().outputPath(`hs2-azve3p-recovered-${width}.png`) });
+  });
+}
+
+test('restores an idle server failure when a persisted conversation still has an active assistant (HS2-AZVE3P)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+  const composer = drawer.getByLabel('Message Codex');
+  await composer.fill('Fail this turn.');
+  await composer.press('Enter');
+  await expect(drawer.getByRole('alert')).toContainText('Selected model is at capacity');
+  await page.evaluate(() => {
+    const key = 'hotsheet.ai-conversations.v1',
+      states = JSON.parse(localStorage.getItem(key)!) as Record<
+        string,
+        { error?: string; activeAssistantId?: string; messages: Array<{ id: string; status?: string }> }
+      >;
+    const state = Object.values(states).find((value) => value.error === 'Selected model is at capacity'),
+      last = state?.messages.at(-1);
+    if (!state || !last) throw new Error('Expected a persisted failed assistant');
+    state.activeAssistantId = last.id;
+    last.status = 'streaming';
+    delete state.error;
+    localStorage.setItem(key, JSON.stringify(states));
+  });
+  // Reopening after a missed terminal event must reconcile from GET /connections alone.
+  await page.route(/\/ws\/poll(?:\?|$)/, (route) => route.fulfill({ json: { events: [], cursor: 0 } }));
+  await page.reload();
+  await expect(drawer.locator('[title="Stopped: Selected model is at capacity"]')).toBeVisible();
+  await expect(drawer.getByRole('alert')).toContainText('Selected model is at capacity');
+});
+
+test('keeps an accepted new conversation turn streaming after an older idle connection snapshot resolves (HS2-AZVE3P)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  let connectionId = '';
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/drive/connections'))
+      connectionId = request.postDataJSON().connection_id;
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"]').first().dblclick();
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+  const host = drawer.locator('[data-component="ai-conversation"]');
+  await expect(host.getByLabel('Message Codex')).toBeVisible();
+  const idle = {
+    id: connectionId,
+    tool: 'codex',
+    project: '/work/demo.hs2',
+    role: 'main',
+    busy: false,
+    actions: ['send_turn', 'interrupt'],
+  };
+  let captured = false,
+    release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(/\/connections(?:\?|$)/, async (route) => {
+    if (captured || route.request().method() !== 'GET') return route.fallback();
+    captured = true;
+    await released;
+    await route.fulfill({ json: [idle] });
+  });
+  try {
+    // An authoritative update starts a refresh before the local turn exists.
+    await page.evaluate(async (id) => {
+      await fetch('/__hotsheet/project-api/demo-checkout/drive/connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool: 'codex', connection_id: id }),
+      });
+    }, connectionId);
+    await expect.poll(() => captured).toBe(true);
+    const accepted = page.waitForResponse(
+      (response) => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/turns'),
+    );
+    await host.getByLabel('Message Codex').fill('background-output-only');
+    await host.getByLabel('Message Codex').press('Enter');
+    expect((await accepted).status()).toBe(202);
+    await expect(host.getByRole('button', { name: 'Stop Codex', exact: true })).toBeVisible();
+    release();
+    await expect(host).toContainText('background event 19');
+    await expect(host.getByRole('button', { name: 'Stop Codex', exact: true })).toBeVisible();
+    await expect(host.getByRole('alert')).toHaveCount(0);
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
   }
 });

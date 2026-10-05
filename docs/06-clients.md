@@ -2358,6 +2358,12 @@ project and marks attention-bearing options with the icon and “Needs attention
 The selected icon names the full reason. Popups,
 Notifications entries, and OS notifications for halts are `HS2-E6KAWY`.
 
+Driven AI chats also retain provider failure text in their conversation alert and show the
+same labelled danger icon in their drawer tab and dashboard tile (HS2-AZVE3P). Restored
+connections expose their saved `last_error`; starting a retry clears stale feedback immediately,
+and completion or interruption leaves no stopped marker. Transient provider retries do not
+mark a chat halted. See [`13`](13-drive-transport-interface.md) for the wire contract.
+
 A terminal whose AI session runs with Hot Sheet's hooks active (HS2-EV1XK3; see
 [`05`](05-ai-tool-plugins.md)) carries `ai_connection {agent, at}` in `GET /terminals`. It is
 set by `POST /terminals/{id}/ai-connection` from the session's `SessionStart` hook and cleared

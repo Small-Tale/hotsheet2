@@ -437,6 +437,7 @@ impl ClientDriveManager {
         }
         match result {
             Ok(done) => {
+                state.last_error = done.reason.failure_message();
                 if done.session_id.is_some() {
                     state.session_id.clone_from(&done.session_id);
                 }
@@ -821,6 +822,42 @@ mod tests {
             model: None,
             effort: None,
         }
+    }
+
+    #[test]
+    fn failed_turn_diagnostic_is_saved_and_cleared_on_retry_success_or_interrupt() {
+        let manager = manager(true);
+        manager
+            .create_or_attach(prepare("/project"), Some("connection".into()), None)
+            .unwrap();
+        let job = manager.begin_turn("connection", None, None, None).unwrap();
+        manager.finish_turn(
+            &job,
+            &done(hotsheet_aitools::DoneReason::failed(1, "Model at capacity")),
+        );
+        assert_eq!(
+            manager.get("connection").unwrap().last_error.as_deref(),
+            Some("Model at capacity")
+        );
+        let job = manager.begin_turn("connection", None, None, None).unwrap();
+        assert_eq!(manager.get("connection").unwrap().last_error, None);
+        manager.finish_turn(&job, &done(hotsheet_aitools::DoneReason::Completed));
+        assert_eq!(manager.get("connection").unwrap().last_error, None);
+        let job = manager.begin_turn("connection", None, None, None).unwrap();
+        manager.finish_turn(
+            &job,
+            &done(hotsheet_aitools::DoneReason::Failed {
+                exit_code: 7,
+                message: None,
+            }),
+        );
+        assert_eq!(
+            manager.get("connection").unwrap().last_error.as_deref(),
+            Some("The tool turn failed.")
+        );
+        let job = manager.begin_turn("connection", None, None, None).unwrap();
+        manager.finish_turn(&job, &done(hotsheet_aitools::DoneReason::Interrupted));
+        assert_eq!(manager.get("connection").unwrap().last_error, None);
     }
 
     #[test]

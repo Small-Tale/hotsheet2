@@ -65,7 +65,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       handler-transitions.test.ts # Callback-level live binding, range-selection, long-press and captured native-close regressions
       registration-inventory.txt # Ordered pre-extraction delegate/native/adapter contract, checked by interaction-wiring.test.ts
     src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
-    src/ai-conversation.ts   #   Per-connection receipt-ordered multi-turn message/activity transitions across streamed output, permission pauses, replay, and terminal outcomes
+    src/ai-conversation.ts   #   Per-connection receipt-ordered multi-turn message/activity transitions across streamed output, permission pauses, replay, and terminal outcomes; provider failure feedback and authoritative idle-connection reconciliation (HS2-AZVE3P)
     src/conversation-scroll.ts # Bottom-aware transcript pinning that preserves intentional scrollback
     src/conversation-export.ts # Portable .hotsheet-chat range, manifest, transcript, summary, selected structured assets, collision-lineage, and resume contract
     src/conversation-export-bridge.ts # Trusted host folder chooser plus validated bundle filesystem read/write boundary
@@ -257,7 +257,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/repository_browser.rs # rich repository status/commit discovery plus freshly validated host-native file open/reveal actions (HS2-323XHG)
       src/notifications.rs   #   targeted/deduplicated/acknowledged notification routing (HS2-ZP869N)
       src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)
-      src/turn_stream.rs     #   stable tagged + bounded raw TurnEvent client projection (output/permission/usage/native/coalesced/done), including pathological-chunk cap (HS2-060HQJ)
+      src/turn_stream.rs     #   stable tagged + bounded raw TurnEvent client projection (output/permission/usage/native/coalesced/done), including pathological-chunk cap (HS2-060HQJ) and optional failed-done provider message (HS2-AZVE3P)
       src/request_performance_tests.rs # Detail/backlink/terminal-launch concurrency regressions (HS2-Y7W3Z4)
       src/ai_tool_discovery.rs # 10 s memo of AI-tool discovery (TTL + scan injectable via `AppState::with_ai_tool_discovery[_ttl]` so tests never depend on real tools on PATH, HS2-BK350W) kept beside the model-catalog cache under the shared model_catalogs lock (concurrent /ai-tools and /ai-settings coalesce; AI defaults are per project at /checkouts/{reference}/ai-settings with /ai-settings as the machine-wide fallback, HS2-SW5S13); refresh=true bypasses, a lock-free generation bump invalidates (POST /setup/{tool}) (HS2-QV8B7R)
       src/health_scan.rs     #   GET /health primary-store listing: single-flight blocking-pool scan awaited under a 250 ms budget, then the last completed scan or the index count (HS2-9PPDR1)

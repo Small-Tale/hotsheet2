@@ -46,6 +46,7 @@ export interface TerminalDrawerChatTab {
   content: SafeHtml;
   busy?: boolean;
   summary?: string;
+  error?: string;
 }
 /** An AI provider the drawer can open an AI shell with (HS2-3HT4PA). */
 export interface TerminalDrawerAiProvider {
@@ -260,6 +261,18 @@ export function TerminalDrawer({
             closeIcon={<LucideIcon icon={X} name="x" />}
             rootAttributes={{ 'data-tab-kind': 'ai-chat', 'data-chat-id': chat.id }}
             leading={<LucideIcon icon={MessageSquare} name="message-square" />}
+            trailing={
+              chat.error ? (
+                <span
+                  class="terminal-drawer__halt"
+                  role="img"
+                  aria-label={`Stopped: ${chat.error}`}
+                  title={`Stopped: ${chat.error}`}
+                >
+                  <LucideIcon size="s" icon={TriangleAlert} name="triangle-alert" color={uiColor('danger-on-quiet')} />
+                </span>
+              ) : undefined
+            }
           />
         );
       }),

@@ -213,7 +213,13 @@ fn a_nonzero_exit_is_failed() {
     let mut turn = SpawnDrive::codex()
         .run(&Target::default(), "x", &ctx(&spawner, "/w"))
         .unwrap();
-    assert_eq!(turn.wait(), DoneReason::Failed(3));
+    assert_eq!(
+        turn.wait(),
+        DoneReason::Failed {
+            exit_code: 3,
+            message: None
+        }
+    );
 }
 
 #[test]
@@ -526,6 +532,32 @@ fn codex_client_drives_the_appserver_drive_end_to_end() {
         spawner.last.borrow().is_none(),
         "app-server drive spawns no process"
     );
+}
+
+#[test]
+fn codex_appserver_drive_retains_failed_message_in_stream_and_wait() {
+    let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoFail)).unwrap();
+    let spawner = FakeSpawner::new(0);
+    let ctx = DriveCtx {
+        cwd: PathBuf::from("/proj"),
+        model: None,
+        effort: None,
+        spawner: &spawner,
+        env: Vec::new(),
+        app_server: Some(&cx),
+        channel: None,
+        acp: None,
+    };
+    let mut turn = AppServerDrive::new()
+        .run(&Target::default(), "work", &ctx)
+        .unwrap();
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Done(DoneReason::failed(1, "boom")))
+    );
+    assert_eq!(turn.next_event(), None);
+    assert_eq!(turn.wait(), DoneReason::failed(1, "boom"));
+    assert_eq!(turn.wait(), DoneReason::failed(1, "boom"));
 }
 
 /// LIVE, gated: a real `codex app-server` turn against a persistent codex process. Off by
@@ -847,7 +879,10 @@ fn claude_channel_captures_the_session_id_and_maps_failure() {
     let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Failure));
     let mut turn = ch.start_turn("x").unwrap();
     // wait() drains the stream to the terminal reason.
-    assert_eq!(turn.wait(), DoneReason::Failed(1));
+    assert_eq!(
+        turn.wait(),
+        DoneReason::failed(1, "Selected model is at capacity")
+    );
     // session id came from the `system`/`init` event.
     assert_eq!(ch.session_id().as_deref(), Some("sess-abc"));
 }
@@ -1110,7 +1145,14 @@ fn run_trigger_threads_env_into_a_spawn_tool() {
     )
     .unwrap()
     .reason;
-    assert_eq!(reason, DoneReason::Failed(1), "unset FOO → the check fails");
+    assert_eq!(
+        reason,
+        DoneReason::Failed {
+            exit_code: 1,
+            message: None
+        },
+        "unset FOO → the check fails"
+    );
 }
 
 #[test]
@@ -1121,7 +1163,13 @@ fn run_trigger_reports_a_nonzero_exit_as_failed() {
     let reason = run_trigger(&plugin, &live("exit 5", tmp.path()), &mut reg, &mut |_| {})
         .unwrap()
         .reason;
-    assert_eq!(reason, DoneReason::Failed(5));
+    assert_eq!(
+        reason,
+        DoneReason::Failed {
+            exit_code: 5,
+            message: None
+        }
+    );
 }
 
 #[test]

@@ -184,14 +184,15 @@ impl TurnHandle for AppServerTurnHandle {
     }
 
     fn wait(&mut self) -> DoneReason {
-        if let Some(d) = self.done {
-            return d;
+        if let Some(d) = &self.done {
+            return d.clone();
         }
         let reason = match self.turn.wait() {
             AppServerOutcome::Completed => DoneReason::Completed,
-            AppServerOutcome::Failed(_) => DoneReason::Failed(1),
+            AppServerOutcome::Interrupted => DoneReason::Interrupted,
+            AppServerOutcome::Failed(message) => DoneReason::failed(1, message),
         };
-        self.done = Some(reason);
+        self.done = Some(reason.clone());
         reason
     }
 
@@ -211,7 +212,7 @@ impl TurnHandle for AppServerTurnHandle {
         }
         let event = self.turn.next_event()?;
         if let crate::drive::TurnEvent::Done(reason) = &event {
-            self.done = Some(*reason);
+            self.done = Some(reason.clone());
         }
         Some(event)
     }

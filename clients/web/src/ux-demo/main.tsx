@@ -1094,6 +1094,36 @@ function demoContent(item: DemoDefinition) {
             />
           </div>
         </section>
+        <section class="terminal-drawer-provider-demo" aria-label="AI chat tab states">
+          <h2 class="terminal-drawer-provider-demo__caption">AI chat tab states</h2>
+          <div class="terminal-drawer-provider-demo__stage">
+            <TerminalDrawer
+              projectId="demo-chat-states"
+              projectName="Demo project"
+              sessions={[]}
+              chatTabs={[
+                {
+                  id: 'failed-chat',
+                  name: 'Stopped chat',
+                  tool: 'Codex',
+                  error: 'Selected model is at capacity',
+                  content: <p>Selected model is at capacity</p>,
+                },
+                {
+                  id: 'recovered-chat',
+                  name: 'Recovered chat',
+                  tool: 'Claude',
+                  content: <p>Retry completed successfully.</p>,
+                },
+              ]}
+              width={900}
+              height={96}
+              fitAcross={2}
+              fitHigh={2}
+              selectedId="failed-chat"
+            />
+          </div>
+        </section>
         {/* A touch-first desktop (coarse primary pointer) adds rail Copy and Paste (HS2-5DHHPV). */}
         <section class="terminal-drawer-provider-demo" aria-label="Touch-first desktop">
           <h2 class="terminal-drawer-provider-demo__caption">Touch-first desktop</h2>

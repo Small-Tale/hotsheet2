@@ -27,9 +27,11 @@ import {
   applyConversationActivity,
   applyConversationEvent,
   beginConversationTurn,
+  conversationError,
   type ConversationState,
   conversationUsage,
   EMPTY_CONVERSATION,
+  reconcileConversationConnection,
 } from '../ai-conversation';
 import {
   type AiToolDefaults,
@@ -852,6 +854,8 @@ export async function startHotSheetWebClient() {
   const driveConnectionsByProject = signal<Record<string, ToolConnection[]>>({}),
     drivePendingByProject = signal<Record<string, boolean>>({});
 
+  let conversationStartGeneration = 0;
+  const pendingConversationStarts = new Set<string>();
   const conversationStates = signal<Record<string, ConversationState>>(loadConversationStates(localStorage)),
     conversationDrafts = signal<Record<string, string>>({}),
     conversationSelections = signal<Record<string, { model?: string; effort?: string }>>({}),
@@ -1739,7 +1743,7 @@ export async function startHotSheetWebClient() {
             activity: state.activity,
             progress: state.progress,
             totalUsage: conversationUsage(state),
-            error: state.error ?? connection?.last_error,
+            error: conversationError(state, connection),
           };
         });
     return [...terminals, ...chats];
@@ -3424,8 +3428,8 @@ export async function startHotSheetWebClient() {
     }
   }
   // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function refreshDriveConnections(current=project(),restoreDrawerTabs=false,quiet=false){if(!current)return;if(project()?.id===current.id&&!aiConfigurationController.restoreAiConfiguration(current))void refreshAiConfiguration(current);try{const client=new Api(current.apiPath,'',{trackBusy:!quiet}),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(!activeIds.has(connection.id)&&conversationStates.peek()[connection.id]?.activeAssistantId)updateConversation(connection.id,state=>applyConversationEvent(state,{type:'done',reason:'interrupted'}));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary.
+  async function refreshDriveConnections(current=project(),restoreDrawerTabs=false,quiet=false){if(!current)return;if(project()?.id===current.id&&!aiConfigurationController.restoreAiConfiguration(current))void refreshAiConfiguration(current);try{const startGeneration=conversationStartGeneration,pendingAtRequest=new Set(pendingConversationStarts),client=new Api(current.apiPath,'',{trackBusy:!quiet}),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(startGeneration===conversationStartGeneration&&projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(conversationStates.peek()[connection.id]?.activeAssistantId&&!pendingAtRequest.has(connection.id)&&!pendingConversationStarts.has(connection.id))updateConversation(connection.id,state=>!state.activeAssistantId?state:!activeIds.has(connection.id)?applyConversationEvent(state,{type:'done',reason:'interrupted'}):reconcileConversationConnection(state,connection));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
   function replaceConversationStates(states: Record<string, ConversationState>) {
     conversationStates.value = states;
     try {
@@ -3445,7 +3449,12 @@ export async function startHotSheetWebClient() {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
   function conversationForActivity(current:Project,tool:string,session?:string){const conversations=conversationStates.peek(),connections=(driveConnectionsByProject.value[current.id]??[]).filter(item=>item.tool.toLowerCase()===tool.toLowerCase()&&conversations[item.id]);return connections.find(item=>session&&(item.session_id===session||item.id===session))??(connections.length===1?connections[0]:undefined)}
   function beginConversation(connectionId: string, content: string) {
+    conversationStartGeneration += 1;
+    pendingConversationStarts.add(connectionId);
     updateConversation(connectionId, (state) => beginConversationTurn(state, browserRandomId(), content));
+    return () => {
+      pendingConversationStarts.delete(connectionId);
+    };
   }
   async function toggleSidebarDrive() {
     const current = project();
@@ -3463,7 +3472,7 @@ export async function startHotSheetWebClient() {
     const connections = driveConnectionsByProject.value[current.id] ?? [];
     drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: true };
     conversationConnectionId.value = connectionId;
-    beginConversation(connectionId, SIDEBAR_DRIVE_PROMPT);
+    const finishStart = beginConversation(connectionId, SIDEBAR_DRIVE_PROMPT);
     try {
       const updated = await runProjectDrive(new Api(current.apiPath), connections, current.id, tool, {
         model: selection.model,
@@ -3489,6 +3498,7 @@ export async function startHotSheetWebClient() {
       }));
       if (project()?.id === current.id) error.value = message;
     } finally {
+      finishStart();
       drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
     }
   }
@@ -3526,7 +3536,7 @@ export async function startHotSheetWebClient() {
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function sendConversationTurn(){const current=project(),connectionId=conversationConnectionId.value,draft=connectionId?conversationDrafts.value[connectionId]?.trim():'';if(!current||!connectionId||!draft)return;const connection=(driveConnectionsByProject.value[current.id]??[]).find(item=>item.id===connectionId),selection=conversationAiSelection(connectionId),turnSelection={...(selection.descriptor?.actions?.includes('change_model')&&selection.model?{model:selection.model}:{}),...(selection.descriptor?.actions?.includes('change_effort')&&selection.effort?{effort:selection.effort}:{})};if(!connection?.actions?.includes('send_turn')||connection.busy)return;beginConversation(connectionId,draft);conversationDrafts.value={...conversationDrafts.value,[connectionId]:''};const composer=document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]');if(composer)composer.value='';requestAnimationFrame(()=>{syncConversationScroll(document,true)});try{const updated=await new Api(current.apiPath).sendToolTurn(connectionId,draft,connection.session_id,turnSelection);if(project()?.id===current.id)driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:(driveConnectionsByProject.value[current.id]??[]).filter(item=>item.id!==updated.id).concat(updated)}}catch(reason){const message=reason instanceof Error?reason.message:String(reason);updateConversation(connectionId,state=>({...state,activeAssistantId:undefined,progress:undefined,error:message,messages:state.messages.map(item=>item.id===state.activeAssistantId?{...item,status:'failed',content:item.content||'The message could not be sent.'}:item)}))}}
+  async function sendConversationTurn(){const current=project(),connectionId=conversationConnectionId.value,draft=connectionId?conversationDrafts.value[connectionId]?.trim():'';if(!current||!connectionId||!draft)return;const connection=(driveConnectionsByProject.value[current.id]??[]).find(item=>item.id===connectionId),selection=conversationAiSelection(connectionId),turnSelection={...(selection.descriptor?.actions?.includes('change_model')&&selection.model?{model:selection.model}:{}),...(selection.descriptor?.actions?.includes('change_effort')&&selection.effort?{effort:selection.effort}:{})};if(!connection?.actions?.includes('send_turn')||connection.busy)return;const finishStart=beginConversation(connectionId,draft);conversationDrafts.value={...conversationDrafts.value,[connectionId]:''};const composer=document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]');if(composer)composer.value='';requestAnimationFrame(()=>{syncConversationScroll(document,true)});try{const updated=await new Api(current.apiPath).sendToolTurn(connectionId,draft,connection.session_id,turnSelection);if(project()?.id===current.id)driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:(driveConnectionsByProject.value[current.id]??[]).filter(item=>item.id!==updated.id).concat(updated)}}catch(reason){const message=reason instanceof Error?reason.message:String(reason);updateConversation(connectionId,state=>({...state,activeAssistantId:undefined,progress:undefined,error:message,messages:state.messages.map(item=>item.id===state.activeAssistantId?{...item,status:'failed',content:item.content||'The message could not be sent.'}:item)}))}finally{finishStart()}}
   async function stopConversation() {
     const current = project(),
       connectionId = conversationConnectionId.value;
@@ -3730,7 +3740,7 @@ export async function startHotSheetWebClient() {
         showToast(`Queued ${created.slug}.`);
         return;
       }
-      beginConversation(connection.id, HOTSHEET_SKILL_SIGNAL);
+      const finishStart = beginConversation(connection.id, HOTSHEET_SKILL_SIGNAL);
       try {
         const updated = await client.sendToolTurn(connection.id, HOTSHEET_SKILL_SIGNAL, connection.session_id, {
           ...(command.model ? { model: command.model } : {}),
@@ -3758,6 +3768,8 @@ export async function startHotSheetWebClient() {
           ),
         }));
         showToast(`Queued ${created.slug}; ${aiToolLabel(connection.tool)} could not be notified.`);
+      } finally {
+        finishStart();
       }
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);

@@ -355,7 +355,7 @@ fn pump_turn(
     if let Some(usage) = turn.usage() {
         on_event(&TurnEvent::Usage(usage));
     }
-    on_event(&TurnEvent::Done(reason));
+    on_event(&TurnEvent::Done(reason.clone()));
     registry.set_idle(conn_id);
     reason
 }
@@ -518,7 +518,10 @@ mod pump_tests {
                 false
             }
             fn wait(&mut self) -> DoneReason {
-                DoneReason::Failed(3)
+                DoneReason::Failed {
+                    exit_code: 3,
+                    message: None,
+                }
             }
         }
         let mut reg = reg_with("c1");
@@ -531,7 +534,13 @@ mod pump_tests {
             None,
             &mut |_| {},
         );
-        assert_eq!(reason, DoneReason::Failed(3));
+        assert_eq!(
+            reason,
+            DoneReason::Failed {
+                exit_code: 3,
+                message: None
+            }
+        );
         assert!(!reg.is_busy("c1", 1_100), "idled on the terminal wait");
     }
 

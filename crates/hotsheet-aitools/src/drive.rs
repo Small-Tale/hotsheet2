@@ -64,11 +64,39 @@ pub struct DriveCtx<'a> {
 }
 
 /// Why a turn finished.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DoneReason {
     Completed,
-    Failed(i32),
+    Failed {
+        exit_code: i32,
+        message: Option<String>,
+    },
     Interrupted,
+}
+
+impl DoneReason {
+    pub fn failed(exit_code: i32, message: impl Into<String>) -> Self {
+        let message = message.into();
+        Self::Failed {
+            exit_code,
+            message: (!message.trim().is_empty()).then(|| message.trim().to_owned()),
+        }
+    }
+
+    /// The stable client fallback also marks failures with no provider diagnostic as halted.
+    pub fn failure_message(&self) -> Option<String> {
+        match self {
+            Self::Failed { message, .. } => Some(
+                message
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|message| !message.is_empty())
+                    .unwrap_or("The tool turn failed.")
+                    .to_owned(),
+            ),
+            _ => None,
+        }
+    }
 }
 
 /// A tool wants approval mid-turn (the channel/ACP shapes surface these; `docs/13` §13.4,

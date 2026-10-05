@@ -240,7 +240,27 @@ fn map_events(v: &Value, assistant_projection: &mut AssistantProjection) -> Vec<
             vec![TurnEvent::Done(if ok {
                 DoneReason::Completed
             } else {
-                DoneReason::Failed(1)
+                let message = v
+                    .get("result")
+                    .and_then(Value::as_str)
+                    .filter(|message| !message.trim().is_empty())
+                    .or_else(|| {
+                        v.get("errors")
+                            .and_then(Value::as_array)
+                            .and_then(|errors| {
+                                errors
+                                    .iter()
+                                    .filter_map(Value::as_str)
+                                    .find(|message| !message.trim().is_empty())
+                            })
+                    })
+                    .or_else(|| {
+                        v.get("subtype")
+                            .and_then(Value::as_str)
+                            .filter(|message| !message.trim().is_empty())
+                    })
+                    .unwrap_or("Claude turn failed");
+                DoneReason::failed(1, message)
             })]
         }
         _ => Vec::new(), // system/init, rate_limit_event, tool-result user echoes, …
@@ -311,20 +331,20 @@ impl ClaudeTurn {
                 self.pending.extend(mapped);
                 if let Some(te) = self.pending.pop_front() {
                     if let TurnEvent::Done(r) = &te {
-                        self.done = Some(*r);
+                        self.done = Some(r.clone());
                     }
                     return Some(te);
                 }
             }
             if self.inner.closed.load(Ordering::SeqCst) {
-                let r = DoneReason::Failed(1);
-                self.done = Some(r);
+                let r = DoneReason::failed(1, "Claude channel closed");
+                self.done = Some(r.clone());
                 return Some(TurnEvent::Done(r));
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
-                let r = DoneReason::Failed(1);
-                self.done = Some(r);
+                let r = DoneReason::failed(1, "Timed out waiting for Claude turn result");
+                self.done = Some(r.clone());
                 return Some(TurnEvent::Done(r));
             }
             let (g, _) = self.inner.cvar.wait_timeout(events, remaining).unwrap();
@@ -346,14 +366,19 @@ impl TurnHandle for ClaudeTurn {
     }
 
     fn wait(&mut self) -> DoneReason {
-        if let Some(r) = self.done {
-            return r;
+        if let Some(r) = &self.done {
+            return r.clone();
         }
         loop {
             match self.pull() {
                 Some(TurnEvent::Done(r)) => return r,
                 Some(_) => continue,
-                None => return self.done.unwrap_or(DoneReason::Failed(1)),
+                None => {
+                    return self.done.clone().unwrap_or(DoneReason::Failed {
+                        exit_code: 1,
+                        message: None,
+                    });
+                }
             }
         }
     }
@@ -569,7 +594,11 @@ pub(crate) mod scripted {
                     ClaudeMode::Success | ClaudeMode::DuplicateOutput | ClaudeMode::RichSuccess => {
                         ("success", false, "done")
                     }
-                    ClaudeMode::Failure => ("error_during_execution", true, ""),
+                    ClaudeMode::Failure => (
+                        "error_during_execution",
+                        true,
+                        "Selected model is at capacity",
+                    ),
                 };
                 self.push(
                     json!({ "type": "result", "subtype": subtype, "is_error": is_error,
@@ -633,6 +662,38 @@ mod usage_tests {
         assert_eq!(u.tokens_out, 350);
         assert_eq!(u.model.as_deref(), Some("claude-opus-4-8"));
         assert_eq!(u.cost_usd, Some(0.0731));
+    }
+
+    #[test]
+    fn failed_result_uses_first_nonblank_diagnostic_and_success_clears_it() {
+        for (value, expected) in [
+            (
+                json!({"type":"result","is_error":true,"result":" capacity ","errors":["other"]}),
+                Some("capacity"),
+            ),
+            (
+                json!({"type":"result","is_error":true,"result":" ","errors":["", "retry later"]}),
+                Some("retry later"),
+            ),
+            (
+                json!({"type":"result","is_error":true,"subtype":"error_during_execution"}),
+                Some("error_during_execution"),
+            ),
+            (
+                json!({"type":"result","is_error":true,"subtype":" "}),
+                Some("Claude turn failed"),
+            ),
+            (
+                json!({"type":"result","subtype":"success","result":"old diagnostic"}),
+                None,
+            ),
+        ] {
+            let events = map_events(&value, &mut AssistantProjection::default());
+            let TurnEvent::Done(reason) = &events[0] else {
+                panic!("expected terminal result");
+            };
+            assert_eq!(reason.failure_message().as_deref(), expected);
+        }
     }
 
     #[test]

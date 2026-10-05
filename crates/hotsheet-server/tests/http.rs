@@ -84,6 +84,17 @@ impl PreparedClientDrive for FakePreparedClientDrive {
             request.effort.map(str::to_owned),
         ));
         on_event(&hotsheet_aitools::TurnEvent::Output("fake output".into()));
+        if request.prompt == "transport-fail" {
+            return Err("Provider connection lost".into());
+        }
+        if request.prompt == "fail" {
+            let reason = hotsheet_aitools::DoneReason::failed(1, "Selected model is at capacity");
+            on_event(&hotsheet_aitools::TurnEvent::Done(reason.clone()));
+            return Ok(hotsheet_aitools::TurnDone {
+                reason,
+                session_id: Some("thread-1".into()),
+            });
+        }
         if request.prompt == "hold" {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
             while !request.control.interrupt_requested() && std::time::Instant::now() < deadline {
@@ -15745,4 +15756,120 @@ async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_ba
     assert!(message.contains("attachments"), "{message}");
     assert!(bare_transport.requests.lock().unwrap().is_empty());
     assert!(transport.responses.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn client_drive_failure_diagnostics_survive_real_routes_and_clear_on_retry() {
+    let (_dir, base) = state();
+    let router = app(
+        base.with_client_drive_backend(Arc::new(FakeClientDriveBackend {
+            supports_interrupt: true,
+            ..Default::default()
+        })),
+    );
+    let created = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(r#"{"tool":"fake","connection_id":"failure-client"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    for (prompt, message) in [
+        ("fail", Some("Selected model is at capacity")),
+        ("complete", None),
+        ("transport-fail", Some("Provider connection lost")),
+        ("hold", None),
+    ] {
+        let cursor = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/ws/poll?timeout_ms=0", None))
+                .await
+                .unwrap(),
+        )
+        .await["cursor"]
+            .as_u64()
+            .unwrap();
+        let started = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/drive/connections/failure-client/turns",
+                Some(&serde_json::json!({"content":prompt}).to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(started.status(), StatusCode::ACCEPTED);
+        assert!(
+            body_json(started).await["last_error"].is_null(),
+            "accepting a retry clears the old diagnostic"
+        );
+        if prompt == "hold" {
+            assert_eq!(
+                router
+                    .clone()
+                    .oneshot(authed(
+                        "POST",
+                        "/drive/connections/failure-client/interrupt",
+                        Some("{}")
+                    ))
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::ACCEPTED
+            );
+        }
+        let listed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let listed = body_json(
+                    router
+                        .clone()
+                        .oneshot(authed("GET", "/connections", None))
+                        .await
+                        .unwrap(),
+                )
+                .await;
+                if listed[0]["busy"] == false {
+                    break listed;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(listed[0]["last_error"].as_str(), message);
+        let replay = body_json(
+            router
+                .clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let done = replay["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["turn"]["event"]["type"] == "done")
+            .collect::<Vec<_>>();
+        assert_eq!(done.len(), 1, "one terminal event per turn");
+        assert_eq!(done[0]["turn"]["event"]["message"].as_str(), message);
+        assert_eq!(
+            done[0]["turn"]["event"]["reason"],
+            if message.is_some() {
+                "failed"
+            } else if prompt == "hold" {
+                "interrupted"
+            } else {
+                "completed"
+            }
+        );
+    }
 }

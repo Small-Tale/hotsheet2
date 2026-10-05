@@ -611,7 +611,7 @@ export type ClientTurnEvent =
   | { type: 'usage'; model?: string; tokens_in: number; tokens_out: number; cost_usd?: number }
   | { type: 'native_activity'; source: string; payload: unknown }
   | { type: 'coalesced'; total: number; kinds: Record<string, number> }
-  | { type: 'done'; reason: 'completed' | 'failed' | 'interrupted'; exit_code?: number }
+  | { type: 'done'; reason: 'completed' | 'failed' | 'interrupted'; exit_code?: number; message?: string }
   | { type: string; [key: string]: unknown };
 export interface TurnStreamEnvelope {
   connection_id: string;

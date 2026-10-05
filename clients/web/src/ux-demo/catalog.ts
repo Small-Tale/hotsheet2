@@ -567,7 +567,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'terminal-drawer',
         'TerminalDrawer',
-        'Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted, and Hot Sheet-connected or unconnected AI sessions.',
+        'Project grid, terminal, and embedded AI-chat tabs with a typed creation menu, and tab states for busy, halted terminals, failed or recovered driven chats, and Hot Sheet-connected or unconnected AI sessions.',
         'feature-floor',
         true,
         ['app-tab', 'list-item', 'list-header', 'ai-conversation', 'terminal-key-bar'],

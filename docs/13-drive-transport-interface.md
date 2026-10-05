@@ -314,6 +314,16 @@ events per kind, coalesces exact dropped counts immediately before an always-pre
 `done`, and truncates a pathological individual output chunk at 65,536 characters.
 Native activity payloads above 65,536 encoded bytes become a small typed truncation marker.
 
+**Driven turn failures (HS2-AZVE3P):** failed `done` events include optional provider
+`message` text, bounded to 65,536 Unicode characters with an ellipsis when shortened;
+completed and interrupted events omit it. Provider failures and transport
+errors save the diagnostic in the client connection's `last_error`. Accepting a new turn
+clears it immediately. Client reconnect reconciles a persisted active assistant against an idle
+server failure without treating an optimistic request still being sent as complete. Codex retryable errors remain in progress until a terminal outcome;
+a later successful completion or interruption clears the pending diagnostic. Claude result
+errors, ACP prompt errors and unexpected stop reasons preserve their provider message, with
+a stable fallback when no nonblank diagnostic is available. Interrupted turns are not failures.
+
 **Durable resume (HS2-KH8FBA):** completed client turns update a machine-local session
 catalog under `${HOTSHEET_HOME}/drive/<project>/sessions.json`; `/drive/sessions` returns
 that project's most-recent-first choices. Recreating a connection with an explicit session

@@ -170,6 +170,11 @@ struct AcpTurn {
     emitted_done: bool,
     started: Instant,
 }
+/// The first terminal outcome wins even if a prompt RPC resolves after closure or timeout.
+fn finish_once(done: &Mutex<Option<DoneReason>>, reason: DoneReason) {
+    done.lock().unwrap().get_or_insert(reason);
+}
+
 impl AcpTurn {
     fn next(&mut self) -> Option<TurnEvent> {
         loop {
@@ -187,7 +192,7 @@ impl AcpTurn {
                 continue;
             }
             drop(notes);
-            if let Some(done) = *self.done.lock().unwrap() {
+            if let Some(done) = self.done.lock().unwrap().clone() {
                 if !self.emitted_usage {
                     self.emitted_usage = true;
                     if let Some(u) = self.response.lock().unwrap().as_ref().and_then(usage) {
@@ -202,7 +207,18 @@ impl AcpTurn {
             }
             if self.inner.closed.load(Ordering::SeqCst) || self.started.elapsed() > REQUEST_TIMEOUT
             {
-                return Some(TurnEvent::Done(DoneReason::Failed(1)));
+                finish_once(
+                    &self.done,
+                    DoneReason::failed(
+                        1,
+                        if self.inner.closed.load(Ordering::SeqCst) {
+                            "ACP connection closed"
+                        } else {
+                            "Timed out waiting for ACP turn result"
+                        },
+                    ),
+                );
+                continue;
             }
             let guard = self.inner.notes.lock().unwrap();
             let _ = self
@@ -223,7 +239,14 @@ impl TurnHandle for AcpTurn {
                 return d;
             }
         }
-        self.done.lock().unwrap().unwrap_or(DoneReason::Failed(1))
+        self.done
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or(DoneReason::Failed {
+                exit_code: 1,
+                message: None,
+            })
     }
     fn interrupt(&mut self) -> bool {
         self.inner
@@ -300,12 +323,14 @@ impl AcpClient for AcpSession {
                         Some("end_turn" | "stop_sequence" | "max_tokens") | None => {
                             DoneReason::Completed
                         }
-                        _ => DoneReason::Failed(1),
+                        other => {
+                            DoneReason::failed(1, format!("Unexpected ACP stop reason: {other:?}"))
+                        }
                     };
                     std::thread::sleep(PROMPT_DRAIN_GRACE);
-                    *d.lock().unwrap() = Some(reason)
+                    finish_once(&d, reason)
                 }
-                Err(_) => *d.lock().unwrap() = Some(DoneReason::Failed(1)),
+                Err(error) => finish_once(&d, DoneReason::failed(1, error.to_string())),
             };
             i.cvar.notify_all();
         });
@@ -613,6 +638,72 @@ mod tests {
             turn.next_event(),
             Some(TurnEvent::Done(DoneReason::Completed))
         );
+    }
+
+    #[test]
+    fn late_prompt_results_cannot_overwrite_an_emitted_terminal_failure() {
+        for late in [
+            DoneReason::Completed,
+            DoneReason::failed(1, "Late RPC error"),
+            DoneReason::Interrupted,
+        ] {
+            let done = Mutex::new(None);
+            let first = DoneReason::failed(1, "ACP connection closed");
+            finish_once(&done, first.clone());
+            finish_once(&done, late);
+            assert_eq!(*done.lock().unwrap(), Some(first));
+        }
+    }
+
+    struct FailureTransport(Value);
+    impl RpcTransport for FailureTransport {
+        fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
+            let (tx, rx) = channel();
+            (
+                Box::new(FailureWriter {
+                    tx,
+                    response: self.0,
+                }),
+                Box::new(AcpReader(rx)),
+            )
+        }
+    }
+    struct FailureWriter {
+        tx: Sender<String>,
+        response: Value,
+    }
+    impl RpcWriter for FailureWriter {
+        fn send(&mut self, message: &str) -> std::io::Result<()> {
+            let value: Value = serde_json::from_str(message).unwrap();
+            if value.get("method").and_then(Value::as_str) == Some("session/prompt") {
+                let mut response = self.response.clone();
+                response["jsonrpc"] = json!("2.0");
+                response["id"] = value["id"].clone();
+                self.tx.send(response.to_string()).unwrap();
+                Ok(())
+            } else {
+                AcpWriter(self.tx.clone()).send(message)
+            }
+        }
+    }
+    #[test]
+    fn failed_prompt_retains_protocol_diagnostic_and_unexpected_stop_reason_once() {
+        for (response, expected) in [
+            (
+                json!({"error":{"code":-32000,"message":"Provider rate limited"}}),
+                "Provider rate limited",
+            ),
+            (json!({"result":{"stopReason":"refused"}}), "refused"),
+        ] {
+            let client = AcpSession::connect(Box::new(FailureTransport(response))).unwrap();
+            let mut turn = client.start_turn(None, Path::new("/tmp"), "work").unwrap();
+            let Some(TurnEvent::Done(reason)) = turn.next_event() else {
+                panic!("expected failed Done");
+            };
+            assert!(reason.failure_message().unwrap().contains(expected));
+            assert_eq!(turn.next_event(), None);
+            assert_eq!(turn.wait(), reason);
+        }
     }
 
     #[test]

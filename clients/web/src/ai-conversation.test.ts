@@ -4,11 +4,13 @@ import {
   applyConversationActivity,
   applyConversationEvent,
   beginConversationTurn,
+  conversationError,
   conversationTimeline,
   conversationUsage,
   EMPTY_CONVERSATION,
   formatConversationCost,
   formatConversationTokens,
+  reconcileConversationConnection,
 } from './ai-conversation';
 
 describe('AI conversation transcript', () => {
@@ -121,6 +123,39 @@ describe('AI conversation transcript', () => {
     expect(retried.error).toBeUndefined();
   });
 
+  it('retains provider failure text, clears halt on retry, and keeps success/interruption clean (HS2-AZVE3P)', () => {
+    let state = beginConversationTurn(EMPTY_CONVERSATION, 'failed-1', 'Work');
+    state = applyConversationEvent(state, {
+      type: 'done',
+      reason: 'failed',
+      message: '  Selected model is at capacity  ',
+    });
+    expect(state.error).toBe('Selected model is at capacity');
+    expect(state.messages.at(-1)?.status).toBe('failed');
+    const stale = { last_error: state.error, busy: false };
+    expect(conversationError(state, stale)).toBe(state.error);
+    expect(conversationError(state, { ...stale, busy: true })).toBeUndefined();
+    state = beginConversationTurn(state, 'retry-1', 'Try again');
+    expect(conversationError(state, stale)).toBeUndefined();
+    state = applyConversationEvent(state, { type: 'output', content: 'Recovered', truncated: false });
+    state = applyConversationEvent(state, { type: 'done', reason: 'completed' });
+    expect(state.error).toBeUndefined();
+    expect(conversationError(state, { busy: false })).toBeUndefined();
+    state = beginConversationTurn(state, 'failed-2', 'Work again');
+    state = applyConversationEvent(state, { type: 'done', reason: 'failed', message: '  ' });
+    expect(state.error).toBe('The tool turn failed.');
+    state = beginConversationTurn(state, 'stop-1', 'Another try');
+    state = applyConversationEvent(state, { type: 'done', reason: 'interrupted', message: 'ignored' });
+    expect(state.error).toBeUndefined();
+    expect(
+      applyConversationEvent(EMPTY_CONVERSATION, { type: 'done', reason: 'failed', message: 'Restored failure' }).error,
+    ).toBe('Restored failure');
+    expect(conversationError(EMPTY_CONVERSATION, { last_error: 'Restored failure', busy: false })).toBe(
+      'Restored failure',
+    );
+    expect(conversationError(EMPTY_CONVERSATION, { last_error: 'Old failure', busy: true })).toBeUndefined();
+  });
+
   it('retains stable structured file references emitted with assistant output', () => {
     let state = beginConversationTurn(EMPTY_CONVERSATION, 'turn-files', 'Inspect the files');
     state = applyConversationEvent(state, {
@@ -177,4 +212,19 @@ describe('AI conversation transcript', () => {
     expect(formatConversationCost(0.0042)).toBe('≈$0.0042');
     expect(formatConversationCost()).toBe('Cost unavailable');
   });
+});
+
+it('settles persisted or disconnected active turns from idle server failures without ending optimistic starts (HS2-AZVE3P)', () => {
+  const active = beginConversationTurn(EMPTY_CONVERSATION, 'restored', 'work');
+  const failed = { busy: false, last_error: 'Model unavailable' };
+  expect(reconcileConversationConnection(active, failed, true)).toBe(active);
+  expect(reconcileConversationConnection(active, { busy: true })).toBe(active);
+  const settled = reconcileConversationConnection(active, failed);
+  expect(settled.activeAssistantId).toBeUndefined();
+  expect(settled.messages.at(-1)?.status).toBe('failed');
+  expect(conversationError(settled, failed)).toBe('Model unavailable');
+  expect(reconcileConversationConnection(settled, failed)).toBe(settled);
+  const recovered = reconcileConversationConnection(active, { busy: false });
+  expect(recovered.messages.at(-1)?.status).toBe('interrupted');
+  expect(recovered.error).toBeUndefined();
 });

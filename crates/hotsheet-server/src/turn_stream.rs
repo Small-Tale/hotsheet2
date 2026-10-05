@@ -9,6 +9,7 @@ const MAX_ORDINARY_EVENTS: usize = 128;
 const MAX_LATE_CRITICAL_PER_KIND: usize = 8;
 const MAX_OUTPUT_CHARS: usize = 65_536;
 const MAX_NATIVE_PAYLOAD_BYTES: usize = 65_536;
+const MAX_DIAGNOSTIC_CHARS: usize = 65_536;
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct TurnStreamEnvelope {
@@ -51,6 +52,8 @@ pub enum ClientTurnEvent {
         reason: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         exit_code: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
     },
 }
 
@@ -86,11 +89,12 @@ impl TurnStreamGuard {
         Vec::new()
     }
 
-    pub fn transport_failed(&mut self) -> Vec<ClientTurnEvent> {
+    pub fn transport_failed(&mut self, message: &str) -> Vec<ClientTurnEvent> {
         let mut output = self.take_summary();
         output.push(ClientTurnEvent::Done {
             reason: "failed".into(),
             exit_code: None,
+            message: bounded_diagnostic(message),
         });
         output
     }
@@ -104,6 +108,23 @@ impl TurnStreamGuard {
             kinds: std::mem::take(&mut self.dropped),
         }]
     }
+}
+
+fn bounded_diagnostic(message: &str) -> Option<String> {
+    let message = message.trim();
+    if message.is_empty() {
+        return None;
+    }
+    let mut chars = message.chars();
+    let mut bounded = chars
+        .by_ref()
+        .take(MAX_DIAGNOSTIC_CHARS)
+        .collect::<String>();
+    if chars.next().is_some() {
+        bounded.pop();
+        bounded.push('…');
+    }
+    Some(bounded)
 }
 
 fn project(event: &TurnEvent) -> ClientTurnEvent {
@@ -140,14 +161,19 @@ fn project(event: &TurnEvent) -> ClientTurnEvent {
             }
         }
         TurnEvent::Done(reason) => {
-            let (reason, exit_code) = match reason {
-                DoneReason::Completed => ("completed", None),
-                DoneReason::Interrupted => ("interrupted", None),
-                DoneReason::Failed(code) => ("failed", Some(*code)),
+            let (reason, exit_code, message) = match reason {
+                DoneReason::Completed => ("completed", None, None),
+                DoneReason::Interrupted => ("interrupted", None, None),
+                DoneReason::Failed { exit_code, message } => (
+                    "failed",
+                    Some(*exit_code),
+                    message.as_deref().and_then(bounded_diagnostic),
+                ),
             };
             ClientTurnEvent::Done {
                 reason: reason.into(),
                 exit_code,
+                message,
             }
         }
     }
@@ -166,6 +192,49 @@ fn kind_name(event: &TurnEvent) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oversized_unicode_diagnostics_are_bounded_for_provider_and_transport_failures() {
+        let diagnostic = "界".repeat(MAX_DIAGNOSTIC_CHARS + 20);
+        for event in [
+            project(&TurnEvent::Done(DoneReason::failed(1, diagnostic.clone()))),
+            TurnStreamGuard::default()
+                .transport_failed(&diagnostic)
+                .remove(0),
+        ] {
+            let ClientTurnEvent::Done {
+                message: Some(message),
+                ..
+            } = event
+            else {
+                panic!("expected diagnostic");
+            };
+            assert_eq!(message.chars().count(), MAX_DIAGNOSTIC_CHARS);
+            assert!(message.ends_with('…'));
+        }
+        assert_eq!(bounded_diagnostic("  "), None);
+        assert_eq!(bounded_diagnostic("短"), Some("短".into()));
+    }
+
+    #[test]
+    fn failed_done_carries_provider_text_and_nonfailures_omit_it() {
+        let failed = project(&TurnEvent::Done(DoneReason::failed(
+            1,
+            " Model at capacity ",
+        )));
+        assert_eq!(
+            serde_json::to_value(failed).unwrap(),
+            serde_json::json!({"type":"done","reason":"failed","exit_code":1,"message":"Model at capacity"})
+        );
+        for reason in [DoneReason::Completed, DoneReason::Interrupted] {
+            assert!(
+                serde_json::to_value(project(&TurnEvent::Done(reason)))
+                    .unwrap()
+                    .get("message")
+                    .is_none()
+            );
+        }
+    }
 
     #[test]
     fn bounds_noise_but_preserves_summary_usage_and_done() {
@@ -221,10 +290,11 @@ mod tests {
     #[test]
     fn a_transport_error_still_emits_terminal_done() {
         assert_eq!(
-            TurnStreamGuard::default().transport_failed(),
+            TurnStreamGuard::default().transport_failed("transport unavailable"),
             [ClientTurnEvent::Done {
                 reason: "failed".into(),
                 exit_code: None,
+                message: Some("transport unavailable".into()),
             }]
         );
     }

@@ -539,6 +539,7 @@ impl AppServerClient for CodexAppServer {
             pending: std::collections::VecDeque::new(),
             streamed_agent_items: std::collections::HashSet::new(),
             done_emitted: false,
+            last_error: None,
         }))
     }
 }
@@ -564,6 +565,8 @@ struct CodexTurn {
     /// retaining the completion fallback for versions/transports that omit deltas.
     streamed_agent_items: std::collections::HashSet<String>,
     done_emitted: bool,
+    /// Scoped diagnostic; retryable errors do not finish the turn.
+    last_error: Option<String>,
 }
 
 /// If `n` is this turn's `turn/completed`, map its status to an outcome.
@@ -571,6 +574,7 @@ fn completed_outcome(
     n: &Value,
     thread_id: &str,
     turn_id: Option<&str>,
+    last_error: Option<&str>,
 ) -> Option<AppServerOutcome> {
     if n.get("method").and_then(Value::as_str) != Some("turn/completed") {
         return None;
@@ -587,12 +591,15 @@ fn completed_outcome(
     }
     Some(match turn.get("status").and_then(Value::as_str) {
         Some("completed") => AppServerOutcome::Completed,
-        Some("interrupted") => AppServerOutcome::Failed("interrupted".into()),
+        Some("interrupted") => AppServerOutcome::Interrupted,
         Some("failed") => {
             let msg = turn
                 .get("error")
                 .and_then(|e| e.get("message"))
                 .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|message| !message.is_empty())
+                .or(last_error)
                 .unwrap_or("turn failed");
             AppServerOutcome::Failed(msg.to_string())
         }
@@ -721,18 +728,45 @@ fn agent_message_delta(
 fn codex_done_reason(outcome: &AppServerOutcome) -> crate::drive::DoneReason {
     match outcome {
         AppServerOutcome::Completed => crate::drive::DoneReason::Completed,
-        AppServerOutcome::Failed(_) => crate::drive::DoneReason::Failed(1),
+        AppServerOutcome::Interrupted => crate::drive::DoneReason::Interrupted,
+        AppServerOutcome::Failed(message) => crate::drive::DoneReason::failed(1, message.clone()),
     }
+}
+
+/// Codex can retry an error notification internally; retain its diagnostic without
+/// emitting Done. Completion or transport closure decides the terminal outcome.
+fn turn_error(notification: &Value, thread_id: &str, turn_id: Option<&str>) -> Option<String> {
+    if notification.get("method").and_then(Value::as_str) != Some("error") {
+        return None;
+    }
+    let params = notification.get("params")?;
+    if params.get("threadId").and_then(Value::as_str) != Some(thread_id) {
+        return None;
+    }
+    if let Some(turn_id) = turn_id
+        && params.get("turnId").and_then(Value::as_str) != Some(turn_id)
+    {
+        return None;
+    }
+    params.get("willRetry")?.as_bool()?;
+    let message = params.get("error")?.get("message")?.as_str()?.trim();
+    (!message.is_empty()).then(|| message.to_owned())
 }
 
 impl CodexTurn {
     /// Non-blocking scan of newly-arrived notifications for this turn's rich items,
     /// usage, and completion.
     fn poll(&mut self) {
+        if self.done.is_some() {
+            return;
+        }
         let notes = self.inner.notes.lock().unwrap();
         while self.cursor < notes.len() {
             let n = &notes[self.cursor];
             self.cursor += 1;
+            if let Some(message) = turn_error(n, &self.thread_id, self.turn_id.as_deref()) {
+                self.last_error = Some(message);
+            }
             if let Some(usage) = token_usage_updated(n, &self.thread_id, self.turn_id.as_deref()) {
                 self.usage = Some(usage);
             }
@@ -765,12 +799,23 @@ impl CodexTurn {
                         });
                 }
             }
-            if let Some(o) = completed_outcome(n, &self.thread_id, self.turn_id.as_deref()) {
+            if let Some(o) = completed_outcome(
+                n,
+                &self.thread_id,
+                self.turn_id.as_deref(),
+                self.last_error.as_deref(),
+            ) {
                 self.usage = self.usage.clone().or_else(|| {
                     n.get("params")
                         .and_then(|p| p.get("turn"))
                         .and_then(turn_usage)
                 });
+                if matches!(
+                    o,
+                    AppServerOutcome::Completed | AppServerOutcome::Interrupted
+                ) {
+                    self.last_error = None;
+                }
                 self.done = Some(o);
                 return;
             }
@@ -812,7 +857,7 @@ impl AppServerTurn for CodexTurn {
         }
         // The drive's TurnHandle records `Interrupted`; keep our own state terminal so a
         // later `wait()` can't block on a `turn/completed` that may never arrive.
-        self.done = Some(AppServerOutcome::Failed("interrupted".into()));
+        self.done = Some(AppServerOutcome::Interrupted);
     }
 
     fn next_event(&mut self) -> Option<crate::drive::TurnEvent> {
@@ -831,14 +876,18 @@ impl AppServerTurn for CodexTurn {
             }
             if self.inner.closed.load(Ordering::SeqCst) {
                 self.done = Some(AppServerOutcome::Failed(
-                    "app-server connection closed".into(),
+                    self.last_error
+                        .clone()
+                        .unwrap_or_else(|| "app-server connection closed".into()),
                 ));
                 continue;
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
                 self.done = Some(AppServerOutcome::Failed(
-                    "timeout waiting for turn/completed".into(),
+                    self.last_error
+                        .clone()
+                        .unwrap_or_else(|| "timeout waiting for turn/completed".into()),
                 ));
                 continue;
             }
@@ -1700,5 +1749,151 @@ mod daemon_tests {
             Some("status payload")
         );
         assert_eq!(daemon_failure_detail(b"", b""), None);
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::*;
+    use crate::drive::{DoneReason, TurnEvent};
+
+    struct NullWriter;
+    impl RpcWriter for NullWriter {
+        fn send(&mut self, _: &str) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    fn turn() -> CodexTurn {
+        CodexTurn {
+            inner: Arc::new(Inner {
+                writer: Mutex::new(Box::new(NullWriter)),
+                request_timeout: REQUEST_TIMEOUT,
+                next_id: AtomicI64::new(1),
+                pending: Mutex::default(),
+                notes: Mutex::default(),
+                cvar: Condvar::new(),
+                closed: AtomicBool::new(false),
+                permission: Mutex::new(None),
+                active_approval: AtomicU64::new(0),
+            }),
+            thread_id: "thread-1".into(),
+            turn_id: Some("turn-1".into()),
+            cursor: 0,
+            done: None,
+            usage: None,
+            pending: std::collections::VecDeque::new(),
+            streamed_agent_items: std::collections::HashSet::new(),
+            done_emitted: false,
+            last_error: None,
+        }
+    }
+    fn error(thread: &str, turn: &str, retry: bool, message: &str) -> Value {
+        json!({"method":"error","params":{"threadId":thread,"turnId":turn,"willRetry":retry,"error":{"message":message}}})
+    }
+    fn completed(status: &str, message: Option<&str>) -> Value {
+        json!({"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":status,"error":{"message":message}}}})
+    }
+    #[test]
+    fn retryable_error_keeps_running_and_success_clears_diagnostic() {
+        let mut turn = turn();
+        turn.inner.notes.lock().unwrap().push(error(
+            "thread-1",
+            "turn-1",
+            true,
+            "Model at capacity",
+        ));
+        assert!(turn.is_running());
+        assert!(turn.pending.is_empty());
+        assert_eq!(turn.last_error.as_deref(), Some("Model at capacity"));
+        turn.inner
+            .notes
+            .lock()
+            .unwrap()
+            .push(completed("completed", None));
+        assert_eq!(
+            turn.next_event(),
+            Some(TurnEvent::Done(DoneReason::Completed))
+        );
+        assert_eq!(turn.last_error, None);
+        assert_eq!(turn.next_event(), None);
+    }
+    #[test]
+    fn error_is_scoped_terminal_message_wins_and_done_is_emitted_once() {
+        let mut turn = turn();
+        turn.inner.notes.lock().unwrap().extend([
+            error("elsewhere", "turn-1", false, "Wrong thread"),
+            error("thread-1", "older-turn", false, "Wrong turn"),
+            error("thread-1", "turn-1", true, "Retry in progress"),
+            error("thread-1", "turn-1", false, "Capacity exhausted"),
+        ]);
+        assert!(turn.is_running()); // Even non-retrying diagnostics await terminal completion.
+        turn.inner
+            .notes
+            .lock()
+            .unwrap()
+            .push(completed("failed", Some("Final provider message")));
+        assert_eq!(
+            turn.next_event(),
+            Some(TurnEvent::Done(DoneReason::failed(
+                1,
+                "Final provider message"
+            )))
+        );
+        assert_eq!(turn.next_event(), None);
+    }
+    #[test]
+    fn missing_or_blank_terminal_error_uses_scoped_diagnostic_or_fallback() {
+        for message in [None, Some("  ")] {
+            let mut turn = turn();
+            turn.inner.notes.lock().unwrap().extend([
+                error("thread-1", "turn-1", false, " Provider diagnostic "),
+                completed("failed", message),
+            ]);
+            assert_eq!(
+                turn.next_event(),
+                Some(TurnEvent::Done(DoneReason::failed(
+                    1,
+                    "Provider diagnostic"
+                )))
+            );
+        }
+        let mut turn = turn();
+        turn.inner.notes.lock().unwrap().extend([
+            error("elsewhere", "turn-1", false, "Wrong thread"),
+            error("thread-1", "turn-1", false, " "),
+            completed("failed", None),
+        ]);
+        assert_eq!(
+            turn.next_event(),
+            Some(TurnEvent::Done(DoneReason::failed(1, "turn failed")))
+        );
+    }
+    #[test]
+    fn connection_loss_finishes_once_with_last_diagnostic_and_interrupt_is_not_failure() {
+        let mut failed = turn();
+        failed
+            .inner
+            .notes
+            .lock()
+            .unwrap()
+            .push(error("thread-1", "turn-1", true, "Rate limited"));
+        failed.inner.closed.store(true, Ordering::SeqCst);
+        assert_eq!(
+            failed.next_event(),
+            Some(TurnEvent::Done(DoneReason::failed(1, "Rate limited")))
+        );
+        assert_eq!(failed.next_event(), None);
+        let mut stopped = turn();
+        stopped
+            .inner
+            .notes
+            .lock()
+            .unwrap()
+            .push(completed("interrupted", None));
+        assert_eq!(
+            stopped.next_event(),
+            Some(TurnEvent::Done(DoneReason::Interrupted))
+        );
+        assert_eq!(stopped.next_event(), None);
     }
 }
