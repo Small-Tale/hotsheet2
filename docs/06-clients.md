@@ -639,7 +639,9 @@ and identity-less legacy entries remain conservatively blocking.
   labeled `LoadingSpinner`; application failures use a dismissible danger `StateBanner`.
   Short confirmations use Web Awesome Toast/ToastItem, with Hot Sheet owning the 2.5-second
   lifetime and replacement/dismissal state so an older hide cannot clear a newer message
-  (HS2-KEHG7H).
+  (HS2-KEHG7H). The root uses the public asynchronous `Toast.create()` factory so a
+  first bottom-end toast enters at its placement rather than crossing the workspace;
+  pending factory results are guarded against replacement, expiration and disposal (HS2-QHH1ZP).
   The primary project and terminal layouts follow the same ownership boundary:
   `components/workspace-composition-surfaces.tsx` owns the sidebar, ticket workspace,
   terminal ticket rail, global terminal/statistics workspace, project terminal drawer,

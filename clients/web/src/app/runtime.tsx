@@ -343,6 +343,7 @@ import {
   ticketViewQuery,
 } from '../ticket-views';
 import { createToastLifetime } from '../toast-lifetime';
+import { createToastPresentation } from '../toast-presentation';
 import { createTrackedSizeObserver } from '../tracked-size-observer';
 import { createTrailingTask } from '../trailing-task';
 import { renderStormSuppressionReason } from '../ui-stability-diagnostics';
@@ -692,24 +693,21 @@ export async function startHotSheetWebClient() {
     },
   };
   const toastHost = document.createElement('wa-toast');
-  let activeToastItem: (HTMLElement & { hide(): Promise<void> }) | undefined;
+  const toastPresentation = createToastPresentation({
+    create: (message) => toastHost.create(message, { duration: 0, variant: 'neutral' }),
+    clear: () => {
+      toastHost.replaceChildren();
+    },
+    prepare: (item, generation) => {
+      item.dataset.toastGeneration = String(generation);
+      const text = document.createElement('span');
+      text.className = 'app-toast';
+      text.textContent = item.textContent;
+      item.replaceChildren(text);
+    },
+  });
   const toastLifetime = createToastLifetime((state) => {
-    if (!toastHost.isConnected) return;
-    if (!state.message) {
-      if (activeToastItem) void activeToastItem.hide();
-      return;
-    }
-    activeToastItem?.remove();
-    const item = document.createElement('wa-toast-item');
-    item.duration = 0;
-    item.variant = 'neutral';
-    item.dataset.toastGeneration = String(state.generation);
-    const text = document.createElement('span');
-    text.className = 'app-toast';
-    text.textContent = state.message;
-    item.append(text);
-    activeToastItem = item;
-    toastHost.append(item);
+    if (toastHost.isConnected) void toastPresentation.publish(state);
   });
   function showToast(message: string) {
     toastLifetime.show(message);
@@ -5142,9 +5140,8 @@ export async function startHotSheetWebClient() {
   const onToastHide = (event: Event) => {
     const item = event.target;
     if (!(item instanceof HTMLElement) || !item.matches('wa-toast-item[data-toast-generation]')) return;
-    if (item !== activeToastItem) return;
-    activeToastItem = undefined;
-    toastLifetime.hide(Number(item.dataset.toastGeneration));
+    const generation = toastPresentation.dismissed(item);
+    if (generation !== undefined) toastLifetime.hide(generation);
   };
   toastHost.addEventListener('wa-after-hide', onToastHide);
   // Kerf drives the shell rails' resizing and persistence (HS2-P289N2) and, through their `collapsed`
@@ -5559,6 +5556,7 @@ export async function startHotSheetWebClient() {
     appRoot,
     disposeInteractions: () => {
       toastHost.removeEventListener('wa-after-hide', onToastHide);
+      toastPresentation.dispose();
       toastHost.remove();
       toastLifetime.dispose();
       disposeInteractions();

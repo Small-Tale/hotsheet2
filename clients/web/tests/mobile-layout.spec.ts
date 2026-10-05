@@ -1,4 +1,40 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
+
+type ToastEntranceWindow = Window & {
+  __toastEntrance: Promise<{ top: number; viewportHeight: number; coversTop: boolean }[]>;
+};
+
+async function observeToastEntrance(page: Page) {
+  await page.evaluate(() => {
+    (window as unknown as ToastEntranceWindow).__toastEntrance = new Promise((resolve) => {
+      const observer = new MutationObserver(() => {
+        const item = document.querySelector('wa-toast-item');
+        if (!item) return;
+        observer.disconnect();
+        const samples: { top: number; viewportHeight: number; coversTop: boolean }[] = [];
+        const sample = () => {
+          if (item.isConnected && item.parentElement?.matches(':popover-open')) {
+            samples.push({
+              top: item.getBoundingClientRect().top,
+              viewportHeight: window.innerHeight,
+              coversTop: Boolean(document.elementFromPoint(window.innerWidth - 40, 5)?.closest('wa-toast-item')),
+            });
+          }
+          if (samples.length === 20) resolve(samples);
+          else requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+  });
+}
+
+async function expectToastEntranceAtBottom(page: Page) {
+  const samples = await page.evaluate(() => (window as unknown as ToastEntranceWindow).__toastEntrance);
+  expect(samples).toHaveLength(20);
+  expect(samples.every(({ top, viewportHeight, coversTop }) => top > viewportHeight * 0.65 && !coversTop)).toBe(true);
+}
 
 // Mobile single-column layout with overlay sidebars (HS2-ZK51WP): below the desktop size floor the
 // project sidebar and ticket inspector overlay the single main column, only one is open at a time,
@@ -262,10 +298,11 @@ test('exposes the phone text-size control in drawer focus mode, cycling with a t
   await expect(textSize).toBeVisible();
   await drawer.screenshot({ path: testInfo.outputPath('drawer-focus-text-size.png') });
   const before = await textSize.getAttribute('data-columns');
+  await observeToastEntrance(page);
   await textSize.click();
   const toast = page.locator('.app-toast');
   await expect(toast).toHaveText(/^Terminal text size: \d+ columns$/);
-  await page.waitForTimeout(250);
+  await expectToastEntranceAtBottom(page);
   await page.screenshot({ path: testInfo.outputPath('app-toast-phone.png') });
   await expect(textSize).not.toHaveAttribute('data-columns', before!);
   await page.waitForTimeout(1_000);
@@ -294,12 +331,13 @@ test('shows the application toast through Web Awesome at a wide viewport (HS2-KE
   await page.setViewportSize({ width: 1100, height: 760 });
   await openDemoProject(page);
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-M1"]').click();
+  await observeToastEntrance(page);
   await page.getByRole('button', { name: 'Copy ticket number HS2-M1' }).click();
   const toast = page.locator('wa-toast-item:has(.app-toast)');
   await expect(toast).toBeVisible();
   await expect(toast.locator('.app-toast')).toContainText('HS2-M1');
   await expect(page.locator('wa-toast')).toHaveAttribute('placement', 'bottom-end');
-  await page.waitForTimeout(250);
+  await expectToastEntranceAtBottom(page);
   await page.screenshot({ path: testInfo.outputPath('app-toast-wide.png') });
 });
 
