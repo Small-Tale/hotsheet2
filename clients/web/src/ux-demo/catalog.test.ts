@@ -181,7 +181,7 @@ describe('UX demo catalog', () => {
     expect(findDemo('list-header')).toMatchObject({ name: 'ListHeader', implemented: true });
     expect(findDemo('menu-item')).toBeUndefined();
     expect(findDemo('menu-header')).toBeUndefined();
-    expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'confidence-badge', 'tag-chip']);
+    expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'confidence-badge', 'tag-chip', 'loading-spinner']);
     expect(demosUsing('tag-chip').map((entry) => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);
     expect(demosUsing('ticket-row').map((entry) => entry.id)).toEqual(['ticket-list', 'ticket-board-column']);
     expect(findDemo('ticket-board')?.uses).toEqual(['ticket-board-column']);
@@ -206,7 +206,7 @@ describe('UX demo catalog', () => {
       'dialog-header',
     ]);
     expect(demosUsing('floating-toolbar').map((entry) => entry.id)).toEqual(['app-shell', 'terminal-dashboard']);
-    expect(findDemo('project-tabs')?.uses).toEqual(['project-tab']);
+    expect(findDemo('project-tabs')?.uses).toEqual(['project-tab', 'select']);
     expect(findDemo('project-tab')?.uses).toEqual(['app-tab']);
     expect(findDemo('terminal-drawer')?.uses).toEqual([
       'app-tab',
@@ -239,6 +239,7 @@ describe('UX demo catalog', () => {
       'ticket-attachments',
       'note-card',
       'note-composer',
+      'loading-spinner',
     ]);
     expect(findDemo('ticket-info-panel')?.uses).toContain('list-header');
     expect(findDemo('ticket-reader')?.uses).toEqual(['ticket-inspector']);
@@ -252,7 +253,9 @@ describe('UX demo catalog', () => {
     expect(findDemo('change-evidence-dialog')?.uses).toEqual(['dialog-header', 'list-item', 'list-header']);
     expect(findDemo('connection-details-dialog')?.uses).toEqual(['dialog-header', 'value-table']);
     expect(demosUsing('note-card').map((entry) => entry.id)).toEqual(['ticket-inspector', 'ticket-info-panel']);
-    expect(entries.flatMap((entry) => entry.uses ?? []).every((id) => findDemo(id))).toBe(true);
+    expect(entries.flatMap((entry) => entry.uses ?? []).every((id) => findDemo(id) || id === 'loading-spinner')).toBe(
+      true,
+    );
   });
 
   it('maps nested categories and relationship metadata into the flat kerf catalog contract', () => {
