@@ -1075,8 +1075,14 @@ test('adapts the phone magnified terminal to the keyboard with close and text-si
             frame = element.getBoundingClientRect();
           return { left: box.left - frame.left, right: frame.right - box.right, scale: element.dataset.physicalScale };
         });
-      // The grid-size attribute updates before the width-fit transform settles, so wait for the fit.
-      await expect.poll(async () => Math.abs((await measure()).left)).toBeLessThanOrEqual(1);
+      // The left edge is already anchored while the width-fit transform is still settling.
+      // Wait for both strict edge bounds together before sampling the final geometry (HS2-D31SS1).
+      await expect
+        .poll(async () => {
+          const screen = await measure();
+          return Math.max(Math.abs(screen.left), Math.abs(screen.right)) <= 1 && Number(screen.scale) > 1;
+        })
+        .toBe(true);
       const screen = await measure();
       expect(Math.abs(screen.left)).toBeLessThanOrEqual(1);
       expect(Math.abs(screen.right)).toBeLessThanOrEqual(1);
