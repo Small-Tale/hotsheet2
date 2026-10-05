@@ -184,7 +184,7 @@ fn codex_declares_its_project_local_skill() {
     let (skill_target, skill_body) = p.skill().expect("codex declares its Hot Sheet skill");
     assert_eq!(skill_target, ".agents/skills/hotsheet/SKILL.md");
     assert!(skill_body.contains("name: hotsheet"));
-    assert!(skill_body.contains("<!-- hotsheet-skill-version: 56 -->"));
+    assert!(skill_body.contains("<!-- hotsheet-skill-version: 57 -->"));
     // Non-trivial tickets get a preliminary-thoughts note before implementation (HS2-C4X2MD).
     assert!(skill_body.contains("## Preliminary thoughts"));
     // Non-trivial claims carry an ETA and renewals re-estimate (HS2-DQQ0AX).
@@ -681,4 +681,31 @@ fn claude_hook_reports_halted_and_resumed_sessions() {
         );
     }
     assert_eq!(hooks.command, "hotsheet-cli permission-hook --agent claude");
+}
+
+#[test]
+fn bundled_guidance_requires_integrating_worktree_and_delegated_work() {
+    // HS2-YVV6A0: a sub-agent finished a ticket in a git worktree, it was marked completed, and
+    // the work never reached main. Every instruction body and the shared skill forbid that.
+    for plugin in builtin_plugins() {
+        let body = plugin.instructions_body();
+        if body.is_empty() {
+            continue;
+        }
+        for phrase in [
+            "**Integrate worktree and background-agent work before you complete its ticket.**",
+            "`git branch --contains <sha>`",
+            "A delegated worker's report that it \"completed\" a ticket is not completion",
+            "never a directory-wide `git add`",
+        ] {
+            assert!(body.contains(phrase), "{}: missing {phrase}", plugin.id());
+        }
+    }
+    for skill in [
+        include_str!("../../../plugins/claude/SKILL.md"),
+        include_str!("../../../plugins/codex/SKILL.md"),
+    ] {
+        assert!(skill.contains("never complete a ticket\n   whose work exists only in a worktree"));
+        assert!(skill.contains("confirm work done in a git worktree, side branch, or delegated"));
+    }
 }

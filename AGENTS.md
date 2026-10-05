@@ -11,7 +11,7 @@
 
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
-<!-- hotsheet-instructions-version: 55 -->
+<!-- hotsheet-instructions-version: 56 -->
 
 ## Hot Sheet — ticket workflow
 
@@ -74,6 +74,21 @@ verification, and all follow-up slugs in the completing note. `FEEDBACK NEEDED` 
 blocker on the *current* ticket that needs a user decision or unavailable external state —
 leave that ticket `started`, name the blocker, and release its lease (`hotsheet-cli release`).
 It does not replace follow-ups for independently describable work.
+
+**Integrate worktree and background-agent work before you complete its ticket.** Work done in a
+git worktree, on a side branch, or by a sub-agent or background worker is not done until it is
+on the branch this project ships from. Before marking the ticket `completed`:
+1. Merge, rebase, or cherry-pick that work into the main checkout's branch, or open the
+   project's pull request when that is its convention.
+2. Confirm the commit is reachable there (`git branch --contains <sha>`), pushed wherever this
+   repository pushes, and that the gates pass on the integrated result.
+3. Name the integrated commit(s) in the completing note, then remove the finished worktree.
+
+A delegated worker's report that it "completed" a ticket is not completion: the agent that owns
+the ticket verifies the integration itself. If integration fails or needs a decision, leave the
+ticket `started` with a note naming the branch, worktree path, and commit instead of completing
+it. When other agents share your checkout, stage and commit only your own files (explicit
+paths, never a directory-wide `git add`), and check the staged diff for changes you did not make.
 
 **Share preliminary thoughts on non-trivial tickets.** After your initial analysis of a
 ticket that is not trivially simple, and before you implement, add a short `regular` note

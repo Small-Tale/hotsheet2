@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 56 -->
+<!-- hotsheet-skill-version: 57 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -22,6 +22,10 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    ticket status, verification, and publishing. A stopped, completed, interrupted, or
    otherwise idle delegated worker does not make its claimed ticket non-actionable: the
    primary agent must inspect and resume that handoff until the ticket is completed and committed.
+   A delegated worker's commits in a git worktree or side branch are not integrated until the
+   primary agent merges or cherry-picks them onto the branch this project ships from and
+   confirms they are reachable there (`git branch --contains <sha>`); never complete a ticket
+   whose work exists only in a worktree, a side branch, or a sub-agent's report.
 3. **Work each ticket end to end under an exact claim lease.** Choose one stable,
    session-specific worker id: the value of `HOTSHEET_WORKER_ID` when your environment sets
    it (Hot Sheet then releases that id's claims when your session ends), otherwise your
@@ -65,8 +69,9 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
 **Completion checklist:** finish and verify scope; update required tests, coverage, and
 docs; scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-
 unimplemented behavior, open questions, and known gaps; immediately create tickets for
-every incomplete item; include result, verification, and all follow-up slugs in the
-completing note.
+every incomplete item; confirm work done in a git worktree, side branch, or delegated
+agent is integrated into the branch this project ships from (name the commits); include
+result, verification, and all follow-up slugs in the completing note.
 
 **Preliminary thoughts:** for a ticket that is not trivially simple, add a short `regular`
 note headed `## Preliminary thoughts` after your initial analysis and before implementing:

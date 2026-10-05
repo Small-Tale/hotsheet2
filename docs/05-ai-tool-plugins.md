@@ -205,6 +205,19 @@ verify the work. People can steer early, and a later reader sees the starting re
 quick, obvious change skips it, and it never replaces a `FEEDBACK NEEDED` blocker. Like
 confidence, this is prompt-level guidance.
 
+The bundled instruction blocks and Hot Sheet skills also require **integrating worktree and
+background-agent work before completion** (HS2-YVV6A0). Work done in a git worktree, on a
+side branch, or by a sub-agent or background worker is not done until it is merged, rebased,
+or cherry-picked onto the branch the project ships from (or proposed through its pull-request
+convention). The commit must be reachable there (`git branch --contains <sha>`), pushed where
+the repository pushes, and gated. The completing note names the integrated commits, and the
+worktree is removed afterwards. A delegated worker's report of completion is not completion:
+the owning agent verifies the integration. An integration that fails or needs a decision
+leaves the ticket `started`, with the branch, worktree path, and commit recorded. Agents that
+share one checkout stage only their own files and check the staged diff for foreign changes.
+This guidance shipped as instructions version 56 and skill version 57, so a setup refresh
+updates existing projects.
+
 Every AI completion also reports a **completion confidence** (HS2-DWTJ43). The bundled
 instruction blocks and Hot Sheet skills require the note that moves a ticket to `completed`
 to include a `## Confidence` section with an integer score (0-100) and one line per rubric
