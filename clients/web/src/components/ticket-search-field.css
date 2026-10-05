@@ -3,16 +3,6 @@
    help) that hang below the field and the field's token colors (HS2-N5G6JS, HS2-8FS5BJ). Every
    part of the `layout` policy is a Kerf ToolbarControlGroup `sizing`/`visibility`/`placement` prop
    (HS2-DAMHD1, HS2-AEK8GK). */
-.ticket-search-field {
-  position: relative;
-}
-/* Kerf's search group clips itself for the collapse animation; the expanded field must let
-   its suggestion, date, and help surfaces hang below the group. The extra attribute outranks
-   Kerf's own `[data-content="search"]` rule regardless of stylesheet order. */
-.ticket-search-field[data-content='search'][data-expanded='true'] {
-  height: auto;
-  overflow: visible;
-}
 /* Both presentations' quieter chips: the token color is set on the app-owned `className` hook
    Kerf's TokenSearchField renders on its root in the grouped and the form-field presentation alike
    (HS2-8FS5BJ, HS2-RXHZVR). Kerf resolves its token defaults at their use sites, so the bare hook
@@ -171,5 +161,11 @@
 @media (max-height: remify(704px)) {
   .ticket-search-field__help {
     max-height: calc(100vh - remify(368px));
+  }
+}
+@media (max-width: remify(480px)) {
+  .ticket-search-field__date,
+  .ticket-search-field__help {
+    width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s)));
   }
 }

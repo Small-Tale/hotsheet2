@@ -193,7 +193,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
       expect(render(layout, false)).toBe(closed);
     }
     const kerf = (layout: 'inline' | 'grow' | 'row', expanded: boolean) =>
-      attrs(render(layout, expanded), 'data-sizing', 'data-visibility', 'data-placement');
+      attrs(render(layout, expanded), 'data-sizing', 'data-visibility', 'data-placement', 'data-expanded-overflow');
     expect(kerf('inline', true)).toEqual(kerf('inline', false));
     expect(kerf('grow', false)).toEqual(
       expect.objectContaining({ 'data-sizing': 'grow', 'data-visibility': 'hide-collapsed-tiny' }),
@@ -209,6 +209,8 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     for (const layout of ['inline', 'grow', 'row'] as const)
       for (const expanded of [false, true])
         expect(group(render(layout, expanded))[1]).toBe('kui-toolbar-control-group ticket-search-field');
+    for (const layout of ['inline', 'grow', 'row'] as const)
+      for (const expanded of [false, true]) expect(kerf(layout, expanded)['data-expanded-overflow']).toBe('visible');
 
     const css = readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8');
     // The grow floor, tiny-toolbar hide, trailing-edge placement, and row entrance are Kerf's now.
@@ -233,10 +235,8 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
 
   it('owns the token colors and helper popover styles that every consumer shares', () => {
     const css = readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8');
-    expect(css).toContainSource('.ticket-search-field { position: relative; }');
-    expect(css).toContainSource(
-      ".ticket-search-field[data-content='search'][data-expanded='true'] { height: auto; overflow: visible; }",
-    );
+    expect(css).not.toContain('.ticket-search-field {');
+    expect(css).not.toContain(".ticket-search-field[data-content='search']");
     // The chip tint is set on the app's own className hook, never on Kerf's `.kui-token-search`, and
     // the tokens that equal Kerf's defaults are not restated (HS2-8FS5BJ). Kerf's use-site token
     // fallbacks let the bare hook apply, so it needs no grouped-root qualifier and the form field
@@ -258,6 +258,9 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     );
     expect(css).toMatch(
       /\.ticket-search-field__date,\s*\.ticket-search-field__help \{[^}]*z-index: 1300;[^}]*box-sizing: border-box;/,
+    );
+    expect(css).toContainSource(
+      '@media (max-width: remify(480px)) { .ticket-search-field__date, .ticket-search-field__help { width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s))); } }',
     );
     expect(css).toContainSource(
       '@media (max-height: remify(704px)) { .ticket-search-field__help { max-height: calc(100vh - remify(368px)); } }',

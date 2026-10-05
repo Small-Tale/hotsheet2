@@ -954,7 +954,12 @@ never styles the field from its own stylesheet (HS2-8FS5BJ). Each policy is a se
   entering from the row above with Kerf's reduced-motion-aware motion.
 
 No layout styles the group from `ticket-search-field.css`; the former app grow-floor rule and its
-`--grow`/`--open` root modifiers were removed with `HS2-AEK8GK`.
+`--grow`/`--open` root modifiers were removed with `HS2-AEK8GK`. Every layout sets Kerf
+`expandedOverflow="visible"` (HS2-PV2AG1, KF-M8SV15), so the expanded search lets the app-owned
+date and syntax-help surfaces extend below its group while the collapsed animation stays clipped.
+The app styles the surfaces themselves, narrowing their floating width to 19rem below a 480px
+viewport so the right-anchored help and date panels remain inside a phone screen, with no height,
+position, or overflow override on the Kerf group.
 
 Both presentations share one quieter chip tint (`--wa-color-brand-fill-quiet`): it is set on the
 `ticket-search-field__query` hook that Kerf renders on the root of the grouped field and of the
@@ -2384,8 +2389,9 @@ plus `kerfjs` and the ESLint plugin in the compatibility spike, to the published
 Kerf beta.77's `ToolbarControlGroup.tileTone` (HS2-RXXXPH, KF-VH4B52) now paints direct
 decorative heading icons in brand, success, or danger quiet tones. The command editor retains its
 app-owned custom-color icon span centered inside a borderless Kerf group; the generic heading root styling
-and all five heading suppressions are gone. The remaining three exact per-file suppressions name
-`KF-MXE9YV`, `KF-M8SV15`, and `KF-7288MD`; `src/kerf-ui-profile.test.ts` pins the list so it can
+and all five heading suppressions are gone. Kerf `expandedOverflow="visible"` also replaces the
+grouped-search root overflow override (HS2-PV2AG1, KF-M8SV15). The remaining two exact per-file
+suppressions name `KF-MXE9YV` and `KF-7288MD`; `src/kerf-ui-profile.test.ts` pins the list so it can
 only change deliberately.
 
 Kerf 5.0.0-beta.70 (HS2-1GPHS5) added `KUI-L023`, the markup-borrowing rule. It flags a module that

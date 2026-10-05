@@ -107,11 +107,6 @@ describe('Kerf application UI profile', () => {
         target: 'src/components/workspace-controls.tsx',
       },
       {
-        id: 'kf-m8sv15-search-group-anchored-surfaces',
-        rules: ['KUI-L022'],
-        target: 'src/components/ticket-search-field.tsx',
-      },
-      {
         id: 'kf-7288md-gallery-filename-dark-tone',
         rules: ['KUI-L022'],
         target: 'src/components/attachment-gallery.tsx',

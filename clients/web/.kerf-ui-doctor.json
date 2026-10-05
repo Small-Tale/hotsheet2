@@ -36,12 +36,6 @@
       "rationale": "Workspace-header groups and identity hide or reveal at toolbar container widths (workspace-header.css) until Kerf ships width-threshold visibility (KF-MXE9YV); remove when HS2 adopts it."
     },
     {
-      "id": "kf-m8sv15-search-group-anchored-surfaces",
-      "rules": ["KUI-L022"],
-      "target": "src/components/ticket-search-field.tsx",
-      "rationale": "The expanded grouped search anchors its suggestion, date, and help surfaces below the group (ticket-search-field.css) until Kerf ships a supported anchor (KF-M8SV15); remove when HS2 adopts it."
-    },
-    {
       "id": "kf-7288md-gallery-filename-dark-tone",
       "rules": ["KUI-L022"],
       "target": "src/components/attachment-gallery.tsx",

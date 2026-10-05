@@ -342,6 +342,7 @@ export function TicketSearchField({
       <ToolbarControlGroup
         className="ticket-search-field"
         expanded={open}
+        expandedOverflow="visible"
         single
         content="search"
         focusRing="halo"
@@ -356,6 +357,7 @@ export function TicketSearchField({
       <ToolbarControlGroup
         className="ticket-search-field"
         expanded={open}
+        expandedOverflow="visible"
         single
         content="search"
         focusRing="halo"
@@ -366,7 +368,14 @@ export function TicketSearchField({
       </ToolbarControlGroup>
     );
   return (
-    <ToolbarControlGroup className="ticket-search-field" expanded={open} single content="search" focusRing="halo">
+    <ToolbarControlGroup
+      className="ticket-search-field"
+      expanded={open}
+      expandedOverflow="visible"
+      single
+      content="search"
+      focusRing="halo"
+    >
       {content}
     </ToolbarControlGroup>
   );

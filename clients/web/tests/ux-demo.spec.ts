@@ -3643,6 +3643,17 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
       }),
     )
     .toBe(true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await help.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      help.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth;
+      }),
+    )
+    .toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-pv2ag1-search-phone.png', fullPage: true });
   await header.getByRole('button', { name: 'Search syntax help' }).click();
   await expect(help).toHaveCount(0);
 });
@@ -8107,6 +8118,11 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   const demo = page.getByRole('region', { name: 'TicketSearchField demo' });
   const fields = demo.locator('.ticket-search-field');
   await expect(fields).toHaveCount(6);
+  expect(
+    await fields.evaluateAll((nodes) =>
+      nodes.every((node) => node.getAttribute('data-expanded-overflow') === 'visible'),
+    ),
+  ).toBe(true);
   expect(await fields.evaluateAll((nodes) => nodes.every((node) => node.closest('[data-component="toolbar"]')))).toBe(
     true,
   );
@@ -8164,6 +8180,8 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
     return box.height > 200 && box.bottom > next.top && getComputedStyle(node).position === 'absolute';
   });
   expect(overlays).toBe(true);
+  await expect(fields.first()).toHaveCSS('overflow', 'visible');
+  await page.screenshot({ path: '/private/tmp/hs2-pv2ag1-search-wide.png', fullPage: true });
   await page.screenshot({ path: '/private/tmp/hs2-n5g6js-ticket-search-field-demo-wide.png', fullPage: true });
   await page.setViewportSize({ width: 600, height: 760 });
   await help.scrollIntoViewIfNeeded();
@@ -8220,8 +8238,10 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   // The collapsible variant opens from its magnifier and collapses again on Escape.
   const collapsible = fields.nth(2);
   await expect(collapsible).toHaveAttribute('data-expanded', 'false');
+  await expect(collapsible).toHaveCSS('overflow', 'hidden');
   await demo.getByRole('button', { name: 'Search tickets' }).click();
   await expect(collapsible).toHaveAttribute('data-expanded', 'true');
+  await expect(collapsible).toHaveCSS('overflow', 'visible');
   const collapsibleQuery = demo.getByRole('searchbox', { name: 'Search tickets' });
   await collapsibleQuery.fill('tag:s');
   await expect(collapsible.locator('.kui-token-search__suggestions').getByRole('button')).toHaveText(['tag:server']);
@@ -8229,6 +8249,7 @@ test('completes tags, applies dates, and explains syntax in the TicketSearchFiel
   await expect(collapsibleQuery).toHaveText('');
   await collapsibleQuery.press('Escape');
   await expect(collapsible).toHaveAttribute('data-expanded', 'false');
+  await expect(collapsible).toHaveCSS('overflow', 'hidden');
   // Each `layout` sizes the open field through TicketSearchField's own policy (Kerf group props,
   // HS2-DAMHD1), open -> closed -> open again, with no consumer stylesheet involved (HS2-8FS5BJ).
   const grow = fields.nth(3),
