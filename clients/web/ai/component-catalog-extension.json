@@ -323,9 +323,9 @@
       "name": "ProjectTabBar",
       "source": "src/components/project-tab-bar.tsx",
       "kind": "component",
-      "purpose": "Local and remote project connection tabs.",
+      "purpose": "Local and remote project tabs and the phone picker with project attention.",
       "useWhen": [
-        "Hot Sheet needs local and remote project connection tabs."
+        "Hot Sheet needs local and remote project tabs and the phone picker with project attention."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific ProjectTabBar behavior."

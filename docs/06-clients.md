@@ -2353,7 +2353,9 @@ refetches its terminals on that event. A halted terminal's drawer tab replaces i
 with a danger `triangle-alert` icon, and its dashboard tile replaces the state dot the same
 way. Both name the error ("Stopped: …") in the icon's label and tooltip. Its project tab
 shows the attention icon ("An AI session stopped on an error") even beside notification and
-work counts. The phone project picker does not show it yet (`HS2-34VG07`). Popups,
+work counts. The phone project picker shows the same labelled danger icon for the selected
+project and marks attention-bearing options with the icon and “Needs attention” (HS2-34VG07).
+The selected icon names the full reason. Popups,
 Notifications entries, and OS notifications for halts are `HS2-E6KAWY`.
 
 A terminal whose AI session runs with Hot Sheet's hooks active (HS2-EV1XK3; see

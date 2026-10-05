@@ -2374,6 +2374,11 @@ demoListeners.add(
   }),
 );
 demoListeners.add(
+  delegate(root, 'change', 'wa-select[name="mobile-project"]', (_event, target) => {
+    selectProjectTab((target as HTMLInputElement).value);
+  }),
+);
+demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.closeProjectTab.selector, (event, target) => {
     event.stopPropagation();
     closeProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);

@@ -151,9 +151,14 @@ export const demoCatalog: DemoCategory[] = [
       demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true, [
         'app-tab',
       ]),
-      demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.', 'feature-floor', true, [
-        'project-tab',
-      ]),
+      demo(
+        'project-tabs',
+        'ProjectTabBar',
+        'Local and remote project tabs and the phone picker with project attention.',
+        'feature-floor',
+        true,
+        ['project-tab', 'select'],
+      ),
       demo(
         'resizable-region',
         'ResizableRegion',

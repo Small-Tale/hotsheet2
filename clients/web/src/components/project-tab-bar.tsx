@@ -1,12 +1,13 @@
 import '@kerfjs/ui/tab-bar.css';
 import './project-tab-bar.css';
 
+import { uiColor } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { ArchiveRestore } from 'lucide';
+import { ArchiveRestore, CircleAlert } from 'lucide';
 
 import { AddProjectAction, ProjectDashboardModes, type ProjectStripMode } from './project-strip-actions';
 import { ProjectTab, type ProjectTabProps } from './project-tab';
@@ -51,8 +52,8 @@ export function ProjectTabBar({
     'data-divider': String(divider),
   };
   if (mobile) {
-    // Kerf's Select has no disabled choices, so still-opening projects join the list once they
-    // register rather than appearing as choices that cannot be selected (HS2-2BEJXD).
+    // Still-opening projects join the list once they register rather than appearing as choices
+    // that cannot yet be selected (HS2-2BEJXD).
     const choosable = tabs.filter((tab) => !tab.pending),
       active = choosable.find((tab) => tab.selected) ?? choosable[0];
     return (
@@ -73,10 +74,25 @@ export function ProjectTabBar({
                     name="mobile-project"
                     value={active.id}
                     ariaLabel="Project"
-                    choices={choosable.map((tab) => ({ value: tab.id, label: tab.name }))}
+                    choices={choosable.map((tab) => ({
+                      value: tab.id,
+                      label: tab.attention ? `${tab.name} — Needs attention` : tab.name,
+                      icon: tab.attention ? CircleAlert : undefined,
+                      iconName: tab.attention ? 'circle-alert' : undefined,
+                      color: tab.attention ? uiColor('danger-on-quiet') : undefined,
+                    }))}
                     renderSelected={(choice) => (
                       <span class="project-tab-bar__selected-project">
-                        {choice.label}
+                        {choosable.find((tab) => tab.id === choice.value)?.name ?? choice.label}
+                        {active.attention && (
+                          <LucideIcon
+                            icon={CircleAlert}
+                            name="circle-alert"
+                            size="s"
+                            color={uiColor('danger-on-quiet')}
+                            label={active.attentionLabel ?? 'Needs attention'}
+                          />
+                        )}
                         {active.operation && (
                           <span
                             class="project-tab-bar__operation"

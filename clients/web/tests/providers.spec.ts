@@ -5349,12 +5349,29 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(halted).toBeVisible();
     await settledAnimations(page.locator('[data-component="app-shell"]'));
-    await page.screenshot({ path: test.info().outputPath('hs2-hj4d1h-halted-390.png') });
-    await page.setViewportSize({ width: 1280, height: 800 });
-
+    const picker = page.locator('wa-select[name="mobile-project"]'),
+      selectedAttention = picker.locator('.project-tab-bar__selected-project [data-lucide="circle-alert"]');
+    await expect(selectedAttention).toBeVisible();
+    await expect(selectedAttention).toHaveAttribute('aria-label', 'An AI session stopped on an error');
+    await picker.click();
+    await expect(picker.getByRole('option', { name: /Needs attention/ })).toBeVisible();
+    await settledAnimations(picker);
+    const phoneOption = await picker.getByRole('option', { name: /Needs attention/ }).boundingBox();
+    expect(phoneOption!.x).toBeGreaterThanOrEqual(0);
+    expect(phoneOption!.x + phoneOption!.width).toBeLessThanOrEqual(390);
+    await page.screenshot({ path: test.info().outputPath('halted-phone-project-options.png') });
+    await picker.press('Escape');
+    await expect(picker).toHaveJSProperty('open', false);
+    await expect(picker.getByRole('option', { name: /Needs attention/ })).not.toBeVisible();
+    await settledAnimations(page.locator('[data-component="app-shell"]'));
+    await settledAnimations(picker);
+    await page.screenshot({ path: test.info().outputPath('hs2-hj4d1h-halted-390.png'), animations: 'disabled' });
     // The user prompts again: UserPromptSubmit clears it everywhere.
     hook({ hook_event_name: 'UserPromptSubmit', session_id: 'session-1', prompt: 'try again' });
     await expect(halted).toHaveCount(0);
+    await expect(selectedAttention).toHaveCount(0);
+    await expect(picker.getByRole('option', { name: /Needs attention/ })).toHaveCount(0);
+    await page.setViewportSize({ width: 1280, height: 800 });
     await expect(projectAttention).toHaveCount(0);
     expect((await server.request<Array<{ halt?: unknown }>>('/terminals'))[0].halt).toBeUndefined();
   } finally {

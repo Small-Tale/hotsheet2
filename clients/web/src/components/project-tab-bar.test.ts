@@ -42,4 +42,36 @@ describe('ProjectTabBar actions (HS2-402AXQ, HS2-PNCDAE)', () => {
     expect(empty).not.toContain('mobile-project');
     expect(empty).toContain('data-action="choose-project"');
   });
+
+  it('projects attention into phone options and the selected value, then removes it on recovery (HS2-34VG07)', () => {
+    const tabs = [
+      { id: 'healthy', name: 'Healthy', location: 'local' as const },
+      {
+        id: 'halted',
+        name: 'Halted',
+        location: 'local' as const,
+        attention: true,
+        attentionLabel: 'An AI session stopped on an error',
+      },
+    ];
+    const inactive = String(
+      ProjectTabBar({ mobile: true, tabs: tabs.map((tab) => ({ ...tab, selected: tab.id === 'healthy' })) }),
+    );
+    expect(inactive).toContain('Halted — Needs attention');
+    expect(inactive.match(/data-lucide="circle-alert"/g)).toHaveLength(1);
+    const selected = String(
+      ProjectTabBar({ mobile: true, tabs: tabs.map((tab) => ({ ...tab, selected: tab.id === 'halted' })) }),
+    );
+    expect(selected.match(/data-lucide="circle-alert"/g)).toHaveLength(2);
+    expect(selected).toContain('aria-label="An AI session stopped on an error"');
+    expect(selected).toContain('var(--kui-color-danger-on-quiet)');
+    const recovered = String(
+      ProjectTabBar({
+        mobile: true,
+        tabs: tabs.map((tab) => ({ ...tab, attention: false, selected: tab.id === 'halted' })),
+      }),
+    );
+    expect(recovered).not.toContain('circle-alert');
+    expect(recovered).not.toContain('stopped on an error');
+  });
 });

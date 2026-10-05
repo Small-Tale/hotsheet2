@@ -182,8 +182,8 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'false');
   await expect(page.locator('[data-action="toggle-geometry-overlay"]')).toHaveCount(0);
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  // ProjectTabBar renders four specimens (standalone, with the new-ticket and the Empty Trash workspace
-  // actions, HS2-PNCDAE, and the divider-free shell-column variant, HS2-DR549A); the AppTab demo composes its tabs inside a TabBar
+  // ProjectTabBar renders five specimens (standalone, with the new-ticket and the Empty Trash workspace
+  // actions, HS2-PNCDAE, the divider-free shell-column variant, HS2-DR549A, and the phone picker); the AppTab demo composes its tabs inside a TabBar
   // (HS2-GX51F7), so the overlay treats that bar as the single specimen and shows no tab borders.
   // The demo frames each bar in its own rounded stage box, so the overlay reports the bar's real
   // bottom-only border rather than a demo-imposed outline (HS2-4APEJP).
@@ -192,7 +192,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(page.getByRole('heading', { name: 'ProjectTabBar', exact: true })).toBeVisible();
   const borders = page.locator('.kui-catalog__geometry-border'),
     bounds = page.locator('.kui-catalog__geometry-bound');
-  await expect(borders).toHaveCount(3);
+  await expect(borders).toHaveCount(4);
   await expect(bounds).toHaveCount(0);
   for (const border of await borders.all()) {
     await expect(border).toHaveCSS('border-bottom-width', '1px');
@@ -215,7 +215,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await catalog.getByRole('button', { name: /ProjectTabBar/ }).click();
   await expect(page.getByRole('heading', { name: 'ProjectTabBar', exact: true })).toBeVisible();
   await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  await expect(borders).toHaveCount(3);
+  await expect(borders).toHaveCount(4);
   await expect(bounds).toHaveCount(0);
   const theme = page.getByRole('button', { name: 'Use dark theme' });
   await theme.click();
@@ -2117,6 +2117,38 @@ test('switches the TicketInspector live-claim header through every claim state (
   expect(narrowSpinner!.width).toBeCloseTo(16.8, 1);
   expect(narrowSpinner!.height).toBeCloseTo(16.8, 1);
   await page.screenshot({ path: test.info().outputPath('live-claim-narrow.png') });
+});
+
+test('projects phone project attention through selection and reset (HS2-34VG07)', async ({ page }) => {
+  await page.goto('/ux-demo?component=project-tabs');
+  const frame = page.locator('[aria-label="Phone project picker"]'),
+    picker = frame.locator('wa-select[name="mobile-project"]'),
+    selected = picker.locator('.project-tab-bar__selected-project'),
+    attention = selected.locator('[data-lucide="circle-alert"]');
+  await expect(picker).toHaveJSProperty('value', 'hotsheet');
+  await expect(attention).toHaveCount(0);
+  await picker.click();
+  const halted = picker.getByRole('option', { name: 'Internal API — Needs attention' });
+  await expect(halted.locator('[data-lucide="circle-alert"]')).toBeVisible();
+  await halted.click();
+  await expect(picker).toHaveJSProperty('value', 'api');
+  await expect(selected).toContainText('Internal API');
+  await expect(attention).toBeVisible();
+  await expect(attention).toHaveAttribute('aria-label', 'An AI session stopped on an error');
+  for (const width of [1100, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await frame.screenshot({ path: test.info().outputPath(`phone-project-attention-${width}.png`) });
+  }
+  // Programmatic selection through another composition updates the picker and every facet.
+  await page.setViewportSize({ width: 1100, height: 844 });
+  await page.locator('[data-tab-kind="project"][data-project-id="hotsheet"]').first().click();
+  await expect(picker).toHaveJSProperty('value', 'hotsheet');
+  await expect(selected).toHaveText('Hot Sheet 2');
+  await expect(attention).toHaveCount(0);
+  await picker.click();
+  await halted.click();
+  await expect(picker).toHaveJSProperty('value', 'api');
+  await expect(attention).toBeVisible();
 });
 
 test('preserves the live-claim row spinner tone at wide and phone widths (HS2-TEM5XY)', async ({ page }) => {

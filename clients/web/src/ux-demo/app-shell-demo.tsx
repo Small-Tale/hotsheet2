@@ -56,7 +56,14 @@ import {
 const initialTabs: ProjectTabProps[] = [
   { id: 'hotsheet', name: 'Hot Sheet 2', location: 'local', selected: true },
   { id: 'website', name: 'Small Tale Website', location: 'remote', upNextCount: 3, activeTicketCount: 1 },
-  { id: 'api', name: 'Internal API', location: 'remote', attention: true, upNextCount: 128 },
+  {
+    id: 'api',
+    name: 'Internal API',
+    location: 'remote',
+    attention: true,
+    attentionLabel: 'An AI session stopped on an error',
+    upNextCount: 128,
+  },
   { id: 'archive', name: 'Legacy Archive', location: 'local', disconnected: true },
 ];
 
@@ -280,6 +287,9 @@ export function ProjectTabBarDemo() {
           surface="default"
           divider={false}
         />
+      </div>
+      <div class="project-tab-bar-demo__frame" aria-label="Phone project picker">
+        <ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} mobile />
       </div>
       <p class="component-stage__event" aria-live="polite">
         {shellEvent.value}
