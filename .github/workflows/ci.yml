@@ -90,6 +90,7 @@ jobs:
         working-directory: clients/web
         run: |
           npm ci
+          npx playwright install --with-deps chromium
           npm run lint
           npm run typecheck
           npm run test:unit

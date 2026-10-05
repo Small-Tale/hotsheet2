@@ -380,6 +380,10 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   now part of the normal suite. **Pending (HS2-FPXSD0):** raise measured coverage
   floors, close remaining web coverage gaps, and add the macOS matrix leg for
   terminal/native-client surfaces.
+- The web gate installs Playwright Chromium and its Linux dependencies after `npm ci`
+  with `npx playwright install --with-deps chromium`. The Vitest suite includes real-browser
+  local-host and stable-dev tests, so browser setup is required before `test:unit` as well
+  as before the Playwright E2E suite.
 - The `check` job also validates the feature double-coverage matrix. Its validator accepts
   formatter-padded Markdown cells, ignores table separators, and checks every feature row
   and evidence reference, including rejecting rows outside the matrix markers. Repository guidance
