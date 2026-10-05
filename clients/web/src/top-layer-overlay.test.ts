@@ -22,6 +22,9 @@ function overlay({
 }: { layer?: Layer; connected?: boolean; dialog?: boolean } = {}) {
   const element = {
     layer,
+    inert: false,
+    /** Whether the overlay was `inert` at each `showPopover()`, when a `<dialog>` would focus a child. */
+    inertAtShow: [] as boolean[],
     calls: [] as string[],
     isConnected: connected,
     localName: dialog ? 'dialog' : 'div',
@@ -33,6 +36,7 @@ function overlay({
       (selector === ':popover-open' && element.layer === 'popover') ||
       (selector === ':modal' && element.layer === 'modal'),
     showPopover: vi.fn(() => {
+      element.inertAtShow.push(element.inert);
       element.calls.push('showPopover');
       element.layer = 'popover';
     }),
@@ -264,6 +268,20 @@ describe('top-layer overlays above modal dialogs (HS2-MAE27T)', () => {
       container = root([popup], [modalHost()]);
     open(container);
     expect(popup.calls).toEqual(['showModal', 'focus']);
+  });
+
+  it('opens a non-modal popup inert so it never takes focus, then restores its inert state (HS2-HZK70N)', () => {
+    const popup = overlay({ dialog: true }),
+      alreadyInert = overlay({ dialog: true }),
+      container = root([popup, alreadyInert]);
+    alreadyInert.inert = true;
+    open(container);
+    expect(popup.calls).toEqual(['showPopover']);
+    expect(popup.inertAtShow).toEqual([true]);
+    expect(popup.inert).toBe(false);
+    expect(alreadyInert.inertAtShow).toEqual([true]);
+    expect(alreadyInert.inert).toBe(true);
+    expect(popup.focus).not.toHaveBeenCalled();
   });
 
   it('keeps a non-dialog overlay a popover even over a modal', () => {

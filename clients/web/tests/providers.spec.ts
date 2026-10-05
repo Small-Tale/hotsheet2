@@ -10972,6 +10972,54 @@ for (const width of [1280, 390]) {
     await expect(popup).toBeFocused();
     await page.screenshot({ path: test.info().outputPath(`hzk70n-permission-${width}.png`) });
   });
+
+  test(`keeps inline ticket details focused when a permission popup opens outside any modal at ${width}px (HS2-HZK70N)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await mockProject(page);
+    let pending: Array<Record<string, unknown>> = [];
+    await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+    const polls: Array<import('@playwright/test').Route> = [];
+    let cursor = 0;
+    await page.route(/\/ws\/poll/, (route) => {
+      if (!new URL(route.request().url()).searchParams.has('since'))
+        return route.fulfill({ json: { cursor, events: [], overflow: false } });
+      polls.push(route);
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-DEMO01"]:visible').first().click();
+    await page.getByRole('button', { name: 'Edit Ticket details' }).locator('visible=true').first().click();
+    const details = page.getByRole('textbox', { name: 'Ticket details' }),
+      popup = page.locator('[data-component="permission-request-popup"][data-layer="top"]');
+    await details.fill('Writing details');
+    await expect(details).toBeFocused();
+    // Nothing reports a blur while the popup opens, so the autosave never fires mid-edit.
+    await details.evaluate((element) => {
+      (window as unknown as { detailsBlurs: number }).detailsBlurs = 0;
+      element.addEventListener('blur', () => {
+        (window as unknown as { detailsBlurs: number }).detailsBlurs += 1;
+      });
+    });
+    pending = [{ id: 65, connection: 'codex-session', tool: 'Bash', action: 'cargo test', agent: 'codex' }];
+    await expect.poll(() => polls.length).toBeGreaterThan(0);
+    cursor += 1;
+    await polls.shift()!.fulfill({
+      json: { cursor, events: [{ store: '', kind: 'permission_asked', id: '65', slug: 'Bash' }], overflow: false },
+    });
+    await expect(popup).toContainText('cargo test');
+    await expect.poll(() => popup.evaluate((element) => element.matches(':popover-open'))).toBe(true);
+    await expect(details).toBeFocused();
+    expect(await page.evaluate(() => (window as unknown as { detailsBlurs: number }).detailsBlurs)).toBe(0);
+    await details.press('!');
+    await expect(details).toHaveValue('Writing details!');
+    // The popup stays fully usable; it simply never took focus.
+    await expect(popup.getByRole('button', { name: 'Ignore' })).toBeVisible();
+    await expect(popup).not.toHaveJSProperty('inert', true);
+    await page.screenshot({ path: test.info().outputPath(`hzk70n-inline-details-${width}.png`) });
+  });
 }
 
 test('switches settings categories from the project sidebar', async ({ page }) => {

@@ -1983,6 +1983,9 @@ ignored (HS2-MAE27T). If a text field, select, or other editable control has foc
 modal, the watcher defers lifting a newly arrived permission request so the user can keep editing.
 The request remains in Notifications and the popup lifts when editing focus leaves; a newer modal
 also stays above an existing permission popup while its form field is focused (HS2-HZK70N).
+Outside any modal the popup never takes focus: it opens as a popover while briefly `inert`, because
+`showPopover()` on a `<dialog>` otherwise focuses its first button (Ignore) and would blur, and so
+autosave, an inline editor such as ticket details (HS2-HZK70N).
 Escape then belongs to the popup as the topmost surface: it acts as Ignore
 (client-only, no decision) and never reaches the modal beneath, so the composer stays open
 (HS2-S8K9BG). When a standalone AI conversation is open, the active permission popup is

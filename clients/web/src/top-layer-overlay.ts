@@ -96,7 +96,23 @@ export function openTopLayerOverlays(root: ParentNode): void {
       liftedAbove.delete(overlay);
     }
     if (overlay.matches(':popover-open') || typeof overlay.showPopover !== 'function') continue;
+    showPopoverWithoutFocus(overlay);
+  }
+}
+
+/**
+ * `showPopover()` on a `<dialog>` runs the dialog focusing steps, which focus its first focusable
+ * descendant (the permission popup's Ignore) and pull focus out of whatever the user is editing
+ * (HS2-HZK70N). A non-modal popover needs no focus, since nothing beneath it is inert, so it opens
+ * while `inert` leaves the focusing steps nothing to focus.
+ */
+function showPopoverWithoutFocus(overlay: OverlayElement): void {
+  const wasInert = overlay.inert;
+  overlay.inert = true;
+  try {
     overlay.showPopover();
+  } finally {
+    overlay.inert = wasInert;
   }
 }
 
