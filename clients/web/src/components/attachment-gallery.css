@@ -31,12 +31,10 @@
 .attachment-gallery__toolbar {
   --kui-toolbar-trailing-gap: var(--kui-space-m);
 }
+/* ToolbarText `fill` truncates the name at the space the controls leave. Its light-on-dark color
+   awaits a ToolbarText tone (KF-7288MD); until then this is a recorded KUI-L022 exception. */
 .attachment-gallery__toolbar .attachment-gallery__filename {
-  max-width: min(remify(672px), 55vw);
-  overflow: hidden;
   color: var(--wa-color-neutral-on-loud);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .attachment-gallery__count {
   display: inline-grid;
@@ -346,13 +344,11 @@
    this strip (centered and end positions), so the markup group stays centered on the media regardless
    of the zoom group's width and no Kerf root carries an app rule (HS2-VABS08). */
 .attachment-gallery__footer-actions {
+  --kui-color-neutral-fill-normal: var(--hs-floating-control-surface);
   position: relative;
   height: remify(40px);
 }
 @media (max-width: remify(640px)) {
-  .attachment-gallery__filename {
-    max-width: 32vw;
-  }
   .attachment-gallery__count {
     min-width: auto;
   }

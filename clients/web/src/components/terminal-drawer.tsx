@@ -298,13 +298,7 @@ export function TerminalDrawer({
               // starts so a reveal or swipe never leaves a peer as a sliver beside it (HS2-6Y8HSH).
               snapTabs
               trailing={
-                <ToolbarControlGroup
-                  className="terminal-drawer__create-wrap"
-                  size="compact"
-                  appearance="borderless"
-                  single
-                  nestedDropdown
-                >
+                <ToolbarControlGroup size="compact" appearance="borderless" single nestedDropdown>
                   <PopupMenu
                     label="New drawer item"
                     icon={<LucideIcon icon={Plus} name="plus" />}

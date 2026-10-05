@@ -1530,7 +1530,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
       probe.remove();
       return result;
     }),
-  ).toEqual({ border: 'rgb(209, 209, 214)', dividerMatches: true, surface: 'rgb(255, 255, 255)' });
+  ).toEqual({ border: 'rgba(0, 0, 28, 0.18)', dividerMatches: true, surface: 'rgb(255, 255, 255)' });
   await expect(dialog.getByRole('button', { name: 'Review captured region 1' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
   await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute(
@@ -3714,12 +3714,12 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   await expect(borderless).toHaveCSS('border-color', 'rgba(0, 0, 0, 0)');
   await expect(borderless).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await borderless.getByRole('button').hover();
-  await expect(borderless).toHaveCSS('background-color', 'rgb(229, 229, 234)');
+  await expect(borderless).toHaveCSS('background-color', 'rgba(0, 0, 49, 0.1)');
   const restingPush = demo.getByRole('button', { name: 'Resting comparison' }).locator('..');
   const pressedPush = demo.getByRole('button', { name: 'Pressed comparison' }).locator('..');
   await expect(restingPush).toHaveAttribute('data-button-appearance', 'push');
   await expect(pressedPush).toHaveCSS('background-color', 'rgb(72, 72, 74)');
-  await expect(pressedPush).toHaveCSS('border-color', 'rgb(174, 174, 178)');
+  await expect(pressedPush).toHaveCSS('border-color', 'rgba(0, 0, 13, 0.318)');
   await expect(pressedPush.getByRole('button')).toHaveCSS('color', 'rgb(255, 255, 255)');
   const dark = demo.getByRole('group', { name: 'Dark navigation' });
   await expect(dark).toHaveAttribute('data-tone', 'dark');
@@ -3757,7 +3757,7 @@ test('catalogs forced-dark FloatingToolbar children across page themes (HS2-HW02
       await page.getByRole('button', { name: 'Use light theme', exact: true }).click();
     await expect(group).toHaveCSS('color-scheme', 'dark');
     await expect(group).toHaveCSS('background-color', 'rgb(58, 58, 60)');
-    await expect(group).toHaveCSS('color', 'rgb(174, 174, 178)');
+    await expect(group).toHaveCSS('color', 'rgb(194, 194, 198)');
     const zoom = toolbar.getByRole('button', { name: 'Zoom in' });
     await zoom.hover();
     await expect(zoom).toHaveCSS('background-color', 'rgb(28, 28, 30)');
@@ -3793,7 +3793,7 @@ test('shows the reader text push state at exactly one and a half times normal si
     .poll(async () => parseFloat(await paragraph.evaluate((node) => getComputedStyle(node).fontSize)))
     .toBeCloseTo(ordinarySize * 1.5, 1);
   await expect(pushGroup).toHaveCSS('background-color', 'rgb(72, 72, 74)');
-  await expect(pushGroup).toHaveCSS('border-color', 'rgb(174, 174, 178)');
+  await expect(pushGroup).toHaveCSS('border-color', 'rgba(0, 0, 13, 0.318)');
   await expect(toggle).toHaveCSS('color', 'rgb(255, 255, 255)');
   await page.screenshot({ path: '/private/tmp/hs2-28frr0-reader-pressed-wide.png', fullPage: true });
   await reader
@@ -3817,7 +3817,7 @@ test('shows repository comparison as a shared pressed toolbar control', async ({
   await compare.click();
   await expect(compare).toHaveAttribute('aria-pressed', 'true');
   await expect(group).toHaveCSS('background-color', 'rgb(72, 72, 74)');
-  await expect(group).toHaveCSS('border-color', 'rgb(174, 174, 178)');
+  await expect(group).toHaveCSS('border-color', 'rgba(0, 0, 13, 0.318)');
   await expect(compare).toHaveCSS('color', 'rgb(255, 255, 255)');
   await dialog.screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-wide.png' });
   await dialog
@@ -5146,6 +5146,23 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 });
 
+test('maps the brand tag variant to Kerf info tone at wide and phone widths', async ({ page }, testInfo) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=tag-chip');
+    await page.locator('[data-action="toggle-settings"]').click();
+    await page.locator('wa-select[name="variant"]').evaluate((node: HTMLElement & { value: string }) => {
+      node.value = 'brand';
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const chip = page.locator('[data-component="tag-chip"]');
+    await expect(chip.locator('[data-component="chip"]')).toHaveAttribute('data-tone', 'info');
+    await page.locator('[data-action="toggle-settings"]').click();
+    await expect(chip).toBeVisible();
+    await chip.screenshot({ path: testInfo.outputPath(`tag-chip-brand-${width}.png`) });
+  }
+});
+
 test('uses semantic cursors across native and Web Awesome interactions', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCSS('cursor', 'pointer');
@@ -5201,7 +5218,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(summary.locator('[data-bar]')).toHaveCount(7);
   await expect(summary.locator('[data-zero="true"]')).toHaveCount(1);
   await expect(summary.locator('[data-zero="true"]')).toHaveCSS('height', '1px');
-  await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgb(174, 174, 178)');
+  await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgba(0, 0, 13, 0.318)');
   await expect(summary).toHaveCSS('cursor', 'pointer');
   const summaryGeometry = await summary.evaluate((node) => {
     const button = node.getBoundingClientRect(),
@@ -6394,7 +6411,7 @@ test('exercises the application-shell responsive composition', async ({ page }) 
     width: getComputedStyle(node).borderInlineEndWidth,
     background: getComputedStyle(node).borderInlineEndColor,
   }));
-  expect(sidebarSeparator).toEqual({ width: '1px', background: 'rgb(209, 209, 214)' });
+  expect(sidebarSeparator).toEqual({ width: '1px', background: 'rgba(0, 0, 28, 0.18)' });
   await shell.getByRole('button', { name: 'Columns view' }).click();
   const shellWorkspace = shell.locator('.app-shell__workspace');
   await expect(shellWorkspace).toHaveAttribute('data-presentation', 'edge-to-edge');
@@ -6614,7 +6631,7 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
       probe.remove();
       return result;
     }),
-  ).toEqual({ divider: 'rgb(209, 209, 214)', dividerMatches: true });
+  ).toEqual({ divider: 'rgba(0, 0, 28, 0.18)', dividerMatches: true });
   await page.screenshot({ path: '/private/tmp/hs2-66m88k-semantic-theme-wide.png', fullPage: true });
   await page.setViewportSize({ width: 940, height: 844 });
   await expect(sidebarRegion).toBeVisible();

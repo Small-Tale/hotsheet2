@@ -180,18 +180,20 @@ export function AppShell({
           // The restore corner is Kerf's; the toolbar inside it is the app's control (no inset: the
           // corner owns it). It is withheld while the drawer animates so it never flashes mid-motion.
           restoreControl: !terminalDrawerTransitioning ? (
-            <FloatingToolbar label="Terminal drawer controls" position="bottom-end">
-              <ToolbarControlGroup single>
-                <button
-                  type="button"
-                  {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
-                  aria-label="Show terminal drawer"
-                  title="Show terminal drawer"
-                >
-                  <LucideIcon icon={PanelBottomOpen} name="panel-bottom-open" />
-                </button>
-              </ToolbarControlGroup>
-            </FloatingToolbar>
+            <div class="app-shell__restore-control-theme">
+              <FloatingToolbar label="Terminal drawer controls" position="bottom-end">
+                <ToolbarControlGroup single>
+                  <button
+                    type="button"
+                    {...TERMINALS_ACTIONS.toggleTerminalDrawer.attrs}
+                    aria-label="Show terminal drawer"
+                    title="Show terminal drawer"
+                  >
+                    <LucideIcon icon={PanelBottomOpen} name="panel-bottom-open" />
+                  </button>
+                </ToolbarControlGroup>
+              </FloatingToolbar>
+            </div>
           ) : undefined,
         }
       : undefined;
@@ -292,8 +294,8 @@ export function AppShell({
 
 /**
  * The phone page header: Kerf's compact borderless toolbar Select switches the ticket view, sized to
- * the selected view name, beside the view's action (HS2-0SARDD). AppShell owns its markup and the
- * `.app-shell__mobile-view` placement (HS2-T35VN7).
+ * the selected view name, beside the view's action (HS2-0SARDD). AppShell owns its markup; the Select
+ * sizes itself inside its group (HS2-T35VN7, HS2-170JC3).
  */
 function AppShellMobileViewHeader({ value, choices, action }: AppShellMobileView) {
   return (
@@ -303,7 +305,6 @@ function AppShellMobileViewHeader({ value, choices, action }: AppShellMobileView
       leading={
         <ToolbarControlGroup single appearance="borderless">
           <Select
-            className="app-shell__mobile-view"
             presentation="toolbar-borderless"
             size="compact"
             name="mobile-view"

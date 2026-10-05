@@ -30,6 +30,10 @@ for (const width of [1280, 390]) {
       );
     const imagePalette = await palette();
     await expect(gallery.locator('.attachment-gallery__filename')).toHaveCSS('color', 'rgb(255, 255, 255)');
+    for (const label of ['Media markup', 'Media zoom'])
+      await expect(
+        gallery.getByRole('toolbar', { name: label }).locator('[data-component="toolbar-control-group"]'),
+      ).toHaveCSS('background-color', 'rgb(58, 58, 60)');
     await expect(gallery.locator('img')).toHaveCSS('filter', 'none');
     await gallery.screenshot({ path: testInfo.outputPath(`gallery-light-${width}.png`), animations: 'disabled' });
     // Exercise real system preference changes while the modal is open. Removing

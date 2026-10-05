@@ -55,6 +55,9 @@
   --hs-command-gray: var(--hs-category-issue);
   --hs-terminal-background: #000;
   --hs-terminal-foreground: #fff;
+  /* Opaque floating controls remain legible over transparent and light content after Kerf
+     beta.76 made the default neutral fill translucent (HS2-170JC3). */
+  --hs-floating-control-surface: #3a3a3c;
   /* Key-bar group outline on the fixed dark terminal surface; mirrors Kerf's dark toolbar
      control border so the bar reads as one family with the terminal toolbar. */
   --hs-terminal-control-border: var(--kui-toolbar-control-dark-border, #353536);

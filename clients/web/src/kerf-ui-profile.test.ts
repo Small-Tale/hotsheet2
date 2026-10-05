@@ -95,10 +95,45 @@ describe('Kerf application UI profile', () => {
         ],
       }),
     );
-    // Known Kerf gaps are documented suppressions, never budgets. Production components carry none
-    // (HS2-DAMHD1, HS2-AEK8GK), beta.72 skips test modules for KUI-L023 (KF-GESM24, HS2-51MB3F), and
-    // beta.73 lets the UX demo ownership group own its stage class (KF-303MPV, HS2-R9GQJE): none remain.
-    expect(config.suppressions).toEqual([]);
+    // Known Kerf gaps are documented suppressions, never open-ended budgets: each names the KF ticket
+    // whose prop removes it. beta.76's stricter KUI-L022 found eight files whose styling no Kerf API
+    // expresses yet (HS2-170JC3); the set only shrinks as those tickets ship.
+    expect(config.suppressions.map(({ id, rules, target }) => ({ id, rules, target }))).toEqual([
+      { id: 'kf-vh4b52-ai-conversation-heading', rules: ['KUI-L022'], target: 'src/components/ai-conversation.tsx' },
+      {
+        id: 'kf-vh4b52-command-settings-heading',
+        rules: ['KUI-L022'],
+        target: 'src/components/command-settings-editor.tsx',
+      },
+      {
+        id: 'kf-vh4b52-connection-details-heading',
+        rules: ['KUI-L022'],
+        target: 'src/components/connection-details-dialog.tsx',
+      },
+      { id: 'kf-vh4b52-dialog-layout-demo-heading', rules: ['KUI-L022'], target: 'src/ux-demo/dialog-layout-demo.tsx' },
+      {
+        id: 'kf-vh4b52-repository-status-heading',
+        rules: ['KUI-L022'],
+        target: 'src/components/repository-status-popover.tsx',
+      },
+      {
+        id: 'kf-mxe9yv-workspace-header-width-visibility',
+        rules: ['KUI-L022'],
+        target: 'src/components/workspace-controls.tsx',
+      },
+      {
+        id: 'kf-m8sv15-search-group-anchored-surfaces',
+        rules: ['KUI-L022'],
+        target: 'src/components/ticket-search-field.tsx',
+      },
+      {
+        id: 'kf-7288md-gallery-filename-dark-tone',
+        rules: ['KUI-L022'],
+        target: 'src/components/attachment-gallery.tsx',
+      },
+    ]);
+    for (const suppression of config.suppressions)
+      expect(suppression.rationale).toContain(suppression.id.slice(0, 9).replace('kf-', 'KF-').toUpperCase());
     // The doctor replaced the app CSS ownership check, so `npm run lint` ends with it (HS2-R9GQJE).
     const scripts = (
       JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {

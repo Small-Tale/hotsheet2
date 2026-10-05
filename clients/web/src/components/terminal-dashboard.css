@@ -423,6 +423,7 @@
    bottom-end inset relative to this anchor, so it clears the device inset without app CSS on the
    toolbar itself (HS2-VABS08). */
 .terminal-dashboard__zoom {
+  --kui-color-neutral-fill-normal: var(--hs-floating-control-surface);
   position: absolute;
   width: 0;
   height: 0;

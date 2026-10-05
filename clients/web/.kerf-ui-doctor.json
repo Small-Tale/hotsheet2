@@ -28,5 +28,54 @@
   },
   "cache": true,
   "failOn": "warning",
-  "suppressions": []
+  "suppressions": [
+    {
+      "id": "kf-vh4b52-ai-conversation-heading",
+      "rules": ["KUI-L022"],
+      "target": "src/components/ai-conversation.tsx",
+      "rationale": "Heading icon tile keeps its brand quiet fill through ToolbarControlGroup tokens (heading.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
+    },
+    {
+      "id": "kf-vh4b52-command-settings-heading",
+      "rules": ["KUI-L022"],
+      "target": "src/components/command-settings-editor.tsx",
+      "rationale": "Heading icon tile keeps its brand quiet fill through ToolbarControlGroup tokens (heading.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
+    },
+    {
+      "id": "kf-vh4b52-connection-details-heading",
+      "rules": ["KUI-L022"],
+      "target": "src/components/connection-details-dialog.tsx",
+      "rationale": "Heading icon tile keeps its brand quiet fill through ToolbarControlGroup tokens (heading.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
+    },
+    {
+      "id": "kf-vh4b52-dialog-layout-demo-heading",
+      "rules": ["KUI-L022"],
+      "target": "src/ux-demo/dialog-layout-demo.tsx",
+      "rationale": "Heading icon tile keeps its brand quiet fill through ToolbarControlGroup tokens (heading.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
+    },
+    {
+      "id": "kf-vh4b52-repository-status-heading",
+      "rules": ["KUI-L022"],
+      "target": "src/components/repository-status-popover.tsx",
+      "rationale": "Repository-status heading icon tile keeps its brand fill (heading.css) and its success/danger state fill (repository-status-popover.css) until Kerf ships an icon-tile tone (KF-VH4B52); remove when HS2 adopts it."
+    },
+    {
+      "id": "kf-mxe9yv-workspace-header-width-visibility",
+      "rules": ["KUI-L022"],
+      "target": "src/components/workspace-controls.tsx",
+      "rationale": "Workspace-header groups and identity hide or reveal at toolbar container widths (workspace-header.css) until Kerf ships width-threshold visibility (KF-MXE9YV); remove when HS2 adopts it."
+    },
+    {
+      "id": "kf-m8sv15-search-group-anchored-surfaces",
+      "rules": ["KUI-L022"],
+      "target": "src/components/ticket-search-field.tsx",
+      "rationale": "The expanded grouped search anchors its suggestion, date, and help surfaces below the group (ticket-search-field.css) until Kerf ships a supported anchor (KF-M8SV15); remove when HS2 adopts it."
+    },
+    {
+      "id": "kf-7288md-gallery-filename-dark-tone",
+      "rules": ["KUI-L022"],
+      "target": "src/components/attachment-gallery.tsx",
+      "rationale": "The gallery filename ToolbarText uses light-on-dark text in the dark toolbar (attachment-gallery.css) until Kerf ships a ToolbarText tone (KF-7288MD); remove when HS2 adopts it."
+    }
+  ]
 }

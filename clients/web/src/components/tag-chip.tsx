@@ -38,6 +38,15 @@ export function normalizeTagChipProps(props: TagChipProps): NormalizedTagChipPro
   };
 }
 
+/** Kerf's semantic tones name the brand palette `info` (5.0.0-beta.76). */
+const CHIP_TONE = {
+  brand: 'info',
+  neutral: 'neutral',
+  success: 'success',
+  warning: 'warning',
+  danger: 'danger',
+} as const;
+
 const CHIP_APPEARANCE = {
   accent: 'solid',
   filled: 'quiet',
@@ -52,7 +61,7 @@ const CHIP_APPEARANCE = {
 export function TagChip(raw: TagChipProps) {
   const props = normalizeTagChipProps(raw);
   const presentation = {
-    tone: props.variant,
+    tone: CHIP_TONE[props.variant],
     appearance: CHIP_APPEARANCE[props.appearance],
     shape: props.pill ? 'pill' : 'rounded',
     size: props.size === 'small' ? 'compact' : 'default',

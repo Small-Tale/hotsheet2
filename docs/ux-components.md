@@ -506,9 +506,12 @@ without network requests (HS2-Y70MJY).
   Hot Sheet uses its bottom-end variant for the collapsed terminal-drawer restore action and
   for zoom controls in both the workspace dashboard and drawer Project grid.
   `ToolbarControlGroup` children inherit the toolbar's dark color scheme with their default
-  tone, keeping dark surfaces and light icons in both page themes. Applying the group's
-  inverse `dark` tone would invert that already-dark scheme back to a light surface
-  (HS2-HW02QG). The children own the control chrome; consumers own visibility,
+  tone. Kerf beta.76's default neutral fill became translucent, so their app-owned anchor
+  supplies the public `--kui-color-neutral-fill-normal` theme token from Hot Sheet's
+  `--hs-floating-control-surface` alias to keep an opaque dark
+  surface over light and transparent content in both page themes. The group's inverse
+  `dark` tone would turn that already-dark scheme into a light surface (HS2-HW02QG,
+  HS2-170JC3). The children own the control chrome; consumers own visibility,
   actions, and safe-area-adjusted positioning (HS2-W3GPHW).
 - `ToolbarText` — **demo built**: vertically aligned large, default, and small toolbar
   identity text; project names use large and inspector ticket numbers use small.
@@ -1393,7 +1396,8 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
 - `TagList`
 - `TagChip` — **built**: Kerf's removable `Chip` primitive inside an app wrapper that carries
   the stable domain identity (`data-tag-id`), compact quiet rounded default presentation plus
-  optional variants (mapped onto Chip tone, appearance, shape, and size), disabled/removable
+  optional variants (mapped onto Chip tone, appearance, shape, and size; Hot Sheet `brand`
+  uses Kerf's `info` tone since beta.76), disabled/removable
   behavior, unit tests, and interactive `/ux-demo` coverage. Removal is Chip's delegated
   `remove-tag-chip` action; the owning feature resolves the tag from the wrapper and mutates
   the ticket (HS2-HJEHRW). Hot Sheet owns no chip chrome.
@@ -2359,11 +2363,13 @@ the plain `kerf-ui-doctor --full` command, with `"failOn": "warning"` in `.kerf-
 active error, review finding, or warning fails it (`KF-6S5EKX`). The interim wrapper script from
 HS2-6PD4FS is gone. Known, tracked gaps are not budgeted; they are documented `suppressions` in
 `.kerf-ui-doctor.json`, each with a rationale naming the Kerf ticket whose adoption removes it.
-Production code carries none: HS2-DAMHD1 adopted Kerf's toolbar yield, fill, placement,
-tiny-visibility, and Select title APIs, and HS2-AEK8GK removed the last one, the `KUI-L022`
-grow-floor hook on `TicketSearchField`, by adopting `sizing="grow"` once Kerf 5.0.0-beta.70 kept
-its basis floor (`KF-K4VBTS`). `src/kerf-ui-profile.test.ts` pins that the suppression list is
-empty.
+HS2-DAMHD1 adopted Kerf's toolbar yield, fill, placement, tiny-visibility, and Select title
+APIs, and HS2-AEK8GK removed the `KUI-L022` grow-floor hook on `TicketSearchField` by adopting
+`sizing="grow"` once Kerf 5.0.0-beta.70 kept its basis floor (`KF-K4VBTS`). Beta.76's stricter
+`KUI-L022` analysis identified eight remaining component files that need Kerf APIs for heading
+icon-tile tone, workspace-header width visibility, grouped-search anchors, or gallery filename
+tone. Each has an exact per-file suppression naming `KF-VH4B52`, `KF-MXE9YV`, `KF-M8SV15`, or
+`KF-7288MD`; `src/kerf-ui-profile.test.ts` pins the list so it can only change deliberately.
 
 Kerf 5.0.0-beta.70 (HS2-1GPHS5) added `KUI-L023`, the markup-borrowing rule. It flags a module that
 renders markup owned by another component. On beta.70 it also read HTML string literals in unit-test
@@ -2419,8 +2425,9 @@ former app check enforced:
 | `.kui-toolbar > .own` (Kerf class as context)                           | `KUI-L019` context |
 | JSX `class=`, raw HTML in a template literal with `${…}`, `className =` | `KUI-L023`         |
 
-Beta.73 also lets the UX demo ownership group own its `.component-stage__event` (`KF-303MPV`), so
-the doctor runs with no suppressions. HS2-R9GQJE therefore deleted the app check
+Beta.73 also lets the UX demo ownership group own its `.component-stage__event` (`KF-303MPV`),
+which removed the suppressions present at that release. Beta.76 introduced the eight documented
+`KUI-L022` suppressions above. HS2-R9GQJE deleted the app check
 (`scripts/check-css-ownership.mjs`, its test, `css-ownership-allowlist.json`, and the
 `css:ownership` script). `npm run lint` now ends with `npm run ui:doctor`.
 

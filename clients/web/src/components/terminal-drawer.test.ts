@@ -53,7 +53,9 @@ describe('TerminalDrawer', () => {
     // Kerf beta.59 sizes a compact PopupMenu trigger from the group's size prop; no app ::part rule (HS2-MYVVK3).
     const css = readFileSync(resolve(import.meta.dirname, 'terminal-drawer.css'), 'utf8');
     expect(css).not.toContain('wa-button::part(base)');
-    expect(render()).toMatch(/terminal-drawer__create-wrap"[^>]*data-size="compact"/);
+    expect(render()).toMatch(
+      /kui-toolbar-control-group"[^>]*data-size="compact"[^>]*>\s*<wa-dropdown|data-size="compact"[^>]*data-nested-dropdown/,
+    );
     expect(render()).toContain('appearance="plain"');
   });
   it('uses the Kerf spacing scale for the rail, content, and terminal inset', () => {
@@ -99,9 +101,7 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('>Project grid</span>');
     expect(markup).toContain('data-lucide="layout-grid"');
     expect(markup).not.toContain('data-lucide="grid-3x3"');
-    expect(markup).toMatch(
-      /data-kui-tab-list[\s\S]*Terminal 2[\s\S]*kui-tab-bar__trailing[\s\S]*terminal-drawer__create/,
-    );
+    expect(markup).toMatch(/data-kui-tab-list[\s\S]*Terminal 2[\s\S]*kui-tab-bar__trailing[\s\S]*New drawer item/);
     expect(markup).toMatch(/kui-tab-bar__end[\s\S]*terminal-drawer__actions[\s\S]*Hide terminal drawer/);
     expect(markup).toContain('data-component="app-tab"');
     expect(markup).toContain('data-tab-kind="terminal"');

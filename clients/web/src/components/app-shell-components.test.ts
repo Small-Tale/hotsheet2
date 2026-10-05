@@ -159,14 +159,13 @@ describe('application shell components', () => {
     });
     expect(markup).toContain('app-shell__mobile-view-header');
     const select = /<wa-select\b[^>]*>/.exec(markup)?.[0] ?? '';
-    expect(select).toMatch(/class="[^"]*\bapp-shell__mobile-view\b/);
     expect(select).toContain('name="mobile-view"');
     expect(select).toContain('aria-label="Ticket view"');
     expect(markup).toContain('data-action="open-empty-trash"');
     expect(markup).not.toContain('desktop-only');
     const without = render({ pageHeader: '<p class="desktop-only">Page</p>' as never });
     expect(without).toContain('desktop-only');
-    expect(without).not.toContain('app-shell__mobile-view');
+    expect(without).not.toContain('app-shell__mobile-view-header');
   });
   it('fills the window only in the viewport presentation the application root uses (HS2-DR549A)', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
@@ -646,7 +645,7 @@ describe('application shell components', () => {
     );
     expect(collapsed).toContain('data-component="toolbar-control-group"');
     expect(collapsed).toContain('data-tone="default"');
-    expect(collapsed).not.toContain('data-tone="dark"');
+    expect(collapsed).toContain('app-shell__restore-control-theme');
     expect(collapsed).toContain('aria-label="Show terminal drawer"');
     const popup = String(
       AppShell({

@@ -849,6 +849,7 @@ body[data-resizing-project-sidebar='true'] {
   }
 }
 .floating-toolbar-demo {
+  --kui-color-neutral-fill-normal: var(--hs-floating-control-surface);
   position: relative;
   min-height: remify(192px);
   padding: var(--kui-space-m);

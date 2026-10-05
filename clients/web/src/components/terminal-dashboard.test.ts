@@ -63,7 +63,6 @@ describe('TerminalDashboard', () => {
     );
     expect(markup).toContain('data-component="toolbar-control-group"');
     expect(markup).toContain('data-tone="default"');
-    expect(markup).not.toContain('data-tone="dark"');
     expect(markup).toContain('data-action="zoom-terminal-grid"');
     for (const action of ['magnify-terminal', 'dedicate-terminal'])
       expect(markup).not.toContain(`data-action="${action}"`);

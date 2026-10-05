@@ -173,10 +173,6 @@
   display: inline-flex;
   flex: none;
 }
-.terminal-drawer__create-wrap {
-  position: relative;
-  flex: none;
-}
 .terminal-drawer__content {
   min-width: 0;
   min-height: 0;

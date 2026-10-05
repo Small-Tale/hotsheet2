@@ -11,6 +11,13 @@ This is the durable report for Hot Sheet 2's **double coverage** goal: every shi
 feature should have both focused unit/logic coverage and a realistic E2E user-flow test.
 Line/branch reports remain useful floors, but they cannot prove this behavioral pairing.
 
+HS2-170JC3 pins Kerf beta.76's `brand` to `info` TagChip mapping in
+`clients/web/src/components/tag-chip.test.ts` and the wide/phone UX demo flow in
+`clients/web/tests/ux-demo.spec.ts`. Floating-toolbar dark-surface behavior is checked
+by the app-shell, terminal-dashboard, and attachment-gallery render tests and by
+`clients/web/tests/providers.spec.ts`, `clients/web/tests/gallery-theme.spec.ts`, and
+`clients/web/tests/ux-demo.spec.ts` at representative widths.
+
 Update this matrix in the same change that ships, changes, defers, or adds automated
 coverage for a feature. Evidence entries are semicolon-separated repository paths; an
 optional `# test_name` suffix documents the most relevant test. Manual evidence may use a

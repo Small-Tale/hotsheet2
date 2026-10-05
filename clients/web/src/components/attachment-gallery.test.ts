@@ -89,13 +89,14 @@ describe('AttachmentGallery', () => {
     );
     expect(markup).toContain('<div class="attachment-gallery__toolbar"><header class="kui-toolbar"');
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);
-    // The header groups are dark-toned; the floating footer groups take the FloatingToolbar's dark scheme.
+    // The header groups use dark tone; the floating footer inherits FloatingToolbar's dark scheme.
     expect(markup.match(/data-tone="dark"/g)).toHaveLength(3);
     const markupMode = String(AttachmentGallery({ images, activeUrl: '/b.svg', markup: true }));
     expect(markupMode).toContain(
       'data-position="bottom" data-placement="floating" role="toolbar" aria-label="Media markup"',
     );
     expect(markupMode.match(/data-component="toolbar-control-group"/g)).toHaveLength(5);
+    expect(markupMode.match(/data-tone="dark"/g)).toHaveLength(3);
   });
   it('cycles previous and next from canonical URLs and aliases', () => {
     const aliased = [images[0], { ...images[1], aliases: ['/tickets/HS2-DEMO/attachments/by-name/b.svg'] }];

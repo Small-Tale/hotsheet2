@@ -3078,10 +3078,11 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
     const group = toolbar.locator('[data-component="toolbar-control-group"]');
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
+      await expect(group).toHaveAttribute('data-tone', 'default');
       await expect(group).toHaveCSS('color-scheme', 'dark');
       await expect(group).toHaveCSS('background-color', 'rgb(58, 58, 60)');
-      await expect(group).toHaveCSS('color', 'rgb(174, 174, 178)');
-      await expect(group.locator('button').first()).toHaveCSS('color', 'rgb(174, 174, 178)');
+      await expect(group).toHaveCSS('color', 'rgb(194, 194, 198)');
+      await expect(group.locator('button').first()).toHaveCSS('color', 'rgb(194, 194, 198)');
       await toolbar.screenshot({ path: testInfo.outputPath(`floating-${name}-${theme}.png`) });
     }
     await page.emulateMedia({ colorScheme: 'light' });

@@ -24,6 +24,7 @@ describe('TagChip', () => {
   });
 
   it('maps Hot Sheet presentation onto Chip tone, appearance, shape, and size', () => {
+    expect(String(TagChip({ id: 'brand', label: 'brand', variant: 'brand' }))).toContain('data-tone="info"');
     const accent = String(
       TagChip({ id: 'a', label: 'a', variant: 'danger', appearance: 'accent', size: 'large', pill: true }),
     );

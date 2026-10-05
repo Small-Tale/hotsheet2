@@ -36,13 +36,9 @@
 .app-shell[data-terminal-focus-mode='true'] {
   --kui-workbench-popup-z: 200;
 }
-/* Mobile view switcher (the page-header Select that replaces the desktop view title): Kerf's compact
-   borderless toolbar Select, placed to size to the selected view name, shrinking/truncating rather
-   than stretching (HS2-0SARDD). */
-.app-shell__mobile-view {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
+.app-shell__restore-control-theme {
+  display: contents;
+  --kui-color-neutral-fill-normal: var(--hs-floating-control-surface);
 }
 .app-shell__work-area {
   position: relative;

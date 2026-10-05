@@ -89,6 +89,7 @@ describe('shared client theme', () => {
       '--hs-terminal-background',
       '--hs-terminal-foreground',
       '--hs-terminal-control-border',
+      '--hs-floating-control-surface',
       '--hs-ticket-state-needs-review',
       '--hs-ticket-state-up-next',
       '--hs-ticket-state-up-next-on',
