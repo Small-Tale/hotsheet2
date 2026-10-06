@@ -336,7 +336,7 @@ export function RepositoryStatusPopover({
           listTitle={compact ? 'Repository Status' : 'Repository'}
           detailTitle={viewLabel}
           backLabel="Back to repository views"
-          compactStack={{ list: { toolbar: actions }, detail: { toolbar: actions } }}
+          compactStack={{ list: { toolbar: { trailing: actions } }, detail: { toolbar: { trailing: actions } } }}
           list={
             compact ? (
               <div class="repository-status-popover__compact-list">

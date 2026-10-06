@@ -372,6 +372,7 @@ export function TicketSourceSetupDialog({
     );
   return (
     <wa-dialog
+      class="ticket-source-setup-dialog"
       data-component="ticket-source-setup-dialog"
       data-ticket-source-setup-dialog
       data-navigation={navigation}

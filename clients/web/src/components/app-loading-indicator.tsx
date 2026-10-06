@@ -10,7 +10,7 @@ export function AppLoadingIndicator({ progress }: { progress?: BulkUpdateProgres
   const updating = progress !== undefined;
   return (
     <div
-      class="app-loading"
+      class="app-loading app-loading-indicator"
       data-component="app-loading-indicator"
       data-loading-kind={updating ? 'tickets' : 'project'}
     >

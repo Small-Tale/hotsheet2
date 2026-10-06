@@ -98,14 +98,38 @@ describe('Kerf application UI profile', () => {
         ],
       }),
     );
-    // Known Kerf gaps are documented suppressions, never open-ended budgets: each names the KF ticket
-    // whose prop removes it. beta.77's tileTone, expandedOverflow, and ToolbarText tone retired
-    // seven exceptions (HS2-RXXXPH, HS2-PV2AG1, HS2-V5VS0A).
+    // Known Kerf and app wrapper gaps are documented file/rule suppressions, never open-ended budgets.
+    // beta.80 adds TabBar placement and app wrapper slot exceptions (KF-KJYK46, HS2-PC9DVB).
     expect(config.suppressions.map(({ id, rules, target }) => ({ id, rules, target }))).toEqual([
       {
         id: 'kf-mxe9yv-workspace-header-width-visibility',
         rules: ['KUI-L022'],
         target: 'src/components/workspace-controls.tsx',
+      },
+      {
+        id: 'kf-kjyk46-tabbar-project-actions',
+        rules: ['KUI-L201'],
+        target: 'src/components/project-tab-bar.tsx',
+      },
+      {
+        id: 'kf-kjyk46-tabbar-terminal-actions',
+        rules: ['KUI-L201'],
+        target: 'src/components/terminal-drawer.tsx',
+      },
+      {
+        id: 'hs2-pc9dvb-main-shell-header-actions',
+        rules: ['KUI-L201'],
+        target: 'src/app/runtime.tsx',
+      },
+      {
+        id: 'hs2-pc9dvb-ux-demo-header-actions',
+        rules: ['KUI-L201'],
+        target: 'src/ux-demo/main.tsx',
+      },
+      {
+        id: 'hs2-pc9dvb-ux-demo-rail-controls',
+        rules: ['KUI-L201'],
+        target: 'src/ux-demo/workspace-components-demo.tsx',
       },
     ]);
     for (const suppression of config.suppressions)

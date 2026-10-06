@@ -12,14 +12,19 @@ describe('global stylesheet ownership', () => {
       [
         'ticket-source setup',
         'ticket-source-setup-dialog.css',
-        ['data-ticket-source-setup-dialog', '.ticket-source-setup'],
+        ['data-ticket-source-setup-dialog', '.ticket-source-setup-dialog', '.ticket-source-setup'],
       ],
       ['provider setup', 'provider-setup-form.css', ['.provider-setup-form']],
-      ['ticket-source settings', 'ticket-sources-settings.css', ['.ticket-provider-settings']],
-      ['settings workspace', 'settings-workspace.css', ['.project-settings']],
+      [
+        'ticket-source settings',
+        'ticket-sources-settings.css',
+        ['.ticket-sources-settings', '.ticket-provider-settings'],
+      ],
+      ['settings workspace', 'settings-workspace.css', ['.settings-workspace', '.project-settings']],
+      ['ticket row context menu', 'ticket-row-context-menu.css', ['.ticket-row-context-menu', '.ticket-context-menu']],
       // TicketPageMore owns the paged list/column continuation button (HS2-WP69TD).
       ['ticket page continuation', 'ticket-page-more.css', ['.ticket-page-more']],
-      ['app loading indicator', 'app-loading-indicator.css', ['.app-loading']],
+      ['app loading indicator', 'app-loading-indicator.css', ['.app-loading-indicator', '.app-loading']],
     ] as const;
     for (const [name, file, selectors] of ownership) {
       const owned = read(`./components/${file}`);

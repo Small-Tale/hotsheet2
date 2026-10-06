@@ -73,7 +73,7 @@ function ConnectionCopy({
 export function TicketSourcesSettings({ sources, error = '', setupOpen = false }: TicketSourcesSettingsProps) {
   const defaultSource = sources.find((source) => source.default) ?? sources.at(0);
   return (
-    <div class="ticket-provider-settings" data-component="ticket-sources-settings">
+    <div class="ticket-provider-settings ticket-sources-settings" data-component="ticket-sources-settings">
       <section>
         <header class="ticket-provider-settings__header">
           <h2 class="ticket-provider-settings__title">Ticket sources</h2>

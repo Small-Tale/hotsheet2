@@ -61,10 +61,10 @@ describe('TerminalTicketRail', () => {
     expect(parts.navStack.views.map((view) => view.key)).toEqual(['root']);
     const [root] = parts.navStack.views;
     // The project selector is the root view's toolbar group, ahead of the panel's standard toggle.
-    expect(String(root.leading)).toContain('name="terminal-rail-project"');
+    expect(String(root.toolbar?.leading)).toContain('name="terminal-rail-project"');
     expect(String(root.header)).toContain('class="kui-toolbar terminal-ticket-rail__controls"');
     expect(String(root.header)).toContain('name="terminal-rail-view"');
-    expect(root.appearance).toBe('sunken');
+    expect(root.pane?.appearance).toBe('sunken');
     expect(String(root.content)).toContain('Tickets');
     expect(String(root.content)).not.toContain('name="terminal-rail-project"');
   });
@@ -74,8 +74,8 @@ describe('TerminalTicketRail', () => {
     const pushed = parts.navStack.views[1];
     // Kerf renders the back control first and the panel toggle last; the view adds the ticket
     // number (centered) and its actions — no second toolbar and no hand-made back button.
-    expect(String(pushed.leading)).toContain('data-action="copy-ticket-slug"');
-    expect(String(pushed.toolbar)).toContain('data-action="open-ticket-reader"');
+    expect(String(pushed.toolbar?.leading)).toContain('data-action="copy-ticket-slug"');
+    expect(String(pushed.toolbar?.trailing)).toContain('data-action="open-ticket-reader"');
     expect(String(pushed.header)).toContain('data-component="ticket-inspector-header"');
     expect(String(pushed.header)).toContain('Pushed ticket');
     expect(String(pushed.content)).toContain('data-component="ticket-inspector-body"');

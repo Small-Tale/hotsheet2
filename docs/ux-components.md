@@ -2393,8 +2393,20 @@ APIs, and HS2-AEK8GK removed the `KUI-L022` grow-floor hook on `TicketSearchFiel
 `sizing="grow"` once Kerf 5.0.0-beta.70 kept its basis floor (`KF-K4VBTS`). Beta.76's stricter
 `KUI-L022` analysis identified eight remaining component files that need Kerf APIs for heading
 icon-tile tone, workspace-header width visibility, grouped-search anchors, or gallery filename
-tone. HS2-X0FS92 pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` in the web client,
-plus `kerfjs` and the ESLint plugin in the compatibility spike, to the published 5.0.0-beta.77.
+tone. HS2-6HPE7R pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` in the web client,
+plus `kerfjs` and the ESLint plugin in the compatibility spike, to the published 5.0.0-beta.80
+following the beta.77 upgrade in HS2-X0FS92. The terminal ticket rail supplies per-view
+`toolbar.leading`, `toolbar.center`, and `toolbar.trailing` through the structured
+NavStack toolbar, and its sunken scroll surface through `pane.appearance`. The repository
+popover supplies compact SplitView actions through `compactStack.*.toolbar.trailing`.
+Beta.80's component-style doctor checks recognize explicit classes matching five application
+component roots: AppLoadingIndicator, SettingsWorkspace, TicketRowContextMenu,
+TicketSourceSetupDialog, and TicketSourcesSettings (HS2-8ZM85Z). Their existing selectors
+remain for compatibility, and the named classes live in each component's own stylesheet.
+The strict doctor gate narrowly suppresses seven `KUI-L201` reports at five call sites where
+Kerf's documented TabBar zones or Hot Sheet toolbar wrapper props accept
+`ToolbarControlGroup`. `KF-KJYK46` tracks the TabBar catalog mismatch, and `HS2-PC9DVB`
+tracks app wrapper slot modeling; remove the suppressions when those contracts are represented.
 Kerf beta.77's `ToolbarControlGroup.tileTone` (HS2-RXXXPH, KF-VH4B52) now paints direct
 decorative heading icons in brand, success, or danger quiet tones. The command editor retains its
 app-owned custom-color icon span centered inside a borderless Kerf group; the generic heading root styling

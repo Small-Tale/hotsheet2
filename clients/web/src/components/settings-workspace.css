@@ -1,4 +1,5 @@
-.project-settings {
+.project-settings,
+.settings-workspace {
   width: 100%;
   max-width: remify(864px);
   margin: 0 auto;

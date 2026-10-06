@@ -42,9 +42,11 @@ export interface TerminalTicketRailProps {
 function detailView(key: string, parts: SidebarPanelParts): NavStackView {
   return {
     key,
-    leading: parts.toolbar.leading,
-    center: parts.toolbar.center,
-    toolbar: parts.toolbar.trailing,
+    toolbar: {
+      leading: parts.toolbar.leading,
+      center: parts.toolbar.center,
+      trailing: parts.toolbar.trailing,
+    },
     header: parts.header,
     content: parts.content,
   };
@@ -89,20 +91,22 @@ export function terminalTicketRailPanel({
   );
   const root: NavStackView = {
     key: TERMINAL_TICKET_RAIL_ROOT_KEY,
-    leading: (
-      <ToolbarControlGroup single appearance="borderless">
-        <Select
-          className="terminal-ticket-rail__project"
-          presentation="toolbar-borderless"
-          name="terminal-rail-project"
-          value={selectedProjectId}
-          ariaLabel="Ticket rail project"
-          triggerWidth="max-content"
-          choices={projects.map((project) => ({ value: project.id, label: project.name }))}
-          renderSelected={(choice) => <span>{choice.label}</span>}
-        />
-      </ToolbarControlGroup>
-    ),
+    toolbar: {
+      leading: (
+        <ToolbarControlGroup single appearance="borderless">
+          <Select
+            className="terminal-ticket-rail__project"
+            presentation="toolbar-borderless"
+            name="terminal-rail-project"
+            value={selectedProjectId}
+            ariaLabel="Ticket rail project"
+            triggerWidth="max-content"
+            choices={projects.map((project) => ({ value: project.id, label: project.name }))}
+            renderSelected={(choice) => <span>{choice.label}</span>}
+          />
+        </ToolbarControlGroup>
+      ),
+    },
     header: (
       <div class="terminal-ticket-rail__header" data-component="terminal-ticket-rail-header">
         {/* The shared WorkspaceControls groups are genuine Toolbar zone content here too (HS2-K9KWJJ).
@@ -124,7 +128,7 @@ export function terminalTicketRailPanel({
       </div>
     ),
     // The view's sunken scroll surface replaces the app's own scroller and SunkenPanel.
-    appearance: 'sunken',
+    pane: { appearance: 'sunken' },
     content: (
       <section
         class="terminal-ticket-rail__list"

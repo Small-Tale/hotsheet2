@@ -1,4 +1,5 @@
-.ticket-provider-settings {
+.ticket-provider-settings,
+.ticket-sources-settings {
   display: grid;
   gap: var(--wa-space-xl);
 }

@@ -1,4 +1,5 @@
-wa-dialog[data-ticket-source-setup-dialog] {
+wa-dialog[data-ticket-source-setup-dialog],
+wa-dialog.ticket-source-setup-dialog {
   --width: min(remify(576px), calc(100vw - remify(32px)));
 }
 .ticket-source-setup__removal {

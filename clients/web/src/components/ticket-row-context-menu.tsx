@@ -267,7 +267,12 @@ export function TicketRowContextMenu({
     );
   }
   return (
-    <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" {...contextPopupMenuAnchor(x, y)}>
+    <div
+      class="ticket-context-menu ticket-row-context-menu"
+      role="menu"
+      aria-label="Ticket actions"
+      {...contextPopupMenuAnchor(x, y)}
+    >
       <PopupMenu context label="Ticket actions" rootAttributes={{ 'data-context-menu': 'ticket' }} items={entries} />
     </div>
   );

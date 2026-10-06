@@ -1104,15 +1104,15 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     heading: geometry.headingPadding,
     content: geometry.contentPadding,
   }).toEqual({ project: '8px', controls: '8px', heading: '8px', content: geometry.contentPadding });
-  // The list sits on the active view's sunken scroll surface (no app SunkenPanel or scroller).
-  await expect(rail.locator('.kui-nav-stack__view[data-nav-active="true"]')).toHaveAttribute(
+  // The list sits on the active view's Pane-owned sunken scroll surface.
+  await expect(rail.locator('.kui-nav-stack__view[data-nav-active="true"] .kui-pane')).toHaveAttribute(
     'data-appearance',
     'sunken',
   );
   expect(geometry.headingBorderBottom).toBe('1px');
   expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
   expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThan(geometry.railWidth / 4);
-  const scroller = rail.locator('.kui-nav-stack__view[data-nav-active="true"]'),
+  const scroller = rail.locator('.kui-nav-stack__view[data-nav-active="true"] .kui-pane__content'),
     rows = rail.locator('[data-component="ticket-list-row"]'),
     lastRow = rows.last();
   await expect.poll(() => scroller.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
@@ -2410,9 +2410,11 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await blocked.click();
   await needsReview.click();
   await selected.click();
+  await expect(row).toContainText('Codex');
   await busy.click();
   // Without live work no estimate shows, whatever the ETA setting.
   await expect(eta).toHaveCount(0);
+  await expect(row.locator('.ticket-list-row__owner')).toHaveCount(0);
   await setClaimEta('overrun');
   await expect(eta).toHaveCount(0);
   // HS2-A0Q6G6: a verified row shows the compact confidence pill; changing the score
@@ -2469,7 +2471,6 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('regression');
   await expect(row.locator('[data-lucide="star"]')).toHaveCount(0);
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveCount(0);
-  await expect(row).toContainText('Codex');
   await expect(row).toContainText('Now');
   await expect(row).toHaveAttribute('data-selected', 'true');
   await expect(row.locator('[data-lucide="chevrons-up"]')).toHaveCount(1);

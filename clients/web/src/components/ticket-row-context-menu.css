@@ -1,6 +1,7 @@
 /* The menu is a context-mode Kerf PopupMenu opened at the pointer; this wrapper only names the menu
    for tests and dismissal and hands the anchor coordinates down (HS2-2EHD8R). */
-.ticket-context-menu {
+.ticket-context-menu,
+.ticket-row-context-menu {
   position: fixed;
   z-index: 50;
   width: 1px;

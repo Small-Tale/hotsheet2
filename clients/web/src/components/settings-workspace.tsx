@@ -48,7 +48,7 @@ export function SettingsWorkspace({
 }: SettingsWorkspaceProps) {
   return (
     <section
-      class="project-settings"
+      class="project-settings settings-workspace"
       data-component="settings-workspace"
       aria-label={`${settingsCategoryTitle(category)} settings`}
       data-settings-category={category}
