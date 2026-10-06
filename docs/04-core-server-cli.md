@@ -170,6 +170,14 @@ one source. An empty discovered source set remains valid at the core layer so a 
 client can present provider setup. Checkout ticket enumeration is also valid for that
 empty source set and returns an empty array; it must not turn a successful project-open
 transaction into a later conflict while the client presents source setup.
+Reopening a registered checkout preserves its linked external ticket sources, selected
+default, alias, and repository metadata. A newly selected sole git store replaces the
+prior sole git link without removing external sources; conservative discovery only adds
+sources. An explicitly supplied complete `sources` list remains authoritative. Source
+removal and default changes use their dedicated checkout operations.
+The CLI's `setup --refresh`, repeated `bootstrap`, `link`, and repeat `checkout register`
+use durable open/relink behavior, so the client setup refresh cannot erase an external
+source before the server receives `/projects/open`.
 The response path does not regenerate the checkout's local worklist. That projection runs
 shortly afterward as best-effort blocking work over the already indexed active Up Next
 rows, giving the client's initial ticket-index requests priority without rescanning every

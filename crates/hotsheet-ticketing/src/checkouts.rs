@@ -177,6 +177,17 @@ pub struct CheckoutRegistry {
     path: PathBuf,
 }
 
+/// How a project open should reconcile newly found sources with durable checkout links.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenSourceMode {
+    /// A caller supplied the complete source set.
+    Explicit,
+    /// A caller selected a git store; replace a previous sole git store when it changed.
+    SelectedGitStore,
+    /// Conservative discovery must never remove an existing source.
+    Discovered,
+}
+
 impl CheckoutRegistry {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
@@ -233,6 +244,25 @@ impl CheckoutRegistry {
         )
     }
 
+    /// Register the git store selected by project setup/open without discarding other
+    /// sources already linked to that checkout.
+    pub fn open_git_store(
+        &self,
+        root: &Path,
+        alias: Option<&str>,
+        repository: Option<String>,
+        store: &Path,
+    ) -> Result<Checkout, CheckoutError> {
+        self.open_sources(
+            root,
+            alias,
+            repository,
+            vec![TicketSource::git(store)],
+            None,
+            OpenSourceMode::SelectedGitStore,
+        )
+    }
+
     pub fn register_sources(
         &self,
         root: &Path,
@@ -243,6 +273,88 @@ impl CheckoutRegistry {
     ) -> Result<Checkout, CheckoutError> {
         let _lock = self.acquire_lock()?;
         self.register_sources_locked(root, alias, repository, sources, default_source)
+    }
+
+    /// Reopening a project must retain linked providers and its selected default. Only an
+    /// explicit full source set replaces every link; selecting a different sole git store
+    /// replaces that git link while keeping external providers (HS2-JY6JZE).
+    pub fn open_sources(
+        &self,
+        root: &Path,
+        alias: Option<&str>,
+        repository: Option<String>,
+        mut sources: Vec<TicketSource>,
+        mut default_source: Option<String>,
+        mode: OpenSourceMode,
+    ) -> Result<Checkout, CheckoutError> {
+        let root = root
+            .canonicalize()
+            .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
+        let _lock = self.acquire_lock()?;
+        let existing = self
+            .read_locked()?
+            .checkouts
+            .into_iter()
+            .find(|checkout| checkout.root == root.to_string_lossy());
+        let is_new = existing.is_none();
+        let mut alias = alias.map(str::to_owned);
+        let mut repository = repository;
+        if let Some(existing) = existing {
+            alias = alias.or(Some(existing.alias));
+            repository = repository.or(existing.repository);
+            if mode != OpenSourceMode::Explicit {
+                for source in &mut sources {
+                    if source.provider == "git" {
+                        *source = TicketSource::git(&source.locator);
+                    }
+                }
+                let old_git = existing
+                    .sources
+                    .iter()
+                    .filter(|source| source.provider == "git")
+                    .collect::<Vec<_>>();
+                let new_git = sources
+                    .iter()
+                    .filter(|source| source.provider == "git")
+                    .collect::<Vec<_>>();
+                let replaced_git = (mode == OpenSourceMode::SelectedGitStore
+                    && old_git.len() == 1
+                    && new_git.len() == 1
+                    && old_git[0].connection_id != new_git[0].connection_id)
+                    .then(|| {
+                        (
+                            old_git[0].connection_id.clone(),
+                            new_git[0].connection_id.clone(),
+                        )
+                    });
+                let mut retained = existing.sources;
+                if let Some((old, _)) = &replaced_git {
+                    retained.retain(|source| &source.connection_id != old);
+                }
+                for source in sources {
+                    retained.retain(|prior| prior.connection_id != source.connection_id);
+                    retained.push(source);
+                }
+                sources = retained;
+                if default_source.is_none() {
+                    default_source = existing.default_source.and_then(|id| {
+                        if let Some((old, new)) = &replaced_git
+                            && &id == old
+                        {
+                            return Some(new.clone());
+                        }
+                        sources
+                            .iter()
+                            .any(|source| source.connection_id == id)
+                            .then_some(id)
+                    });
+                }
+            }
+        }
+        if is_new && default_source.is_none() && sources.len() == 1 {
+            default_source = Some(sources[0].connection_id.clone());
+        }
+        self.register_sources_locked(&root, alias.as_deref(), repository, sources, default_source)
     }
 
     fn register_sources_locked(
@@ -1012,6 +1124,138 @@ mod tests {
                 .to_string()
                 .contains("not associated")
         );
+    }
+
+    #[test]
+    fn reopening_preserves_external_links_defaults_and_explicit_removal() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("app");
+        let store = temp.path().join("app.hs2");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::create_dir(&store).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let git = TicketSource::git(&store);
+        let github = TicketSource {
+            connection_id: "github-issues".into(),
+            provider: "github".into(),
+            locator: "acme/app".into(),
+        };
+        registry
+            .register_sources(
+                &root,
+                Some("renamed app"),
+                Some("acme/app".into()),
+                vec![git.clone(), github.clone()],
+                Some(github.connection_id.clone()),
+            )
+            .unwrap();
+
+        let reopened = registry
+            .open_sources(
+                &root,
+                None,
+                None,
+                vec![git.clone()],
+                None,
+                OpenSourceMode::SelectedGitStore,
+            )
+            .unwrap();
+        assert_eq!(reopened.alias, "renamed app");
+        assert_eq!(reopened.repository.as_deref(), Some("acme/app"));
+        assert_eq!(reopened.sources.len(), 2);
+        assert_eq!(reopened.source(&github.connection_id), Some(&github));
+        assert_eq!(reopened.default_source, Some(github.connection_id.clone()));
+
+        let discovered = registry
+            .open_sources(&root, None, None, vec![], None, OpenSourceMode::Discovered)
+            .unwrap();
+        assert_eq!(discovered.sources.len(), 2);
+        assert_eq!(
+            discovered.default_source,
+            Some(github.connection_id.clone())
+        );
+
+        registry
+            .remove_source(&reopened.id, &github.connection_id)
+            .unwrap();
+        let removed = registry
+            .open_sources(
+                &root,
+                None,
+                None,
+                vec![git.clone()],
+                None,
+                OpenSourceMode::SelectedGitStore,
+            )
+            .unwrap();
+        assert!(removed.source(&github.connection_id).is_none());
+        assert_eq!(removed.default_source, Some(git.connection_id));
+    }
+
+    #[test]
+    fn opening_a_relinked_git_store_keeps_external_sources_and_updates_git_default() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("app");
+        let old_store = temp.path().join("old.hs2");
+        let new_store = temp.path().join("new.hs2");
+        for path in [&root, &old_store, &new_store] {
+            std::fs::create_dir(path).unwrap();
+        }
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let old = TicketSource::git(&old_store);
+        let new = TicketSource::git(&new_store);
+        let github = TicketSource {
+            connection_id: "github-issues".into(),
+            provider: "github".into(),
+            locator: "acme/app".into(),
+        };
+        registry
+            .register_sources(
+                &root,
+                None,
+                None,
+                vec![old.clone(), github.clone()],
+                Some(old.connection_id.clone()),
+            )
+            .unwrap();
+        let relinked = registry
+            .open_sources(
+                &root,
+                None,
+                None,
+                vec![new.clone()],
+                None,
+                OpenSourceMode::SelectedGitStore,
+            )
+            .unwrap();
+        assert_eq!(relinked.default_source, Some(new.connection_id.clone()));
+        assert!(relinked.source(&old.connection_id).is_none());
+        assert_eq!(relinked.source(&github.connection_id), Some(&github));
+        assert_eq!(relinked.stores, vec![new.locator]);
+
+        registry
+            .add_source(&relinked.id, old.clone(), false)
+            .unwrap();
+        let multiple_git = registry
+            .open_git_store(&root, None, None, &new_store)
+            .unwrap();
+        assert!(multiple_git.source(&old.connection_id).is_some());
+        assert!(multiple_git.source(&new.connection_id).is_some());
+        assert!(multiple_git.source(&github.connection_id).is_some());
+        assert_eq!(multiple_git.default_source, Some(new.connection_id.clone()));
+
+        let explicit = registry
+            .open_sources(
+                &root,
+                None,
+                None,
+                vec![github.clone()],
+                None,
+                OpenSourceMode::Explicit,
+            )
+            .unwrap();
+        assert_eq!(explicit.sources, vec![github]);
+        assert!(explicit.default_source.is_none());
     }
 
     #[test]

@@ -122,6 +122,11 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     const connection = (await created.json()) as ProviderConnection;
     expect(connection.id).toBe('github-acme-procurement');
     expect(connection.projects?.map((project) => project.id)).toEqual([owner.id]);
+    // The same client bridge path runs when a remembered project opens after a restart.
+    const reopened = await openLocalProject(owner.root, owner.stores[0]);
+    expect(reopened.id).toBe(owner.id);
+    const reopenedSources = (await (await api(owner.id, '/provider-connections')).json()) as ProviderConnection[];
+    expect(reopenedSources.map((item) => item.id)).toEqual([connection.id]);
     // Only the owner sees it; the other project gets neither the record nor a catalog to attach from.
     const own = (await (await api(owner.id, '/provider-connections')).json()) as ProviderConnection[];
     expect(own.map((item) => item.id)).toEqual([connection.id]);

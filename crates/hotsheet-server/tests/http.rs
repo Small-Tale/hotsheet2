@@ -15130,6 +15130,82 @@ async fn a_broker_shell_terminal_releases_claims_when_its_foreground_command_exi
     a_finished_foreground_command_releases_claims(app, &store, "fg2").await;
 }
 
+/// HS2-JY6JZE: the UI reopens a project with only its git store after every restart.
+#[tokio::test]
+async fn reopening_a_project_after_server_restart_keeps_its_github_source() {
+    let home = tempfile::tempdir().unwrap();
+    let (store_dir, state) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry_path = home.path().join("checkouts.json");
+    let router = app(state
+        .with_machine_home(home.path())
+        .with_checkout_registry(&registry_path));
+    let open = serde_json::json!({"root": checkout.path(), "stores": [store_dir.path()]});
+    let first = router
+        .clone()
+        .oneshot(authed("POST", "/projects/open", Some(&open.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let first = body_json(first).await;
+    let id = first["checkout"]["id"].as_str().unwrap();
+    let created = router
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{id}/provider-connections"),
+            Some(
+                &serde_json::json!({
+                    "provider": "github", "locator": "acme/app", "name": "GitHub Issues",
+                    "settings": {"credential": {"secret": "github-app-test"}},
+                    "make_default": true
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let connection_id = body_json(created).await["id"].as_str().unwrap().to_owned();
+
+    let restarted = app(
+        AppState::new(FsStore::open(store_dir.path()).unwrap(), SECRET.into())
+            .unwrap()
+            .with_machine_home(home.path())
+            .with_checkout_registry(&registry_path),
+    );
+    let reopened = restarted
+        .clone()
+        .oneshot(authed("POST", "/projects/open", Some(&open.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(reopened.status(), StatusCode::CREATED);
+    let reopened = body_json(reopened).await["checkout"].clone();
+    assert_eq!(reopened["id"], id);
+    assert_eq!(reopened["default_source"], connection_id);
+    assert_eq!(reopened["sources"].as_array().unwrap().len(), 2);
+    assert!(
+        reopened["sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|source| source["connection_id"] == connection_id)
+    );
+    let providers = restarted
+        .oneshot(authed("GET", &format!("/checkouts/{id}/providers"), None))
+        .await
+        .unwrap();
+    assert_eq!(providers.status(), StatusCode::OK);
+    let providers = body_json(providers).await;
+    assert!(
+        providers
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|provider| provider["connection_id"] == connection_id
+                && provider["default"] == true)
+    );
+}
+
 /// HS2-3SCH1K: a checkout's provider list holds only the sources it links, marked default by
 /// the checkout's own default source, even though the connection catalog is machine-wide.
 #[tokio::test]

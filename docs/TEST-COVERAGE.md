@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-JY6JZE keeps provider links across a server/client restart. Checkout-registry unit
+tests cover reopen, discovery, git-store relink, explicit source replacement, and
+removal; CLI tests cover setup refresh with a linked provider;
+`crates/hotsheet-server/tests/http.rs` reopens a checkout through the real server route
+after rebuilding its state and checks the GitHub provider descriptor. The opt-in real
+client bridge test opens the project again and checks the linked connection.
+
 HS2-YSZ711 covers the git-backed Started phase inspector control with
 `clients/web/src/components/ticket-metadata-controls.test.ts` for all six choices,
 clearing, and read-only rendering; `clients/web/tests/providers.spec.ts` exercises

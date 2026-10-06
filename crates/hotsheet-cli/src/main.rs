@@ -1836,7 +1836,7 @@ fn cmd_bootstrap(
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
-    let checkout = registry.register(&project, None, repository, vec![store.clone()])?;
+    let checkout = registry.open_git_store(&project, None, repository, &store)?;
     hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?;
 
     let existing_remote = hotsheet_ticketing::git::command()
@@ -2026,7 +2026,7 @@ fn cmd_link(store: &Path) -> Result<()> {
     let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
-    let checkout = registry.register(&cwd, None, None, vec![abs.clone()])?;
+    let checkout = registry.open_git_store(&cwd, None, None, &abs)?;
     hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?;
     println!(
         "Linked {} → {} (via {})",
@@ -4812,7 +4812,7 @@ fn cmd_setup(
     hotsheet_ticketing::checkouts::CheckoutRegistry::new(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     )
-    .register(&project_dir, None, repository, vec![store.to_path_buf()])?;
+    .open_git_store(&project_dir, None, repository, store)?;
     let (reports, removed) = if refresh {
         let report = hotsheet_cli::setup::refresh_setup(store, &project_dir)?;
         if report.is_empty() && !json {
@@ -5333,7 +5333,23 @@ fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                     .map(|v| v.trim().to_owned())
                     .filter(|v| !v.is_empty())
             });
-            let entry = registry.register(&root, alias.as_deref(), repository, stores)?;
+            let entry = match registry.resolve(root.to_string_lossy().as_ref()) {
+                Ok(_) => registry.open_sources(
+                    &root,
+                    alias.as_deref(),
+                    repository,
+                    stores
+                        .into_iter()
+                        .map(hotsheet_ticketing::checkouts::TicketSource::git)
+                        .collect(),
+                    None,
+                    hotsheet_ticketing::checkouts::OpenSourceMode::Discovered,
+                )?,
+                Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => {
+                    registry.register(&root, alias.as_deref(), repository, stores)?
+                }
+                Err(error) => return Err(error.into()),
+            };
             println!("{}", serde_json::to_string_pretty(&entry)?);
         }
         CheckoutCmd::List => println!("{}", serde_json::to_string_pretty(&registry.list()?)?),

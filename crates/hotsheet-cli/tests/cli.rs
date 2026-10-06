@@ -1914,6 +1914,26 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .stdout(predicate::str::contains(
             r#""default_source": "github-main""#,
         ));
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "checkout",
+            "register",
+            checkout.path().to_str().unwrap(),
+            "--alias",
+            "web",
+            "--store",
+            store.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "\"connection_id\": \"github-main\"",
+        ))
+        .stdout(predicate::str::contains(
+            "\"default_source\": \"github-main\"",
+        ));
     let mut remove_source = Command::cargo_bin("hotsheet-cli").unwrap();
     remove_source
         .env("HOTSHEET_HOME", home.path())
@@ -1932,6 +1952,71 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .assert()
         .success()
         .stdout(predicate::str::contains("github-main").not());
+}
+
+#[test]
+fn setup_refresh_preserves_a_project_github_source() {
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let store_dir = tempfile::tempdir().unwrap();
+    hotsheet_ticketing::FsStore::init(
+        store_dir.path(),
+        &hotsheet_ticketing::StoreMetadata::new("HS"),
+    )
+    .unwrap();
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "checkout",
+            "register",
+            project.path().to_str().unwrap(),
+            "--store",
+            store_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "checkout",
+            "add-source",
+            project.path().to_str().unwrap(),
+            "github-issues",
+            "github",
+            "acme/issues",
+            "--default",
+        ])
+        .assert()
+        .success();
+
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "-C",
+            store_dir.path().to_str().unwrap(),
+            "setup",
+            "--refresh",
+            "--project",
+            project.path().to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .args(["checkout", "resolve", project.path().to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "\"connection_id\": \"github-issues\"",
+        ))
+        .stdout(predicate::str::contains(
+            "\"default_source\": \"github-issues\"",
+        ));
 }
 
 #[cfg(unix)]

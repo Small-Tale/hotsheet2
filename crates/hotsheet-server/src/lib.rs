@@ -3957,6 +3957,13 @@ async fn open_project(
     Json(body): Json<OpenProjectBody>,
 ) -> Result<(StatusCode, Json<OpenProjectResponse>), ApiError> {
     let discovered = body.stores.is_none() && body.sources.is_none();
+    let source_mode = if body.sources.is_some() {
+        hotsheet_ticketing::checkouts::OpenSourceMode::Explicit
+    } else if body.stores.is_some() {
+        hotsheet_ticketing::checkouts::OpenSourceMode::SelectedGitStore
+    } else {
+        hotsheet_ticketing::checkouts::OpenSourceMode::Discovered
+    };
     let hosting_state = state.clone();
     let discovery_root = body.root.clone();
     let explicit_stores = body.stores;
@@ -3987,17 +3994,15 @@ async fn open_project(
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     let root = FsPath::new(&body.root);
-    let default_source = body
-        .default_source
-        .or_else(|| (sources.len() == 1).then(|| sources[0].connection_id.clone()));
     let checkout = state
         .checkout_registry
-        .register_sources(
+        .open_sources(
             root,
             body.alias.as_deref(),
             body.repository,
             sources,
-            default_source,
+            body.default_source,
+            source_mode,
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     state.watch_checkout_repository(&checkout);
