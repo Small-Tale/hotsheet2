@@ -52,6 +52,14 @@ export const demoCatalog: DemoCategory[] = [
         ],
       ),
       demo(
+        'app-loading-indicator',
+        'AppLoadingIndicator',
+        'Fixed app-level project loading and sequential ticket-update progress.',
+        'feature-floor',
+        true,
+        ['state-banner', 'loading-spinner'],
+      ),
+      demo(
         'project-sidebar',
         'ProjectSidebar',
         'Project summary, repository state, views, commands, and drive controls.',

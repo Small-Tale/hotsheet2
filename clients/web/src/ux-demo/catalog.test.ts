@@ -78,6 +78,7 @@ describe('UX demo catalog', () => {
     expect(new Set(entries.map((entry) => entry.id)).size).toBe(entries.length);
     expect(entries.filter((entry) => entry.implemented).map((entry) => entry.id)).toEqual([
       'app-shell',
+      'app-loading-indicator',
       'project-sidebar',
       'project-summary',
       'repository-summary',

@@ -31,6 +31,29 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "app-loading-indicator",
+      "name": "AppLoadingIndicator",
+      "source": "src/components/app-loading-indicator.tsx",
+      "kind": "component",
+      "purpose": "Fixed app-level project loading and sequential ticket-update progress.",
+      "useWhen": [
+        "Hot Sheet needs fixed app-level project loading and sequential ticket-update progress."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AppLoadingIndicator behavior."
+      ],
+      "publicClasses": [
+        "app-loading-indicator"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "project-sidebar",
       "name": "ProjectSidebar",
       "source": "src/components/project-sidebar.tsx",

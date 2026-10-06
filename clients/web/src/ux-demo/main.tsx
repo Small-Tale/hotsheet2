@@ -122,6 +122,7 @@ import {
   AIConversationSettings,
   resetAIConversationDemo,
 } from './ai-conversation-demo';
+import { appLoadingDemoProgress, AppLoadingIndicatorDemo } from './app-loading-indicator-demo';
 import {
   addDemoProject,
   AppShellDemo,
@@ -1356,6 +1357,7 @@ function demoContent(item: DemoDefinition) {
     );
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner') return <ConnectionStateBannerDemo />;
+  if (item.id === 'app-loading-indicator') return <AppLoadingIndicatorDemo />;
   if (item.id === 'app-shell') return <AppShellDemo />;
   if (item.id === 'ticket-page-more')
     return (
@@ -2617,7 +2619,21 @@ window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') tabContextMenu.value = undefined;
 });
 demoListeners.add(
+  delegate(root, 'click', '[data-app-loading-demo]', (_event, target) => {
+    const state = (target as HTMLElement).dataset.appLoadingDemo;
+    appLoadingDemoProgress.value =
+      state === 'start'
+        ? { completed: 0, total: 2 }
+        : state === 'progress'
+          ? { completed: 1, total: 2 }
+          : state === 'complete'
+            ? { completed: 2, total: 2 }
+            : undefined;
+  }),
+);
+demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.resetSettings.selector, () => {
+    if (selectedId.value === 'app-loading-indicator') appLoadingDemoProgress.value = undefined;
     if (selectedId.value === 'app-shell') resetAppShellDemo(root);
     if (selectedId.value === 'content-transition') resetContentTransitionDemo(root);
     if (selectedId.value === 'quick-ticket-composer') resetQuickTicketComposerDemo(root);

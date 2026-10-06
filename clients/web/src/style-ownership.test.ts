@@ -19,6 +19,7 @@ describe('global stylesheet ownership', () => {
       ['settings workspace', 'settings-workspace.css', ['.project-settings']],
       // TicketPageMore owns the paged list/column continuation button (HS2-WP69TD).
       ['ticket page continuation', 'ticket-page-more.css', ['.ticket-page-more']],
+      ['app loading indicator', 'app-loading-indicator.css', ['.app-loading']],
     ] as const;
     for (const [name, file, selectors] of ownership) {
       const owned = read(`./components/${file}`);
@@ -34,7 +35,7 @@ describe('global stylesheet ownership', () => {
     expect(global).toContain("@import '@kerfjs/ui/document.css'");
     expect(global).not.toContain('font-family:');
     expect(global).not.toContain('box-sizing:');
-    for (const selector of [':root', 'html, body, #app', '.app-loading']) expect(global).toContainSource(selector);
+    for (const selector of [':root', 'html, body, #app']) expect(global).toContainSource(selector);
     expect(global).not.toContain('.app-toast');
     // The application root's edge-to-edge shell is AppShell's own `viewport` presentation (HS2-DR549A).
     expect(global).not.toContain('.app-shell');

@@ -2,9 +2,7 @@
 import '../components/heading.css';
 import '@awesome.me/webawesome/dist/components/toast/toast.js';
 
-import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
-import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
@@ -81,9 +79,11 @@ import {
   nextBoardColumnFetch,
 } from '../board-pagination';
 import { browserRandomId } from '../browser-id';
+import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { AppError } from '../components/app-error';
+import { AppLoadingIndicator } from '../components/app-loading-indicator';
 import { APP_WORKBENCH_ID, type AppShellMobileView } from '../components/app-shell';
 import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
@@ -619,6 +619,7 @@ export async function startHotSheetWebClient() {
   let claimEtaTimer: number | undefined;
   const storedWorkspacePreferences = loadWorkspacePreferences(localStorage);
   const loading = signal(false),
+    bulkUpdateProgress = signal<BulkUpdateProgress | undefined>(undefined),
     error = signal(''),
     viewMode = signal<WorkspaceViewMode>(storedWorkspacePreferences.viewMode),
     // The list/columns view the user last had open, so Notifications or Settings can hand back to it (HS2-42T028).
@@ -633,6 +634,9 @@ export async function startHotSheetWebClient() {
     searchHelpOpen = signal(false),
     searchMatchKeys = signal<Set<string> | undefined>(undefined),
     workspaceSorts = signal(storedWorkspacePreferences.sorts);
+  const bulkUpdateActivities = createBulkUpdateProgress((progress) => {
+    bulkUpdateProgress.value = progress;
+  });
   const ticketNextCursor = signal<string | undefined>(undefined),
     ticketCursorsByProject = signal<Record<string, string | undefined>>({}),
     ticketPageLoading = signal(false);
@@ -3785,7 +3789,7 @@ export async function startHotSheetWebClient() {
       }
   }
   // prettier-ignore
-  const { restoreTicketDraft, flushTicketDrafts, updateSelected, history, updateSelectedTracked, detailsAutosave, readerDetailsAutosave, noteAutosave, readerNoteAutosave, blockedReasonAutosave, readerBlockedReasonAutosave, titleAutosave, tagsAutosave, linkedReaderFrame, linkedReaderAutosaves, replaceLinkedReaderFrame, linkedReaderSaves, flushLinkedReader, selectedRows, restoreTrashedTickets, executeBulkTicketAction, openEmptyTrash, emptyTrash, openBulkTicketDialog, copySelection, pasteSelection, copyDraggedTickets, isEditableEvent, ticketWorkAreaFocused, ordinaryTextSelected, timeline, notes, attachmentContext: ticketAttachmentContext, duplicateTargetFor, addAttachments, selectionOrder, presentTicket, cancelTicketDrafts, selectTickets, openTicketReader, closeNotWorking, presentNotWorkingDialog, openNotWorking, closeTicketCloseDialog, openTicketClose, setTicketCloseReason, searchTicketCloseTargets, submitTicketClose, openDuplicateTarget, addNotWorkingFiles, openTicketComposer, resetTicketComposer, addNewTicketFiles, submitNewTicket, submitNotWorking, } = createTicketWorkflows({ state: { get blockedReasonDraftBase() { return blockedReasonDraftBase; }, set blockedReasonDraftBase(value) { blockedReasonDraftBase = value; }, get bulkTicketSlugs() { return bulkTicketSlugs; }, set bulkTicketSlugs(value) { bulkTicketSlugs = value; }, get clipboard() { return clipboard; }, set clipboard(value) { clipboard = value; }, get detailsDraftBase() { return detailsDraftBase; }, set detailsDraftBase(value) { detailsDraftBase = value; }, get detailsEditGeneration() { return detailsEditGeneration; }, set detailsEditGeneration(value) { detailsEditGeneration = value; }, get noteDraftBase() { return noteDraftBase; }, set noteDraftBase(value) { noteDraftBase = value; }, get readerBlockedReasonDraftBase() { return readerBlockedReasonDraftBase; }, set readerBlockedReasonDraftBase(value) { readerBlockedReasonDraftBase = value; }, get readerDetailsDraftBase() { return readerDetailsDraftBase; }, set readerDetailsDraftBase(value) { readerDetailsDraftBase = value; }, get readerDetailsEditGeneration() { return readerDetailsEditGeneration; }, set readerDetailsEditGeneration(value) { readerDetailsEditGeneration = value; }, get readerNoteDraftBase() { return readerNoteDraftBase; }, set readerNoteDraftBase(value) { readerNoteDraftBase = value; }, get ticketSelectionAnchor() { return ticketSelectionAnchor; }, set ticketSelectionAnchor(value) { ticketSelectionAnchor = value; }, get titleDraftBase() { return titleDraftBase; }, set titleDraftBase(value) { titleDraftBase = value; }, }, CLOSED_NOT_WORKING_TARGET, projects, selectedProjectId, tickets, ticketRowsByProject, ticketCountsByProject, selectedTicket, selectedTicketSlugs, selectedCorruptKey, selectedView, ticketCollectionState, loading, error, attachmentMessage, inspectorTab, inspectorVisible, readerTab, readerOpen, linkedReaderStack, detailsMode, detailsDraft, readerDetailsMode, readerDetailsDraft, titleEditingSurface, titleDraft, blockedReasonEditing, blockedReasonDraft, readerBlockedReasonEditing, readerBlockedReasonDraft, editingNoteId, readerEditingNoteId, noteDraft, readerNoteDraft, fieldConflict, fieldConflictResolution, readerInlineFeedbackReplies, readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, codeReview, codeReviewLoading, codeReviewMessage, expandedCodeReviewCommits, duplicateBacklinkState, resolvedDuplicateTargets, ticketCloseDialog, ticketLinkChoice, bulkTicketDialog, notWorkingTarget, notWorkingNote, notWorkingFiles, notWorkingSubmitting, notWorkingError, composerExpanded, composerTitle, composerDetails, composerCategory, composerUpNext, composerSource, lastTicketSourceByProject, composerAttachments, composerAttachmentMessage, composerAttachmentError, composerScreening, composerSubmitting, histories, mutationGenerations, committedTickets, singleTicketMutationSequencer, bulkTicketMutationSequencer, localTicketChangeAcknowledgements, pendingCreatedTickets, project, api, defaultProvider, newTicketSource, capabilitiesFor, canUseAttachments, canStageNewTicketAttachments, ticketSnapshot, visibleTickets, projectTabTicketRows, projectTicketCounts, beginBulkBoardRefill, finishBulkBoardRefill, publishOptimisticTicketRows, beginLocalTicketMutation, beginLocalTicketCreation, refreshProject, refreshTicketCollection, refreshCodeReview, selectTicketView, scheduleClaimLeaseExpiry, scheduleProjectSessionPersistence, persistWorkspacePreferences, showToast, showFieldConflict, reconcileRefreshedSelected, openTicketLinkMatch, presentTicketReaderDialog, beginDetailsEdit, revealTicketInspector: revealInspectorOverlay, activeTicketSurface, draftScope, ago, });
+  const { restoreTicketDraft, flushTicketDrafts, updateSelected, history, updateSelectedTracked, detailsAutosave, readerDetailsAutosave, noteAutosave, readerNoteAutosave, blockedReasonAutosave, readerBlockedReasonAutosave, titleAutosave, tagsAutosave, linkedReaderFrame, linkedReaderAutosaves, replaceLinkedReaderFrame, linkedReaderSaves, flushLinkedReader, selectedRows, restoreTrashedTickets, executeBulkTicketAction, openEmptyTrash, emptyTrash, openBulkTicketDialog, copySelection, pasteSelection, copyDraggedTickets, isEditableEvent, ticketWorkAreaFocused, ordinaryTextSelected, timeline, notes, attachmentContext: ticketAttachmentContext, duplicateTargetFor, addAttachments, selectionOrder, presentTicket, cancelTicketDrafts, selectTickets, openTicketReader, closeNotWorking, presentNotWorkingDialog, openNotWorking, closeTicketCloseDialog, openTicketClose, setTicketCloseReason, searchTicketCloseTargets, submitTicketClose, openDuplicateTarget, addNotWorkingFiles, openTicketComposer, resetTicketComposer, addNewTicketFiles, submitNewTicket, submitNotWorking, } = createTicketWorkflows({ state: { get blockedReasonDraftBase() { return blockedReasonDraftBase; }, set blockedReasonDraftBase(value) { blockedReasonDraftBase = value; }, get bulkTicketSlugs() { return bulkTicketSlugs; }, set bulkTicketSlugs(value) { bulkTicketSlugs = value; }, get clipboard() { return clipboard; }, set clipboard(value) { clipboard = value; }, get detailsDraftBase() { return detailsDraftBase; }, set detailsDraftBase(value) { detailsDraftBase = value; }, get detailsEditGeneration() { return detailsEditGeneration; }, set detailsEditGeneration(value) { detailsEditGeneration = value; }, get noteDraftBase() { return noteDraftBase; }, set noteDraftBase(value) { noteDraftBase = value; }, get readerBlockedReasonDraftBase() { return readerBlockedReasonDraftBase; }, set readerBlockedReasonDraftBase(value) { readerBlockedReasonDraftBase = value; }, get readerDetailsDraftBase() { return readerDetailsDraftBase; }, set readerDetailsDraftBase(value) { readerDetailsDraftBase = value; }, get readerDetailsEditGeneration() { return readerDetailsEditGeneration; }, set readerDetailsEditGeneration(value) { readerDetailsEditGeneration = value; }, get readerNoteDraftBase() { return readerNoteDraftBase; }, set readerNoteDraftBase(value) { readerNoteDraftBase = value; }, get ticketSelectionAnchor() { return ticketSelectionAnchor; }, set ticketSelectionAnchor(value) { ticketSelectionAnchor = value; }, get titleDraftBase() { return titleDraftBase; }, set titleDraftBase(value) { titleDraftBase = value; }, }, CLOSED_NOT_WORKING_TARGET, projects, selectedProjectId, tickets, ticketRowsByProject, ticketCountsByProject, selectedTicket, selectedTicketSlugs, selectedCorruptKey, selectedView, ticketCollectionState, loading, error, attachmentMessage, inspectorTab, inspectorVisible, readerTab, readerOpen, linkedReaderStack, detailsMode, detailsDraft, readerDetailsMode, readerDetailsDraft, titleEditingSurface, titleDraft, blockedReasonEditing, blockedReasonDraft, readerBlockedReasonEditing, readerBlockedReasonDraft, editingNoteId, readerEditingNoteId, noteDraft, readerNoteDraft, fieldConflict, fieldConflictResolution, readerInlineFeedbackReplies, readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, codeReview, codeReviewLoading, codeReviewMessage, expandedCodeReviewCommits, duplicateBacklinkState, resolvedDuplicateTargets, ticketCloseDialog, ticketLinkChoice, bulkTicketDialog, notWorkingTarget, notWorkingNote, notWorkingFiles, notWorkingSubmitting, notWorkingError, composerExpanded, composerTitle, composerDetails, composerCategory, composerUpNext, composerSource, lastTicketSourceByProject, composerAttachments, composerAttachmentMessage, composerAttachmentError, composerScreening, composerSubmitting, histories, mutationGenerations, committedTickets, singleTicketMutationSequencer, bulkTicketMutationSequencer, localTicketChangeAcknowledgements, pendingCreatedTickets, project, api, defaultProvider, newTicketSource, capabilitiesFor, canUseAttachments, canStageNewTicketAttachments, ticketSnapshot, visibleTickets, projectTabTicketRows, projectTicketCounts, beginBulkBoardRefill, finishBulkBoardRefill, publishOptimisticTicketRows, beginLocalTicketMutation, beginLocalTicketCreation, refreshProject, refreshTicketCollection, refreshCodeReview, selectTicketView, scheduleClaimLeaseExpiry, scheduleProjectSessionPersistence, persistWorkspacePreferences, showToast, showFieldConflict, reconcileRefreshedSelected, openTicketLinkMatch, presentTicketReaderDialog, beginDetailsEdit, revealTicketInspector: revealInspectorOverlay, activeTicketSurface, draftScope, ago, beginBulkUpdateProgress: bulkUpdateActivities.begin, });
 
   async function queueAiCommand(command: CommandDefinition, current: Project) {
     if (!(defaultProvider()?.capabilities.create ?? true)) {
@@ -5059,7 +5063,9 @@ export async function startHotSheetWebClient() {
       migration = hs1MigrationProject.value,
       deleteTargetId = savedViewDeleteTargetId.value,
       deleteView = deleteTargetId ? customViewsFor().find((item) => item.id === deleteTargetId) : undefined,
-      showCornerLoading = loading.value && (!project() || tickets.value.length > 0 || corruptTickets.value.length > 0);
+      showCornerLoading =
+        bulkUpdateProgress.value !== undefined ||
+        (loading.value && (!project() || tickets.value.length > 0 || corruptTickets.value.length > 0));
     return (
       <>
         <HotSheetShell />
@@ -5191,16 +5197,7 @@ export async function startHotSheetWebClient() {
         {gallerySurface()}
         <AttachmentContextMenuSurface menu={attachmentMenuSurfaceProps()} />
         <AppTabMenuSurface menu={appTabContextMenu.value} />
-        {showCornerLoading && (
-          <div class="app-loading">
-            <StateBanner
-              title="Loading…"
-              tone="neutral"
-              urgency="status"
-              icon={<LoadingSpinner label="Loading project" size={16.8} />}
-            />
-          </div>
-        )}
+        {showCornerLoading && <AppLoadingIndicator progress={bulkUpdateProgress.value} />}
         {error.value && project() && <AppError message={error.value} />}
       </>
     );

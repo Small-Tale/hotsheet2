@@ -19025,9 +19025,7 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   expect(mutationRequests.filter((value) => value.includes('/tickets/'))).toEqual([]);
 });
 
-test('falls back to visible best-effort progress when a provider cannot update atomically (HS2-967BWM)', async ({
-  page,
-}) => {
+test('shows non-atomic provider updates in the app loading indicator (HS2-TPF3EB)', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 0, 400, false, 2, false, false, false),
     mutationRequests: string[] = [];
   page.on('request', (request) => {
@@ -19041,9 +19039,13 @@ test('falls back to visible best-effort progress when a provider cannot update a
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await page.getByRole('button', { name: 'Toggle Up Next for selected tickets' }).click();
-  await expect(page.locator('.app-toast')).toContainText(/Updating tickets… [01] of 2/);
+  const loading = page.locator('[data-component="app-loading-indicator"]');
+  await expect(loading).toHaveAttribute('data-loading-kind', 'tickets');
+  await expect(loading).toContainText(/Updating tickets… [01] of 2/);
+  await expect(page.locator('.app-toast')).toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/hs2-967bwm-best-effort-progress.png', fullPage: true });
   await expect.poll(() => patches.filter((patch) => patch.up_next === true).length).toBe(2);
+  await expect(loading).toHaveCount(0);
   expect(mutationRequests.filter((value) => value.endsWith('/batch'))).toEqual([]);
   expect(mutationRequests.filter((value) => value.includes('/tickets/'))).toHaveLength(2);
 });
@@ -19066,6 +19068,8 @@ test('keeps successful best-effort writes when another selected ticket fails (HS
   await expect(page.getByRole('alert')).toContainText(
     'Updated 1 of 2 tickets. 1 failed; HS2-START02: stale imported ticket',
   );
+  await expect(page.locator('[data-component="app-loading-indicator"]')).toHaveCount(0);
+  await expect(page.locator('.app-toast')).toHaveCount(0);
   await expect.poll(() => patches.filter((patch) => patch.up_next === true).length).toBe(1);
   await expect(first.locator('[data-action="toggle-row-up-next"]')).toHaveAttribute(
     'aria-label',

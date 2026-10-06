@@ -55,8 +55,10 @@ against an estimated menu size that can vary with ticket state. Production handl
 Up Next, add/remove tag, duplication, archive, and confirmed soft deletion. A provider
 advertising atomic batch support receives one checkout-scoped request with every
 concurrency token validated before any write. Other update-capable providers degrade to
-visible, best-effort per-ticket progress; successful writes remain applied and each failed
-ticket is restored and reported. Every metadata/tag/delete write is provider-capability
+visible, best-effort per-ticket progress in the app-level loading indicator (for example,
+`Updating tickets… 1 of 2`), rather than a succession of toasts (HS2-TPF3EB). The indicator
+clears after the request sequence, even on failure; successful writes remain applied and each
+failed ticket is restored and reported. Every metadata/tag/delete write is provider-capability
 gated and carries the freshly read opaque
 concurrency token; a stale ticket fails instead of overwriting a collaborator's edit.
 In the inspector and reader, Add tag is a distinct button that opens its own anchored,

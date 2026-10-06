@@ -15,6 +15,7 @@ import { describeUnreadableAttachments, screenAttachmentFiles } from '../attachm
 import { attachmentUploadBatchId } from '../attachment-grouping';
 import { type AttachmentReferenceContext, isVideoAttachment } from '../attachment-references';
 import { browserRandomId } from '../browser-id';
+import type { BulkUpdateHandle } from '../bulk-update-progress';
 import type { BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
 import {
@@ -219,6 +220,7 @@ export interface TicketWorkflowDependencies {
   finishBulkBoardRefill: (projectId: string) => Promise<void>;
   publishOptimisticTicketRows: (projectId: string) => void;
   beginLocalTicketMutation: () => () => void;
+  beginBulkUpdateProgress: (total: number) => BulkUpdateHandle;
   beginLocalTicketCreation: () => () => Promise<void>;
   refreshProject: (options?: { showLoading?: boolean }) => Promise<unknown>;
   refreshTicketCollection: (view: TicketView) => Promise<unknown>;
@@ -335,6 +337,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     finishBulkBoardRefill,
     publishOptimisticTicketRows,
     beginLocalTicketMutation,
+    beginBulkUpdateProgress,
     beginLocalTicketCreation,
     refreshProject,
     refreshTicketCollection,
@@ -923,6 +926,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       if (operation) selectedTicket.value = projectTicketPatch(selectedTicket.value, operation.patch);
     }
     finishTiming();
+    let updateProgress: BulkUpdateHandle | undefined;
     try {
       const client = new Api(current.apiPath),
         requestOperations = operations.map((operation) => {
@@ -945,7 +949,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           )),
         );
       else {
-        showToast(`Updating tickets… 0 of ${requestOperations.length}`);
+        updateProgress = beginBulkUpdateProgress(requestOperations.length);
         for (const operation of requestOperations) {
           try {
             const ticket = before.find((item) => item.slug === operation.slug)!;
@@ -953,7 +957,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           } catch (reason) {
             failures.push({ slug: operation.slug, message: reason instanceof Error ? reason.message : String(reason) });
           }
-          showToast(`Updating tickets… ${updated.length + failures.length} of ${requestOperations.length}`);
+          updateProgress.advance(updated.length + failures.length);
         }
       }
       for (const ticket of updated)
@@ -1004,6 +1008,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       reportBulkFailure(current, reason instanceof Error ? reason.message : String(reason));
       return { complete: false, succeeded: new Set<string>() };
     } finally {
+      updateProgress?.finish();
       releaseRefresh();
       await finishBulkBoardRefill(current.id);
     }

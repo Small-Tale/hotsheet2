@@ -23,13 +23,6 @@ body,
   height: 100dvh;
   overflow: clip;
 }
-/* Fixed loading location; StateBanner owns its feedback presentation. */
-.app-loading {
-  position: fixed;
-  z-index: 1000;
-  right: remify(16px);
-  bottom: remify(16px);
-}
 /* The switching-ticket transition is presented by the value-free TicketInspectorSkeleton
    (owned by ticket-inspector.tsx since HS2-XBHADT), which replaced the earlier dimmed-stale-inspector overlay
    (.ticket-inspector-transition) — that dead rule was removed with HS2-YSHZQK. */

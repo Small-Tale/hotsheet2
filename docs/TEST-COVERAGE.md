@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-TPF3EB moves non-atomic provider update progress from toasts to the app-level loading
+indicator. `clients/web/src/bulk-update-progress.test.ts` covers start, advance, repeat,
+overlap, and out-of-order completion; `clients/web/tests/providers.spec.ts` covers the real
+bulk-update flow and absence of progress toasts; `clients/web/tests/ux-demo.spec.ts` covers
+the indicator's project-load and ticket-update states. The wide/phone visual review is
+recorded on the ticket after integration.
+
 HS2-E6KAWY pairs `clients/web/src/halted-sessions.test.ts` transition/adversarial tests
 (pause, permission priority, actual presentation, reload dedupe, active/history pruning,
 resolution, closed projects, retry suppression, malformed and unavailable storage) with
