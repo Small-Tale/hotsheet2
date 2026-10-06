@@ -479,6 +479,8 @@ export function QuickTicketComposerDemo() {
         category={composerCategory.value}
         upNext={composerUpNext.value}
         providerName={demoComposerSource().label}
+        defaultSourceName={composerSources[0].label}
+        sourceIsDefault={demoComposerSource().value === composerSources[0].value}
         sources={composerMultipleSources.value ? composerSources : composerSources.slice(0, 1)}
         source={demoComposerSource().value}
         attachments={composerAttachments.value}

@@ -1743,8 +1743,13 @@ and identity-less legacy entries remain conservatively blocking.
   persisted, so a reload, a new session, or another device starts at the default — and a
   pick that is cancelled is not remembered. The create request names the chosen source with
   `?source=<connection-id>`, and attachment staging follows that source's capabilities. A
-  project with a single writable source keeps the plain "Creating in" label and the
-  checkout's default routing (HS2-NZMJBJ).
+  project with a single writable source keeps the plain "Creating in" label. It uses the
+  checkout's default routing when that source is the default and explicitly names an
+  alternate source when the default cannot create tickets (HS2-NZMJBJ, HS2-FXN0EZ).
+  When the selected source differs from the project default, a warning-toned Kerf
+  `StateBanner` at the top of the dialog names the selected destination and the default
+  source. It updates as the selection changes and remains visible when the last-used source
+  is preselected on reopening; selecting the default removes it (HS2-FXN0EZ).
   Files staged while a source that takes attachments is selected are never silently dropped
   or uploaded just to fail: switching to a source whose capabilities report
   `attachments: false` keeps them listed, disables **Create ticket**, and explains that the

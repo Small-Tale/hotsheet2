@@ -65,6 +65,14 @@ export function resolveNewTicketSource(
   );
 }
 
+/** Route explicitly whenever the selected source differs from the checkout default. */
+export function newTicketCreationSourceId(
+  project: ProjectTicketSources | undefined,
+  target: TicketSourceChoice | undefined,
+): string | undefined {
+  return target && (writableTicketSources(project).length > 1 || !target.default) ? target.connectionId : undefined;
+}
+
 /** Remember the source a ticket was just created in, per project, in memory only. */
 export function rememberNewTicketSource(
   remembered: Readonly<Record<string, string>>,

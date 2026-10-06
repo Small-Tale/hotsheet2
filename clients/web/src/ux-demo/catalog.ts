@@ -224,7 +224,7 @@ export const demoCatalog: DemoCategory[] = [
           demo(
             'quick-ticket-composer',
             'QuickTicketComposer',
-            'Compact ticket creation that expands in place.',
+            'Compact ticket creation with a clear warning when the destination differs from the project default.',
             'feature-floor',
             true,
             ['ticket-category-select', 'ticket-list'],

@@ -9826,6 +9826,8 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   await expect(source).toHaveJSProperty('value', 'git-local');
   await expect(source).toHaveAccessibleName('Ticket source');
   await expect(source.locator('wa-option')).toHaveText(['HS2 git tickets', 'GitHub issues']);
+  const sourceWarning = dialog.locator('.quick-ticket-composer__source-warning [data-component="state-banner"]');
+  await expect(sourceWarning).toHaveCount(0);
   await expect(dialog.locator('.quick-ticket-composer__footer')).toContainText('Creating in');
   expect(
     await source.evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!).cursor),
@@ -9849,6 +9851,10 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   await page.screenshot({ path: '/private/tmp/hs2-nzmjbj-source-select-open.png' });
   await source.locator('wa-option[value="github-acme"]').click();
   await expect(source).toHaveJSProperty('value', 'github-acme');
+  await expect(sourceWarning).toBeVisible();
+  await expect(sourceWarning).toContainText('Creating in GitHub issues');
+  await expect(sourceWarning).toContainText('not the default ticket source (HS2 git tickets)');
+  await dialog.locator('form').screenshot({ path: test.info().outputPath('hs2-fxn0ez-source-warning-1280.png') });
   await expect(source).toHaveJSProperty('open', false);
   await expect
     .poll(() =>
@@ -9862,6 +9868,7 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   // The most recently used source is preselected when the composer reopens.
   await launcher.click();
   await expect(source).toHaveJSProperty('value', 'github-acme');
+  await expect(sourceWarning).toBeVisible();
   await expect
     .poll(() =>
       source.evaluate((node) => node.shadowRoot!.querySelector<HTMLInputElement>('[part~="display-input"]')!.value),
@@ -9871,12 +9878,15 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   await source.click();
   await source.locator('wa-option[value="git-local"]').click();
   await expect(source).toHaveJSProperty('value', 'git-local');
+  await expect(sourceWarning).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
   await launcher.click();
   await expect(source).toHaveJSProperty('value', 'github-acme');
+  await expect(sourceWarning).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(source).toBeVisible();
+  await dialog.locator('form').screenshot({ path: test.info().outputPath('hs2-fxn0ez-source-warning-390.png') });
   await dialog.locator('form').screenshot({ path: '/private/tmp/hs2-nzmjbj-source-select-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -9885,6 +9895,7 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
   await launcher.click();
   await expect(source).toHaveJSProperty('value', 'git-local');
+  await expect(sourceWarning).toHaveCount(0);
   await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Routed to git');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
   await expect(dialog).toBeHidden();

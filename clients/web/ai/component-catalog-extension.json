@@ -438,9 +438,9 @@
       "name": "QuickTicketComposer",
       "source": "src/components/quick-ticket-composer.tsx",
       "kind": "component",
-      "purpose": "Compact ticket creation that expands in place.",
+      "purpose": "Compact ticket creation with a clear warning when the destination differs from the project default.",
       "useWhen": [
-        "Hot Sheet needs compact ticket creation that expands in place."
+        "Hot Sheet needs compact ticket creation with a clear warning when the destination differs from the project default."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific QuickTicketComposer behavior."

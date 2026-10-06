@@ -36,6 +36,9 @@
   grid-template-columns: minmax(0, 1fr) minmax(remify(192px), remify(240px));
   gap: var(--kui-space-m);
 }
+.quick-ticket-composer__source-warning {
+  grid-column: 1 / -1;
+}
 .quick-ticket-composer__title::part(base) {
   height: remify(44px);
   min-height: remify(44px);

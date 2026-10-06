@@ -5161,6 +5161,8 @@ export async function startHotSheetWebClient() {
           category={composerCategory.value}
           upNext={composerUpNext.value}
           providerName={composerTarget?.name ?? provider?.name ?? 'Hot Sheet git'}
+          defaultSourceName={provider?.name ?? 'Hot Sheet git'}
+          sourceIsDefault={composerTarget?.default ?? true}
           sources={writableTicketSources(provider).map((source) => ({
             value: source.connectionId,
             label: source.name,

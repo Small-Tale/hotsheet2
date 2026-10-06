@@ -197,6 +197,36 @@ describe('QuickTicketComposer', () => {
     expect(submitting).toMatch(/<wa-select[^>]*name="new-ticket-source"[^>]*disabled/);
   });
 
+  it('makes only a non-default destination prominent and names both sources (HS2-FXN0EZ)', () => {
+    const sources = [
+      { value: 'git-a', label: 'HS2 git tickets' },
+      { value: 'github-b', label: 'GitHub issues' },
+    ];
+    const render = (source: string, providerName: string, sourceIsDefault: boolean) =>
+      String(
+        QuickTicketComposer({
+          expanded: true,
+          sources,
+          source,
+          providerName,
+          defaultSourceName: 'HS2 git tickets',
+          sourceIsDefault,
+        }),
+      );
+    const defaultMarkup = render('git-a', 'HS2 git tickets', true);
+    expect(defaultMarkup).not.toContain('quick-ticket-composer__source-warning');
+    const alternate = render('github-b', 'GitHub issues', false);
+    expect(alternate).toContain('class="quick-ticket-composer__source-warning"');
+    expect(alternate).toMatch(/data-component="state-banner"[^>]*role="status"/);
+    expect(alternate).toContain('Creating in GitHub issues');
+    expect(alternate).toContain('This is not the default ticket source (HS2 git tickets).');
+    expect(alternate).toContain('data-lucide="triangle-alert"');
+    expect(alternate.indexOf('quick-ticket-composer__source-warning')).toBeLessThan(
+      alternate.indexOf('name="new-ticket-title"'),
+    );
+    expect(render('git-a', 'HS2 git tickets', true)).not.toContain('quick-ticket-composer__source-warning');
+  });
+
   it('blocks creation while attachment screening is still busy', () => {
     const markup = String(QuickTicketComposer({ expanded: true, busy: true }));
     expect(markup).toContain('Create ticket');

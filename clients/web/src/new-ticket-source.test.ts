@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { type Capabilities, type ProviderDescriptor } from './api';
 import {
+  newTicketCreationSourceId,
   projectTicketSources,
   rememberNewTicketSource,
   resolveNewTicketSource,
@@ -72,5 +73,15 @@ describe('new ticket source selection (HS2-NZMJBJ)', () => {
     remembered = rememberNewTicketSource(remembered, 'p1', 'git-a');
     expect(remembered).toEqual({ p1: 'git-a', p2: 'git-a' });
     expect(before).toEqual({ p1: 'github-b', p2: 'git-a' });
+  });
+
+  it('routes a sole writable non-default source explicitly', () => {
+    const defaultWritable = projectTicketSources([descriptor('git-a', true, true)]);
+    expect(newTicketCreationSourceId(defaultWritable, resolveNewTicketSource(defaultWritable))).toBeUndefined();
+    const alternate = projectTicketSources([descriptor('jira-ro', false, true), descriptor('github-b', true)]);
+    expect(newTicketCreationSourceId(alternate, resolveNewTicketSource(alternate))).toBe('github-b');
+    const twoWritable = projectTicketSources([descriptor('git-a', true, true), descriptor('github-b', true)]);
+    expect(newTicketCreationSourceId(twoWritable, resolveNewTicketSource(twoWritable))).toBe('git-a');
+    expect(newTicketCreationSourceId(twoWritable, resolveNewTicketSource(twoWritable, 'github-b'))).toBe('github-b');
   });
 });

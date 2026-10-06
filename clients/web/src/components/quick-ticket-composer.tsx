@@ -6,7 +6,8 @@ import './quick-ticket-composer.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
-import { Paperclip, Plus, Star, Trash2, Upload } from 'lucide';
+import { StateBanner } from '@kerfjs/ui/state-banner';
+import { Paperclip, Plus, Star, Trash2, TriangleAlert, Upload } from 'lucide';
 
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
@@ -19,6 +20,9 @@ export interface QuickTicketComposerProps {
   category?: string;
   upNext?: boolean;
   providerName?: string;
+  /** The project default, which may differ from the selected or only writable source. */
+  defaultSourceName?: string;
+  sourceIsDefault?: boolean;
   /**
    * Writable ticket sources the new ticket can target. With two or more the footer offers a
    * source Select instead of the plain "Creating in" text (HS2-NZMJBJ).
@@ -115,6 +119,8 @@ export function QuickTicketComposer({
   category = 'task',
   upNext = false,
   providerName = 'Hot Sheet',
+  defaultSourceName = providerName,
+  sourceIsDefault = true,
   sources = [],
   source,
   canCreate = true,
@@ -152,6 +158,18 @@ export function QuickTicketComposer({
           {...SHELL_AND_GLOBAL_TARGETS.duplicateTicketDropAction.attrs}
           data-submitting={String(submitting)}
         >
+          {!sourceIsDefault && (
+            <div class="quick-ticket-composer__source-warning">
+              <StateBanner
+                title={`Creating in ${providerName}`}
+                detail={`This is not the default ticket source (${defaultSourceName}).`}
+                tone="warning"
+                urgency="status"
+                copyLayout="stacked"
+                icon={<LucideIcon icon={TriangleAlert} name="triangle-alert" />}
+              />
+            </div>
+          )}
           <wa-input
             class="quick-ticket-composer__title"
             name="new-ticket-title"

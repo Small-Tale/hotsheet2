@@ -37,10 +37,10 @@ import type { Control, NotWorkingTarget, PendingEvidence, Project } from '../int
 import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from '../new-ticket-attachments';
 import {
+  newTicketCreationSourceId,
   type ProjectTicketSources,
   rememberNewTicketSource,
   type TicketSourceChoice,
-  writableTicketSources,
 } from '../new-ticket-source';
 import { submitNotWorkingReport } from '../not-working-workflow';
 import { noteAuthorship } from '../note-authorship';
@@ -1838,9 +1838,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   async function submitNewTicket() {
     const origin = project(),
       target = newTicketSource(),
-      // Name the target explicitly only when the project offers a choice; a single writable source
-      // keeps the checkout's own default routing (HS2-NZMJBJ).
-      source = target && writableTicketSources(defaultProvider()).length > 1 ? target.connectionId : undefined,
+      // A non-default target must be named even when it is the only writable source.
+      source = newTicketCreationSourceId(defaultProvider(), target),
       title = composerTitle.value.trim();
     if (
       !origin ||

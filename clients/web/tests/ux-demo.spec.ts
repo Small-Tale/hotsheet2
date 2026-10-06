@@ -4134,15 +4134,20 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   // HS2-NZMJBJ: several writable sources show a source Select; the last-used one is preselected.
   await page.getByRole('button', { name: /New ticket/ }).click();
   const source = form.locator('wa-select[name="new-ticket-source"]');
+  const sourceWarning = form.locator('.quick-ticket-composer__source-warning [data-component="state-banner"]');
   await expect(source).toHaveJSProperty('value', 'git-local');
+  await expect(sourceWarning).toHaveCount(0);
   await source.click();
   await source.locator('wa-option[value="github-issues"]').click();
   await expect(source).toHaveJSProperty('value', 'github-issues');
+  await expect(sourceWarning).toContainText('Creating in GitHub issues');
+  await expect(sourceWarning).toContainText('not the default ticket source (Hot Sheet git)');
   await form.getByRole('textbox', { name: 'Ticket title' }).fill('Routed to GitHub');
   await form.getByRole('button', { name: 'Create ticket' }).click();
   await expect(page.getByText(/HS2-DEMO\d created in GitHub issues/)).toBeVisible();
   await page.getByRole('button', { name: /New ticket/ }).click();
   await expect(source).toHaveJSProperty('value', 'github-issues');
+  await expect(sourceWarning).toBeVisible();
   await page.getByRole('button', { name: /Cancel/ }).click();
   await expect(source).toHaveCount(0);
   // The demo settings switch to the single-source variant, which keeps the plain label.
@@ -4157,6 +4162,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await page.getByRole('button', { name: /New ticket/ }).click();
   await expect(form.locator('.quick-ticket-composer__footer')).toContainText('Creating in Hot Sheet git');
   await expect(source).toHaveCount(0);
+  await expect(sourceWarning).toHaveCount(0);
   await page.getByRole('button', { name: /Cancel/ }).click();
   await sourceCount.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'several';
@@ -4164,6 +4170,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   });
   await page.getByRole('button', { name: /New ticket/ }).click();
   await expect(source).toHaveJSProperty('value', 'github-issues');
+  await expect(sourceWarning).toBeVisible();
   await page.getByRole('button', { name: /Cancel/ }).click();
   // HS2-8HHHK3: files staged for git stay listed but block Create on attachment-less GitHub issues.
   await page.getByRole('button', { name: /New ticket/ }).click();
@@ -4171,6 +4178,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await source.click();
   await source.locator('wa-option[value="git-local"]').click();
   await expect(source).toHaveJSProperty('value', 'git-local');
+  await expect(sourceWarning).toHaveCount(0);
   await form
     .getByLabel('Browse attachments for new ticket', { exact: true })
     .setInputFiles({ name: 'demo-proof.png', mimeType: 'image/png', buffer: Buffer.from('demo') });
