@@ -7,7 +7,7 @@ import type { ClaimEtaPresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import { SEARCH_AND_COMPOSER_ACTIONS } from '../interaction-attrs/search-and-composer';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
-import { ActiveClaimSpinner, ClaimEta } from './active-claim';
+import { ActiveClaimIndicator, ClaimEta } from './active-claim';
 import {
   categoryAbbreviation,
   defaultCategoryPresentation,
@@ -86,11 +86,11 @@ export function ticketRowIndicator(
   return undefined;
 }
 
-function ActiveClaimIndicator({ agentName = 'AI' }: { agentName?: string }) {
+function RowClaimIndicator({ agentName = 'AI', claimEta }: { agentName?: string; claimEta?: ClaimEtaPresentation }) {
   const label = `${agentName} is actively working on this ticket`;
   return (
     <span class="ticket-list-row__claim" title={`${label} while it stays active`}>
-      <ActiveClaimSpinner label={label} />
+      <ActiveClaimIndicator label={label} eta={claimEta} />
     </span>
   );
 }
@@ -214,7 +214,7 @@ export function TicketRow(raw: TicketRowProps) {
               {props.presentation === 'list' && (
                 <StatusBadge status={props.status} startedPhase={props.startedPhase} compact />
               )}
-              {props.busy && <ActiveClaimIndicator agentName={props.agentName} />}
+              {props.busy && <RowClaimIndicator agentName={props.agentName} claimEta={props.claimEta} />}
               {needsReview && (
                 <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review">
                   <span class="ticket-list-row__feedback-icon">

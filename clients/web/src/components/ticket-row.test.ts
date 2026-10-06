@@ -135,6 +135,9 @@ describe('TicketRow', () => {
     );
     expect(estimate).toContain('data-claim-eta="estimate"');
     expect(estimate).toMatch(/<wa-progress-ring[^>]*value="25"/);
+    expect(estimate).not.toContain('data-component="loading-spinner"');
+    expect(estimate.indexOf('ticket-list-row__claim')).toBeLessThan(estimate.indexOf('ticket-list-row__owner'));
+    expect(estimate.indexOf('ticket-list-row__owner')).toBeLessThan(estimate.indexOf('data-claim-eta'));
     expect(estimate).toContain('~45m left');
     expect(estimate).toContain('title="Estimated to finish 11:00"');
     const overrun = String(
@@ -142,6 +145,7 @@ describe('TicketRow', () => {
     );
     expect(overrun).toContain('data-claim-eta="overrun"');
     expect(overrun).not.toContain('wa-progress-ring');
+    expect(overrun).toContain('data-component="loading-spinner"');
     expect(overrun).toContain('>Soon<');
     // No ETA without live work, even if a stale presentation is passed.
     expect(

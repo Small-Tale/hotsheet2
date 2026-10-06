@@ -9,7 +9,7 @@
   flex: none;
 }
 .claim-eta__ring {
-  --size: remify(12.8px);
+  --size: remify(16.8px);
   --track-width: remify(2px);
   --indicator-width: remify(2px);
   --indicator-color: var(--wa-color-brand-fill-loud);

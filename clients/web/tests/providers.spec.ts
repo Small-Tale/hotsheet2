@@ -8648,10 +8648,8 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
   const inspector = page.locator('#app-right-rail'),
     inspectorNotice = inspector.locator('[data-component="live-claim-notice"]');
   await expect(inspectorNotice).toContainText('Codex is working on this');
-  await expect(inspectorNotice.locator('[data-component="loading-spinner"]')).toHaveAttribute(
-    'aria-label',
-    'Codex is actively working on this ticket',
-  );
+  await expect(inspectorNotice.locator('[data-component="loading-spinner"]')).toHaveCount(0);
+  await expect(inspectorNotice.locator('.claim-eta__ring')).toBeVisible();
   await expect(inspectorNotice.locator('[data-claim-eta]')).toHaveAttribute('data-claim-eta', 'estimate');
   await expect(inspectorNotice.locator('[data-claim-eta]')).toHaveText(/~4[45]m left/);
   // The same row also shows the estimate, so opening the ticket keeps both cues (HS2-XQMDQB).
@@ -8755,7 +8753,9 @@ test('shows ETA progress on actively claimed tickets in list and column views an
     // 15 of 60 minutes elapsed: the ring reads about a quarter done.
     await expect
       .poll(() =>
-        estimateEta.locator('wa-progress-ring').evaluate((ring) => (ring as HTMLElement & { value: number }).value),
+        page
+          .locator('[data-ticket-slug="HS2-DEMO01"] .ticket-list-row__claim wa-progress-ring')
+          .evaluate((ring) => (ring as HTMLElement & { value: number }).value),
       )
       .toBeGreaterThanOrEqual(24);
     await expect(estimateEta).toHaveAttribute('title', /Estimated to finish/);

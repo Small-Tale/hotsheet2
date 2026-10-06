@@ -802,13 +802,13 @@ always retain native clipboard behavior.
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
   the familiar yellow Lucide star with an accessible add/remove name. Blocked tickets
   additionally show a compact `Blocked` pill immediately after their status. A live,
-  non-expired worker claim adds a yellow activity spinner immediately after the status badge;
-  started-but-unclaimed and
-  previously claimed tickets do not show it.
+  non-expired worker claim adds an activity indicator immediately after the status badge;
+  started-but-unclaimed and previously claimed tickets do not show it.
   When that live claim carries an ETA (HS2-XQMDQB), the agent name is followed by a compact
-  estimate: a brand-blue Web Awesome progress ring showing the elapsed share of the time from
-  the claim's start (`claim_started_at`) to its ETA, plus `~45m left` (`<1m`, `~1h 20m`, `~3d`
-  forms). Once the ETA passes, the ring gives way to `Soon`, with the activity spinner as the
+  estimate: a brand-blue Web Awesome progress ring replaces the spinner in its 16.8px slot,
+  showing the elapsed share of the time from the claim's start (`claim_started_at`) to its ETA.
+  The time label remains after the agent name: `~45m left` (`<1m`, `~1h 20m`, `~3d` forms).
+  Once the ETA passes, the ring gives way to `Soon`, with the activity spinner as the
   indeterminate cue, until the worker re-estimates or the claim ends. Both states carry a
   title with the absolute time. The countdown re-renders from a local timer (at most every 30
   seconds, and just after the nearest ETA) that never makes network requests. The demo's
@@ -1132,7 +1132,8 @@ The zero-selection placeholder omits the otherwise-shared Toolbar divider so the
 navbar does not leave a stray rule above its centered guidance. Loading and
 multi-selection placeholders keep the divider to preserve their intentional state boundary.
 While a live claim is held, the header leads its status notices with a `LiveClaimNotice`
-(holder, the shared activity spinner, and the row's ETA ring/time left or `Soon`); the demo's
+(holder, the shared activity slot with either a 16.8px ETA ring or an indeterminate spinner,
+and the row's time-left label or `Soon`); the demo's
 **Live claim** setting exposes none, with an estimate, past its estimate, and without an ETA
 (HS2-QKNQXC).
 The copyable ticket number sits in the header toolbar's **leading** slot for both the sidebar

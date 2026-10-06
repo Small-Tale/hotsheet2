@@ -24,11 +24,27 @@ export function ActiveClaimSpinner({
   return <LoadingSpinner label={label} size={ACTIVE_CLAIM_SPINNER_SIZE} color={color} />;
 }
 
-/** Progress toward a live claim's ETA: a determinate ring plus time left, or "Soon" once overrun. */
+/** The live-work symbol is determinate while an ETA is on track and indeterminate otherwise. */
+export function ActiveClaimIndicator({
+  label,
+  eta,
+  color,
+}: {
+  label: string;
+  eta?: ClaimEtaPresentation;
+  color?: CssForegroundColor;
+}) {
+  return eta?.kind === 'estimate' ? (
+    <wa-progress-ring class="claim-eta__ring" value={eta.percent} aria-label={`${label}; ${eta.label}`} />
+  ) : (
+    <ActiveClaimSpinner label={label} color={color} />
+  );
+}
+
+/** The time-left label remains beside the holder when the ring moves to the activity slot. */
 export function ClaimEta({ eta }: { eta: ClaimEtaPresentation }) {
   return (
     <span class="claim-eta" data-claim-eta={eta.kind} title={eta.title}>
-      {eta.kind === 'estimate' && <wa-progress-ring class="claim-eta__ring" value={eta.percent} aria-hidden="true" />}
       <span class="claim-eta__label">{eta.label}</span>
     </span>
   );
@@ -49,7 +65,13 @@ export function LiveClaimNotice({ agentName, eta }: LiveClaimNoticeProps) {
         title={`${agentName} is working on this`}
         tone="info"
         urgency="status"
-        icon={<ActiveClaimSpinner label={label} color={foregroundColorVar('--kui-state-banner-info-foreground')} />}
+        icon={
+          <ActiveClaimIndicator
+            label={label}
+            eta={eta}
+            color={foregroundColorVar('--kui-state-banner-info-foreground')}
+          />
+        }
         action={eta ? <ClaimEta eta={eta} /> : undefined}
       />
     </div>

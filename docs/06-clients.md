@@ -542,7 +542,9 @@ and identity-less legacy entries remain conservatively blocking.
   while a worker holds a non-expired claim lease. Started tickets without a lease remain
   unclaimed, and old `claim_count` values never imply presence. A local one-shot expiry timer removes stale indicators without issuing
   polling requests; claim/release changes otherwise arrive through the shared live-update
-  channel.
+  channel. When a live claim has an on-track ETA, a progress ring of the same size replaces
+  the spinner in that slot; the time-left label remains after the holder name. An overrun
+  keeps the spinner and shows `Soon`.
 
 - **Started phase.** List rows and the ticket inspector show the optional phase label
   inside the Started badge. `Final testing` remains visible after a worker releases
@@ -3075,14 +3077,15 @@ guessed from their prose or author-like display text.
 **Live claim in the inspector and reader (HS2-QKNQXC).** While a ticket has a live,
 non-expired claim lease, the inspector and reader header leads its status notices with a
 brand-tinted "<holder> is working on this" line: the holder's worker label (else worker id), the
-shared activity spinner, and, when the claim carries an ETA, the same progress ring and time
+shared activity slot, and, when the claim carries an ETA, the same progress ring and time
 left (or `Soon` once overrun) that list and column rows show (HS2-XQMDQB). It uses the rows'
 local ETA clock, so the countdown never triggers network requests, and it disappears as soon as
-the claim is released, expires, or the ticket reaches a terminal status. The spinner and ETA
+the claim is released, expires, or the ticket reaches a terminal status. The spinner and ETA ring
 come from one shared component (`components/active-claim.tsx`) so rows and headers cannot drift.
 The inspector and reader compose the holder and ETA as a Kerf `StateBanner` with a
-public-token-colored `LoadingSpinner`; the claim label and ETA progress ring retain their
-distinct accessible meanings (HS2-KEHG7H).
+public-token-colored `LoadingSpinner` when progress is indeterminate; the same-sized ETA ring
+occupies its icon slot while the estimate is on track (HS2-SNC0S3/1FYDF0). The time-left
+label stays in the banner action, and the claim label remains accessible (HS2-KEHG7H).
 
 **AI completion confidence (HS2-DWTJ43).** A note carrying a `confidence` score renders a
 compact Lucide `gauge` badge with the percentage in its header beside the timestamp,

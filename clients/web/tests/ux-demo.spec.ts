@@ -2216,23 +2216,15 @@ test('switches the TicketInspector live-claim header through every claim state (
   };
   await setLiveClaim('estimate');
   await expect(notice).toContainText('Claude is working on this');
-  await expect(notice.locator('[data-component="loading-spinner"]')).toHaveAttribute(
-    'aria-label',
-    'Claude is actively working on this ticket',
-  );
+  await expect(notice.locator('[data-component="loading-spinner"]')).toHaveCount(0);
   await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
-  // Kerf LoadingSpinner `size` gives the live-claim spinner its 16.8px box (HS2-JVPPVV).
-  const claimSpinner = await notice.locator('[data-component="loading-spinner"]').boundingBox();
-  expect(claimSpinner!.width).toBeCloseTo(16.8, 1);
-  expect(claimSpinner!.height).toBeCloseTo(16.8, 1);
-  // The public color prop preserves the notice tone without an app tint wrapper (HS2-TEM5XY).
-  const noticeColors = await notice.evaluate((node) => ({
-    notice: getComputedStyle(node.querySelector('[data-component="state-banner"]')!).color,
-    spinner: getComputedStyle(node.querySelector('[data-component="loading-spinner"]')!).color,
-  }));
-  expect(noticeColors.spinner).toBe(noticeColors.notice);
+  const claimRing = notice.locator('.claim-eta__ring');
+  await expect(claimRing).toHaveJSProperty('value', 25);
+  const ringBox = await claimRing.boundingBox();
+  expect(ringBox!.width).toBeCloseTo(16.8, 1);
+  expect(ringBox!.height).toBeCloseTo(16.8, 1);
   await expect(eta).toHaveText('~45m left');
-  await expect(eta.locator('wa-progress-ring')).toHaveJSProperty('value', 25);
+  await expect(eta.locator('wa-progress-ring')).toHaveCount(0);
   // The notice leads the header notices and sits inside the inspector's width.
   const [noticeBox, inspectorBox] = await Promise.all([notice.boundingBox(), inspector.boundingBox()]);
   expect(noticeBox!.x).toBeGreaterThanOrEqual(inspectorBox!.x);
@@ -2245,6 +2237,7 @@ test('switches the TicketInspector live-claim header through every claim state (
   await setLiveClaim('no-eta');
   await expect(notice).toContainText('Claude is working on this');
   await expect(eta).toHaveCount(0);
+  await expect(notice.locator('[data-component="loading-spinner"]')).toBeVisible();
   await setLiveClaim('none');
   await expect(notice).toHaveCount(0);
   await setLiveClaim('estimate');
@@ -2253,9 +2246,9 @@ test('switches the TicketInspector live-claim header through every claim state (
   await page.screenshot({ path: test.info().outputPath('live-claim-wide.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(notice).toBeVisible();
-  const narrowSpinner = await notice.locator('[data-component="loading-spinner"]').boundingBox();
-  expect(narrowSpinner!.width).toBeCloseTo(16.8, 1);
-  expect(narrowSpinner!.height).toBeCloseTo(16.8, 1);
+  const narrowRing = await notice.locator('.claim-eta__ring').boundingBox();
+  expect(narrowRing!.width).toBeCloseTo(16.8, 1);
+  expect(narrowRing!.height).toBeCloseTo(16.8, 1);
   await page.screenshot({ path: test.info().outputPath('live-claim-narrow.png') });
 });
 
@@ -2291,18 +2284,40 @@ test('projects phone project attention through selection and reset (HS2-34VG07)'
   await expect(attention).toBeVisible();
 });
 
-test('preserves the live-claim row spinner tone at wide and phone widths (HS2-TEM5XY)', async ({ page }) => {
+test('uses the row claim slot for one same-size ring or spinner at wide and phone widths (HS2-SNC0S3/1FYDF0)', async ({
+  page,
+}) => {
   await page.goto('/ux-demo?component=ticket-row');
   const row = page.locator('[data-component="ticket-list-row"]');
-  const spinner = row.locator('[data-component="loading-spinner"]');
+  await page.locator('[data-action="toggle-settings"]').click();
+  const claimEta = page
+    .getByRole('complementary', { name: 'TicketRow settings' })
+    .locator('wa-select[name="claim-eta"]');
+  const setClaimEta = (value: string) =>
+    claimEta.evaluate((node: HTMLElement & { value: string }, next) => {
+      node.value = next;
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
   for (const width of [1100, 390]) {
     await page.setViewportSize({ width, height: 844 });
+    const ring = row.locator('.ticket-list-row__claim .claim-eta__ring');
+    await expect(ring).toBeVisible();
+    await expect(row.locator('[data-component="loading-spinner"]')).toHaveCount(0);
+    const ringBox = await ring.boundingBox();
+    expect(ringBox!.width).toBeCloseTo(16.8, 1);
+    expect(ringBox!.height).toBeCloseTo(16.8, 1);
+    await expect(row.locator('[data-claim-eta]')).toHaveText('~45m left');
+    await setClaimEta('none');
+    const spinner = row.locator('[data-component="loading-spinner"]');
     await expect(spinner).toBeVisible();
     await expect(spinner).toHaveAttribute('style', /color:var\(--hs-ticket-state-up-next\)/);
     const box = await spinner.boundingBox();
     expect(box!.width).toBeCloseTo(16.8, 1);
     expect(box!.height).toBeCloseTo(16.8, 1);
+    await setClaimEta('estimate');
+    await page.getByRole('button', { name: 'Close settings' }).click();
     await page.screenshot({ path: test.info().outputPath(`live-claim-row-${width}.png`) });
+    await page.locator('[data-action="toggle-settings"]').click();
   }
 });
 
@@ -2336,7 +2351,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   // A live claim with an estimate shows a progress ring and the time left (HS2-XQMDQB).
   await expect(eta).toHaveAttribute('data-claim-eta', 'estimate');
   await expect(eta).toHaveText('~45m left');
-  await expect(eta.locator('wa-progress-ring')).toHaveJSProperty('value', 25);
+  await expect(row.locator('.ticket-list-row__claim wa-progress-ring')).toHaveJSProperty('value', 25);
+  await expect(eta.locator('wa-progress-ring')).toHaveCount(0);
   await title.fill('Fix selection synchronization');
   await category.fill('bug');
   await tags.fill('client, regression');

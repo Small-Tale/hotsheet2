@@ -3,7 +3,13 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ACTIVE_CLAIM_SPINNER_SIZE, ActiveClaimSpinner, ClaimEta, LiveClaimNotice } from './active-claim';
+import {
+  ACTIVE_CLAIM_SPINNER_SIZE,
+  ActiveClaimIndicator,
+  ActiveClaimSpinner,
+  ClaimEta,
+  LiveClaimNotice,
+} from './active-claim';
 
 describe('active claim presentation (HS2-QKNQXC)', () => {
   it('renders a labeled spinner the row and header share', () => {
@@ -18,17 +24,35 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     expect(css).not.toContain('.active-claim-spinner');
   });
 
-  it('renders the ETA ring only for an estimate and the overrun as Soon', () => {
+  it('replaces the activity spinner with a same-size ETA ring and keeps the time label separate', () => {
+    const indicator = String(
+      ActiveClaimIndicator({
+        label: 'Claude is actively working on this ticket',
+        eta: { kind: 'estimate', percent: 40, label: '~25m left', title: 'Estimated to finish 10:00' },
+      }),
+    );
+    expect(indicator).toContain('<wa-progress-ring class="claim-eta__ring" value="40"');
+    expect(indicator).not.toContain('loading-spinner');
     const estimate = String(
       ClaimEta({ eta: { kind: 'estimate', percent: 40, label: '~25m left', title: 'Estimated to finish 10:00' } }),
     );
     expect(estimate).toContain('data-claim-eta="estimate"');
-    expect(estimate).toContain('<wa-progress-ring class="claim-eta__ring" value="40"');
+    expect(estimate).not.toContain('wa-progress-ring');
     expect(estimate).toContain('~25m left');
     const overrun = String(ClaimEta({ eta: { kind: 'overrun', label: 'Soon', title: 'Past its estimate' } }));
     expect(overrun).toContain('data-claim-eta="overrun"');
     expect(overrun).not.toContain('wa-progress-ring');
     expect(overrun).toContain('Soon');
+    expect(
+      String(
+        ActiveClaimIndicator({
+          label: 'Claude is actively working on this ticket',
+          eta: { kind: 'overrun', label: 'Soon', title: '' },
+        }),
+      ),
+    ).toContain('data-component="loading-spinner"');
+    const css = readFileSync(resolve(import.meta.dirname, 'active-claim.css'), 'utf8');
+    expect(css).toContain('--size: remify(16.8px)');
   });
 
   it('names the claim holder and shows the ETA only when one exists', () => {
@@ -43,11 +67,13 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     expect(withEta).toContain('data-component="state-banner"');
     expect(withEta).toContain('data-tone="info"');
     expect(withEta).toContain('<strong>Claude worker is working on this</strong>');
-    expect(withEta).toContain('var(--kui-state-banner-info-foreground)');
+    expect(withEta).not.toContain('loading-spinner');
+    expect(withEta).toContain('class="claim-eta__ring"');
     expect(withEta).toContain('data-claim-eta="estimate"');
     const withoutEta = String(LiveClaimNotice({ agentName: 'codex-01' }));
     expect(withoutEta).toContain('codex-01');
     expect(withoutEta).not.toContain('data-claim-eta');
+    expect(withoutEta).toContain('var(--kui-state-banner-info-foreground)');
   });
 
   it('owns the spinner and ETA styles it renders', () => {
