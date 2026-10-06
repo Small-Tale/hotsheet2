@@ -5,7 +5,7 @@
 //! byte-for-byte unchanged (no commits, no config change, notably no `core.bare`) and
 //! the store must hold the expected history.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
@@ -83,6 +83,38 @@ fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     unreachable!()
 }
 
+/// Report only paths and byte counts: a failed isolation assertion must identify the writer's
+/// footprint without printing an entire Git index or object into CI logs.
+fn changed_snapshot_paths(
+    before: &BTreeMap<PathBuf, Vec<u8>>,
+    after: &BTreeMap<PathBuf, Vec<u8>>,
+) -> Vec<String> {
+    before
+        .keys()
+        .chain(after.keys())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|path| before.get(*path) != after.get(*path))
+        .map(|path| {
+            format!(
+                "{} ({} -> {} bytes)",
+                path.display(),
+                before.get(path).map(Vec::len).unwrap_or(0),
+                after.get(path).map(Vec::len).unwrap_or(0)
+            )
+        })
+        .collect()
+}
+
+fn assert_sentinel_unchanged(before: &BTreeMap<PathBuf, Vec<u8>>, sentinel: &Path, stage: &str) {
+    let after = snapshot(sentinel);
+    let changed = changed_snapshot_paths(before, &after);
+    assert!(
+        changed.is_empty(),
+        "the inherited GIT_DIR repository changed during {stage}; changed paths: {changed:?}"
+    );
+}
+
 /// `hotsheet-cli` with the sentinel exported the way a git hook would.
 fn hostile_cli(sentinel: &Path, home: &Path) -> Command {
     let git_dir = sentinel.join(".git");
@@ -122,6 +154,7 @@ fn cli_store_operations_ignore_an_inherited_git_repository_environment() {
         .arg(&remote)
         .assert()
         .success();
+    assert_sentinel_unchanged(&before, &sentinel, "standalone init");
     // Committing writes.
     hostile_cli(&sentinel, &home)
         .arg("-C")
@@ -129,6 +162,7 @@ fn cli_store_operations_ignore_an_inherited_git_repository_environment() {
         .args(["new", "--title", "isolated ticket", "--category", "bug"])
         .assert()
         .success();
+    assert_sentinel_unchanged(&before, &sentinel, "ticket creation");
     let slug = hotsheet_ticketing::FsStore::open(&store)
         .unwrap()
         .list_tickets()
@@ -144,6 +178,7 @@ fn cli_store_operations_ignore_an_inherited_git_repository_environment() {
         .args(["edit", &slug, "--status", "started"])
         .assert()
         .success();
+    assert_sentinel_unchanged(&before, &sentinel, "ticket edit");
     // Fetch / integrate / push.
     hostile_cli(&sentinel, &home)
         .arg("-C")
@@ -151,6 +186,7 @@ fn cli_store_operations_ignore_an_inherited_git_repository_environment() {
         .arg("sync")
         .assert()
         .success();
+    assert_sentinel_unchanged(&before, &sentinel, "sync");
     // A plain in-place `init` of a fresh directory.
     let local = root.path().join("local-store");
     std::fs::create_dir(&local).unwrap();
@@ -160,12 +196,7 @@ fn cli_store_operations_ignore_an_inherited_git_repository_environment() {
         .arg(&local)
         .assert()
         .success();
-
-    assert_eq!(
-        before,
-        snapshot(&sentinel),
-        "the inherited GIT_DIR repository must be byte-for-byte untouched"
-    );
+    assert_sentinel_unchanged(&before, &sentinel, "local init");
     assert!(
         git(&sentinel, &["config", "--get", "core.bare"]) == "false",
         "the sentinel must never be made bare"
