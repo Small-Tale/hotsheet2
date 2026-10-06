@@ -92,6 +92,17 @@ pub fn should_bridge_permission(event: PermissionHookEvent, headless_pre_tool: b
         || event == PermissionHookEvent::PreToolUse && headless_pre_tool
 }
 
+/// Only an interactive permission request proves a terminal's live hook connection.
+/// Headless PreToolUse has no interactive session to display as connected.
+pub fn permission_terminal_id<'a>(
+    event: PermissionHookEvent,
+    terminal_id: Option<&'a str>,
+) -> Option<&'a str> {
+    (event == PermissionHookEvent::PermissionRequest)
+        .then_some(terminal_id?)
+        .filter(|id| !id.is_empty())
+}
+
 /// Map a native hook **input** to the bridge's `(tool, action)` rule key. The
 /// action is the command (Bash), else a file path (Edit/Write/Read), else empty — the same
 /// coarse key codex uses, so an `Always` rule remembered on one transport matches the other.
@@ -233,6 +244,22 @@ mod tests {
             PermissionHookEvent::PreToolUse,
             true
         ));
+        assert_eq!(
+            permission_terminal_id(PermissionHookEvent::PermissionRequest, Some("terminal-7")),
+            Some("terminal-7")
+        );
+        assert_eq!(
+            permission_terminal_id(PermissionHookEvent::PreToolUse, Some("terminal-7")),
+            None
+        );
+        assert_eq!(
+            permission_terminal_id(PermissionHookEvent::PermissionRequest, Some("")),
+            None
+        );
+        assert_eq!(
+            permission_terminal_id(PermissionHookEvent::PermissionRequest, None),
+            None
+        );
     }
 
     #[test]

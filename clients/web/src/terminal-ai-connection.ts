@@ -1,13 +1,13 @@
 /**
  * Whether a terminal's AI session is connected to Hot Sheet (HS2-EV1XK3). An AI tool runs Hot
  * Sheet's project hooks only once they are installed and trusted (Codex reviews each new or changed
- * hook in `/hooks`), so a session whose `SessionStart` hook reported in sends its permission prompts
- * to Hot Sheet. An AI terminal that has not reported in after a short grace period keeps its prompts
- * to itself.
+ * hook in `/hooks`), so a session whose `SessionStart` or interactive permission hook reported in
+ * sends its permission prompts to Hot Sheet. An AI terminal that has not reported in after a short
+ * grace period keeps its prompts to itself.
  */
 import type { TerminalAiConnection } from './api';
 
-/** How long an AI terminal may run before a missing `SessionStart` report counts as not connected. */
+/** How long an AI terminal may run before a missing hook report counts as not connected. */
 export const AI_CONNECTION_GRACE_MS = 15_000;
 
 /** `connected`: the session's hook reported in. `missing`: an AI terminal never did. */

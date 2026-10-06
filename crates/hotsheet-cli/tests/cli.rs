@@ -76,6 +76,7 @@ fn retained_permission_hook_uses_restarted_server_route() {
         assert_eq!(body["project"], store_for_server.to_string_lossy().as_ref());
         assert_eq!(body["agent"], "codex");
         assert_eq!(body["action"], "git push");
+        assert_eq!(body["terminal_id"], "codex-7");
         let reply = r#"{"decision":"allow"}"#;
         write!(
             reader.get_mut(),
@@ -90,6 +91,7 @@ fn retained_permission_hook_uses_restarted_server_route() {
         .env("HOTSHEET_PROJECT", &store)
         .env("HOTSHEET_SERVER", "http://127.0.0.1:1")
         .env("HOTSHEET_SECRET", "stale-secret")
+        .env("HOTSHEET_TERMINAL_ID", "codex-7")
         .args(["permission-hook", "--agent", "codex"])
         .write_stdin(
             r#"{"hook_event_name":"PermissionRequest","session_id":"codex-retained","tool_name":"Bash","tool_input":{"command":"git push"}}"#,

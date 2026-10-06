@@ -762,8 +762,12 @@ native prompt stays in charge.
 **Connected sessions (HS2-EV1XK3).** Both the Claude and Codex manifests also route
 `SessionStart` and `SessionEnd` through the same adapter. In a Hot Sheet terminal
 (`HOTSHEET_TERMINAL_ID`), `SessionStart` POSTs `/terminals/{id}/ai-connection` with the agent,
-and `SessionEnd` DELETEs it. Neither prints anything, because a `SessionStart` hook's output
-would otherwise become model context.
+and `SessionEnd` DELETEs it. An authenticated interactive `PermissionRequest` also carries the
+terminal id in `/permissions/ask`; the server marks it connected as soon as the request arrives,
+including while the answer is pending, so a missed `SessionStart` cannot leave a live bridge
+showing as disconnected (HS2-XYSXVT). A headless `PreToolUse` does not imply an interactive
+session. Lifecycle hooks print nothing, because a `SessionStart` hook's output would otherwise
+become model context.
 
 A tool runs a project hook only once it is installed and, for Codex, trusted. A reported
 connection therefore shows that the session's hooks are live, and its permission prompts reach

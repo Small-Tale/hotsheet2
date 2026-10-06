@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -5840,9 +5840,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
   }
 });
 
-test('shows a terminal connected to Hot Sheet while its Codex session runs with trusted hooks (HS2-EV1XK3)', async ({
-  page,
-}) => {
+test('recovers a missing Codex connection when its interactive permission hook runs (HS2-XYSXVT)', async ({ page }) => {
   test.setTimeout(120_000);
   const server = await realTicketServer(),
     cli =
@@ -5850,6 +5848,7 @@ test('shows a terminal connected to Hot Sheet while its Codex session runs with 
       fileURLToPath(
         new URL(`../../../target/debug/hotsheet-cli${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url),
       );
+  await page.clock.install();
   // The Codex hook adapter exactly as a Hot Sheet terminal runs it: its env names the terminal.
   const hook = (input: Record<string, string>) => {
     const result = spawnSync(cli, ['permission-hook', '--agent', 'codex'], {
@@ -5870,6 +5869,7 @@ test('shows a terminal connected to Hot Sheet while its Codex session runs with 
   try {
     await server.request('/terminals', 'POST', {
       id: 'codex-shell',
+      connect: 'codex',
       command: '/bin/sh',
       args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
       cwd: server.root,
@@ -5910,13 +5910,51 @@ test('shows a terminal connected to Hot Sheet while its Codex session runs with 
       tile = drawer.locator('.terminal-tile[data-terminal-key="demo-checkout:codex-shell"]'),
       tileConnection = tile.locator('.terminal-tile__ai-connection');
     await expect(tab).toBeVisible();
-    // A plain shell that never ran an AI tool shows no connection state.
+    // The AI terminal starts unreported. After the grace period it shows the warning from
+    // the ticket's screenshot, even though its later permission hook can still be live.
     await expect(connection).toHaveCount(0);
     await expect(tileConnection).toHaveCount(0);
+    await page.clock.fastForward(16_000);
+    await expect(connection).toHaveAttribute('data-ai-connection', 'missing');
+    await expect(connection.locator('[data-lucide="unplug"]')).toBeVisible();
+    await expect(tileConnection).toHaveAttribute('data-ai-connection', 'missing');
 
-    // Codex starts in the shell with Hot Sheet's hooks trusted: its SessionStart reaches the real
-    // server and the change stream marks the tab without a reload.
-    hook({ hook_event_name: 'SessionStart', session_id: 'session-1', source: 'startup' });
+    // A permission request can arrive even when SessionStart was missed. The real CLI hook
+    // reaches the real server, whose change stream marks the tab while the ask is still pending.
+    const permission = spawn(cli, ['permission-hook', '--agent', 'codex'], {
+      env: {
+        ...withoutGitRepositoryEnv(process.env),
+        HOTSHEET_HOME: server.home,
+        HOTSHEET_SERVER: server.url,
+        HOTSHEET_SECRET: server.secret,
+        HOTSHEET_TERMINAL_ID: 'codex-shell',
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let permissionOutput = '',
+      permissionError = '';
+    permission.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+      permissionOutput += chunk;
+    });
+    permission.stderr.setEncoding('utf8').on('data', (chunk: string) => {
+      permissionError += chunk;
+    });
+    permission.stdin.end(
+      JSON.stringify({
+        hook_event_name: 'PermissionRequest',
+        session_id: 'session-1',
+        tool_name: 'Bash',
+        tool_input: { command: 'git push' },
+      }),
+    );
+    let pendingId = 0;
+    await expect
+      .poll(async () => {
+        const pending = await server.request<Array<{ id: number }>>('/permissions');
+        pendingId = pending[0]?.id ?? 0;
+        return pendingId;
+      })
+      .toBeGreaterThan(0);
     await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
     await expect(connection).toHaveAttribute(
       'title',
@@ -5925,13 +5963,16 @@ test('shows a terminal connected to Hot Sheet while its Codex session runs with 
     await expect(connection.locator('[data-lucide="plug"]')).toBeVisible();
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
     await expect(tileConnection).toHaveAttribute('title', (await connection.getAttribute('title')) as string);
-    await page.screenshot({ path: test.info().outputPath('hs2-ev1xk3-connected-1280.png') });
+    await page.screenshot({ path: test.info().outputPath('hs2-xysxvt-connected-1280.png') });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(connection).toBeVisible();
-    await expect(tileConnection).toBeVisible();
-    await settledAnimations(page.locator('[data-component="app-shell"]'));
-    await page.screenshot({ path: test.info().outputPath('hs2-ev1xk3-connected-390.png') });
+    await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
+    await tab.screenshot({ path: test.info().outputPath('hs2-xysxvt-connected-tab-390.png') });
     await page.setViewportSize({ width: 1280, height: 800 });
+    await server.request(`/permissions/${pendingId}`, 'POST', { decision: 'allow', scope: 'once' });
+    const permissionExit =
+      permission.exitCode ?? (await new Promise<number | null>((resolve) => permission.on('exit', resolve)));
+    expect(permissionExit, permissionError).toBe(0);
+    expect(JSON.parse(permissionOutput).hookSpecificOutput.decision.behavior).toBe('allow');
 
     // Halt warnings take precedence; clearing the halt restores the connection.
     expect(
@@ -5957,8 +5998,8 @@ test('shows a terminal connected to Hot Sheet while its Codex session runs with 
 
     // Codex exits: SessionEnd clears it everywhere.
     hook({ hook_event_name: 'SessionEnd', session_id: 'session-1', reason: 'exit' });
-    await expect(connection).toHaveCount(0);
-    await expect(tileConnection).toHaveCount(0);
+    await expect(connection).toHaveAttribute('data-ai-connection', 'missing');
+    await expect(tileConnection).toHaveAttribute('data-ai-connection', 'missing');
     expect((await server.request<Array<{ ai_connection?: unknown }>>('/terminals'))[0].ai_connection).toBeUndefined();
   } finally {
     await server.stop();

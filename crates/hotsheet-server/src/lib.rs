@@ -7417,6 +7417,10 @@ struct AskBody {
     action: String,
     #[serde(default)]
     agent: Option<String>,
+    /// A trusted interactive hook's hosting terminal. Presence proves its permission bridge is
+    /// live even if its earlier SessionStart event never reached the server (HS2-XYSXVT).
+    #[serde(default)]
+    terminal_id: Option<String>,
 }
 
 /// A disconnected hook is no longer waiting for a decision. Remove its pending prompt
@@ -7487,6 +7491,19 @@ impl Drop for PermissionAskGuard {
 async fn ask_permission(State(state): State<AppState>, Json(body): Json<AskBody>) -> Response {
     if state.is_stopping() {
         return permission_ask_stopping();
+    }
+    if let Some(terminal_id) = body.terminal_id.as_deref().filter(|id| !id.is_empty()) {
+        // The authenticated hook has reached the permission bridge. Publish this before the
+        // request parks for a human answer so the tab does not show a stale unplugged icon.
+        // A terminal that ended meanwhile is ignored; it must not be resurrected.
+        let _ = connect_terminal_ai(
+            State(state.clone()),
+            Path(terminal_id.to_owned()),
+            Json(TerminalAiConnectionReq {
+                agent: body.agent.clone(),
+            }),
+        )
+        .await;
     }
     let stopping = state.clone();
     let bridge = state.permissions.clone();
@@ -8358,8 +8375,9 @@ struct TerminalInfo {
     ai_connection: Option<TerminalAiConnection>,
 }
 
-/// An AI session whose `SessionStart` hook reported in from a terminal (HS2-EV1XK3). A tool runs
-/// a project hook only once it is installed and trusted, so this proves the hook is live.
+/// An AI session whose `SessionStart` or interactive permission hook reported in from a terminal
+/// (HS2-EV1XK3, HS2-XYSXVT). A tool runs a project hook only once it is installed and trusted,
+/// so this proves the hook is live.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TerminalAiConnection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -9464,7 +9482,8 @@ fn forget_terminal_halt_if(state: &AppState, id: &str, at: Option<&str>) -> bool
     halts.remove(id).is_some()
 }
 
-/// Body for `POST /terminals/{id}/ai-connection`, sent by the AI tool's `SessionStart` hook.
+/// Body for `POST /terminals/{id}/ai-connection`, sent by the AI tool's `SessionStart` hook and
+/// reused by an authenticated interactive permission ask.
 #[derive(Deserialize)]
 struct TerminalAiConnectionReq {
     #[serde(default)]

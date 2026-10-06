@@ -11624,6 +11624,19 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
     let bridge = st.permission_bridge();
     let app = app(st);
 
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/terminals",
+                Some(r#"{"command":"cat","id":"codex-hook"}"#),
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+
     // The asking side identifies its agent independently from the requested Bash tool.
     let ask_app = app.clone();
     let ask = tokio::spawn(async move {
@@ -11631,7 +11644,7 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
             .oneshot(authed(
                 "POST",
                 "/permissions/ask",
-                Some(r#"{"connection":"codex-1","tool":"Bash","action":"rm x","agent":"codex"}"#),
+                Some(r#"{"connection":"codex-1","tool":"Bash","action":"rm x","agent":"codex","terminal_id":"codex-hook"}"#),
             ))
             .await
             .unwrap()
@@ -11651,6 +11664,16 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     };
+    // The ask itself proves the trusted hook is live, before the user answers it. This covers
+    // a missed SessionStart and makes the connection icon accurate during the popup.
+    let terminals = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(terminals[0]["ai_connection"]["agent"], "codex");
     bridge
         .resolve(
             id,
@@ -11663,6 +11686,25 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
     let resp = ask.await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(body_json(resp).await["decision"], "allow");
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "DELETE",
+                "/terminals/codex-hook/ai-connection",
+                None,
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    let terminals = body_json(
+        app.oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(terminals[0].get("ai_connection").is_none());
 }
 
 #[tokio::test]

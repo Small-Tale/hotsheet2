@@ -3214,7 +3214,7 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
     use hotsheet_cli::permission_hook::{
         PermissionHookEvent, decision_from_server, hook_connection, hook_decision_json,
         hook_tool_action, permission_hook_event, permission_request_decision_json,
-        should_bridge_permission,
+        permission_terminal_id, should_bridge_permission,
     };
     let input: serde_json::Value =
         serde_json::from_reader(std::io::stdin()).unwrap_or(serde_json::Value::Null);
@@ -3245,6 +3245,8 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
 
     let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
     let route = hook_server_route();
+    let terminal_env = std::env::var("HOTSHEET_TERMINAL_ID").ok();
+    let terminal = permission_terminal_id(event, terminal_env.as_deref());
     let Some(decision) = (match route {
         // Governed by a Hot Sheet server: raise a blocking request and honor the answer.
         Some((url, secret)) => {
@@ -3252,7 +3254,16 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
             let connection = hook_connection(&input);
             let env_agent = std::env::var("HOTSHEET_AGENT").ok();
             let agent = installed_agent.or(env_agent.as_deref());
-            match ask_server(&url, &secret, &project, &connection, &tool, &action, agent) {
+            match ask_server(
+                &url,
+                &secret,
+                &project,
+                &connection,
+                &tool,
+                &action,
+                agent,
+                terminal,
+            ) {
                 Ok(reply) => Some(decision_from_server(&reply)),
                 // Server unreachable / error → emit nothing and preserve Claude's native flow.
                 Err(_) => None,
@@ -3532,11 +3543,12 @@ fn ask_server(
     tool: &str,
     action: &str,
     agent: Option<&str>,
+    terminal_id: Option<&str>,
 ) -> Result<serde_json::Value> {
     let endpoint = format!("{}/permissions/ask", url.trim_end_matches('/'));
     let body = serde_json::json!({
         "project": project, "connection": connection, "tool": tool, "action": action,
-        "agent": agent,
+        "agent": agent, "terminal_id": terminal_id,
     })
     .to_string();
     let text = ureq::post(&endpoint)
