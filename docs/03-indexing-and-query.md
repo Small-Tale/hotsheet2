@@ -26,6 +26,11 @@ providers will refresh the same normalized cache through their query/watch contr
 The UI never walks a store directory or calls a provider directly to draw a list; it
 queries the host.
 
+Checkout text search includes connected GitHub Issues, GitLab, and Jira sources.
+External list responses are matched locally against the issue key, title, description,
+and labels using the same all-term word-prefix rule as the git index. Provider notes
+are read on detail requests and are not searched in external list results.
+
 Search scope follows the currently selected sidebar view. Queue, Backlog, and Archive
 apply their collection predicate before the bounded search page, including for exact-slug
 queries. After the selected view settles, the client performs bounded background searches

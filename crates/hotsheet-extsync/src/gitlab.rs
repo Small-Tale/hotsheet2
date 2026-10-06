@@ -7,7 +7,7 @@ use hotsheet_ticketing::{
     ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderPatch,
     ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
     checkout_order::MergeKey, compare_provider_tickets, filter_provider_ticket_page,
-    keyset_page_from_native_pages, keyset_page_from_rows, unbounded_query,
+    keyset_page_from_native_pages, keyset_page_from_rows, provider_text_matches, unbounded_query,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -214,8 +214,7 @@ impl GitLabProvider {
 
     /// Reject filters the native page API cannot evaluate (shared by paged reads).
     fn check_query_filters(&self, query: &TicketQuery) -> Result<(), ProviderError> {
-        if query.text.is_some()
-            || query.review_requested.is_some()
+        if query.review_requested.is_some()
             || query.review_by.is_some()
             || query.claimed.is_some()
             || query.blocked.is_some()
@@ -395,8 +394,7 @@ impl TicketProvider for GitLabProvider {
     }
 
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError> {
-        if query.text.is_some()
-            || query.review_requested.is_some()
+        if query.review_requested.is_some()
             || query.review_by.is_some()
             || query.claimed.is_some()
             || query.blocked.is_some()
@@ -418,6 +416,7 @@ impl TicketProvider for GitLabProvider {
             .list_issues(query.updated_after.as_deref())?
             .into_iter()
             .map(|issue| self.ticket(issue, vec![]))
+            .filter(|ticket| provider_text_matches(ticket, query.text.as_deref()))
             .filter(|ticket| query.status.is_none_or(|value| ticket.status == value))
             .filter(|ticket| query.priority.is_none_or(|value| ticket.priority == value))
             .filter(|ticket| {

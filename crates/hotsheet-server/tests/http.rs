@@ -13981,6 +13981,75 @@ async fn paged_github_checkout(
     (router, primary, checkout, registry)
 }
 
+#[tokio::test]
+async fn checkout_search_with_github_source_keeps_git_and_provider_matches() {
+    let transport = Arc::new(PagedGitHub::new(1..=3, 2));
+    transport.issues.lock().unwrap()[1]["title"] = "unrelated".into();
+    let (router, _primary, _checkout, _registry) = paged_github_checkout(transport).await;
+    let git_store = tempfile::tempdir().unwrap();
+    FsStore::init(git_store.path(), &StoreMetadata::new("LOCAL")).unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(git_store.path());
+    let added = checkout_call(
+        &router,
+        "PUT",
+        &format!("/checkouts/paged/sources/{}", source.connection_id),
+        Some(serde_json::json!({"provider":"git","locator":git_store.path()})),
+    )
+    .await;
+    assert_eq!(added["sources"].as_array().unwrap().len(), 2);
+    let created = checkout_call(
+        &router,
+        "POST",
+        &format!("/checkouts/paged/tickets?source={}", source.connection_id),
+        Some(serde_json::json!({"title":"Local issue"})),
+    )
+    .await;
+    assert_eq!(created["title"], "Local issue");
+    let page = checkout_call(
+        &router,
+        "GET",
+        "/checkouts/paged/tickets?page_size=10&text=issue&counts=false",
+        None,
+    )
+    .await;
+    assert_eq!(page["items"].as_array().unwrap().len(), 3, "{page}");
+    assert!(
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["title"] == "Local issue")
+    );
+    let mut cursor: Option<String> = None;
+    let mut titles = Vec::new();
+    loop {
+        let suffix = cursor
+            .as_deref()
+            .map(|value| format!("&cursor={value}"))
+            .unwrap_or_default();
+        let next = checkout_call(
+            &router,
+            "GET",
+            &format!("/checkouts/paged/tickets?page_size=1&text=issue&counts=false{suffix}"),
+            None,
+        )
+        .await;
+        titles.extend(
+            next["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row["title"].as_str().unwrap().to_owned()),
+        );
+        cursor = next["next_cursor"].as_str().map(str::to_owned);
+        if cursor.is_none() {
+            break;
+        }
+    }
+    assert_eq!(titles.len(), 3);
+    assert!(titles.contains(&"Local issue".to_owned()));
+}
+
 fn native_ids(page: &serde_json::Value) -> Vec<String> {
     page["items"]
         .as_array()

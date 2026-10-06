@@ -610,7 +610,8 @@ pub fn filter_provider_ticket_page(
     query: &TicketQuery,
 ) -> Vec<ApiTicket> {
     tickets.retain(|ticket| {
-        query.status.is_none_or(|value| ticket.status == value)
+        provider_text_matches(ticket, query.text.as_deref())
+            && query.status.is_none_or(|value| ticket.status == value)
             && query.collection.is_none_or(|collection| match collection {
                 crate::TicketCollection::Queue => !matches!(
                     ticket.status,
@@ -668,6 +669,30 @@ pub fn filter_provider_ticket_page(
         tickets.truncate(limit);
     }
     tickets
+}
+
+/// Match the fields available in a provider's list response with the local index's
+/// word-prefix, all-terms search semantics. Detail-only notes are not fetched for lists.
+pub fn provider_text_matches(ticket: &ApiTicket, text: Option<&str>) -> bool {
+    let Some(text) = text else { return true };
+    let terms = text
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|term| !term.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>();
+    if terms.is_empty() {
+        return true;
+    }
+    let searchable = std::iter::once(ticket.slug.as_str())
+        .chain([ticket.title.as_str(), ticket.details.as_str()])
+        .chain(ticket.tags.iter().map(String::as_str))
+        .flat_map(|field| field.split(|character: char| !character.is_ascii_alphanumeric()))
+        .filter(|word| !word.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>();
+    terms
+        .iter()
+        .all(|term| searchable.iter().any(|word| word.starts_with(term)))
 }
 
 /// The query without paging or keyset limits, for adapters that read a complete result.

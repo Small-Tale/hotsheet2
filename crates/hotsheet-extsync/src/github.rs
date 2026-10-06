@@ -10,7 +10,7 @@ use hotsheet_ticketing::{
     ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderPatch,
     ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
     checkout_order::MergeKey, compare_provider_tickets, filter_provider_ticket_page,
-    keyset_page_from_native_pages, keyset_page_from_rows, unbounded_query,
+    keyset_page_from_native_pages, keyset_page_from_rows, provider_text_matches, unbounded_query,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -466,8 +466,7 @@ impl GitHubProvider {
 
     /// Reject filters the native page API cannot evaluate (shared by paged reads).
     fn check_query_filters(&self, query: &TicketQuery) -> Result<(), ProviderError> {
-        if query.text.is_some()
-            || query.review_requested.is_some()
+        if query.review_requested.is_some()
             || query.review_by.is_some()
             || query.claimed.is_some()
             || query.blocked.is_some()
@@ -557,8 +556,7 @@ impl TicketProvider for GitHubProvider {
     }
 
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError> {
-        if query.text.is_some()
-            || query.review_requested.is_some()
+        if query.review_requested.is_some()
             || query.review_by.is_some()
             || query.claimed.is_some()
             || query.blocked.is_some()
@@ -583,6 +581,7 @@ impl TicketProvider for GitHubProvider {
             self.list_issues(query.updated_after.as_deref())?
                 .into_iter()
                 .map(|issue| self.api_ticket(issue, vec![]))
+                .filter(|ticket| provider_text_matches(ticket, query.text.as_deref()))
                 .filter(|ticket| query.status.is_none_or(|status| ticket.status == status))
                 .filter(|ticket| {
                     query
@@ -2307,6 +2306,41 @@ mod tests {
             Some("https://api.test/repos/acme/widgets/issues?page2")
         );
         assert_eq!(transport.requests.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn text_search_matches_list_fields_with_all_terms_and_word_prefixes() {
+        let transport = FakeTransport::with(vec![
+            response(
+                200,
+                json!([
+                    issue(1, "Broken parser", "fails on import"),
+                    issue(2, "Healthy parser", "handles imports")
+                ]),
+            ),
+            response(
+                200,
+                json!([
+                    issue(1, "Broken parser", "fails on import"),
+                    issue(2, "Healthy parser", "handles imports")
+                ]),
+            ),
+        ]);
+        let provider = provider(transport);
+        let query = TicketQuery {
+            text: Some("bro par".into()),
+            ..TicketQuery::default()
+        };
+        let matches = provider.query(&query).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].native_id, "1");
+        for text in ["imp", "cus", "widgets #1", "  "] {
+            assert!(provider_text_matches(&matches[0], Some(text)), "{text}");
+        }
+        assert!(!provider_text_matches(&matches[0], Some("missing")));
+        let page = provider.query_page(&query, None, 100).unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].native_id, "1");
     }
 
     #[test]
