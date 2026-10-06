@@ -9433,17 +9433,35 @@ async fn halt_terminal(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `DELETE /terminals/{id}/halt` — the session resumed (the user submitted a new prompt) or the
-/// halt was dismissed. A terminal that was not halted is a no-op without an event.
-async fn clear_terminal_halt(State(state): State<AppState>, Path(id): Path<String>) -> StatusCode {
-    if forget_terminal_halt(&state, &id) {
+#[derive(Default, Deserialize)]
+struct TerminalHaltClearQuery {
+    /// A manual clear applies only to the episode the user saw; hooks omit this to clear on resume.
+    at: Option<String>,
+}
+
+/// `DELETE /terminals/{id}/halt` — the session resumed or the user cleared its stopped state.
+/// An optional `at` makes a manual clear safe if a newer failure arrived meanwhile.
+async fn clear_terminal_halt(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<TerminalHaltClearQuery>,
+) -> StatusCode {
+    if forget_terminal_halt_if(&state, &id, query.at.as_deref()) {
         emit_terminal_halted(&state, &id, None);
     }
     StatusCode::NO_CONTENT
 }
 
 fn forget_terminal_halt(state: &AppState, id: &str) -> bool {
-    state.terminal_halts.lock().unwrap().remove(id).is_some()
+    forget_terminal_halt_if(state, id, None)
+}
+
+fn forget_terminal_halt_if(state: &AppState, id: &str, at: Option<&str>) -> bool {
+    let mut halts = state.terminal_halts.lock().unwrap();
+    if at.is_some_and(|expected| halts.get(id).is_none_or(|halt| halt.at != expected)) {
+        return false;
+    }
+    halts.remove(id).is_some()
 }
 
 /// Body for `POST /terminals/{id}/ai-connection`, sent by the AI tool's `SessionStart` hook.
@@ -9468,6 +9486,10 @@ async fn connect_terminal_ai(
         .any(|info| info.id == id)
     {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "no such terminal"));
+    }
+    // A new or resumed AI session in this terminal cannot inherit an earlier session's halt.
+    if forget_terminal_halt(&state, &id) {
+        emit_terminal_halted(&state, &id, None);
     }
     let agent = body
         .agent
@@ -9497,6 +9519,9 @@ async fn disconnect_terminal_ai(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> StatusCode {
+    if forget_terminal_halt(&state, &id) {
+        emit_terminal_halted(&state, &id, None);
+    }
     if forget_terminal_ai_connection(&state, &id) {
         emit_terminal_ai_connection(&state, &id, None);
     }

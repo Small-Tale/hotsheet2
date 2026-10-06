@@ -3,6 +3,19 @@ import { expect, type Locator, test } from '@playwright/test';
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
+test('clears the halted terminal example from its menu at wide and phone widths (HS2-6J79SA)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=terminal-dashboard&dev-review=false');
+    const tile = page.locator('[data-component="terminal-tile"][data-terminal-key="demo:halted"]');
+    await expect(tile).toHaveAttribute('data-halted', 'true');
+    await tile.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('menuitem', { name: 'Clear stopped state' }).click();
+    await expect(tile).not.toHaveAttribute('data-halted', 'true');
+    await expect(tile.locator('.terminal-tile__halt')).toHaveCount(0);
+  }
+});
+
 test('previews every ticket-source dialog state at wide and narrow widths (HS2-7FYYN9)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });

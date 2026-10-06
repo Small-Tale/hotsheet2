@@ -89,7 +89,7 @@ export interface TerminalDrawerProps {
 }
 export const TERMINAL_DRAWER_TAB_BAR_ID = 'terminal-drawer';
 // Terminal visibility is scoped to the workspace dashboard, so the drawer grid offers Open only.
-const DRAWER_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open'];
+const DRAWER_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'clear-halt'];
 
 /**
  * The New drawer item menu's AI shell entry (HS2-3HT4PA): with one provider it is named for that

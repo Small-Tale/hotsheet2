@@ -46,7 +46,7 @@ pub enum SessionHookEvent {
     /// Claude Code's `StopFailure`: the turn ended on an API error (for example `overloaded`,
     /// "Selected model is at capacity") and the session is waiting for the user.
     Halted { error_type: String, message: String },
-    /// `UserPromptSubmit`: the user sent a new prompt, so any earlier halt is over.
+    /// `UserPromptSubmit` or a successful `Stop`: the earlier halt is over.
     Resumed,
     /// `SessionStart`: an AI session began (or resumed) with Hot Sheet's hooks active, so the
     /// terminal is connected to Hot Sheet (HS2-EV1XK3). A tool skips an untrusted or missing
@@ -68,12 +68,18 @@ pub fn session_hook_event(input: &Value) -> Option<SessionHookEvent> {
     };
     match input.get("hook_event_name").and_then(Value::as_str) {
         Some("StopFailure") => Some(SessionHookEvent::Halted {
-            error_type: text("error_type").unwrap_or_else(|| "unknown".to_owned()),
-            message: text("error_message")
+            // Current Claude reports `error` as the error type and `last_assistant_message` as
+            // the rendered diagnostic. Keep the older fields for existing installations.
+            error_type: text("error_type")
                 .or_else(|| text("error"))
-                .unwrap_or_else(|| "The AI session stopped on an error.".to_owned()),
+                .unwrap_or_else(|| "unknown".to_owned()),
+            message: text("error_message")
+                .or_else(|| text("last_assistant_message"))
+                .unwrap_or_else(|| {
+                    "The AI session could not complete its response. You can try again.".to_owned()
+                }),
         }),
-        Some("UserPromptSubmit") => Some(SessionHookEvent::Resumed),
+        Some("UserPromptSubmit" | "Stop") => Some(SessionHookEvent::Resumed),
         Some("SessionStart") => Some(SessionHookEvent::Connected),
         Some("SessionEnd") => Some(SessionHookEvent::Disconnected),
         _ => None,
@@ -242,16 +248,35 @@ mod tests {
                 message: "Selected model is at capacity. Please try a different model.".into(),
             })
         );
+        assert_eq!(
+            session_hook_event(&json!({
+                "hook_event_name": "StopFailure",
+                "error": "rate_limit",
+                "error_details": "429 Too Many Requests",
+                "last_assistant_message": "API Error: Rate limit reached",
+            })),
+            Some(SessionHookEvent::Halted {
+                error_type: "rate_limit".into(),
+                message: "API Error: Rate limit reached".into(),
+            })
+        );
         // Missing or blank fields fall back instead of reporting an empty halt.
         assert_eq!(
             session_hook_event(&json!({ "hook_event_name": "StopFailure", "error_type": " " })),
             Some(SessionHookEvent::Halted {
                 error_type: "unknown".into(),
-                message: "The AI session stopped on an error.".into(),
+                message: "The AI session could not complete its response. You can try again."
+                    .into(),
             })
         );
         assert_eq!(
             session_hook_event(&json!({ "hook_event_name": "UserPromptSubmit", "prompt": "go" })),
+            Some(SessionHookEvent::Resumed)
+        );
+        assert_eq!(
+            session_hook_event(
+                &json!({ "hook_event_name": "Stop", "last_assistant_message": "Done." })
+            ),
             Some(SessionHookEvent::Resumed)
         );
         // Session start and end report the terminal's connection to Hot Sheet (HS2-EV1XK3).

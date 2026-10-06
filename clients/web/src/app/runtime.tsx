@@ -1482,6 +1482,18 @@ export async function startHotSheetWebClient() {
       terminalDashboardLoading.value = false;
     } else if (terminalGroups.peek().length > 0) terminalDashboardMessage.value = '';
   }
+  async function clearTerminalHalt(key: string) {
+    const session = terminalSession(key),
+      current = projects.value.find((item) => item.id === session?.projectId);
+    if (!session?.halt || !current) return;
+    try {
+      await new Api(current.apiPath).clearTerminalHalt(session.id, session.halt.at);
+      await refreshTerminalDashboard(true, current);
+      if (!terminalSession(key)?.halt) showToast('Stopped state cleared.');
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
   // The workspace grid and drawer sizes follow whichever element currently renders them: a re-render
   // that replaces the measured node must re-bind the observer, or the size freezes (HS2-0PF13V).
   const terminalDashboardSizeObserver = createTrackedSizeObserver({
@@ -5354,7 +5366,7 @@ export async function startHotSheetWebClient() {
     changeEvidenceReader, selectedTicket, codeReviewMessage, openProject, currentRememberedProjectRoots, persistDrawerTabOrder, currentDrawerTabIds, focusDrawerTab,
     revealCorruptTicket, queueCorruptTicketRepair, corruptTickets, selectedCorruptKey, selectedTicketSlugs, setInspectorVisible, statsProjectId, setShellMode,
     selectTerminalRailProject, selectTicketView, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
-    terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
+    terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, clearTerminalHalt, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
     setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, terminalCopy, terminalPaste, terminalEditMenu, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,

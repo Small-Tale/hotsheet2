@@ -789,12 +789,14 @@ a successful open delivers it.
 
 **Halted sessions (HS2-HJ4D1H).** Every Hot Sheet terminal also carries
 `HOTSHEET_TERMINAL_ID`. The Claude manifest's lifecycle hook additionally listens to
-`StopFailure` and `UserPromptSubmit` through the same `hotsheet-cli permission-hook`
-adapter. `StopFailure` fires when a turn ends on an API error. Its `error_type` is one of
+`StopFailure`, `Stop`, and `UserPromptSubmit` through the same `hotsheet-cli permission-hook`
+adapter. `StopFailure` fires when a turn ends on an API error. Its `error` is one of
 `overloaded` ("Selected model is at capacity"), `rate_limit`, `authentication_failed`,
-`billing_error`, `model_not_found`, `server_error`, and so on, and it carries an
-`error_message`. The adapter POSTs both to `/terminals/{id}/halt`. `UserPromptSubmit` means
-the user prompted again, so the adapter sends `DELETE /terminals/{id}/halt`. Neither event
+`billing_error`, `model_not_found`, `server_error`, and so on, and it carries
+`last_assistant_message` with the rendered diagnostic. The adapter POSTs both to `/terminals/{id}/halt`; older hook field
+names remain accepted. `UserPromptSubmit` means the user prompted again, and a normal `Stop`
+means the turn completed, so either sends `DELETE /terminals/{id}/halt`. `SessionStart` and
+`SessionEnd` also clear an earlier halt when a session begins or ends. None of these events
 prints a hook decision, and outside a Hot Sheet terminal (no `HOTSHEET_TERMINAL_ID`) or
 without a reachable server they do nothing. Older Claude versions ignore the unknown event
 names. Codex has no equivalent hook yet (`HS2-5ZQ7J8`). Driven sessions report completed

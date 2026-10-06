@@ -673,7 +673,7 @@ fn claude_hook_reports_halted_and_resumed_sessions() {
         .hooks
         .expect("claude installs lifecycle hooks");
     assert_eq!(hooks.event, "PermissionRequest");
-    for event in ["PreToolUse", "StopFailure", "UserPromptSubmit"] {
+    for event in ["PreToolUse", "StopFailure", "Stop", "UserPromptSubmit"] {
         assert!(
             hooks.additional_events.iter().any(|value| value == event),
             "{event} missing from {:?}",

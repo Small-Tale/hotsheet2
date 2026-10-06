@@ -91,6 +91,7 @@ import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
+import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { wireTicketSearchFields } from '../interactions/ticket-search-field';
 import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
@@ -572,6 +573,7 @@ const renameDemoTargets = {
 const editMenuDemo = signal<TerminalEditMenuState | undefined>(undefined),
   editMenuDemoOutput = signal('');
 const terminalDashboardContextMenu = signal<{ key: string; x: number; y: number } | undefined>(undefined);
+const terminalDashboardHaltCleared = signal(false);
 const markdownAutosave = createDebouncedAutosave((value: string) => {
   markdownSavedValue.value = value;
   markdownEvent.value = 'Markdown autosaved.';
@@ -1198,11 +1200,13 @@ function demoContent(item: DemoDefinition) {
                   alive: true,
                   busy: false,
                   aiConnection: 'connected',
-                  halt: {
-                    error_type: 'overloaded',
-                    message: 'Selected model is at capacity.',
-                    at: '2026-10-05T08:00:00Z',
-                  },
+                  halt: terminalDashboardHaltCleared.value
+                    ? undefined
+                    : {
+                        error_type: 'overloaded',
+                        message: 'Selected model is at capacity.',
+                        at: '2026-10-05T08:00:00Z',
+                      },
                   scrollback: 'Selected model is at capacity.',
                 },
               ],
@@ -2009,6 +2013,12 @@ demoListeners.add(
     event.preventDefault();
     const pointer = event as MouseEvent;
     showTerminalDashboardContextMenu(target as HTMLElement, pointer.clientX, pointer.clientY);
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', TERMINALS_ACTIONS.clearTerminalHalt.selector, () => {
+    terminalDashboardHaltCleared.value = true;
+    terminalDashboardContextMenu.value = undefined;
   }),
 );
 // The TerminalKeyBar demo exercises the same modifier and Fn transitions as production and shows the

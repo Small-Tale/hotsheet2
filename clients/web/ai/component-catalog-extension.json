@@ -1426,9 +1426,9 @@
       "name": "TerminalDashboard",
       "source": "src/components/terminal-dashboard.tsx",
       "kind": "composition",
-      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states.",
+      "purpose": "Responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states with manual clearing.",
       "useWhen": [
-        "Hot Sheet needs responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states."
+        "Hot Sheet needs responsive workspace grid for terminals and AI chats, including connected, missing-hook, and halted session states with manual clearing."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TerminalDashboard behavior."

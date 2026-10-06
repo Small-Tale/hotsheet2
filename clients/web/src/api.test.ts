@@ -442,6 +442,7 @@ describe('terminal dashboard transport', () => {
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ id: 'terminal-3', alive: true, busy: false }), { status: 200 }),
       )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     const api = new Api('/api');
     await expect(api.terminals()).resolves.toHaveLength(1);
@@ -453,6 +454,7 @@ describe('terminal dashboard transport', () => {
       id: 'terminal-3',
     });
     await expect(api.deleteTerminal('agent/1')).resolves.toBeUndefined();
+    await expect(api.clearTerminalHalt('agent/1', '2026-10-06T01:00:00Z')).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/terminals', expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/terminals/agent%2F1', expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -471,6 +473,11 @@ describe('terminal dashboard transport', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
       '/api/terminals/agent%2F1',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
+      '/api/terminals/agent%2F1/halt?at=2026-10-06T01%3A00%3A00Z',
       expect.objectContaining({ method: 'DELETE' }),
     );
     fetchMock.mockRestore();

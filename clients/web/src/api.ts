@@ -1102,6 +1102,9 @@ export class Api {
     } = {},
   ) => this.request<TerminalInfo>('/terminals', { method: 'POST', body: JSON.stringify(value) });
   deleteTerminal = (id: string) => this.request<void>(`/terminals/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  /** Clear only the stopped episode the user saw; a newer failure remains visible. */
+  clearTerminalHalt = (id: string, at: string) =>
+    this.request<void>(`/terminals/${encodeURIComponent(id)}/halt?at=${encodeURIComponent(at)}`, { method: 'DELETE' });
   /** Save (or, with `null`, clear) a terminal's shared tab name (HS2-89FPV1). */
   renameTerminal = (id: string, name: string | null) =>
     this.request<TerminalName>(`/terminals/${encodeURIComponent(id)}/name`, {

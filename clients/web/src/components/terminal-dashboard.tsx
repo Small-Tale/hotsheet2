@@ -11,6 +11,7 @@ import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import {
   ALargeSmall,
+  CircleCheck,
   ClipboardPaste,
   Copy,
   Ellipsis,
@@ -124,8 +125,8 @@ export interface TerminalDashboardProps {
    */
   contextMenuActions?: readonly TerminalContextMenuAction[];
 }
-export type TerminalContextMenuAction = 'open' | 'hide';
-const ALL_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'hide'];
+export type TerminalContextMenuAction = 'open' | 'hide' | 'clear-halt';
+const ALL_CONTEXT_MENU_ACTIONS: readonly TerminalContextMenuAction[] = ['open', 'hide', 'clear-halt'];
 
 const keyFor = (session: TerminalDashboardSession) => `${session.projectId}:${session.id}`;
 const chatKeyFor = (chat: WorkspaceGridChat) => `${chat.projectId}:${chat.id}`;
@@ -653,6 +654,7 @@ export function TerminalDashboard({
     .filter((group) => group.sessions.length + group.chats.length > 0);
   const sessions = visibleGroups.flatMap((group) => group.sessions);
   const chats = visibleGroups.flatMap((group) => group.chats);
+  const menuSession = contextMenu && sessions.find((session) => keyFor(session) === contextMenu.key);
   const layout =
     layoutMode === 'drawer'
       ? terminalDrawerGridLayout(width, height, fitHigh)
@@ -783,6 +785,16 @@ export function TerminalDashboard({
             label="Terminal actions"
             rootAttributes={{ 'data-context-menu': 'terminal' }}
             items={[
+              ...(contextMenuActions.includes('clear-halt') && menuSession?.halt
+                ? [
+                    {
+                      label: 'Clear stopped state',
+                      action: TERMINALS_ACTIONS.clearTerminalHalt.value,
+                      icon: <LucideIcon icon={CircleCheck} name="circle-check" />,
+                      attributes: { 'data-item-id': contextMenu.key },
+                    },
+                  ]
+                : []),
               ...(contextMenuActions.includes('open')
                 ? [
                     {

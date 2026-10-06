@@ -1148,18 +1148,48 @@ async fn terminal_halt_is_reported_listed_announced_cleared_and_forgotten_on_kil
     assert_eq!(changed_events.len(), 2);
     assert_eq!(changed_events[1]["message"], "Slow down.");
 
-    // Resuming clears it and announces the clear; clearing again is a silent no-op.
+    // A stale manual action must not clear the newer episode.
+    let stale_clear = format!(
+        "/terminals/halt-me/halt?at={}",
+        episode_at.as_str().unwrap()
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("DELETE", &stale_clear, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        body_json(send("GET", "/terminals/halt-me", None).await).await["halt"]["at"],
+        changed_halt["halt"]["at"]
+    );
+
+    // Clearing the selected episode announces the clear; clearing again is a silent no-op.
     let resumed_at = body_json(send("GET", "/ws/poll?timeout_ms=0", None).await).await["cursor"]
         .as_u64()
         .unwrap();
-    for _ in 0..2 {
-        assert_eq!(
-            send("DELETE", "/terminals/halt-me/halt", None)
-                .await
-                .status(),
-            StatusCode::NO_CONTENT
-        );
-    }
+    let current_clear = format!(
+        "/terminals/halt-me/halt?at={}",
+        changed_halt["halt"]["at"].as_str().unwrap()
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("DELETE", &current_clear, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        send("DELETE", "/terminals/halt-me/halt", None)
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
     assert!(
         body_json(send("GET", "/terminals", None).await).await[0]
             .get("halt")
@@ -1285,6 +1315,18 @@ async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgott
             .unwrap()
     };
 
+    // A new session in a retained terminal drops an earlier session's stopped state.
+    send(
+        "POST",
+        "/terminals/hooked/halt",
+        Some(r#"{"error_type":"rate_limit","message":"Rate limit reached."}"#),
+    )
+    .await;
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("halt")
+            .is_some()
+    );
     // Connect, then repeat (a resumed session): listed once, announced once.
     let before = cursor().await;
     for _ in 0..2 {
@@ -1297,6 +1339,7 @@ async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgott
     }
     let listed = body_json(send("GET", "/terminals", None).await).await;
     assert_eq!(listed[0]["ai_connection"]["agent"], "codex");
+    assert!(listed[0].get("halt").is_none());
     assert!(
         listed[0]["ai_connection"]["at"]
             .as_str()
@@ -1321,7 +1364,18 @@ async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgott
     .await;
     assert_eq!(announced_since(before).await.len(), 1);
 
-    // Ending clears it and announces once; ending again is a silent no-op.
+    // Ending clears a halt and announces the connection change once; ending again is a silent no-op.
+    send(
+        "POST",
+        "/terminals/hooked/halt",
+        Some(r#"{"error_type":"rate_limit","message":"Rate limit reached."}"#),
+    )
+    .await;
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("halt")
+            .is_some()
+    );
     let before = cursor().await;
     for _ in 0..2 {
         assert_eq!(
@@ -1335,6 +1389,12 @@ async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgott
         body_json(send("GET", "/terminals", None).await).await[0]
             .get("ai_connection")
             .is_none()
+    );
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("halt")
+            .is_none(),
+        "SessionEnd clears a stale stopped state"
     );
     let cleared = announced_since(before).await;
     assert_eq!(cleared.len(), 1, "{cleared:?}");

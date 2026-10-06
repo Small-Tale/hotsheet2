@@ -76,11 +76,11 @@ machine_local = true
 # the shared adapter ignores ordinary PreToolUse events in an interactive terminal.
 event = "PermissionRequest"
 # StopFailure reports a turn that ended on an API error (for example "Selected model is at
-# capacity") as a halted session on the Hot Sheet terminal; UserPromptSubmit clears it when the
-# user prompts again (HS2-HJ4D1H). SessionStart/SessionEnd report that the session in a Hot
+# capacity") as a halted session on the Hot Sheet terminal; UserPromptSubmit and a successful
+# Stop clear it when work resumes or completes (HS2-HJ4D1H, HS2-6J79SA). SessionStart/SessionEnd report that the session in a Hot
 # Sheet terminal is connected to Hot Sheet (HS2-EV1XK3). Older Claude versions ignore unknown
 # hook events.
-additional_events = ["PreToolUse", "StopFailure", "UserPromptSubmit", "SessionStart", "SessionEnd"]
+additional_events = ["PreToolUse", "StopFailure", "Stop", "UserPromptSubmit", "SessionStart", "SessionEnd"]
 command = "hotsheet-cli permission-hook --agent claude"
 timeout_seconds = 86430
 

@@ -45,6 +45,36 @@ const groups: TerminalDashboardGroup[] = [
 const css = readFileSync(new URL('./terminal-dashboard.css', import.meta.url), 'utf8');
 
 describe('TerminalDashboard', () => {
+  it('offers a clear action only for a halted terminal in its More actions menu (HS2-6J79SA)', () => {
+    const props = {
+        groups,
+        width: 1200,
+        height: 700,
+        fitAcross: 4,
+        fitHigh: 2,
+        contextMenu: { key: 'one:term-1', x: 100, y: 100 },
+      },
+      ordinary = String(TerminalDashboard(props)),
+      halted = String(
+        TerminalDashboard({
+          ...props,
+          groups: [
+            {
+              ...groups[0],
+              sessions: [
+                {
+                  ...groups[0].sessions[0],
+                  halt: { error_type: 'rate_limit', message: 'Rate limit reached.', at: '2026-10-06T01:00:00Z' },
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    expect(ordinary).not.toContain('Clear stopped state');
+    expect(halted).toContain('Clear stopped state');
+    expect(halted).toContain('data-action="clear-terminal-halt"');
+  });
   it('renders every dashboard terminal as a fixed 80x24 scaled non-interactive viewport with Kerf floating zoom controls', () => {
     const markup = String(TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2 }));
     expect(markup).toContain('data-basis="across"');

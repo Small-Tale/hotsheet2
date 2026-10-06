@@ -2360,7 +2360,11 @@ always reaches the server last, and the terminal counts as pending until its que
 A terminal whose AI session halted on an API error (HS2-HJ4D1H; see
 [`05`](05-ai-tool-plugins.md)) carries `halt {error_type, message, agent, at}` in
 `GET /terminals`, set by `POST /terminals/{id}/halt` and cleared by
-`DELETE /terminals/{id}/halt` or by killing the terminal. Each change emits a
+`DELETE /terminals/{id}/halt`, normal successful completion, a new session start, session end,
+or killing the terminal.
+The terminal's **More actions** menu offers **Clear stopped state** while halted; this sends
+`DELETE /terminals/{id}/halt?at=<episode-time>` so a stale menu action cannot clear a newer
+failure. Each change emits a
 `terminal_halted` event (with the message when set, without it when cleared), and the client
 refetches its terminals on that event. A halted terminal's drawer tab replaces its busy dot
 with a danger `triangle-alert` icon, and its dashboard tile replaces the state dot the same

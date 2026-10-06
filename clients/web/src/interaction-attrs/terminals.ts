@@ -25,6 +25,7 @@ export const TERMINALS_ACTIONS = {
   cancelTerminalPaste: action('cancel-terminal-paste'),
   cycleMobileTerminalColumns: action('cycle-mobile-terminal-columns'),
   hideDashboardTerminal: action('hide-dashboard-terminal'),
+  clearTerminalHalt: action('clear-terminal-halt'),
   openTerminalVisibility: action('open-terminal-visibility'),
   selectTerminalVisibilityTab: action('select-terminal-visibility-tab'),
   addTerminalVisibilityGroup: action('add-terminal-visibility-group'),

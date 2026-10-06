@@ -5769,8 +5769,8 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     hook({
       hook_event_name: 'StopFailure',
       session_id: 'session-1',
-      error_type: 'overloaded',
-      error_message: 'Selected model is at capacity. Please try a different model.',
+      error: 'overloaded',
+      last_assistant_message: 'Selected model is at capacity. Please try a different model.',
     });
     await expect(halted).toBeVisible();
     await expect(halted).toHaveAttribute(
@@ -5813,6 +5813,22 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     await expect(selectedAttention).toHaveCount(0);
     await expect(picker.getByRole('option', { name: /Needs attention/ })).toHaveCount(0);
     await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(projectAttention).toHaveCount(0);
+    expect((await server.request<Array<{ halt?: unknown }>>('/terminals'))[0].halt).toBeUndefined();
+
+    // A successful completion clears a prior failure, and a new failure remains a new episode.
+    hook({ hook_event_name: 'StopFailure', error: 'rate_limit', last_assistant_message: 'Rate limit reached.' });
+    await expect(halted).toBeVisible();
+    hook({ hook_event_name: 'Stop', last_assistant_message: 'Work complete.' });
+    await expect(halted).toHaveCount(0);
+    hook({ hook_event_name: 'StopFailure', error: 'rate_limit', last_assistant_message: 'Rate limit reached.' });
+    await expect(halted).toBeVisible();
+    await expect(haltPrompt).toBeVisible();
+    await haltPrompt.getByRole('button', { name: 'Dismiss', exact: true }).click();
+    const tile = drawer.locator('.terminal-tile[data-terminal-key="demo-checkout:claude-session"]');
+    await tile.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('menuitem', { name: 'Clear stopped state' }).click();
+    await expect(halted).toHaveCount(0);
     await expect(projectAttention).toHaveCount(0);
     expect((await server.request<Array<{ halt?: unknown }>>('/terminals'))[0].halt).toBeUndefined();
   } finally {

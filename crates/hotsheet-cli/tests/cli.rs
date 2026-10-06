@@ -208,6 +208,15 @@ fn permission_hook_reports_halted_and_resumed_sessions_to_its_terminal() {
     .unwrap();
     assert_eq!(resumed.0, "DELETE /terminals/term%207/halt HTTP/1.1");
 
+    let completed = hook(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        r#"{"hook_event_name":"Stop","session_id":"s-1","last_assistant_message":"Done."}"#,
+        Some("term 7"),
+    )
+    .join()
+    .unwrap();
+    assert_eq!(completed.0, "DELETE /terminals/term%207/halt HTTP/1.1");
+
     // No Hot Sheet terminal: the hook exits quietly and the listener never hears from it.
     let quiet = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     quiet.set_nonblocking(true).unwrap();

@@ -70,6 +70,7 @@ export interface TerminalInteractionsDependencies {
   readonly terminalFitHigh: Signal<number>;
   terminalPreviewClickTimer: number | undefined;
   readonly terminalSession: (key?: string) => TerminalDashboardSession | undefined;
+  readonly clearTerminalHalt: (key: string) => Promise<void>;
   pendingTerminalFocus: TerminalFocusRequest | undefined;
   readonly magnifiedTerminalKey: Signal<string | undefined>;
   readonly openTerminalInProject: (key: string) => void;
@@ -156,6 +157,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
     terminalFitAcross,
     terminalFitHigh,
     terminalSession,
+    clearTerminalHalt,
     magnifiedTerminalKey,
     openTerminalInProject,
     terminalContextMenu,
@@ -314,6 +316,13 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
           height: 104,
         }),
       };
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.clearTerminalHalt.selector, (_event, target) => {
+      const key = data(target).itemId;
+      terminalContextMenu.value = undefined;
+      if (key) void clearTerminalHalt(key);
     }),
   );
   lifetime.add(
