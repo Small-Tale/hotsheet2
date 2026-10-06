@@ -207,12 +207,14 @@
   flex: none;
 }
 .ticket-list-row__owner {
-  display: inline-flex;
-  align-items: center;
-  gap: remify(4.8px);
+  display: inline-block;
+  max-width: min(24ch, calc(100cqw - remify(30px)));
+  overflow: hidden;
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
+  text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
 }
 .ticket-list-row__up-next {
   position: relative;

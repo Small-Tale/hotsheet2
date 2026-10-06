@@ -225,7 +225,7 @@ export function TicketRow(raw: TicketRowProps) {
               )}
               {props.blocked && <BlockedBadge compact />}
               {props.busy && (
-                <span class="ticket-list-row__owner" aria-label={props.agentName}>
+                <span class="ticket-list-row__owner" aria-label={props.agentName} title={props.agentName}>
                   {props.agentName}
                 </span>
               )}

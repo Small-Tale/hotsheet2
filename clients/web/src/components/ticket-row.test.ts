@@ -153,6 +153,26 @@ describe('TicketRow', () => {
     ).not.toContain('data-claim-eta');
   });
 
+  it('keeps the full worker identity available when its visible row label is clipped (HS2-3H4Y31)', () => {
+    const worker = 'codex-01M44ZE2BPEZKWTW49DCTATTPW';
+    const row = String(
+      TicketRow({
+        slug: 'HS2-LONGID',
+        title: 'Long worker identity',
+        status: 'started',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+        busy: true,
+        agentName: worker,
+      }),
+    );
+    expect(row).toContain(`class="ticket-list-row__owner" aria-label="${worker}" title="${worker}">${worker}</span>`);
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    expect(css).toContain('max-width: min(24ch, calc(100cqw - remify(30px)))');
+    expect(css).toContain('text-overflow: ellipsis');
+  });
+
   it('maps HS2 priorities onto the HS1 icon and color semantics', () => {
     expect(
       Object.fromEntries(

@@ -812,7 +812,9 @@ always retain native clipboard behavior.
   indeterminate cue, until the worker re-estimates or the claim ends. Both states carry a
   title with the absolute time. The countdown re-renders from a local timer (at most every 30
   seconds, and just after the nearest ETA) that never makes network requests. The demo's
-  **Claim ETA** setting exposes the none, on-track, and past-estimate variants.
+  **Claim ETA** setting exposes the none, on-track, and past-estimate variants. The worker
+  label is visually clipped at a maximum width of `24ch` in list and column rows; the
+  full identity remains in its accessible name and hover title (HS2-3H4Y31).
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
     command palette; a configured icon replaces category text and appears before the title.
     Neutral retains its pale fill swatch but uses a darker, still-lighter-than-gray icon

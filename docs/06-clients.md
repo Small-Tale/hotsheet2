@@ -544,7 +544,8 @@ and identity-less legacy entries remain conservatively blocking.
   polling requests; claim/release changes otherwise arrive through the shared live-update
   channel. When a live claim has an on-track ETA, a progress ring of the same size replaces
   the spinner in that slot; the time-left label remains after the holder name. An overrun
-  keeps the spinner and shows `Soon`.
+  keeps the spinner and shows `Soon`. Long worker IDs are clipped only in the row display;
+  hover and assistive technology retain the full value.
 
 - **Started phase.** List rows and the ticket inspector show the optional phase label
   inside the Started badge. `Final testing` remains visible after a worker releases

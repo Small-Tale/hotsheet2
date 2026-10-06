@@ -2321,6 +2321,38 @@ test('uses the row claim slot for one same-size ring or spinner at wide and phon
   }
 });
 
+test('clips a long worker ID inside the TicketRow while retaining its full accessible name (HS2-3H4Y31)', async ({
+  page,
+}) => {
+  await page.goto('/ux-demo?component=ticket-row');
+  await page.locator('[data-action="toggle-settings"]').click();
+  const worker = 'codex-01M44ZE2BPEZKWTW49DCTATTPW';
+  const agent = page
+    .getByRole('complementary', { name: 'TicketRow settings' })
+    .getByRole('textbox', { name: 'Active agent' });
+  const row = page.locator('[data-component="ticket-list-row"]');
+  const owner = row.locator('.ticket-list-row__owner');
+  await agent.fill(worker);
+  await page.locator('[data-action="toggle-settings"]').click();
+  for (const width of [1100, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(owner).toHaveAttribute('title', worker);
+    await expect(owner).toHaveAttribute('aria-label', worker);
+    await expect(owner).toHaveCSS('text-overflow', 'ellipsis');
+    const dimensions = await owner.evaluate((node) => ({ width: node.clientWidth, content: node.scrollWidth }));
+    expect(dimensions.content).toBeGreaterThan(dimensions.width);
+    const [ownerBox, rowBox] = await Promise.all([owner.boundingBox(), row.boundingBox()]);
+    expect(ownerBox!.x + ownerBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
+    await row.screenshot({ path: test.info().outputPath(`long-worker-${width}.png`) });
+  }
+  await page.locator('[data-action="toggle-settings"]').click();
+  await agent.fill('Codex');
+  await page.locator('[data-action="toggle-settings"]').click();
+  await expect(owner).toHaveText('Codex');
+  const shortDimensions = await owner.evaluate((node) => ({ width: node.clientWidth, content: node.scrollWidth }));
+  expect(shortDimensions.content).toBeLessThanOrEqual(shortDimensions.width);
+});
+
 test('round-trips every TicketRow setting and selection action', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
   const row = page.locator('[data-component="ticket-list-row"]');
