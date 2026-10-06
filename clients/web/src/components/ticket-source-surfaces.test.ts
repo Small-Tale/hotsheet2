@@ -371,6 +371,13 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('Signed in with Hot Sheet');
     expect(markup).toContain('dev@acme.test · Keychain credential jira-token');
     expect(markup).toContain('OPS · Not used by any project');
+    expect(markup).toContain('Connection ID: jira-ops');
+    expect(markup).toContain('data-action="request-unused-account-source-removal"');
+    expect(markup).not.toContain('Connection ID: github-main');
+    const confirming = String(AccountsSettings({ accounts, sourceRemovalChoice: 'jira-ops' }));
+    expect(confirming).toContain('Remove this unused connection?');
+    expect(confirming).toContain('data-action="remove-unused-account-source"');
+    expect(confirming).toContain('data-account-id="jira-token" data-source-id="jira-ops"');
     // Only an account no source uses can be signed out, and its button names it.
     expect(markup.match(/data-action="sign-out-account"/g)).toHaveLength(1);
     expect(markup).toMatch(/data-action="sign-out-account" data-item-id="github-app-01unused"/);

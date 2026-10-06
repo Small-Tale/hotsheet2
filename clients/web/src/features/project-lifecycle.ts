@@ -102,6 +102,9 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerAccountsError = signal(''),
     /** The account whose sign-out is in flight. */
     signingOutAccount = signal<string | undefined>(undefined),
+    /** An unlinked source selected for removal from App Settings → Accounts. */
+    unusedAccountSourceChoice = signal<string | undefined>(undefined),
+    removingUnusedAccountSource = signal<string | undefined>(undefined),
     /** The GitLab or Jira account whose details prefill a new source's form (HS2-F5HNJN). */
     providerAccountChoice = signal<string | undefined>(undefined),
     providerSettingsBusy = signal(false),
@@ -969,6 +972,41 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
   }
 
+  function requestUnusedAccountSourceRemoval(accountId: string, sourceId: string) {
+    if (removingUnusedAccountSource.value) return;
+    if (
+      !providerAccounts.value.some(
+        (account) =>
+          account.id === accountId &&
+          account.sources.some((source) => source.connection_id === sourceId && source.projects.length === 0),
+      )
+    )
+      return;
+    providerAccountsError.value = '';
+    unusedAccountSourceChoice.value = sourceId;
+  }
+
+  function cancelUnusedAccountSourceRemoval() {
+    if (!removingUnusedAccountSource.value) unusedAccountSourceChoice.value = undefined;
+  }
+
+  async function removeUnusedAccountSource(accountId: string, sourceId: string) {
+    const current = dependencies.project();
+    if (!current || unusedAccountSourceChoice.value !== sourceId || removingUnusedAccountSource.value) return;
+    removingUnusedAccountSource.value = sourceId;
+    providerAccountsError.value = '';
+    try {
+      await new Api(current.apiPath).removeUnusedAccountSource(accountId, sourceId);
+      unusedAccountSourceChoice.value = undefined;
+      await refreshProviderAccounts(current);
+      dependencies.showToast('Unused ticket source removed.');
+    } catch (reason) {
+      providerAccountsError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      removingUnusedAccountSource.value = undefined;
+    }
+  }
+
   function cancelGitHubSignIn() {
     const target = ticketSourceSetupProject.value,
       current = githubAuth.value;
@@ -1074,8 +1112,13 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerAccounts,
     providerAccountsError,
     signingOutAccount,
+    unusedAccountSourceChoice,
+    removingUnusedAccountSource,
     refreshProviderAccounts,
     signOutProviderAccount,
+    requestUnusedAccountSourceRemoval,
+    cancelUnusedAccountSourceRemoval,
+    removeUnusedAccountSource,
     useGithubAccount,
     providerAccountChoice,
     useProviderAccount,

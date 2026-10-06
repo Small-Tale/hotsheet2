@@ -275,12 +275,53 @@ pub enum AccountError {
     },
     #[error("no account named '{0}'")]
     NotFound(String),
+    #[error("ticket source '{connection_id}' is not signed in through account '{account}'")]
+    SourceNotFound {
+        account: String,
+        connection_id: String,
+    },
+    #[error("ticket source '{connection_id}' is still used by {}", .projects.join(", "))]
+    SourceInUse {
+        connection_id: String,
+        projects: Vec<String>,
+    },
     #[error(transparent)]
     Provider(#[from] ProviderError),
     #[error(transparent)]
     Checkout(#[from] CheckoutError),
     #[error(transparent)]
     Secret(#[from] SecretError),
+}
+
+/// Remove an account's unused external source from an in-memory connection catalog. The caller
+/// persists the returned catalog; this never unlinks projects or deletes the account credential.
+pub fn take_unused_source(
+    connections: &mut Vec<ProviderConnection>,
+    checkouts: &[Checkout],
+    account: &str,
+    source: &str,
+) -> Result<ProviderConnection, AccountError> {
+    let Some(index) = connections.iter().position(|connection| {
+        connection.id == source
+            && connection.provider != "git"
+            && credential_of(connection) == Some(account)
+    }) else {
+        return Err(AccountError::SourceNotFound {
+            account: account.into(),
+            connection_id: source.into(),
+        });
+    };
+    let projects = connection_projects(checkouts, source)
+        .into_iter()
+        .map(|project| project.alias)
+        .collect::<Vec<_>>();
+    if !projects.is_empty() {
+        return Err(AccountError::SourceInUse {
+            connection_id: source.into(),
+            projects,
+        });
+    }
+    Ok(connections.remove(index))
 }
 
 fn describe_users(sources: &[String], projects: &[String]) -> String {
@@ -480,6 +521,46 @@ mod tests {
             providers,
             checkouts,
         }
+    }
+
+    #[test]
+    fn only_an_unused_source_of_the_named_account_can_be_removed() {
+        let legacy = legacy_install();
+        let mut connections = legacy.providers.load().unwrap();
+        let checkouts = legacy.checkouts.list().unwrap();
+        assert!(matches!(
+            take_unused_source(
+                &mut connections,
+                &checkouts,
+                "github-app-01aaa",
+                "github-acme-old"
+            ),
+            Err(AccountError::SourceNotFound { .. })
+        ));
+        assert!(matches!(
+            take_unused_source(
+                &mut connections,
+                &checkouts,
+                "github-app-01aaa",
+                "github-acme-shared"
+            ),
+            Err(AccountError::SourceInUse { .. })
+        ));
+        assert_eq!(connections.len(), 4);
+        let removed = take_unused_source(
+            &mut connections,
+            &checkouts,
+            "github-app-01bbb",
+            "github-acme-old",
+        )
+        .unwrap();
+        assert_eq!(removed.id, "github-acme-old");
+        assert_eq!(connections.len(), 3);
+        assert!(
+            checkouts
+                .iter()
+                .all(|checkout| checkout.source(&removed.id).is_none())
+        );
     }
 
     #[test]

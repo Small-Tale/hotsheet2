@@ -15453,6 +15453,13 @@ async fn project_owned_sources_and_machine_wide_accounts() {
     assert_eq!(accounts[0]["identity"], "bob");
     assert_eq!(accounts[1]["identity"], "alice");
     assert_eq!(accounts[1]["sources"].as_array().unwrap().len(), 2);
+    let (status, linked) = call(
+        "DELETE",
+        format!("/accounts/github-app-01work/sources/{id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{linked}");
 
     // Signing out is refused while a source uses the account; it names the projects.
     let (status, refused) = call("DELETE", "/accounts/github-app-01work".into(), None).await;
@@ -15505,6 +15512,63 @@ async fn project_owned_sources_and_machine_wide_accounts() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     let (_, all) = call("GET", "/provider-connections".into(), None).await;
     assert_eq!(all.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn an_unused_account_source_can_be_removed_without_signing_out() {
+    let home = tempfile::tempdir().unwrap();
+    let (_store, st) = state();
+    std::fs::write(
+        home.path().join("keys.json"),
+        serde_json::json!({
+            "github-app-01orphan": {"provider":"github-app-01orphan", "env":"HOTSHEET_API_KEY_GITHUB_APP_01ORPHAN", "site":"https://github.com"}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let app = app(st.with_machine_home(home.path()));
+    let created = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/provider-connections",
+            Some(
+                &serde_json::json!({
+                    "id":"", "provider":"github", "locator":"acme/orphan", "name":null,
+                    "default":false, "settings":{"credential":{"secret":"github-app-01orphan"}}
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = body_json(created).await;
+    let id = created["id"].as_str().unwrap();
+    let path = format!("/accounts/github-app-01orphan/sources/{id}");
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "DELETE",
+                &format!("/accounts/wrong-account/sources/{id}"),
+                None,
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("DELETE", &path, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    let accounts = body_json(app.oneshot(authed("GET", "/accounts", None)).await.unwrap()).await;
+    assert_eq!(accounts[0]["id"], "github-app-01orphan");
+    assert!(accounts[0]["sources"].as_array().unwrap().is_empty());
 }
 
 /// HS2-16MYXN: an unused Hot Sheet GitHub Enterprise sign-in reports its host from the site

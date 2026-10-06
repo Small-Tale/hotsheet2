@@ -611,7 +611,10 @@ and identity-less legacy entries remain conservatively blocking.
   checked only if the project has no default source. The user can change that choice before
   connecting; editing a source shows whether that source is the current default (HS2-VM6YG9).
   **App Settings → Accounts** lists the machine-wide sign-ins with each one's sources and
-  the projects using them, and offers **Sign out** only for a sign-in no source uses. When
+  the projects using them, and offers **Sign out** only for a sign-in no source uses. An
+  unlinked source shows its connection ID and an inline-confirmed **Remove connection** action;
+  this deletes only that orphaned connection and keeps the sign-in available for reuse or
+  separate sign-out (HS2-G0E8ZS). When
   adding a GitHub source, the setup form first offers the GitHub accounts already signed in
   on this computer; choosing one lists that account's repositories so the project picks its
   own repository without signing in again. Each GitHub row names the signed-in login and host;

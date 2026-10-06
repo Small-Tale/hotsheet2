@@ -756,6 +756,11 @@ export class Api {
   /** Machine-wide sign-ins with the sources and projects using each (HS2-SM9PM8). */
   accounts = () => this.request<ProviderAccount[]>('/accounts');
   signOutAccount = (id: string) => this.request<void>(`/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  /** Remove an unlinked source belonging to this account without signing out. */
+  removeUnusedAccountSource = (account: string, source: string) =>
+    this.request<void>(`/accounts/${encodeURIComponent(account)}/sources/${encodeURIComponent(source)}`, {
+      method: 'DELETE',
+    });
   accountGithubRepositories = (id: string) =>
     this.request<GitHubRepositoryAccess>(`/accounts/${encodeURIComponent(id)}/github-repositories`);
   updateConnection = (id: string, value: ProviderConnection) =>

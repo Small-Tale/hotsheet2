@@ -125,6 +125,9 @@ export interface CommandAndAiInteractionsDependencies {
   readonly requestProjectSourceRemoval: (id: string) => void;
   readonly refreshProviderAccounts: (current?: Project) => Promise<void>;
   readonly signOutProviderAccount: (id: string) => Promise<void>;
+  readonly requestUnusedAccountSourceRemoval: (account: string, source: string) => void;
+  readonly cancelUnusedAccountSourceRemoval: () => void;
+  readonly removeUnusedAccountSource: (account: string, source: string) => Promise<void>;
   readonly useGithubAccount: (id: string) => Promise<void>;
   /** The GitLab or Jira account prefilling a new source's form (HS2-F5HNJN). */
   readonly providerAccountChoice: Signal<string | undefined>;
@@ -235,6 +238,9 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     requestProjectSourceRemoval,
     refreshProviderAccounts,
     signOutProviderAccount,
+    requestUnusedAccountSourceRemoval,
+    cancelUnusedAccountSourceRemoval,
+    removeUnusedAccountSource,
     useGithubAccount,
     providerAccountChoice,
     useProviderAccount,
@@ -1076,6 +1082,30 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.signOutAccount.selector, (_event, target) => {
       const id = data(target).itemId;
       if (id) void signOutProviderAccount(id);
+    }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'click',
+      COMMANDS_AND_AI_ACTIONS.requestUnusedAccountSourceRemoval.selector,
+      (_event, target) => {
+        const source = data(target).sourceId,
+          account = data(target).accountId;
+        if (source && account) requestUnusedAccountSourceRemoval(account, source);
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.cancelUnusedAccountSourceRemoval.selector, () => {
+      cancelUnusedAccountSourceRemoval();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.removeUnusedAccountSource.selector, (_event, target) => {
+      const source = data(target).sourceId,
+        account = data(target).accountId;
+      if (source && account) void removeUnusedAccountSource(account, source);
     }),
   );
   lifetime.add(

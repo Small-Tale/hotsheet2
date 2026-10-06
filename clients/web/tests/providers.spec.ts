@@ -2829,6 +2829,76 @@ for (const width of [1280, 390])
     await expect(page.locator('.app-error')).toHaveCount(0);
   });
 
+test('removes an orphaned account source while keeping its sign-in (HS2-G0E8ZS)', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await mockProject(page);
+  let removed = false,
+    removalAttempts = 0;
+  await page.route('**/accounts**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/accounts') && route.request().method() === 'GET')
+      return route.fulfill({
+        json: [
+          {
+            id: 'github-app-orphan',
+            provider: 'github',
+            host: 'github.com',
+            identity: 'alice',
+            managed: true,
+            projects: [],
+            sources: removed
+              ? []
+              : [
+                  {
+                    connection_id: 'github-orphan',
+                    name: 'GitHub Issues',
+                    locator: 'alice/old-repo',
+                    disabled: false,
+                    projects: [],
+                  },
+                ],
+          },
+        ],
+      });
+    if (path.endsWith('/accounts/github-app-orphan/sources/github-orphan') && route.request().method() === 'DELETE') {
+      removalAttempts += 1;
+      if (removalAttempts === 1)
+        return route.fulfill({ status: 409, json: { error: 'Ticket source is still used by a project' } });
+      removed = true;
+      return route.fulfill({ status: 204 });
+    }
+    return route.fallback();
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Settings view').click();
+  await page.locator('#app-left-rail nav[aria-label="Settings categories"] [data-item-id="accounts"]').click();
+  const account = page.locator('[data-component="accounts-settings"] article[data-account-id="github-app-orphan"]'),
+    source = account.locator('.ticket-provider-settings__account-source[data-source-id="github-orphan"]');
+  await expect(source).toContainText('Connection ID: github-orphan');
+  await expect(account.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('orphan-account-source-wide.png') });
+  await source.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(source).toContainText('The sign-in stays available.');
+  await source.getByRole('button', { name: 'Keep' }).click();
+  await expect(source.getByRole('button', { name: 'Remove', exact: true })).toBeVisible();
+  await source.getByRole('button', { name: 'Remove', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const scrim = page.locator('.app-shell__scrim');
+  if (await scrim.isVisible()) await scrim.click({ position: { x: 360, y: 600 } });
+  await source.getByRole('button', { name: 'Remove connection' }).scrollIntoViewIfNeeded();
+  await expect(source.getByRole('button', { name: 'Remove connection' })).toBeInViewport();
+  await account.screenshot({ path: test.info().outputPath('orphan-account-source-confirm-phone.png') });
+  await source.getByRole('button', { name: 'Remove connection' }).click();
+  await expect(page.locator('[data-component="accounts-settings"] [role="alert"]')).toContainText('still used');
+  await expect(source).toBeVisible();
+  await source.getByRole('button', { name: 'Remove connection' }).click();
+  await expect.poll(() => removed).toBe(true);
+  await expect(source).toHaveCount(0);
+  await expect(account.getByRole('button', { name: 'Sign out' })).toBeVisible();
+});
+
 test('names an unused GitHub Enterprise sign-in by its host and reuses its server (HS2-16MYXN)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page, true, false, 0, 0, 0, true);

@@ -134,3 +134,26 @@
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-s);
 }
+.ticket-provider-settings__account-source + .ticket-provider-settings__account-source {
+  border-top: 1px solid var(--wa-color-neutral-border-quiet);
+}
+.ticket-provider-settings__account-source > .ticket-provider-settings__store {
+  flex-wrap: wrap;
+}
+.ticket-provider-settings__account-source .ticket-provider-settings__connection-copy {
+  flex: 1 1 remify(208px);
+}
+.ticket-provider-settings__source-confirmation {
+  display: flex;
+  padding: 0 var(--wa-space-s) var(--wa-space-s);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--wa-space-xs);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-s);
+}
+.ticket-provider-settings__source-confirmation > div {
+  display: flex;
+  gap: var(--wa-space-xs);
+}

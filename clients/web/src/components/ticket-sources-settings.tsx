@@ -169,6 +169,9 @@ export interface AccountsSettingsProps {
   error?: string;
   /** The account whose sign-out is in flight. */
   signingOut?: string;
+  /** The orphaned connection selected for an inline removal confirmation. */
+  sourceRemovalChoice?: string;
+  removingSource?: string;
 }
 
 const accountProviderName = (provider: string) =>
@@ -183,7 +186,13 @@ function projectList(projects: readonly { alias: string }[]) {
  * sources signed in through it and the projects that own them. Sources themselves belong to projects;
  * an account can be signed out only once no source uses it.
  */
-export function AccountsSettings({ accounts, error = '', signingOut }: AccountsSettingsProps) {
+export function AccountsSettings({
+  accounts,
+  error = '',
+  signingOut,
+  sourceRemovalChoice,
+  removingSource,
+}: AccountsSettingsProps) {
   return (
     <div class="ticket-provider-settings" data-component="accounts-settings">
       <section>
@@ -236,22 +245,69 @@ export function AccountsSettings({ accounts, error = '', signingOut }: AccountsS
                     )}
                   </header>
                   {account.sources.length ? (
-                    account.sources.map((source) => (
-                      <div class="ticket-provider-settings__store" data-source-id={source.connection_id}>
-                        <span class="ticket-provider-settings__store-icon">
-                          <LucideIcon icon={Cable} name="cable" size="s" color={uiColor('neutral-on-quiet')} />
-                        </span>
-                        <span class="ticket-provider-settings__connection-copy">
-                          <strong>
-                            {source.name}
-                            {source.disabled && <small data-state="disabled">Disabled</small>}
-                          </strong>
-                          <small>
-                            {source.locator} · {projectList(source.projects)}
-                          </small>
-                        </span>
-                      </div>
-                    ))
+                    account.sources.map((source) => {
+                      const unused = source.projects.length === 0,
+                        confirming = sourceRemovalChoice === source.connection_id,
+                        removing = removingSource === source.connection_id;
+                      return (
+                        <div class="ticket-provider-settings__account-source" data-source-id={source.connection_id}>
+                          <div class="ticket-provider-settings__store">
+                            <span class="ticket-provider-settings__store-icon">
+                              <LucideIcon icon={Cable} name="cable" size="s" color={uiColor('neutral-on-quiet')} />
+                            </span>
+                            <span class="ticket-provider-settings__connection-copy">
+                              <strong>
+                                {source.name}
+                                {source.disabled && <small data-state="disabled">Disabled</small>}
+                              </strong>
+                              <small>
+                                {source.locator} · {projectList(source.projects)}
+                              </small>
+                              {unused && <small>Connection ID: {source.connection_id}</small>}
+                            </span>
+                            {unused && !confirming && (
+                              <wa-button
+                                size="small"
+                                appearance="outlined"
+                                type="button"
+                                {...COMMANDS_AND_AI_ACTIONS.requestUnusedAccountSourceRemoval.attrs}
+                                data-account-id={account.id}
+                                data-source-id={source.connection_id}
+                              >
+                                Remove
+                              </wa-button>
+                            )}
+                          </div>
+                          {unused && confirming && (
+                            <div class="ticket-provider-settings__source-confirmation">
+                              <span>Remove this unused connection? The sign-in stays available.</span>
+                              <div>
+                                <wa-button
+                                  size="small"
+                                  appearance="plain"
+                                  type="button"
+                                  {...COMMANDS_AND_AI_ACTIONS.cancelUnusedAccountSourceRemoval.attrs}
+                                  disabled={removing}
+                                >
+                                  Keep
+                                </wa-button>
+                                <wa-button
+                                  size="small"
+                                  variant="danger"
+                                  type="button"
+                                  {...COMMANDS_AND_AI_ACTIONS.removeUnusedAccountSource.attrs}
+                                  data-account-id={account.id}
+                                  data-source-id={source.connection_id}
+                                  disabled={removing}
+                                >
+                                  {removing ? 'Removing…' : 'Remove connection'}
+                                </wa-button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
                   ) : (
                     <p class="ticket-provider-settings__account-empty">
                       No ticket source uses this sign-in. Reuse it when adding a source to a project, or sign out.
@@ -273,7 +329,7 @@ export function AccountsSettings({ accounts, error = '', signingOut }: AccountsS
         </p>
       )}
       <p class="ticket-provider-settings__footnote">
-        Credentials stay in the operating system keychain; Hot Sheet stores only their names.
+        Credentials stay in the operating system keychain; Hot Sheet stores only their references and non-secret labels.
       </p>
     </div>
   );

@@ -1079,8 +1079,13 @@ export async function startHotSheetWebClient() {
     providerAccounts,
     providerAccountsError,
     signingOutAccount,
+    unusedAccountSourceChoice,
+    removingUnusedAccountSource,
     refreshProviderAccounts,
     signOutProviderAccount,
+    requestUnusedAccountSourceRemoval,
+    cancelUnusedAccountSourceRemoval,
+    removeUnusedAccountSource,
     useGithubAccount,
     providerAccountChoice,
     useProviderAccount,
@@ -4308,6 +4313,8 @@ export async function startHotSheetWebClient() {
           accounts: providerAccounts.value,
           error: providerAccountsError.value,
           signingOut: signingOutAccount.value,
+          sourceRemovalChoice: unusedAccountSourceChoice.value,
+          removingSource: removingUnusedAccountSource.value,
         }}
         ai={{
           tools: aiTools.value,
@@ -5361,7 +5368,7 @@ export async function startHotSheetWebClient() {
   const interactionBindingsPort: InteractionBindingsPort = {
     openProjectPicker, openRemoteProjectDialog, chooseAndOpenProject, unhealthyServerRecovery, projectDialogOpen, openRemoteCheckout, remoteProjectDialogOpen, importHs1Project,
     chooseHs1TicketStore, hs1MigrationProject, hs1MigrationBusy, hs1SourceIdentity, project, migrationJobDetails, migrationJobs, migrationConnectionErrors,
-    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, signOutProviderAccount, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource,
+    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, signOutProviderAccount, requestUnusedAccountSourceRemoval, cancelUnusedAccountSourceRemoval, removeUnusedAccountSource, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource,
     providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView, repositoryDetailActive: repositoryController.repositoryDetailActive,
     repositorySetupStep, repositorySetupError, repositoryFileMenu, repositorySelectedFiles, repositoryComparison, expandedCodeReviewCommits, loadRepositoryDetail, refreshRepositoryStatus,
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,

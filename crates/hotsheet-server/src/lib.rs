@@ -1843,6 +1843,10 @@ pub fn app(state: AppState) -> Router {
         .route("/accounts", get(list_accounts_route))
         .route("/accounts/{account}", delete(sign_out_account))
         .route(
+            "/accounts/{account}/sources/{connection_id}",
+            delete(remove_unused_account_source),
+        )
+        .route(
             "/accounts/{account}/github-repositories",
             get(list_account_github_repositories),
         )
@@ -2732,6 +2736,46 @@ async fn sign_out_account(
             };
             ApiError::new(status, error.to_string())
         })
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+/// Remove only a source no checkout links and whose credential belongs to this account.
+/// The account remains signed in for reuse or a separate sign-out (HS2-G0E8ZS).
+async fn remove_unused_account_source(
+    State(state): State<AppState>,
+    Path((account, connection_id)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let providers = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+        let mut connections = providers.load().map_err(provider_transfer_error)?;
+        let checkouts = state
+            .checkout_registry
+            .list()
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        hotsheet_ticketing::accounts::take_unused_source(
+            &mut connections,
+            &checkouts,
+            &account,
+            &connection_id,
+        )
+        .map_err(|error| {
+            let status = match error {
+                hotsheet_ticketing::accounts::AccountError::SourceNotFound { .. } => {
+                    StatusCode::NOT_FOUND
+                }
+                hotsheet_ticketing::accounts::AccountError::SourceInUse { .. } => {
+                    StatusCode::CONFLICT
+                }
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            };
+            ApiError::new(status, error.to_string())
+        })?;
+        providers
+            .save(&connections)
+            .map_err(provider_transfer_error)?;
+        Ok(StatusCode::NO_CONTENT)
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?

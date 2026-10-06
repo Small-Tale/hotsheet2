@@ -550,6 +550,12 @@ never stored, so there is nothing to migrate:
   the bundle.
 - `DELETE /accounts/{id}` / `hotsheet account sign-out <id>` delete the credential. Both
   refuse (409 / non-zero exit) while any source still uses the account, naming the projects.
+- `DELETE /accounts/{id}/sources/{connection_id}` removes an orphaned connection shown under
+  that account in App Settings → Accounts (HS2-G0E8ZS). The server checks the credential
+  reference and refuses (409) if any checkout links the source; a mismatched account or
+  missing connection returns 404. Removing the connection keeps the sign-in, which can then
+  be reused or signed out separately. The UI shows the connection ID and requires an inline
+  confirmation before this action.
 - `GET /accounts/{id}/github-repositories` lists the repositories a signed-in GitHub account
   can reach (refreshing its token server-side), so adding a source in another project
   reuses the sign-in and picks that project's own repository. **App Settings → Accounts**
