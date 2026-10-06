@@ -79,6 +79,12 @@ function accountTitle(account: ProviderAccount) {
   return account.identity ? `${account.identity} on ${account.host || account.id}` : account.host || account.id;
 }
 
+function githubAccountTitle(account: ProviderAccount) {
+  if (account.identity) return `${account.identity} on ${account.host || 'GitHub'}`;
+  const host = account.host || 'GitHub';
+  return `${host} · sign-in ${account.id.slice(-6)}`;
+}
+
 function accountUsage(account: ProviderAccount, capitalized = true) {
   const usage = account.projects.length
     ? `used by ${account.projects.map((project) => project.alias).join(', ')}`
@@ -231,12 +237,12 @@ export function ProviderSetupForm({
                           itemId={account.id}
                           multiline
                           divider={index > 0 ? 'before' : 'none'}
-                          accessibleLabel={`Use ${account.host ? `the GitHub account on ${account.host}` : 'an earlier GitHub sign-in'}, ${accountUsage(account, false)}`}
+                          accessibleLabel={`Use ${githubAccountTitle(account)}, ${accountUsage(account, false)}`}
                           icon={<ProviderIcon kind="github" />}
                           trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
                           label={
                             <span class="provider-setup-form__account-copy">
-                              <strong>{account.host || 'Earlier GitHub sign-in'}</strong>
+                              <strong>{githubAccountTitle(account)}</strong>
                               <small class="provider-setup-form__account-usage">{accountUsage(account)}</small>
                             </span>
                           }

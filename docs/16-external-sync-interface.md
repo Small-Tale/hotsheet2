@@ -525,19 +525,25 @@ derives accounts from the connection records, the checkout links, and `keys.json
 never stored, so there is nothing to migrate:
 
 - `GET /accounts` / `hotsheet account list [--json]` list each account (`id` = credential
-  reference, `provider`, `host`, `base_url`, Jira `identity`, `managed` for a Hot Sheet GitHub
+  reference, `provider`, `host`, `base_url`, account `identity`, `managed` for a Hot Sheet GitHub
   sign-in) with its sources and the projects using each. `base_url` is the endpoint a new
   source reusing the account needs — a GitHub Enterprise or self-managed GitLab `api_base`, or
   the Jira site — and is omitted for github.com and gitlab.com. A Hot Sheet GitHub sign-in
   (`github-app-*`) that no source uses yet is listed too; other unused keys (AI-provider keys)
   are not accounts.
+- **GitHub account identity (HS2-1D350D).** Device sign-in looks up the authenticated
+  `/user` login and records it as non-secret `identity` metadata in `keys.json`. A failed
+  lookup does not block sign-in. Both the server and CLI device flows record this label,
+  and token refreshes keep it. The new-source picker shows the login with its host; for an
+  older sign-in without a saved login it shows a short credential-reference suffix so
+  multiple sign-ins on the same host are distinguishable.
 - **Host of an unused sign-in (HS2-16MYXN).** The device flow (server and `github-sign-in`)
   records the sign-in's web origin as non-secret `site` metadata in `keys.json`, kept across
   token refreshes. An unused sign-in reports that site's host and, for GitHub Enterprise, its
   `/api/v3` `base_url`. A sign-in stored before sites were recorded is backfilled once from its
   keychain bundle's `web_base` by the shared `credentials_with_sites` helper behind both
   listings; one whose bundle cannot be read keeps an empty host (the picker then says
-  "Earlier GitHub sign-in"). Creating a GitHub source (`POST
+  "GitHub · sign-in <suffix>"). Creating a GitHub source (`POST
 /checkouts/{reference}/provider-connections` or `POST /provider-connections`) without an
   `api_base` fills it from the reused sign-in's recorded Enterprise site, so a reused
   Enterprise account never falls back to github.com; `github-connect` already derives it from

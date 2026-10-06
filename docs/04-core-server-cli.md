@@ -960,9 +960,10 @@ setup` writes ([05](05-ai-tool-plugins.md) §5.1a).
 > (`secret-tool`), and Windows Credential Manager adapters, plus a global provider registry. `hotsheet key
 set|get|list|delete` is the headless CLI surface; `set` uses a hidden prompt when
 > stdin is a terminal and accepts piped stdin for automation. `${HOTSHEET_HOME}/keys.json` contains provider names and fallback environment
-> variable names only, is mode `0600` on Unix, and never contains secret values. A Hot Sheet
-> GitHub sign-in also records its non-secret `site` (the web origin signed in to), kept across
-> token refreshes, so an unused sign-in still reports its host (HS2-16MYXN).
+> variable names and non-secret account labels, is mode `0600` on Unix, and never contains
+> secret values. A Hot Sheet GitHub sign-in records its `site` (the web origin signed in to)
+> and, when available, its authenticated login as `identity`; both survive token refreshes
+> (HS2-16MYXN, HS2-1D350D).
 
 Settings refer to a secret as `{ "secret": "provider-id" }`; consumers call the
 shared resolver, which fetches the value from the OS credential store. If no credential

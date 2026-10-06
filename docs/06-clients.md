@@ -614,7 +614,9 @@ and identity-less legacy entries remain conservatively blocking.
   the projects using them, and offers **Sign out** only for a sign-in no source uses. When
   adding a GitHub source, the setup form first offers the GitHub accounts already signed in
   on this computer; choosing one lists that account's repositories so the project picks its
-  own repository without signing in again. Adding a GitLab or Jira source likewise lists that
+  own repository without signing in again. Each GitHub row names the signed-in login and host;
+  older sign-ins without a saved login show a short credential suffix to distinguish them
+  (HS2-1D350D). Adding a GitLab or Jira source likewise lists that
   provider's signed-in accounts above the form (HS2-F5HNJN). Choosing one, which marks it
   pressed with a check, prefills the credential reference, the Jira account email
   (`identity`), and the self-managed GitLab API base or Jira site (`base_url`). Each project

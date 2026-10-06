@@ -818,6 +818,7 @@ async function mockProject(
             : fallbackHost,
           ...(endpoint ? { base_url: endpoint } : {}),
           ...(settings.email ? { identity: settings.email } : {}),
+          ...(credential === 'github-app-auth-1' ? { identity: 'alice' } : {}),
           managed: credential.startsWith('github-app-'),
           sources: [],
           projects: [],
@@ -2708,7 +2709,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   });
   await page.getByRole('button', { name: 'Add data source' }).click();
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
-  const reuse = providerForm.getByRole('button', { name: 'Use the GitHub account on github.com, used by demo' });
+  const reuse = providerForm.getByRole('button', { name: 'Use alice on github.com, used by demo' });
   await expect(reuse).toBeVisible();
   await expect(reuse).toContainText('Used by demo');
   await expect(providerForm).toContainText('Or sign in with another account.');
@@ -2786,7 +2787,7 @@ for (const width of [1280, 390])
     await expect(setup).toHaveJSProperty('open', true);
     await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
     // The only account on this machine is an earlier sign-in no project uses yet.
-    const reuse = form.getByRole('button', { name: 'Use an earlier GitHub sign-in, not used by any project yet' });
+    const reuse = form.getByRole('button', { name: 'Use GitHub · sign-in ndoned, not used by any project yet' });
     await expect(reuse).toBeVisible();
     await setup.evaluate(async (node) => {
       const animations = [...node.getAnimations({ subtree: true }), ...(node.shadowRoot?.getAnimations() ?? [])];
@@ -2843,6 +2844,7 @@ test('names an unused GitHub Enterprise sign-in by its host and reuses its serve
               id: 'github-app-ghe',
               provider: 'github',
               host: 'ghe.test',
+              identity: 'enterprise-user',
               base_url: 'https://ghe.test/api/v3',
               managed: true,
               sources: [],
@@ -2852,6 +2854,7 @@ test('names an unused GitHub Enterprise sign-in by its host and reuses its serve
               id: 'github-app-dotcom',
               provider: 'github',
               host: 'github.com',
+              identity: 'dotcom-user',
               managed: true,
               sources: [],
               projects: [],
@@ -2874,11 +2877,11 @@ test('names an unused GitHub Enterprise sign-in by its host and reuses its serve
     form = setup.locator('[data-action="save-provider-connection"]');
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   const enterprise = form.getByRole('button', {
-    name: 'Use the GitHub account on ghe.test, not used by any project yet',
+    name: 'Use enterprise-user on ghe.test, not used by any project yet',
   });
   await expect(enterprise).toContainText('ghe.test');
   await expect(
-    form.getByRole('button', { name: 'Use the GitHub account on github.com, not used by any project yet' }),
+    form.getByRole('button', { name: 'Use dotcom-user on github.com, not used by any project yet' }),
   ).toContainText('github.com');
   await expect(form).not.toContainText('Earlier GitHub sign-in');
   // Visual QA evidence: the picker at a wide and a phone width.

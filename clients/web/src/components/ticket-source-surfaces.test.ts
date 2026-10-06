@@ -417,6 +417,7 @@ describe('ticket source surfaces', () => {
           id: 'github-app-01work',
           provider: 'github',
           host: 'github.com',
+          identity: 'alice',
           managed: true,
           sources: [],
           projects: [{ id: 'a', alias: 'procurement' }],
@@ -427,11 +428,27 @@ describe('ticket source surfaces', () => {
     expect(picker).toContain('data-action="use-github-account"');
     expect(picker).toContain('data-item-id="github-app-01work"');
     expect(picker).toContain('Used by procurement');
-    expect(picker).toContain('aria-label="Use the GitHub account on github.com, used by procurement"');
+    expect(picker).toContain('aria-label="Use alice on github.com, used by procurement"');
     expect(picker).toContain('Or sign in with another account.');
     expect(picker).toContain('data-action="start-github-sign-in"');
     // Only GitHub sign-ins are offered for GitHub, and none without accounts.
     expect(picker.match(/data-action="use-github-account"/g)).toHaveLength(1);
+    const older = String(
+      ProviderSetupForm({
+        kind: 'github',
+        accounts: [
+          {
+            id: 'github-app-01older',
+            provider: 'github',
+            host: 'github.com',
+            managed: true,
+            sources: [],
+            projects: [],
+          },
+        ],
+      }),
+    );
+    expect(older).toContain('github.com · sign-in 1older');
     const none = String(ProviderSetupForm({ kind: 'github' }));
     expect(none).not.toContain('use-github-account');
     expect(none).toContain('Sign in to choose a repository.');

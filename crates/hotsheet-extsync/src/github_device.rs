@@ -136,6 +136,22 @@ impl GitHubDeviceClient {
         .map_err(|error| GitHubDeviceError::Invalid(error.to_string()))
     }
 
+    /// Resolve the signed-in user's login for account labels. Failure must not block sign-in.
+    pub fn current_login(&self, access_token: &str) -> Result<String, GitHubDeviceError> {
+        let headers = [
+            ("Accept", "application/vnd.github+json".into()),
+            ("Authorization", format!("Bearer {access_token}")),
+            ("X-GitHub-Api-Version", "2022-11-28".into()),
+            ("User-Agent", "hotsheet2".into()),
+        ];
+        let (user, _) = self.get_json_page(&format!("{}/user", self.api_base()), &headers)?;
+        user.get("login")
+            .and_then(Value::as_str)
+            .filter(|login| !login.trim().is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| GitHubDeviceError::Invalid("user login missing".into()))
+    }
+
     /// Lists repositories the signed-in user can access through this GitHub App installation.
     /// The access token remains on the server; callers receive repository names only.
     pub fn installed_repositories(
@@ -153,11 +169,7 @@ impl GitHubDeviceClient {
         &self,
         access_token: &str,
     ) -> Result<RepositoryAccess, GitHubDeviceError> {
-        let api_base = if self.web_base == "https://github.com" {
-            "https://api.github.com".to_owned()
-        } else {
-            format!("{}/api/v3", self.web_base)
-        };
+        let api_base = self.api_base();
         let headers = [
             ("Accept", "application/vnd.github+json".into()),
             ("Authorization", format!("Bearer {access_token}")),
@@ -239,6 +251,14 @@ impl GitHubDeviceClient {
             Err(GitHubDeviceError::MissingClientId)
         } else {
             Ok(())
+        }
+    }
+
+    fn api_base(&self) -> String {
+        if self.web_base == "https://github.com" {
+            "https://api.github.com".to_owned()
+        } else {
+            format!("{}/api/v3", self.web_base)
         }
     }
 
@@ -343,6 +363,29 @@ mod tests {
             headers: HashMap::new(),
             body: body.to_string(),
         }
+    }
+
+    #[test]
+    fn reads_current_login_from_enterprise_user_endpoint() {
+        struct UserResponse;
+        impl GitHubTransport for UserResponse {
+            fn request(
+                &self,
+                method: &str,
+                url: &str,
+                headers: &[(&str, String)],
+                _: Option<&Value>,
+            ) -> Result<HttpResponse, String> {
+                assert_eq!(method, "GET");
+                assert_eq!(url, "https://ghe.test/api/v3/user");
+                assert!(headers.iter().any(|(name, value)| {
+                    *name == "Authorization" && value == "Bearer secret-token"
+                }));
+                Ok(response(json!({"login":"alice"})))
+            }
+        }
+        let client = GitHubDeviceClient::new("client", "https://ghe.test", Arc::new(UserResponse));
+        assert_eq!(client.current_login("secret-token").unwrap(), "alice");
     }
 
     #[test]

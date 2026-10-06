@@ -176,6 +176,14 @@ pub fn list_accounts(
     credentials: &[KeyMetadata],
 ) -> Vec<Account> {
     let mut accounts: BTreeMap<String, Account> = BTreeMap::new();
+    let identities = credentials
+        .iter()
+        .filter_map(|key| {
+            key.identity
+                .as_deref()
+                .map(|identity| (key.provider.as_str(), identity))
+        })
+        .collect::<BTreeMap<_, _>>();
     for connection in connections {
         if connection.provider == "git" {
             continue;
@@ -191,7 +199,7 @@ pub fn list_accounts(
                 provider: connection.provider.clone(),
                 host: connection_host(connection),
                 base_url: None,
-                identity: None,
+                identity: identities.get(credential).map(|value| (*value).to_owned()),
                 managed: credential.starts_with(MANAGED_CREDENTIAL_PREFIX),
                 sources: Vec::new(),
                 projects: Vec::new(),
@@ -225,7 +233,7 @@ pub fn list_accounts(
                     provider: "github".into(),
                     host: host_of(site),
                     base_url: github_api_base_for_site(site),
-                    identity: None,
+                    identity: credential.identity.clone(),
                     managed: true,
                     sources: Vec::new(),
                     projects: Vec::new(),
@@ -374,7 +382,34 @@ mod tests {
             provider: name.into(),
             env: crate::secrets::env_name(name),
             site: site.map(str::to_owned),
+            identity: None,
         }
+    }
+
+    #[test]
+    fn github_login_labels_both_used_and_unused_sign_ins() {
+        let mut used = key("github-app-used", Some("https://github.com"));
+        used.identity = Some("alice".into());
+        let mut unused = key("github-app-unused", Some("https://github.com"));
+        unused.identity = Some("bob".into());
+        let accounts = list_accounts(
+            &[external(
+                "github-source",
+                "github",
+                "alice/repo",
+                "github-app-used",
+                serde_json::json!({}),
+            )],
+            &[],
+            &[used, unused],
+        );
+        assert_eq!(
+            accounts
+                .iter()
+                .map(|account| account.identity.as_deref())
+                .collect::<Vec<_>>(),
+            vec![Some("bob"), Some("alice")]
+        );
     }
 
     fn link(id: &str, provider: &str, locator: &str) -> TicketSource {

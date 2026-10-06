@@ -2501,6 +2501,7 @@ async fn start_github_device_auth(
                     break;
                 }
                 Ok(hotsheet_extsync::DevicePoll::Authorized(bundle)) => {
+                    let login = client.current_login(&bundle.access_token).ok();
                     let result = hotsheet_extsync::store_device_authorization(
                         &keys,
                         &credential_reference,
@@ -2509,6 +2510,11 @@ async fn start_github_device_auth(
                         &bundle,
                         OffsetDateTime::now_utc().unix_timestamp(),
                     );
+                    if result.is_ok() {
+                        if let Some(login) = login {
+                            let _ = keys.record_identity(&credential_reference, &login);
+                        }
+                    }
                     let next = match result {
                         Ok(()) => GitHubAuthStatus::Authorized {
                             credential_reference: credential_reference.clone(),

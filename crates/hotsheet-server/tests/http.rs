@@ -15297,7 +15297,8 @@ async fn project_owned_sources_and_machine_wide_accounts() {
     std::fs::write(
         home.path().join("keys.json"),
         serde_json::json!({
-            "github-app-01unused": {"provider": "github-app-01unused", "env": "HOTSHEET_API_KEY_GITHUB_APP_01UNUSED"},
+            "github-app-01unused": {"provider": "github-app-01unused", "env": "HOTSHEET_API_KEY_GITHUB_APP_01UNUSED", "site": "https://github.com", "identity": "bob"},
+            "github-app-01work": {"provider": "github-app-01work", "env": "HOTSHEET_API_KEY_GITHUB_APP_01WORK", "site": "https://github.com", "identity": "alice"},
             "anthropic": {"provider": "anthropic", "env": "HOTSHEET_API_KEY_ANTHROPIC"}
         })
         .to_string(),
@@ -15449,6 +15450,8 @@ async fn project_owned_sources_and_machine_wide_accounts() {
         "{accounts}"
     );
     assert_eq!(accounts[1]["host"], "github.com");
+    assert_eq!(accounts[0]["identity"], "bob");
+    assert_eq!(accounts[1]["identity"], "alice");
     assert_eq!(accounts[1]["sources"].as_array().unwrap().len(), 2);
 
     // Signing out is refused while a source uses the account; it names the projects.

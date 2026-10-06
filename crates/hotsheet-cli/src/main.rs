@@ -2230,18 +2230,23 @@ fn cmd_github_sign_in(web_base: &str) -> Result<()> {
             }
             hotsheet_extsync::DevicePoll::Denied => bail!("GitHub sign-in was denied"),
             hotsheet_extsync::DevicePoll::Authorized(bundle) => {
+                let login = client.current_login(&bundle.access_token).ok();
                 let reference = format!(
                     "github-app-{}",
                     Ulid::new().to_string().to_ascii_lowercase()
                 );
+                let keys = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
                 hotsheet_extsync::store_device_authorization(
-                    &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+                    &keys,
                     &reference,
                     &client_id,
                     web_base,
                     &bundle,
                     OffsetDateTime::now_utc().unix_timestamp(),
                 )?;
+                if let Some(login) = login {
+                    let _ = keys.record_identity(&reference, &login);
+                }
                 println!("Credential reference: {reference}");
                 return Ok(());
             }

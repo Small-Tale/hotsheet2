@@ -275,9 +275,12 @@ pub struct KeyMetadata {
     /// for plain keys and for sign-ins recorded before it existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site: Option<String>,
+    /// Non-secret account login learned during provider sign-in. Older entries may omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<String>,
 }
 
-/// Global provider registry. The registry file contains names only, never values.
+/// Global provider registry. The registry file contains names and non-secret labels, never values.
 pub struct KeyRegistry<S> {
     root: PathBuf,
     store: S,
@@ -297,12 +300,16 @@ impl<S: SecretStore> KeyRegistry<S> {
         let mut map = self.metadata()?;
         // Replacing a value (a refreshed token) keeps the sign-in's recorded site.
         let site = map.get(provider).and_then(|existing| existing.site.clone());
+        let identity = map
+            .get(provider)
+            .and_then(|existing| existing.identity.clone());
         map.insert(
             provider.into(),
             KeyMetadata {
                 provider: provider.into(),
                 env: env_name(provider),
                 site,
+                identity,
             },
         );
         if let Err(error) = self.write_metadata(&map) {
@@ -325,6 +332,24 @@ impl<S: SecretStore> KeyRegistry<S> {
             return Ok(());
         }
         entry.site = Some(site.to_owned());
+        self.write_metadata(&map)
+    }
+
+    /// Record the public login associated with a managed provider sign-in.
+    pub fn record_identity(&self, provider: &str, identity: &str) -> Result<(), SecretError> {
+        validate(provider)?;
+        let identity = identity.trim();
+        if identity.is_empty() {
+            return Ok(());
+        }
+        let mut map = self.metadata()?;
+        let Some(entry) = map.get_mut(provider) else {
+            return Err(SecretError::NotFound(provider.into()));
+        };
+        if entry.identity.as_deref() == Some(identity) {
+            return Ok(());
+        }
+        entry.identity = Some(identity.to_owned());
         self.write_metadata(&map)
     }
 
@@ -479,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn a_recorded_site_survives_a_value_replacement_and_older_files_parse() {
+    fn recorded_site_and_identity_survive_a_value_replacement_and_older_files_parse() {
         let dir = tempfile::tempdir().unwrap();
         // A keys.json written before sites existed parses unchanged.
         std::fs::write(
@@ -489,6 +514,7 @@ mod tests {
         .unwrap();
         let registry = KeyRegistry::new(dir.path(), Memory::default());
         assert_eq!(registry.list().unwrap()[0].site, None);
+        assert_eq!(registry.list().unwrap()[0].identity, None);
         assert!(matches!(
             registry.record_site("missing", "https://github.com"),
             Err(SecretError::NotFound(_))
@@ -497,6 +523,9 @@ mod tests {
         registry
             .record_site("github-app-01a", "https://ghe.corp.test/")
             .unwrap();
+        registry
+            .record_identity("github-app-01a", " alice ")
+            .unwrap();
         // Idempotent, and a token refresh (set) keeps the site.
         registry
             .record_site("github-app-01a", "https://ghe.corp.test")
@@ -504,8 +533,10 @@ mod tests {
         registry.set("github-app-01a", "bundle-2").unwrap();
         let listed = registry.list().unwrap();
         assert_eq!(listed[0].site.as_deref(), Some("https://ghe.corp.test"));
+        assert_eq!(listed[0].identity.as_deref(), Some("alice"));
         let disk = std::fs::read_to_string(dir.path().join("keys.json")).unwrap();
         assert!(disk.contains(r#""site": "https://ghe.corp.test""#));
+        assert!(disk.contains(r#""identity": "alice""#));
         assert!(!disk.contains("bundle-2"));
         // Deleting the credential drops its site with it.
         assert!(registry.delete("github-app-01a").unwrap());
