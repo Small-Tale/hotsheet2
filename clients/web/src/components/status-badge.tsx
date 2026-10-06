@@ -9,6 +9,14 @@ export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' 
 export type StatusBadgeAppearance = 'filled' | 'plain';
 /** Label weight: `semibold` is the quieter trigger label inside the TicketStatusMenu. */
 export type StatusBadgeWeight = 'bold' | 'semibold';
+export const STARTED_PHASE_LABELS: Record<StartedPhase, string> = {
+  analyzing: 'Analyzing',
+  planning: 'Planning',
+  working: 'Working',
+  initial_testing: 'Initial testing',
+  integrating: 'Integrating',
+  final_testing: 'Final testing',
+};
 
 export interface StatusBadgeProps {
   status: TicketStatus;
@@ -48,17 +56,7 @@ export function StatusBadge({
   slot,
 }: StatusBadgeProps) {
   const value = statusPresentation(status);
-  const phaseLabel =
-    startedPhase && status === 'started'
-      ? {
-          analyzing: 'Analyzing',
-          planning: 'Planning',
-          working: 'Working',
-          initial_testing: 'Initial testing',
-          integrating: 'Integrating',
-          final_testing: 'Final testing',
-        }[startedPhase]
-      : undefined;
+  const phaseLabel = startedPhase && status === 'started' ? STARTED_PHASE_LABELS[startedPhase] : undefined;
   const className = `status-badge status-badge--${status} status-badge--${appearance}${compact ? ' status-badge--compact' : ''}${interactive ? ' status-badge--interactive' : ''}${weight === 'semibold' ? ' status-badge--semibold' : ''}`;
   const content = (
     <>

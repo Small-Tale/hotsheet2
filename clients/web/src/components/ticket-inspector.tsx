@@ -54,6 +54,7 @@ export interface TicketInspectorProps {
   titleEditing?: boolean;
   titleDraft?: string;
   canUpdate?: boolean;
+  canEditStartedPhase?: boolean;
   canEditText?: boolean;
   canAddNotes?: boolean;
   canEditNotes?: boolean;
@@ -133,6 +134,7 @@ export function ticketInspectorPanel({
   titleEditing = false,
   titleDraft = title,
   canUpdate = true,
+  canEditStartedPhase = false,
   canEditText = canUpdate,
   canAddNotes = true,
   canEditNotes = true,
@@ -399,6 +401,7 @@ export function ticketInspectorPanel({
           tagSuggestions={tagSuggestions}
           tagPopoverId={`ticket-tag-${presentation}-${slug.toLowerCase()}`}
           canUpdate={canUpdate}
+          canEditStartedPhase={canEditStartedPhase}
           canEditText={canEditText}
           canAddNotes={canAddNotes}
           canEditNotes={canEditNotes}

@@ -56,6 +56,7 @@ export interface InspectorAndEditorInteractionsDependencies {
   readonly fieldConflictResolution: Signal<string>;
   readonly fieldConflict: Signal<TicketFieldConflict | undefined>;
   readonly canUpdateSelected: () => boolean;
+  readonly canEditStartedPhaseSelected: () => boolean;
   /** The one surface whose title editor is open (HS2-2M5BBN). */
   readonly titleEditingSurface: Signal<TicketTitleEditSurface | undefined>;
   readonly activeTicketSurface: () => ParentNode;
@@ -145,6 +146,7 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     fieldConflictResolution,
     fieldConflict,
     canUpdateSelected,
+    canEditStartedPhaseSelected,
     titleEditingSurface,
     activeTicketSurface,
     titleAutosave,
@@ -245,6 +247,22 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       if (select.open) select.addEventListener('wa-after-hide', apply, { once: true });
       else apply();
     }),
+  );
+  lifetime.add(
+    delegate(
+      document.body,
+      'change',
+      INSPECTOR_AND_EDITOR_TARGETS.inspectorStartedPhaseField.selector,
+      (_event, target) => {
+        const select = target as Control & { open?: boolean };
+        const value = select.value;
+        const apply = () => {
+          if (canEditStartedPhaseSelected()) void updateSelectedTracked({ started_phase: value || null });
+        };
+        if (select.open) select.addEventListener('wa-after-hide', apply, { once: true });
+        else apply();
+      },
+    ),
   );
   function updateConflictDraft(field: string, value: string, base = value) {
     if (field === 'details' && readerOpen.value) {

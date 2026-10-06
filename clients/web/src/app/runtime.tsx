@@ -1169,6 +1169,19 @@ export async function startHotSheetWebClient() {
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
   const canUpdateSelected = () => selectedTicket.value ? (providerCapabilities.value[selectedTicket.value.connection_id]?.update ?? true) : false;
+  const canEditStartedPhaseSelected = () => {
+    const ticket = selectedTicket.value;
+    const current = project();
+    return Boolean(
+      ticket &&
+      current &&
+      ticket.status === 'started' &&
+      canUpdateSelected() &&
+      defaultProviders.value[current.id]?.sources.some(
+        (source) => source.connectionId === ticket.connection_id && source.provider === 'git',
+      ),
+    );
+  };
   const noteCapabilities = () =>
     selectedTicket.value ? providerCapabilities.value[selectedTicket.value.connection_id] : undefined;
   const canAddNotes = () => noteCapabilities()?.notes ?? true;
@@ -4074,6 +4087,7 @@ export async function startHotSheetWebClient() {
       titleEditing: titleEditingSurface.value === 'inspector',
       titleDraft: titleDraft.value,
       canUpdate: canUpdateSelected(),
+      canEditStartedPhase: canEditStartedPhaseSelected(),
       canAddNotes: canAddNotes(),
       canEditNotes: canEditNotes(),
       canDeleteNotes: canDeleteNotes(),
@@ -5408,7 +5422,7 @@ export async function startHotSheetWebClient() {
     activeAttachmentGalleryVideo, attachmentGalleryDuration, attachmentGalleryMarkup, finishGalleryAnnotationSession, beginGalleryAnnotationSession, attachmentGalleryDrawMode, attachmentGallerySelectedAnnotation, attachmentGalleryAnnotations,
     updateGalleryPlaybackPresentation, attachmentGalleryPlayhead, attachmentGalleryPlaying, gallerySvgClock, stopGallerySvgClock, attachmentGalleryVolumeOpen, attachmentGalleryMuted, attachmentGalleryVolume,
     canUseAttachments, canEditAttachments, updateSelectedTracked, readerOpen, readerDetailsDraft, detailsDraft, titleDraft, readerBlockedReasonDraft, blockedReasonDraft,
-    readerNoteDraft, noteDraft, fieldConflictResolution, fieldConflict, canUpdateSelected, titleEditingSurface, activeTicketSurface, titleAutosave,
+    readerNoteDraft, noteDraft, fieldConflictResolution, fieldConflict, canUpdateSelected, canEditStartedPhaseSelected, titleEditingSurface, activeTicketSurface, titleAutosave,
     tagsAutosave, beginDetailsEdit, linkedReaderFrame, replaceLinkedReaderFrame, linkedReaderSaves, readerDetailsAutosave, detailsAutosave, beginDetailsFinish,
     finishDetailsEdit, readerEditingNoteId, editingNoteId, composingNote, newNoteDraft, readerNoteAutosave, noteAutosave, readerInlineFeedbackReplies,
     readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, canDeleteNotes, workspaceSearchActive, loadBoardColumnMore, loadNextTicketPage, readerBlockedReasonEditing, blockedReasonEditing,

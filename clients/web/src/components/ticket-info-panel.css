@@ -15,6 +15,10 @@
   display: grid;
   grid-column: 1 / -1;
 }
+.ticket-info-panel__phase-field {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
 /* Details and Status label fields use the same compact label-to-control gap as Category. Kerf beta.60
    ListHeader tokens drop the navigation-row height and borders; the 1px title padding keeps the label
    aligned where its removed inline border used to inset it. */

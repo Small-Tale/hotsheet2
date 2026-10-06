@@ -40,6 +40,7 @@ export const INSPECTOR_AND_EDITOR_TARGETS = {
   inspectorCategoryField: attr('name', 'inspector-category'),
   inspectorPriorityField: attr('name', 'inspector-priority'),
   inspectorStatusField: attr('name', 'inspector-status'),
+  inspectorStartedPhaseField: attr('name', 'inspector-started-phase'),
   ticketConflictResolutionField: attr('name', 'ticket-conflict-resolution'),
   ticketTitleField: attr('name', 'ticket-title'),
   ticketTagInputField: attr('name', 'ticket-tag-input'),

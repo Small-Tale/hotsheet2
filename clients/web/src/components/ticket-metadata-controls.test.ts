@@ -12,6 +12,25 @@ import { TicketStatusMenu } from './ticket-status-menu';
 import { TicketTimeline } from './ticket-timeline';
 
 describe('ticket metadata controls and inspector panels', () => {
+  it('offers all Started phases only when editing a git-backed Started ticket (HS2-YSZ711)', () => {
+    const ticket = {
+      status: 'started' as const,
+      priority: 'high' as const,
+      category: 'feature',
+      tags: [],
+      details: '',
+    };
+    const editable = String(TicketInfoPanel({ ...ticket, startedPhase: 'planning', canEditStartedPhase: true }));
+    expect(editable).toContain('name="inspector-started-phase"');
+    expect(editable).toContain('value="planning"');
+    for (const phase of ['', 'analyzing', 'planning', 'working', 'initial_testing', 'integrating', 'final_testing'])
+      expect(editable).toContain(`<wa-option value="${phase}"`);
+    expect(String(TicketInfoPanel({ ...ticket, canEditStartedPhase: false }))).not.toContain('inspector-started-phase');
+    expect(String(TicketInfoPanel({ ...ticket, status: 'completed', canEditStartedPhase: true }))).not.toContain(
+      'inspector-started-phase',
+    );
+  });
+
   it('uses compact Details field-label geometry in preview and editing modes (HS2-S6S709)', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-info-panel.css'), 'utf8');
     expect(css).toContainSource(

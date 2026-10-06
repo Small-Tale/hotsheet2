@@ -378,6 +378,7 @@ inspector-and-editor	delegate	document.body	'click'	'[data-action="copy-ticket-s
 inspector-and-editor	delegate	document.body	'change'	'[name="inspector-category"]'
 inspector-and-editor	delegate	document.body	'change'	'[name="inspector-priority"]'
 inspector-and-editor	delegate	document.body	'change'	'[name="inspector-status"]'
+inspector-and-editor	delegate	document.body	'change'	'[name="inspector-started-phase"]'
 inspector-and-editor	delegate	document.body	'input'	'[name="ticket-conflict-resolution"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="accept-remote-ticket-field"]'
 inspector-and-editor	delegate	document.body	'click'	'[data-action="apply-ticket-field-merge"]'

@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-YSZ711 covers the git-backed Started phase inspector control with
+`clients/web/src/components/ticket-metadata-controls.test.ts` for all six choices,
+clearing, and read-only rendering; `clients/web/tests/providers.spec.ts` exercises
+phase selection and clearing through the browser while status stays Started.
+
 HS2-TPF3EB moves non-atomic provider update progress from toasts to the app-level loading
 indicator. `clients/web/src/bulk-update-progress.test.ts` covers start, advance, repeat,
 overlap, and out-of-order completion; `clients/web/tests/providers.spec.ts` covers the real

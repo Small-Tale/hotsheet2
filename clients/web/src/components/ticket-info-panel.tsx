@@ -6,6 +6,7 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Select } from '@kerfjs/ui/select';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { CircleAlert, Plus } from 'lucide';
 
@@ -15,7 +16,7 @@ import { DETAILS_FEEDBACK_ID, textRequestsFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
 import { FeedbackPrompt, type NoteCardProps, NoteEditor, RespondToFeedbackButton } from './note-card';
-import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
+import { BlockedBadge, STARTED_PHASE_LABELS, StatusBadge, type TicketStatus } from './status-badge';
 import { TicketCategorySelect } from './ticket-category-select';
 import { TicketInspectorPanel } from './ticket-inspector-panel';
 import { TicketNotes } from './ticket-notes';
@@ -33,6 +34,7 @@ export interface TicketInfoPanelProps {
   tagSuggestions?: readonly string[];
   tagPopoverId?: string;
   canUpdate?: boolean;
+  canEditStartedPhase?: boolean;
   canEditText?: boolean;
   canAddNotes?: boolean;
   canEditNotes?: boolean;
@@ -135,6 +137,7 @@ function LoadedTicketInfoPanel({
   tagSuggestions,
   tagPopoverId,
   canUpdate = true,
+  canEditStartedPhase = false,
   canEditText = canUpdate,
   canAddNotes = true,
   canEditNotes = true,
@@ -185,6 +188,20 @@ function LoadedTicketInfoPanel({
             </div>
           </ListInsetControl>
         </div>
+        {status === 'started' && canEditStartedPhase && (
+          <div class="ticket-info-panel__phase-field">
+            <Select
+              name="inspector-started-phase"
+              value={startedPhase ?? ''}
+              label="Started phase"
+              choices={[
+                { value: '', label: 'No phase' },
+                ...Object.entries(STARTED_PHASE_LABELS).map(([value, label]) => ({ value, label })),
+              ]}
+              triggerWidth="fill"
+            />
+          </div>
+        )}
       </section>
       <section class="ticket-info-panel__section ticket-info-panel__blocked-section">
         {blockedReasonEditing ? (

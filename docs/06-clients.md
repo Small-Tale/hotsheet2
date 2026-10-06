@@ -61,6 +61,9 @@ clears after the request sequence, even on failure; successful writes remain app
 failed ticket is restored and reported. Every metadata/tag/delete write is provider-capability
 gated and carries the freshly read opaque
 concurrency token; a stale ticket fails instead of overwriting a collaborator's edit.
+Git-backed Started tickets expose a Started phase picker in the inspector and reader. It
+offers all six phases and a clear option while preserving the lifecycle status; external
+providers show the phase badge without an edit control.
 In the inspector and reader, Add tag is a distinct button that opens its own anchored,
 viewport-contained popover with a labeled autocomplete field. Enter or comma can add
 repeated tags, Escape restores focus to the trigger, and read-only providers omit the

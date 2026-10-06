@@ -13938,8 +13938,36 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await expect(statusField.locator('.kui-list-inset-control')).toHaveCount(1);
   await expect(status).toHaveJSProperty('disabled', true);
   await expect(status).toHaveAttribute('aria-label', 'Status, Started');
+  await expect(inspector.locator('wa-select[name="inspector-started-phase"]')).toHaveCount(0);
   await expect(status.locator('.kui-select__custom-selected [data-lucide="clock"]')).toBeVisible();
   await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-readonly.png');
+});
+
+test('edits and clears the Started phase without changing lifecycle status', async ({ page }) => {
+  await mockProject(page);
+  const patches: Record<string, unknown>[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && new URL(request.url()).pathname.includes('/tickets/'))
+      patches.push(request.postDataJSON());
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByText('Use real project tickets').click();
+  const inspector = page.locator('#app-right-rail');
+  const phase = inspector.locator('wa-select[name="inspector-started-phase"]');
+  await expect(phase).toBeVisible();
+  await expect(phase).toHaveJSProperty('value', '');
+  await phase.click();
+  await phase.locator('wa-option[value="initial_testing"]').click();
+  await expect.poll(() => patches.at(-1)?.started_phase).toBe('initial_testing');
+  await expect(inspector.locator('wa-select[name="inspector-status"]')).toHaveJSProperty('value', 'started');
+  await expect(phase).toHaveJSProperty('value', 'initial_testing');
+  await phase.click();
+  await phase.locator('wa-option[value=""]').click();
+  await expect.poll(() => patches.at(-1)?.started_phase).toBeNull();
+  await expect(phase).toHaveJSProperty('value', '');
+  expect(patches.every((patch) => !('status' in patch))).toBe(true);
 });
 
 test('opens a checkout, discovers its source, and drives real shell ticket flows', async ({ page }) => {
