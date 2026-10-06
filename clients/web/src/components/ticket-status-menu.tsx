@@ -2,6 +2,7 @@ import './ticket-status-menu.css';
 
 import { Select, type SelectChoice } from '@kerfjs/ui/select';
 
+import type { StartedPhase } from '../api';
 import { StatusBadge, statusPresentation, type TicketStatus } from './status-badge';
 
 export const TICKET_STATUS_CHOICES: readonly SelectChoice<TicketStatus>[] = (
@@ -9,10 +10,12 @@ export const TICKET_STATUS_CHOICES: readonly SelectChoice<TicketStatus>[] = (
 ).map((value) => ({ value, ...statusPresentation(value), separatorBefore: value === 'backlog' }));
 export function TicketStatusMenu({
   value,
+  startedPhase,
   disabled = false,
   placeholder = false,
 }: {
   value: TicketStatus;
+  startedPhase?: StartedPhase;
   disabled?: boolean;
   placeholder?: boolean;
 }) {
@@ -28,7 +31,7 @@ export function TicketStatusMenu({
         placeholder={placeholder}
         presentation="inline"
         caret={false}
-        renderSelected={(choice) => <StatusBadge status={choice.value} weight="semibold" />}
+        renderSelected={(choice) => <StatusBadge status={choice.value} startedPhase={startedPhase} weight="semibold" />}
       />
     </span>
   );

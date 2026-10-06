@@ -542,6 +542,11 @@ and identity-less legacy entries remain conservatively blocking.
   polling requests; claim/release changes otherwise arrive through the shared live-update
   channel.
 
+- **Started phase.** List rows and the ticket inspector show the optional phase label
+  inside the Started badge. `Final testing` remains visible after a worker releases
+  the claim to wait for remote CI; the live-work spinner and worker name still follow the lease.
+  Legacy Started tickets without a phase keep the plain `Started` label.
+
 - **Custom project commands.** The sidebar renders machine-local typed command
   definitions as collapsible groups with running feedback, stop confirmation, latest
   outcome, and press-and-hold output history. Definitions are edited in Project

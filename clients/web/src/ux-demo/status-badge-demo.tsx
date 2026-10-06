@@ -1,6 +1,7 @@
 import { Select } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
+import type { StartedPhase } from '../api';
 import {
   StatusBadge,
   type StatusBadgeAppearance,
@@ -11,6 +12,7 @@ import { syncSettingsControls } from './settings-controls';
 
 export const statusBadgeSettings = {
   status: signal<TicketStatus>('started'),
+  startedPhase: signal<'' | StartedPhase>(''),
   showIcon: signal(true),
   appearance: signal<StatusBadgeAppearance>('filled'),
   compact: signal(false),
@@ -19,6 +21,7 @@ export const statusBadgeSettings = {
 
 export function resetStatusBadgeDemo(root?: ParentNode): void {
   statusBadgeSettings.status.value = 'started';
+  statusBadgeSettings.startedPhase.value = '';
   statusBadgeSettings.showIcon.value = true;
   statusBadgeSettings.appearance.value = 'filled';
   statusBadgeSettings.compact.value = false;
@@ -27,6 +30,7 @@ export function resetStatusBadgeDemo(root?: ParentNode): void {
     syncSettingsControls(root, 'status-badge', {
       values: {
         status: statusBadgeSettings.status.value,
+        'started-phase': statusBadgeSettings.startedPhase.value,
         appearance: statusBadgeSettings.appearance.value,
         weight: statusBadgeSettings.weight.value,
       },
@@ -40,6 +44,7 @@ export function StatusBadgeDemo() {
       <div class="component-stage__canvas">
         {StatusBadge({
           status: statusBadgeSettings.status.value,
+          startedPhase: statusBadgeSettings.startedPhase.value || undefined,
           showIcon: statusBadgeSettings.showIcon.value,
           appearance: statusBadgeSettings.appearance.value,
           compact: statusBadgeSettings.compact.value,
@@ -64,6 +69,20 @@ export function StatusBadgeSettings() {
           value,
           label: value.replace('_', ' '),
         }))}
+      />
+      <Select
+        name="started-phase"
+        label="Started phase"
+        value={statusBadgeSettings.startedPhase.value}
+        choices={[
+          { value: '', label: 'None' },
+          { value: 'analyzing', label: 'Analyzing' },
+          { value: 'planning', label: 'Planning' },
+          { value: 'working', label: 'Working' },
+          { value: 'initial_testing', label: 'Initial testing' },
+          { value: 'integrating', label: 'Integrating' },
+          { value: 'final_testing', label: 'Final testing' },
+        ]}
       />
       <Select
         name="appearance"

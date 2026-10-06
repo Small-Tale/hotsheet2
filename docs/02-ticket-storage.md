@@ -491,6 +491,23 @@ setting its current active status is an idempotent repair: `hotsheet edit <slug>
 started` (or `not_started`) clears the stale terminal-only metadata without changing its
 active state.
 
+### Started phases and remote verification
+
+`started_phase` is optional progress within `status: started`: `analyzing`,
+`planning`, `working`, `initial_testing`, `integrating`, or `final_testing`.
+It records the current kind of work, while a live claim records who is working now.
+New claims from Not Started begin at `analyzing`; existing Started tickets retain
+their phase across release, renewal, and exact reclaim. Leaving Started clears it.
+Legacy Started tickets may have no phase.
+
+After affected local checks pass and the integrated commit is pushed, a worker may
+record the commit and remote CI run, set `final_testing`, and release the claim.
+This lets the worker take another ticket while the run proceeds. Automatic local and
+distributed claim-next selection skip final-testing tickets, even after the lease is
+released; an exact claim remains available to record CI results and complete or repair
+the ticket. A CI failure in the ticket's own change stays with that ticket. An
+independent failure gets a prioritized follow-up bug linked from its completion note.
+
 ## 2.7 Concurrency & automatic conflict resolution
 
 > **Maintainer requirement (2026-08-19): conflict resolution must be "almost

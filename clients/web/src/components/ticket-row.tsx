@@ -4,6 +4,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ChevronDown, ChevronsUp, ChevronUp, CircleAlert, type IconNode, Minus, Star } from 'lucide';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
+import type { StartedPhase } from '../api';
 import { SEARCH_AND_COMPOSER_ACTIONS } from '../interaction-attrs/search-and-composer';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { ActiveClaimSpinner, ClaimEta } from './active-claim';
@@ -29,6 +30,7 @@ export interface TicketRowProps {
   slug: string;
   title: string;
   status: TicketStatus;
+  startedPhase?: StartedPhase;
   priority: TicketPriority;
   category: string;
   tags: string[];
@@ -209,7 +211,9 @@ export function TicketRow(raw: TicketRowProps) {
                   </span>
                 </button>
               )}
-              {props.presentation === 'list' && <StatusBadge status={props.status} compact />}
+              {props.presentation === 'list' && (
+                <StatusBadge status={props.status} startedPhase={props.startedPhase} compact />
+              )}
               {props.busy && <ActiveClaimIndicator agentName={props.agentName} />}
               {needsReview && (
                 <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review">
@@ -220,9 +224,11 @@ export function TicketRow(raw: TicketRowProps) {
                 </span>
               )}
               {props.blocked && <BlockedBadge compact />}
-              <span class="ticket-list-row__owner" aria-label={props.agentName}>
-                {props.agentName}
-              </span>
+              {props.busy && (
+                <span class="ticket-list-row__owner" aria-label={props.agentName}>
+                  {props.agentName}
+                </span>
+              )}
               {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
               {confidence !== undefined && <ConfidenceBadge value={confidence} />}
               {props.tags.length > 0 && (

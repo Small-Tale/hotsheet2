@@ -11,8 +11,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use hotsheet_cli::{git_init, run_import};
 use hotsheet_model::{
-    CloseReason, Confidence, NoteKind, Priority, ReviewKind, ReviewRequest, Status, Ticket,
-    Timestamp, Ulid, parse_file, to_file_string,
+    CloseReason, Confidence, NoteKind, Priority, ReviewKind, ReviewRequest, StartedPhase, Status,
+    Ticket, Timestamp, Ulid, parse_file, to_file_string,
 };
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, OsKeychain, Person,
@@ -321,6 +321,12 @@ enum Cmd {
         /// One of not_started|started|completed|verified|backlog|archive|deleted|moved.
         #[arg(long)]
         status: Option<String>,
+        /// Progress within Started (analyzing|planning|working|initial_testing|integrating|final_testing).
+        #[arg(long, conflicts_with = "clear_started_phase")]
+        started_phase: Option<String>,
+        /// Clear the Started phase.
+        #[arg(long)]
+        clear_started_phase: bool,
         /// Replace the tag list (repeatable): `--tag a --tag b`.
         #[arg(long = "tag")]
         tags: Vec<String>,
@@ -1320,6 +1326,8 @@ fn main() -> Result<()> {
             category,
             priority,
             status,
+            started_phase,
+            clear_started_phase,
             tags,
             blocked_by,
             clear_blocked_by,
@@ -1354,6 +1362,8 @@ fn main() -> Result<()> {
                 category,
                 priority,
                 status,
+                started_phase,
+                clear_started_phase,
                 tags,
                 blocked_by,
                 clear_blocked_by,
@@ -4330,6 +4340,8 @@ fn cmd_edit(
     category: Option<String>,
     priority: Option<String>,
     status: Option<String>,
+    started_phase: Option<String>,
+    clear_started_phase: bool,
     tags: Vec<String>,
     blocked_by: Vec<String>,
     clear_blocked_by: bool,
@@ -4383,6 +4395,15 @@ fn cmd_edit(
         category,
         priority: priority.as_deref().map(parse_priority).transpose()?,
         status: status.as_deref().map(parse_status_str).transpose()?,
+        started_phase: if clear_started_phase {
+            Some(None)
+        } else {
+            started_phase
+                .as_deref()
+                .map(parse_started_phase)
+                .transpose()?
+                .map(Some)
+        },
         tags: (!tags.is_empty()).then_some(tags),
         up_next,
         blocked_by,
@@ -4721,6 +4742,20 @@ fn parse_status_str(s: &str) -> Result<Status> {
         other => bail!(
             "invalid status '{other}' \
              (not_started|started|completed|verified|backlog|archive|deleted|moved)"
+        ),
+    })
+}
+
+fn parse_started_phase(s: &str) -> Result<StartedPhase> {
+    Ok(match s {
+        "analyzing" => StartedPhase::Analyzing,
+        "planning" => StartedPhase::Planning,
+        "working" => StartedPhase::Working,
+        "initial_testing" => StartedPhase::InitialTesting,
+        "integrating" => StartedPhase::Integrating,
+        "final_testing" => StartedPhase::FinalTesting,
+        other => bail!(
+            "invalid started phase '{other}' (analyzing|planning|working|initial_testing|integrating|final_testing)"
         ),
     })
 }

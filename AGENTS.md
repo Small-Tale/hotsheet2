@@ -46,6 +46,9 @@ lookups, a single-line fix, or a git commit. When in doubt, create the ticket.
   `--eta <duration>` (for example `--eta 45m`; MCP `eta`) with your honest estimate of when
   you will finish. If `renew` reports that the ETA has passed, renew again with a new `--eta`.
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
+- On git-backed Started tickets, keep `started_phase` current with
+  `hotsheet-cli edit <slug> --started-phase <analyzing|planning|working|initial_testing|integrating|final_testing>`.
+  The phase is durable progress; only the live claim signals active work.
 - Or the MCP tools: `hotsheet_claim_next` / `hotsheet_renew` / `hotsheet_release` for the lease,
   and `hotsheet_update` (it takes a `note`) / `hotsheet_close`.
 - Create work with `hotsheet-cli new --title "…" --category <bug|feature|task>` or
@@ -166,6 +169,14 @@ Keep the repo in a known-good state.
    one commit only when their changes overlap so strongly that separating them would be unsafe
    or misleading.
 4. Get the worktree clean before starting the next ticket.
+
+**Final remote CI exception:** after local gates pass and the integrated commit is
+pushed, a Started ticket may enter `final_testing` while its remote CI run continues.
+Record the commit and run in a ticket note, release the claim, and work another ready
+ticket; automatic claim-next skips final-testing tickets. Reclaim the exact ticket
+when CI resolves and complete it after a green result. Repair failures caused by that
+ticket's own change before completion; create a prioritized follow-up bug for an
+independent failure. This does not defer local gates, integration, or pushing.
 
 **Pushing is up to this repository.** Follow whatever push/PR/review conventions this project
 already uses; this default guidance does not require or forbid pushing on its own.

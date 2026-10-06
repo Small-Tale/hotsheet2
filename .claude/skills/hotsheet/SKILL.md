@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 57 -->
+<!-- hotsheet-skill-version: 58 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -48,6 +48,9 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    verify scope, run the completion checklist, and mark completed with a result and
    verification note. Delegated workers claim their own exact assigned ticket and use a
    distinct worker id; the primary agent remains responsible for integration.
+   For git-backed Started tickets, keep `started_phase` current as work moves through
+   analyzing, planning, working, initial_testing, integrating, and final_testing;
+   use `hotsheet-cli edit <id> --started-phase <phase>` or the equivalent MCP update.
 4. **Create every follow-up immediately, without asking.** As soon as you identify an
    unfinished step, open question, known gap, out-of-scope task, or designed-but-unbuilt
    behavior, create its ticket. Do not ask permission, wait, promise to file it later, or
@@ -64,6 +67,12 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    its own push, PR, and review conventions (for example per ticket, in coherent
    batches, or through review) as its instructions state. This skill neither requires
    nor forbids pushing on its own.
+   A final remote CI run may continue after a locally green, integrated commit has been
+   pushed. Set the Started phase to `final_testing`, note the commit and CI run, release
+   the claim, and take another ready ticket. Claim-next skips such waiting tickets; reclaim
+   the exact ticket when CI resolves and finish it. Repair a failure caused by the ticket's
+   own change before completion; for an independent failure, create a prioritized follow-up
+   bug and cite it in the completing note. Do not defer local gates or integration to CI.
 6. **Re-read the queue after every completion.** Concurrent work and new findings can
    change the plan. Continue until no actionable Up Next ticket remains.
 

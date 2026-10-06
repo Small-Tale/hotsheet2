@@ -39,6 +39,8 @@ pub struct ApiTicket {
     pub category: String,
     pub priority: Priority,
     pub status: Status,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_phase: Option<hotsheet_model::StartedPhase>,
     pub up_next: bool,
     /// Computed review state carried on full responses as well as compact rows so
     /// selecting a ticket cannot discard the list's needs-review presentation.
@@ -152,6 +154,7 @@ impl ApiTicket {
             category: t.category.clone(),
             priority: t.priority,
             status: t.status,
+            started_phase: t.started_phase,
             up_next: t.up_next,
             feedback_needed: t.feedback_needed(),
             tags: t.tags.clone(),
@@ -258,6 +261,8 @@ pub struct TicketRow {
     pub category: Option<String>,
     pub priority: Option<String>,
     pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_phase: Option<String>,
     pub up_next: bool,
     /// True when the latest regular/feedback exchange ends in `feedback_needed` — it is
     /// waiting on the user. A later regular note clears the state. Computed here (a
@@ -311,6 +316,7 @@ impl From<&Ticket> for TicketRow {
             category: Some(t.category.clone()),
             priority: Some(enum_str(&t.priority)),
             status: Some(enum_str(&t.status)),
+            started_phase: t.started_phase.as_ref().map(enum_str),
             up_next: t.up_next,
             feedback_needed: t.feedback_needed(),
             tags: t.tags.clone(),

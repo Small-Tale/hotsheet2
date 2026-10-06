@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::enums::{CloseReason, NoteKind, Priority, ReviewKind, Status};
+use crate::enums::{CloseReason, NoteKind, Priority, ReviewKind, StartedPhase, Status};
 use crate::ids::Ulid;
 use crate::timestamp::Timestamp;
 
@@ -266,6 +266,9 @@ pub struct Ticket {
     pub priority: Priority,
     #[serde(default)]
     pub status: Status,
+    /// Optional progress inside Started; absent on legacy tickets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_phase: Option<StartedPhase>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub up_next: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

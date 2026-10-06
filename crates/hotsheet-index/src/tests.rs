@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use hotsheet_model::{Priority, Status, Timestamp, Ulid};
+use hotsheet_model::{Priority, StartedPhase, Status, Timestamp, Ulid};
 use hotsheet_ticketing::{
     FsStore, NewTicket, StoreMetadata, TicketCollection, TicketPatch, TicketQuery, ops,
 };
@@ -88,6 +88,37 @@ fn ops_ids(store: &FsStore, q: &TicketQuery) -> HashSet<String> {
 fn rebuild_indexes_every_ticket() {
     let (_d, _s, ix) = seeded();
     assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 3);
+}
+
+#[test]
+fn started_phase_survives_index_rebuild_and_matches_file_scan() {
+    let (_dir, store, index) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    ops::update(
+        &store,
+        &id,
+        Timestamp::new("2026-08-19T00:01:00Z"),
+        TicketPatch {
+            status: Some(Status::Started),
+            started_phase: Some(Some(StartedPhase::FinalTesting)),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    index.rebuild_from_store(&store).unwrap();
+    let indexed = index.query(&TicketQuery::default()).unwrap();
+    let scan: Vec<_> = ops::query(&store, &TicketQuery::default())
+        .unwrap()
+        .iter()
+        .map(TicketRow::from)
+        .collect();
+    let indexed_phase = indexed.iter().find(|row| row.id == id.to_string()).unwrap();
+    let scanned_phase = scan.iter().find(|row| row.id == id.to_string()).unwrap();
+    assert_eq!(
+        indexed_phase.started_phase.as_deref(),
+        Some("final_testing")
+    );
+    assert_eq!(indexed_phase.started_phase, scanned_phase.started_phase);
 }
 
 #[test]

@@ -174,6 +174,7 @@ fn base_tools_list() -> Value {
                 "id": str_prop("slug or ULID"),
                 "title": str_prop(""), "details": str_prop(""), "category": str_prop(""),
                 "priority": str_prop(""), "status": str_prop(""),
+                "started_phase": { "type": ["string", "null"], "enum": ["analyzing", "planning", "working", "initial_testing", "integrating", "final_testing", null], "description": "optional progress within Started; null clears it" },
                 "expected_token": str_prop("opaque optimistic-concurrency token returned by get"),
                 "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
@@ -1415,6 +1416,11 @@ mod core_backend {
                         category: str_field(body, "category"),
                         priority: opt_enum(body, "priority")?,
                         status: opt_enum(body, "status")?,
+                        started_phase: match body.get("started_phase") {
+                            None => None,
+                            Some(Value::Null) => Some(None),
+                            Some(_) => Some(opt_enum(body, "started_phase")?),
+                        },
                         tags: body
                             .get("tags")
                             .filter(|v| !v.is_null())

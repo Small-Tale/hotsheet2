@@ -2,6 +2,7 @@ import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { signal } from 'kerfjs';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
+import type { StartedPhase } from '../api';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../components/category-presentation';
 import type { TicketStatus } from '../components/status-badge';
 import { type TicketPriority, TicketRow } from '../components/ticket-row';
@@ -26,6 +27,7 @@ const TICKET_ROW_CONFIDENCE_CHOICES: SelectChoice[] = [
 export const ticketRowSettings = {
   title: signal('Build the first client ticket list'),
   status: signal<TicketStatus>('started'),
+  startedPhase: signal<'' | StartedPhase>(''),
   priority: signal<TicketPriority>('high'),
   category: signal('feature'),
   tags: signal('client, ux'),
@@ -48,6 +50,7 @@ export const ticketRowSettings = {
 export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.title.value = 'Build the first client ticket list';
   ticketRowSettings.status.value = 'started';
+  ticketRowSettings.startedPhase.value = '';
   ticketRowSettings.priority.value = 'high';
   ticketRowSettings.category.value = 'feature';
   ticketRowSettings.tags.value = 'client, ux';
@@ -69,6 +72,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
       values: {
         title: ticketRowSettings.title.value,
         status: ticketRowSettings.status.value,
+        'started-phase': ticketRowSettings.startedPhase.value,
         priority: ticketRowSettings.priority.value,
         category: ticketRowSettings.category.value,
         tags: ticketRowSettings.tags.value,
@@ -98,6 +102,7 @@ export function TicketRowDemo() {
           slug: 'HS2-D3M0',
           title: ticketRowSettings.title.value,
           status: ticketRowSettings.status.value,
+          startedPhase: ticketRowSettings.startedPhase.value || undefined,
           priority: ticketRowSettings.priority.value,
           category: ticketRowSettings.category.value,
           tags: ticketRowSettings.tags.value.split(','),
@@ -142,6 +147,20 @@ export function TicketRowSettings() {
           value,
           label: value.replace('_', ' '),
         }))}
+      />
+      <Select
+        name="started-phase"
+        label="Started phase"
+        value={ticketRowSettings.startedPhase.value}
+        choices={[
+          { value: '', label: 'None' },
+          { value: 'analyzing', label: 'Analyzing' },
+          { value: 'planning', label: 'Planning' },
+          { value: 'working', label: 'Working' },
+          { value: 'initial_testing', label: 'Initial testing' },
+          { value: 'integrating', label: 'Integrating' },
+          { value: 'final_testing', label: 'Final testing' },
+        ]}
       />
       <Select
         name="priority"

@@ -2826,6 +2826,8 @@ demoListeners.add(
     const control = target as FormControl;
     if (control.getAttribute('name') === 'status')
       statusBadgeSettings.status.value = control.value as typeof statusBadgeSettings.status.value;
+    if (control.getAttribute('name') === 'started-phase')
+      statusBadgeSettings.startedPhase.value = control.value as typeof statusBadgeSettings.startedPhase.value;
     if (control.getAttribute('name') === 'appearance')
       statusBadgeSettings.appearance.value = control.value as typeof statusBadgeSettings.appearance.value;
     if (control.getAttribute('name') === 'weight')
@@ -3508,6 +3510,9 @@ demoListeners.add(
     switch (control.getAttribute('name')) {
       case 'status':
         ticketRowSettings.status.value = control.value as typeof ticketRowSettings.status.value;
+        break;
+      case 'started-phase':
+        ticketRowSettings.startedPhase.value = control.value as typeof ticketRowSettings.startedPhase.value;
         break;
       case 'priority':
         ticketRowSettings.priority.value = control.value as typeof ticketRowSettings.priority.value;

@@ -332,6 +332,7 @@ impl JiraProvider {
             category: issue.fields.issue_type.name,
             priority,
             status,
+            started_phase: None,
             up_next: false,
             feedback_needed: false,
             tags: issue.fields.labels,
@@ -639,6 +640,9 @@ impl TicketProvider for JiraProvider {
     ) -> Result<ApiTicket, ProviderError> {
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
+        }
+        if patch.started_phase.is_some() {
+            return self.unsupported("started_phase");
         }
         let current = self.issue(native_id)?;
         if patch

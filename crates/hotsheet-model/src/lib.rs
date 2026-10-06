@@ -14,7 +14,7 @@ pub mod ids;
 pub mod ticket;
 pub mod timestamp;
 
-pub use enums::{CloseReason, NoteKind, Priority, ReviewKind, Status};
+pub use enums::{CloseReason, NoteKind, Priority, ReviewKind, StartedPhase, Status};
 pub use format::{ParseError, parse_file, to_file_string};
 pub use ids::{Ulid, derive_slug};
 pub use ticket::{

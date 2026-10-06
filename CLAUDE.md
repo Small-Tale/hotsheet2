@@ -85,6 +85,9 @@ Workers renew during long work and release when they stop. Never
 derive live activity from status or claim count. Self-claim workers use `claim-next`;
 general orchestration and delegated agents use exact `claim <slug-or-id>`, then renew and
 release that same ticket with one stable, session-specific worker id.
+On git-backed Started tickets, set `started_phase` as work moves through analyzing,
+planning, working, initial testing, integrating, and final testing. The phase is
+durable progress; it does not signal a live worker without a claim.
 
 ## Client UI stack
 
@@ -372,6 +375,17 @@ Keep the repo in a **known-good state**. After each completed ticket (or other
 coherent user-requested unit), finish its documentation and ticket notes, run the
 required gates, commit it, and push it **before starting the next ticket**. Do not
 accumulate completed tickets as uncommitted or unpushed work.
+
+Remote CI can be a final verification handoff. After the affected local gates pass,
+the ticket's integrated commit is pushed, and the CI run is identified in a ticket
+note, move a Started ticket to `final_testing` and release its live claim. Continue
+other ready tickets while CI runs; the waiting ticket is not a claim-next candidate.
+Reclaim that exact ticket when the run resolves, record its outcome, and complete it
+when the result is green. If CI finds a defect in the ticket's own change, repair
+and verify that ticket before completion. For an independent failure, create a
+prioritized follow-up bug and record its slug and the CI evidence in the original
+ticket's completion note. A remote check never excuses a failing local gate or an
+unintegrated, unpushed change.
 
 For each ticket:
 

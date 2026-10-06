@@ -3,6 +3,8 @@ import './status-badge.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Archive, BadgeCheck, Circle, CircleCheck, Clock, Clock3, type IconNode, Trash2 } from 'lucide';
 
+import type { StartedPhase } from '../api';
+
 export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog' | 'archive' | 'deleted';
 export type StatusBadgeAppearance = 'filled' | 'plain';
 /** Label weight: `semibold` is the quieter trigger label inside the TicketStatusMenu. */
@@ -10,6 +12,7 @@ export type StatusBadgeWeight = 'bold' | 'semibold';
 
 export interface StatusBadgeProps {
   status: TicketStatus;
+  startedPhase?: StartedPhase;
   showIcon?: boolean;
   appearance?: StatusBadgeAppearance;
   compact?: boolean;
@@ -35,6 +38,7 @@ export function statusPresentation(status: TicketStatus) {
 
 export function StatusBadge({
   status,
+  startedPhase,
   showIcon = true,
   appearance = 'filled',
   compact = false,
@@ -44,6 +48,17 @@ export function StatusBadge({
   slot,
 }: StatusBadgeProps) {
   const value = statusPresentation(status);
+  const phaseLabel =
+    startedPhase && status === 'started'
+      ? {
+          analyzing: 'Analyzing',
+          planning: 'Planning',
+          working: 'Working',
+          initial_testing: 'Initial testing',
+          integrating: 'Integrating',
+          final_testing: 'Final testing',
+        }[startedPhase]
+      : undefined;
   const className = `status-badge status-badge--${status} status-badge--${appearance}${compact ? ' status-badge--compact' : ''}${interactive ? ' status-badge--interactive' : ''}${weight === 'semibold' ? ' status-badge--semibold' : ''}`;
   const content = (
     <>
@@ -52,7 +67,7 @@ export function StatusBadge({
           <LucideIcon icon={value.icon} name={value.iconName} size={compact ? 'xs' : 13.6} />
         </span>
       )}
-      <span>{value.label}</span>
+      <span>{phaseLabel ?? value.label}</span>
     </>
   );
   return interactive ? (

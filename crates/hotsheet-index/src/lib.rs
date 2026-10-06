@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 18;
+const SCHEMA_VERSION: i64 = 19;
 
 /// How long an index connection waits for another process's write lock.
 const INDEX_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -59,6 +59,7 @@ CREATE TABLE tickets (
   priority        TEXT,
   priority_rank   INTEGER NOT NULL DEFAULT 2,
   status          TEXT,
+  started_phase   TEXT,
   status_rank     INTEGER NOT NULL DEFAULT 0,
   close_reason    TEXT,
   duplicate_of    TEXT,
@@ -447,8 +448,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation,legacy_number,claim_eta_at,claim_started_at,latest_confidence,started_phase) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -460,7 +461,7 @@ impl Index {
              claim_count=excluded.claim_count,file_path=excluded.file_path,\
              content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed,has_media_annotation=excluded.has_media_annotation,\
              legacy_number=excluded.legacy_number,claim_eta_at=excluded.claim_eta_at,claim_started_at=excluded.claim_started_at,\
-             latest_confidence=excluded.latest_confidence",
+             latest_confidence=excluded.latest_confidence,started_phase=excluded.started_phase",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -474,6 +475,7 @@ impl Index {
                 t.legacy_number, ts(&t.claim_eta_at),
                 hotsheet_ticketing::ops::claim_started_at(t).map(|at| at.as_str().to_string()),
                 hotsheet_ticketing::ops::latest_confidence(t).map(|score| i64::from(score.get())),
+                t.started_phase.as_ref().map(enum_str),
             ],
         )?;
 
@@ -1087,7 +1089,7 @@ impl Index {
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.blocked_reason,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
-             t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence \
+             t.feedback_needed,t.legacy_number,t.claim_eta_at,t.claim_started_at,t.latest_confidence,t.started_phase \
              FROM {from} WHERE {} ORDER BY {order_clause}{limit}",
             wheres.join(" AND ")
         );
@@ -1107,6 +1109,7 @@ impl Index {
                     category: r.get(4)?,
                     priority: r.get(5)?,
                     status: r.get(6)?,
+                    started_phase: r.get(27)?,
                     up_next: r.get::<_, i64>(7)? != 0,
                     feedback_needed: r.get::<_, i64>(22)? != 0,
                     tags: json_vec(r.get::<_, String>(8)?),

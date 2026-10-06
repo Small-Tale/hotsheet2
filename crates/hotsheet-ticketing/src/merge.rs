@@ -20,7 +20,7 @@
 
 use std::collections::BTreeMap;
 
-use hotsheet_model::{Attachment, ClaimEvent, Note, Ticket};
+use hotsheet_model::{Attachment, ClaimEvent, Note, Status, Ticket};
 
 /// How the `details` body resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,6 +70,16 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
     m.category = pick3(&base.category, &ours.category, &theirs.category, ours_wins);
     m.priority = pick3(&base.priority, &ours.priority, &theirs.priority, ours_wins);
     m.status = pick3(&base.status, &ours.status, &theirs.status, ours_wins);
+    m.started_phase = if m.status == Status::Started {
+        pick3(
+            &base.started_phase,
+            &ours.started_phase,
+            &theirs.started_phase,
+            ours_wins,
+        )
+    } else {
+        None
+    };
     m.up_next = pick3(&base.up_next, &ours.up_next, &theirs.up_next, ours_wins);
     m.blocked_reason = pick3(
         &base.blocked_reason,

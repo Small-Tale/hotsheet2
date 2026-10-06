@@ -31,6 +31,19 @@ pub enum Status {
     Moved,
 }
 
+/// Progress within `started`. This is separate from a live claim: a ticket can
+/// remain in final testing while its worker is free to take another ticket.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StartedPhase {
+    Analyzing,
+    Planning,
+    Working,
+    InitialTesting,
+    Integrating,
+    FinalTesting,
+}
+
 impl Status {
     /// Whether the ticket is in an **active** state — the only states where being on the
     /// Up Next queue makes sense (`not_started` / `started`). Moving to any other state

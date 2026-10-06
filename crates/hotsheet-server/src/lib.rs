@@ -3491,6 +3491,11 @@ fn do_provider_update(
                 category: req.category,
                 priority: opt_parse(req.priority.as_deref())?,
                 status,
+                started_phase: req
+                    .started_phase
+                    .as_ref()
+                    .map(|phase| opt_parse(phase.as_deref()))
+                    .transpose()?,
                 tags: req.tags,
                 up_next: req.up_next,
                 blocked_by: req.blocked_by,
@@ -6807,6 +6812,11 @@ fn do_update(
         category: req.category,
         priority: opt_parse(req.priority.as_deref())?,
         status: opt_parse(req.status.as_deref())?,
+        started_phase: req
+            .started_phase
+            .as_ref()
+            .map(|phase| opt_parse(phase.as_deref()))
+            .transpose()?,
         tags: req.tags,
         up_next: req.up_next,
         blocked_by,
@@ -10931,6 +10941,8 @@ struct UpdateReq {
     category: Option<String>,
     priority: Option<String>,
     status: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nullable_patch")]
+    started_phase: Option<Option<String>>,
     tags: Option<Vec<String>>,
     up_next: Option<bool>,
     /// Replace the blocker set (slug or ULID); `[]` clears it, absent leaves it.

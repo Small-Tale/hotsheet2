@@ -423,6 +423,7 @@ impl GitHubProvider {
             category,
             priority,
             status,
+            started_phase: None,
             up_next: false,
             feedback_needed: false,
             tags: labels
@@ -813,6 +814,9 @@ impl TicketProvider for GitHubProvider {
         validate_number(native_id)?;
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
+        }
+        if patch.started_phase.is_some() {
+            return self.unsupported("started_phase");
         }
         if patch.blocked_by.as_ref().is_some_and(|v| !v.is_empty()) {
             return Err(ProviderError::Unsupported {

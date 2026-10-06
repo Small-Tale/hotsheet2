@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide';
 
-import type { CodeReview, DuplicateBacklink, TicketCloseReason } from '../api';
+import type { CodeReview, DuplicateBacklink, StartedPhase, TicketCloseReason } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
@@ -61,6 +61,7 @@ export interface TicketInspectorProps {
   composingNote?: boolean;
   composerDraft?: string;
   status: TicketStatus;
+  startedPhase?: StartedPhase;
   priority: TicketPriority;
   category: string;
   tags: string[];
@@ -139,6 +140,7 @@ export function ticketInspectorPanel({
   composingNote = false,
   composerDraft = '',
   status,
+  startedPhase,
   priority,
   category,
   tags,
@@ -390,6 +392,7 @@ export function ticketInspectorPanel({
       {activeTab === 'info' && (
         <TicketInfoPanel
           status={status}
+          startedPhase={startedPhase}
           priority={priority}
           category={category}
           tags={tags}

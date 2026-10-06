@@ -29,6 +29,7 @@ const KNOWN_KEYS: &[&str] = &[
     "category",
     "priority",
     "status",
+    "started_phase",
     "up_next",
     "tags",
     "blocked_by",
@@ -725,6 +726,20 @@ mod tests {
         let back = parse_file(&text).unwrap();
         assert_eq!(back, t);
         assert_eq!(to_file_string(&back), text);
+    }
+
+    #[test]
+    fn started_phase_round_trips_and_legacy_file_keeps_it_absent() {
+        let mut ticket = sample();
+        ticket.status = crate::Status::Started;
+        let legacy = to_file_string(&ticket);
+        assert!(!legacy.contains("started_phase:"));
+        assert_eq!(parse_file(&legacy).unwrap().started_phase, None);
+
+        ticket.started_phase = Some(crate::StartedPhase::FinalTesting);
+        let encoded = to_file_string(&ticket);
+        assert!(encoded.contains("started_phase: final_testing"));
+        assert_eq!(parse_file(&encoded).unwrap(), ticket);
     }
 
     #[test]

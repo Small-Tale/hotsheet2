@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 use hotsheet_model::{
     ClaimEvent, ClaimEventKind, CloseReason, Confidence, Note, NoteKind, Priority, ReviewRequest,
-    Status, Ticket, Timestamp, Ulid, derive_slug,
+    StartedPhase, Status, Ticket, Timestamp, Ulid, derive_slug,
 };
 
 use crate::store::{FsStore, StoreError};
@@ -608,6 +608,7 @@ pub fn create(
     );
     t.priority = new.priority;
     t.status = new.status;
+    t.started_phase = (new.status == Status::Started).then_some(StartedPhase::Analyzing);
     t.details = new.details;
     t.tags = new.tags;
     t.up_next = new.up_next && t.status.is_active();
@@ -626,6 +627,8 @@ pub struct TicketPatch {
     pub category: Option<String>,
     pub priority: Option<Priority>,
     pub status: Option<Status>,
+    /// Absent leaves the phase unchanged; present `None` clears it.
+    pub started_phase: Option<Option<StartedPhase>>,
     pub tags: Option<Vec<String>>,
     pub up_next: Option<bool>,
     /// Replace the blocker set (already resolved to ULIDs); `Some(vec![])` clears it.
@@ -679,6 +682,11 @@ pub fn update(
     }
     if let Some(s) = patch.status {
         t.status = s;
+        if s != Status::Started {
+            t.started_phase = None;
+        } else if previous_status != Status::Started && patch.started_phase.is_none() {
+            t.started_phase = Some(StartedPhase::Analyzing);
+        }
         if s.is_active() {
             // An explicit active status begins (or repairs) the current work cycle.
             // Clear terminal-only timestamps even when the ticket is already active so
@@ -710,6 +718,11 @@ pub fn update(
         }
         if s.is_active() && !previous_status.is_active() {
             end_claim(&mut t, &now);
+        }
+    }
+    if let Some(phase) = patch.started_phase {
+        if t.status == Status::Started {
+            t.started_phase = phase;
         }
     }
     // Also covers `--up-next` on an already-inactive ticket when no status is present in
@@ -876,6 +889,7 @@ pub fn prepare_not_working(
         });
     }
     ticket.status = Status::NotStarted;
+    ticket.started_phase = None;
     ticket.up_next = true;
     ticket.completed_at = None;
     ticket.verified_at = None;
@@ -1577,6 +1591,7 @@ pub fn close_as(
     if t.status.is_active() {
         let previous_status = t.status;
         t.status = Status::Completed;
+        t.started_phase = None;
         if t.completed_at.is_none() {
             t.completed_at = Some(now.clone());
         }
@@ -1615,6 +1630,7 @@ pub fn copy_ticket(
     t.updated_at = now;
     // A fresh copy starts clean: no claim, no close/move annotation, off Up Next.
     t.status = Status::NotStarted;
+    t.started_phase = None;
     t.up_next = false;
     t.claimed_by = None;
     t.claim_lease_expires_at = None;
@@ -1670,6 +1686,7 @@ pub fn move_ticket(
     let mut tombstone = orig;
     let previous_status = tombstone.status;
     tombstone.status = Status::Moved;
+    tombstone.started_phase = None;
     if previous_status != Status::Moved {
         append_status_transition(&mut tombstone, previous_status, Status::Moved, &now);
     }
@@ -1898,7 +1915,12 @@ pub fn claim_next_with_eta(
 
     let mut candidates: Vec<Ticket> = tickets
         .into_iter()
-        .filter(|t| is_open(t) && !is_blocked(t, &done) && claim_available(t, now))
+        .filter(|t| {
+            is_open(t)
+                && !is_blocked(t, &done)
+                && claim_available(t, now)
+                && t.started_phase != Some(StartedPhase::FinalTesting)
+        })
         .collect();
     candidates.sort_by(|a, b| {
         b.up_next
@@ -1981,6 +2003,7 @@ pub(crate) fn start_claimed_ticket(ticket: &mut Ticket, now: &Timestamp) {
         return;
     }
     ticket.status = Status::Started;
+    ticket.started_phase = Some(StartedPhase::Analyzing);
     append_status_transition(ticket, Status::NotStarted, Status::Started, now);
 }
 
@@ -2191,6 +2214,102 @@ mod tests {
 
     fn ts(s: &str) -> Timestamp {
         Timestamp::new(s)
+    }
+
+    #[test]
+    fn final_testing_releases_worker_without_reentering_claim_next() {
+        let (_dir, store) = store();
+        let first = create(
+            &store,
+            Ulid::new(),
+            "HS",
+            ts("2026-10-06T00:00:00Z"),
+            NewTicket {
+                title: "CI pending".into(),
+                up_next: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let second = create(
+            &store,
+            Ulid::new(),
+            "HS",
+            ts("2026-10-06T00:00:01Z"),
+            NewTicket {
+                title: "Next task".into(),
+                up_next: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let claimed = claim_with_eta(
+            &store,
+            &first.id,
+            &ts("2026-10-06T00:01:00Z"),
+            ts("2026-10-06T00:31:00Z"),
+            "worker",
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(claimed.started_phase, Some(StartedPhase::Analyzing));
+        let testing = update(
+            &store,
+            &first.id,
+            ts("2026-10-06T00:02:00Z"),
+            TicketPatch {
+                started_phase: Some(Some(StartedPhase::FinalTesting)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(testing.status, Status::Started);
+        let released = release(
+            &store,
+            &first.id,
+            ts("2026-10-06T00:03:00Z"),
+            "worker",
+            false,
+        )
+        .unwrap();
+        assert_eq!(released.started_phase, Some(StartedPhase::FinalTesting));
+        assert!(released.claimed_by.is_none());
+
+        let next = claim_next_with_eta(
+            &store,
+            &ts("2026-10-06T00:04:00Z"),
+            ts("2026-10-06T00:34:00Z"),
+            "worker",
+            None,
+            None,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(next.id, second.id);
+        let resumed = claim_with_eta(
+            &store,
+            &first.id,
+            &ts("2026-10-06T00:05:00Z"),
+            ts("2026-10-06T00:35:00Z"),
+            "ci-worker",
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(resumed.started_phase, Some(StartedPhase::FinalTesting));
+        let done = update(
+            &store,
+            &first.id,
+            ts("2026-10-06T00:06:00Z"),
+            TicketPatch {
+                status: Some(Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(done.started_phase, None);
+        assert!(done.claimed_by.is_none());
     }
 
     fn trashed(store: &FsStore, title: &str, prior: Status, deleted_at: &str) -> Ticket {

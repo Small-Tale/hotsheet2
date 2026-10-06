@@ -195,6 +195,7 @@ export interface Ticket {
   native_url?: string;
   title: string;
   status: string;
+  started_phase?: StartedPhase;
   connection_id: string;
   notes?: Note[];
   attachments?: Attachment[];
@@ -214,6 +215,7 @@ export interface Checkout {
   default_source?: string;
 }
 export type { TicketCloseReason } from './ticket-close';
+export type StartedPhase = 'analyzing' | 'planning' | 'working' | 'initial_testing' | 'integrating' | 'final_testing';
 export interface TicketRow {
   connection_id: string;
   native_id: string;
@@ -224,6 +226,7 @@ export interface TicketRow {
   category?: string;
   priority?: string;
   status?: string;
+  started_phase?: StartedPhase;
   up_next: boolean;
   feedback_needed: boolean;
   tags: string[];

@@ -3152,6 +3152,58 @@ fn claim_next_release_and_renew() {
 }
 
 #[test]
+fn final_testing_phase_keeps_remote_ci_wait_out_of_claim_next() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    hs(root).arg("init").assert().success();
+    let waiting = new_ticket(root, "Awaiting remote CI");
+    let ready = new_ticket(root, "Ready to work");
+    for slug in [&waiting, &ready] {
+        hs(root)
+            .args(["edit", slug, "--up-next"])
+            .assert()
+            .success();
+    }
+    hs(root)
+        .args(["claim", &waiting, "--worker", "agent"])
+        .assert()
+        .success();
+    hs(root)
+        .args(["edit", &waiting, "--started-phase", "final_testing"])
+        .assert()
+        .success();
+    hs(root)
+        .args(["release", &waiting, "--worker", "agent"])
+        .assert()
+        .success();
+    hs(root)
+        .args(["claim-next", "--worker", "agent"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(&ready));
+    hs(root)
+        .args(["show", &waiting])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("status: started"))
+        .stdout(predicate::str::contains("started_phase: final_testing"));
+    hs(root)
+        .args(["claim", &waiting, "--worker", "ci-agent"])
+        .assert()
+        .success();
+    hs(root)
+        .args(["edit", &waiting, "--status", "completed"])
+        .assert()
+        .success();
+    hs(root)
+        .args(["show", &waiting])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("status: completed"))
+        .stdout(predicate::str::contains("started_phase: final_testing").not());
+}
+
+#[test]
 fn exact_claim_accepts_slug_and_ulid_and_starts_without_changing_retry_count() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

@@ -2056,6 +2056,46 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   await expect(badge.locator('[data-lucide="circle-check"]')).toHaveCount(1);
 });
 
+test('shows remote final testing as a Started phase at wide and phone widths', async ({ page }, testInfo) => {
+  await page.goto('/ux-demo?component=status-badge');
+  await page.locator('[data-action="toggle-settings"]').click();
+  const phase = page.locator('wa-select[name="started-phase"]');
+  await phase.evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'final_testing';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const badge = page.locator('[data-component="status-badge"]');
+  await expect(badge).toContainText('Final testing');
+  await expect(badge).toHaveAttribute('data-status', 'started');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({ path: testInfo.outputPath('final-testing-wide.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Close settings' }).click();
+  await expect(badge).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('final-testing-phone.png') });
+});
+
+test('shows a released final-testing ticket in the list row at wide and phone widths', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/ux-demo?component=ticket-row');
+  await page.locator('[data-action="toggle-settings"]').click();
+  const settings = page.locator('[data-settings="ticket-list-row"]');
+  await settings.locator('wa-select[name="started-phase"]').evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'final_testing';
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const busy = settings.locator('wa-checkbox[name="busy"]');
+  await busy.click();
+  const row = page.locator('[data-component="ticket-list-row"]');
+  await expect(row.locator('[data-component="status-badge"]')).toContainText('Final testing');
+  await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
+  await page.screenshot({ path: testInfo.outputPath('final-testing-row-wide.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Close settings' }).click();
+  await expect(row).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('final-testing-row-phone.png') });
+});
+
 test('demonstrates the production Not Working dialog and pending evidence picker', async ({ page }) => {
   await page.goto('/ux-demo?component=not-working-dialog');
   await page.getByRole('button', { name: 'Open Not Working dialog' }).click();

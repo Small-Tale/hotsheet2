@@ -10,7 +10,7 @@
 //! Because the remote arbitrates, two workers scanning the same queue never take the same
 //! ticket — the property a single machine's in-process claim can't give across machines.
 
-use hotsheet_model::{Timestamp, Ulid};
+use hotsheet_model::{StartedPhase, Timestamp, Ulid};
 
 use crate::distclaim::{self, ClaimMarker, ClaimResult, DistError};
 use crate::ops::{self, priority_rank};
@@ -110,7 +110,12 @@ fn candidates(store: &FsStore, now: &Timestamp) -> Result<Vec<Ulid>, DistError> 
 
     let mut c: Vec<_> = tickets
         .into_iter()
-        .filter(|t| ops::is_open(t) && !ops::is_blocked(t, &done) && ops::claim_available(t, now))
+        .filter(|t| {
+            ops::is_open(t)
+                && !ops::is_blocked(t, &done)
+                && ops::claim_available(t, now)
+                && t.started_phase != Some(StartedPhase::FinalTesting)
+        })
         .collect();
     c.sort_by(|a, b| {
         b.up_next
@@ -156,6 +161,48 @@ mod tests {
 
     fn ts(s: &str) -> Timestamp {
         Timestamp::new(format!("2026-08-22T00:00:{s}Z"))
+    }
+
+    #[test]
+    fn distributed_candidates_skip_released_final_testing_ticket() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let waiting = create(
+            &store,
+            Ulid::new(),
+            "HS",
+            ts("00"),
+            NewTicket {
+                title: "Waiting for CI".into(),
+                up_next: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let ready = create(
+            &store,
+            Ulid::new(),
+            "HS",
+            ts("01"),
+            NewTicket {
+                title: "Ready".into(),
+                up_next: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        ops::update(
+            &store,
+            &waiting.id,
+            ts("02"),
+            ops::TicketPatch {
+                status: Some(hotsheet_model::Status::Started),
+                started_phase: Some(Some(StartedPhase::FinalTesting)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(candidates(&store, &ts("03")).unwrap(), vec![ready.id]);
     }
 
     /// A bare remote + two clones that are each Hot Sheet stores holding the SAME two Up

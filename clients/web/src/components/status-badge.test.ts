@@ -47,4 +47,11 @@ describe('StatusBadge', () => {
     expect(markup).toContain('status-badge--filled');
     expect(markup).not.toContain('status-badge--compact');
   });
+
+  it('shows a Started phase without changing the lifecycle status', () => {
+    const waiting = String(StatusBadge({ status: 'started', startedPhase: 'final_testing', compact: true }));
+    expect(waiting).toContain('Final testing');
+    expect(waiting).toContain('data-status="started"');
+    expect(String(StatusBadge({ status: 'completed', startedPhase: 'final_testing' }))).toContain('Completed');
+  });
 });

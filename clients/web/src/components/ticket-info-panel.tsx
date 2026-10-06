@@ -9,6 +9,7 @@ import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { CircleAlert, Plus } from 'lucide';
 
+import type { StartedPhase } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import { DETAILS_FEEDBACK_ID, textRequestsFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
@@ -25,6 +26,7 @@ import { TicketTagEditor } from './ticket-tag-editor';
 
 export interface TicketInfoPanelProps {
   status: TicketStatus;
+  startedPhase?: StartedPhase;
   priority: TicketPriority;
   category: string;
   tags: string[];
@@ -126,6 +128,7 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
 
 function LoadedTicketInfoPanel({
   status,
+  startedPhase,
   priority,
   category,
   tags,
@@ -175,7 +178,7 @@ function LoadedTicketInfoPanel({
                 {status === 'deleted' ? (
                   <StatusBadge status="deleted" />
                 ) : (
-                  <TicketStatusMenu value={status} disabled={!canUpdate} />
+                  <TicketStatusMenu value={status} startedPhase={startedPhase} disabled={!canUpdate} />
                 )}
                 {blockedReason && <BlockedBadge />}
               </>

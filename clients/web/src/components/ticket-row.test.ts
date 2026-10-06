@@ -275,6 +275,7 @@ describe('TicketRow', () => {
         slug: 'HS2-STARTED',
         title: 'Started but idle',
         status: 'started',
+        startedPhase: 'final_testing',
         priority: 'default',
         category: 'task',
         tags: [],
@@ -283,6 +284,8 @@ describe('TicketRow', () => {
       }),
     );
     expect(inactive).not.toContain('ticket-list-row__claim');
+    expect(inactive).not.toContain('ticket-list-row__owner');
+    expect(inactive).toContain('Final testing');
     const active = String(
       TicketRow({
         slug: 'HS2-ACTIVE',

@@ -8404,6 +8404,55 @@ async fn create_get_update_close_and_query() {
 }
 
 #[tokio::test]
+async fn started_phase_round_trips_through_http_and_indexed_query() {
+    let (_dir, state) = state();
+    let app = app(state);
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"Remote verification"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let created = body_json(response).await;
+    let slug = created["slug"].as_str().unwrap();
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{slug}"),
+            Some(r#"{"status":"started","started_phase":"final_testing"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated = body_json(response).await;
+    assert_eq!(updated["started_phase"], "final_testing");
+    let response = app
+        .clone()
+        .oneshot(authed("GET", "/tickets", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let listed = body_json(response).await;
+    assert!(listed.to_string().contains("final_testing"));
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{slug}"),
+            Some(r#"{"status":"completed"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(body_json(response).await.get("started_phase").is_none());
+}
+
+#[tokio::test]
 async fn blocked_by_set_clear_and_reject() {
     let (dir, st) = state();
     let app = app(st);
