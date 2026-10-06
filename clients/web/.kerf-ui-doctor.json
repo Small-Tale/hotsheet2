@@ -36,18 +36,6 @@
       "rationale": "Workspace-header groups and identity hide or reveal at toolbar container widths (workspace-header.css) until Kerf ships width-threshold visibility (KF-MXE9YV); remove when HS2 adopts it."
     },
     {
-      "id": "kf-kjyk46-tabbar-project-actions",
-      "rules": ["KUI-L201"],
-      "target": "src/components/project-tab-bar.tsx",
-      "rationale": "TabBar leading/trailing/end explicitly accept ToolbarControlGroup, but beta.80 parent validation rejects those zones (KF-KJYK46)."
-    },
-    {
-      "id": "kf-kjyk46-tabbar-terminal-actions",
-      "rules": ["KUI-L201"],
-      "target": "src/components/terminal-drawer.tsx",
-      "rationale": "TabBar trailing/end explicitly accept ToolbarControlGroup, but beta.80 parent validation rejects those zones (KF-KJYK46)."
-    },
-    {
       "id": "hs2-pc9dvb-main-shell-header-actions",
       "rules": ["KUI-L201"],
       "target": "src/app/runtime.tsx",
