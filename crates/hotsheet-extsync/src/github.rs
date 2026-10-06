@@ -424,7 +424,7 @@ impl GitHubProvider {
             priority,
             status,
             started_phase: None,
-            up_next: false,
+            up_next: status.is_active() && labels.iter().any(|label| label == "up-next"),
             feedback_needed: false,
             tags: labels
                 .into_iter()
@@ -472,7 +472,6 @@ impl GitHubProvider {
             || query.claimed.is_some()
             || query.blocked.is_some()
             || query.page_after.is_some()
-            || query.up_next_only
             || query.completed_after.is_some()
             || query.min_confidence.is_some()
             || query.max_confidence.is_some()
@@ -562,7 +561,6 @@ impl TicketProvider for GitHubProvider {
             || query.claimed.is_some()
             || query.blocked.is_some()
             || query.page_after.is_some()
-            || query.up_next_only
             || query.completed_after.is_some()
             || query.min_confidence.is_some()
             || query.max_confidence.is_some()
@@ -584,6 +582,7 @@ impl TicketProvider for GitHubProvider {
                 .map(|issue| self.api_ticket(issue, vec![]))
                 .filter(|ticket| provider_text_matches(ticket, query.text.as_deref()))
                 .filter(|ticket| query.status.is_none_or(|status| ticket.status == status))
+                .filter(|ticket| !query.up_next_only || ticket.up_next)
                 .filter(|ticket| {
                     query
                         .priority
@@ -793,6 +792,7 @@ impl TicketProvider for GitHubProvider {
             draft.priority,
             &draft.tags,
             Some(draft.status),
+            draft.up_next,
             None,
             None,
         );
@@ -840,6 +840,7 @@ impl TicketProvider for GitHubProvider {
         let priority = patch.priority.unwrap_or(current_ticket.priority);
         let tags = patch.tags.unwrap_or(current_ticket.tags);
         let status = patch.status.unwrap_or(current_ticket.status);
+        let up_next = patch.up_next.unwrap_or(current_ticket.up_next);
         // A closed issue keeps the outcome it was closed with (HS2-K8R3T8): GitHub resets
         // `state_reason` to `completed` on any PATCH that omits it, so every closed write
         // re-sends the current reason and its `closed:` / `duplicate-of:` labels. Reopening
@@ -860,6 +861,7 @@ impl TicketProvider for GitHubProvider {
             priority,
             &tags,
             Some(status),
+            up_next,
             close_reason,
             duplicate_of.as_deref(),
         );
@@ -1044,6 +1046,7 @@ impl TicketProvider for GitHubProvider {
             current.priority,
             &current.tags,
             Some(Status::Completed),
+            false,
             Some(reason),
             duplicate_of.as_deref(),
         );
@@ -1239,7 +1242,7 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         assignment: true,
         review_requests: false,
         dependencies: false,
-        up_next: false,
+        up_next: true,
         close_reasons: true,
         claims: false,
         atomic_batch: false,
@@ -1253,6 +1256,7 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         query_fields: [
             "status",
             "priority",
+            "up_next",
             "category",
             "tags",
             "assignee",
@@ -1318,9 +1322,10 @@ const PROVIDER_LABEL_PREFIXES: [&str; 5] = [
 ];
 
 fn is_provider_label(label: &str) -> bool {
-    PROVIDER_LABEL_PREFIXES
-        .iter()
-        .any(|prefix| label.starts_with(prefix))
+    label == "up-next"
+        || PROVIDER_LABEL_PREFIXES
+            .iter()
+            .any(|prefix| label.starts_with(prefix))
 }
 
 /// Whether a Hot Sheet status is represented by a closed GitHub issue.
@@ -1389,6 +1394,7 @@ fn mapped_labels(
     priority: Priority,
     tags: &[String],
     status: Option<Status>,
+    up_next: bool,
     close_reason: Option<CloseReason>,
     duplicate_of: Option<&str>,
 ) -> Vec<String> {
@@ -1401,6 +1407,9 @@ fn mapped_labels(
     labels.push(format!("priority:{}", priority_name(priority)));
     if let Some(label) = status.and_then(status_label) {
         labels.push(label.into());
+    }
+    if up_next && status.is_some_and(Status::is_active) {
+        labels.push("up-next".into());
     }
     if let Some(label) = close_reason.and_then(close_reason_label) {
         labels.push(label.into());
@@ -1612,6 +1621,133 @@ mod tests {
                 .iter()
                 .any(|(name, value)| name == "Authorization" && value == "Bearer test-token")
         );
+    }
+
+    #[test]
+    fn up_next_label_survives_edits_and_clears_on_close() {
+        let open = issue(42, "widget", "details");
+        let mut queued = open.clone();
+        queued["labels"] = json!([
+            {"name":"category:bug"}, {"name":"priority:high"},
+            {"name":"customer"}, {"name":"up-next"}
+        ]);
+        let mut closed = queued.clone();
+        closed["state"] = json!("closed");
+        closed["closed_at"] = json!("2026-08-27T00:00:00Z");
+        closed["labels"] = json!([
+            {"name":"category:bug"}, {"name":"priority:high"}, {"name":"customer"}
+        ]);
+        let transport = FakeTransport::with(vec![
+            response(200, open.clone()),
+            response(200, queued.clone()),
+            response(200, queued.clone()),
+            response(200, queued.clone()),
+            response(200, queued.clone()),
+            response(200, open.clone()),
+            response(200, open.clone()),
+            response(200, queued.clone()),
+            response(200, queued.clone()),
+            response(200, closed),
+        ]);
+        let github = provider(transport.clone());
+        let now = Timestamp::new("2026-08-28T00:00:00Z");
+        assert!(
+            github
+                .update(
+                    "42",
+                    now.clone(),
+                    ProviderPatch {
+                        up_next: Some(true),
+                        ..Default::default()
+                    }
+                )
+                .unwrap()
+                .up_next
+        );
+        assert!(
+            github
+                .update(
+                    "42",
+                    now.clone(),
+                    ProviderPatch {
+                        title: Some("renamed".into()),
+                        ..Default::default()
+                    }
+                )
+                .unwrap()
+                .up_next
+        );
+        assert!(
+            !github
+                .update(
+                    "42",
+                    now.clone(),
+                    ProviderPatch {
+                        up_next: Some(false),
+                        ..Default::default()
+                    }
+                )
+                .unwrap()
+                .up_next
+        );
+        assert!(
+            github
+                .update(
+                    "42",
+                    now.clone(),
+                    ProviderPatch {
+                        up_next: Some(true),
+                        ..Default::default()
+                    }
+                )
+                .unwrap()
+                .up_next
+        );
+        assert!(
+            !github
+                .close("42", now, CloseReason::Completed, None)
+                .unwrap()
+                .up_next
+        );
+        for index in [1, 3, 5, 7, 9] {
+            let labels = label_names(&patch_body(&transport, index));
+            assert_eq!(
+                labels.contains(&"up-next".to_string()),
+                index < 5 || index == 7
+            );
+            assert!(labels.contains(&"customer".to_string()));
+        }
+        assert!(!is_provider_label("up-next-extra"));
+    }
+
+    #[test]
+    fn up_next_query_reads_only_active_labeled_issues() {
+        let mut queued = issue(42, "queued", "details");
+        queued["labels"] = json!([{"name":"up-next"}, {"name":"customer"}]);
+        let mut closed = queued.clone();
+        closed["number"] = json!(43);
+        closed["state"] = json!("closed");
+        closed["closed_at"] = json!("2026-08-27T00:00:00Z");
+        let issues = json!([issue(41, "plain", "details"), queued, closed]);
+        let transport =
+            FakeTransport::with(vec![response(200, issues.clone()), response(200, issues)]);
+        let github = provider(transport);
+        let query = TicketQuery {
+            up_next_only: true,
+            ..Default::default()
+        };
+        let rows = github.query(&query).unwrap();
+        assert_eq!(
+            rows.iter()
+                .map(|row| row.native_id.as_str())
+                .collect::<Vec<_>>(),
+            ["42"]
+        );
+        assert!(rows[0].tags.contains(&"customer".to_string()));
+        assert!(!rows[0].tags.contains(&"up-next".to_string()));
+        let page = github.query_page(&query, None, 100).unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].native_id, "42");
     }
 
     /// HS2-5YNASC: a scored note is written with a `Confidence: NN%` trailer and read back

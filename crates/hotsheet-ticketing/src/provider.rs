@@ -624,6 +624,7 @@ pub fn filter_provider_ticket_page(
                 crate::TicketCollection::Trash => ticket.status == Status::Deleted,
             })
             && query.priority.is_none_or(|value| ticket.priority == value)
+            && (!query.up_next_only || ticket.up_next)
             && query
                 .category
                 .as_deref()

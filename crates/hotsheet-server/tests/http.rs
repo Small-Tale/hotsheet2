@@ -12341,6 +12341,85 @@ async fn direct_github_provider_runs_through_provider_routes_without_mirroring()
     );
 }
 
+#[tokio::test]
+async fn github_up_next_survives_provider_route_refresh_and_can_be_cleared() {
+    let (_dir, st) = state();
+    let plain = github_issue(11, "remote issue");
+    let mut queued = plain.clone();
+    queued["labels"] = serde_json::json!([{"name":"up-next"}]);
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, plain.clone()),
+                github_response(200, queued.clone()),
+                github_response(200, serde_json::json!([queued.clone()])),
+                github_response(200, queued),
+                github_response(200, plain.clone()),
+                github_response(200, serde_json::json!([plain])),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        transport.clone(),
+    );
+    let app = app(st.with_ticket_provider(Arc::new(provider)));
+    let path = "/providers/github-main/tickets/11";
+    let set = app
+        .clone()
+        .oneshot(authed("PATCH", path, Some(r#"{"up_next":true}"#)))
+        .await
+        .unwrap();
+    assert_eq!(set.status(), StatusCode::OK);
+    assert_eq!(body_json(set).await["up_next"], true);
+    let queued = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                "/providers/github-main/tickets?up_next=true",
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(queued.as_array().unwrap().len(), 1);
+    assert_eq!(queued[0]["native_id"], "11");
+    let clear = app
+        .clone()
+        .oneshot(authed("PATCH", path, Some(r#"{"up_next":false}"#)))
+        .await
+        .unwrap();
+    assert_eq!(clear.status(), StatusCode::OK);
+    assert_eq!(body_json(clear).await["up_next"], false);
+    let empty = body_json(
+        app.oneshot(authed(
+            "GET",
+            "/providers/github-main/tickets?up_next=true",
+            None,
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(empty, serde_json::json!([]));
+    let requests = transport.requests.lock().unwrap();
+    assert!(
+        requests[0]["labels"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("up-next"))
+    );
+    assert!(
+        !requests[1]["labels"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("up-next"))
+    );
+}
+
 /// HS2-5YNASC: the provider route writes a scored note to GitHub as a `Confidence: NN%`
 /// comment trailer and reads it back as the note's and ticket's confidence.
 #[tokio::test]

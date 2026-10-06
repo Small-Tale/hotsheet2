@@ -240,11 +240,13 @@ same-ULID/tombstone compatibility semantics.
 
 Built in the GitHub reference-provider increment: `hotsheet-extsync` maps GitHub issue
 numbers/URLs, body/state/state-reason, configured `category:`/`priority:`/`status:`
-labels, ordinary labels, assignees, and comments directly to the normalized contract.
+labels, a provider-owned `up-next` label for active queued issues, ordinary labels,
+assignees, and comments directly to the normalized contract. The queue label survives
+unrelated edits and is removed when an issue closes; queued-only reads use that label.
 It paginates while excluding pull requests, sends incremental `since` queries, exposes
 webhook invalidations for authoritative re-read, checks opaque optimistic-concurrency
 tokens, and maps authentication/rate-limit/conflict failures to typed provider errors.
-Unsupported claims, dependencies, review requests, Up Next, and query
+Unsupported claims, dependencies, review requests, and query
 dimensions are declared or rejected rather than discarded. Attachments are supported only
 through a configured assets repository (below).
 
