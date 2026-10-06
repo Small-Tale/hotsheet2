@@ -527,6 +527,7 @@ type TicketSourceScenario =
   | 'jira-account'
   | 'waiting'
   | 'authorized'
+  | 'authorized-existing-default'
   | 'editing'
   | 'editing-shared'
   | 'removing'
@@ -868,6 +869,7 @@ function demoContent(item: DemoDefinition) {
         accounts={scenario === 'accounts' || scenario === 'jira-account' ? DEMO_ACCOUNTS : []}
         chosenAccount={scenario === 'jira-account' ? 'jira-token' : undefined}
         projectDefault
+        hasProjectDefault={scenario === 'authorized-existing-default'}
         providerBusy={scenario === 'busy'}
         githubAuth={
           scenario === 'waiting'
@@ -878,7 +880,7 @@ function demoContent(item: DemoDefinition) {
                 state: 'waiting',
                 copied: true,
               }
-            : scenario === 'authorized'
+            : scenario === 'authorized' || scenario === 'authorized-existing-default'
               ? {
                   session: 'demo',
                   userCode: 'ABCD-EFGH',

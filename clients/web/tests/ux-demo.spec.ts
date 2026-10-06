@@ -29,6 +29,7 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
       ['jira-account', 'This project still enters its own project key.'],
       ['waiting', 'ABCD-EFGH'],
       ['authorized', 'Signed in to GitHub.'],
+      ['authorized-existing-default', 'Signed in to GitHub.'],
       ['editing', 'Save changes'],
       ['editing-shared', 'Also used by marketing-site.'],
       ['removing', 'Remove Product issues from Demo project?'],
@@ -41,6 +42,23 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
       }, value);
       await expect(dialog).toHaveAttribute('data-preview-scenario', value);
       await expect(dialog).toContainText(expected);
+      if (value === 'authorized' || value === 'authorized-existing-default')
+        await expect(dialog.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty(
+          'checked',
+          value === 'authorized',
+        );
+      if (value === 'authorized-existing-default') {
+        await scenario.evaluate((node: HTMLElement & { value: string }) => {
+          node.value = 'authorized';
+          node.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await expect(dialog.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
+        await scenario.evaluate((node: HTMLElement & { value: string }) => {
+          node.value = 'authorized-existing-default';
+          node.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await expect(dialog.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', false);
+      }
       await dialog.evaluate(async (node) => {
         await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
       });

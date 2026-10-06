@@ -27,6 +27,7 @@ const previewScenarioChoices: readonly SelectChoice[] = [
   { value: 'accounts', label: 'Reuse a signed-in account' },
   { value: 'jira-account', label: 'Reuse a Jira account' },
   { value: 'authorized', label: 'GitHub authorized' },
+  { value: 'authorized-existing-default', label: 'GitHub authorized, existing default' },
   { value: 'editing', label: "Editing this project's source" },
   { value: 'editing-shared', label: 'Editing a shared source' },
   { value: 'removing', label: 'Confirm removal' },
@@ -60,6 +61,8 @@ export interface TicketSourceSetupDialogProps {
   removingProviderId?: string;
   /** Whether the edited connection is this project's default source. */
   projectDefault?: boolean;
+  /** Whether this project already has any default ticket source. */
+  hasProjectDefault?: boolean;
   /** Machine-wide sign-ins a new source can reuse (HS2-SM9PM8). */
   accounts?: readonly ProviderAccount[];
   /** The GitLab or Jira account whose details prefill a new source (HS2-F5HNJN). */
@@ -83,6 +86,7 @@ export function TicketSourceSetupDialog({
   providerError = '',
   removingProviderId,
   projectDefault = false,
+  hasProjectDefault = false,
   accounts = [],
   chosenAccount,
   previewScenario,
@@ -253,7 +257,7 @@ export function TicketSourceSetupDialog({
         connection={editing}
         auth={githubAuth}
         error={providerError}
-        defaultChoice={editing ? projectDefault : true}
+        defaultChoice={editing ? projectDefault : !hasProjectDefault}
         accounts={accounts}
         chosenAccount={chosenAccount}
       />

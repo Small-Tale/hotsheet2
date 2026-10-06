@@ -1918,9 +1918,9 @@
       "name": "TicketSourceSetupDialog",
       "source": "src/components/ticket-source-setup-dialog.tsx",
       "kind": "component",
-      "purpose": "Choose and configure a git or external ticket source.",
+      "purpose": "Choose and configure a git or external ticket source, including first-source and existing-default choices.",
       "useWhen": [
-        "Hot Sheet needs choose and configure a git or external ticket source."
+        "Hot Sheet needs choose and configure a git or external ticket source, including first-source and existing-default choices."
       ],
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific TicketSourceSetupDialog behavior."

@@ -602,6 +602,9 @@ and identity-less legacy entries remain conservatively blocking.
   **Disable / Enable**) and its trailing **Remove from this project** action opens that
   editor at an inline confirmation; a source shared with another project (attached
   headlessly) says "Also used by …". There is no list of other projects' connections.
+  When adding a provider source, **Use as this project's default ticket source** starts
+  checked only if the project has no default source. The user can change that choice before
+  connecting; editing a source shows whether that source is the current default (HS2-VM6YG9).
   **App Settings → Accounts** lists the machine-wide sign-ins with each one's sources and
   the projects using them, and offers **Sign out** only for a sign-in no source uses. When
   adding a GitHub source, the setup form first offers the GitHub accounts already signed in

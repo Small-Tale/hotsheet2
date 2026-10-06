@@ -455,6 +455,23 @@ describe('ticket source surfaces', () => {
     expect(reused).not.toContain('use-github-account');
   });
 
+  it('prechecks a new source only when this project has no default (HS2-VM6YG9)', () => {
+    const auth = { session: 's', userCode: '', verificationUri: '', state: 'authorized' as const },
+      render = (hasProjectDefault: boolean) =>
+        String(
+          TicketSourceSetupDialog({
+            project: { id: 'demo', root: '/work/demo', name: 'Demo', stores: [] },
+            providerKind: 'github',
+            providerConnections: [],
+            githubAuth: auth,
+            hasProjectDefault,
+            navigation: 'none',
+          }),
+        );
+    expect(render(false)).toMatch(/name="make-default" value="on" checked/);
+    expect(render(true)).toMatch(/name="make-default" value="on"(?! checked)/);
+  });
+
   it('offers signed-in GitLab and Jira accounts and prefills a new source from the chosen one (HS2-F5HNJN)', () => {
     const accounts = [
         {

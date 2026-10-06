@@ -2581,6 +2581,10 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.getByText('Signed in to GitHub.')).toBeVisible();
   await providerForm.getByLabel('Display name').fill('GitHub Secondary');
   await providerForm.locator('input[name="connection-locator"]').fill('small-tale/secondary');
+  // Adding a second source keeps this project's existing default unless explicitly changed.
+  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', false);
+  await providerForm.locator('wa-checkbox[name="make-default"] label[part~="base"]').click();
+  await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
   await providerForm.locator('wa-checkbox[name="make-default"] label[part~="base"]').click();
   await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', false);
   await setup.getByRole('button', { name: 'Connect provider' }).click();

@@ -5118,9 +5118,12 @@ export async function startHotSheetWebClient() {
           accounts={providerAccounts.value}
           chosenAccount={providerAccountChoice.value}
           projectDefault={Boolean(
-            defaultProviders.value[project()?.id ?? '']?.sources.some(
+            defaultProviders.value[ticketSourceSetupProject.value?.id ?? '']?.sources.some(
               (source) => source.connectionId === providerEditingId.value && source.default,
             ),
+          )}
+          hasProjectDefault={Boolean(
+            defaultProviders.value[ticketSourceSetupProject.value?.id ?? '']?.sources.some((source) => source.default),
           )}
           githubAuth={githubAuth.value}
           navigation={ticketSourceSetupNavigation.value}

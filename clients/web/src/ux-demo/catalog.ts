@@ -852,7 +852,7 @@ export const demoCatalog: DemoCategory[] = [
       demo(
         'ticket-source-setup-dialog',
         'TicketSourceSetupDialog',
-        'Choose and configure a git or external ticket source.',
+        'Choose and configure a git or external ticket source, including first-source and existing-default choices.',
         'feature-floor',
         true,
         ['content-transition', 'list-item', 'provider-icon'],
