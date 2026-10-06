@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 
 import { HaltedSessionPopup } from './halted-session-popup';
 
-it('composes accessible top-layer halt copy and production actions with public Kerf primitives', () => {
+it('composes an accessible permission-style halt card with the production actions', () => {
   const markup = String(
     HaltedSessionPopup({
       episode: {
@@ -19,8 +19,9 @@ it('composes accessible top-layer halt copy and production actions with public K
   expect(markup).toContain('popover="manual"');
   expect(markup).toContain('data-top-layer-overlay');
   expect(markup).toContain('aria-label="AI session halted"');
-  expect(markup).toContain('data-component="list"');
-  expect(markup).toContain('data-component="row"');
+  expect(markup).toContain('class="halted-session-popup__card"');
+  expect(markup).toContain('class="halted-session-popup__details"');
+  expect(markup).toContain('class="halted-session-popup__primary"');
   expect(markup).toContain('data-action="open-halted-session"');
   expect(markup).toContain('data-action="dismiss-halted-session"');
   expect(markup).toContain('data-action="pause-notifications"');

@@ -2389,8 +2389,9 @@ work counts. The phone project picker shows the same labelled danger icon for th
 project and marks attention-bearing options with the icon and “Needs attention” (HS2-34VG07).
 The selected icon names the full reason.
 
-**Halted-session prompts (HS2-E6KAWY).** An in-app top-layer prompt offers Open session,
-Dismiss, and Pause notifications. Open returns to the originating project and terminal or
+**Halted-session prompts (HS2-E6KAWY, HS2-AFZ6SX).** An in-app top-layer card follows the
+permission prompt layout: session and project identity, a danger status, the error detail,
+quiet Dismiss and Pause notifications actions, and primary Open session. Open returns to the originating project and terminal or
 driven chat; neither Open nor Dismiss clears the stopped indicators or server halt. Permission
 requests take priority, including an ignored request still visible inside the foreground conversation. Modal form editing can
 defer the prompt; acknowledgment occurs only when the browser actually presents it.

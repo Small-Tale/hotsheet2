@@ -1,8 +1,10 @@
 # UX component catalog
 
-`HaltedSessionPopup` (HS2-E6KAWY) composes public Kerf `List`, `Row`, and `Text` inside
-an app-owned native top-layer dialog. Its stylesheet owns viewport placement, framing,
-and scroll containment only. The `/ux-demo?component=halted-session-popup` entry exercises
+`HaltedSessionPopup` (HS2-E6KAWY, HS2-AFZ6SX) uses an app-owned native top-layer dialog
+with the same compact card structure as permission popups: session and project identity,
+a danger status row, a contained error detail, quiet dismiss/pause actions, and one
+primary **Open session** action. Its stylesheet owns viewport placement and the card's
+content layout. The `/ux-demo?component=halted-session-popup` entry exercises
 the three actions and restore control; production owns episode acknowledgment, routing,
 permission priority, and app-wide pause. See [client requirements](06-clients.md).
 

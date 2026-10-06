@@ -1,4 +1,4 @@
-/* Owned native dialog/popover viewport contract; nested Kerf content configures itself. */
+/* Native top-layer placement mirrors the permission popup; the card owns its visible frame. */
 .halted-session-popup {
   position: fixed;
   inset: auto remify(16px) auto auto;
@@ -10,11 +10,11 @@
   margin: 0;
   padding: 0;
   overflow-y: auto;
-  border: 1px solid var(--wa-color-danger-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-raised);
-  color: var(--wa-color-text-normal);
-  box-shadow: var(--wa-shadow-l);
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
   transition: none;
 }
 .halted-session-popup[open] {
@@ -26,10 +26,135 @@
 .halted-session-popup::backdrop {
   background: transparent;
 }
+.halted-session-popup__card {
+  overflow: hidden;
+  border: 1px solid var(--wa-color-neutral-border-loud);
+  border-radius: remify(16px);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-default);
+  box-shadow: var(--wa-shadow-l);
+}
+.halted-session-popup__header {
+  display: grid;
+  min-width: 0;
+  margin: remify(12.8px) remify(16px) remify(4.8px);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: remify(10.4px);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+}
+.halted-session-popup__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: remify(4.8px);
+}
+.halted-session-popup__identity strong {
+  overflow: hidden;
+  color: var(--wa-color-neutral-on-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.halted-session-popup__project {
+  overflow: hidden;
+  max-width: remify(224px);
+  padding: remify(2.88px) remify(8.8px);
+  border-radius: var(--wa-border-radius-pill);
+  background: var(--wa-color-neutral-fill-quiet);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.halted-session-popup__summary {
+  display: grid;
+  padding: remify(12px) remify(16px) remify(8.8px);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: remify(8.8px);
+}
+.halted-session-popup__details {
+  overflow: visible;
+  margin: 0 remify(16px);
+  padding: remify(11.2px) remify(12.8px);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(10.4px);
+  background: var(--wa-color-surface-lowered);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    var(--wa-font-size-xs)/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+}
+.halted-session-popup__footer {
+  display: flex;
+  padding: remify(12.8px) remify(16px) remify(16px);
+  align-items: center;
+  justify-content: space-between;
+  gap: remify(16px);
+}
+.halted-session-popup__quiet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: remify(16px);
+}
+.halted-session-popup button {
+  min-height: remify(32px);
+  padding: 0 remify(12.8px);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: remify(10.4px);
+  color: var(--wa-color-neutral-on-normal);
+  background: var(--wa-color-surface-default);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--wa-font-size-xs);
+  font-weight: 600;
+}
+.halted-session-popup button:focus-visible {
+  outline: 2px solid var(--wa-color-text-link);
+  outline-offset: 2px;
+}
+.halted-session-popup__quiet-actions button {
+  padding: 0;
+  border: 0;
+  color: var(--wa-color-neutral-on-quiet);
+  background: transparent;
+}
+.halted-session-popup__quiet-actions button:hover {
+  color: var(--wa-color-neutral-on-normal);
+  text-decoration: underline;
+}
+.halted-session-popup .halted-session-popup__primary {
+  flex: none;
+  border-color: var(--wa-color-brand-border-loud);
+  color: var(--wa-color-neutral-on-loud);
+  background: var(--wa-color-brand-fill-loud);
+}
+.halted-session-popup .halted-session-popup__primary:hover {
+  background: var(--wa-color-brand-on-quiet);
+}
 @media (max-width: remify(672px)) {
   .halted-session-popup {
     right: remify(8px);
     left: remify(8px);
     width: auto;
+  }
+}
+@media (max-width: remify(440px)) {
+  .halted-session-popup__header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .halted-session-popup__project {
+    max-width: 100%;
+    justify-self: start;
+  }
+  .halted-session-popup__footer {
+    flex-wrap: wrap;
+  }
+  .halted-session-popup__primary {
+    margin-left: auto;
   }
 }

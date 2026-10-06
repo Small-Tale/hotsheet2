@@ -266,7 +266,8 @@ test('opens a halted session in its originating project and follows another wind
   await expect.poll(fixture.socketCount).toBe(2);
   await fixture.halt('origin-project');
   const popup = page.getByRole('dialog', { name: 'AI session halted' });
-  await expect(popup).toContainText('demo · Claude worker');
+  await expect(popup.locator('.halted-session-popup__identity')).toContainText('Claude worker');
+  await expect(popup.locator('.halted-session-popup__project')).toContainText('demo');
   await expect.poll(() => fixture.terminalGets().length).toBe(4);
   await popup.getByRole('button', { name: 'Open session' }).click();
   await expect(page.getByRole('tab', { name: /^demo/ })).toHaveAttribute('aria-selected', 'true');
