@@ -901,6 +901,8 @@ one identity when it has several. Older `hotsheet-settings.json` and
 inputs (default source first) until the project file is written or setup migration copies
 them forward; legacy store-only/serverless APIs retain their old paths rather than creating
 `<ticket-store>/.hotsheet`. Global settings and ticket-source discovery are unchanged.
+Settings rewrites replace each scope file atomically so concurrent CLI and server readers see
+complete JSON before or after a write.
 
 `trash_cleanup_days` is a positive whole number stored in Shared scope. Its documented and
 runtime default is 30. The server validates checkout-scoped writes, the generic CLI settings

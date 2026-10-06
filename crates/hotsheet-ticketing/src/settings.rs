@@ -17,6 +17,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
 
+use crate::store::write_file_atomically;
+
 const SETTINGS_SCHEMA_KEY: &str = "$hotsheetSchema";
 const SETTINGS_SCHEMA_VERSION: u64 = 1;
 const SETTINGS_DIR: &str = ".hotsheet2";
@@ -412,7 +414,7 @@ impl Settings {
         }
         let text = text + "\n";
         if !std::fs::read(&path).is_ok_and(|existing| existing == text.as_bytes()) {
-            std::fs::write(&path, text)?;
+            write_file_atomically(&path, text.as_bytes())?;
         }
         if scope == Scope::Local {
             let ignored = if self.project_owned {
@@ -511,6 +513,54 @@ mod tests {
 
         let eff = s.effective().unwrap();
         assert_eq!(eff.len(), 3); // categories, theme_hint (local), index_path
+    }
+
+    #[test]
+    fn concurrent_reader_sees_only_complete_settings_snapshots() {
+        use std::sync::{
+            Arc, Barrier,
+            atomic::{AtomicBool, Ordering},
+        };
+
+        let root = root();
+        let path = root.path().join(".hotsheet2/settings.json");
+        let settings = Settings::for_project(root.path());
+        settings
+            .set("payload", json!("a".repeat(1_000_000)), Scope::Shared)
+            .unwrap();
+
+        let done = Arc::new(AtomicBool::new(false));
+        let barrier = Arc::new(Barrier::new(2));
+        let writer_root = root.path().to_path_buf();
+        let writer_done = Arc::clone(&done);
+        let writer_barrier = Arc::clone(&barrier);
+        let writer = std::thread::spawn(move || {
+            let settings = Settings::for_project(writer_root);
+            writer_barrier.wait();
+            for index in 0..60 {
+                let mut map = Map::new();
+                map.insert(
+                    "payload".into(),
+                    json!(if index % 2 == 0 { "a" } else { "b" }.repeat(1_000_000)),
+                );
+                settings.replace_scope(Scope::Shared, &map).unwrap();
+                std::thread::yield_now();
+            }
+            writer_done.store(true, Ordering::Release);
+        });
+
+        barrier.wait();
+        let mut reads = 0;
+        while !done.load(Ordering::Acquire) {
+            let bytes = std::fs::read(&path).unwrap();
+            let value: Value = serde_json::from_slice(&bytes).unwrap();
+            let payload = value["payload"].as_str().unwrap();
+            assert_eq!(payload.len(), 1_000_000);
+            assert!(payload.bytes().all(|byte| byte == b'a' || byte == b'b'));
+            reads += 1;
+        }
+        writer.join().unwrap();
+        assert!(reads > 0);
     }
 
     #[test]

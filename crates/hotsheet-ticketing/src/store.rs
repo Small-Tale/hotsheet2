@@ -1421,7 +1421,7 @@ fn frontmatter_value(text: &str, key: &str) -> Option<String> {
 /// first, so another process (a CLI `ls`, the server's watcher/reconcile) could parse
 /// a ticket mid-write and report it corrupt. The staged sibling is a dot-file with a
 /// non-`.md` extension, so enumeration never mistakes a leftover for a ticket.
-fn write_file_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_file_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let name = path
         .file_name()
