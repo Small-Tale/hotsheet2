@@ -3254,16 +3254,11 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
             let connection = hook_connection(&input);
             let env_agent = std::env::var("HOTSHEET_AGENT").ok();
             let agent = installed_agent.or(env_agent.as_deref());
-            match ask_server(
-                &url,
-                &secret,
-                &project,
-                &connection,
-                &tool,
-                &action,
-                agent,
-                terminal,
-            ) {
+            let request = serde_json::json!({
+                "project": project, "connection": connection, "tool": tool, "action": action,
+                "agent": agent, "terminal_id": terminal,
+            });
+            match ask_server(&url, &secret, &request) {
                 Ok(reply) => Some(decision_from_server(&reply)),
                 // Server unreachable / error → emit nothing and preserve Claude's native flow.
                 Err(_) => None,
@@ -3535,26 +3530,12 @@ fn urlencoding_component(value: &str) -> String {
         .collect()
 }
 
-fn ask_server(
-    url: &str,
-    secret: &str,
-    project: &str,
-    connection: &str,
-    tool: &str,
-    action: &str,
-    agent: Option<&str>,
-    terminal_id: Option<&str>,
-) -> Result<serde_json::Value> {
+fn ask_server(url: &str, secret: &str, request: &serde_json::Value) -> Result<serde_json::Value> {
     let endpoint = format!("{}/permissions/ask", url.trim_end_matches('/'));
-    let body = serde_json::json!({
-        "project": project, "connection": connection, "tool": tool, "action": action,
-        "agent": agent, "terminal_id": terminal_id,
-    })
-    .to_string();
     let text = ureq::post(&endpoint)
         .set("X-Hotsheet-Secret", secret)
         .set("Content-Type", "application/json")
-        .send_string(&body)?
+        .send_string(&request.to_string())?
         .into_string()?;
     Ok(serde_json::from_str(&text)?)
 }

@@ -94,10 +94,10 @@ pub fn should_bridge_permission(event: PermissionHookEvent, headless_pre_tool: b
 
 /// Only an interactive permission request proves a terminal's live hook connection.
 /// Headless PreToolUse has no interactive session to display as connected.
-pub fn permission_terminal_id<'a>(
+pub fn permission_terminal_id(
     event: PermissionHookEvent,
-    terminal_id: Option<&'a str>,
-) -> Option<&'a str> {
+    terminal_id: Option<&str>,
+) -> Option<&str> {
     (event == PermissionHookEvent::PermissionRequest)
         .then_some(terminal_id?)
         .filter(|id| !id.is_empty())
