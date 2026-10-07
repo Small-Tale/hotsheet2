@@ -2,14 +2,17 @@
 
 ## Current behavior
 
-The web client's thumbs controls append a regular, human-authored ticket note beginning
+The web client's thumbs controls append a regular ticket note beginning
 `AI feedback for <target>: Helpful` or `AI feedback for <target>: Not helpful`, followed
-by an optional explanation. The action preserves an auditable response in the ticket;
-it does not update a model, prompt, agent instruction, or future suggestion. Target and
-rating are currently prose rather than structured fields. Ticket text search can find
-these notes, but a reliable feedback-only query, correction history, and deduplication
-need explicit metadata (HS2-2G2336). See [the client contract](06-clients.md) and
-[ticket note format](17-ticket-file-format.md).
+by an optional explanation. For a `note:<id>` target, the Notes UI nests the rating
+inside that source note behind a disclosure and Git-backed parent deletion removes the
+rating. Missing-parent and other-target feedback stays visible. The action preserves an
+auditable response in the ticket; it does not update a model, prompt, agent instruction,
+or future suggestion. Git-backed note targets also carry a structured `feedback_for`
+source id, while ratings and non-note targets remain prose.
+Ticket text search can find these notes, but a reliable feedback-only query, correction
+history, and deduplication need explicit metadata (HS2-2G2336). See [the client
+contract](06-clients.md) and [ticket note format](17-ticket-file-format.md).
 
 ## Recommended process
 

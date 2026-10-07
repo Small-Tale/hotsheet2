@@ -283,3 +283,32 @@
   padding: remify(11.2px) remify(8px);
   border-radius: remify(9.6px);
 }
+.note-card__ai-feedback {
+  border-top: 1px solid var(--wa-color-neutral-border-normal);
+  padding-top: var(--kui-space-xs);
+}
+.note-card__ai-feedback summary {
+  color: var(--wa-color-text-link);
+  cursor: pointer;
+  font-size: var(--wa-font-size-xs);
+  font-weight: var(--wa-font-weight-semibold);
+}
+.note-card__ai-feedback summary:focus-visible {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: 2px;
+}
+.note-card__ai-feedback-hide,
+.note-card__ai-feedback[open] .note-card__ai-feedback-show {
+  display: none;
+}
+.note-card__ai-feedback[open] .note-card__ai-feedback-hide {
+  display: inline;
+}
+.note-card__ai-feedback-entry {
+  border-top: 1px solid var(--wa-color-neutral-border-normal);
+  margin-top: var(--kui-space-xs);
+  padding-top: var(--kui-space-xs);
+}
+.note-card__ai-feedback-entry .note-card {
+  background: var(--wa-color-neutral-fill-quiet);
+}

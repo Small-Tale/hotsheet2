@@ -29,6 +29,9 @@ pub struct Note {
     /// carried as the `confidence:` note-marker token (HS2-DWTJ43). Optional and
     /// absent on every note written before it existed.
     pub confidence: Option<Confidence>,
+    /// Source note of an AI thumbs rating. Legacy files without this marker retain
+    /// their relationship through the known first-line prefix.
+    pub feedback_for: Option<Ulid>,
     /// Who wrote the note: the acting role and optional stable id of the mutation that
     /// created it (HS2-32QDZ3), carried as the `actor:` / `actor_id_hex:` note-marker
     /// tokens. Absent on notes written before it existed or by an unspecified caller.
@@ -98,6 +101,40 @@ impl std::fmt::Display for Confidence {
 }
 
 impl Note {
+    /// Source note of a thumbs rating written by the web client. New Git notes carry
+    /// a marker; the exact legacy prefix remains a link for older and provider notes.
+    /// Malformed or non-note targets stay ordinary notes so they cannot disappear.
+    pub fn ai_feedback_for_note(&self) -> Option<Ulid> {
+        self.feedback_for
+            .or_else(|| Self::feedback_parent_from_text(&self.text))
+    }
+
+    pub fn feedback_parent_from_text(text: &str) -> Option<Ulid> {
+        let target = Self::ai_feedback_target(text)?;
+        Ulid::from_string(target.strip_prefix("note:")?).ok()
+    }
+
+    pub fn is_ai_thumbs_feedback(&self) -> bool {
+        self.feedback_for.is_some() || Self::text_is_ai_thumbs_feedback(&self.text)
+    }
+
+    pub fn text_is_ai_thumbs_feedback(text: &str) -> bool {
+        Self::ai_feedback_target(text).is_some()
+    }
+
+    fn ai_feedback_target(text: &str) -> Option<&str> {
+        let first = text.lines().next()?;
+        let target = first.strip_prefix("AI feedback for ")?;
+        let (id, rating) = target.rsplit_once(": ")?;
+        if !matches!(
+            rating,
+            "Helpful — keep suggestions like this." | "Not helpful — stop suggestions like this."
+        ) {
+            return None;
+        }
+        Some(id)
+    }
+
     /// Whether regular-note text uses HS1's historical feedback marker.
     ///
     /// HS1 deliberately accepted the all-caps phrase anywhere in the note and did
@@ -120,8 +157,9 @@ impl Note {
     /// regular note. Keep those files meaningful while new writes use the first-class
     /// `feedback_needed` kind.
     pub fn is_feedback_needed_request(&self) -> bool {
-        self.kind == NoteKind::FeedbackNeeded
-            || (self.kind == NoteKind::Regular && Self::text_requests_feedback(&self.text))
+        !self.is_ai_thumbs_feedback()
+            && (self.kind == NoteKind::FeedbackNeeded
+                || (self.kind == NoteKind::Regular && Self::text_requests_feedback(&self.text)))
     }
 }
 
@@ -389,7 +427,10 @@ impl Ticket {
     pub fn feedback_needed(&self) -> bool {
         self.notes
             .iter()
-            .filter(|note| matches!(note.kind, NoteKind::Regular | NoteKind::FeedbackNeeded))
+            .filter(|note| {
+                matches!(note.kind, NoteKind::Regular | NoteKind::FeedbackNeeded)
+                    && !note.is_ai_thumbs_feedback()
+            })
             .max_by(|a, b| {
                 a.created_at
                     .chronological_cmp(&b.created_at)
@@ -423,6 +464,7 @@ mod tests {
             edited_at: Timestamp::new(created_at),
             summary: None,
             confidence: None,
+            feedback_for: None,
             actor: None,
             text: String::new(),
         }
@@ -489,6 +531,34 @@ mod tests {
             "2026-08-20T00:03:00Z",
         ));
         assert!(ticket.feedback_needed());
+    }
+
+    #[test]
+    fn ai_thumbs_ratings_do_not_answer_a_feedback_request() {
+        let mut ticket = Ticket::default();
+        let ask = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+            NoteKind::FeedbackNeeded,
+            "2026-08-20T00:00:00Z",
+        );
+        let mut rating = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+            NoteKind::Regular,
+            "2026-08-20T00:01:00Z",
+        );
+        rating.text = "AI feedback for note:01ARZ3NDEKTSV4RRFFQ69G5FA3: Helpful — keep suggestions like this.".into();
+        ticket.notes.extend([ask, rating.clone()]);
+        assert!(ticket.feedback_needed());
+        rating.text = "Edited rating".into();
+        rating.feedback_for = Some(Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FA3").unwrap());
+        ticket.notes[1] = rating;
+        assert!(ticket.feedback_needed());
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA4",
+            NoteKind::Regular,
+            "2026-08-20T00:02:00Z",
+        ));
+        assert!(!ticket.feedback_needed());
     }
 
     #[test]

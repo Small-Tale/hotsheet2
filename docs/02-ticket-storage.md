@@ -299,6 +299,12 @@ should the fix also cover the dashboard dedicated view?
   two distinct, uniquely-identified blocks that union cleanly and sort by explicit
   creation time, with ULID as the stable tie-breaker. The comment keeps metadata machine-readable without cluttering
   the rendered Markdown.
+- **AI thumbs feedback for a note** is a regular note whose marker carries
+  `feedback_for: <source-note-ULID>`. The first line also starts
+  `AI feedback for note:<source-note-ULID>: Helpful` or `Not helpful`, so existing
+  records without the marker retain their link. Editing the text of a new feedback note
+  preserves its marker. Deleting the source note from a Git-backed store removes its
+  associated feedback notes in the same ticket write. Orphaned feedback stays visible.
 - **Every note has immutable `created_at` and mutable `edited_at` RFC3339 timestamps**
   in its marker. Editing changes only `edited_at`; legacy one-timestamp notes map that
   timestamp to both fields.

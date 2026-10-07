@@ -11,6 +11,7 @@ import { Skeleton } from '@kerfjs/ui/skeleton';
 import { Activity, MessageSquareText, Plus } from 'lucide';
 
 import type { AttachmentReferenceContext } from '../attachment-references';
+import { isAiThumbsFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { NoteCard, type NoteCardProps } from './note-card';
 import { NoteComposer } from './note-composer';
@@ -80,6 +81,43 @@ interface TicketNotesProps {
   attachmentContext?: AttachmentReferenceContext;
 }
 
+/** Legacy and current thumbs notes keep their source id in the first line. Only a
+ * known rating and an existing parent are nested; orphaned/other-target notes stay
+ * visible so an edit or provider sync cannot silently discard them. */
+export function nestAiFeedback(notes: readonly NoteCardProps[]): NoteCardProps[] {
+  const target = (note: NoteCardProps) => {
+    const first = note.body.split(/\r?\n/, 1)[0] ?? '';
+    const match =
+      /^AI feedback for note:([^:\r\n]+): (Helpful — keep suggestions like this\.|Not helpful — stop suggestions like this\.)$/u.exec(
+        first,
+      );
+    return note.feedbackFor
+      ? { parent: note.feedbackFor, rating: match?.[2], first: match ? first : undefined }
+      : match
+        ? { parent: match[1], rating: match[2], first }
+        : undefined;
+  };
+  const parents = new Set(notes.filter((note) => !target(note)).map((note) => note.id));
+  const feedback = new Map<string, NoteCardProps[]>();
+  const visible: NoteCardProps[] = [];
+  for (const note of notes) {
+    const link = target(note);
+    if (!link || link.parent === note.id || !parents.has(link.parent)) {
+      visible.push(note);
+      continue;
+    }
+    const entries = feedback.get(link.parent) ?? [];
+    entries.push({
+      ...note,
+      body: link.first
+        ? [link.rating, note.body.slice(link.first.length).trim()].filter(Boolean).join('\n\n')
+        : note.body,
+    });
+    feedback.set(link.parent, entries);
+  }
+  return visible.map((note) => ({ ...note, aiFeedback: feedback.get(note.id) }));
+}
+
 function LoadedTicketNotes({
   notes,
   editingNoteId,
@@ -94,17 +132,22 @@ function LoadedTicketNotes({
   feedbackChoiceSelections = {},
   attachmentContext,
 }: TicketNotesProps) {
-  const latestExchangeNote = [...notes]
+  const visibleNotes = nestAiFeedback(notes);
+  const latestExchangeNote = [...visibleNotes]
     .reverse()
-    .find((note) => note.kind === 'regular' || note.kind === 'feedback_needed');
+    .find(
+      (note) =>
+        (note.kind === 'regular' || note.kind === 'feedback_needed') &&
+        !isAiThumbsFeedback({ text: note.body, feedback_for: note.feedbackFor }),
+    );
   const activeFeedbackNoteId = latestExchangeNote?.kind === 'feedback_needed' ? latestExchangeNote.id : undefined;
   return (
     <section class="ticket-notes" data-component="ticket-notes">
       {canAdd && !composing ? (
         <ListHeader
           label="Notes"
-          count={notes.length}
-          countLabel={`${notes.length} ${notes.length === 1 ? 'note' : 'notes'}`}
+          count={visibleNotes.length}
+          countLabel={`${visibleNotes.length} ${visibleNotes.length === 1 ? 'note' : 'notes'}`}
           action="add-ticket-note"
           actionLabel="Add note"
           actionIcon={<LucideIcon icon={Plus} name="plus" />}
@@ -112,13 +155,13 @@ function LoadedTicketNotes({
       ) : (
         <ListHeader
           label="Notes"
-          count={notes.length}
-          countLabel={`${notes.length} ${notes.length === 1 ? 'note' : 'notes'}`}
+          count={visibleNotes.length}
+          countLabel={`${visibleNotes.length} ${visibleNotes.length === 1 ? 'note' : 'notes'}`}
         />
       )}
-      {notes.length > 0 ? (
+      {visibleNotes.length > 0 ? (
         <List className="ticket-notes__list" gap={rem(0.55)}>
-          {notes.map((note) => (
+          {visibleNotes.map((note) => (
             <NoteCard
               {...note}
               density="compact"

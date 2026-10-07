@@ -126,6 +126,8 @@ export interface Note {
   summary?: string;
   /** AI completion confidence (0-100) recorded on this note (HS2-DWTJ43). */
   confidence?: number;
+  /** Persisted source note id of AI thumbs feedback; older/provider notes use their text prefix. */
+  feedback_for?: string;
   /** Who wrote the note, when recorded (HS2-32QDZ3). */
   actor?: NoteActor;
   text: string;

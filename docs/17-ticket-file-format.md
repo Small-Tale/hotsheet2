@@ -135,6 +135,12 @@ than swallowed or discarded; a future schema can define such a section explicitl
 | `actor`      | optional `human\|ai\|system` plus id                         | who wrote the note (HS2-32QDZ3): `actor: ai` plus an optional `actor_id_hex:` (UTF-8 hex id); an unknown role parses as absent                               |
 | text         | Markdown                                                     | rendered; raw HTML escaped                                                                                                                                   |
 
+AI thumbs feedback for a source note carries an optional `feedback_for: <ulid>` token
+in the note marker. Writers derive it from the known `AI feedback for note:<ulid>:`
+first line; readers still recognize that prefix in older files without the token.
+The marker keeps the association if the feedback text is edited. Other note kinds and
+feedback for non-note targets omit it. Older bounded-note readers ignore this token.
+
 A scored marker looks like
 `<!-- hotsheet:note:begin <ulid> created_at: … edited_at: … summary_hex: … confidence: 82 -->`.
 Older bounded-note parsers ignore the unknown token, so writing it needs no schema

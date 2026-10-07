@@ -37,6 +37,9 @@ export interface NoteCardProps {
   aiMayContainErrors?: boolean;
   /** AI completion confidence (0-100) recorded on this note; absent for unscored notes. */
   confidence?: number;
+  feedbackFor?: string;
+  /** Thumbs ratings associated with this source note, hidden until expanded. */
+  aiFeedback?: readonly NoteCardProps[];
   /** `comfortable` (default) uses the canonical card inset; `compact` the tighter list inset. */
   density?: 'comfortable' | 'compact';
 }
@@ -292,6 +295,7 @@ export function NoteCard({
   aiTool,
   aiMayContainErrors = kind === 'activity',
   confidence,
+  aiFeedback = [],
   density = 'comfortable',
 }: NoteCardProps) {
   const presentation = presentations[kind];
@@ -327,7 +331,7 @@ export function NoteCard({
           : undefined
       }
       data-acknowledgement={acknowledgement ? 'true' : undefined}
-      data-edit-on-click={editable && !editorOpen ? 'true' : undefined}
+      data-edit-on-click={editable && !editorOpen && !aiFeedback.length ? 'true' : undefined}
       title={editable && !editorOpen ? 'Click to edit' : undefined}
     >
       <header class="note-card__header">
@@ -388,6 +392,21 @@ export function NoteCard({
           author
         )}
       </footer>
+      {aiFeedback.length > 0 && (
+        <details class="note-card__ai-feedback">
+          <summary>
+            <span class="note-card__ai-feedback-show">Show AI Feedback</span>
+            <span class="note-card__ai-feedback-hide">Hide AI Feedback</span>
+          </summary>
+          <div class="note-card__ai-feedback-list">
+            {aiFeedback.map((feedback) => (
+              <div class="note-card__ai-feedback-entry">
+                <NoteCard {...feedback} density="compact" aiFeedback={[]} />
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </article>
   );
 }

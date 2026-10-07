@@ -33,6 +33,18 @@ describe('isFeedbackNeeded', () => {
     ).toBe(true);
   });
 
+  it('keeps an open feedback request open across AI thumbs ratings', () => {
+    const ask = note('ask', 'feedback_needed', '2026-09-02T00:00:00Z');
+    const rating = {
+      ...note('rating', 'regular', '2026-09-02T00:01:00Z'),
+      text: 'AI feedback for note:source: Helpful — keep suggestions like this.',
+    };
+    expect(isFeedbackNeeded([ask, rating])).toBe(true);
+    expect(presentedNoteKind(ask, [ask, rating])).toBe('feedback_needed');
+    expect(fullTicketFeedbackNeeded({ details: '', notes: [ask, rating] })).toBe(true);
+    expect(isFeedbackNeeded([ask, { ...rating, text: 'Edited rating', feedback_for: 'source' }])).toBe(true);
+  });
+
   it('presents answered asks as regular notes without changing later unanswered asks', () => {
     const ask = note('1', 'feedback_needed', '2026-09-02T00:00:00Z'),
       response = note('2', 'regular', '2026-09-02T00:01:00Z'),

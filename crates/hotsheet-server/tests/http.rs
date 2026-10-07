@@ -7557,6 +7557,22 @@ async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_a
     )
     .await;
     let note_id = noted["notes"][0]["id"].as_str().unwrap().to_owned();
+    let feedback = serde_json::json!({
+        "note": format!("AI feedback for note:{note_id}: Helpful — keep suggestions like this.\n\nUseful")
+    });
+    let with_feedback = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/qual/tickets/{qualified_id}"),
+                Some(&feedback.to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(with_feedback["notes"].as_array().unwrap().len(), 2);
+    assert_eq!(with_feedback["notes"][1]["feedback_for"], note_id);
     let note_deleted = app
         .clone()
         .oneshot(authed(

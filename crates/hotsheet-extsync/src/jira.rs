@@ -313,6 +313,7 @@ impl JiraProvider {
                     edited_at: comment.updated.unwrap_or(comment.created),
                     summary: None,
                     confidence,
+                    feedback_for: None,
                     actor: None,
                     text,
                 }

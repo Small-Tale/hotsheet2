@@ -1132,6 +1132,7 @@ impl FsStore {
             edited_at: now.clone(),
             summary: Some(summary),
             confidence: None,
+            feedback_for: None,
             actor: None,
             text,
         });

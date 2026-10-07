@@ -1371,6 +1371,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         aiAuthored,
         aiTool,
         confidence: note.confidence,
+        feedbackFor: note.feedback_for,
       } as const;
     });
   }

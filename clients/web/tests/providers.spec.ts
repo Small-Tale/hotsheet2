@@ -1818,7 +1818,11 @@ async function mockProject(
       selectedFull = {
         ...selectedFull,
         notes: selectedFull.notes.filter((note) => {
-          return note.id !== noteId;
+          return (
+            note.id !== noteId &&
+            !('feedback_for' in note && note.feedback_for === noteId) &&
+            !note.text.startsWith(`AI feedback for note:${noteId}: `)
+          );
         }),
       };
       return route.fulfill({ json: { store: 'git-local', ...selectedFull } });
@@ -1856,6 +1860,7 @@ async function mockProject(
                   kind: 'regular' as const,
                   created_at: '2026-09-02T02:01:00Z',
                   edited_at: '2026-09-02T02:01:00Z',
+                  feedback_for: /^AI feedback for note:([^:]+): /u.exec(body.note)?.[1],
                   text: body.note,
                 }
               : undefined;
@@ -13887,6 +13892,45 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
     ),
   ).toBe(true);
 });
+
+for (const width of [1280, 390]) {
+  test(`nests AI note feedback after rating, reload, and parent deletion at ${width}px (HS2-9R3XY0)`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const patches = await mockProject(page);
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByText('Use real project tickets').click();
+    const inspector = page.locator('#app-right-rail');
+    const parent = inspector.locator('[data-component="note-card"][data-note-id="N1"]');
+    page.once('dialog', (dialog) => dialog.accept('Keep the short status summary.'));
+    await parent.getByRole('button', { name: 'Helpful — keep suggestions like this' }).click();
+    await expect
+      .poll(() => patches.some((patch) => String(patch.note).startsWith('AI feedback for note:N1: Helpful')))
+      .toBe(true);
+    await expect(parent.locator('.note-card__ai-feedback')).toBeVisible();
+    await expect(inspector.locator('.ticket-notes__list > *')).toHaveCount(3);
+    await parent.getByText('Show AI Feedback').click();
+    await expect(parent.getByText('Keep the short status summary.')).toBeVisible();
+    await page.reload();
+    if (width === 390)
+      await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').first().click();
+    const reloaded = page.locator('#app-right-rail [data-component="note-card"][data-note-id="N1"]');
+    await expect(reloaded.getByText('Show AI Feedback')).toBeVisible();
+    await expect(reloaded.getByText('Keep the short status summary.')).toBeHidden();
+    const disclosure = reloaded.locator('.note-card__ai-feedback summary');
+    await disclosure.focus();
+    await disclosure.press('Enter');
+    await expect(reloaded.locator('.note-card__ai-feedback')).toHaveAttribute('open', '');
+    await expect(reloaded.getByText('Keep the short status summary.')).toBeVisible();
+    await reloaded.screenshot({ path: `/private/tmp/hs2-9r3xy0-feedback-${width}.png` });
+    await reloaded.getByRole('button', { name: 'Delete note' }).first().click();
+    await expect(page.locator('#app-right-rail [data-note-id="N1"]')).toHaveCount(0);
+    await expect(page.locator('#app-right-rail')).not.toContainText('Keep the short status summary.');
+  });
+}
 
 test('aligns the empty Notes text and preserves Add note before the first note exists (HS2-D4VEE8)', async ({
   page,

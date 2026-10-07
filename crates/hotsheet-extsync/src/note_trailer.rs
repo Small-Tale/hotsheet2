@@ -211,6 +211,7 @@ mod tests {
             edited_at: created_at.into(),
             summary: None,
             confidence,
+            feedback_for: None,
             actor: None,
             text: String::new(),
         };
@@ -237,6 +238,7 @@ mod tests {
             edited_at: created_at.into(),
             summary: None,
             confidence,
+            feedback_for: None,
             actor: None,
             text: String::new(),
         }

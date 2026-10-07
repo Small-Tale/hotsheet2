@@ -953,6 +953,7 @@ fn hs1_style_feedback_marker_sets_the_indexed_flag() {
         kind: NoteKind::Regular,
         summary: None,
         confidence: None,
+        feedback_for: None,
         actor: None,
         text: "Context first. FEEDBACK NEEDED choose one".into(),
     });

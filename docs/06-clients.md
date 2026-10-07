@@ -3038,6 +3038,18 @@ quieter Activity variant uses an 8px block / 16px inline inset with 4px between 
 regions. Fixed action targets, choice indicators, and glyphs remain explicit geometry
 (HS2-4Y6SM9).
 
+Thumbs feedback on an AI-authored **note** remains a regular, auditable ticket note with
+a persisted `feedback_for` source-note id. Older and external-provider notes use the
+exact `AI feedback for note:<id>:` prefix as a compatibility link. The Notes list groups it under the
+referenced parent, hides it by default, and offers a keyboard-accessible **Show AI
+Feedback / Hide AI Feedback** disclosure only when that parent has ratings. Multiple
+ratings are separated below the parent body. A rating with a missing parent, malformed
+prefix, or a non-note target remains visible in the flat list. This works after reload
+and provider sync because the relationship is persisted. Git-backed
+note deletion removes a parent's associated ratings; external providers currently do
+not offer note deletion through Hot Sheet. A thumbs rating does not answer or reopen a
+separate `feedback_needed` exchange.
+
 - **`feedback_needed` and `feedback_draft` notes render in the feedback-editor style in
   reader mode** (you can answer the ask / continue your draft). A new response starts
   empty; a saved draft is prefilled.

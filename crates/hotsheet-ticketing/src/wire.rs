@@ -108,6 +108,9 @@ pub struct ApiNote {
     /// The author's completion confidence (0-100) recorded on this note (HS2-DWTJ43).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence: Option<u8>,
+    /// Source note id for AI thumbs feedback; absent on older or unrelated notes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feedback_for: Option<String>,
     /// Who wrote the note (HS2-32QDZ3): `{"role":"human|ai|system","id":...}`. Omitted
     /// when unknown, so older clients see an unchanged shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -197,6 +200,7 @@ impl ApiTicket {
                     edited_at: n.edited_at.as_str().to_string(),
                     summary: n.summary.clone(),
                     confidence: n.confidence.map(Confidence::get),
+                    feedback_for: n.ai_feedback_for_note().map(|id| id.to_string()),
                     actor: n.actor.clone(),
                     text: n.text.clone(),
                 })
@@ -492,6 +496,7 @@ mod tests {
             edited_at: Timestamp::new(created_at),
             summary: None,
             confidence: None,
+            feedback_for: None,
             actor: None,
             text: "please confirm".into(),
         };
@@ -548,6 +553,7 @@ mod tests {
             edited_at: Timestamp::new("2026-08-20T00:00:00Z"),
             summary: None,
             confidence: None,
+            feedback_for: None,
             actor: None,
             text: "Context first. IMMEDIATE FEEDBACK NEEDED choose one".into(),
         });

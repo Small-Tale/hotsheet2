@@ -886,6 +886,7 @@ fn build_ticket(
                 edited_at: created_at,
                 summary: None,
                 confidence: None,
+                feedback_for: Note::feedback_parent_from_text(&n.text),
                 actor: None,
                 text: n.text.clone(),
             }

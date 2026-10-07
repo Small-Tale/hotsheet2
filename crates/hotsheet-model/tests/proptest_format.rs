@@ -150,6 +150,7 @@ fn arb_note() -> impl Strategy<Value = Note> {
             edited_at: at,
             summary,
             confidence,
+            feedback_for: None,
             actor,
             text: text.trim().to_string(),
         })

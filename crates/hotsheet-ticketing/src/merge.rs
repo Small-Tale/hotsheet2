@@ -443,6 +443,7 @@ mod tests {
             edited_at: ts("2026-08-19T01:00:00Z"),
             summary: None,
             confidence: None,
+            feedback_for: None,
             actor: None,
             text: "ours note".into(),
         }];
@@ -454,6 +455,7 @@ mod tests {
             edited_at: ts("2026-08-19T02:00:00Z"),
             summary: None,
             confidence: None,
+            feedback_for: None,
             actor: None,
             text: "theirs note".into(),
         }];
@@ -510,6 +512,7 @@ mod tests {
             edited_at: ts("2026-08-19T01:00:00Z"),
             summary: Some("Started implementation".into()),
             confidence: None,
+            feedback_for: None,
             actor: None,
             text: "started".into(),
         }];
@@ -537,6 +540,7 @@ mod tests {
             edited_at: ts(at),
             summary: None,
             confidence: confidence(value),
+            feedback_for: None,
             actor: None,
             text: text.into(),
         };

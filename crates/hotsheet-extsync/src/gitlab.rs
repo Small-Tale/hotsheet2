@@ -306,6 +306,7 @@ impl GitLabProvider {
                     edited_at: note.updated_at.unwrap_or(note.created_at),
                     summary: None,
                     confidence,
+                    feedback_for: None,
                     actor: None,
                     text,
                 }

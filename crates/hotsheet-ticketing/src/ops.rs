@@ -819,6 +819,7 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
         edited_at: now.clone(),
         summary: Some(status_label(to).to_string()),
         confidence: None,
+        feedback_for: None,
         actor: None,
         text: format!(
             "Status changed from {} to {}",
@@ -870,6 +871,7 @@ pub fn prepare_not_working(
         edited_at: now.clone(),
         summary: Some(NOT_WORKING_SUMMARY.into()),
         confidence: None,
+        feedback_for: None,
         actor: None,
         text: reporter
             .filter(|value| !value.trim().is_empty())
@@ -884,6 +886,7 @@ pub fn prepare_not_working(
             edited_at: now.clone(),
             summary: None,
             confidence: None,
+            feedback_for: None,
             actor: None,
             text: format!("Not working: {text}"),
         });
@@ -1100,7 +1103,10 @@ pub fn add_note_with_metadata(
 ) -> Result<Ticket, StoreError> {
     let mut t = store.read_ticket(id)?;
     let text = canonicalize_attachment_id_references(store, &t, &text);
-    let kind = if kind == NoteKind::Regular && Note::text_requests_feedback(&text) {
+    let kind = if kind == NoteKind::Regular
+        && !Note::text_is_ai_thumbs_feedback(&text)
+        && Note::text_requests_feedback(&text)
+    {
         NoteKind::FeedbackNeeded
     } else {
         kind
@@ -1115,6 +1121,7 @@ pub fn add_note_with_metadata(
             (!value.is_empty()).then_some(value)
         }),
         confidence: metadata.confidence,
+        feedback_for: Note::feedback_parent_from_text(&text),
         actor: metadata.actor,
         text,
     });
@@ -1539,14 +1546,15 @@ pub fn delete_note(
     now: Timestamp,
 ) -> Result<Ticket, StoreError> {
     let mut ticket = store.read_ticket(ticket_id)?;
-    let before = ticket.notes.len();
-    ticket.notes.retain(|note| &note.id != note_id);
-    if ticket.notes.len() == before {
+    if !ticket.notes.iter().any(|note| &note.id == note_id) {
         return Err(StoreError::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!("note {note_id}"),
         )));
     }
+    ticket.notes.retain(|note| {
+        &note.id != note_id && note.ai_feedback_for_note().as_ref() != Some(note_id)
+    });
     ticket.updated_at = now;
     store.write_ticket_committing(&ticket)?;
     Ok(ticket)
@@ -3023,6 +3031,7 @@ mod tests {
             edited_at: ts(at),
             summary: None,
             confidence: confidence.map(|value| Confidence::new(value).unwrap()),
+            feedback_for: None,
             actor: None,
             text: text.into(),
         };
@@ -3370,6 +3379,85 @@ mod tests {
         assert_eq!(deleted.notes[0].id, n2);
         assert_eq!(deleted.updated_at.as_str(), "2026-08-19T04:00:00Z");
         assert!(delete_note(&store, &id, &n1, ts("t5")).is_err());
+    }
+
+    #[test]
+    fn deleting_source_note_cascades_only_its_ai_feedback() {
+        let (_dir, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let source = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        let other = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap();
+        add_note(
+            &store,
+            &id,
+            source,
+            ts("t1"),
+            NoteKind::Regular,
+            "source".into(),
+        )
+        .unwrap();
+        add_note(
+            &store,
+            &id,
+            other,
+            ts("t2"),
+            NoteKind::Regular,
+            "other".into(),
+        )
+        .unwrap();
+        for (suffix, target, rating) in [
+            ("2", source, "Helpful — keep suggestions like this."),
+            ("3", source, "Not helpful — stop suggestions like this."),
+            ("4", other, "Helpful — keep suggestions like this."),
+        ] {
+            let feedback =
+                Ulid::from_string(&format!("01ARZ3NDEKTSV4RRFFQ69G5FB{suffix}")).unwrap();
+            add_note(
+                &store,
+                &id,
+                feedback,
+                ts("t3"),
+                NoteKind::Regular,
+                format!("AI feedback for note:{target}: {rating}\n\nDetail"),
+            )
+            .unwrap();
+        }
+        let first_feedback = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB2").unwrap();
+        assert!(
+            std::fs::read_to_string(store.ticket_path(&id))
+                .unwrap()
+                .contains(&format!("feedback_for: {source}"))
+        );
+        let edited = edit_note(
+            &store,
+            &id,
+            &first_feedback,
+            ts("t3b"),
+            "Edited rating".into(),
+        )
+        .unwrap();
+        assert_eq!(
+            edited
+                .notes
+                .iter()
+                .find(|note| note.id == first_feedback)
+                .unwrap()
+                .feedback_for,
+            Some(source)
+        );
+        let remaining = delete_note(&store, &id, &source, ts("t4")).unwrap();
+        assert_eq!(remaining.notes.len(), 2);
+        assert_eq!(remaining.notes[0].id, other);
+        assert_eq!(remaining.notes[1].ai_feedback_for_note(), Some(other));
+        assert_eq!(store.read_ticket(&id).unwrap().notes, remaining.notes);
     }
 
     #[test]

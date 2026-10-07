@@ -6,10 +6,32 @@ import { describe, expect, it } from 'vitest';
 import { MarkdownEditor } from './markdown-editor';
 import { MarkdownPreview } from './markdown-preview';
 import { NoteComposer } from './note-composer';
-import { TicketNotes } from './ticket-notes';
+import { nestAiFeedback, TicketNotes } from './ticket-notes';
 import { TicketReader } from './ticket-reader';
 
 describe('content components', () => {
+  it('nests multiple note ratings while keeping orphaned and other-target feedback visible', () => {
+    const note = (id: string, body: string) => ({ id, kind: 'regular' as const, author: 'You', time: 'Now', body });
+    const source = note('source', 'Agent suggestion');
+    const helpful = note('one', 'AI feedback for note:source: Helpful — keep suggestions like this.\n\nClear answer');
+    const unhelpful = note('two', 'AI feedback for note:source: Not helpful — stop suggestions like this.');
+    const edited = { ...note('persisted', 'Edited rating without its old prefix'), feedbackFor: 'source' };
+    const orphan = note('orphan', 'AI feedback for note:deleted: Helpful — keep suggestions like this.');
+    const activity = note('activity', 'AI feedback for activity:one: Helpful — keep suggestions like this.');
+    const grouped = nestAiFeedback([helpful, source, orphan, unhelpful, edited, activity]);
+    expect(grouped.map((item) => item.id)).toEqual(['source', 'orphan', 'activity']);
+    expect(grouped[0].aiFeedback?.map((item) => [item.id, item.body])).toEqual([
+      ['one', 'Helpful — keep suggestions like this.\n\nClear answer'],
+      ['two', 'Not helpful — stop suggestions like this.'],
+      ['persisted', 'Edited rating without its old prefix'],
+    ]);
+    const markup = String(TicketNotes({ notes: [helpful, source, orphan, unhelpful, edited, activity] }));
+    expect(markup).toContain('Show AI Feedback');
+    expect(markup).toContain('Hide AI Feedback');
+    expect(markup).toContain('class="note-card__ai-feedback-entry"');
+    expect(markup).toContain('3 notes');
+    expect(nestAiFeedback([orphan])[0].id).toBe('orphan');
+  });
   it('renders a controlled note composer with explicit submit and cancel states', () => {
     const empty = String(NoteComposer({ value: '' }));
     expect(empty).toContain('data-action="create-note-form"');

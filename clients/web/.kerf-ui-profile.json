@@ -386,6 +386,12 @@
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`${expanded ? 'markdown-editor markdown-editor--expanded' : 'markdown-editor'}${appearance === 'embedded' ? ' markdown-editor--embedded' : ''}${inset === 'flush' ? ' markdown-editor--flush' : ''}`}"
     },
     {
+      "id": "intentional-nested-inset-note-card-ai-feedback",
+      "rules": ["KUI-L004"],
+      "target": "src/components/note-card.tsx",
+      "rationale": "Reviewed HS2-9R3XY0: design: note-card__ai-feedback-entry is a separated nested rating surface. Its NoteCard inset keeps each rating's content and actions readable within the expanded source note."
+    },
+    {
       "id": "state-modifier-classes-note-card",
       "rules": ["KUI-L008"],
       "target": "src/components/note-card.tsx",
