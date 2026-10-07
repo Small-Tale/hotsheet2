@@ -2894,7 +2894,17 @@ mod tests {
     }
 
     /// Call a tool and return the parsed JSON the agent would see (or the error text).
-    fn call(backend: &dyn Backend, name: &str, args: Value) -> Value {
+    fn call(backend: &dyn Backend, name: &str, mut args: Value) -> Value {
+        // Keep fixture calls independent of the AI worker environment inherited by cargo test.
+        // Tests that exercise another role supply it explicitly; the stable id also prevents
+        // HOTSHEET_ACTOR_ID from leaking into their expected note authors.
+        if MUTATING_TOOLS.contains(&name) {
+            let object = args.as_object_mut().expect("tool arguments are an object");
+            object.entry("actor_role").or_insert_with(|| json!("human"));
+            object
+                .entry("actor_id")
+                .or_insert_with(|| json!("mcp-test"));
+        }
         let r = handle_message(
             &req("tools/call", json!({ "name": name, "arguments": args })),
             backend,
@@ -3467,7 +3477,7 @@ mod tests {
             .find(|note| note["confidence"] == 70)
             .unwrap()
             .clone();
-        assert_eq!(scored["actor"], json!({ "role": "ai" }));
+        assert_eq!(scored["actor"], json!({ "role": "ai", "id": "mcp-test" }));
         for actor in [json!({ "actor_role": "human" }), json!({})] {
             let other = call(&backend, "hotsheet_create", json!({ "title": "Human" }))["id"]
                 .as_str()
