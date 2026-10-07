@@ -119,19 +119,7 @@ export function ConversationMessages({
           tabindex={selectable ? 0 : undefined}
           aria-label={message.role === 'assistant' ? `AI-generated response by ${tool}` : undefined}
         >
-          <strong>
-            {message.role === 'user' ? (
-              'You'
-            ) : (
-              <AIContentLabel
-                tool={tool}
-                tone="inherit"
-                feedbackTarget={
-                  feedbackAvailable && message.status === 'completed' ? `conversation:${message.id}` : undefined
-                }
-              />
-            )}
-          </strong>
+          {message.role === 'user' && <strong>You</strong>}
           {message.content ? (
             <MarkdownPreview
               source={message.content}
@@ -157,7 +145,14 @@ export function ConversationMessages({
               ))}
             </ul>
           )}
-          {message.usage && <UsageLine usage={message.usage} />}
+          {(message.usage || (message.role === 'assistant' && feedbackAvailable && message.status === 'completed')) && (
+            <footer class="ai-conversation__message-meta">
+              {message.usage && <UsageLine usage={message.usage} />}
+              {message.role === 'assistant' && feedbackAvailable && message.status === 'completed' && (
+                <AIContentFeedback tool={tool} feedbackTarget={`conversation:${message.id}`} />
+              )}
+            </footer>
+          )}
         </article>
       ))}
     </>

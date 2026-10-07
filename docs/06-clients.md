@@ -3111,9 +3111,12 @@ Note authorship comes from the note's recorded `actor` (HS2-32QDZ3):
   marks its own updates, closes, and batches as human (HS2-XF81CJ).
 - **System or unrecorded notes** show "Hot Sheet".
 
-AI-authored artifacts use the shared `AIContentLabel`; attribution is persistent rather
-than hover-only and is repeated in the containing response, narration item, or note's
-accessible name. Narration and distilled summaries explicitly say that they may contain
+AI-authored notes, narration items, and activity summaries use the shared `AIContentLabel`;
+attribution is persistent rather than hover-only and is repeated in the containing artifact's
+accessible name. In the conversation transcript, the side and color of each bubble identify
+the speaker, so assistant turns omit the repeated visible attribution while retaining an
+accessible name with the tool and their feedback controls (HS2-WV9TWE).
+Narration and distilled summaries explicitly say that they may contain
 errors. Thumbs feedback appears only when the composition has a selected ticket whose
 provider accepts notes. The optional explanation and consequence-oriented rating are
 then appended as an ordinary ticket note, so feedback is syncable and auditable rather
