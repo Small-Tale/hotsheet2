@@ -303,10 +303,16 @@ may not have open at once):
    remote ancestry before removing any source data. An unavailable, stale, or replaced
    backup refuses deletion. A matching existing origin can be retried; failed setup
    removes only the origin added by that attempt, provided its URL has not changed.
-   Cleanup requires confirmation and refuses to start while a registered HS1 channel
-   process owned by this checkout is still live, because that process can recreate its
-   database after removal. Project-tagged entries owned by another checkout are ignored;
-   matching and identity-less legacy entries remain conservatively blocking.
+   Cleanup requires confirmation and refuses to start while a registered HS1 channel,
+   project lock, or saved-list app instance is still live, because that process can
+   recreate its database after removal. Project-tagged channel entries owned by another
+   checkout are ignored; matching and identity-less legacy entries remain conservatively
+   blocking. After backup verification, cleanup removes the exact project directory from
+   the legacy global `~/.hotsheet/projects.json` list (including symlink aliases)
+   and removes only matching HS1 channel entries from the project's `.mcp.json`,
+   preserving HS2 and unrelated MCP servers. `HOTSHEET_LEGACY_HOME` selects another
+   legacy global directory for isolated installations. Malformed legacy registration
+   files stop cleanup without deleting live data, and retrying the cleanup is safe.
    It removes only the explicit HS1 live-data/runtime allowlist (database, attachments,
    migrated settings, and generated runtime files); backups, snapshots, the HS2
    legacy `.hotsheet/store` link, and unknown files are preserved. New HS2 links live at

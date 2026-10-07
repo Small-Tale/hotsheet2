@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { access, readdir, readFile, realpath, rm } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { access, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 
@@ -187,6 +187,10 @@ export function developmentRepositoryRoot(cwd = process.cwd(), environment = pro
 
 function hotsheetHome() {
   return process.env.HOTSHEET_HOME || resolve(homedir(), '.hotsheet2');
+}
+
+function hs1LegacyHome() {
+  return process.env.HOTSHEET_LEGACY_HOME || resolve(homedir(), '.hotsheet');
 }
 
 async function exists(path: string) {
@@ -530,13 +534,43 @@ async function hs1ChannelPids(directory: string): Promise<number[]> {
   ];
 }
 
-export async function removeHs1LiveData(directory: string, probe: ProcessProbe = processIsRunning): Promise<string[]> {
-  if (!(await exists(resolve(directory, 'db/PG_VERSION')))) return [];
+async function optionalFile(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+async function hs1LockPid(directory: string): Promise<number | undefined> {
+  const raw = await optionalFile(resolve(directory, 'hotsheet.lock'));
+  if (raw === undefined) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error('Cannot verify the Hot Sheet 1 project lock; no files were removed.');
+  }
+  const pid = typeof value === 'object' && value !== null ? (value as { pid?: unknown }).pid : undefined;
+  if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0)
+    throw new Error('Cannot verify the Hot Sheet 1 project lock; no files were removed.');
+  return pid;
+}
+
+async function requireHs1Stopped(directory: string, probe: ProcessProbe): Promise<void> {
   const running = (await hs1ChannelPids(directory)).filter(probe);
+  const lockPid = await hs1LockPid(directory);
+  if (lockPid !== undefined && probe(lockPid) && !running.includes(lockPid)) running.push(lockPid);
   if (running.length)
     throw new Error(
       `Hot Sheet 1 is still running for this project (process${running.length === 1 ? '' : 'es'} ${running.join(', ')}). Quit Hot Sheet 1 and its AI-tool channel sessions, then retry; no files were removed.`,
     );
+}
+
+export async function removeHs1LiveData(directory: string, probe: ProcessProbe = processIsRunning): Promise<string[]> {
+  if (!(await exists(resolve(directory, 'db/PG_VERSION')))) return [];
+  await requireHs1Stopped(directory, probe);
   const removed: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (preserveHs1Entry(entry.name)) continue;
@@ -551,11 +585,112 @@ export async function removeHs1LiveData(directory: string, probe: ProcessProbe =
   return removed.sort();
 }
 
+async function writeJsonAtomically(path: string, value: unknown): Promise<void> {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    const original = await stat(path);
+    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: original.mode & 0o777 });
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+
+async function sameHs1Directory(candidate: string, directory: string): Promise<boolean> {
+  if (resolve(candidate) === directory) return true;
+  try {
+    return (await realpath(candidate)) === (await realpath(directory));
+  } catch {
+    return false;
+  }
+}
+
+/** Remove only HS1 registrations for this checkout after verified backup and before live-data deletion. */
+export async function reconcileHs1Registrations(
+  root: string,
+  legacyHome = hs1LegacyHome(),
+  probe: ProcessProbe = processIsRunning,
+): Promise<void> {
+  const directory = resolve(root, '.hotsheet');
+  await requireHs1Stopped(directory, probe);
+  const projectsPath = resolve(legacyHome, 'projects.json');
+  const projectsRaw = await optionalFile(projectsPath);
+  let projects: string[] | undefined;
+  if (projectsRaw !== undefined) {
+    try {
+      const parsed: unknown = JSON.parse(projectsRaw);
+      if (!Array.isArray(parsed) || !parsed.every((entry) => typeof entry === 'string')) throw new Error();
+      projects = parsed;
+    } catch {
+      throw new Error('Cannot read the Hot Sheet 1 saved project list; no files were removed.');
+    }
+  }
+  const projectMatches = projects ? await Promise.all(projects.map((entry) => sameHs1Directory(entry, directory))) : [];
+  const saved = projectMatches.includes(true);
+  if (saved) {
+    const instanceRaw = await optionalFile(resolve(legacyHome, 'instance.json'));
+    if (instanceRaw !== undefined) {
+      let instance: unknown;
+      try {
+        instance = JSON.parse(instanceRaw);
+      } catch {
+        throw new Error('Cannot verify the Hot Sheet 1 app instance; no files were removed.');
+      }
+      const pid = typeof instance === 'object' && instance !== null ? (instance as { pid?: unknown }).pid : undefined;
+      if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0)
+        throw new Error('Cannot verify the Hot Sheet 1 app instance; no files were removed.');
+      if (probe(pid))
+        throw new Error(`Hot Sheet 1 is still running (process ${pid}). Quit it, then retry; no files were removed.`);
+    }
+  }
+  const mcpPath = resolve(root, '.mcp.json');
+  const mcpRaw = await optionalFile(mcpPath);
+  let mcp: Record<string, unknown> | undefined;
+  let servers: Record<string, unknown> | undefined;
+  if (mcpRaw !== undefined) {
+    try {
+      const parsed: unknown = JSON.parse(mcpRaw);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error();
+      mcp = parsed as Record<string, unknown>;
+      const listed = mcp.mcpServers;
+      if (listed !== undefined) {
+        if (typeof listed !== 'object' || listed === null || Array.isArray(listed)) throw new Error();
+        servers = listed as Record<string, unknown>;
+      }
+    } catch {
+      throw new Error('Cannot read the project MCP configuration; no files were removed.');
+    }
+  }
+  const matchingKeys: string[] = [];
+  for (const [key, server] of Object.entries(servers ?? {})) {
+    if (key !== 'hotsheet-channel' && !key.startsWith('hotsheet-channel-')) continue;
+    const args = typeof server === 'object' && server !== null ? (server as { args?: unknown }).args : undefined;
+    if (!Array.isArray(args)) continue;
+    for (let index = 0; index + 1 < args.length; index++) {
+      const target: unknown = args[index + 1];
+      if (args[index] === '--data-dir' && typeof target === 'string' && (await sameHs1Directory(target, directory))) {
+        matchingKeys.push(key);
+        break;
+      }
+    }
+  }
+  if (saved && projects)
+    await writeJsonAtomically(
+      projectsPath,
+      projects.filter((_, index) => !projectMatches[index]),
+    );
+  if (matchingKeys.length && mcp && servers) {
+    const remaining = Object.fromEntries(Object.entries(servers).filter(([key]) => !matchingKeys.includes(key)));
+    await writeJsonAtomically(mcpPath, { ...mcp, mcpServers: remaining });
+  }
+}
+
 export async function removeImportedHs1Data(projectId: string): Promise<string[]> {
   const session = sessions.get(projectId),
     root = session?.root;
   if (!root || !session.ticketStore) throw new Error('Project session has no imported ticket store.');
   await requireHs1Backup(session.ticketStore, root);
+  await reconcileHs1Registrations(root);
   return removeHs1LiveData(resolve(root, '.hotsheet'));
 }
 

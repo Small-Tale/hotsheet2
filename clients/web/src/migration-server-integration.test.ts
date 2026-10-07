@@ -19,9 +19,12 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
       root = resolve(workspace, 'project'),
       store = resolve(workspace, 'custom.hs2'),
       home = resolve(workspace, 'home'),
+      legacyHome = resolve(workspace, 'legacy-home'),
       previousHome = process.env.HOTSHEET_HOME,
+      previousLegacyHome = process.env.HOTSHEET_LEGACY_HOME,
       previousJobs = process.env.HOTSHEET_MIGRATION_JOBS;
     process.env.HOTSHEET_HOME = home;
+    process.env.HOTSHEET_LEGACY_HOME = legacyHome;
     process.env.HOTSHEET_MIGRATION_JOBS = resolve(workspace, 'jobs');
     await mkdir(root);
     try {
@@ -99,7 +102,26 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
         expect((await listServerCheckouts()).find((checkout) => checkout.id === session.id)?.stores).toEqual([store]);
       }
       expect(await hasHs1Backup(store, root)).toBe(false);
+      await mkdir(legacyHome);
+      await writeFile(
+        resolve(legacyHome, 'projects.json'),
+        JSON.stringify([resolve(root, '.hotsheet'), resolve(workspace, 'other/.hotsheet')]),
+      );
+      const mcpPath = resolve(root, '.mcp.json');
+      await writeFile(
+        mcpPath,
+        JSON.stringify({
+          mcpServers: {
+            'hotsheet-channel-project': {
+              command: 'legacy',
+              args: ['channel.js', '--data-dir', resolve(root, '.hotsheet')],
+            },
+            hotsheet: { command: 'hotsheet-mcp', args: ['--path', store] },
+          },
+        }),
+      );
       expect((await app.request(`/__hotsheet/projects/${session.id}/hs1-data`, { method: 'DELETE' })).status).toBe(400);
+      expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8'))).toHaveLength(2);
       const remote = resolve(workspace, 'backup.git');
       await backupGit(workspace, ['init', '--bare', remote]);
       job = (await (await start({ ...input, kind: 'backup', remote })).json()) as MigrationJob;
@@ -109,6 +131,16 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
       expect(await hasHs1Backup(store, root)).toBe(true);
       expect(await readFile(resolve(root, '.hotsheet/attachments/proof.txt'), 'utf8')).toBe('ACTUAL PAYLOAD');
       expect((await app.request(`/__hotsheet/projects/${session.id}/hs1-data`, { method: 'DELETE' })).status).toBe(200);
+      expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8'))).toEqual([
+        resolve(workspace, 'other/.hotsheet'),
+      ]);
+      expect(JSON.parse(await readFile(mcpPath, 'utf8'))).toEqual({
+        mcpServers: { hotsheet: { command: 'hotsheet-mcp', args: ['--path', store] } },
+      });
+      // Restoring the old app from its saved project list no longer opens this project.
+      expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8')) as string[]).not.toContain(
+        resolve(root, '.hotsheet'),
+      );
       // Replaying terminal history must not undo an intentional later relink.
       const replacement = resolve(workspace, 'replacement.hs2');
       await mkdir(replacement);
@@ -163,6 +195,8 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
       }
       if (previousHome === undefined) delete process.env.HOTSHEET_HOME;
       else process.env.HOTSHEET_HOME = previousHome;
+      if (previousLegacyHome === undefined) delete process.env.HOTSHEET_LEGACY_HOME;
+      else process.env.HOTSHEET_LEGACY_HOME = previousLegacyHome;
       if (previousJobs === undefined) delete process.env.HOTSHEET_MIGRATION_JOBS;
       else process.env.HOTSHEET_MIGRATION_JOBS = previousJobs;
       delete (process as typeof process & { __hotsheetMigrationJobs?: unknown }).__hotsheetMigrationJobs;

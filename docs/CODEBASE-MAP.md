@@ -148,7 +148,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/new-ticket-source.ts # Project ticket sources from provider descriptors; the composer's writable-source choices and last-used/default target resolution (HS2-NZMJBJ)
       src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, and soft-delete patch planning
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry
-    src/project-bridge.ts    #   Vite-only singleton bootstrap-server discovery/detached start + multi-store project attach and credential-hiding HTTP/terminal-WS target resolution; exact HS1 source/database/version discovery; authenticated corrupt-path validation, shell-free platform reveal, and shared CLI-bootstrap/Git remote/first-push setup
+    src/project-bridge.ts    #   Vite-only singleton bootstrap-server discovery/detached start + multi-store project attach and credential-hiding HTTP/terminal-WS target resolution; exact HS1 source/database/version discovery and backup-gated legacy registration cleanup (`HOTSHEET_LEGACY_HOME` overrides the old app's global directory); authenticated corrupt-path validation, shell-free platform reveal, and shared CLI-bootstrap/Git remote/first-push setup
     src/migration-progress.ts # Versioned phase counters, job/attempt snapshots, phase-local labels and stale revision guards
     src/migration-jobs.ts    # Atomic background job checkpoints, native project/store locks, child ownership and blocking revision watches
     src/child-process.ts     # The ONE node:child_process boundary in src/: spawn/spawnSync/execFileAsync strip inherited repo-locating GIT_* vars (parity with hotsheet_ticketing::git + scripts/repository-env.mjs); ESLint no-restricted-imports forbids child_process elsewhere (HS2-T1H6NP)
@@ -156,7 +156,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/migration-stream.ts  # Incremental NDJSON/Git byte-rate decoding and checkpoint-before-launch process-group ownership
     src/migration-job-bridge.ts # Canonical project/source validation and singleton async migration service
     src/migration-job-client.ts # Project-owned start/rejoin/watch lifecycle, stale responses and reconnect errors
-    src/migration-server-integration.test.ts # Opt-in real PGLite → Rust import → source registration → bare Git backup → authorized cleanup
+    src/migration-server-integration.test.ts # Opt-in real PGLite → Rust import → source registration → bare Git backup → authorized cleanup and legacy saved-list/MCP reconciliation
     src/terminal-ws-bridge.ts #  Vite WebSocket upgrade bridge; keeps server credentials out of browser URLs and frames
     src/terminal-names.ts   #   Human-readable generated-id fallback, tab-title precedence (in-flight local rename > server `name` > default), legacy local-name upload/drop reconcile, live retitle (HS2-89FPV1), and reset-to-default restore (HS2-2Q7KTX)
     src/terminal-ai-connection.ts # Per-terminal Hot Sheet connection state (`connected` / `missing` after a 15 s grace, local re-derive timer) and its tab label (HS2-EV1XK3)

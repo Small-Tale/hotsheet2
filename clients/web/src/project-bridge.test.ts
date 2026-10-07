@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -28,6 +28,7 @@ import {
   projectScopedServerPath,
   projectServerPlan,
   projectSessionRegistry,
+  reconcileHs1Registrations,
   recoverUnhealthyServer,
   refreshLocalProjectSetup,
   refreshProjectSetupOnOpen,
@@ -641,6 +642,130 @@ describe('Hot Sheet 1 project import bridge', () => {
       await rm(parent, { recursive: true, force: true });
     }
   });
+  it('refuses cleanup while the HS1 project lock is live even without a channel registration', async () => {
+    const parent = await mkdtemp(resolve(tmpdir(), 'hotsheet-hs1-lock-')),
+      directory = resolve(parent, '.hotsheet');
+    try {
+      await mkdir(resolve(directory, 'db'), { recursive: true });
+      await writeFile(resolve(directory, 'db/PG_VERSION'), '17');
+      await writeFile(resolve(directory, 'hotsheet.lock'), '{"pid":73}');
+      await expect(removeHs1LiveData(directory, (pid) => pid === 73)).rejects.toThrow(
+        /still running.*73.*no files were removed/i,
+      );
+      expect((await readdir(directory)).sort()).toEqual(['db', 'hotsheet.lock']);
+      await expect(removeHs1LiveData(directory, () => false)).resolves.toEqual(['db', 'hotsheet.lock']);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+  it('preserves legacy data when its project lock cannot be verified', async () => {
+    const parent = await mkdtemp(resolve(tmpdir(), 'hotsheet-hs1-invalid-lock-')),
+      directory = resolve(parent, '.hotsheet');
+    try {
+      await mkdir(resolve(directory, 'db'), { recursive: true });
+      await writeFile(resolve(directory, 'db/PG_VERSION'), '17');
+      await writeFile(resolve(directory, 'hotsheet.lock'), '{invalid');
+      await expect(removeHs1LiveData(directory, () => false)).rejects.toThrow(
+        /Cannot verify.*lock.*no files were removed/i,
+      );
+      expect((await readdir(directory)).sort()).toEqual(['db', 'hotsheet.lock']);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+  it('removes only matching saved projects and HS1 MCP channels, including on retry', async () => {
+    const parent = await mkdtemp(resolve(tmpdir(), 'hotsheet-hs1-registry-')),
+      root = resolve(parent, 'legacy'),
+      other = resolve(parent, 'other'),
+      home = resolve(parent, 'home');
+    try {
+      await mkdir(resolve(root, '.hotsheet'), { recursive: true });
+      await mkdir(home);
+      await writeFile(
+        resolve(home, 'projects.json'),
+        JSON.stringify([resolve(root, '.hotsheet'), resolve(other, '.hotsheet')]),
+      );
+      await writeFile(resolve(home, 'instance.json'), '{"pid":82}');
+      await writeFile(
+        resolve(root, '.mcp.json'),
+        JSON.stringify({
+          otherSetting: true,
+          mcpServers: {
+            'hotsheet-channel-legacy': { args: ['channel.js', '--data-dir', resolve(root, '.hotsheet')] },
+            'hotsheet-channel-other': { args: ['channel.js', '--data-dir', resolve(other, '.hotsheet')] },
+            hotsheet: { args: ['--path', resolve(root, 'tickets.hs2')] },
+          },
+        }),
+      );
+      if (process.platform !== 'win32') await chmod(resolve(root, '.mcp.json'), 0o600);
+      await expect(reconcileHs1Registrations(root, home, (pid) => pid === 82)).rejects.toThrow(
+        /still running.*82.*no files were removed/i,
+      );
+      expect(JSON.parse(await readFile(resolve(home, 'projects.json'), 'utf8'))).toHaveLength(2);
+      await reconcileHs1Registrations(root, home, () => false);
+      await reconcileHs1Registrations(root, home, () => false);
+      expect(JSON.parse(await readFile(resolve(home, 'projects.json'), 'utf8'))).toEqual([resolve(other, '.hotsheet')]);
+      expect(JSON.parse(await readFile(resolve(root, '.mcp.json'), 'utf8'))).toEqual({
+        otherSetting: true,
+        mcpServers: {
+          'hotsheet-channel-other': { args: ['channel.js', '--data-dir', resolve(other, '.hotsheet')] },
+          hotsheet: { args: ['--path', resolve(root, 'tickets.hs2')] },
+        },
+      });
+      if (process.platform !== 'win32') expect((await stat(resolve(root, '.mcp.json'))).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+  it('keeps registries untouched if either HS1 project list or MCP configuration is malformed', async () => {
+    const parent = await mkdtemp(resolve(tmpdir(), 'hotsheet-hs1-registry-invalid-')),
+      root = resolve(parent, 'legacy'),
+      home = resolve(parent, 'home');
+    try {
+      await mkdir(resolve(root, '.hotsheet'), { recursive: true });
+      await mkdir(home);
+      const projects = JSON.stringify([resolve(root, '.hotsheet')]);
+      await writeFile(resolve(home, 'projects.json'), projects);
+      await writeFile(resolve(root, '.mcp.json'), '{invalid');
+      await expect(reconcileHs1Registrations(root, home, () => false)).rejects.toThrow(/MCP configuration/);
+      expect(await readFile(resolve(home, 'projects.json'), 'utf8')).toBe(projects);
+      await writeFile(resolve(root, '.mcp.json'), '{}');
+      await writeFile(resolve(home, 'projects.json'), '{}');
+      await expect(reconcileHs1Registrations(root, home, () => false)).rejects.toThrow(/saved project list/);
+      expect(await readFile(resolve(root, '.mcp.json'), 'utf8')).toBe('{}');
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+  it.skipIf(process.platform === 'win32')(
+    'removes symlink aliases and registrations refilled after cleanup',
+    async () => {
+      const parent = await mkdtemp(resolve(tmpdir(), 'hotsheet-hs1-registry-alias-')),
+        root = resolve(parent, 'legacy'),
+        alias = resolve(parent, 'shortcut'),
+        home = resolve(parent, 'home');
+      try {
+        await mkdir(resolve(root, '.hotsheet'), { recursive: true });
+        await mkdir(home);
+        await symlink(root, alias, 'dir');
+        const aliasData = resolve(alias, '.hotsheet'),
+          projectsPath = resolve(home, 'projects.json'),
+          mcpPath = resolve(root, '.mcp.json');
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await writeFile(projectsPath, JSON.stringify([aliasData]));
+          await writeFile(
+            mcpPath,
+            JSON.stringify({ mcpServers: { 'hotsheet-channel-legacy': { args: ['--data-dir', aliasData] } } }),
+          );
+          await reconcileHs1Registrations(root, home, () => false);
+          expect(JSON.parse(await readFile(projectsPath, 'utf8'))).toEqual([]);
+          expect(JSON.parse(await readFile(mcpPath, 'utf8'))).toEqual({ mcpServers: {} });
+        }
+      } finally {
+        await rm(parent, { recursive: true, force: true });
+      }
+    },
+  );
   it('ignores live channel registrations that explicitly belong to another HS1 project', async () => {
     const parent = await mkdtemp(resolve(tmpdir(), 'kerf-hs1-cleanup-')),
       directory = resolve(parent, '.hotsheet'),
