@@ -29,7 +29,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   .hotsheet2/settings.json   # committed project settings, incl. the Quality AI command group (HS2-11285R)
   .claude/skills/{check-requirements-against-code,check-code-hygiene,analyze-code-quality}/ # quality-check skills run by those commands (Codex mirror: .agents/skills/)
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
-  spikes/kerf-webawesome/    # Kerf 5.0.0-beta.83 + Web Awesome Vite/Playwright compatibility proof
+  spikes/kerf-webawesome/    # Kerf 5.0.0-beta.84 + Web Awesome Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     scripts/format-sources.mjs # Shared Prettier scope for format/check: required tracked paths plus optional local opencode.json
     scripts/format-sources.test.mjs # Unit scope/error checks and real npm-script clean-checkout formatting regression

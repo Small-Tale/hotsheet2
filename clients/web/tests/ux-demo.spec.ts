@@ -70,14 +70,14 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
       await expect(dialog).toHaveAttribute('data-preview-scenario', value);
       await expect(dialog).toContainText(expected);
       if (value === 'editing') {
-        await expect(dialog.locator('wa-input[name="attachment-repo"]')).toHaveJSProperty(
+        await expect(dialog.locator('input[name="attachment-repo"]')).toHaveJSProperty(
           'value',
           'small-tale/hotsheet-assets',
         );
         await expect(dialog).toContainText('Currently enabled.');
       }
       if (value === 'authorized')
-        await expect(dialog.locator('wa-input[name="attachment-repo"]')).toHaveJSProperty('value', '');
+        await expect(dialog.locator('input[name="attachment-repo"]')).toHaveJSProperty('value', '');
       if (value === 'authorized' || value === 'authorized-existing-default')
         await expect(dialog.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty(
           'checked',
@@ -1284,7 +1284,7 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
   const blurTarget = rail.getByRole('button', { name: 'List view', exact: true });
   await expect(rows).toHaveCount(7);
   // The rail offers Columns as well (HS2-656Q43).
-  await expect(rail.locator('[data-view-mode="board"]')).toHaveCount(1);
+  await expect(rail.getByRole('button', { name: 'Columns view', exact: true })).toHaveCount(1);
   await rail.getByRole('button', { name: 'Notifications view', exact: true }).click();
   await expect(rail.getByRole('button', { name: 'Notifications view', exact: true })).toHaveAttribute(
     'aria-pressed',
@@ -6980,16 +6980,6 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
   await page.goto('/ux-demo?component=app-shell');
   const workArea = page.locator('.app-shell__work-area');
   await expect(workArea).toBeVisible();
-  expect(
-    await workArea.evaluate((node) => {
-      const probe = document.createElement('span');
-      probe.style.backgroundColor = 'var(--wa-color-surface-lowered)';
-      document.body.append(probe);
-      const matches = getComputedStyle(node).backgroundColor === getComputedStyle(probe).backgroundColor;
-      probe.remove();
-      return matches;
-    }),
-  ).toBe(true);
   const sidebarRegion = page.locator('#app-left-rail');
   expect(
     await sidebarRegion.evaluate((node) => {

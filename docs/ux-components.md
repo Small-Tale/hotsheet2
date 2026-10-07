@@ -2409,6 +2409,10 @@ HS2-ARMAX3 advances all five exact pins to 5.0.0-beta.83. This release changes K
 Catalog stage and background controls, adds a TabNavigator sunken separator option and
 an anchored UI surface, and keeps narrow Catalog controls visible; Hot Sheet verifies its
 existing Catalog and workspace flows against the new packages.
+HS2-6999AW advances the same web-client and compatibility-spike pins to 5.0.0-beta.84.
+The release includes toolbar visibility and measurement fixes plus stricter UI Doctor
+composition checks; Hot Sheet validates its existing toolbar, Catalog, and workspace
+flows against the updated packages.
 Beta.80's component-style doctor checks recognize explicit classes matching five application
 component roots: AppLoadingIndicator, SettingsWorkspace, TicketRowContextMenu,
 TicketSourceSetupDialog, and TicketSourcesSettings (HS2-8ZM85Z). Their existing selectors
