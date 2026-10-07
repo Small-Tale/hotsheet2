@@ -2637,6 +2637,7 @@ fn cmd_provider_edit(
         let edit = ops::NoteEditInput {
             text: input.note,
             confidence: input.note_confidence,
+            actor: hotsheet_ticketing::actor::note_actor(actor),
         };
         if !edit.is_empty() {
             ticket = provider.edit_note_with_metadata(id, &note_id, now, edit)?;
@@ -2650,6 +2651,7 @@ fn cmd_provider_edit(
             },
             input.note_kind,
             ops::NoteMetadataInput {
+                human_edited: false,
                 summary: input.note_summary,
                 confidence: input.note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),
@@ -4446,6 +4448,7 @@ fn cmd_edit(
         let edit = ops::NoteEditInput {
             text: note,
             confidence: note_confidence,
+            actor: hotsheet_ticketing::actor::note_actor(actor),
         };
         if !edit.is_empty() {
             updated = ops::edit_note_with_metadata(&store, &ticket.id, &note_id, now_ts(), edit)?;
@@ -4458,6 +4461,7 @@ fn cmd_edit(
             now_ts(),
             note_kind,
             ops::NoteMetadataInput {
+                human_edited: false,
                 summary: note_summary,
                 confidence: note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),

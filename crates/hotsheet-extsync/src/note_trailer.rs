@@ -212,6 +212,7 @@ mod tests {
             summary: None,
             confidence,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: String::new(),
         };
@@ -239,6 +240,7 @@ mod tests {
             summary: None,
             confidence,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: String::new(),
         }

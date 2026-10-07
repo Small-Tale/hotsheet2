@@ -3050,6 +3050,14 @@ note deletion removes a parent's associated ratings; external providers currentl
 not offer note deletion through Hot Sheet. A thumbs rating does not answer or reopen a
 separate `feedback_needed` exchange.
 
+When a human changes the saved text of an AI-authored note, the note and reader keep
+the original AI attribution and add **edited by human** beside it. The label is read
+with the attribution for assistive technology. Opening and closing the editor or
+saving identical text leaves it absent. It remains after repeat edits and a revert
+because it reports edit history. Git-backed notes persist the marker through reload
+and Git-to-Git transfer. External issue providers currently expose note editing as
+unsupported, so they cannot create this state through Hot Sheet.
+
 - **`feedback_needed` and `feedback_draft` notes render in the feedback-editor style in
   reader mode** (you can answer the ask / continue your draft). A new response starts
   empty; a saved draft is prefilled.

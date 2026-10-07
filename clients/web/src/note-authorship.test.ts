@@ -28,6 +28,9 @@ describe('noteAuthorship (HS2-32QDZ3)', () => {
       aiAuthored: true,
       aiTool: 'Hot Sheet AI',
     });
+    expect(noteAuthorship({ text: 'Edited distillation', actor: { role: 'ai', id: 'hotsheet' } }).aiTool).toBe(
+      'Hot Sheet AI',
+    );
   });
 
   it('never echoes an opaque session id as the tool name', () => {

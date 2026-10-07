@@ -1369,6 +1369,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         time: ago(note.created_at),
         body: note.text,
         aiAuthored,
+        humanEdited: note.human_edited,
         aiTool,
         confidence: note.confidence,
         feedbackFor: note.feedback_for,

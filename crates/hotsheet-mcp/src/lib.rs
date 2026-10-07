@@ -1456,6 +1456,7 @@ mod core_backend {
                             let edit = ops::NoteEditInput {
                                 text: note_text.clone(),
                                 confidence: confidence_change,
+                                actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
                             };
                             if edit.is_empty() {
                                 updated
@@ -1478,6 +1479,7 @@ mod core_backend {
                                 (self.now)(),
                                 new_note_kind,
                                 ops::NoteMetadataInput {
+                                    human_edited: false,
                                     summary: str_field(body, "note_summary"),
                                     confidence: confidence_change.flatten(),
                                     actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),

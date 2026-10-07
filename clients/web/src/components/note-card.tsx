@@ -33,6 +33,7 @@ export interface NoteCardProps {
   selectedChoices?: readonly string[];
   attachmentContext?: AttachmentReferenceContext;
   aiAuthored?: boolean;
+  humanEdited?: boolean;
   aiTool?: string;
   aiMayContainErrors?: boolean;
   /** AI completion confidence (0-100) recorded on this note; absent for unscored notes. */
@@ -292,6 +293,7 @@ export function NoteCard({
   selectedChoices = [],
   attachmentContext,
   aiAuthored = false,
+  humanEdited = false,
   aiTool,
   aiMayContainErrors = kind === 'activity',
   confidence,
@@ -327,7 +329,7 @@ export function NoteCard({
       data-ai-authored={aiAuthored ? 'true' : undefined}
       aria-label={
         showAiAttribution
-          ? `AI-generated ${presentation.label.toLowerCase()} by ${aiTool ?? author}${aiMayContainErrors ? '; may contain errors' : ''}`
+          ? `AI-generated ${presentation.label.toLowerCase()} by ${aiTool ?? author}${humanEdited ? '; edited by human' : ''}${aiMayContainErrors ? '; may contain errors' : ''}`
           : undefined
       }
       data-acknowledgement={acknowledgement ? 'true' : undefined}
@@ -387,7 +389,12 @@ export function NoteCard({
       {respondToFeedback && !readerMode && <RespondToFeedbackButton id={id} />}
       <footer class="note-card__footer">
         {showAiAttribution ? (
-          <AIContentLabel tool={aiTool ?? author} mayContainErrors={aiMayContainErrors} feedbackTarget={`note:${id}`} />
+          <AIContentLabel
+            tool={aiTool ?? author}
+            humanEdited={humanEdited}
+            mayContainErrors={aiMayContainErrors}
+            feedbackTarget={`note:${id}`}
+          />
         ) : (
           author
         )}

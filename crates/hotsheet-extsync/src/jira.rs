@@ -314,6 +314,7 @@ impl JiraProvider {
                     summary: None,
                     confidence,
                     feedback_for: None,
+                    human_edited: false,
                     actor: None,
                     text,
                 }
@@ -1141,6 +1142,7 @@ mod tests {
                 },
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    human_edited: false,
                     summary: None,
                     confidence: Some(score),
                     actor: None,

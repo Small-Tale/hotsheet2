@@ -1297,6 +1297,7 @@ impl TicketProvider for GitProvider {
             ctx,
             kind,
             NoteMetadataInput {
+                human_edited: false,
                 summary,
                 confidence: None,
                 actor: None,
@@ -1434,6 +1435,7 @@ impl TicketProvider for GitProvider {
             ops::NoteEditInput {
                 text: Some(text),
                 confidence: None,
+                actor: None,
             },
         )
     }
@@ -1853,6 +1855,7 @@ pub fn copy_between(
                     .confidence
                     .and_then(|value| Confidence::new(u64::from(value)).ok()),
                 actor: note.actor.clone(),
+                human_edited: note.human_edited,
             },
             note.text.clone(),
         )?;
@@ -2582,19 +2585,33 @@ mod tests {
             )
             .unwrap();
         source
-            .add_note(
+            .add_note_with_metadata(
                 &source_id.to_string(),
                 ctx(source_note_id, "2026-08-26T01:00:10Z"),
                 NoteKind::Activity,
+                NoteMetadataInput {
+                    actor: Some(hotsheet_model::NoteActor {
+                        role: hotsheet_model::AttachmentActorRole::Ai,
+                        id: Some("codex".into()),
+                    }),
+                    ..Default::default()
+                },
                 "preserve this note".into(),
             )
             .unwrap();
         source
-            .edit_note(
+            .edit_note_with_metadata(
                 &source_id.to_string(),
                 &source_note_id.to_string(),
                 Timestamp::new("2026-08-26T01:00:15Z"),
-                "preserve this edited note".into(),
+                ops::NoteEditInput {
+                    text: Some("preserve this edited note".into()),
+                    confidence: None,
+                    actor: Some(hotsheet_model::NoteActor {
+                        role: hotsheet_model::AttachmentActorRole::Human,
+                        id: None,
+                    }),
+                },
             )
             .unwrap();
         source
@@ -2650,6 +2667,11 @@ mod tests {
         assert_eq!(copied.notes[0].text, "preserve this edited note");
         assert_eq!(copied.notes[0].created_at, "2026-08-26T01:00:10Z");
         assert_eq!(copied.notes[0].edited_at, "2026-08-26T01:00:15Z");
+        assert!(copied.notes[0].human_edited);
+        assert_eq!(
+            copied.notes[0].actor.as_ref().unwrap().role,
+            hotsheet_model::AttachmentActorRole::Ai
+        );
         assert_eq!(copied.assignees, ["dev@example.com"]);
         assert_eq!(copied.status, Status::NotStarted);
         assert!(!copied.up_next);
@@ -2887,6 +2909,7 @@ mod tests {
                 ctx(Ulid::new(), "2026-08-26T03:01:00Z"),
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    human_edited: false,
                     summary: None,
                     confidence: Some(Confidence::new(73).unwrap()),
                     actor: None,
@@ -2911,6 +2934,7 @@ mod tests {
                 ctx(Ulid::new(), "2026-08-26T03:01:00Z"),
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    human_edited: false,
                     summary: None,
                     confidence: Some(Confidence::new(10).unwrap()),
                     actor: None,
@@ -2950,6 +2974,7 @@ mod tests {
                 crate::ops::NoteEditInput {
                     text: None,
                     confidence: Some(Some(Confidence::new(10).unwrap())),
+                    actor: None,
                 },
             )
             .unwrap_err();
@@ -2970,6 +2995,7 @@ mod tests {
                     crate::ops::NoteEditInput {
                         text: text.map(str::to_owned),
                         confidence,
+                        actor: None,
                     },
                 )
                 .unwrap()

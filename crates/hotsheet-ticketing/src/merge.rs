@@ -318,9 +318,11 @@ fn merge_notes(ours: &[Note], theirs: &[Note]) -> Vec<Note> {
         by_id
             .entry(n.id)
             .and_modify(|cur| {
+                let human_edited = cur.human_edited || n.human_edited;
                 if n.edited_at.as_str() > cur.edited_at.as_str() {
                     *cur = n.clone();
                 }
+                cur.human_edited = human_edited;
             })
             .or_insert_with(|| n.clone());
     }
@@ -444,6 +446,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: "ours note".into(),
         }];
@@ -456,12 +459,38 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: "theirs note".into(),
         }];
         let m = merge_tickets(&base, &ours, &theirs).ticket;
         assert_eq!(m.notes.len(), 2, "both appends kept");
         assert!(m.notes[0].id < m.notes[1].id, "sorted by id");
+    }
+
+    #[test]
+    fn newer_concurrent_note_edit_cannot_clear_human_edit_history() {
+        let mut marked = Note {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
+            kind: hotsheet_model::NoteKind::Regular,
+            created_at: ts("2026-08-19T01:00:00Z"),
+            edited_at: ts("2026-08-19T01:01:00Z"),
+            summary: None,
+            confidence: None,
+            feedback_for: None,
+            human_edited: true,
+            actor: None,
+            text: "human edit".into(),
+        };
+        let mut later = marked.clone();
+        later.edited_at = ts("2026-08-19T01:02:00Z");
+        later.human_edited = false;
+        later.text = "later edit".into();
+        let merged = merge_notes(&[marked.clone()], &[later]);
+        assert_eq!(merged[0].text, "later edit");
+        assert!(merged[0].human_edited);
+        marked.human_edited = false;
+        assert!(!merge_notes(&[marked.clone()], &[marked])[0].human_edited);
     }
 
     #[test]
@@ -513,6 +542,7 @@ mod tests {
             summary: Some("Started implementation".into()),
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: "started".into(),
         }];
@@ -541,6 +571,7 @@ mod tests {
             summary: None,
             confidence: confidence(value),
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: text.into(),
         };

@@ -128,6 +128,8 @@ export interface Note {
   confidence?: number;
   /** Persisted source note id of AI thumbs feedback; older/provider notes use their text prefix. */
   feedback_for?: string;
+  /** True once a human changed AI-authored text, including after a later revert. */
+  human_edited?: boolean;
   /** Who wrote the note, when recorded (HS2-32QDZ3). */
   actor?: NoteActor;
   text: string;

@@ -307,6 +307,7 @@ struct NoteMetadata {
     summary: Option<String>,
     confidence: Option<Confidence>,
     feedback_for: Option<Ulid>,
+    human_edited: bool,
     actor: Option<NoteActor>,
 }
 
@@ -348,6 +349,7 @@ fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
         // the whole file (HS2-DWTJ43); writers can only emit validated values.
         confidence: value_after("confidence:").and_then(|value| value.parse().ok()),
         feedback_for: value_after("feedback_for:").and_then(|value| Ulid::from_string(value).ok()),
+        human_edited: value_after("human_edited:") == Some("true"),
         actor: value_after("actor:")
             .and_then(parse_actor_role)
             .map(|role| NoteActor {
@@ -382,6 +384,7 @@ fn build_note(metadata: NoteMetadata, block: &str) -> Option<Note> {
         summary: metadata.summary,
         confidence: metadata.confidence,
         feedback_for: metadata.feedback_for,
+        human_edited: metadata.human_edited,
         actor: metadata.actor,
         text,
     })
@@ -419,6 +422,9 @@ fn notes_to_string(notes: &[&Note]) -> String {
         if let Some(feedback_for) = n.feedback_for {
             out.push_str(" feedback_for: ");
             out.push_str(&feedback_for.to_string());
+        }
+        if n.human_edited {
+            out.push_str(" human_edited: true");
         }
         if let Some(actor) = n
             .actor
@@ -640,6 +646,7 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                human_edited: false,
                 actor: None,
                 text: "Reproduced on macOS; root cause is the pre-theme paint.".into(),
             },
@@ -651,6 +658,7 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                human_edited: false,
                 actor: None,
                 text: "should the fix also cover the dashboard dedicated view?".into(),
             },
@@ -873,6 +881,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: "half-written reply".into(),
         });
@@ -895,6 +904,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: "   ".into(),
         }];
@@ -1009,6 +1019,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: text.into(),
         };
@@ -1018,6 +1029,18 @@ mod tests {
             note("01ARZ3NDEKTSV4RRFFQ69G5FA1", "by a human"),
         ];
         ticket
+    }
+
+    #[test]
+    fn human_edited_note_marker_round_trips_and_defaults_false() {
+        let mut ticket = sample_ticket_for_actor();
+        ticket.notes[0].human_edited = true;
+        let encoded = to_file_string(&ticket);
+        assert!(encoded.contains("human_edited: true"));
+        let decoded = parse_file(&encoded).unwrap();
+        assert!(decoded.notes[0].human_edited);
+        assert!(!decoded.notes[1].human_edited);
+        assert_eq!(to_file_string(&decoded), encoded);
     }
 
     #[test]
@@ -1032,6 +1055,7 @@ mod tests {
                 summary: Some("Shipped".into()),
                 confidence: Some(Confidence::new(82).unwrap()),
                 feedback_for: None,
+                human_edited: false,
                 actor: None,
                 text: "## Result\nDone\n\n## Confidence\n82".into(),
             },
@@ -1043,6 +1067,7 @@ mod tests {
                 summary: None,
                 confidence: Some(Confidence::new(0).unwrap()),
                 feedback_for: None,
+                human_edited: false,
                 actor: None,
                 text: "zero is a real score".into(),
             },
@@ -1065,6 +1090,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: "unscored".into(),
         }];
@@ -1105,6 +1131,7 @@ mod tests {
             summary: Some("Completed café investigation".into()),
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: "completed investigation".into(),
         }];
@@ -1158,6 +1185,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: text.into(),
         };
@@ -1222,6 +1250,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: "half-written".into(),
         }];

@@ -141,6 +141,12 @@ first line; readers still recognize that prefix in older files without the token
 The marker keeps the association if the feedback text is edited. Other note kinds and
 feedback for non-note targets omit it. Older bounded-note readers ignore this token.
 
+An AI-authored note gains `human_edited: true` in its marker when an explicit human
+actor persists different text. The original `actor:` stays unchanged. Unchanged saves,
+metadata-only edits, and AI edits do not set the token. Once set, it records that a
+human edited the note even if a later edit restores the original text. Older notes
+without the token are treated as not marked.
+
 A scored marker looks like
 `<!-- hotsheet:note:begin <ulid> created_at: … edited_at: … summary_hex: … confidence: 82 -->`.
 Older bounded-note parsers ignore the unknown token, so writing it needs no schema

@@ -1133,6 +1133,7 @@ impl FsStore {
             summary: Some(summary),
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text,
         });

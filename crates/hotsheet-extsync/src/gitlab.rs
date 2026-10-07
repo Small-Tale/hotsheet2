@@ -307,6 +307,7 @@ impl GitLabProvider {
                     summary: None,
                     confidence,
                     feedback_for: None,
+                    human_edited: false,
                     actor: None,
                     text,
                 }
@@ -1051,6 +1052,7 @@ mod tests {
                     },
                     NoteKind::Regular,
                     NoteMetadataInput {
+                        human_edited: false,
                         summary: None,
                         confidence: Some(score),
                         actor: None,
@@ -1315,6 +1317,7 @@ mod tests {
             .unwrap();
         let id = created.native_id.clone();
         let score = |value: u64| NoteMetadataInput {
+            human_edited: false,
             summary: None,
             confidence: Some(hotsheet_model::Confidence::new(value).unwrap()),
             actor: None,

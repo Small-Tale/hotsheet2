@@ -3669,6 +3669,7 @@ fn do_provider_update(
     let edit = ops::NoteEditInput {
         text: note,
         confidence: confidence_change,
+        actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
     };
     match (note_id, edit) {
         (Some(note_id), edit) if !edit.is_empty() => {
@@ -3691,6 +3692,7 @@ fn do_provider_update(
                     },
                     note_kind,
                     ops::NoteMetadataInput {
+                        human_edited: false,
                         summary: note_summary,
                         confidence: note_confidence,
                         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
@@ -7086,6 +7088,7 @@ fn do_update(
             let edit = ops::NoteEditInput {
                 text: note_text_edit,
                 confidence: confidence_change,
+                actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
             };
             if edit.is_empty() {
                 updated
@@ -7101,6 +7104,7 @@ fn do_update(
                 now(),
                 req.note_kind.unwrap_or(NoteKind::Regular),
                 ops::NoteMetadataInput {
+                    human_edited: false,
                     summary: req.note_summary,
                     confidence: confidence_change.flatten(),
                     actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),

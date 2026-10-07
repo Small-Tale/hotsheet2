@@ -305,6 +305,9 @@ should the fix also cover the dashboard dedicated view?
   records without the marker retain their link. Editing the text of a new feedback note
   preserves its marker. Deleting the source note from a Git-backed store removes its
   associated feedback notes in the same ticket write. Orphaned feedback stays visible.
+- **Human edits to AI-authored notes** set `human_edited: true` after a human actor
+  saves different text. Authorship remains the original AI actor; the marker is sticky
+  through later edits, reverts, reload, and Git-to-Git copy.
 - **Every note has immutable `created_at` and mutable `edited_at` RFC3339 timestamps**
   in its marker. Editing changes only `edited_at`; legacy one-timestamp notes map that
   timestamp to both fields.

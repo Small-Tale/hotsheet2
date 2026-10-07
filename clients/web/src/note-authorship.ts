@@ -13,6 +13,7 @@ const KNOWN_TOOLS: Record<string, string> = {
   opencode: 'OpenCode',
   antigravity: 'Antigravity',
   gemini: 'Gemini',
+  hotsheet: 'Hot Sheet AI',
 };
 
 /**

@@ -12,11 +12,12 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use hotsheet_model::{NoteKind, Timestamp, Ulid};
+use hotsheet_model::{AttachmentActorRole, NoteActor, NoteKind, Timestamp, Ulid};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::activity::{ActivityEvent, ActivityKind, Importance};
+use crate::ops::NoteMetadataInput;
 use crate::provider::{MutationContext, ProviderError, TicketProvider};
 use crate::settings::{Scope, Settings, SettingsError};
 use crate::wire::ApiTicket;
@@ -279,14 +280,21 @@ pub fn write_distilled_note(
     {
         return Ok(current);
     }
-    provider.add_note_with_summary(
+    provider.add_note_with_metadata(
         native_id,
         MutationContext {
             now,
             generated_id: note.note_id,
         },
         NoteKind::Activity,
-        Some(note.summary.clone()),
+        NoteMetadataInput {
+            summary: Some(note.summary.clone()),
+            actor: Some(NoteActor {
+                role: AttachmentActorRole::Ai,
+                id: Some("hotsheet".into()),
+            }),
+            ..Default::default()
+        },
         note.text.clone(),
     )
 }

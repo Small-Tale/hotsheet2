@@ -820,6 +820,7 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
         summary: Some(status_label(to).to_string()),
         confidence: None,
         feedback_for: None,
+        human_edited: false,
         actor: None,
         text: format!(
             "Status changed from {} to {}",
@@ -872,6 +873,7 @@ pub fn prepare_not_working(
         summary: Some(NOT_WORKING_SUMMARY.into()),
         confidence: None,
         feedback_for: None,
+        human_edited: false,
         actor: None,
         text: reporter
             .filter(|value| !value.trim().is_empty())
@@ -887,6 +889,7 @@ pub fn prepare_not_working(
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: format!("Not working: {text}"),
         });
@@ -1072,6 +1075,7 @@ pub fn add_note_with_summary(
         now,
         kind,
         NoteMetadataInput {
+            human_edited: false,
             summary,
             confidence: None,
             actor: None,
@@ -1080,15 +1084,17 @@ pub fn add_note_with_summary(
     )
 }
 
-/// Optional per-note metadata a caller may attach when appending a note: the
-/// timeline headline (HS2-A32EAK) and the author's completion confidence
-/// (HS2-DWTJ43). Both are stored as note-marker tokens (`docs/17` §17.3).
+/// Optional per-note metadata attached on append. The headline, completion
+/// confidence, authorship, and human edit history are stored as note-marker
+/// tokens (`docs/17` §17.3).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NoteMetadataInput {
     pub summary: Option<String>,
     pub confidence: Option<Confidence>,
     /// The note's author (HS2-32QDZ3); absent for an unspecified caller.
     pub actor: Option<hotsheet_model::NoteActor>,
+    /// Preserve a source note's human edit history during provider copy.
+    pub human_edited: bool,
 }
 
 /// Append a note with optional metadata (see [`NoteMetadataInput`]).
@@ -1122,6 +1128,7 @@ pub fn add_note_with_metadata(
         }),
         confidence: metadata.confidence,
         feedback_for: Note::feedback_parent_from_text(&text),
+        human_edited: metadata.human_edited,
         actor: metadata.actor,
         text,
     });
@@ -1218,6 +1225,7 @@ pub fn edit_note(
         NoteEditInput {
             text: Some(text),
             confidence: None,
+            actor: None,
         },
     )
 }
@@ -1230,6 +1238,8 @@ pub struct NoteEditInput {
     pub text: Option<String>,
     /// `Some(Some(score))` sets the completion confidence; `Some(None)` clears it.
     pub confidence: Option<Option<Confidence>>,
+    /// Actor making this edit; only an explicit human actor can mark AI text edited.
+    pub actor: Option<hotsheet_model::NoteActor>,
 }
 
 impl NoteEditInput {
@@ -1263,6 +1273,27 @@ pub fn edit_note_with_metadata(
             ))
         })?;
     if let Some(text) = text {
+        let legacy_distillation =
+            note.actor.is_none() && note.text.contains("hotsheet:activity-distillation:v1:");
+        if text != note.text
+            && edit
+                .actor
+                .as_ref()
+                .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Human)
+            && (note
+                .actor
+                .as_ref()
+                .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai)
+                || note.text.contains("hotsheet:activity-distillation:v1:"))
+        {
+            note.human_edited = true;
+        }
+        if legacy_distillation && text != note.text {
+            note.actor = Some(hotsheet_model::NoteActor {
+                role: hotsheet_model::AttachmentActorRole::Ai,
+                id: Some("hotsheet".into()),
+            });
+        }
         note.text = text;
     }
     if let Some(confidence) = edit.confidence {
@@ -2951,6 +2982,7 @@ mod tests {
                 at,
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    human_edited: false,
                     summary: None,
                     confidence: confidence.map(|value| Confidence::new(value).unwrap()),
                     actor: None,
@@ -3032,6 +3064,7 @@ mod tests {
             summary: None,
             confidence: confidence.map(|value| Confidence::new(value).unwrap()),
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: text.into(),
         };
@@ -3458,6 +3491,104 @@ mod tests {
         assert_eq!(remaining.notes[0].id, other);
         assert_eq!(remaining.notes[1].ai_feedback_for_note(), Some(other));
         assert_eq!(store.read_ticket(&id).unwrap().notes, remaining.notes);
+    }
+
+    #[test]
+    fn human_text_edits_of_ai_notes_are_durable_and_sticky() {
+        let (_dir, store) = store();
+        let id = Ulid::new();
+        create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
+        let note_id = Ulid::new();
+        let ai = hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Ai,
+            id: Some("codex-session".into()),
+        };
+        let human = hotsheet_model::NoteActor {
+            role: hotsheet_model::AttachmentActorRole::Human,
+            id: Some("reviewer".into()),
+        };
+        add_note_with_metadata(
+            &store,
+            &id,
+            note_id,
+            ts("t1"),
+            NoteKind::Regular,
+            NoteMetadataInput {
+                actor: Some(ai.clone()),
+                ..Default::default()
+            },
+            "original".into(),
+        )
+        .unwrap();
+        let edit = |text: Option<&str>, actor: Option<hotsheet_model::NoteActor>| {
+            edit_note_with_metadata(
+                &store,
+                &id,
+                &note_id,
+                ts("t2"),
+                NoteEditInput {
+                    text: text.map(str::to_owned),
+                    confidence: None,
+                    actor,
+                },
+            )
+            .unwrap()
+            .notes
+            .into_iter()
+            .find(|note| note.id == note_id)
+            .unwrap()
+        };
+        assert!(!edit(Some("original"), Some(human.clone())).human_edited);
+        assert!(!edit(Some("agent revision"), Some(ai.clone())).human_edited);
+        assert!(!edit(None, Some(human.clone())).human_edited);
+        assert!(edit(Some("human revision"), Some(human.clone())).human_edited);
+        let reverted = edit(Some("original"), Some(human));
+        assert!(reverted.human_edited);
+        assert_eq!(reverted.actor, Some(ai));
+        assert!(store.read_ticket(&id).unwrap().notes[0].human_edited);
+    }
+
+    #[test]
+    fn legacy_distillation_keeps_ai_provenance_after_human_rewrites_marker() {
+        let (_dir, store) = store();
+        let id = Ulid::new();
+        create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
+        let note_id = Ulid::new();
+        add_note(
+            &store,
+            &id,
+            note_id,
+            ts("t1"),
+            NoteKind::Activity,
+            "<!-- hotsheet:activity-distillation:v1:legacy -->\nAI summary".into(),
+        )
+        .unwrap();
+        let changed = edit_note_with_metadata(
+            &store,
+            &id,
+            &note_id,
+            ts("t2"),
+            NoteEditInput {
+                text: Some("Human summary".into()),
+                confidence: None,
+                actor: Some(hotsheet_model::NoteActor {
+                    role: hotsheet_model::AttachmentActorRole::Human,
+                    id: None,
+                }),
+            },
+        )
+        .unwrap();
+        let note = changed
+            .notes
+            .iter()
+            .find(|note| note.id == note_id)
+            .unwrap();
+        assert!(note.human_edited);
+        assert_eq!(
+            note.actor.as_ref().unwrap().role,
+            hotsheet_model::AttachmentActorRole::Ai
+        );
+        assert_eq!(note.actor.as_ref().unwrap().id.as_deref(), Some("hotsheet"));
     }
 
     #[test]

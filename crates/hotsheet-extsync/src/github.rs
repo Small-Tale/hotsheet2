@@ -456,6 +456,7 @@ impl GitHubProvider {
                     summary: None,
                     confidence,
                     feedback_for: None,
+                    human_edited: false,
                     actor: None,
                     text,
                 }
@@ -1871,6 +1872,7 @@ mod tests {
                 },
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    human_edited: false,
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(82).unwrap()),
                     actor: None,
@@ -2779,6 +2781,7 @@ mod tests {
                 },
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    human_edited: false,
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(77).unwrap()),
                     actor: None,
@@ -2841,6 +2844,7 @@ mod tests {
                 },
                 NoteKind::Regular,
                 NoteMetadataInput {
+                    human_edited: false,
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(88).unwrap()),
                     actor: None,

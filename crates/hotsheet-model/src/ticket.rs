@@ -32,6 +32,8 @@ pub struct Note {
     /// Source note of an AI thumbs rating. Legacy files without this marker retain
     /// their relationship through the known first-line prefix.
     pub feedback_for: Option<Ulid>,
+    /// A human changed the text after AI authorship; remains true even after a revert.
+    pub human_edited: bool,
     /// Who wrote the note: the acting role and optional stable id of the mutation that
     /// created it (HS2-32QDZ3), carried as the `actor:` / `actor_id_hex:` note-marker
     /// tokens. Absent on notes written before it existed or by an unspecified caller.
@@ -465,6 +467,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            human_edited: false,
             actor: None,
             text: String::new(),
         }
