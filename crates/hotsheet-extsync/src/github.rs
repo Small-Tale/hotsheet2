@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -21,6 +22,8 @@ use hotsheet_ticketing::wire::ApiAttachment;
 
 /// Native page size for value-keyset walks; fixed so resume hints stay positionally valid.
 const NATIVE_KEYSET_PAGE: usize = 100;
+/// Coalesce the summary and status-scoped board reads issued together by one project refresh.
+const ISSUE_LIST_CACHE_TTL: Duration = Duration::from_secs(10);
 
 const API_VERSION: &str = "2022-11-28";
 
@@ -187,15 +190,27 @@ impl GitHubTransport for UreqGitHubTransport {
 pub struct GitHubProvider {
     config: GitHubConfig,
     transport: Arc<dyn GitHubTransport>,
+    issues_cache: Option<IssueListCache>,
+    rate_limited_until: Option<Arc<Mutex<Option<Instant>>>>,
 }
+
+type IssueListCache = Arc<Mutex<Option<(Instant, Vec<GitHubIssue>)>>>;
 
 impl GitHubProvider {
     pub fn new(config: GitHubConfig, transport: Arc<dyn GitHubTransport>) -> Self {
-        Self { config, transport }
+        Self {
+            config,
+            transport,
+            issues_cache: None,
+            rate_limited_until: None,
+        }
     }
 
     pub fn live(config: GitHubConfig) -> Self {
-        Self::new(config, Arc::new(UreqGitHubTransport))
+        let mut provider = Self::new(config, Arc::new(UreqGitHubTransport));
+        provider.issues_cache = Some(Arc::new(Mutex::new(None)));
+        provider.rate_limited_until = Some(Arc::new(Mutex::new(None)));
+        provider
     }
 
     fn endpoint(&self, suffix: &str) -> String {
@@ -221,6 +236,19 @@ impl GitHubProvider {
         url: &str,
         body: Option<&Value>,
     ) -> Result<HttpResponse, ProviderError> {
+        if let Some(cooldown) = &self.rate_limited_until {
+            if let Ok(mut until) = cooldown.lock() {
+                if let Some(remaining) =
+                    until.and_then(|deadline| deadline.checked_duration_since(Instant::now()))
+                {
+                    return Err(ProviderError::RateLimited {
+                        connection_id: self.config.connection_id.clone(),
+                        retry_after_seconds: Some(remaining.as_secs().max(1)),
+                    });
+                }
+                *until = None;
+            }
+        }
         let headers = [
             ("Accept", "application/vnd.github+json".into()),
             ("Authorization", format!("Bearer {}", self.config.token)),
@@ -234,15 +262,29 @@ impl GitHubProvider {
                 ticket: self.config.connection_id.clone(),
                 message,
             })?;
-        match response.status {
-            200..=299 => Ok(response),
-            401 | 403
-                if response
+        let rate_limited = response.status == 429
+            || (response.status == 403
+                && (response
                     .headers
                     .get("x-ratelimit-remaining")
                     .map(String::as_str)
-                    != Some("0") =>
-            {
+                    == Some("0")
+                    || response.headers.contains_key("retry-after")
+                    || github_message(&response.body)
+                        .to_ascii_lowercase()
+                        .contains("rate limit")));
+        match response.status {
+            200..=299 => {
+                if method != "GET" {
+                    if let Some(cache) = &self.issues_cache {
+                        if let Ok(mut cached) = cache.lock() {
+                            *cached = None;
+                        }
+                    }
+                }
+                Ok(response)
+            }
+            401 | 403 if !rate_limited => {
                 let message = github_message(&response.body);
                 let message = if response.headers.contains_key("x-github-sso") {
                     format!(
@@ -258,13 +300,38 @@ impl GitHubProvider {
                     message,
                 })
             }
-            403 | 429 => Err(ProviderError::RateLimited {
-                connection_id: self.config.connection_id.clone(),
-                retry_after_seconds: response
+            403 | 429 if rate_limited => {
+                let seconds = response
                     .headers
                     .get("retry-after")
-                    .and_then(|value| value.parse().ok()),
-            }),
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .or_else(|| {
+                        response
+                            .headers
+                            .get("x-ratelimit-reset")
+                            .and_then(|value| value.parse::<u64>().ok())
+                            .map(|reset| {
+                                reset
+                                    .saturating_sub(
+                                        SystemTime::now()
+                                            .duration_since(UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_secs(),
+                                    )
+                                    .max(1)
+                            })
+                    })
+                    .unwrap_or(60);
+                if let Some(cooldown) = &self.rate_limited_until {
+                    if let Ok(mut until) = cooldown.lock() {
+                        *until = Some(Instant::now() + Duration::from_secs(seconds));
+                    }
+                }
+                Err(ProviderError::RateLimited {
+                    connection_id: self.config.connection_id.clone(),
+                    retry_after_seconds: Some(seconds),
+                })
+            }
             404 => Err(ProviderError::NotFound {
                 connection_id: self.config.connection_id.clone(),
                 native_id: url.rsplit('/').next().unwrap_or(url).into(),
@@ -531,6 +598,26 @@ impl GitHubProvider {
     }
 
     fn list_issues(&self, updated_after: Option<&str>) -> Result<Vec<GitHubIssue>, ProviderError> {
+        if updated_after.is_none() {
+            if let Some(cache) = &self.issues_cache {
+                if let Ok(mut cached) = cache.lock() {
+                    if let Some((at, issues)) = cached.as_ref() {
+                        if at.elapsed() < ISSUE_LIST_CACHE_TTL {
+                            return Ok(issues.clone());
+                        }
+                    }
+                    // Keep this per-provider lock through the refresh: parallel board columns
+                    // share one GitHub walk instead of all consuming the remaining API budget.
+                    let issues = self.fetch_issues(None)?;
+                    *cached = Some((Instant::now(), issues.clone()));
+                    return Ok(issues);
+                }
+            }
+        }
+        self.fetch_issues(updated_after)
+    }
+
+    fn fetch_issues(&self, updated_after: Option<&str>) -> Result<Vec<GitHubIssue>, ProviderError> {
         let mut cursor = None;
         let mut issues = Vec::new();
         loop {
@@ -723,14 +810,8 @@ impl TicketProvider for GitHubProvider {
         day_starts: &[String],
     ) -> Result<ProviderTicketSummary, ProviderError> {
         let mut summary = ProviderTicketSummary::default();
-        let mut cursor = None;
-        loop {
-            let (issues, next) = self.issue_page(cursor.as_deref(), None, 100)?;
-            for issue in issues {
-                summary.add_ticket(&self.api_ticket(issue, vec![]), now, day_starts);
-            }
-            let Some(next) = next else { break };
-            cursor = Some(next);
+        for issue in self.list_issues(None)? {
+            summary.add_ticket(&self.api_ticket(issue, vec![]), now, day_starts);
         }
         Ok(summary)
     }
@@ -2411,6 +2492,59 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn live_read_state_coalesces_issue_walks_and_honors_rate_limit_cooldown() {
+        let mut limited = response(403, json!({"message":"secondary rate limit exceeded"}));
+        limited.headers.insert("retry-after".into(), "60".into());
+        let transport = FakeTransport::with(vec![
+            response(200, json!([issue(1, "one", "")])),
+            response(201, issue(2, "two", "")),
+            response(200, json!([issue(2, "two", "")])),
+            limited,
+            response(200, json!([issue(3, "three", "")])),
+        ]);
+        let mut provider = provider(transport.clone());
+        provider.issues_cache = Some(Arc::new(Mutex::new(None)));
+        provider.rate_limited_until = Some(Arc::new(Mutex::new(None)));
+
+        assert_eq!(provider.query(&TicketQuery::default()).unwrap().len(), 1);
+        assert_eq!(provider.query(&TicketQuery::default()).unwrap().len(), 1);
+        assert_eq!(transport.requests.lock().unwrap().len(), 1);
+        provider
+            .request(
+                "POST",
+                &provider.endpoint("issues"),
+                Some(&json!({"title":"two"})),
+            )
+            .unwrap();
+        assert_eq!(
+            provider.query(&TicketQuery::default()).unwrap()[0].title,
+            "two"
+        );
+        assert_eq!(transport.requests.lock().unwrap().len(), 3);
+        *provider.issues_cache.as_ref().unwrap().lock().unwrap() = None;
+        assert!(matches!(
+            provider.query(&TicketQuery::default()),
+            Err(ProviderError::RateLimited { .. })
+        ));
+        assert!(matches!(
+            provider.query(&TicketQuery::default()),
+            Err(ProviderError::RateLimited { .. })
+        ));
+        assert_eq!(transport.requests.lock().unwrap().len(), 4);
+        *provider
+            .rate_limited_until
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap() = None;
+        assert_eq!(
+            provider.query(&TicketQuery::default()).unwrap()[0].title,
+            "three"
+        );
+        assert_eq!(transport.requests.lock().unwrap().len(), 5);
     }
 
     #[test]

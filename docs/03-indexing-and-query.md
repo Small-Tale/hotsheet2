@@ -309,6 +309,13 @@ query(filter, sort, text?, paging) -> TicketRow[]
   applies `limit` to the checkout-wide result, and projects `fields` only after merging
   (every row keeps its source `store`). The serverless MCP backend merges multi-store
   checkouts the same way (HS2-M0YTB6).
+  A failing external source does not suppress healthy git or other provider rows. Paged
+  responses include `source_errors` when a provider could not be read; their `counts`
+  then cover only successfully read sources, so the client shows a partial-data warning
+  alongside the available tickets. Unpaged responses retain their array shape and set
+  `x-hotsheet-partial: true` when a source was omitted. A fresh page after recovery
+  includes the source again; callers restart pagination rather than continuing a
+  partial cursor when they need the recovered source's older rows (HS2-190BAS).
   The unpaged array is **bounded** by `CHECKOUT_READ_MAX_ROWS` (500), the same ceiling as a
   page (HS2-CYXS0N):
   - without `limit`, a read that would return more than 500 rows fails with
@@ -320,7 +327,7 @@ query(filter, sort, text?, paging) -> TicketRow[]
   **Skipping counts (HS2-VPEAM4).** Every page computes `counts` by default, and a
   hosted-provider source computes its summary with a full provider walk. A caller that
   ignores counts passes `counts=false`: the page then carries an explicit `"counts": null`
-  (never a stale or partial object) and no source summary is read. Any other `counts` value
+  (never a stale object) and no source summary is read. Any other `counts` value
   is `400`. `counts` is not a filter, so it does not change the cursor fingerprint. Whole-
   checkout walkers (`Api.checkoutTicketRowsPaged`, MCP `hotsheet_query` walks with
   `counts: false`) use it; the web list's own pages keep counts.

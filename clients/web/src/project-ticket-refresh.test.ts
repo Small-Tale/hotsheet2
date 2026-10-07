@@ -51,6 +51,29 @@ describe('loadProjectTicketRefresh', () => {
     expect(checkoutTicketPage).toHaveBeenCalledWith('checkout', 200, undefined, { collection: 'queue' });
   });
 
+  it('keeps local rows and reports a partial checkout page when GitHub is rate limited', async () => {
+    const ticket = { id: '01', slug: 'HS2-OK', title: 'Local ticket', tags: [] };
+    const result = await loadProjectTicketRefresh(
+      {
+        checkoutTicketPage: vi.fn().mockResolvedValue({
+          items: [ticket],
+          counts,
+          source_errors: ["github-mixed: provider 'github-mixed' is rate limited"],
+        }),
+        checkoutCorruptTickets: vi.fn().mockResolvedValue([]),
+      },
+      'checkout',
+    );
+
+    expect(result).toEqual({
+      tickets: [ticket],
+      ticketCounts: counts,
+      nextCursor: undefined,
+      ticketsError: "github-mixed: provider 'github-mixed' is rate limited",
+      corruptTickets: [],
+    });
+  });
+
   it('keeps corrupt entries available when the healthy-ticket index fails', async () => {
     const corrupt = {
       store: 'local',

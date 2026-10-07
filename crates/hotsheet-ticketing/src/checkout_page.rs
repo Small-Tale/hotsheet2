@@ -425,6 +425,9 @@ pub struct CheckoutTicketPage {
     /// Navigation counts, or an explicit `null` when the caller passed `counts=false`
     /// (HS2-VPEAM4): walkers that ignore counts skip a full summary read per page.
     pub counts: Option<CheckoutTicketCounts>,
+    /// External sources omitted because their read failed. Healthy sources remain usable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_errors: Vec<String>,
 }
 
 /// Parse the `counts` page parameter: absent or `true` computes counts, `false` omits them.

@@ -38,23 +38,36 @@ export async function loadBoardColumnRefresh(
   query: CheckoutTicketQuery,
   columns: readonly BoardColumnSpec[],
   wants: Readonly<Record<string, number>> = {},
-): Promise<{ tickets: TicketRow[]; counts?: CheckoutTicketCounts; pages: Record<string, BoardColumnPage> }> {
+): Promise<{
+  tickets: TicketRow[];
+  counts?: CheckoutTicketCounts;
+  pages: Record<string, BoardColumnPage>;
+  sourceErrors: string[];
+}> {
   let counts: CheckoutTicketCounts | undefined,
     countsRequested = false;
+  const sourceErrors = new Set<string>();
   // A legacy server answers with a plain row array (no paging or counts); treat it as one exhausted page and
   // keep its rows as-is, as the global loader does. The board buckets rows by status when it renders.
   const normalize = (
-    page: { items: TicketRow[]; next_cursor?: string; counts?: CheckoutTicketCounts | null } | TicketRow[],
+    page:
+      | { items: TicketRow[]; next_cursor?: string; counts?: CheckoutTicketCounts | null; source_errors?: string[] }
+      | TicketRow[],
   ) => (Array.isArray(page) ? { items: page, next_cursor: undefined } : page);
   const fetchPage = async (size: number, cursor: string | undefined, status: string) => {
     const statusQuery = { ...query, status };
     if (!countsRequested || !client.checkoutTicketRowsPage) {
       countsRequested = true;
       const page = await client.checkoutTicketPage(checkout, size, cursor, statusQuery);
-      if (!Array.isArray(page)) counts ??= page.counts;
+      if (!Array.isArray(page)) {
+        counts ??= page.counts;
+        page.source_errors?.forEach((error) => sourceErrors.add(error));
+      }
       return normalize(page);
     }
-    return normalize(await client.checkoutTicketRowsPage(checkout, size, cursor, statusQuery));
+    const page = await client.checkoutTicketRowsPage(checkout, size, cursor, statusQuery);
+    if (!Array.isArray(page)) page.source_errors?.forEach((error) => sourceErrors.add(error));
+    return normalize(page);
   };
   const loadStream = async (status: string, target: number) => {
     const rows: TicketRow[] = [];
@@ -89,7 +102,7 @@ export async function loadBoardColumnRefresh(
     tickets = appendUniqueTicketRows(tickets, column.rows);
     pages[column.id] = column.page;
   }
-  return { tickets, counts, pages };
+  return { tickets, counts, pages, sourceErrors: [...sourceErrors] };
 }
 
 export function appendUniqueTicketRows(current: readonly TicketRow[], incoming: readonly TicketRow[]): TicketRow[] {
@@ -135,6 +148,7 @@ export async function loadProjectTicketRefresh(
             tickets: columns.value.tickets.filter((ticket) => !corruptSlugs.has(ticket.slug)),
             ticketCounts: columns.value.counts,
             boardPages: columns.value.pages,
+            ...(columns.value.sourceErrors.length ? { ticketsError: columns.value.sourceErrors.join(' · ') } : {}),
           }
         : { ticketsError: message(columns.reason) }),
       ...(corruptTickets.status === 'fulfilled'
@@ -156,7 +170,11 @@ export async function loadProjectTicketRefresh(
           tickets: ticketRows.filter((ticket) => !corruptSlugs.has(ticket.slug)),
           ...(Array.isArray(ticketPage)
             ? {}
-            : { ticketCounts: ticketPage?.counts, nextCursor: ticketPage?.next_cursor }),
+            : {
+                ticketCounts: ticketPage?.counts,
+                nextCursor: ticketPage?.next_cursor,
+                ...(ticketPage?.source_errors?.length ? { ticketsError: ticketPage.source_errors.join(' · ') } : {}),
+              }),
         }
       : { ticketsError: message(tickets.reason) }),
     ...(corruptTickets.status === 'fulfilled'

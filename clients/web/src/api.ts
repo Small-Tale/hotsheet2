@@ -310,12 +310,14 @@ export interface CheckoutTicketPage {
   items: TicketRow[];
   next_cursor?: string;
   counts: CheckoutTicketCounts;
+  source_errors?: string[];
 }
 /** A checkout page requested with `counts=false`: the server returns `counts: null`. */
 export interface CheckoutTicketRowsPage {
   items: TicketRow[];
   next_cursor?: string;
   counts: null;
+  source_errors?: string[];
 }
 
 function checkoutPageParams(

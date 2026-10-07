@@ -12744,6 +12744,156 @@ async fn external_checkout_pages_use_provider_cursors_and_summaries() {
 }
 
 #[tokio::test]
+async fn a_rate_limited_github_source_does_not_hide_local_tickets_and_recovers() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("mixed");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(
+        workspace.path().join("mixed.hs2"),
+        &StoreMetadata::new("MIX"),
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(429, serde_json::json!({"message":"rate limit"})),
+                github_response(200, serde_json::json!([github_issue(11, "Remote ticket")])),
+                github_response(429, serde_json::json!({"message":"rate limit"})),
+                github_response(200, serde_json::json!([github_issue(11, "Remote ticket")])),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let router = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(GitHubProvider::new(
+            GitHubConfig::new("github-mixed", "acme/repo", "fixture-token"),
+            transport.clone(),
+        ))));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    let create = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{checkout_id}/tickets"),
+            Some(r#"{"title":"Local ticket"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(create.status(), StatusCode::CREATED);
+    let connection = serde_json::json!({
+        "id":"github-mixed","provider":"github","locator":"acme/repo","name":"Issues",
+        "default":false,"settings":{"credential":{"secret":"github-fixture"}}
+    });
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/provider-connections",
+                Some(&connection.to_string()),
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("/checkouts/{checkout_id}/sources/github-mixed"),
+                Some(r#"{"provider":"github","locator":"acme/repo","make_default":false}"#),
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+
+    let first = router
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{checkout_id}/tickets?page_size=50"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let partial = body_json(first).await;
+    assert_eq!(partial["items"][0]["title"], "Local ticket");
+    assert_eq!(partial["items"].as_array().unwrap().len(), 1);
+    assert_eq!(partial["counts"]["total"], 1);
+    assert!(
+        partial["source_errors"][0]
+            .as_str()
+            .unwrap()
+            .contains("rate limited")
+    );
+    assert_eq!(transport.responses.lock().unwrap().len(), 3);
+
+    let query_limited = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=50"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(query_limited["items"][0]["title"], "Local ticket");
+    assert_eq!(query_limited["counts"]["total"], 1);
+    assert!(
+        query_limited["source_errors"][0]
+            .as_str()
+            .unwrap()
+            .contains("rate limited")
+    );
+    assert_eq!(transport.responses.lock().unwrap().len(), 1);
+
+    let recovered = body_json(
+        router
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=50&counts=false"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let titles: Vec<&str> = recovered["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["title"].as_str().unwrap())
+        .collect();
+    assert!(titles.contains(&"Local ticket"));
+    assert!(titles.contains(&"Remote ticket"));
+    assert!(recovered.get("source_errors").is_none());
+}
+
+#[tokio::test]
 async fn linking_a_github_source_keeps_unqualified_git_ticket_ids_working() {
     // HS2-GKERTK: probing every linked source for a bare git ULID asked GitHub too, whose
     // "not an issue number" rejection aborted the lookup with a 409 toast.

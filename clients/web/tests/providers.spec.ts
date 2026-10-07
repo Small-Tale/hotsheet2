@@ -18068,6 +18068,55 @@ test('shows new-project feedback when a project has no tickets', async ({ page }
   await page.screenshot({ path: '/private/tmp/hs2-ydrmad-project-empty-board-wide.png', fullPage: true });
 });
 
+test('shows local tickets and a partial-data warning when a GitHub source is rate limited (HS2-190BAS)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
+    const request = route.request(),
+      params = new URL(request.url()).searchParams;
+    if (request.method() !== 'GET' || !params.has('page_size')) return route.fallback();
+    return route.fulfill({
+      json: {
+        items: params.has('status') && params.get('status') !== 'not_started' ? [] : [notStartedRow],
+        counts:
+          params.get('counts') === 'false'
+            ? null
+            : {
+                total: 1,
+                queued: 1,
+                backlog: 0,
+                archive: 0,
+                trash: 0,
+                open: 1,
+                up_next: 0,
+                active: 0,
+                started: 0,
+                verified: 0,
+                completed_today: 0,
+                completion_trend: [0, 0, 0, 0, 0, 0, 0],
+              },
+        source_errors: ["github-mixed: provider 'github-mixed' is rate limited; retry after 60s"],
+      },
+    });
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
+  await expect(page.getByText("provider 'github-mixed' is rate limited", { exact: false })).toBeVisible();
+  await expect(page.getByText('No tickets yet')).toHaveCount(0);
+  await page.getByLabel('Columns view').click();
+  await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-190bas-partial-phone.png', fullPage: true, animations: 'disabled' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'false');
+  await page.screenshot({ path: '/private/tmp/hs2-190bas-partial-wide.png', fullPage: true, animations: 'disabled' });
+});
+
 test('shows view-specific feedback when a populated project has no tickets in the selected view', async ({ page }) => {
   await mockProject(page);
   await page.route('**/checkouts/demo-checkout/tickets*', (route) =>

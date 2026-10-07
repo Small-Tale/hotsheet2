@@ -988,6 +988,7 @@ mod core_backend {
                 items: page.items,
                 next_cursor: page.next_cursor,
                 counts: with_counts.then_some(counts),
+                source_errors: Vec::new(),
             }))
         }
     }

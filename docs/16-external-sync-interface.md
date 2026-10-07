@@ -156,6 +156,13 @@ cannot represent the id (a git ULID sent to GitHub, which numbers its issues) si
 hold it; a source that fails to answer (auth, rate limit, network) only surfaces its error
 when no other source owns the id. Id-shape errors name the provider that raised them
 (HS2-GKERTK).
+Checkout lists tolerate an unavailable external source: they return available tickets
+with a partial-data warning instead of failing the entire collection. The live GitHub
+adapter shares a ten-second issue-list snapshot across summary and board reads and
+invalidates it after successful writes. After a GitHub rate-limit response, the adapter
+honors `Retry-After` or the reset time (60 seconds when neither is supplied) before
+trying the remote again. These bounded read states reduce duplicate requests without
+changing GitHub's authority for tickets (HS2-190BAS).
 
 Cross-provider operations are explicit compositions, not background synchronization
 and not assumed atomic transactions. Copying a ticket asks the destination provider

@@ -75,6 +75,10 @@ pub const MAX_ATTACHMENT_BODY_BYTES: usize = 100 * 1024 * 1024;
 pub const MAX_VIDEO_POSTER_BODY_BYTES: usize = 5 * 1024 * 1024;
 
 /// Shared server state (cheaply cloned into each handler).
+type LiveProviderCache = Arc<
+    Mutex<std::collections::HashMap<String, (String, Arc<dyn hotsheet_ticketing::TicketProvider>)>>,
+>;
+
 #[derive(Clone)]
 pub struct AppState {
     store: FsStore,
@@ -93,6 +97,8 @@ pub struct AppState {
     /// here as the default entry; additional stores are added via `POST /stores`.
     host: StoreHost,
     injected_providers: ProviderRegistry,
+    /// Reuse live provider adapters so short-lived read caches span checkout requests.
+    live_providers: LiveProviderCache,
     /// Keeps the fs-watchers of `POST /stores`-registered stores alive, by store id (the
     /// default store's watcher is held by the server binary). Removing one stops it.
     watchers: Arc<Mutex<std::collections::HashMap<String, WatchHandle>>>,
@@ -333,6 +339,7 @@ impl AppState {
             event_log,
             host,
             injected_providers: ProviderRegistry::default(),
+            live_providers: Arc::default(),
             watchers: Arc::default(),
             presence: presence::Presence::default(),
             project_hosted: Arc::default(),
@@ -3156,6 +3163,7 @@ fn update_connection_record(
         .iter()
         .any(|existing| existing.id == connection_id && existing.disabled);
     save_provider_connections(state, connections, connection.clone(), Some(&connection_id))?;
+    forget_live_provider(state, &connection_id);
     // Checkout links copy the locator; an edit reaches every project that shares the
     // connection (HS2-RCBKA3).
     state
@@ -3178,11 +3186,12 @@ async fn set_provider_connection_disabled(
     Path(connection_id): Path<String>,
     Json(body): Json<ProviderConnectionDisabledBody>,
 ) -> Result<Json<ProviderConnection>, ApiError> {
-    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
         .set_disabled(&connection_id, body.disabled)
         .map_err(provider_transfer_error)?
-        .map(Json)
-        .ok_or_else(|| ApiError::not_found(&connection_id))
+        .ok_or_else(|| ApiError::not_found(&connection_id))?;
+    forget_live_provider(&state, &connection_id);
+    Ok(Json(connection))
 }
 
 /// Whether `connection_id` names a disabled external connection in `providers.json`.
@@ -3200,12 +3209,11 @@ async fn delete_provider_connection(
     Path(connection_id): Path<String>,
 ) -> Result<Json<hotsheet_ticketing::connection_removal::ConnectionRemoval>, ApiError> {
     tokio::task::spawn_blocking(move || {
-        hotsheet_ticketing::connection_removal::remove_provider_connection(
+        let removed = hotsheet_ticketing::connection_removal::remove_provider_connection(
             &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
             &state.checkout_registry,
             &connection_id,
         )
-        .map(Json)
         .map_err(|error| match error {
             hotsheet_ticketing::connection_removal::ConnectionRemovalError::GitSource(_) => {
                 ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
@@ -3214,7 +3222,9 @@ async fn delete_provider_connection(
                 provider_transfer_error(error)
             }
             other => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, other.to_string()),
-        })
+        })?;
+        forget_live_provider(&state, &connection_id);
+        Ok(Json(removed))
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
@@ -3303,7 +3313,32 @@ fn provider_for(
         .find(|connection| connection.id == connection_id)
         .ok_or_else(|| ApiError::not_found(connection_id))?;
     let token = connection_token(state, &connection)?;
-    hotsheet_extsync::live_provider(&connection, token).map_err(provider_transfer_error)
+    use sha2::{Digest, Sha256};
+    let mut fingerprint = Sha256::new();
+    fingerprint.update(serde_json::to_vec(&connection).map_err(provider_transfer_error)?);
+    fingerprint.update(token.as_bytes());
+    let fingerprint = format!("{:x}", fingerprint.finalize());
+    let mut cached = state.live_providers.lock().map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "provider cache lock poisoned",
+        )
+    })?;
+    if let Some((key, provider)) = cached.get(connection_id) {
+        if key == &fingerprint {
+            return Ok(provider.clone());
+        }
+    }
+    let provider =
+        hotsheet_extsync::live_provider(&connection, token).map_err(provider_transfer_error)?;
+    cached.insert(connection_id.into(), (fingerprint, provider.clone()));
+    Ok(provider)
+}
+
+fn forget_live_provider(state: &AppState, connection_id: &str) {
+    if let Ok(mut providers) = state.live_providers.lock() {
+        providers.remove(connection_id);
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -4539,7 +4574,8 @@ async fn list_checkout_tickets(
         merge_checkout_page(&state, &reference, &params, 1, false)?;
         return Ok(Json(serde_json::Value::Array(Vec::new())).into_response());
     }
-    let (items, next_cursor, _) = merge_checkout_page(&state, &reference, &params, cap, false)?;
+    let (items, next_cursor, _, source_errors) =
+        merge_checkout_page(&state, &reference, &params, cap, false)?;
     let truncated = next_cursor.is_some();
     if truncated && params.limit.is_none() {
         return Err(ApiError::new(
@@ -4553,6 +4589,12 @@ async fn list_checkout_tickets(
     if truncated {
         response.headers_mut().insert(
             TRUNCATED_HEADER,
+            axum::http::HeaderValue::from_static("true"),
+        );
+    }
+    if !source_errors.is_empty() {
+        response.headers_mut().insert(
+            "x-hotsheet-partial",
             axum::http::HeaderValue::from_static("true"),
         );
     }
@@ -4654,12 +4696,13 @@ fn list_checkout_ticket_page(
         ));
     }
     let with_counts = params.counts.unwrap_or(true);
-    let (items, next_cursor, counts) =
+    let (items, next_cursor, counts, source_errors) =
         merge_checkout_page(state, reference, &params, page_size, with_counts)?;
     serde_json::to_value(checkout_page::CheckoutTicketPage {
         items,
         next_cursor,
         counts: with_counts.then_some(counts),
+        source_errors,
     })
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
 }
@@ -4668,20 +4711,20 @@ fn list_checkout_ticket_page(
 /// order, the continuation cursor when a row remains, and (when requested) exact counts.
 /// Both the paged envelope and the capped unpaged array read through here; the merge and
 /// cursor codec are shared with the serverless MCP backend (`checkout_page`, HS2-JVF20F).
+type CheckoutMergeResult = (
+    Vec<serde_json::Value>,
+    Option<String>,
+    checkout_page::CheckoutTicketCounts,
+    Vec<String>,
+);
+
 fn merge_checkout_page(
     state: &AppState,
     reference: &str,
     params: &ListParams,
     page_size: usize,
     with_counts: bool,
-) -> Result<
-    (
-        Vec<serde_json::Value>,
-        Option<String>,
-        checkout_page::CheckoutTicketCounts,
-    ),
-    ApiError,
-> {
+) -> Result<CheckoutMergeResult, ApiError> {
     let checkout = state
         .checkout_registry
         .resolve(reference)
@@ -4736,12 +4779,21 @@ fn merge_checkout_page(
             .summary(&now_text, &day_starts)?;
         counts.add(index_summary(summary));
     }
-    for source in external_sources.iter().filter(|_| with_counts) {
-        counts.add(
-            provider_for(state, &source.connection_id)?
+    let mut failed_sources = vec![None; external_sources.len()];
+    let mut provider_summaries = vec![None; external_sources.len()];
+    for (index, source) in external_sources.iter().enumerate().filter(|_| with_counts) {
+        let result = provider_for(state, &source.connection_id).and_then(|provider| {
+            provider
                 .summary(&now_text, &day_starts)
-                .map_err(provider_transfer_error)?,
-        );
+                .map_err(provider_transfer_error)
+        });
+        match result {
+            Ok(summary) => provider_summaries[index] = Some(summary),
+            Err(error) => {
+                failed_sources[index] =
+                    Some(format!("{}: {}", source.connection_id, error.message));
+            }
+        }
     }
 
     let compact = params.compact.unwrap_or(true);
@@ -4823,17 +4875,42 @@ fn merge_checkout_page(
                     exhausted,
                 });
             }
-            let source = external_sources[request.source - entries.len()];
-            let provider = provider_for(state, &source.connection_id)?;
+            let source_index = request.source - entries.len();
+            let source = external_sources[source_index];
+            if failed_sources[source_index].is_some() {
+                return Ok(checkout_page::SourceBatch {
+                    exhausted: true,
+                    ..Default::default()
+                });
+            }
+            let provider = match provider_for(state, &source.connection_id) {
+                Ok(provider) => provider,
+                Err(error) => {
+                    failed_sources[source_index] =
+                        Some(format!("{}: {}", source.connection_id, error.message));
+                    return Ok(checkout_page::SourceBatch {
+                        exhausted: true,
+                        ..Default::default()
+                    });
+                }
+            };
             let query = params.clone().into_query(state.store.root())?;
-            let page = provider
-                .query_after(
-                    &hotsheet_ticketing::unbounded_query(&query),
-                    request.after,
-                    request.resume,
-                    request.want,
-                )
-                .map_err(provider_transfer_error)?;
+            let page = match provider.query_after(
+                &hotsheet_ticketing::unbounded_query(&query),
+                request.after,
+                request.resume,
+                request.want,
+            ) {
+                Ok(page) => page,
+                Err(error) => {
+                    failed_sources[source_index] =
+                        Some(format!("{}: {error}", source.connection_id));
+                    return Ok(checkout_page::SourceBatch {
+                        exhausted: true,
+                        ..Default::default()
+                    });
+                }
+            };
             let matches = commit_filter(
                 page.items
                     .iter()
@@ -4884,7 +4961,21 @@ fn merge_checkout_page(
         page_size,
         fetch,
     )?;
-    Ok((page.items, page.next_cursor, counts))
+    // A provider can succeed at summary but fail while fetching its page. Its counts are
+    // incomplete in that case too, so only add sources whose entire read succeeded.
+    for (index, summary) in provider_summaries.into_iter().enumerate() {
+        if failed_sources[index].is_none() {
+            if let Some(summary) = summary {
+                counts.add(summary);
+            }
+        }
+    }
+    Ok((
+        page.items,
+        page.next_cursor,
+        counts,
+        failed_sources.into_iter().flatten().collect(),
+    ))
 }
 
 #[derive(Serialize)]
