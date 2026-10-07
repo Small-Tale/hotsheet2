@@ -36,6 +36,10 @@ fn sentinel(root: &Path) -> PathBuf {
     let dir = root.join("sentinel");
     std::fs::create_dir(&dir).unwrap();
     git(&dir, &["init", "-q", "-b", "main"]);
+    // Keep the sentinel stable after its baseline snapshot. Git may detach
+    // auto-maintenance after its setup commit and leave a transient lock behind.
+    git(&dir, &["config", "maintenance.auto", "false"]);
+    git(&dir, &["config", "gc.auto", "0"]);
     std::fs::write(dir.join("README"), "sentinel\n").unwrap();
     git(&dir, &["add", "README"]);
     git(&dir, &["commit", "-q", "-m", "sentinel"]);
