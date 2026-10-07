@@ -6479,9 +6479,14 @@ test('resizes ResizableRegion demos through Kerf wireResizableRegions pointer an
   const horizontal = page.getByRole('separator', { name: 'Resize Example sidebar' });
   const vertical = page.getByRole('separator', { name: 'Resize Example drawer' });
   await expect(horizontal).toHaveAttribute('aria-valuenow', '260');
+  // Hover the live separator so layout shifts under concurrent load cannot leave the pointer
+  // at a stale bounding-box coordinate before Kerf receives pointerdown (HS2-PYRH81).
+  await horizontal.hover();
   const box = (await horizontal.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
+  await expect(
+    page.locator('[data-component="resizable-region"][data-region-id="resize-demo-horizontal"]'),
+  ).toHaveAttribute('data-resizing', 'true');
   await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2, { steps: 4 });
   await expect(horizontal).toHaveAttribute('aria-valuenow', '320');
   await page.mouse.move(box.x + box.width / 2 + 600, box.y + box.height / 2, { steps: 4 });
@@ -6496,9 +6501,12 @@ test('resizes ResizableRegion demos through Kerf wireResizableRegions pointer an
   await expect(horizontal).toHaveAttribute('aria-valuenow', '314');
   await page.keyboard.press('End');
   await expect(horizontal).toHaveAttribute('aria-valuenow', '420');
+  await vertical.hover();
   const verticalBox = (await vertical.boundingBox())!;
-  await page.mouse.move(verticalBox.x + verticalBox.width / 2, verticalBox.y + verticalBox.height / 2);
   await page.mouse.down();
+  await expect(
+    page.locator('[data-component="resizable-region"][data-region-id="resize-demo-vertical"]'),
+  ).toHaveAttribute('data-resizing', 'true');
   await page.mouse.move(verticalBox.x + verticalBox.width / 2, verticalBox.y + verticalBox.height / 2 - 40, {
     steps: 4,
   });
