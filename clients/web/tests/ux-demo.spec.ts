@@ -179,6 +179,42 @@ test('preserves a selected catalog component through a real reload (HS2-9TZ9AF)'
   await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
 });
 
+test('keeps the beta.82 catalog filter visible, searchable, and focused after clearing (HS2-458BS5)', async ({
+  page,
+}) => {
+  await page.goto('/ux-demo?dev-review=false');
+  const sidebar = page.locator('[data-catalog-sidebar]');
+  const filter = page.locator('[data-catalog-filter]');
+  await expect(sidebar).toBeVisible();
+  await expect(filter).toBeVisible();
+  await sidebar.locator('[data-item-id="value-table"]').scrollIntoViewIfNeeded();
+  await expect(filter).toBeInViewport();
+
+  await filter.fill('TiCkEtRoW');
+  await expect(sidebar.locator('[data-item-id="ticket-row"]')).toBeVisible();
+  await expect(sidebar.locator('[data-item-id="app-shell"]')).toBeHidden();
+  await sidebar.locator('[data-item-id="ticket-row"]').click();
+  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
+  await expect(filter).toHaveText('TiCkEtRoW');
+
+  await page.getByRole('button', { name: 'Clear filter' }).click();
+  await expect(filter).toHaveText('');
+  await expect(filter).toBeFocused();
+  await expect(sidebar.locator('[data-item-id="app-shell"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Clear filter' })).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-458bs5-catalog-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Show UX components catalog' }).click();
+  await expect(filter).toBeVisible();
+  await expect
+    .poll(async () => {
+      const box = await filter.boundingBox();
+      return Boolean(box && box.x >= 0 && box.x + box.width <= 390);
+    })
+    .toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-458bs5-catalog-narrow.png', fullPage: true });
+});
+
 test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF)', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();

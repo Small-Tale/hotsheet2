@@ -2062,7 +2062,11 @@ uses `@kerfjs/ui/catalog`: `Catalog` owns its responsive sidebar, titled detail 
 footer/status surface, related-component menu, theme control, and collapse control,
 while `wireCatalog` synchronizes the selected entry with `?component=`. The nested Hot
 Sheet inventory is flattened into path-labelled Kerf sections; phase, implementation,
-and dependency metadata remain visible as tags and native related menus. The app retains
+and dependency metadata remain visible as tags and native related menus. Kerf beta.82
+keeps the `TokenSearchField` filter in the fixed sidebar header while entries scroll;
+its conditional Clear filter button clears the query and returns focus to the field.
+Filtering still matches entry and section names without regard to case, and rerenders
+retain the query. The app retains
 ownership of the selected entry and persisted collapsed/theme state, its development-only
 Dev Review toggle, and an optional manually closed settings inspector
 that keeps the demo visible during live adjustment. The settings action lives with the
@@ -2396,7 +2400,11 @@ icon-tile tone, workspace-header width visibility, grouped-search anchors, or ga
 tone. HS2-6HPE7R pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs` in the web client,
 plus `kerfjs` and the ESLint plugin in the compatibility spike, to the published 5.0.0-beta.80
 following the beta.77 upgrade in HS2-X0FS92. HS2-Z7Q3PY advances the same five exact
-package pins to 5.0.0-beta.81. The terminal ticket rail supplies per-view
+package pins to 5.0.0-beta.81.
+HS2-458BS5 advances the five exact pins to 5.0.0-beta.82. Beta.82 also derives
+Web Awesome button, input, and select corner radii from Kerf's
+`--kui-layout-rounded-radius` token (12px by default); pill and circular controls
+retain their own radius. The terminal ticket rail supplies per-view
 `toolbar.leading`, `toolbar.center`, and `toolbar.trailing` through the structured
 NavStack toolbar, and its sunken scroll surface through `pane.appearance`. The repository
 popover supplies compact SplitView actions through `compactStack.*.toolbar.trailing`.
