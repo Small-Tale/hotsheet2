@@ -2285,6 +2285,17 @@ test('switches the TicketInspector live-claim header through every claim state (
   expect(narrowRing!.width).toBeCloseTo(16.8, 1);
   expect(narrowRing!.height).toBeCloseTo(16.8, 1);
   await page.screenshot({ path: test.info().outputPath('live-claim-narrow.png') });
+  await page.locator('[data-action="toggle-settings"]').click();
+  await setLiveClaim('generated-id');
+  await page.locator('[data-action="toggle-settings"]').click();
+  await expect(notice).toContainText('Codex is working on this');
+  await expect(notice).toHaveAttribute('title', 'codex-01M44ZE2BPEZKWTW49DCTATTPW is actively working on this ticket');
+  await expect(eta).toHaveText('~45m left');
+  for (const width of [390, 1100]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await notice.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await notice.screenshot({ path: test.info().outputPath(`live-claim-generated-id-${width}.png`) });
+  }
 });
 
 test('projects phone project attention through selection and reset (HS2-34VG07)', async ({ page }) => {

@@ -76,6 +76,24 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     expect(withoutEta).toContain('var(--kui-state-banner-info-foreground)');
   });
 
+  it('keeps a generated worker id accessible without letting it crowd the ETA', () => {
+    const worker = 'codex-01M44ZE2BPEZKWTW49DCTATTPW';
+    const markup = String(
+      LiveClaimNotice({
+        agentName: worker,
+        eta: { kind: 'estimate', percent: 30, label: '1h 27m left', title: 'Estimated to finish later' },
+      }),
+    );
+    expect(markup).toContain('<strong>Codex is working on this</strong>');
+    expect(markup).toContain(`title="${worker} is actively working on this ticket"`);
+    expect(markup).toContain(`aria-label="${worker} is actively working on this ticket; 1h 27m left"`);
+    expect(markup).toContain('1h 27m left');
+
+    const custom = String(LiveClaimNotice({ agentName: 'verylongcustomworkeridentity' }));
+    expect(custom).toContain('<strong>verylongcustomworke… is working on this</strong>');
+    expect(custom).toContain('title="verylongcustomworkeridentity is actively working on this ticket"');
+  });
+
   it('owns the spinner and ETA styles it renders', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'active-claim.css'), 'utf8');
     for (const selector of ['.claim-eta', '.claim-eta__ring', '.live-claim-notice'])

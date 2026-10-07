@@ -496,12 +496,15 @@ export function QuickTicketComposerDemo() {
 }
 
 /** Live-claim header states the TicketInspector demo exposes (HS2-QKNQXC). */
-export type InspectorLiveClaimDemo = 'none' | 'estimate' | 'overrun' | 'no-eta';
+export type InspectorLiveClaimDemo = 'none' | 'estimate' | 'overrun' | 'no-eta' | 'generated-id';
 export const inspectorLiveClaim = signal<InspectorLiveClaimDemo>('none');
 function demoLiveClaim(): LiveClaimNoticeProps | undefined {
   const state = inspectorLiveClaim.value;
   if (state === 'none') return undefined;
-  return { agentName: 'Claude', eta: state === 'no-eta' ? undefined : TICKET_ROW_CLAIM_ETA[state] };
+  return {
+    agentName: state === 'generated-id' ? 'codex-01M44ZE2BPEZKWTW49DCTATTPW' : 'Claude',
+    eta: state === 'no-eta' ? undefined : TICKET_ROW_CLAIM_ETA[state === 'generated-id' ? 'estimate' : state],
+  };
 }
 
 /** Restore the canonical inspector settings and sync the live controls (HS2-X1SM48). */
@@ -522,6 +525,7 @@ export function TicketInspectorSettings() {
           { value: 'estimate', label: 'With ETA estimate' },
           { value: 'overrun', label: 'Past its ETA (Soon)' },
           { value: 'no-eta', label: 'Without an ETA' },
+          { value: 'generated-id', label: 'Generated worker id with ETA' },
         ]}
       />
       <wa-button type="button" data-action="reset-settings">

@@ -56,13 +56,28 @@ export interface LiveClaimNoticeProps {
   eta?: ClaimEtaPresentation;
 }
 
+function visibleClaimHolder(agentName: string): string {
+  const generated = /^(codex|claude|opencode|antigravity)-[0-9A-HJKMNP-TV-Z]{26}$/i.exec(agentName);
+  if (generated) {
+    const names: Record<string, string> = {
+      codex: 'Codex',
+      claude: 'Claude',
+      opencode: 'OpenCode',
+      antigravity: 'Antigravity',
+    };
+    return names[generated[1].toLowerCase()];
+  }
+  const characters = Array.from(agentName);
+  return characters.length > 22 ? `${characters.slice(0, 19).join('')}…` : agentName;
+}
+
 /** Header status line for a ticket someone is actively working on (HS2-QKNQXC). */
 export function LiveClaimNotice({ agentName, eta }: LiveClaimNoticeProps) {
   const label = `${agentName} is actively working on this ticket`;
   return (
     <div class="live-claim-notice" data-component="live-claim-notice" title={label}>
       <StateBanner
-        title={`${agentName} is working on this`}
+        title={`${visibleClaimHolder(agentName)} is working on this`}
         tone="info"
         urgency="status"
         icon={
