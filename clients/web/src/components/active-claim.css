@@ -18,3 +18,6 @@
 .live-claim-notice {
   margin: 0 var(--kui-space-xs) var(--kui-space-m);
 }
+.live-claim-notice .claim-eta {
+  margin-inline-start: var(--kui-space-xs);
+}

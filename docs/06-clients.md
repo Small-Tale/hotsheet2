@@ -3099,6 +3099,7 @@ The inspector and reader compose the holder and ETA as a Kerf `StateBanner` with
 public-token-colored `LoadingSpinner` when progress is indeterminate; the same-sized ETA ring
 occupies its icon slot while the estimate is on track (HS2-SNC0S3/1FYDF0). The time-left
 label stays in the banner action, and the claim label remains accessible (HS2-KEHG7H).
+The time-left label has an inline gap from the holder text, including when a long worker id wraps.
 
 **AI completion confidence (HS2-DWTJ43).** A note carrying a `confidence` score renders a
 compact Lucide `gauge` badge with the percentage in its header beside the timestamp,
