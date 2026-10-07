@@ -1903,6 +1903,8 @@ test('round-trips ConfidenceBadge appearance and band controls through reset and
 test('resets the TicketInspector, AIConversation, QuickTicketComposer, and ContentTransition settings (HS2-X1SM48)', async ({
   page,
 }) => {
+  // Eight demo navigations and reset cycles share one test deadline under the full worker load.
+  test.setTimeout(120_000);
   const setValue = (control: Locator, value: string) =>
     control.evaluate((node: HTMLElement & { value: string }, next) => {
       node.value = next;
