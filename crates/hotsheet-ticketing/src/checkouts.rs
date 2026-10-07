@@ -26,6 +26,13 @@ pub struct Checkout {
     pub sources: Vec<TicketSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_source: Option<String>,
+    /// Distinguishes a user-cleared default from an older registry with no recorded choice.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub default_source_cleared: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -272,7 +279,7 @@ impl CheckoutRegistry {
         default_source: Option<String>,
     ) -> Result<Checkout, CheckoutError> {
         let _lock = self.acquire_lock()?;
-        self.register_sources_locked(root, alias, repository, sources, default_source)
+        self.register_sources_locked(root, alias, repository, sources, default_source, false)
     }
 
     /// Reopening a project must retain linked providers and its selected default. Only an
@@ -354,7 +361,14 @@ impl CheckoutRegistry {
         if is_new && default_source.is_none() && sources.len() == 1 {
             default_source = Some(sources[0].connection_id.clone());
         }
-        self.register_sources_locked(&root, alias.as_deref(), repository, sources, default_source)
+        self.register_sources_locked(
+            &root,
+            alias.as_deref(),
+            repository,
+            sources,
+            default_source,
+            false,
+        )
     }
 
     fn register_sources_locked(
@@ -364,6 +378,7 @@ impl CheckoutRegistry {
         repository: Option<String>,
         mut sources: Vec<TicketSource>,
         mut default_source: Option<String>,
+        explicit_clear: bool,
     ) -> Result<Checkout, CheckoutError> {
         let root = root
             .canonicalize()
@@ -405,6 +420,12 @@ impl CheckoutRegistry {
             .find(|checkout| checkout.root == root.to_string_lossy())
             .map(|checkout| checkout.id.clone())
             .unwrap_or(generated_id);
+        let default_source_cleared = default_source.is_none()
+            && (explicit_clear
+                || file
+                    .checkouts
+                    .iter()
+                    .any(|checkout| checkout.id == id && checkout.default_source_cleared));
         let mut store_strings = sources
             .iter()
             .filter(|source| source.provider == "git")
@@ -419,6 +440,7 @@ impl CheckoutRegistry {
             stores: store_strings,
             sources,
             default_source,
+            default_source_cleared,
         };
         if let Some(existing) = file.checkouts.iter_mut().find(|c| c.id == id) {
             *existing = entry.clone();
@@ -605,6 +627,7 @@ impl CheckoutRegistry {
             checkout.repository,
             checkout.sources,
             checkout.default_source,
+            false,
         )
     }
 
@@ -728,6 +751,7 @@ impl CheckoutRegistry {
             checkout.repository,
             checkout.sources,
             checkout.default_source,
+            false,
         )
     }
 
@@ -744,6 +768,7 @@ impl CheckoutRegistry {
             checkout.repository,
             checkout.sources,
             connection_id.map(str::to_owned),
+            connection_id.is_none(),
         )
     }
 }
@@ -847,7 +872,10 @@ fn migrate_checkout(checkout: &mut Checkout) {
     {
         checkout.default_source = None;
     }
-    if checkout.default_source.is_none() {
+    if checkout.default_source.is_some() {
+        checkout.default_source_cleared = false;
+    }
+    if checkout.default_source.is_none() && !checkout.default_source_cleared {
         checkout.default_source =
             legacy_default_source(Path::new(&checkout.root), &checkout.sources).or_else(|| {
                 (checkout.sources.len() == 1).then(|| checkout.sources[0].connection_id.clone())
@@ -1123,6 +1151,113 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("not associated")
+        );
+    }
+
+    #[test]
+    fn clearing_a_default_survives_reads_reopen_and_source_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("project");
+        std::fs::create_dir(&root).unwrap();
+        let path = temp.path().join("checkouts.json");
+        let registry = CheckoutRegistry::new(&path);
+        let github = TicketSource {
+            connection_id: "github-issues".into(),
+            provider: "github".into(),
+            locator: "example/issues".into(),
+        };
+        registry
+            .register_sources(
+                &root,
+                None,
+                None,
+                vec![github.clone()],
+                Some(github.connection_id.clone()),
+            )
+            .unwrap();
+        let cleared = registry
+            .set_default_source(root.to_str().unwrap(), None)
+            .unwrap();
+        assert!(cleared.default_source.is_none());
+        assert!(cleared.default_source_cleared);
+        let reopened = CheckoutRegistry::new(&path);
+        assert!(
+            reopened
+                .resolve(root.to_str().unwrap())
+                .unwrap()
+                .default_source
+                .is_none()
+        );
+        assert!(reopened.list().unwrap()[0].default_source_cleared);
+
+        let jira = TicketSource {
+            connection_id: "jira-eng".into(),
+            provider: "jira".into(),
+            locator: "ENG".into(),
+        };
+        assert!(
+            reopened
+                .add_source(root.to_str().unwrap(), jira, false)
+                .unwrap()
+                .default_source
+                .is_none()
+        );
+        assert!(
+            reopened
+                .remove_source(root.to_str().unwrap(), "jira-eng")
+                .unwrap()
+                .default_source
+                .is_none()
+        );
+        let empty = reopened
+            .remove_source(root.to_str().unwrap(), &github.connection_id)
+            .unwrap();
+        assert!(empty.sources.is_empty());
+        assert!(empty.default_source_cleared);
+        assert!(
+            reopened
+                .add_source(root.to_str().unwrap(), github.clone(), false)
+                .unwrap()
+                .default_source
+                .is_none()
+        );
+        assert!(
+            reopened
+                .open_sources(
+                    &root,
+                    None,
+                    None,
+                    vec![github.clone()],
+                    None,
+                    OpenSourceMode::Discovered
+                )
+                .unwrap()
+                .default_source
+                .is_none()
+        );
+        let selected = reopened
+            .set_default_source(root.to_str().unwrap(), Some(&github.connection_id))
+            .unwrap();
+        assert_eq!(selected.default_source.as_deref(), Some("github-issues"));
+        assert!(!selected.default_source_cleared);
+
+        // An older file with no clear marker still infers its sole linked source.
+        reopened
+            .set_default_source(root.to_str().unwrap(), None)
+            .unwrap();
+        let mut legacy: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let entry = legacy["checkouts"][0].as_object_mut().unwrap();
+        entry.remove("default_source_cleared");
+        entry.remove("default_source");
+        std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        assert_eq!(
+            CheckoutRegistry::new(&path)
+                .resolve(root.to_str().unwrap())
+                .unwrap()
+                .default_source
+                .as_deref(),
+            Some("github-issues")
         );
     }
 

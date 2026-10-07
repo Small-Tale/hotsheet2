@@ -484,6 +484,7 @@ mod tests {
             ],
             sources: Vec::new(),
             default_source: None,
+            default_source_cleared: false,
         };
 
         assert_eq!(regenerate_checkout(&checkout).unwrap(), 2);

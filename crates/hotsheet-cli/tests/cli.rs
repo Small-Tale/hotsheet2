@@ -1967,6 +1967,40 @@ fn checkout_register_list_and_resolve_are_store_independent() {
 }
 
 #[test]
+fn checkout_clear_default_survives_fresh_cli_processes_and_reregistration() {
+    let home = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let root = project.path().to_str().unwrap();
+    let store_path = store.path().to_str().unwrap();
+    let run = |args: &[&str]| -> serde_json::Value {
+        let output = Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", home.path())
+            .args(args)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        serde_json::from_slice(&output).unwrap()
+    };
+    let registered = run(&["checkout", "register", root, "--store", store_path]);
+    let source = registered["default_source"].as_str().unwrap();
+    let cleared = run(&["checkout", "set-default", root, "--clear"]);
+    assert!(cleared["default_source"].is_null());
+    assert_eq!(cleared["default_source_cleared"], true);
+    let resolved = run(&["checkout", "resolve", root]);
+    assert!(resolved["default_source"].is_null());
+    let reopened = run(&["checkout", "register", root, "--store", store_path]);
+    assert!(reopened["default_source"].is_null());
+    assert_eq!(reopened["default_source_cleared"], true);
+    let selected = run(&["checkout", "set-default", root, source]);
+    assert_eq!(selected["default_source"], source);
+    assert!(selected["default_source_cleared"].is_null());
+}
+
+#[test]
 fn setup_refresh_preserves_a_project_github_source() {
     let home = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();

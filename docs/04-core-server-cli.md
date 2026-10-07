@@ -175,6 +175,10 @@ default, alias, and repository metadata. A newly selected sole git store replace
 prior sole git link without removing external sources; conservative discovery only adds
 sources. An explicitly supplied complete `sources` list remains authoritative. Source
 removal and default changes use their dedicated checkout operations.
+Clearing a checkout's default records that choice in the machine-local registry, so a
+reload or source update does not select its sole remaining source again. Older registry
+entries without an explicit-clear marker still infer a default from their legacy store
+link or sole source (HS2-QC87XT).
 The CLI's `setup --refresh`, repeated `bootstrap`, `link`, and repeat `checkout register`
 use durable open/relink behavior, so the client setup refresh cannot erase an external
 source before the server receives `/projects/open`.
