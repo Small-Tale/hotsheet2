@@ -2696,7 +2696,9 @@ that version too. HS2-PKPGGZ then adopted the rest of beta.60 and took `KUI-L019
 region surfaces and the focus-mode popup layer are `--kui-resizable-region-background` /
 `--kui-resizable-region-popup-z` tokens, the drawer restore control is a `placement="inline"`
 FloatingToolbar in Kerf's own corner, sidebar and rail inspector tabs use AppTab's `icon-only`
-presentation (fill allocation centers them; the icon gap is `--kui-layout-item-gap`), the project
+presentation (fill allocation centers them; the icon gap is `--kui-layout-item-gap`), and the
+inspector scopes `--kui-layout-pill-radius` to Kerf's small radius so icon-only tab corners match
+the rectangular track (HS2-1H2KNN); the project
 and drawer tab strips configure their inset, chrome, and growth through the `--kui-tab-bar-strip-*`
 and `--kui-tab-bar-trailing-flex` tokens, Selects size and style their selected content through
 `triggerWidth` and the `--kui-select-selected-*` tokens, list rows and headers use `density`,

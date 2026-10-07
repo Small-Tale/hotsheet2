@@ -199,6 +199,10 @@
   --kui-layout-item-gap: var(--kui-space-2xs);
   padding: 0 var(--kui-space-xs) var(--kui-space-xs);
 }
+.ticket-inspector__tabs {
+  /* Kerf's icon-only tabs otherwise keep their pill shape inside the rectangular inspector track. */
+  --kui-layout-pill-radius: var(--kui-radius-s);
+}
 .ticket-inspector__tab-count {
   display: inline-grid;
   min-width: remify(16px);

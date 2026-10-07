@@ -9352,12 +9352,18 @@ test('contains and centers inspector tabs while showing labels only when they fi
           ],
           padding: getComputedStyle(node).padding,
           overflow: node.scrollWidth - node.clientWidth,
+          trackRadius: getComputedStyle(node.querySelector<HTMLElement>('.kui-tab-bar__tabs')!).borderRadius,
           tabBoxes,
         };
       });
       for (const gutter of geometry.gutter) expect(gutter).toBeCloseTo(8, 1);
       expect(geometry.padding).toBe('0px');
       expect(geometry.overflow).toBeLessThanOrEqual(1);
+      expect(
+        await tabs
+          .locator('[data-inspector-tab][data-selected="true"]')
+          .evaluate((tab) => getComputedStyle(tab).borderRadius),
+      ).toBe(geometry.trackRadius);
       const widths = geometry.tabBoxes.map((tab) => tab.width);
       expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1);
       for (const tab of geometry.tabBoxes) {
