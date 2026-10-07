@@ -830,6 +830,7 @@ async function mockProject(
   // source; `/providers` lists only linked sources (HS2-3SCH1K).
   let linkedConnectionIds: string[] = [],
     checkoutDefaultSource: string | undefined;
+  const sourceColors: Record<string, string> = {};
   // Machine-wide sign-ins no source uses yet (HS2-SM9PM8): an abandoned earlier sign-in whose site
   // was never recorded (stored before HS2-16MYXN and unreadable since), so its host is unknown.
   let unusedAccounts = ['github-app-abandoned'];
@@ -903,6 +904,7 @@ async function mockProject(
         })),
     ],
     default_source: checkoutDefaultSource,
+    ...(Object.keys(sourceColors).length ? { source_colors: sourceColors } : {}),
   });
   await page.route('**/*', async (route) => {
     const request = route.request(),
@@ -1049,6 +1051,28 @@ async function mockProject(
       providerConnectionRecords = providerConnectionRecords.map((item) => (item.id === id ? updated : item));
       return route.fulfill({ json: updated });
     }
+    const sourceColor = path.match(/\/sources\/([^/]+)\/color$/);
+    if (sourceColor && request.method() === 'PATCH') {
+      const id = decodeURIComponent(sourceColor[1]),
+        color = request.postDataJSON().color;
+      const linked = gitStores.some((_, index) => gitSourceId(index) === id) || linkedConnectionIds.includes(id);
+      const allowed = [
+        'transparent',
+        '#3b82f6',
+        '#22c55e',
+        '#f97316',
+        '#ef4444',
+        '#8b5cf6',
+        '#ec4899',
+        '#14b8a6',
+        '#6b7280',
+      ];
+      if (!linked || !allowed.includes(color))
+        return route.fulfill({ status: 400, json: { error: 'invalid source or color' } });
+      if (color === 'transparent') Reflect.deleteProperty(sourceColors, id);
+      else sourceColors[id] = color;
+      return route.fulfill({ json: checkoutRecord() });
+    }
     if (path.includes('/sources/') && request.method() === 'PUT') {
       const body = request.postDataJSON(),
         id = decodeURIComponent(path.split('/').pop()!);
@@ -1064,6 +1088,7 @@ async function mockProject(
       const id = decodeURIComponent(path.split('/').pop()!),
         unlinked = linkedConnectionIds.includes(id);
       linkedConnectionIds = linkedConnectionIds.filter((item) => item !== id);
+      Reflect.deleteProperty(sourceColors, id);
       if (checkoutDefaultSource === id) checkoutDefaultSource = undefined;
       const removed = providerConnectionRecords.some((connection) => connection.id === id);
       providerConnectionRecords = providerConnectionRecords.filter((connection) => connection.id !== id);
@@ -1113,6 +1138,7 @@ async function mockProject(
             provider: 'git',
             display_name: 'Hot Sheet git',
             locator,
+            color: sourceColors[gitSourceId(index)],
             default: checkoutDefaultSource ? checkoutDefaultSource === gitSourceId(index) : index === 0,
             capabilities,
           })),
@@ -1123,6 +1149,7 @@ async function mockProject(
               provider: connection.provider,
               display_name: connection.name ?? connection.id,
               locator: connection.locator,
+              color: sourceColors[connection.id],
               default: connection.id === checkoutDefaultSource,
               capabilities: {
                 ...capabilities,
@@ -2444,6 +2471,38 @@ test('opens the native folder chooser directly from Add project and only onboard
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   expect(openedRoots).toEqual(['.', '/work/other', '/work/other']);
+});
+
+test('changes a project source color and updates card and inspector badges (HS2-068Q55)', async ({ page }) => {
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const ticketRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'git');
+  await page.getByLabel('Settings view').click();
+  const color = page.locator('select[name="project-source-color"][data-source-id="git-local"]');
+  await color.selectOption('#3b82f6');
+  await expect(page.locator('.app-toast')).toContainText('Ticket source color updated.');
+  await expect(color).toHaveValue('#3b82f6');
+  await page.getByLabel('List view').click();
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS(
+    'background-color',
+    'rgb(59, 130, 246)',
+  );
+  await ticketRow.click();
+  await expect(page.locator('.ticket-inspector__source-identity [data-component="ticket-source-icon"]')).toHaveCSS(
+    'background-color',
+    'rgb(59, 130, 246)',
+  );
+  await page.getByLabel('Settings view').click();
+  await color.selectOption('transparent');
+  await expect(color).toHaveValue('transparent');
+  await page.getByLabel('List view').click();
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS(
+    'background-color',
+    'rgba(0, 0, 0, 0)',
+  );
 });
 
 test('uses one provider dialog for onboarding, repeated connection creation, and editing', async ({ page }) => {

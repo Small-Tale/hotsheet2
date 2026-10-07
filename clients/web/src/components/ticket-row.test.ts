@@ -13,6 +13,23 @@ import {
 } from './ticket-row';
 
 describe('TicketRow', () => {
+  it('places the project source mark after the category in list and column cards', () => {
+    const ticket: TicketRowProps = {
+      slug: 'HS2-SOURCE',
+      title: 'Source identity',
+      status: 'started',
+      priority: 'default',
+      category: 'task',
+      tags: [],
+      source: { provider: 'github', name: 'Issues', color: '#3b82f6' },
+    };
+    for (const presentation of ['list', 'column'] as const) {
+      const markup = String(TicketRow({ ...ticket, presentation }));
+      expect(markup).toContain('data-provider="github"');
+      expect(markup).toContain('background-color: #3b82f6');
+      expect(markup.indexOf('task category')).toBeLessThan(markup.indexOf('data-provider="github"'));
+    }
+  });
   it('normalizes fallbacks, tags, and boolean defaults', () => {
     expect(
       normalizeTicketRowProps({

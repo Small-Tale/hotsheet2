@@ -24,6 +24,9 @@ pub struct Checkout {
     pub stores: Vec<String>,
     #[serde(default)]
     pub sources: Vec<TicketSource>,
+    /// Project-local source accent colors keyed by connection id; omitted entries are transparent.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub source_colors: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_source: Option<String>,
     /// Distinguishes a user-cleared default from an older registry with no recorded choice.
@@ -432,6 +435,23 @@ impl CheckoutRegistry {
             .map(|source| source.locator.clone())
             .collect::<Vec<_>>();
         store_strings.sort();
+        let source_colors = file
+            .checkouts
+            .iter()
+            .find(|checkout| checkout.id == id)
+            .map(|checkout| {
+                checkout
+                    .source_colors
+                    .iter()
+                    .filter(|(source_id, _)| {
+                        sources
+                            .iter()
+                            .any(|source| &source.connection_id == *source_id)
+                    })
+                    .map(|(source_id, color)| (source_id.clone(), color.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
         let entry = Checkout {
             id: id.clone(),
             root: root.to_string_lossy().into_owned(),
@@ -439,6 +459,7 @@ impl CheckoutRegistry {
             repository,
             stores: store_strings,
             sources,
+            source_colors,
             default_source,
             default_source_cleared,
         };
@@ -679,6 +700,11 @@ impl CheckoutRegistry {
             ));
         }
         source.connection_id = new_connection_id.to_string();
+        if let Some(color) = entry.source_colors.remove(connection_id) {
+            entry
+                .source_colors
+                .insert(new_connection_id.to_string(), color);
+        }
         if entry.default_source.as_deref() == Some(connection_id) {
             entry.default_source = Some(new_connection_id.to_string());
         }
@@ -753,6 +779,53 @@ impl CheckoutRegistry {
             checkout.default_source,
             false,
         )
+    }
+
+    /// Set this project's visual accent for a linked source. It has no effect on projects
+    /// sharing the same provider connection. Transparent is represented by no map entry.
+    pub fn set_source_color(
+        &self,
+        reference: &str,
+        connection_id: &str,
+        color: &str,
+    ) -> Result<Checkout, CheckoutError> {
+        const COLORS: &[&str] = &[
+            "transparent",
+            "#3b82f6",
+            "#22c55e",
+            "#f97316",
+            "#ef4444",
+            "#8b5cf6",
+            "#ec4899",
+            "#14b8a6",
+            "#6b7280",
+        ];
+        if !COLORS.contains(&color) {
+            return Err(CheckoutError::Invalid(format!(
+                "unsupported ticket source color '{color}'"
+            )));
+        }
+        let _lock = self.acquire_lock()?;
+        let mut file = self.read_locked()?;
+        let checkout = resolve_checkout(file.checkouts.clone(), reference)?;
+        let entry = file
+            .checkouts
+            .iter_mut()
+            .find(|candidate| candidate.id == checkout.id)
+            .expect("resolved checkout remains in the locked registry");
+        if entry.source(connection_id).is_none() {
+            return Err(CheckoutError::NotFound(connection_id.into()));
+        }
+        if color == "transparent" {
+            entry.source_colors.remove(connection_id);
+        } else {
+            entry
+                .source_colors
+                .insert(connection_id.to_string(), color.to_string());
+        }
+        let changed = entry.clone();
+        self.write_locked(&file)?;
+        Ok(changed)
     }
 
     pub fn set_default_source(
@@ -1151,6 +1224,92 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("not associated")
+        );
+    }
+
+    #[test]
+    fn source_colors_are_project_local_and_follow_source_lifecycle() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(&second).unwrap();
+        let path = temp.path().join("checkouts.json");
+        let registry = CheckoutRegistry::new(&path);
+        let source = TicketSource {
+            connection_id: "github-a".into(),
+            provider: "github".into(),
+            locator: "acme/a".into(),
+        };
+        for root in [&first, &second] {
+            registry
+                .register_sources(root, None, None, vec![source.clone()], None)
+                .unwrap();
+        }
+        let first_ref = first.to_str().unwrap();
+        let second_ref = second.to_str().unwrap();
+        assert!(
+            registry
+                .resolve(first_ref)
+                .unwrap()
+                .source_colors
+                .is_empty()
+        );
+        registry
+            .set_source_color(first_ref, "github-a", "#3b82f6")
+            .unwrap();
+        assert!(
+            registry
+                .resolve(second_ref)
+                .unwrap()
+                .source_colors
+                .is_empty()
+        );
+        registry
+            .register_sources(&first, None, None, vec![source.clone()], None)
+            .unwrap();
+        let reopened = CheckoutRegistry::new(&path);
+        assert_eq!(
+            reopened.resolve(first_ref).unwrap().source_colors["github-a"],
+            "#3b82f6"
+        );
+        assert!(
+            reopened
+                .set_source_color(first_ref, "missing", "#ef4444")
+                .is_err()
+        );
+        assert!(
+            reopened
+                .set_source_color(first_ref, "github-a", "red")
+                .is_err()
+        );
+        reopened
+            .rename_source(first_ref, "github-a", "github-b")
+            .unwrap();
+        assert_eq!(
+            reopened.resolve(first_ref).unwrap().source_colors["github-b"],
+            "#3b82f6"
+        );
+        reopened
+            .set_source_color(first_ref, "github-b", "transparent")
+            .unwrap();
+        assert!(
+            reopened
+                .resolve(first_ref)
+                .unwrap()
+                .source_colors
+                .is_empty()
+        );
+        reopened
+            .set_source_color(first_ref, "github-b", "#14b8a6")
+            .unwrap();
+        reopened.remove_source(first_ref, "github-b").unwrap();
+        assert!(
+            reopened
+                .resolve(first_ref)
+                .unwrap()
+                .source_colors
+                .is_empty()
         );
     }
 

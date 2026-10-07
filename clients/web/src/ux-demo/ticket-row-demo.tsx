@@ -105,6 +105,7 @@ export function TicketRowDemo() {
           startedPhase: ticketRowSettings.startedPhase.value || undefined,
           priority: ticketRowSettings.priority.value,
           category: ticketRowSettings.category.value,
+          source: { provider: 'github', name: 'Product issues', color: '#3b82f6' },
           tags: ticketRowSettings.tags.value.split(','),
           upNext: ticketRowSettings.upNext.value,
           blocked: ticketRowSettings.blocked.value,

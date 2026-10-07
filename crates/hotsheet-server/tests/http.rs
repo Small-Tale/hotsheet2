@@ -15583,6 +15583,29 @@ async fn checkout_providers_list_only_linked_sources_with_the_checkout_default()
             .collect::<Vec<_>>()
     };
     let git_id = summary(providers("first").await)[0].1.clone();
+    let color_path = format!("/checkouts/first/sources/{git_id}/color");
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &color_path,
+            Some(&serde_json::json!({"color":"#8b5cf6"}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(providers("first").await[0]["color"], "#8b5cf6");
+    assert!(providers("second").await[0].get("color").is_none());
+    let invalid = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &color_path,
+            Some(&serde_json::json!({"color":"purple"}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     assert_eq!(
         summary(providers("first").await),
         vec![

@@ -134,6 +134,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly providerAccountChoice: Signal<string | undefined>;
   readonly useProviderAccount: (id: string) => void;
   readonly setProjectDefaultSource: (id: string) => Promise<void>;
+  readonly setProjectSourceColor: (id: string, color: string) => Promise<void>;
   readonly providerSettingsError: Signal<string>;
   readonly createdGitTicketStore: Signal<string>;
   readonly ticketSourceSetupNavigation: Signal<'none' | 'push' | 'pop'>;
@@ -248,6 +249,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     providerAccountChoice,
     useProviderAccount,
     setProjectDefaultSource,
+    setProjectSourceColor,
     providerSettingsError,
     createdGitTicketStore,
     ticketSourceSetupNavigation,
@@ -1123,6 +1125,13 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     delegate(document.body, 'change', 'wa-select[name="project-default-source"]', (_event, target) => {
       const id = (target as Control).value;
       if (id) void setProjectDefaultSource(id);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', 'select[name="project-source-color"]', (_event, target) => {
+      const select = target as HTMLSelectElement;
+      const id = select.dataset.sourceId;
+      if (id) void setProjectSourceColor(id, select.value);
     }),
   );
   lifetime.add(

@@ -544,6 +544,7 @@ function demoInspectorProps(slug?: string): TicketInspectorProps {
     collectionTickets.value[0];
   return {
     slug: ticket.slug,
+    source: { provider: 'git', name: 'Hot Sheet git' },
     title: inspectorTitle.value,
     titleEditing: inspectorTitleEditing.value,
     titleDraft: inspectorTitleDraft.value,

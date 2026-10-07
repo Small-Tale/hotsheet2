@@ -37,6 +37,8 @@ export interface ProviderDescriptor {
   display_name: string;
   locator: string;
   default: boolean;
+  /** Project-local icon background from the shared customization palette. */
+  color?: string;
   capabilities: Capabilities;
 }
 export interface ProviderConnection {
@@ -816,6 +818,11 @@ export class Api {
       method: 'PUT',
       body: JSON.stringify({ connection_id: connectionId }),
     });
+  setCheckoutSourceColor = (checkout: string, connectionId: string, color: string) =>
+    this.request<Checkout>(
+      `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/color`,
+      { method: 'PATCH', body: JSON.stringify({ color }) },
+    );
   transfer = (kind: 'copy' | 'move', source: Ticket, destination_connection: string) =>
     this.request(`/provider-transfers/${kind}`, {
       method: 'POST',

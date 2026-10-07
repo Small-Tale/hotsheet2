@@ -457,6 +457,7 @@ const DEMO_PROJECT_SOURCES = [
     provider: 'github',
     locator: 'small-tale/hotsheet2',
     default: true,
+    color: '#3b82f6',
   },
   {
     connectionId: 'github-docs',
@@ -464,6 +465,7 @@ const DEMO_PROJECT_SOURCES = [
     provider: 'github',
     locator: 'small-tale/hotsheet-docs',
     default: false,
+    color: '#3b82f6',
     disabled: true,
     sharedWith: ['marketing-site'],
   },

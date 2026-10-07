@@ -233,3 +233,8 @@
   border-color: var(--wa-color-focus);
   background: var(--wa-color-brand-fill-quiet);
 }
+.ticket-inspector__source-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-xs);
+}

@@ -398,6 +398,21 @@ describe('ticket source surfaces', () => {
     expect(single.match(/<small>Default<\/small>/g)).toHaveLength(1);
   });
 
+  it('offers project-local source colors and warns when provider and color repeat', () => {
+    const sources = [
+      { connectionId: 'gh-a', name: 'Alpha', provider: 'github', locator: 'a', default: true, color: '#3b82f6' },
+      { connectionId: 'gh-b', name: 'Beta', provider: 'github', locator: 'b', default: false, color: '#3b82f6' },
+    ];
+    const repeated = String(TicketSourcesSettings({ sources }));
+    expect(repeated).toContain('Some ticket sources look alike');
+    expect(repeated).toContain('name="project-source-color" data-source-id="gh-a"');
+    expect(repeated).toContain('name="project-source-color" data-source-id="gh-b"');
+    expect(repeated).toContain('data-provider="github"');
+    expect(
+      String(TicketSourcesSettings({ sources: [{ ...sources[0], color: 'transparent' }, sources[1]] })),
+    ).not.toContain('Some ticket sources look alike');
+  });
+
   it('lists machine-wide accounts with their sources and projects under App Settings → Accounts (HS2-SM9PM8)', () => {
     const accounts = [
         {

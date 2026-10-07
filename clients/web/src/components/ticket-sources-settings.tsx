@@ -5,12 +5,15 @@ import { List } from '@kerfjs/ui/list';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
+import { StateBanner } from '@kerfjs/ui/state-banner';
 import { Cable, Database, LogOut, Unlink } from 'lucide';
 
 import type { ProviderAccount } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { COMMAND_CUSTOMIZATION_COLORS, resolveCommandColor } from './customization-palette';
 import { ProviderIcon, type ProviderIconKind } from './provider-icon';
 import { type ExternalProviderKind, providerName } from './provider-setup-form';
+import { TicketSourceIcon } from './ticket-source-icon';
 
 /** One ticket source this project's checkout owns (HS2-3SCH1K, HS2-SM9PM8). */
 export interface ProjectTicketSource {
@@ -20,6 +23,7 @@ export interface ProjectTicketSource {
   locator: string;
   /** This checkout's default source. */
   default: boolean;
+  color?: string;
   disabled?: boolean;
   /** Other projects that share this source (attached headlessly with `checkout add-source`). */
   sharedWith?: readonly string[];
@@ -72,6 +76,26 @@ function ConnectionCopy({
  */
 export function TicketSourcesSettings({ sources, error = '', setupOpen = false }: TicketSourcesSettingsProps) {
   const defaultSource = sources.find((source) => source.default) ?? sources.at(0);
+  const duplicates = sources.filter(
+    (source, index) =>
+      sources.findIndex(
+        (candidate) =>
+          candidate.provider === source.provider &&
+          resolveCommandColor(candidate.color) === resolveCommandColor(source.color),
+      ) < index,
+  );
+  const colorChoice = (source: ProjectTicketSource) => (
+    <label class="ticket-provider-settings__color-choice">
+      Icon color
+      <select name="project-source-color" data-source-id={source.connectionId}>
+        {COMMAND_CUSTOMIZATION_COLORS.map((option) => (
+          <option value={option.value} selected={option.value === resolveCommandColor(source.color)}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   return (
     <div class="ticket-provider-settings ticket-sources-settings" data-component="ticket-sources-settings">
       <section>
@@ -85,6 +109,16 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
           This project uses {sources.length} ticket source{sources.length === 1 ? '' : 's'}. New tickets go to the
           default source unless you choose another when creating one.
         </p>
+        {duplicates.length > 0 && (
+          <StateBanner
+            title="Some ticket sources look alike"
+            detail="Choose a different color for sources from the same provider to tell their tickets apart."
+            tone="warning"
+            urgency="status"
+            copyLayout="stacked"
+            icon={<LucideIcon icon={Cable} name="cable" />}
+          />
+        )}
         {sources.length > 1 && (
           <div class="ticket-provider-settings__default">
             <Select
@@ -117,25 +151,37 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                 return source.provider === 'git' ? (
                   <div class="ticket-provider-settings__store" data-source-id={source.connectionId}>
                     <span class="ticket-provider-settings__store-icon">
-                      <LucideIcon icon={Database} name="database" size="s" color={uiColor('neutral-on-quiet')} />
+                      <TicketSourceIcon
+                        source={{ provider: source.provider, name: source.name, color: source.color }}
+                        size="compact"
+                      />
                     </span>
                     {copy}
+                    {colorChoice(source)}
                   </div>
                 ) : (
-                  <ListActionRow
-                    action="edit-provider-connection"
-                    itemId={source.connectionId}
-                    multiline
-                    divider={index > 0 ? 'before' : 'none'}
-                    accessibleLabel={`Edit ${source.name}`}
-                    icon={<LucideIcon icon={Cable} name="cable" />}
-                    label={copy}
-                    trailingAction="remove-project-source"
-                    trailingActionLabel={`Remove ${source.name} from this project`}
-                    trailingActionTitle="Remove from this project"
-                    trailingActionIcon={<LucideIcon icon={Unlink} name="unlink" />}
-                    trailingActionAttributes={{ 'data-source-id': source.connectionId }}
-                  />
+                  <div class="ticket-provider-settings__source-row">
+                    <ListActionRow
+                      action="edit-provider-connection"
+                      itemId={source.connectionId}
+                      multiline
+                      divider={index > 0 ? 'before' : 'none'}
+                      accessibleLabel={`Edit ${source.name}`}
+                      icon={
+                        <TicketSourceIcon
+                          source={{ provider: source.provider, name: source.name, color: source.color }}
+                          size="compact"
+                        />
+                      }
+                      label={copy}
+                      trailingAction="remove-project-source"
+                      trailingActionLabel={`Remove ${source.name} from this project`}
+                      trailingActionTitle="Remove from this project"
+                      trailingActionIcon={<LucideIcon icon={Unlink} name="unlink" />}
+                      trailingActionAttributes={{ 'data-source-id': source.connectionId }}
+                    />
+                    {colorChoice(source)}
+                  </div>
                 );
               })}
             </List>

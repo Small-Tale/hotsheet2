@@ -540,6 +540,11 @@ Ticket sources belong to projects and sign-ins are machine-wide accounts (HS2-SM
 `checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
 Project Settings → Ticket sources and App Settings → Accounts; like the other provider
 commands they read the `-C` store's `providers.json`.
+Each checkout stores its own source icon colors in `checkouts.json`, keyed by connection id;
+linked projects can give a shared connection different colors. The checkout provider
+descriptors include the color, and `PATCH /checkouts/{reference}/sources/{connection_id}/color`
+accepts `transparent` or a custom-palette color. Removing or renaming a source removes or
+moves its project color with it.
 
 `github-sign-in` works without a running server. It prints GitHub's verification URL and
 one-time code, waits for approval, and then prints a `github-app-*` credential reference;

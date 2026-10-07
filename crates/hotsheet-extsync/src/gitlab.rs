@@ -385,6 +385,7 @@ impl GitLabProvider {
 impl TicketProvider for GitLabProvider {
     fn descriptor(&self) -> ProviderDescriptor {
         ProviderDescriptor {
+            color: None,
             connection_id: self.config.connection_id.clone(),
             provider: "gitlab".into(),
             display_name: format!("GitLab {}", self.config.project),

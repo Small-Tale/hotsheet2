@@ -16,6 +16,17 @@ const base = {
 };
 
 describe('TicketInspector', () => {
+  it('shows the source mark beside the ticket number in the shared inspector toolbar', () => {
+    const markup = String(
+      TicketInspector({
+        ...base,
+        source: { provider: 'gitlab', name: 'GitLab issues', color: '#ef4444' },
+      }),
+    );
+    expect(markup).toContain('data-provider="gitlab"');
+    expect(markup).toContain('background-color: #ef4444');
+    expect(markup.indexOf('data-provider="gitlab"')).toBeLessThan(markup.indexOf('Copy ticket number HS2-TEST'));
+  });
   it('allows the sidebar title to wrap without a line cap', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');

@@ -1118,6 +1118,7 @@ export async function startHotSheetWebClient() {
     useProviderAccount,
     requestProjectSourceRemoval,
     setProjectDefaultSource,
+    setProjectSourceColor,
     providerSettingsBusy,
     providerSettingsError,
     providerRemovingId,
@@ -2493,6 +2494,9 @@ export async function startHotSheetWebClient() {
     startedPhase: ticket.started_phase,
     priority: priority(ticket.priority),
     category: ticket.category ?? 'issue',
+    source: defaultProviders.value[project()?.id ?? '']?.sources.find(
+      (source) => source.connectionId === ticket.connection_id,
+    ),
     tags: ticket.tags,
     upNext: ticket.up_next,
     upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
@@ -4208,6 +4212,9 @@ export async function startHotSheetWebClient() {
         : undefined;
     return {
       slug: ticket.slug,
+      source: defaultProviders.value[current.id]?.sources.find(
+        (source) => source.connectionId === ticket.connection_id,
+      ),
       title: ticket.title,
       liveClaim: liveClaimNotice(ticket),
       titleEditing: titleEditingSurface.value === 'inspector',
@@ -4434,6 +4441,7 @@ export async function startHotSheetWebClient() {
           provider: source.provider,
           locator: source.locator,
           default: source.default,
+          color: source.color,
           disabled: Boolean(connection?.disabled),
           sharedWith: (connection?.projects ?? [])
             .filter((project) => project.id !== current.id)
@@ -5516,7 +5524,7 @@ export async function startHotSheetWebClient() {
   const interactionBindingsPort: InteractionBindingsPort = {
     openProjectPicker, openRemoteProjectDialog, chooseAndOpenProject, unhealthyServerRecovery, projectDialogOpen, openRemoteCheckout, remoteProjectDialogOpen, importHs1Project,
     chooseHs1TicketStore, hs1MigrationProject, hs1MigrationBusy, hs1SourceIdentity, project, migrationJobDetails, migrationJobs, migrationConnectionErrors,
-    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, identifyGithubAccount, signOutProviderAccount, requestUnusedAccountSourceRemoval, cancelUnusedAccountSourceRemoval, removeUnusedAccountSource, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource,
+    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, identifyGithubAccount, signOutProviderAccount, requestUnusedAccountSourceRemoval, cancelUnusedAccountSourceRemoval, removeUnusedAccountSource, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource, setProjectSourceColor,
     providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView, repositoryDetailActive: repositoryController.repositoryDetailActive,
     repositorySetupStep, repositorySetupError, repositoryFileMenu, repositorySelectedFiles, repositoryComparison, expandedCodeReviewCommits, loadRepositoryDetail, refreshRepositoryStatus,
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,

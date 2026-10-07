@@ -696,6 +696,13 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     );
   }
 
+  function setProjectSourceColor(id: string, color: string) {
+    return changeProjectSources(
+      (client, current) => client.setCheckoutSourceColor(current.id, id, color),
+      'Ticket source color updated.',
+    );
+  }
+
   /**
    * Switch the connection open for editing off or back on (HS2-SF6W34). While disabled the server
    * neither reads nor writes it, so its tickets drop out of the refreshed views.
@@ -1185,6 +1192,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerRemovingId,
     requestProjectSourceRemoval,
     setProjectDefaultSource,
+    setProjectSourceColor,
     requestProviderRemoval,
     cancelProviderRemoval,
     removeExternalProvider,

@@ -58,11 +58,19 @@
 }
 .ticket-list-row__body {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: start;
   gap: var(--kui-space-xs);
   min-width: 0;
   padding: remify(10.4px) remify(13.6px);
+}
+.ticket-list-row__body[data-has-source='false'] {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.ticket-list-row__source {
+  display: inline-block;
+  margin-right: remify(5.6px);
+  vertical-align: -0.125em;
 }
 .ticket-list-row__content {
   display: grid;

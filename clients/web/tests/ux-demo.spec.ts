@@ -8250,6 +8250,17 @@ test('renders project-owned ticket sources and machine-wide accounts at wide and
     await page.goto('/ux-demo?component=ticket-sources-settings');
     const sources = page.locator('[data-component="ticket-sources-settings"]');
     await expect(sources.locator('wa-select[name="project-default-source"]')).toHaveJSProperty('value', 'github-main');
+    await expect(sources.locator('select[name="project-source-color"]')).toHaveCount(3);
+    await expect(sources.locator('[data-component="ticket-source-icon"]')).toHaveCount(3);
+    const gitSourceCopy = sources.locator(
+      '.ticket-provider-settings__store .ticket-provider-settings__connection-copy',
+    );
+    expect((await gitSourceCopy.boundingBox())!.width).toBeGreaterThan(100);
+    await expect(sources).toContainText('Some ticket sources look alike');
+    await expect(sources.locator('[data-component="ticket-source-icon"][data-provider="github"]').first()).toHaveCSS(
+      'background-color',
+      'rgb(59, 130, 246)',
+    );
     await expect(sources.getByRole('button', { name: 'Remove Product issues from this project' })).toBeVisible();
     await expect(sources).toContainText('Also used by marketing-site');
     // Never another project's sources to attach.
@@ -8295,6 +8306,18 @@ test('renders project-owned ticket sources and machine-wide accounts at wide and
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.screenshot({ path: test.info().outputPath(`accounts-${width}.png`), fullPage: true });
   }
+});
+
+test('shows the source mark after the type on cards and beside the inspector number (HS2-068Q55)', async ({ page }) => {
+  await page.goto('/ux-demo?component=ticket-row');
+  const row = page.locator('[data-component="ticket-list-row"]');
+  await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
+  await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('background-color', 'rgb(59, 130, 246)');
+  await page.goto('/ux-demo?component=ticket-inspector');
+  const inspector = page.locator('[data-component="ticket-inspector"]');
+  await expect(
+    inspector.locator('.ticket-inspector__source-identity [data-component="ticket-source-icon"]'),
+  ).toHaveAttribute('data-provider', 'git');
 });
 
 test('ticket source connection rows hover flush with their card edge (HS2-KZP94T)', async ({ page }) => {

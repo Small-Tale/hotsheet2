@@ -44,12 +44,14 @@ import {
 import { TicketFieldConflict } from './ticket-field-conflict';
 import { TicketInfoPanel } from './ticket-info-panel';
 import type { TicketPriority } from './ticket-row';
+import { TicketSourceIcon, type TicketSourceIdentity } from './ticket-source-icon';
 import { TicketTimeline, type TicketTimelineEntry } from './ticket-timeline';
 
 export type InspectorTab = 'info' | 'timeline' | 'code-review' | 'attachments';
 
 export interface TicketInspectorProps {
   slug: string;
+  source?: TicketSourceIdentity;
   title: string;
   titleEditing?: boolean;
   titleDraft?: string;
@@ -181,6 +183,7 @@ export function ticketInspectorPanel({
   blockedReasonEditing,
   blockedReasonDraft,
   providerName,
+  source,
   updatedLabel,
   presentation = 'sidebar',
   largeText = false,
@@ -454,7 +457,14 @@ export function ticketInspectorPanel({
     toolbar: {
       label: 'Ticket inspector toolbar',
       dividerSides: '',
-      leading: slugButton,
+      leading: source ? (
+        <span class="ticket-inspector__source-identity">
+          <TicketSourceIcon source={source} size="compact" />
+          {slugButton}
+        </span>
+      ) : (
+        slugButton
+      ),
       trailing: actions,
     },
     toggle: inspectorToggle(),

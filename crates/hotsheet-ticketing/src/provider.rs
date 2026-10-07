@@ -85,6 +85,8 @@ pub struct ProviderDescriptor {
     pub display_name: String,
     pub locator: String,
     pub default: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
     pub capabilities: ProviderCapabilities,
 }
 
@@ -1119,6 +1121,7 @@ impl GitProvider {
 impl TicketProvider for GitProvider {
     fn descriptor(&self) -> ProviderDescriptor {
         ProviderDescriptor {
+            color: None,
             connection_id: self.connection_id.clone(),
             provider: "git".into(),
             display_name: self.display_name.clone(),
@@ -2330,6 +2333,7 @@ mod tests {
         impl TicketProvider for Failing {
             fn descriptor(&self) -> ProviderDescriptor {
                 ProviderDescriptor {
+                    color: None,
                     connection_id: "down".into(),
                     provider: "fake".into(),
                     display_name: "Down".into(),

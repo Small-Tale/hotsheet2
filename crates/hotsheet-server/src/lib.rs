@@ -1665,6 +1665,10 @@ pub fn app(state: AppState) -> Router {
             put(add_checkout_source).delete(remove_checkout_source),
         )
         .route(
+            "/checkouts/{reference}/sources/{connection_id}/color",
+            patch(set_checkout_source_color),
+        )
+        .route(
             "/checkouts/{reference}/default-source",
             put(set_checkout_default_source),
         )
@@ -2984,6 +2988,7 @@ async fn list_checkout_providers(
         };
         if let Some(mut descriptor) = descriptor {
             descriptor.default = is_default;
+            descriptor.color = checkout.source_colors.get(&source.connection_id).cloned();
             descriptors.push(descriptor);
         }
     }
@@ -4261,6 +4266,23 @@ async fn remove_checkout_source(
 #[derive(Deserialize)]
 struct CheckoutDefaultSourceBody {
     connection_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CheckoutSourceColorBody {
+    color: String,
+}
+
+async fn set_checkout_source_color(
+    State(state): State<AppState>,
+    Path((reference, connection_id)): Path<(String, String)>,
+    Json(body): Json<CheckoutSourceColorBody>,
+) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
+    state
+        .checkout_registry
+        .set_source_color(&reference, &connection_id, &body.color)
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
 }
 
 async fn set_checkout_default_source(

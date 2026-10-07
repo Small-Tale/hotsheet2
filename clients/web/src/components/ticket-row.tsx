@@ -17,6 +17,7 @@ import {
 import { ConfidenceBadge } from './confidence-badge';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
+import { TicketSourceIcon, type TicketSourceIdentity } from './ticket-source-icon';
 
 export type TicketPriority = 'low' | 'default' | 'high' | 'urgent';
 export type TicketRowPresentation = 'list' | 'column';
@@ -33,6 +34,7 @@ export interface TicketRowProps {
   startedPhase?: StartedPhase;
   priority: TicketPriority;
   category: string;
+  source?: TicketSourceIdentity;
   tags: string[];
   upNext?: boolean;
   upNextEligible?: boolean;
@@ -176,13 +178,19 @@ export function TicketRow(raw: TicketRowProps) {
             aria-label={indicator.replace('-', ' ')}
           />
         )}
-        <div class="ticket-list-row__body">
+        <div class="ticket-list-row__body" data-has-source={String(Boolean(props.source))}>
           {props.presentation === 'list' && category}
+          {props.presentation === 'list' && props.source && <TicketSourceIcon source={props.source} />}
           <div class="ticket-list-row__content">
             <div class="ticket-list-row__first-line">
               <div class="ticket-list-row__identity">
                 <span class="ticket-list-row__updated">{props.updatedLabel}</span>
                 {props.presentation === 'column' && category}
+                {props.presentation === 'column' && props.source && (
+                  <span class="ticket-list-row__source">
+                    <TicketSourceIcon source={props.source} size="compact" />
+                  </span>
+                )}
                 <span class="ticket-list-row__slug">{props.slug}</span>
                 <span
                   class="ticket-list-row__priority"

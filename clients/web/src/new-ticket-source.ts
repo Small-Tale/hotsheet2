@@ -9,6 +9,7 @@ export interface TicketSourceChoice {
   locator: string;
   capabilities: Capabilities;
   default: boolean;
+  color?: string;
 }
 
 /**
@@ -38,6 +39,7 @@ export function projectTicketSources(descriptors: readonly ProviderDescriptor[])
       locator: item.locator,
       capabilities: item.capabilities,
       default: item === selected,
+      color: item.color,
     })),
   };
 }
