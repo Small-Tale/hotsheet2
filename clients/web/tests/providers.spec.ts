@@ -4353,7 +4353,8 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
     .poll(() => page.evaluate(() => (window as unknown as { __terminalSockets: unknown[] }).__terminalSockets.length))
     .toBeGreaterThan(before);
   await expect(magnified).toHaveAttribute('data-connection', 'connected');
-  expect(await magnified.locator('.xterm-rows').innerText()).toContain('Live terminal ready');
+  // `connected` precedes the intentionally delayed binary replay; wait for xterm to paint it.
+  await expect(magnified.locator('.xterm-rows')).toContainText('Live terminal ready');
   await expect
     .poll(async () => {
       const text = await magnified.locator('.xterm-rows').innerText();
