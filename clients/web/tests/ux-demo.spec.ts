@@ -3559,10 +3559,15 @@ test('switches workspace header groups at Kerf toolbar width thresholds (HS2-BBG
     sort = toolbar.locator('.workspace-header__sort-group'),
     utility = toolbar.locator('.workspace-header__utility-group'),
     overflow = toolbar.locator('.workspace-header__overflow-group');
-  const setWidth = (width: number) =>
-    toolbar.evaluate((node, next) => {
-      node.style.width = `${next}px`;
+  // The connected demo can rerender its toolbar while live data refreshes. Keep the test width
+  // in the document stylesheet so a replacement toolbar receives the same measured width.
+  const widthStyle = await page.addStyleTag({ content: '.workspace-header.kui-toolbar { width: 1280px !important; }' });
+  const setWidth = async (width: number) => {
+    await widthStyle.evaluate((node, next) => {
+      node.textContent = `.workspace-header.kui-toolbar { width: ${next}px !important; }`;
     }, width);
+    await expect(toolbar).toHaveCSS('width', `${width}px`);
+  };
 
   await expect(utility).toBeVisible();
   await expect(overflow).toBeHidden();
@@ -3579,9 +3584,7 @@ test('switches workspace header groups at Kerf toolbar width thresholds (HS2-BBG
   await setWidth(175);
   await expect(view).toBeHidden();
   await expect(overflow).toBeVisible();
-  await toolbar.evaluate((node) => {
-    node.style.width = '';
-  });
+  await widthStyle.evaluate((node) => node.parentNode?.removeChild(node));
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(sort).toBeHidden();
   await expect(utility).toBeHidden();
