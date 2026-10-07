@@ -19418,6 +19418,7 @@ for (const surface of ['workspace', 'rail'] as const) {
       });
       await expect(star).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
       await expect(star).toHaveCSS('box-shadow', 'none');
+      await expect(star).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
       const shape = await star.evaluate((node) => ({
         width: node.getBoundingClientRect().width,
         height: node.getBoundingClientRect().height,

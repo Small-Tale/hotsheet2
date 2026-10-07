@@ -25,6 +25,12 @@
   width: 1rem;
   height: 1rem;
 }
+.workspace-header__utility-group > button.workspace-header__up-next-button[aria-pressed='true'] {
+  /* The filled star already shows its pressed state; keep Kerf's keyboard focus ring. */
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
 /* The half fill is an app-owned span clipping a solid LucideIcon star (HS2-EZ1N7Z, HS2-ZFFCHW). */
 .workspace-header__up-next-fill {
   position: absolute;

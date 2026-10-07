@@ -1005,6 +1005,7 @@ and identity-less legacy entries remain conservatively blocking.
   The workspace and grid-rail selection toolbar uses native group
   buttons and an empty, yellow half-filled, or yellow filled Up Next star for none,
   some, or all selected tickets queued, with matching false/mixed/true pressed state.
+  The selected star has no extra colored border; keyboard focus still has a visible ring.
   None/mixed toggles add the eligible selection; all toggles remove it. Completed,
   Verified, other ineligible statuses, empty selections, and provider-disabled
   selections remain disabled. Narrow overflow retains the same star state (HS2-WP15AF).
