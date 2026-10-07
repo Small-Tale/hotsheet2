@@ -98,14 +98,9 @@ describe('Kerf application UI profile', () => {
         ],
       }),
     );
-    // Known Kerf and app wrapper gaps are documented file/rule suppressions, never open-ended budgets.
-    // beta.81 recognizes TabBar placement; app wrapper slot exceptions remain (HS2-PC9DVB).
+    // Known app wrapper gaps are documented file/rule suppressions, never open-ended budgets.
+    // Kerf's width visibility API removes KF-MXE9YV; app wrapper slot exceptions remain (HS2-PC9DVB).
     expect(config.suppressions.map(({ id, rules, target }) => ({ id, rules, target }))).toEqual([
-      {
-        id: 'kf-mxe9yv-workspace-header-width-visibility',
-        rules: ['KUI-L022'],
-        target: 'src/components/workspace-controls.tsx',
-      },
       {
         id: 'hs2-pc9dvb-main-shell-header-actions',
         rules: ['KUI-L201'],

@@ -1,7 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './workspace-header.css';
 
-import { foregroundColorVar } from '@kerfjs/ui/css-values';
+import { foregroundColorVar, px } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { SegmentedControl, type SegmentedControlChoice } from '@kerfjs/ui/segmented-control';
@@ -100,6 +100,7 @@ export function WorkspaceIdentity({
   return (
     <ToolbarText
       className="workspace-header__identity"
+      hideBelow={px(224)}
       text={projectName}
       id={id}
       size="large"
@@ -281,6 +282,8 @@ function WorkspaceOverflowControls({
   selectedTicketsUpNextEligible: boolean;
   presentation: WorkspaceControlsPresentation;
 }) {
+  // The rail keeps its controls on wrapped rows; its overflow menu was never shown.
+  if (presentation === 'rail') return <></>;
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'Show List View', icon: List, iconName: 'list' },
     { value: 'board', label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' },
@@ -290,9 +293,7 @@ function WorkspaceOverflowControls({
       icon: Bell,
       iconName: 'bell',
     },
-    ...(presentation === 'rail'
-      ? []
-      : [{ value: 'settings' as const, label: 'Show Settings', icon: Settings, iconName: 'settings' }]),
+    { value: 'settings', label: 'Show Settings', icon: Settings, iconName: 'settings' },
   ];
   const overflowIcon = (icon: IconNode, name: string) => <LucideIcon icon={icon} name={name} />;
   const menu = (
@@ -363,18 +364,7 @@ function WorkspaceOverflowControls({
       ]}
     />
   );
-  // Kerf's analyzer classifies only literal class names on its components, so the rail variant is
-  // spelled out rather than computed (HS2-K9KWJJ).
-  return presentation === 'rail' ? (
-    <ToolbarControlGroup
-      className="workspace-header__overflow-group workspace-header__overflow-group--rail"
-      single
-      appearance="borderless"
-      nestedDropdown
-    >
-      {menu}
-    </ToolbarControlGroup>
-  ) : (
+  return (
     // The open search takes the compact row the menu would otherwise appear in (HS2-DAMHD1).
     <ToolbarControlGroup
       className="workspace-header__overflow-group"
@@ -382,6 +372,7 @@ function WorkspaceOverflowControls({
       appearance="borderless"
       nestedDropdown
       visibility="yield-to-expanded-sibling"
+      showBelow={px(480)}
     >
       {menu}
     </ToolbarControlGroup>
@@ -489,7 +480,12 @@ export function WorkspaceControls({
           {viewSwitcher}
         </ToolbarControlGroup>
       ) : (
-        <ToolbarControlGroup className="view-mode-switcher" shape="pill" visibility="yield-to-expanded-sibling">
+        <ToolbarControlGroup
+          className="view-mode-switcher"
+          shape="pill"
+          visibility="yield-to-expanded-sibling"
+          hideBelow={px(176)}
+        >
           {viewSwitcher}
         </ToolbarControlGroup>
       )}
@@ -508,6 +504,7 @@ export function WorkspaceControls({
           shape="pill"
           focusRing="outline"
           visibility="yield-to-expanded-sibling"
+          hideBelow={px(416)}
         >
           {sortSelect}
         </ToolbarControlGroup>
@@ -528,6 +525,7 @@ export function WorkspaceControls({
           selectedChrome="outline"
           selectedTone="pop"
           visibility="yield-to-expanded-sibling"
+          hideBelow={px(480)}
         >
           {utilityButtons}
         </ToolbarControlGroup>

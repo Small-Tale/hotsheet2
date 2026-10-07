@@ -36,6 +36,7 @@ import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
 import { reorderTabs, wireTabBars } from '@kerfjs/ui/wire-tab-bars';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
+import { wireToolbarVisibility } from '@kerfjs/ui/wire-toolbar-visibility';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
@@ -1567,6 +1568,7 @@ const applyCatalogTheme = () => {
 };
 applyCatalogTheme();
 mount(root, withControlledOpen(root, DemoApp));
+demoListeners.add(wireToolbarVisibility(root));
 demoListeners.add(wireProjectDialogDemo(root));
 // Demo stages render context-mode PopupMenus statically; keep every one open so the catalog shows
 // the menu itself (the app opens them from its own signals, HS2-2EHD8R).

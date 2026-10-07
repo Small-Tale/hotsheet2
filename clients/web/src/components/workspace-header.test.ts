@@ -73,7 +73,7 @@ describe('WorkspaceHeader', () => {
     // The rail pages a Columns view like the phone board; Settings stays in the main workspace (HS2-656Q43).
     expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(3);
     expect(markup).toContain('data-segment-value="board"');
-    expect(markup).toContain('data-view-mode="board"');
+    expect(markup).not.toContain('data-workspace-overflow');
     expect(markup).not.toContain('data-segment-value="settings"');
     expect(markup).not.toContain('data-view-mode="settings"');
   });
@@ -91,9 +91,9 @@ describe('WorkspaceHeader', () => {
       }),
     );
     expect(markup).not.toContain('All Tickets');
-    expect(markup).toContain(
-      'data-component="toolbar-text" data-size="large"><span class="kui-toolbar-text__text">Hot Sheet 2',
-    );
+    expect(markup).toContain('data-component="toolbar-text"');
+    expect(markup).toContain('data-hide-below="224px"');
+    expect(markup).toContain('<span class="kui-toolbar-text__text">Hot Sheet 2');
     expect(markup).toContain('aria-label="View mode"');
     expect(markup).toContain(
       'data-segment-value="settings" data-selected="true" aria-label="Settings view" aria-pressed="true"',
@@ -184,7 +184,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('.kui-token-search {');
     expect(headerCss).not.toContain('search-suggestions');
     expect(headerCss).not.toContain('search-help');
-    expect(headerCss).toContainSource('.workspace-header__overflow-group { display: none; }');
+    expect(headerCss).not.toContain('.workspace-header__overflow-group {');
     // While its search is open the overflow menu yields too, through Kerf's group visibility; no
     // sibling combinator reads the field (HS2-DAMHD1).
     expect(String(WorkspaceControls({ mode: 'list', searchOpen: true }))).toMatch(
@@ -437,28 +437,20 @@ describe('WorkspaceHeader', () => {
       '.workspace-header__sort-group { --kui-select-selected-color: var(--kui-toolbar-control-color); }',
     );
     expect(headerCss).not.toContain('.kui-select__custom-selected');
-    expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(480px))');
-    // The terminal rail's `--rail` groups are excluded: that toolbar wraps them onto rows instead of
-    // yielding them to the menu (HS2-K9KWJJ).
-    expect(headerCss).toContainSource(
-      '.workspace-header__utility-group:not(.workspace-header__utility-group--rail) { display: none; }',
-    );
-    expect(headerCss).toContainSource(
-      '.workspace-header__overflow-group:not(.workspace-header__overflow-group--rail) { display: inline-flex; }',
-    );
-    expect(headerCss).toContainSource(
-      '.workspace-header__sort-group:not(.workspace-header__sort-group--rail) { display: none; }',
-    );
+    // Kerf applies strict Toolbar content-width thresholds; the rail keeps its wrapped groups and
+    // does not render the narrow header's overflow menu (HS2-BBG8ZC).
+    expect(headerCss).not.toContain('@container kui-toolbar');
+    expect(markup).toMatch(/view-mode-switcher"[^>]*data-hide-below="176px"/);
+    expect(markup).toMatch(/workspace-header__sort-group"[^>]*data-hide-below="416px"/);
+    expect(markup).toMatch(/workspace-header__utility-group"[^>]*data-hide-below="480px"/);
+    expect(markup).toMatch(/workspace-header__overflow-group"[^>]*data-show-below="480px"/);
     const railMarkup = String(
       WorkspaceControls({ mode: 'list', presentation: 'rail', sort: 'updated', sortDirection: 'descending' }),
     );
-    for (const group of [
-      'view-mode-switcher',
-      'workspace-header__sort-group',
-      'workspace-header__utility-group',
-      'workspace-header__overflow-group',
-    ])
+    for (const group of ['view-mode-switcher', 'workspace-header__sort-group', 'workspace-header__utility-group'])
       expect(railMarkup).toContain(`${group} ${group}--rail`);
+    expect(railMarkup).not.toContain('workspace-header__overflow-group');
+    expect(railMarkup).not.toContain('data-hide-below');
     expect(markup).not.toContain('--rail');
     // The rail sizes its search as its own row (Kerf `sizing="fill"`, `placement="end"`); the header grows
     // its search on the header's row (HS2-DAMHD1).
@@ -499,7 +491,6 @@ describe('WorkspaceHeader', () => {
     expect(railOpen).not.toContain('yield-to-expanded-sibling');
     expect(railOpen).not.toContain('--yield');
     expect(railOpen).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="true"/);
-    expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(416px))');
     expect(headerCss).not.toContainSource('.workspace-header__sort-group { display: none; }');
     // An open search hides its sibling groups through Kerf's yield visibility, never through app
     // modifiers, by reading the search field's rendered state, or by styling it from this stylesheet
@@ -508,9 +499,6 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('view-mode-switcher--rail');
     expect(headerCss).not.toContain('ticket-search-field');
     expect(headerCss).not.toContain(':has(');
-    expect(headerCss).toContainSource('@container kui-toolbar (max-width: remify(224px))');
-    expect(headerCss).toContainSource(
-      '@container kui-toolbar (max-width: remify(176px)) { .view-mode-switcher { display: none; } }',
-    );
+    expect(headerCss).not.toContain('.workspace-header__identity {');
   });
 });

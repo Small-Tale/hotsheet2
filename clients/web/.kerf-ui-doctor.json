@@ -30,12 +30,6 @@
   "failOn": "warning",
   "suppressions": [
     {
-      "id": "kf-mxe9yv-workspace-header-width-visibility",
-      "rules": ["KUI-L022"],
-      "target": "src/components/workspace-controls.tsx",
-      "rationale": "Workspace-header groups and identity hide or reveal at toolbar container widths (workspace-header.css) until Kerf ships width-threshold visibility (KF-MXE9YV); remove when HS2 adopts it."
-    },
-    {
       "id": "hs2-pc9dvb-main-shell-header-actions",
       "rules": ["KUI-L201"],
       "target": "src/app/runtime.tsx",

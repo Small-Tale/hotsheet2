@@ -2419,8 +2419,11 @@ app-owned custom-color icon span centered inside a borderless Kerf group; the ge
 and all five heading suppressions are gone. Kerf `expandedOverflow="visible"` also replaces the
 grouped-search root overflow override (HS2-PV2AG1, KF-M8SV15). The gallery filename now uses
 `ToolbarText tone="dark"` (HS2-V5VS0A, KF-7288MD), removing its cross-component color rule.
-The one remaining exact per-file suppression names `KF-MXE9YV`; `src/kerf-ui-profile.test.ts`
-pins the list so it can only change deliberately.
+The workspace header now expresses its 176px, 224px, 416px, and 480px thresholds through
+Kerf `hideBelow`/`showBelow` props and `wireToolbarVisibility` (HS2-BBG8ZC, KF-MXE9YV).
+The rail keeps its wrapping controls and omits its formerly hidden overflow menu. The
+`KF-MXE9YV` suppression is removed; `src/kerf-ui-profile.test.ts` pins the remaining app
+wrapper exceptions so they can change only deliberately.
 
 Kerf 5.0.0-beta.70 (HS2-1GPHS5) added `KUI-L023`, the markup-borrowing rule. It flags a module that
 renders markup owned by another component. On beta.70 it also read HTML string literals in unit-test

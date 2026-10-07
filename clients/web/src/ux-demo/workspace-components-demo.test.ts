@@ -155,7 +155,7 @@ describe('connected workspace demo state', () => {
     );
     expect(notifications).toContain('data-component="notification-center"');
     expect(notifications).not.toContain('data-component="ticket-list-row"');
-    expect(notifications).toContain('data-view-mode="board"');
+    expect(notifications).not.toContain('data-workspace-overflow');
     workspaceMode.value = 'list';
     const list = String(TerminalTicketRailDemo());
     expect(list).toContain('data-segment-value="list" data-selected="true" aria-label="List view" aria-pressed="true"');

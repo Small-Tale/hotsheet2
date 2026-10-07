@@ -52,35 +52,5 @@ wa-button.workspace-header__text-action::part(base) {
 .workspace-header__sort-group {
   --kui-select-selected-color: var(--kui-toolbar-control-color);
 }
-/* The search field sizes itself and the header's groups yield to it through Kerf
-   ToolbarControlGroup props (HS2-8FS5BJ, HS2-DAMHD1); this module styles only its own groups. The
-   overflow menu only appears where the container queries below move controls into it. */
-.workspace-header__overflow-group {
-  display: none;
-}
-/* The terminal rail composes the same groups (marked `--rail`) in a toolbar that is always narrower
-   than these breakpoints and wraps them onto rows instead of moving them into the menu, so the
-   overflow queries skip rail groups (HS2-K9KWJJ). */
-@container kui-toolbar (max-width: remify(480px)) {
-  .workspace-header__utility-group:not(.workspace-header__utility-group--rail) {
-    display: none;
-  }
-  .workspace-header__overflow-group:not(.workspace-header__overflow-group--rail) {
-    display: inline-flex;
-  }
-}
-@container kui-toolbar (max-width: remify(416px)) {
-  .workspace-header__sort-group:not(.workspace-header__sort-group--rail) {
-    display: none;
-  }
-}
-@container kui-toolbar (max-width: remify(224px)) {
-  .workspace-header__identity {
-    display: none;
-  }
-}
-@container kui-toolbar (max-width: remify(176px)) {
-  .view-mode-switcher {
-    display: none;
-  }
-}
+/* Kerf's typed width thresholds and wireToolbarVisibility control Toolbar items. The rail keeps
+   its groups on wrapped rows and never renders the narrow header's overflow menu (HS2-BBG8ZC). */

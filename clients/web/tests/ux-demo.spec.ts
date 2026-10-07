@@ -3533,6 +3533,52 @@ test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({
   });
 });
 
+test('switches workspace header groups at Kerf toolbar width thresholds (HS2-BBG8ZC)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+  const toolbar = page.locator('.workspace-header.kui-toolbar'),
+    identity = toolbar.locator('.workspace-header__identity'),
+    view = toolbar.locator('.view-mode-switcher'),
+    sort = toolbar.locator('.workspace-header__sort-group'),
+    utility = toolbar.locator('.workspace-header__utility-group'),
+    overflow = toolbar.locator('.workspace-header__overflow-group');
+  const setWidth = (width: number) =>
+    toolbar.evaluate((node, next) => {
+      node.style.width = `${next}px`;
+    }, width);
+
+  await expect(utility).toBeVisible();
+  await expect(overflow).toBeHidden();
+  await setWidth(479);
+  await expect(utility).toBeHidden();
+  await expect(overflow).toBeVisible();
+  await expect(sort).toBeVisible();
+  await setWidth(415);
+  await expect(sort).toBeHidden();
+  await expect(identity).toBeVisible();
+  await setWidth(223);
+  await expect(identity).toBeHidden();
+  await expect(view).toBeVisible();
+  await setWidth(175);
+  await expect(view).toBeHidden();
+  await expect(overflow).toBeVisible();
+  await toolbar.evaluate((node) => {
+    node.style.width = '';
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(sort).toBeHidden();
+  await expect(utility).toBeHidden();
+  await expect(overflow).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-bbg8zc-workspace-phone.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(identity).toBeVisible();
+  await expect(view).toBeVisible();
+  await expect(sort).toBeVisible();
+  await expect(utility).toBeVisible();
+  await expect(overflow).toBeHidden();
+  await page.screenshot({ path: '/private/tmp/hs2-bbg8zc-workspace-wide.png', animations: 'disabled' });
+});
+
 test('switches and searches the connected workspace through WorkspaceHeader', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=workspace-header');
