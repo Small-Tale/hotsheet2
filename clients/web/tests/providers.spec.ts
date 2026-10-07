@@ -2848,23 +2848,39 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(unused).toContainText('No ticket source uses this sign-in.');
   await page.screenshot({ path: test.info().outputPath('legacy-account-before-lookup.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
-  await accounts.screenshot({ path: test.info().outputPath('legacy-account-before-lookup-narrow.png') });
-  await page.setViewportSize({ width: 1100, height: 760 });
+  const accountsFitPhone = () =>
+    accounts.evaluate((node) => {
+      const rect = node.getBoundingClientRect(),
+        left = document.querySelector('#app-left-rail > [data-workbench-panel-content]')?.getBoundingClientRect(),
+        right = document.querySelector('#app-right-rail > [data-workbench-panel-content]')?.getBoundingClientRect();
+      // The main content can reach its phone width before the two overlay rails finish sliding out.
+      return (
+        rect.left >= 0 &&
+        rect.right <= innerWidth &&
+        Boolean(left && left.right <= 0 && right && right.left >= innerWidth)
+      );
+    });
+  await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
+  await expect.poll(accountsFitPhone).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('legacy-account-before-lookup-narrow.png'), fullPage: true });
   await unused.getByRole('button', { name: 'Show username' }).click();
   await expect(unused).toContainText('legacy-user');
   await expect(unused.getByRole('button', { name: 'Show username' })).toHaveCount(0);
+  await expect.poll(accountsFitPhone).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('legacy-account-narrow.png'), fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 760 });
   await page.screenshot({ path: test.info().outputPath('legacy-account-after-lookup.png'), fullPage: true });
   await page.screenshot({ path: test.info().outputPath('accounts-settings-wide.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
+  await expect.poll(accountsFitPhone).toBe(true);
   await page.screenshot({ path: test.info().outputPath('accounts-settings-narrow.png'), fullPage: true });
-  await accounts.screenshot({ path: test.info().outputPath('legacy-account-narrow.png') });
-  await page.setViewportSize({ width: 1100, height: 760 });
   const signOuts: string[] = [];
   page.on('request', (request) => {
     if (request.method() === 'DELETE' && request.url().includes('/accounts/'))
       signOuts.push(new URL(request.url()).pathname.split('/').pop()!);
   });
   await unused.getByRole('button', { name: 'Sign out' }).click();
+  await expect.poll(accountsFitPhone).toBe(true);
   await expect.poll(() => signOuts).toEqual(['github-app-abandoned']);
   await expect(page.locator('.app-toast')).toContainText('Signed out.');
   await expect(unused).toHaveCount(0);
