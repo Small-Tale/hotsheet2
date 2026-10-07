@@ -197,6 +197,11 @@ empty sections are omitted, and raw logs or multi-part results are not left as o
 paragraph. Multiline CLI notes use `--note-file` so the intended Markdown structure reaches
 the ticket intact.
 
+Thumbs feedback on AI-authored notes is saved as an ordinary ticket note. It does not
+immediately change agent behavior; [the proposed feedback synthesis process](23-ai-feedback-synthesis.md)
+describes how a maintainer can periodically review recurring themes and approve concise
+repository guidance (HS2-355565).
+
 Before implementing a ticket that is not trivially simple, the bundled instruction blocks
 and Hot Sheet skills ask the AI to post its **preliminary thoughts** (HS2-C4X2MD): a short
 `regular` note headed `## Preliminary thoughts` with its understanding of the problem or
