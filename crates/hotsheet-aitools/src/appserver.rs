@@ -299,6 +299,11 @@ mod catalog_probe_tests {
 
     #[test]
     fn stopping_probes_kills_a_catalog_app_server_mid_listing_and_refuses_new_ones() {
+        if crate::probe::isolated_probe_test(
+            "appserver::catalog_probe_tests::stopping_probes_kills_a_catalog_app_server_mid_listing_and_refuses_new_ones",
+        ) {
+            return;
+        }
         let dir = tempfile::tempdir().unwrap();
         let (program, pid_file) = wedged_codex(dir.path());
         let listing = {

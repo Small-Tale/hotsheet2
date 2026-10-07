@@ -284,6 +284,28 @@ fn kill_group(pid: u32) {
     }
 }
 
+/// Destructive probe tests need their own process: the stop flag is permanent, and
+/// killing the global in-flight set can otherwise reach another parallel test's child.
+#[cfg(all(test, unix))]
+pub(crate) fn isolated_probe_test(test_name: &str) -> bool {
+    const ISOLATED: &str = "HOTSHEET_ISOLATED_PROBE_TEST";
+    if std::env::var(ISOLATED).ok().as_deref() == Some(test_name) {
+        return false;
+    }
+    let output = Command::new(std::env::current_exe().expect("test executable"))
+        .args(["--exact", test_name, "--nocapture"])
+        .env(ISOLATED, test_name)
+        .output()
+        .expect("run isolated probe test");
+    assert!(
+        output.status.success(),
+        "isolated {test_name} failed:\n{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    true
+}
+
 #[cfg(not(unix))]
 fn kill_group(pid: u32) {
     let _ = Command::new("taskkill")
@@ -340,6 +362,9 @@ mod tests {
 
     #[test]
     fn stopping_kills_every_in_flight_probe() {
+        if isolated_probe_test("probe::tests::stopping_kills_every_in_flight_probe") {
+            return;
+        }
         let handle = std::thread::spawn(|| {
             run_probe_within(&mut sh("exec sleep 30"), Duration::from_secs(60))
         });
