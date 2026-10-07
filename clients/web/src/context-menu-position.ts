@@ -66,6 +66,23 @@ export function openContextPopupMenu(menu: ContextPopupMenuElement): void {
   openPopupMenuAt(menu, x, y);
 }
 
+/** A live menu can be replaced when its entries change. Reopen only a new DOM host at the
+ * wrapper's original pointer, and forget hosts after dismissal (HS2-S1EE53). */
+export function reanchorReplacedContextPopupMenus(
+  activeSurfaces: readonly string[],
+  opened: Map<string, ContextPopupMenuElement>,
+  root: ParentNode = document,
+): void {
+  for (const surface of opened.keys()) if (!activeSurfaces.includes(surface)) opened.delete(surface);
+  for (const surface of activeSurfaces) {
+    const menu = root.querySelector<ContextPopupMenuElement>(`[data-context-menu="${surface}"]`);
+    if (menu && opened.get(surface) !== menu) {
+      opened.set(surface, menu);
+      openContextPopupMenu(menu);
+    }
+  }
+}
+
 /** Wrapper attributes that record a context-mode PopupMenu's viewport anchor for `revealContextPopupMenu`. */
 export function contextPopupMenuAnchor(
   x: number,

@@ -1681,7 +1681,9 @@ and identity-less legacy entries remain conservatively blocking.
   All discovery, target validation, and process launch remain server-owned.
 
   The ticket context menu also exposes the server's structured close operation when the
-  provider advertises `close` and `close_reasons`. The close dialog records Completed,
+  provider advertises `close` and `close_reasons`. Its pointer anchor remains stable while
+  live ticket updates change the menu's available actions (HS2-S1EE53).
+  The close dialog records Completed,
   Not planned, Duplicate, or Obsolete rather than approximating those outcomes with a
   status patch or note. Duplicate closure searches every open project, labels each result
   with its owning project, excludes and rejects the exact source identity, requires an

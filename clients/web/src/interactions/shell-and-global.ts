@@ -14,7 +14,11 @@ import { type RepositoryFileMenu } from '../components/repository-status-popover
 import { type TerminalEditMenuState } from '../components/terminal-clipboard-dialogs';
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
 import { type WorkspaceViewMode } from '../components/workspace-header';
-import { revealContextPopupMenu } from '../context-menu-position';
+import {
+  type ContextPopupMenuElement,
+  reanchorReplacedContextPopupMenus,
+  revealContextPopupMenu,
+} from '../context-menu-position';
 import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
@@ -535,18 +539,41 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   );
   // Each pointer-positioned menu renders a context-mode Kerf PopupMenu from its signal; open it once
   // it is in the DOM. The signal stays the source of truth for dismissal below (HS2-2EHD8R).
-  for (const [surface, menu] of [
+  const contextMenus = [
     ['ticket', ticketContextMenu],
     ['app-tab', appTabContextMenu],
     ['terminal', terminalContextMenu],
     ['terminal-edit', terminalEditMenu],
     ['attachment', attachmentMenu],
-  ] as const)
+  ] as const;
+  for (const [surface, menu] of contextMenus)
     effect(() => {
       // The handler-transition tests wire this module with partial dependencies, so the signal may be absent.
       const state = (menu as typeof menu | undefined)?.value;
       if (state) revealContextPopupMenu(surface);
     });
+  // A ticket update can alter PopupMenu's content key while its menu signal remains unchanged.
+  // Kerf then replaces the DOM host; reanchor that new host without moving an unchanged one.
+  if (typeof MutationObserver !== 'undefined') {
+    const opened = new Map<string, ContextPopupMenuElement>();
+    let active: string[] = [];
+    const observer = new MutationObserver(() => {
+      reanchorReplacedContextPopupMenus(active, opened);
+    });
+    effect(() => {
+      active = contextMenus
+        .filter(([, signal]) => Boolean((signal as typeof ticketContextMenu | undefined)?.value))
+        .map(([id]) => id);
+      observer.disconnect();
+      if (active.length && !lifetime.signal.aborted) {
+        observer.observe(document.body, { childList: true, subtree: true });
+        reanchorReplacedContextPopupMenus(active, opened);
+      } else opened.clear();
+    });
+    lifetime.add(() => {
+      observer.disconnect();
+    });
+  }
   document.addEventListener(
     'pointerdown',
     (event) => {

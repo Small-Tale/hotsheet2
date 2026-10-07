@@ -21403,6 +21403,23 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   });
   expect(Math.abs(boardMenu.x - board.pointer.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(boardMenu.y - board.pointer.y)).toBeLessThanOrEqual(2);
+  // A ticket-state morph can replace the PopupMenu and lose the inline anchor Kerf wrote when
+  // it first opened. The replacement must reopen at the original pointer (HS2-S1EE53).
+  await menu.locator('wa-dropdown').evaluate((node) => {
+    const replacement = node.cloneNode(true) as HTMLElement;
+    replacement.removeAttribute('style');
+    node.replaceWith(replacement);
+  });
+  await expect
+    .poll(async () => {
+      const rect = await menu
+        .locator('wa-dropdown')
+        .evaluate((node) =>
+          (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect().toJSON(),
+        );
+      return Math.max(Math.abs(rect.x - board.pointer.x), Math.abs(rect.y - board.pointer.y));
+    })
+    .toBeLessThanOrEqual(2);
   expect(
     await page.evaluate((id) => {
       const col = document.querySelector(`[data-column-id="${id}"] .ticket-board-column__tickets`) as HTMLElement;

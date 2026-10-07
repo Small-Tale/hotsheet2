@@ -1,6 +1,46 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from './context-menu-position';
+import {
+  type ContextPopupMenuElement,
+  reanchorReplacedContextPopupMenus,
+  viewportSafeContextMenuPosition,
+  viewportSafePointerPosition,
+} from './context-menu-position';
+
+describe('reanchorReplacedContextPopupMenus', () => {
+  it('opens each new host at its original pointer once and resets after dismissal', () => {
+    const makeMenu = () => {
+      const setProperty = vi.fn();
+      return {
+        menu: {
+          open: true,
+          style: { setProperty },
+          closest: () => ({ dataset: { contextAnchorX: '418', contextAnchorY: '267' } }),
+        } as unknown as ContextPopupMenuElement,
+        setProperty,
+      };
+    };
+    const first = makeMenu(),
+      second = makeMenu(),
+      opened = new Map<string, ContextPopupMenuElement>();
+    let current = first.menu;
+    const root = { querySelector: () => current } as unknown as ParentNode;
+
+    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
+    expect(first.setProperty).toHaveBeenCalledTimes(2);
+    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
+    expect(first.setProperty).toHaveBeenCalledTimes(2);
+
+    current = second.menu;
+    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
+    expect(second.setProperty.mock.calls.map(([, value]) => value)).toEqual(['418px', '267px']);
+
+    reanchorReplacedContextPopupMenus([], opened, root);
+    expect(opened.size).toBe(0);
+    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
+    expect(second.setProperty).toHaveBeenCalledTimes(4);
+  });
+});
 
 describe('viewportSafeContextMenuPosition', () => {
   it('keeps an ordinary pointer position unchanged', () => {
