@@ -292,7 +292,7 @@ pub(crate) fn isolated_probe_test(test_name: &str) -> bool {
     if std::env::var(ISOLATED).ok().as_deref() == Some(test_name) {
         return false;
     }
-    let output = Command::new(std::env::current_exe().expect("test executable"))
+    let output = hotsheet_ticketing::git::launch(std::env::current_exe().expect("test executable"))
         .args(["--exact", test_name, "--nocapture"])
         .env(ISOLATED, test_name)
         .output()
