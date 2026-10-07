@@ -833,6 +833,7 @@ async function mockProject(
   // Machine-wide sign-ins no source uses yet (HS2-SM9PM8): an abandoned earlier sign-in whose site
   // was never recorded (stored before HS2-16MYXN and unreadable since), so its host is unknown.
   let unusedAccounts = ['github-app-abandoned'];
+  const identifiedAccounts = new Set<string>();
   const credentialOf = (connection: { settings: Record<string, unknown> }) =>
     (connection.settings as { credential?: { secret?: string } }).credential?.secret;
   const projectOwners = (id: string) => (linkedConnectionIds.includes(id) ? [{ id: project.id, alias: 'demo' }] : []);
@@ -873,7 +874,15 @@ async function mockProject(
     }
     for (const id of unusedAccounts)
       if (!accounts.has(id))
-        accounts.set(id, { id, provider: 'github', host: '', managed: true, sources: [], projects: [] });
+        accounts.set(id, {
+          id,
+          provider: 'github',
+          host: '',
+          ...(identifiedAccounts.has(id) ? { identity: 'legacy-user' } : {}),
+          managed: true,
+          sources: [],
+          projects: [],
+        });
     return [...accounts.values()];
   };
   // The first linked store is the one the fixture rows name.
@@ -957,6 +966,11 @@ async function mockProject(
       });
     }
     if (path.endsWith('/accounts') && request.method() === 'GET') return route.fulfill({ json: accountRecords() });
+    const identityPath = path.match(/\/accounts\/([^/]+)\/identity$/);
+    if (identityPath && request.method() === 'POST') {
+      identifiedAccounts.add(decodeURIComponent(identityPath[1]));
+      return route.fulfill({ json: { identity: 'legacy-user' } });
+    }
     const accountPath = path.match(/\/accounts\/([^/]+)(\/github-repositories)?$/);
     if (accountPath?.[2] && request.method() === 'GET')
       return route.fulfill({
@@ -2832,9 +2846,18 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(used.locator('[data-action="sign-out-account"]')).toHaveCount(0);
   const unused = accounts.locator('[data-account-id="github-app-abandoned"]');
   await expect(unused).toContainText('No ticket source uses this sign-in.');
+  await page.screenshot({ path: test.info().outputPath('legacy-account-before-lookup.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 760 });
+  await accounts.screenshot({ path: test.info().outputPath('legacy-account-before-lookup-narrow.png') });
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await unused.getByRole('button', { name: 'Show username' }).click();
+  await expect(unused).toContainText('legacy-user');
+  await expect(unused.getByRole('button', { name: 'Show username' })).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('legacy-account-after-lookup.png'), fullPage: true });
   await page.screenshot({ path: test.info().outputPath('accounts-settings-wide.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
   await page.screenshot({ path: test.info().outputPath('accounts-settings-narrow.png'), fullPage: true });
+  await accounts.screenshot({ path: test.info().outputPath('legacy-account-narrow.png') });
   await page.setViewportSize({ width: 1100, height: 760 });
   const signOuts: string[] = [];
   page.on('request', (request) => {

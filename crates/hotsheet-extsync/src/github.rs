@@ -155,7 +155,7 @@ impl GitHubTransport for UreqGitHubTransport {
         headers: &[(&str, String)],
         body: Option<&Value>,
     ) -> Result<HttpResponse, String> {
-        let mut request = ureq::request(method, url);
+        let mut request = ureq::request(method, url).timeout(std::time::Duration::from_secs(30));
         for (name, value) in headers {
             request = request.set(name, value);
         }

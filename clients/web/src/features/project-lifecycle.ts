@@ -982,6 +982,29 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
   }
 
+  /** An explicit lookup for a legacy GitHub sign-in whose username was never saved. */
+  const identifyingAccounts = new Set<string>();
+  async function identifyGithubAccount(id: string) {
+    const current = dependencies.project();
+    if (
+      !current ||
+      identifyingAccounts.has(id) ||
+      !providerAccounts.value.some((account) => account.id === id && account.provider === 'github' && !account.identity)
+    )
+      return;
+    identifyingAccounts.add(id);
+    providerAccountsError.value = '';
+    try {
+      await new Api(current.apiPath).identifyAccount(id);
+      await refreshProviderAccounts(current);
+    } catch (reason) {
+      providerAccountsError.value = reason instanceof Error ? reason.message : String(reason);
+      dependencies.showToast(`Could not show username: ${providerAccountsError.value}`);
+    } finally {
+      identifyingAccounts.delete(id);
+    }
+  }
+
   /** Sign out of an account no ticket source uses; the server refuses one still in use. */
   async function signOutProviderAccount(id: string) {
     const current = dependencies.project();
@@ -1142,6 +1165,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     unusedAccountSourceChoice,
     removingUnusedAccountSource,
     refreshProviderAccounts,
+    identifyGithubAccount,
     signOutProviderAccount,
     requestUnusedAccountSourceRemoval,
     cancelUnusedAccountSourceRemoval,

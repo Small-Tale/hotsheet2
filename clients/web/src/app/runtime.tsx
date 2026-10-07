@@ -1101,6 +1101,7 @@ export async function startHotSheetWebClient() {
     unusedAccountSourceChoice,
     removingUnusedAccountSource,
     refreshProviderAccounts,
+    identifyGithubAccount,
     signOutProviderAccount,
     requestUnusedAccountSourceRemoval,
     cancelUnusedAccountSourceRemoval,
@@ -5424,7 +5425,7 @@ export async function startHotSheetWebClient() {
   const interactionBindingsPort: InteractionBindingsPort = {
     openProjectPicker, openRemoteProjectDialog, chooseAndOpenProject, unhealthyServerRecovery, projectDialogOpen, openRemoteCheckout, remoteProjectDialogOpen, importHs1Project,
     chooseHs1TicketStore, hs1MigrationProject, hs1MigrationBusy, hs1SourceIdentity, project, migrationJobDetails, migrationJobs, migrationConnectionErrors,
-    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, signOutProviderAccount, requestUnusedAccountSourceRemoval, cancelUnusedAccountSourceRemoval, removeUnusedAccountSource, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource,
+    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, identifyGithubAccount, signOutProviderAccount, requestUnusedAccountSourceRemoval, cancelUnusedAccountSourceRemoval, removeUnusedAccountSource, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource,
     providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView, repositoryDetailActive: repositoryController.repositoryDetailActive,
     repositorySetupStep, repositorySetupError, repositoryFileMenu, repositorySelectedFiles, repositoryComparison, expandedCodeReviewCommits, loadRepositoryDetail, refreshRepositoryStatus,
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,

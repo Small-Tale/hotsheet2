@@ -230,19 +230,35 @@ export function AccountsSettings({
                         {account.managed ? 'Signed in with Hot Sheet' : `Keychain credential ${account.id}`}
                       </small>
                     </span>
-                    {account.sources.length === 0 && (
-                      <wa-button
-                        size="small"
-                        appearance="outlined"
-                        type="button"
-                        {...COMMANDS_AND_AI_ACTIONS.signOutAccount.attrs}
-                        data-item-id={account.id}
-                        disabled={busy}
-                      >
-                        <LucideIcon slot="start" icon={LogOut} name="log-out" />
-                        {busy ? 'Signing out…' : 'Sign out'}
-                      </wa-button>
-                    )}
+                    {(account.provider === 'github' && account.managed && !account.identity) ||
+                    account.sources.length === 0 ? (
+                      <span class="ticket-provider-settings__account-actions">
+                        {account.provider === 'github' && account.managed && !account.identity && (
+                          <wa-button
+                            size="small"
+                            appearance="outlined"
+                            type="button"
+                            {...COMMANDS_AND_AI_ACTIONS.identifyGithubAccount.attrs}
+                            data-item-id={account.id}
+                          >
+                            Show username
+                          </wa-button>
+                        )}
+                        {account.sources.length === 0 && (
+                          <wa-button
+                            size="small"
+                            appearance="outlined"
+                            type="button"
+                            {...COMMANDS_AND_AI_ACTIONS.signOutAccount.attrs}
+                            data-item-id={account.id}
+                            disabled={busy}
+                          >
+                            <LucideIcon slot="start" icon={LogOut} name="log-out" />
+                            {busy ? 'Signing out…' : 'Sign out'}
+                          </wa-button>
+                        )}
+                      </span>
+                    ) : null}
                   </header>
                   {account.sources.length ? (
                     account.sources.map((source) => {

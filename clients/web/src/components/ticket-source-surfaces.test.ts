@@ -526,6 +526,9 @@ describe('ticket source surfaces', () => {
       }),
     );
     expect(older).toContain('github.com · sign-in 1older');
+    expect(older).toContain('data-action="identify-github-account"');
+    expect(older).toContain('aria-label="Show username for github.com sign-in 1older"');
+    expect(older).toMatch(/data-action="identify-github-account"[^>]*data-item-id="github-app-01older"/);
     const none = String(ProviderSetupForm({ kind: 'github' }));
     expect(none).not.toContain('use-github-account');
     expect(none).toContain('Sign in to choose a repository.');

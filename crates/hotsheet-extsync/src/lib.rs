@@ -17,7 +17,7 @@ pub use github::{
 };
 pub use github_attachments::GitHubAttachmentRepository;
 pub use github_credential::{
-    GitHubCredentialError, connection_access_token, credentials_with_sites,
+    GitHubCredentialError, access_token_from_raw, connection_access_token, credentials_with_sites,
     store_device_authorization,
 };
 pub use github_device::{

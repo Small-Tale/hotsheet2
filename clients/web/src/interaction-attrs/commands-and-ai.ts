@@ -59,6 +59,7 @@ export const COMMANDS_AND_AI_ACTIONS = {
   editProviderConnection: action('edit-provider-connection'),
   removeProjectSource: action('remove-project-source'),
   useGithubAccount: action('use-github-account'),
+  identifyGithubAccount: action('identify-github-account'),
   useProviderAccount: action('use-provider-account'),
   signOutAccount: action('sign-out-account'),
   requestUnusedAccountSourceRemoval: action('request-unused-account-source-removal'),

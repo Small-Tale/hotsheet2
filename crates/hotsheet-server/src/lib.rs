@@ -1850,6 +1850,10 @@ pub fn app(state: AppState) -> Router {
         .route("/accounts", get(list_accounts_route))
         .route("/accounts/{account}", delete(sign_out_account))
         .route(
+            "/accounts/{account}/identity",
+            post(identify_github_account),
+        )
+        .route(
             "/accounts/{account}/sources/{connection_id}",
             delete(remove_unused_account_source),
         )
@@ -2713,6 +2717,57 @@ async fn list_accounts_route(
             &checkouts,
             &credentials,
         )))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+}
+
+/// Resolve an older managed GitHub sign-in's username only when the user requests it.
+/// Account listing itself never contacts GitHub or reads an already indexed keychain item.
+async fn identify_github_account(
+    State(state): State<AppState>,
+    Path(account): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        if !account.starts_with(hotsheet_ticketing::connection_removal::MANAGED_CREDENTIAL_PREFIX) {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "Account is not a managed GitHub sign-in",
+            ));
+        }
+        let keys = state.key_registry();
+        let raw = keys.get(&account).map_err(|error| match error {
+            hotsheet_ticketing::SecretError::NotFound(_) => ApiError::not_found(&account),
+            other => provider_transfer_error(other),
+        })?;
+        let stored: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        if stored.get("kind").and_then(serde_json::Value::as_str) != Some("github_app") {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "Account is not a managed GitHub sign-in",
+            ));
+        }
+        let client_id = stored
+            .get("client_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let web_base = stored
+            .get("web_base")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("https://github.com");
+        let token = hotsheet_extsync::access_token_from_raw(
+            &raw,
+            &keys,
+            &account,
+            OffsetDateTime::now_utc().unix_timestamp(),
+        )
+        .map_err(|error| ApiError::new(StatusCode::UNAUTHORIZED, error.to_string()))?;
+        let login = hotsheet_extsync::GitHubDeviceClient::live(client_id, web_base)
+            .current_login(&token)
+            .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))?;
+        keys.record_identity(&account, &login)
+            .map_err(provider_transfer_error)?;
+        Ok(Json(serde_json::json!({"identity": login})))
     })
     .await
     .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?

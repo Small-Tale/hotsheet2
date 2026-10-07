@@ -16063,6 +16063,24 @@ async fn an_unused_enterprise_sign_in_reports_its_host_and_seeds_reusing_sources
 }
 
 #[tokio::test]
+async fn identify_account_rejects_missing_and_unmanaged_credentials() {
+    let home = tempfile::tempdir().unwrap();
+    let (_store, state) = state();
+    let app = app(state.with_machine_home(home.path()));
+    let response = app
+        .clone()
+        .oneshot(authed("POST", "/accounts/github-app-missing/identity", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let response = app
+        .oneshot(authed("POST", "/accounts/plain-key/identity", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn stopping_server_cancels_a_held_permission_ask_with_503() {
     // HS2-W1KJR4: a hook parked on a decision must not hold the shutdown drain open.
     let (_d, st) = state();

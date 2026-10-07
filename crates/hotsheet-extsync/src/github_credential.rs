@@ -82,8 +82,19 @@ pub fn connection_access_token<S: SecretStore>(
     if connection.provider != "github" {
         return Ok(raw);
     }
+    access_token_from_raw(&raw, keys, reference, now)
+}
+
+/// Resolve a bundle already read from the keychain, for an explicit account lookup that
+/// must not read the same keychain item twice.
+pub fn access_token_from_raw<S: SecretStore>(
+    raw: &str,
+    keys: &KeyRegistry<S>,
+    reference: &str,
+    now: i64,
+) -> Result<String, GitHubCredentialError> {
     resolve_token(
-        &raw,
+        raw,
         now,
         |client_id, web_base, refresh| {
             GitHubDeviceClient::live(client_id, web_base).refresh(refresh)

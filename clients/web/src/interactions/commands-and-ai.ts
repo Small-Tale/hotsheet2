@@ -124,6 +124,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly providerEditingId: Signal<string | undefined>;
   readonly requestProjectSourceRemoval: (id: string) => void;
   readonly refreshProviderAccounts: (current?: Project) => Promise<void>;
+  readonly identifyGithubAccount: (id: string) => Promise<void>;
   readonly signOutProviderAccount: (id: string) => Promise<void>;
   readonly requestUnusedAccountSourceRemoval: (account: string, source: string) => void;
   readonly cancelUnusedAccountSourceRemoval: () => void;
@@ -238,6 +239,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     providerEditingId,
     requestProjectSourceRemoval,
     refreshProviderAccounts,
+    identifyGithubAccount,
     signOutProviderAccount,
     requestUnusedAccountSourceRemoval,
     cancelUnusedAccountSourceRemoval,
@@ -1085,6 +1087,12 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.signOutAccount.selector, (_event, target) => {
       const id = data(target).itemId;
       if (id) void signOutProviderAccount(id);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.identifyGithubAccount.selector, (_event, target) => {
+      const id = data(target).itemId;
+      if (id) void identifyGithubAccount(id);
     }),
   );
   lifetime.add(

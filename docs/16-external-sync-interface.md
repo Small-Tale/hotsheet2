@@ -551,7 +551,13 @@ never stored, so there is nothing to migrate:
   lookup does not block sign-in. Both the server and CLI device flows record this label,
   and token refreshes keep it. The new-source picker shows the login with its host; for an
   older sign-in without a saved login it shows a short credential-reference suffix so
-  multiple sign-ins on the same host are distinguishable.
+  multiple sign-ins on the same host are distinguishable. `POST /accounts/{id}/identity`
+  explicitly resolves one older managed sign-in: it reads the selected keychain item once,
+  refreshes an expired token when possible, asks GitHub `/user` for the login with a bounded
+  request, and persists the login as non-secret metadata. The response is `{identity}`;
+  a missing credential returns 404, a non-managed credential returns 400, and an unavailable
+  GitHub lookup returns an error without altering the saved label. Account listing never
+  performs the GitHub lookup automatically.
 - **Host of an unused sign-in (HS2-16MYXN).** The device flow (server and `github-sign-in`)
   records the sign-in's web origin as non-secret `site` metadata in `keys.json`, kept across
   token refreshes. An unused sign-in reports that site's host and, for GitHub Enterprise, its

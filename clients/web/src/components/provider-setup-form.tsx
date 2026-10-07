@@ -4,6 +4,7 @@ import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 import { rem } from '@kerfjs/ui/css-values';
 import { Grid } from '@kerfjs/ui/grid';
 import { List } from '@kerfjs/ui/list';
+import { ListActionRow } from '@kerfjs/ui/list-action-row';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { SunkenPanel } from '@kerfjs/ui/sunken-panel';
@@ -233,23 +234,36 @@ export function ProviderSetupForm({
                   </p>
                   <div class="provider-setup-form__accounts">
                     <List>
-                      {githubAccounts.map((account, index) => (
-                        <ListItem
-                          action="use-github-account"
-                          itemId={account.id}
-                          multiline
-                          divider={index > 0 ? 'before' : 'none'}
-                          accessibleLabel={`Use ${githubAccountTitle(account)}, ${accountUsage(account, false)}`}
-                          icon={<ProviderIcon kind="github" />}
-                          trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
-                          label={
+                      {githubAccounts.map((account, index) => {
+                        const shared = {
+                          action: 'use-github-account',
+                          itemId: account.id,
+                          multiline: true,
+                          divider: index > 0 ? ('before' as const) : ('none' as const),
+                          accessibleLabel: `Use ${githubAccountTitle(account)}, ${accountUsage(account, false)}`,
+                          icon: <ProviderIcon kind="github" />,
+                          label: (
                             <span class="provider-setup-form__account-copy">
                               <strong>{githubAccountTitle(account)}</strong>
                               <small class="provider-setup-form__account-usage">{accountUsage(account)}</small>
                             </span>
-                          }
-                        />
-                      ))}
+                          ),
+                        };
+                        return account.identity ? (
+                          <ListItem
+                            {...shared}
+                            trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
+                          />
+                        ) : (
+                          <ListActionRow
+                            {...shared}
+                            trailingAction="identify-github-account"
+                            trailingActionLabel={`Show username for ${account.host || 'GitHub'} sign-in ${account.id.slice(-6)}`}
+                            trailingActionTitle="Show username"
+                            trailingActionIcon={<LucideIcon icon={RefreshCw} name="refresh-cw" />}
+                          />
+                        );
+                      })}
                     </List>
                   </div>
                 </>

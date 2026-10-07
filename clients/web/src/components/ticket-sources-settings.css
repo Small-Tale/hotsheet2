@@ -112,6 +112,7 @@
 }
 .ticket-provider-settings__account-header {
   display: flex;
+  flex-wrap: wrap;
   min-height: remify(64px);
   box-sizing: border-box;
   align-items: center;
@@ -121,7 +122,12 @@
   background: var(--wa-color-neutral-fill-quiet);
 }
 .ticket-provider-settings__account-header > .ticket-provider-settings__connection-copy {
-  flex: 1;
+  flex: 1 1 remify(140px);
+}
+.ticket-provider-settings__account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wa-space-s);
 }
 .ticket-provider-settings__account-host {
   min-width: 0;
