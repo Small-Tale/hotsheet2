@@ -305,6 +305,34 @@ describe('NoteCard', () => {
     expect(markup).toContain('data-component="ai-content-label"');
     expect(markup).toContain('data-ai-feedback-target="note:distilled"');
   });
+
+  it('shows AI attribution for prose while leaving automatic event labels plain', () => {
+    const base = { id: 'event', kind: 'activity' as const, author: 'Codex', aiAuthored: true, time: 'Now' };
+    const event = String(NoteCard({ ...base, body: 'Status changed from Started to Completed' }));
+    expect(event).toContain('data-ai-authored="true"');
+    expect(event).not.toContain('AI-generated');
+    expect(event).not.toContain('data-component="ai-content-label"');
+    expect(event).toContain('Codex</footer>');
+
+    const mixed = String(NoteCard({ ...base, body: 'Status changed from Started to Completed\n\nVerified the fix.' }));
+    expect(mixed).toContain('aria-label="AI-generated activity by Codex; may contain errors"');
+    expect(mixed).toContain('data-component="ai-content-label"');
+    const readerEvent = String(
+      NoteCard({ ...base, body: 'Status changed from Started to Completed', readerMode: true }),
+    );
+    const readerMixed = String(
+      NoteCard({ ...base, body: 'Status changed from Started to Completed\n\nVerified the fix.', readerMode: true }),
+    );
+    expect(readerEvent).not.toContain('AI-generated');
+    expect(readerMixed).toContain('aria-label="AI-generated activity by Codex; may contain errors"');
+
+    const status = String(NoteCard({ ...base, kind: 'status', body: 'Claim expired — reclaimed' }));
+    expect(status).not.toContain('AI-generated');
+    expect(
+      String(NoteCard({ ...base, kind: 'status', body: 'Claim expired — reclaimed\n\nReviewed the cause.' })),
+    ).toContain('AI-generated status update by Codex');
+    expect(String(NoteCard({ ...base, kind: 'regular', body: '  ' }))).not.toContain('AI-generated');
+  });
 });
 
 describe('NoteEditor and RespondToFeedbackButton (HS2-3X404M)', () => {

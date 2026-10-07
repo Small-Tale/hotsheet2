@@ -49,6 +49,15 @@ const presentations = {
   activity: { label: 'Activity', icon: Activity, iconName: 'activity' },
 } as const;
 
+/** Keep automatic event labels distinct from authored prose, including in mixed activity notes. */
+function hasAiAuthoredText(kind: NoteKind, body: string): boolean {
+  const text = body.trim();
+  if (!text) return false;
+  if (kind === 'status') return /\r?\n\s*\S/u.test(text);
+  if (kind === 'activity' && /^Status changed from [^\r\n]+ to [^\r\n]+$/u.test(text)) return false;
+  return true;
+}
+
 function FeedbackBlocks({
   source,
   sourceStart,
@@ -286,6 +295,7 @@ export function NoteCard({
   density = 'comfortable',
 }: NoteCardProps) {
   const presentation = presentations[kind];
+  const showAiAttribution = aiAuthored && hasAiAuthoredText(kind, body);
   const feedbackEditor = readerMode && (kind === 'feedback_needed' || kind === 'feedback_draft');
   const feedbackResponse = readerMode && kind === 'feedback_needed';
   const editorOpen = editing || feedbackEditor;
@@ -312,7 +322,7 @@ export function NoteCard({
       data-confidence={confidence !== undefined ? String(confidence) : undefined}
       data-ai-authored={aiAuthored ? 'true' : undefined}
       aria-label={
-        aiAuthored
+        showAiAttribution
           ? `AI-generated ${presentation.label.toLowerCase()} by ${aiTool ?? author}${aiMayContainErrors ? '; may contain errors' : ''}`
           : undefined
       }
@@ -372,7 +382,7 @@ export function NoteCard({
       )}
       {respondToFeedback && !readerMode && <RespondToFeedbackButton id={id} />}
       <footer class="note-card__footer">
-        {aiAuthored ? (
+        {showAiAttribution ? (
           <AIContentLabel tool={aiTool ?? author} mayContainErrors={aiMayContainErrors} feedbackTarget={`note:${id}`} />
         ) : (
           author

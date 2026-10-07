@@ -33,9 +33,11 @@ export const noteDemoNotes = signal<NoteCardProps[]>([
   {
     id: 'status',
     kind: 'status' as const,
-    author: 'Hot Sheet',
+    author: 'Codex',
     time: '9 minutes ago',
     body: 'Status changed from Started to Needs Review.',
+    aiAuthored: true,
+    aiTool: 'Codex',
   },
   {
     id: 'feedback',
@@ -61,6 +63,15 @@ export const noteDemoNotes = signal<NoteCardProps[]>([
     aiAuthored: true,
     aiTool: 'Codex',
     confidence: 96,
+  },
+  {
+    id: 'mixed-activity',
+    kind: 'activity' as const,
+    author: 'Codex',
+    time: 'Now',
+    body: 'Status changed from Started to Completed\n\nVerified the fix in a browser.',
+    aiAuthored: true,
+    aiTool: 'Codex',
   },
   {
     id: 'scored-partial',

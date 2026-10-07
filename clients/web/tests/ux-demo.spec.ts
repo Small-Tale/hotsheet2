@@ -2651,8 +2651,8 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=note-card');
   const notes = page.locator('[data-component="note-card"]');
-  // Seven comfortable cards plus the compact-density pair that TicketNotes uses (HS2-7RY5GK).
-  await expect(notes).toHaveCount(9);
+  // Eight comfortable cards plus the compact-density pair that TicketNotes uses (HS2-7RY5GK).
+  await expect(notes).toHaveCount(10);
   for (const id of ['compact-regular', 'compact-activity']) {
     const compact = page.locator(`[data-component="note-card"][data-note-id="${id}"]`);
     await expect(compact).toHaveAttribute('data-density', 'compact');
@@ -2671,6 +2671,11 @@ test('presents note kinds and round-trips reader and Markdown editor composition
     await expect(note).toHaveAttribute('data-kind', kind);
     await expect(note.locator(`[data-lucide="${icon}"]`)).toBeVisible();
   }
+  await expect(noteById('status')).toHaveAttribute('data-ai-authored', 'true');
+  await expect(noteById('status')).not.toHaveAttribute('aria-label', /AI-generated/);
+  await expect(noteById('status').locator('[data-component="ai-content-label"]')).toHaveCount(0);
+  await expect(noteById('activity')).toHaveAccessibleName('AI-generated activity by Codex; may contain errors');
+  await expect(noteById('mixed-activity')).toHaveAccessibleName('AI-generated activity by Codex; may contain errors');
   // The demo exposes every confidence band (HS2-DWTJ43); unscored kinds carry no badge.
   for (const [id, value, band] of [
     ['regular', 82, 'assumed'],
