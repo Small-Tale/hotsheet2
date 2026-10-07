@@ -263,7 +263,9 @@ browser-only flow), so, like the original Hot Sheet GitHub plugin, the provider 
 file to a configured **assets repository** through the Contents API and links it from one
 issue comment. The connection settings keep the original plugin's keys:
 `attachment_repo` (`owner/repo`), `attachment_folder` (default `hotsheet-attachments`), and
-`attachment_branch` (default `main`); the headless path is `github-connect
+`attachment_branch` (default `main`). The web GitHub connection form accepts the optional
+assets repository plus its folder and branch, and shows whether attachments are enabled;
+clearing the repository turns them off. The headless path is `github-connect
 --attachment-repo/--attachment-folder/--attachment-branch/--no-attachments`, and a
 reconnect without them keeps the repository. The provider reports `attachments: true` only
 when `attachment_repo` is set; otherwise an upload fails with an explicit capability error.

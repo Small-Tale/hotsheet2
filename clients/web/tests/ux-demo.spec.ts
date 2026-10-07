@@ -69,6 +69,15 @@ test('previews every ticket-source dialog state at wide and narrow widths (HS2-7
       }, value);
       await expect(dialog).toHaveAttribute('data-preview-scenario', value);
       await expect(dialog).toContainText(expected);
+      if (value === 'editing') {
+        await expect(dialog.locator('wa-input[name="attachment-repo"]')).toHaveJSProperty(
+          'value',
+          'small-tale/hotsheet-assets',
+        );
+        await expect(dialog).toContainText('Currently enabled.');
+      }
+      if (value === 'authorized')
+        await expect(dialog.locator('wa-input[name="attachment-repo"]')).toHaveJSProperty('value', '');
       if (value === 'authorized' || value === 'authorized-existing-default')
         await expect(dialog.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty(
           'checked',

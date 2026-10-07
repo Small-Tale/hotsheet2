@@ -13,7 +13,7 @@ import { isRemoteClient } from '../client-origin';
 import { copyWhenReady } from '../clipboard-when-ready';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
 import { type ExternalProviderKind, type GithubAuthState, providerName } from '../components/provider-setup-form';
-import { carryGithubAttachmentSettings } from '../github-attachment-settings';
+import { githubAttachmentSettings } from '../github-attachment-settings';
 import { type Control, type Project, type UnhealthyServerRecovery } from '../interactions/types';
 import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
@@ -567,9 +567,18 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
           : read('api-base'),
       email = read('jira-email');
     if (apiBase) settings[kind === 'jira' ? 'base_url' : 'api_base'] = apiBase;
-    // The dialog has no assets-repository fields yet; an edit keeps a GitHub connection's
-    // attachment repository configured headlessly with `github-connect` (HS2-HSA64D).
-    if (kind === 'github') carryGithubAttachmentSettings(existing?.settings, settings);
+    if (kind === 'github') {
+      const attachments = githubAttachmentSettings(
+        read('attachment-repo'),
+        read('attachment-folder'),
+        read('attachment-branch'),
+      );
+      if (attachments.error) {
+        providerSettingsError.value = attachments.error;
+        return;
+      }
+      Object.assign(settings, attachments.settings);
+    }
     if (kind === 'jira') {
       if (!email || !apiBase) {
         providerSettingsError.value = 'Jira requires the account email and site URL.';

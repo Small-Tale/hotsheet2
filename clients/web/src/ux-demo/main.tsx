@@ -856,7 +856,11 @@ function demoContent(item: DemoDefinition) {
         locator: 'small-tale/hotsheet2',
         name: 'Product issues',
         default: true,
-        settings: {},
+        settings: {
+          attachment_repo: 'small-tale/hotsheet-assets',
+          attachment_folder: 'hotsheet-attachments',
+          attachment_branch: 'main',
+        },
         projects:
           scenario === 'editing-shared'
             ? [

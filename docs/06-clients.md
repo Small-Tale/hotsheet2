@@ -892,6 +892,12 @@ and identity-less legacy entries remain conservatively blocking.
   above the footer actions at narrow and wide widths. The UX demo's selector sits inside
   the open modal and previews source choice, sign-in, authorized, editing, removal, busy,
   and remote-backup states (HS2-7FYYN9).
+  The GitHub form also offers an optional writable assets repository, folder, and branch for
+  issue attachments (HS2-8BAHRJ, HS2-DH55NG). The repository must use `owner/repository`;
+  the folder defaults to `hotsheet-attachments` and the branch to `main`. An existing
+  configuration appears when editing, and clearing the repository turns attachments off.
+  The connection's attachment capability updates after save, so ticket forms accept files
+  only while an assets repository is configured.
   Multiple connections of one provider type are
   allowed because connection identity is independent from provider kind. Clicking an
   existing connection row opens that same dialog with its editable non-secret values.

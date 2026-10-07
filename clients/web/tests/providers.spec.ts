@@ -1074,7 +1074,10 @@ async function mockProject(
               display_name: connection.name ?? connection.id,
               locator: connection.locator,
               default: connection.id === checkoutDefaultSource,
-              capabilities,
+              capabilities: {
+                ...capabilities,
+                attachments: connection.provider === 'github' && Boolean(connection.settings.attachment_repo),
+              },
             })),
         ],
       });
@@ -2560,12 +2563,38 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
   await expect(providerForm.getByText('3 repositories available.')).toBeVisible();
   await repository.fill('small-tale/hotsheet2');
+  const attachmentRepo = providerForm.locator('wa-input[name="attachment-repo"] input');
+  await expect(providerForm).toContainText('Enter a repository and save to enable attachments.');
+  await attachmentRepo.fill('small-tale/assets');
+  await providerForm.locator('wa-input[name="attachment-folder"] input').fill('evidence');
+  await providerForm.locator('wa-input[name="attachment-branch"] input').fill('media');
+  await page.screenshot({ path: '/private/tmp/hs2-8bahrj-assets-setup-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 760 });
+  await providerForm.locator('wa-input[name="attachment-branch"]').scrollIntoViewIfNeeded();
+  await expect(providerForm.locator('wa-input[name="attachment-repo"]')).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-8bahrj-assets-setup-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await attachmentRepo.fill('invalid');
+  await setup.getByRole('button', { name: 'Connect provider' }).click();
+  await expect(providerForm.getByRole('alert')).toContainText('owner/repository');
+  await attachmentRepo.fill('small-tale/assets');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
   await expect.poll(() => creates.length).toBe(1);
   expect(creates[0]).toMatchObject({ id: '', name: 'GitHub Issues', make_default: true });
+  expect(creates[0].settings).toMatchObject({
+    attachment_repo: 'small-tale/assets',
+    attachment_folder: 'evidence',
+    attachment_branch: 'media',
+  });
   await expect(setup).toHaveJSProperty('open', false);
   await expect(page.locator('.app-toast')).toContainText('GitHub Issues connected.');
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+  await page.getByRole('button', { name: 'New ticket…' }).click();
+  const composer = page.getByRole('dialog', { name: 'Create ticket' });
+  await expect(composer.getByLabel('Drop or browse attachments for new ticket')).toBeVisible();
+  await expect(composer.getByText('This ticket provider does not support attachments.')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(composer).toBeHidden();
   await page.getByLabel('Settings view').click();
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   const sourcesPanel = page.locator('[data-component="ticket-sources-settings"]');
@@ -2602,6 +2631,8 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     'value',
     'small-tale/hotsheet2',
   );
+  await expect(providerForm.locator('wa-input[name="attachment-repo"]')).toHaveJSProperty('value', 'small-tale/assets');
+  await expect(providerForm).toContainText('Currently enabled.');
   await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
   const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');
   await expect(footer.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
@@ -2609,7 +2640,15 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   // Owned by this project alone, so there is no "shared with" note.
   await expect(setup.locator('.ticket-source-setup__scope-hint')).toHaveCount(0);
   await providerForm.getByLabel('Display name').fill('GitHub Primary');
+  await providerForm.locator('wa-input[name="attachment-repo"] input').fill('');
+  const updates: Array<Record<string, unknown>> = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && new URL(request.url()).pathname.includes('/provider-connections/'))
+      updates.push(request.postDataJSON());
+  });
   await setup.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => updates.length).toBe(1);
+  expect(updates[0].settings).not.toHaveProperty('attachment_repo');
   await expect(setup).toHaveJSProperty('open', false);
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Primary' })).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);

@@ -1,31 +1,29 @@
 import { describe, expect, it } from 'vitest';
 
-import { carryGithubAttachmentSettings } from './github-attachment-settings';
+import { githubAttachmentSettings } from './github-attachment-settings';
 
-describe('GitHub attachment settings carry-over (HS2-HSA64D)', () => {
-  it('keeps the assets repository through a rebuilt connection edit', () => {
-    const settings = { credential: { secret: 'github-app-1' } };
-    expect(
-      carryGithubAttachmentSettings(
-        {
-          credential: { secret: 'old' },
-          attachment_repo: 'acme/assets',
-          attachment_folder: 'evidence',
-          attachment_branch: 'media',
-          api_base: 'https://ghe.example/api/v3',
-        },
-        settings,
-      ),
-    ).toEqual({
-      credential: { secret: 'github-app-1' },
-      attachment_repo: 'acme/assets',
-      attachment_folder: 'evidence',
-      attachment_branch: 'media',
+describe('GitHub attachment settings (HS2-8BAHRJ, HS2-DH55NG)', () => {
+  it('enables, retains, and clears attachment support from form values', () => {
+    const enabled = githubAttachmentSettings(' acme/assets ', '', '');
+    expect(enabled).toEqual({
+      settings: {
+        attachment_repo: 'acme/assets',
+        attachment_folder: 'hotsheet-attachments',
+        attachment_branch: 'main',
+      },
     });
+    expect(githubAttachmentSettings('acme/assets', ' /evidence/2026/ ', ' media ')).toEqual({
+      settings: { attachment_repo: 'acme/assets', attachment_folder: 'evidence/2026', attachment_branch: 'media' },
+    });
+    expect(githubAttachmentSettings('', 'evidence', 'media')).toEqual({ settings: {} });
   });
 
-  it('adds nothing for a new connection or non-string values', () => {
-    expect(carryGithubAttachmentSettings(undefined, { a: 1 })).toEqual({ a: 1 });
-    expect(carryGithubAttachmentSettings({ attachment_repo: null, attachment_branch: 3 }, {})).toEqual({});
+  it('rejects the same unsafe repository, folder, and branch shapes as the server', () => {
+    for (const repository of ['acme', 'acme/assets/extra', '../assets', 'acme/assets name'])
+      expect(githubAttachmentSettings(repository, '', '')).toHaveProperty('error');
+    for (const folder of ['../assets', 'foo//bar', './assets'])
+      expect(githubAttachmentSettings('acme/assets', folder, '')).toHaveProperty('error');
+    for (const branch of ['feature..new', 'feature new'])
+      expect(githubAttachmentSettings('acme/assets', '', branch)).toHaveProperty('error');
   });
 });

@@ -269,7 +269,30 @@ describe('ticket source surfaces', () => {
     expect(signedIn).not.toContain('provider-setup-form__grid');
     expect(signedIn).toContain('<wa-input class="provider-setup-form__wide" name="connection-name"');
     expect(signedIn).toContain('<wa-checkbox class="provider-setup-form__wide" name="make-default"');
+    expect(signedIn).toContain('name="attachment-repo"');
+    expect(signedIn).toContain('Enter a repository and save to enable attachments.');
+    expect(signedIn).toContain('name="attachment-folder" label="Attachment folder" value="hotsheet-attachments"');
+    expect(signedIn).toContain('name="attachment-branch" label="Attachment branch" value="main"');
     expect(signedIn).not.toContain('name="api-base"');
+    const configured = String(
+      ProviderSetupForm({
+        kind: 'github',
+        connection: {
+          id: 'github-main',
+          provider: 'github',
+          locator: 'acme/issues',
+          name: 'Issues',
+          default: false,
+          settings: { attachment_repo: 'acme/assets', attachment_folder: 'evidence', attachment_branch: 'media' },
+        },
+      }),
+    );
+    expect(configured).toContain('Currently enabled.');
+    expect(configured).toContain(
+      'name="attachment-repo" label="Attachment assets repository (optional)" placeholder="owner/repository" value="acme/assets"',
+    );
+    expect(configured).toContain('name="attachment-folder" label="Attachment folder" value="evidence"');
+    expect(configured).toContain('name="attachment-branch" label="Attachment branch" value="media"');
     const remote = String(
       TicketSourceSetupDialog({
         project: { root: '/work/demo', name: 'Demo', stores: ['/work/demo.hs2'] },

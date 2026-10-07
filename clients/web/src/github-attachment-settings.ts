@@ -1,19 +1,24 @@
-/**
- * GitHub assets-repository settings (HS2-HSA64D). They keep the original Hot Sheet plugin's
- * keys and are configured headlessly with `hotsheet github-connect --attachment-repo`; the
- * connection dialog rebuilds `settings` on save, so an edit must carry them over.
- */
-export const GITHUB_ATTACHMENT_SETTINGS = ['attachment_repo', 'attachment_folder', 'attachment_branch'] as const;
+/** Settings shared by the GitHub connection form and its assets-repository adapter (HS2-HSA64D). */
+export const DEFAULT_GITHUB_ATTACHMENT_FOLDER = 'hotsheet-attachments';
+export const DEFAULT_GITHUB_ATTACHMENT_BRANCH = 'main';
 
-/** Copy an existing connection's string-valued attachment settings into rebuilt settings. */
-export function carryGithubAttachmentSettings(
-  existing: Readonly<Record<string, unknown>> | undefined,
-  settings: Record<string, unknown>,
-): Record<string, unknown> {
-  if (!existing) return settings;
-  for (const key of GITHUB_ATTACHMENT_SETTINGS) {
-    const value = existing[key];
-    if (typeof value === 'string') settings[key] = value;
-  }
-  return settings;
+/** Match GitHubAttachmentRepository::new on the server before submitting a connection. */
+export function githubAttachmentSettings(
+  repositoryInput: string,
+  folderInput: string,
+  branchInput: string,
+): { settings: Record<string, string>; error?: never } | { settings?: never; error: string } {
+  const repository = repositoryInput.trim();
+  if (!repository) return { settings: {} };
+  const validName = (name: string) => Boolean(name) && name !== '.' && name !== '..' && /^[A-Za-z0-9._-]+$/.test(name);
+  const parts = repository.split('/');
+  if (parts.length !== 2 || !parts.every(validName))
+    return { error: 'Enter an attachment repository as owner/repository.' };
+  const folder = (folderInput.trim() || DEFAULT_GITHUB_ATTACHMENT_FOLDER).replace(/^\/+|\/+$/g, '');
+  if (folder.split('/').some((part) => part === '.' || part === '..' || (!part && Boolean(folder))))
+    return { error: 'Enter a plain relative attachment folder without empty, . or .. segments.' };
+  const branch = branchInput.trim() || DEFAULT_GITHUB_ATTACHMENT_BRANCH;
+  if (branch.includes('..') || /\s/.test(branch))
+    return { error: 'Enter an attachment branch without whitespace or consecutive dots.' };
+  return { settings: { attachment_repo: repository, attachment_folder: folder, attachment_branch: branch } };
 }

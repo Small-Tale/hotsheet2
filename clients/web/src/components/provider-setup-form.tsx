@@ -11,6 +11,7 @@ import type { AttrSpec } from 'kerfjs';
 import { Check, ChevronRight, Copy, ExternalLink, LogIn, RefreshCw } from 'lucide';
 
 import type { ProviderAccount, ProviderConnection } from '../api';
+import { DEFAULT_GITHUB_ATTACHMENT_BRANCH, DEFAULT_GITHUB_ATTACHMENT_FOLDER } from '../github-attachment-settings';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { FlowBackButton } from './flow-back-button';
 import { ProviderIcon } from './provider-icon';
@@ -118,6 +119,7 @@ export function ProviderSetupForm({
     }[kind],
     editing = Boolean(connection),
     apiBase = connectionSetting(connection, kind === 'jira' ? 'base_url' : 'api_base'),
+    attachmentRepo = connectionSetting(connection, 'attachment_repo'),
     repositories = auth?.repositories ?? [],
     signedIn = auth?.state === 'authorized',
     // A new GitHub connection starts from sign-in; its settings appear once GitHub has authorized it.
@@ -430,6 +432,38 @@ export function ProviderSetupForm({
                 </button>
               </div>
             </section>
+          )}
+          {kind === 'github' && (
+            <>
+              <wa-input
+                class="provider-setup-form__wide"
+                name="attachment-repo"
+                label="Attachment assets repository (optional)"
+                placeholder="owner/repository"
+                value={attachmentRepo}
+              >
+                <span slot="hint">
+                  {attachmentRepo
+                    ? 'Currently enabled. Clear this field and save to turn attachments off. '
+                    : 'Enter a repository and save to enable attachments. '}
+                  The Hot Sheet GitHub App needs write access; files are committed there and linked in issues.
+                </span>
+              </wa-input>
+              <wa-input
+                name="attachment-folder"
+                label="Attachment folder"
+                value={connectionSetting(connection, 'attachment_folder') || DEFAULT_GITHUB_ATTACHMENT_FOLDER}
+              >
+                <span slot="hint">Relative folder in the assets repository.</span>
+              </wa-input>
+              <wa-input
+                name="attachment-branch"
+                label="Attachment branch"
+                value={connectionSetting(connection, 'attachment_branch') || DEFAULT_GITHUB_ATTACHMENT_BRANCH}
+              >
+                <span slot="hint">Existing branch to receive attachment files.</span>
+              </wa-input>
+            </>
           )}
           {/* GitHub uses the credential saved by Sign in with GitHub; there is no manual reference (HS2-48GA17). */}
           {kind !== 'github' && (
