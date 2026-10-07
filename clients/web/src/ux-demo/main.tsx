@@ -31,7 +31,7 @@ import { openPopupMenuAt, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { revealCatalogEntry, wireCatalog, wireCatalogGeometryOverlay } from '@kerfjs/ui/wire-catalog';
+import { revealCatalogEntry, wireCatalog } from '@kerfjs/ui/wire-catalog';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
 import { reorderTabs, wireTabBars } from '@kerfjs/ui/wire-tab-bars';
@@ -162,7 +162,7 @@ import {
   resetBulkTicketDialogDemo,
   setBulkTicketDialogScenario,
 } from './bulk-ticket-dialog-demo';
-import { demoCatalog, type DemoDefinition, findDemo, kerfCatalogSections, usesCatalogGeometryOverlay } from './catalog';
+import { demoCatalog, type DemoDefinition, findDemo, kerfCatalogSections } from './catalog';
 import { applyAfterCatalogPopupsClose } from './catalog-update';
 import {
   CommandRunDialogDemo,
@@ -1451,7 +1451,6 @@ function DemoApp() {
         active={selected.id}
         collapsed={catalogCollapsed.value}
         theme={catalogTheme.value}
-        geometryOverlay={usesCatalogGeometryOverlay(selected.id)}
         content={
           <section class="demo-catalog-examples" data-catalog-example-stack aria-label={`${selected.name} examples`}>
             {demoContent(selected)}
@@ -1688,7 +1687,6 @@ wireCatalog(root, {
   urlParam: 'component',
   revealSelection: true,
 });
-wireCatalogGeometryOverlay(root);
 revealCatalogEntry(root, selectedId.value, { block: 'center' });
 if (selectedId.value === 'ticket-reader') queueMicrotask(() => showTicketReaderDialog(root, 'ux-demo-ticket-reader'));
 if (selectedId.value === 'command-run-dialog') showCommandRunDialogDemo(root);

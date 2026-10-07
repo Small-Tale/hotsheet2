@@ -24,15 +24,7 @@ import {
   resetAIConversationDemo,
 } from './ai-conversation-demo';
 import { AppShellSettings, appShellSettings, resetAppShellDemo } from './app-shell-demo';
-import {
-  demoCatalog,
-  demoKind,
-  demosUsing,
-  findDemo,
-  flattenCatalog,
-  kerfCatalogSections,
-  usesCatalogGeometryOverlay,
-} from './catalog';
+import { demoCatalog, demoKind, demosUsing, findDemo, flattenCatalog, kerfCatalogSections } from './catalog';
 import {
   connectionDetailsAssessment,
   ConnectionDetailsDialogSettings,
@@ -307,12 +299,6 @@ describe('UX demo catalog', () => {
         .find((section) => section.category === 'Setup and settings')
         ?.entries.find((entry) => entry.id === 'welcome-screen')?.tags,
     ).toContain('Planned');
-  });
-
-  it('shows Kerf geometry for components but not composed layouts', () => {
-    expect(usesCatalogGeometryOverlay('app-shell')).toBe(false);
-    expect(usesCatalogGeometryOverlay('tag-chip')).toBe(true);
-    expect(usesCatalogGeometryOverlay('unknown-future-component')).toBe(true);
   });
 
   it('publishes every implemented app-owned catalog surface with the Kerf consumer metadata contract', () => {

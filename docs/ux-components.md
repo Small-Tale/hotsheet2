@@ -2075,19 +2075,14 @@ that keeps the demo visible during live adjustment. The settings action lives wi
 other catalog-header tools; while the inspector is open, its Close settings action stays
 viewport anchored. Stateful Web Awesome control properties stay synchronized when a demo
 reset restores its canonical mock state. Every settings form ends with a Reset action, including the
-TicketInspector, AIConversation, QuickTicketComposer, and ContentTransition forms (HS2-X1SM48). The remaining catalog review-tooling package is
-tracked by HS2-89692E. It should grow to provide:
+TicketInspector, AIConversation, QuickTicketComposer, and ContentTransition forms (HS2-X1SM48).
+Further catalog review tooling is tracked by HS2-89692E.
 
-Kerf beta 18's native geometry overlay replaces the catalog's local alignment-outline
-mode. Focused `component` entries always pass `geometryOverlay={true}` so transparent outer
-bounds receive a dashed outline and positive computed margins receive orange bands;
-`composition` entries explicitly pass `false`, because their outer placement belongs to
-the embedding layout. This behavior is automatic rather than hidden behind a demo toolbar
-toggle. `wireCatalogGeometryOverlay` keeps the layer synchronized across
-controlled renders and resize, while explanatory content may opt out with
-`data-catalog-geometry-overlay-skip`. Long desktop sidebars reveal both the initial deep
-link and later controlled selection without moving keyboard focus; compact layouts retain
-Kerf's default no-forced-scroll guard.
+Kerf beta.83 removes the Catalog geometry overlay API. The UX demo no longer outlines
+transparent component bounds or external margins; HS2-WWRMFY tracks a supported replacement.
+The beta.83 Catalog keeps its checkerboard preview stage and responsive controls. Long desktop
+sidebars reveal both the initial deep link and later controlled selection without moving keyboard
+focus; compact layouts retain Kerf's default no-forced-scroll guard.
 
 Hot Sheet publishes its package-qualified consumer metadata in
 `clients/web/ai/component-catalog-extension.json`. Its generated entries record every
@@ -2410,6 +2405,10 @@ retain their own radius. The terminal ticket rail supplies per-view
 `toolbar.leading`, `toolbar.center`, and `toolbar.trailing` through the structured
 NavStack toolbar, and its sunken scroll surface through `pane.appearance`. The repository
 popover supplies compact SplitView actions through `compactStack.*.toolbar.trailing`.
+HS2-ARMAX3 advances all five exact pins to 5.0.0-beta.83. This release changes Kerf's
+Catalog stage and background controls, adds a TabNavigator sunken separator option and
+an anchored UI surface, and keeps narrow Catalog controls visible; Hot Sheet verifies its
+existing Catalog and workspace flows against the new packages.
 Beta.80's component-style doctor checks recognize explicit classes matching five application
 component roots: AppLoadingIndicator, SettingsWorkspace, TicketRowContextMenu,
 TicketSourceSetupDialog, and TicketSourcesSettings (HS2-8ZM85Z). Their existing selectors

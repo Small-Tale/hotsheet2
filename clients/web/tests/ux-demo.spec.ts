@@ -215,7 +215,7 @@ test('keeps the beta.82 catalog filter visible, searchable, and focused after cl
   await page.screenshot({ path: '/private/tmp/hs2-458bs5-catalog-narrow.png', fullPage: true });
 });
 
-test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF)', async ({ page }) => {
+test('presents catalog navigation, controls, and responsive stage (HS2-9TZ9AF, HS2-ARMAX3)', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
   const catalogShell = page.locator('[data-component="catalog"]'),
@@ -274,43 +274,18 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'true');
   await page.getByRole('button', { name: 'Show UX components catalog' }).click();
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'false');
-  await expect(page.locator('[data-action="toggle-geometry-overlay"]')).toHaveCount(0);
-  await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  // ProjectTabBar renders five specimens (standalone, with the new-ticket and the Empty Trash workspace
-  // actions, HS2-PNCDAE, the divider-free shell-column variant, HS2-DR549A, and the phone picker); the AppTab demo composes its tabs inside a TabBar
-  // (HS2-GX51F7), so the overlay treats that bar as the single specimen and shows no tab borders.
-  // The demo frames each bar in its own rounded stage box, so the overlay reports the bar's real
-  // bottom-only border rather than a demo-imposed outline (HS2-4APEJP).
   await catalog.getByRole('button', { name: /ProjectTabBar/ }).click();
   await expect(page).toHaveURL('/ux-demo?component=project-tabs');
   await expect(page.getByRole('heading', { name: 'ProjectTabBar', exact: true })).toBeVisible();
-  const borders = page.locator('.kui-catalog__geometry-border'),
-    bounds = page.locator('.kui-catalog__geometry-bound');
-  await expect(borders).toHaveCount(4);
-  await expect(bounds).toHaveCount(0);
-  for (const border of await borders.all()) {
-    await expect(border).toHaveCSS('border-bottom-width', '1px');
-    for (const side of ['top', 'right', 'left']) await expect(border).toHaveCSS(`border-${side}-width`, '0px');
-  }
-  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-borders-wide.png', fullPage: true });
+  await expect(catalogShell.locator('[data-catalog-stage]')).toHaveAttribute('data-background-style', 'checkerboard');
+  await page.screenshot({ path: '/private/tmp/hs2-armax3-catalog-wide.png', fullPage: true });
   await catalog.locator('[data-item-id="list"]').click();
   await expect(page.getByRole('region', { name: 'List layout variants', exact: true })).toBeVisible();
-  await expect.poll(() => bounds.count()).toBeGreaterThan(0);
-  await expect(borders).toHaveCount(0);
   await catalog.getByRole('button', { name: /ValueTable/ }).click();
   await expect(page.getByRole('heading', { name: 'ValueTable', exact: true })).toBeVisible();
-  await expect.poll(() => page.locator('.kui-catalog__geometry-margin').count()).toBeGreaterThan(0);
-  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-margins-wide.png', fullPage: true });
   await catalog.getByRole('button', { name: /AppShell/ }).click();
-  await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'false');
-  await expect(
-    page.locator('.kui-catalog__geometry-bound, .kui-catalog__geometry-border, .kui-catalog__geometry-margin'),
-  ).toHaveCount(0);
   await catalog.getByRole('button', { name: /ProjectTabBar/ }).click();
   await expect(page.getByRole('heading', { name: 'ProjectTabBar', exact: true })).toBeVisible();
-  await expect(catalogShell).toHaveAttribute('data-geometry-overlay', 'true');
-  await expect(borders).toHaveCount(4);
-  await expect(bounds).toHaveCount(0);
   const theme = page.getByRole('button', { name: 'Use dark theme' });
   await theme.click();
   await expect(page.locator('html')).toHaveClass(/wa-dark/);
@@ -318,7 +293,7 @@ test('presents catalog navigation, controls, and responsive geometry (HS2-9TZ9AF
   await page.setViewportSize({ width: 760, height: 800 });
   await page.getByRole('button', { name: 'Hide UX components catalog' }).click();
   await expect(catalogShell).toHaveAttribute('data-sidebar-collapsed', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-yrhp2f-geometry-borders-narrow.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-armax3-catalog-narrow.png', fullPage: true });
 });
 
 test('reveals deep-linked and newly selected catalog entries without moving focus', async ({ page }) => {
