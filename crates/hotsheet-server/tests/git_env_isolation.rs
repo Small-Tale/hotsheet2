@@ -122,9 +122,24 @@ fn sentinel_repo(root: &Path) -> PathBuf {
     let sentinel = root.join("sentinel");
     std::fs::create_dir(&sentinel).unwrap();
     git(&sentinel, &["init", "-q", "-b", "main"]);
+    // The fixture's own commit must not start asynchronous Git maintenance.
+    git(&sentinel, &["config", "maintenance.auto", "false"]);
     std::fs::write(sentinel.join("README"), "sentinel\n").unwrap();
     git(&sentinel, &["add", "README"]);
     git(&sentinel, &["commit", "-q", "-m", "sentinel"]);
+    // Git may still be finishing automatic maintenance after commit exits. A
+    // baseline captured while this lock exists would differ once Git removes it,
+    // even when the server never touches the sentinel repository.
+    let maintenance_lock = sentinel.join(".git/objects/maintenance.lock");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while maintenance_lock.exists() {
+        assert!(
+            Instant::now() < deadline,
+            "Git maintenance did not release {}",
+            maintenance_lock.display()
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
     sentinel
 }
 
