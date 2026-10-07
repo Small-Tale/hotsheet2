@@ -61,9 +61,10 @@ clears after the request sequence, even on failure; successful writes remain app
 failed ticket is restored and reported. Every metadata/tag/delete write is provider-capability
 gated and carries the freshly read opaque
 concurrency token; a stale ticket fails instead of overwriting a collaborator's edit.
-Git-backed Started tickets expose a Started phase picker in the inspector and reader. It
-offers all six phases and a clear option while preserving the lifecycle status; external
-providers show the phase badge without an edit control.
+The inspector and reader status badge opens a status menu. For git-backed tickets,
+Started opens a submenu with all six phases and a No phase choice. Changing a phase
+on an already Started ticket preserves its lifecycle status; choosing a phase from
+another status moves the ticket to Started. External providers omit the phase submenu.
 In the inspector and reader, Add tag is a distinct button that opens its own anchored,
 viewport-contained popover with a labeled autocomplete field. Enter or comma can add
 repeated tags, Escape restores focus to the trigger, and read-only providers omit the
@@ -550,8 +551,9 @@ and identity-less legacy entries remain conservatively blocking.
   keeps the spinner and shows `Soon`. Long worker IDs are clipped only in the row display;
   hover and assistive technology retain the full value.
 
-- **Started phase.** List rows and the ticket inspector show the optional phase label
-  inside the Started badge. `Final testing` remains visible after a worker releases
+- **Started phase.** List rows, column cards, and the ticket inspector show the optional phase label
+  inside the Started badge. Other status labels remain hidden on column cards because the column
+  already names their status. `Final testing` remains visible after a worker releases
   the claim to wait for remote CI; the live-work spinner and worker name still follow the lease.
   Legacy Started tickets without a phase keep the plain `Started` label.
 

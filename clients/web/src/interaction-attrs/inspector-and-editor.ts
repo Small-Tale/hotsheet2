@@ -28,6 +28,9 @@ export const INSPECTOR_AND_EDITOR_ACTIONS = {
   respondToFeedback: action('respond-to-feedback'),
   toggleReaderTextSize: action('toggle-reader-text-size'),
   setInspectorTab: action('set-inspector-tab'),
+  openInspectorStatusMenu: action('open-inspector-status-menu'),
+  setInspectorStatus: action('set-inspector-status'),
+  setInspectorStartedPhase: action('set-inspector-started-phase'),
   openCodeReview: action('open-code-review'),
 } as const;
 
@@ -39,8 +42,6 @@ export const INSPECTOR_AND_EDITOR_ACTIONS = {
 export const INSPECTOR_AND_EDITOR_TARGETS = {
   inspectorCategoryField: attr('name', 'inspector-category'),
   inspectorPriorityField: attr('name', 'inspector-priority'),
-  inspectorStatusField: attr('name', 'inspector-status'),
-  inspectorStartedPhaseField: attr('name', 'inspector-started-phase'),
   ticketConflictResolutionField: attr('name', 'ticket-conflict-resolution'),
   ticketTitleField: attr('name', 'ticket-title'),
   ticketTagInputField: attr('name', 'ticket-tag-input'),

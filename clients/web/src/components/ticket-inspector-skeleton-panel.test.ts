@@ -22,8 +22,8 @@ describe('TicketInspectorSkeleton', () => {
     for (const label of ['Category', 'Priority', 'Status', 'Block ticket', 'Details', 'Tags', 'Notes']) {
       expect(markup).toContain(label);
     }
-    // The metadata controls use the @kerfjs/ui native Select placeholder mode (real chrome, skeleton value).
-    expect(markup.match(/kui-select--placeholder/g)).toHaveLength(3);
+    // Category and priority keep their Select placeholders; Status uses a value-free Skeleton.
+    expect(markup.match(/kui-select--placeholder/g)).toHaveLength(2);
     expect(markup).toContain('class="kui-text" data-component="text"');
     expect(markup).toContain('data-font="default" data-border="none">Status</h2>');
     expect(markup).toContain('class="kui-list-inset-control"');
@@ -63,7 +63,8 @@ describe('placeholder variants', () => {
     expect(sidebar).toContain('aria-hidden="true"');
     expect(sidebar).toMatch(/\binert\b/);
     expect(sidebar).toContain('class="ticket-info-panel__details-placeholder"');
-    expect(sidebar.match(/kui-select--placeholder/g)).toHaveLength(3);
+    expect(sidebar.match(/kui-select--placeholder/g)).toHaveLength(2);
+    expect(sidebar).not.toContain('Not started');
     // The Tags and Notes add actions are drawn but disabled while loading.
     expect(sidebar.match(/aria-label="Add (tag|note)"[^>]*disabled/g)).toHaveLength(2);
     // Value-free: no tags, notes, provider, or updated time.

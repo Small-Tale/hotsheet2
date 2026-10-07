@@ -1294,16 +1294,13 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     both selected-value and popup-option presentations
   - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
     selected-value and popup-option presentations
-  - `TicketStatusMenu` — **demo built**: a shared `Select` whose custom selected-value
-    renderer retains the `StatusBadge` presentation at its `semibold` weight. Kerf's
-    `presentation="inline"` (KF-V2Y51V, adopted in HS2-WQ8T6B) and `caret={false}` fit the closed
-    trigger exactly to the badge box, with no chrome, caret, or trailing slack, and keep its focus
-    ring; the app overrides no Select part;
-    every normally weighted popup option carries its semantic Lucide icon, and the
-    selected control intentionally hides the redundant dropdown caret. Inspector and
-    row-context status menus share one canonical order: Not started, Started,
-    Completed, Verified, then a separator before Backlog and Archive. Backlog uses the
-    clock metaphor; Archive uses the archive-box metaphor.
+  - `TicketStatusMenu` — **demo built**: an interactive app-owned `StatusBadge` at
+    `semibold` weight opens a Kerf `PopupMenu`. The Started item contains six phase
+    actions plus No phase for git-backed tickets; other providers omit that submenu.
+    The menu keeps the canonical order: Not started, Started, Completed, Verified,
+    then a separator before Backlog and Archive. Each status action has its semantic
+    Lucide icon. The phone anchor leaves space above the status list for the Started
+    submenu; the native badge owns its focus ring without overriding Kerf parts.
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text with status-specific tone,
     optional reinforcing Lucide icon, filled/plain appearances, regular/compact

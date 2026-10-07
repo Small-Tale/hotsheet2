@@ -27,6 +27,8 @@ export interface StatusBadgeProps {
   interactive?: boolean;
   weight?: StatusBadgeWeight;
   actionLabel?: string;
+  action?: string;
+  hasPopup?: 'menu';
   slot?: string;
 }
 
@@ -53,6 +55,8 @@ export function StatusBadge({
   interactive = false,
   weight = 'bold',
   actionLabel,
+  action,
+  hasPopup,
   slot,
 }: StatusBadgeProps) {
   const value = statusPresentation(status);
@@ -77,6 +81,8 @@ export function StatusBadge({
       data-status={status}
       data-appearance={appearance}
       aria-label={actionLabel}
+      data-action={action}
+      aria-haspopup={hasPopup}
     >
       {content}
     </button>

@@ -211,7 +211,8 @@ export function TicketRow(raw: TicketRowProps) {
                   </span>
                 </button>
               )}
-              {props.presentation === 'list' && (
+              {(props.presentation === 'list' ||
+                (props.presentation === 'column' && props.status === 'started' && props.startedPhase)) && (
                 <StatusBadge status={props.status} startedPhase={props.startedPhase} compact />
               )}
               {props.busy && <RowClaimIndicator agentName={props.agentName} claimEta={props.claimEta} />}

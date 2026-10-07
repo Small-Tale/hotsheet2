@@ -133,7 +133,6 @@ export const DEMO_FIELDS = {
   conversationDraft: attr('name', 'conversation-draft'),
   inspectorCategory: attr('name', 'inspector-category'),
   inspectorPriority: attr('name', 'inspector-priority'),
-  inspectorStatus: attr('name', 'inspector-status'),
   markdownSource: attr('name', 'markdown-source'),
   newNoteBody: attr('name', 'new-note-body'),
   newTicketCategory: attr('name', 'new-ticket-category'),

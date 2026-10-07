@@ -4703,45 +4703,19 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
   await star.click();
   await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
-  const statusTrigger = inspector.locator('wa-select[name="inspector-status"]');
-  await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Started');
-  await expect(statusTrigger.locator('.kui-select__custom-selected [data-component="status-badge"]')).toHaveAttribute(
-    'data-status',
-    'started',
-  );
-  // The closed trigger is exactly the semibold badge: Kerf's caret-free inline Select (KF-V2Y51V)
-  // leaves no chrome or trailing slack around it, with no app part override (HS2-4APEJP, HS2-WQ8T6B).
-  const triggerFit = await statusTrigger.evaluate((node) => {
-    const combobox = node.shadowRoot!.querySelector('[part~="combobox"]')!,
-      badge = node.querySelector<HTMLElement>('[data-component="status-badge"]')!,
-      box = combobox.getBoundingClientRect(),
-      badgeBox = badge.getBoundingClientRect(),
-      style = getComputedStyle(combobox);
-    return {
-      height: Math.round(box.height - badgeBox.height),
-      width: Math.round(box.width - badgeBox.width),
-      presentation: node.dataset.presentation,
-      background: style.backgroundColor,
-      border: style.borderTopWidth,
-      weight: getComputedStyle(badge).fontWeight,
-    };
-  });
-  expect(triggerFit).toEqual({
-    height: 0,
-    width: 0,
-    presentation: 'inline',
-    background: 'rgba(0, 0, 0, 0)',
-    border: '0px',
-    weight: '600',
-  });
-  // The inline trigger keeps its keyboard focus ring, drawn around the badge box.
+  const statusTrigger = inspector.locator('[data-action="open-inspector-status-menu"]');
+  const statusMenu = inspector.locator('[data-inspector-status-menu]');
+  await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Planning');
+  await expect(statusTrigger).toHaveAttribute('data-status', 'started');
+  await expect(statusTrigger).toHaveCSS('font-weight', '600');
+  // The native badge trigger keeps a visible keyboard focus ring.
   await statusTrigger.evaluate((node: HTMLElement) => {
     node.focus({ focusVisible: true } as FocusOptions);
   });
   await expect
     .poll(() =>
       statusTrigger.evaluate((node) => {
-        const style = getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!);
+        const style = getComputedStyle(node);
         return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0;
       }),
     )
@@ -4750,24 +4724,17 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     node.blur();
   });
   await statusTrigger.click();
-  await expect(statusTrigger.locator('wa-option [data-lucide]')).toHaveCount(6);
-  await expect(statusTrigger.locator('wa-divider')).toHaveCount(1);
+  await expect(statusMenu.locator('[data-ticket-status] [data-lucide]')).toHaveCount(6);
+  await expect(statusMenu.locator('wa-divider')).toHaveCount(1);
   expect(
-    await statusTrigger
-      .locator('wa-option')
-      .evaluateAll((options) => options.map((option) => option.getAttribute('value'))),
+    await statusMenu
+      .locator('[data-ticket-status]')
+      .evaluateAll((options) => options.map((option) => option.getAttribute('data-ticket-status'))),
   ).toEqual(['not_started', 'started', 'completed', 'verified', 'backlog', 'archive']);
-  const popupFontWeight = await statusTrigger
-    .locator('wa-option[value="completed"]')
-    .evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="label"]')!).fontWeight);
-  expect(Number(popupFontWeight)).toBeLessThanOrEqual(500);
-  await statusTrigger.locator('wa-option[value="completed"]').click();
+  await statusMenu.locator('[data-ticket-status="completed"]').click();
   await expect(inspector.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
   await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Completed');
-  await expect(statusTrigger.locator('.kui-select__custom-selected [data-component="status-badge"]')).toHaveAttribute(
-    'data-status',
-    'completed',
-  );
+  await expect(statusTrigger).toHaveAttribute('data-status', 'completed');
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate((node) =>
     [...node.querySelectorAll<HTMLElement>('.ticket-info-panel__section')].map((section) => ({
@@ -7309,8 +7276,8 @@ test('renders the real inspector chrome as a value-free loading placeholder', as
   for (const label of ['Category', 'Priority', 'Status', 'Block ticket', 'Details', 'Tags', 'Notes', 'Activity']) {
     await expect(skeleton.getByText(label, { exact: true }).first()).toBeVisible();
   }
-  // Metadata controls use the native Select placeholder mode (side by side) and value slots use Skeleton.
-  await expect(skeleton.locator('.kui-select--placeholder')).toHaveCount(3);
+  // Category and Priority use native Select placeholders; Status uses a value-free Skeleton.
+  await expect(skeleton.locator('.kui-select--placeholder')).toHaveCount(2);
   await expect(skeleton.locator('.kui-skeleton')).not.toHaveCount(0);
   const [category, priority] = await skeleton
     .locator('.ticket-info-panel__metadata > .kui-select')
@@ -7386,7 +7353,7 @@ test('exposes the TicketInfoPanel placeholder variant beside the loaded panel (H
     await expect(loaded).toContainText('Hot Sheet git');
     const panel = placeholder.locator('[data-component="ticket-info-panel"][data-placeholder="true"]');
     await expect(panel).toHaveJSProperty('inert', true);
-    await expect(panel.locator('.kui-select--placeholder')).toHaveCount(3);
+    await expect(panel.locator('.kui-select--placeholder')).toHaveCount(2);
     await expect(panel.locator('[data-component="ticket-notes"][data-placeholder="true"]')).toHaveCount(1);
     await expect(panel).not.toContainText('Hot Sheet git');
     const box = await panel.boundingBox();

@@ -6,7 +6,6 @@ import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListInsetControl } from '@kerfjs/ui/list-inset-control';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Select } from '@kerfjs/ui/select';
 import { Skeleton } from '@kerfjs/ui/skeleton';
 import { CircleAlert, Plus } from 'lucide';
 
@@ -16,7 +15,7 @@ import { DETAILS_FEEDBACK_ID, textRequestsFeedback } from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
 import { FeedbackPrompt, type NoteCardProps, NoteEditor, RespondToFeedbackButton } from './note-card';
-import { BlockedBadge, STARTED_PHASE_LABELS, StatusBadge, type TicketStatus } from './status-badge';
+import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TicketCategorySelect } from './ticket-category-select';
 import { TicketInspectorPanel } from './ticket-inspector-panel';
 import { TicketNotes } from './ticket-notes';
@@ -89,7 +88,7 @@ function TicketInfoPanelPlaceholder({ readerPresentation = false }: { readerPres
           <ListHeader label="Status" />
           <ListInsetControl>
             <div class="ticket-info-panel__status-line">
-              <TicketStatusMenu value="not_started" placeholder />
+              <Skeleton width={rem(5)} height={rem(1.5)} />
             </div>
           </ListInsetControl>
         </div>
@@ -181,27 +180,18 @@ function LoadedTicketInfoPanel({
                 {status === 'deleted' ? (
                   <StatusBadge status="deleted" />
                 ) : (
-                  <TicketStatusMenu value={status} startedPhase={startedPhase} disabled={!canUpdate} />
+                  <TicketStatusMenu
+                    value={status}
+                    startedPhase={startedPhase}
+                    disabled={!canUpdate}
+                    canEditStartedPhase={canEditStartedPhase}
+                  />
                 )}
                 {blockedReason && <BlockedBadge />}
               </>
             </div>
           </ListInsetControl>
         </div>
-        {status === 'started' && canEditStartedPhase && (
-          <div class="ticket-info-panel__phase-field">
-            <Select
-              name="inspector-started-phase"
-              value={startedPhase ?? ''}
-              label="Started phase"
-              choices={[
-                { value: '', label: 'No phase' },
-                ...Object.entries(STARTED_PHASE_LABELS).map(([value, label]) => ({ value, label })),
-              ]}
-              triggerWidth="fill"
-            />
-          </div>
-        )}
       </section>
       <section class="ticket-info-panel__section ticket-info-panel__blocked-section">
         {blockedReasonEditing ? (

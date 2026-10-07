@@ -1,3 +1,4 @@
+import { openPopupMenuAt, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -7,6 +8,7 @@ import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import { codeReviewTarget } from '../components/ticket-code-review';
 import { type InspectorTab } from '../components/ticket-inspector';
 import { type TicketReaderDialogElement } from '../components/ticket-reader';
+import { statusMenuAnchorY } from '../components/ticket-status-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import { copyText } from '../copy-text';
@@ -238,29 +240,39 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     ),
   );
   lifetime.add(
-    delegate(document.body, 'change', INSPECTOR_AND_EDITOR_TARGETS.inspectorStatusField.selector, (_event, target) => {
-      const select = target as Control & { open?: boolean },
-        value = select.value,
-        apply = () => {
-          void updateSelectedTracked({ status: value });
-        };
-      if (select.open) select.addEventListener('wa-after-hide', apply, { once: true });
-      else apply();
+    delegate(
+      document.body,
+      'click',
+      INSPECTOR_AND_EDITOR_ACTIONS.openInspectorStatusMenu.selector,
+      (_event, target) => {
+        const menu = target
+          .closest('.ticket-status-menu')
+          ?.querySelector<PopupMenuElement>('[data-inspector-status-menu]');
+        if (!menu) return;
+        const rect = target.getBoundingClientRect();
+        openPopupMenuAt(menu, rect.left, statusMenuAnchorY(rect.bottom, window.innerWidth, window.innerHeight));
+      },
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStatus.selector, (_event, target) => {
+      if (!canUpdateSelected()) return;
+      const status = (target as HTMLElement).dataset.ticketStatus;
+      if (status) void updateSelectedTracked({ status });
     }),
   );
   lifetime.add(
     delegate(
       document.body,
-      'change',
-      INSPECTOR_AND_EDITOR_TARGETS.inspectorStartedPhaseField.selector,
+      'click',
+      INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStartedPhase.selector,
       (_event, target) => {
-        const select = target as Control & { open?: boolean };
-        const value = select.value;
-        const apply = () => {
-          if (canEditStartedPhaseSelected()) void updateSelectedTracked({ started_phase: value || null });
-        };
-        if (select.open) select.addEventListener('wa-after-hide', apply, { once: true });
-        else apply();
+        if (!canEditStartedPhaseSelected()) return;
+        const phase = (target as HTMLElement).dataset.startedPhase;
+        if (phase === undefined) return;
+        const patch: TicketPatch = { started_phase: phase || null };
+        if (selectedTicket.value?.status !== 'started') patch.status = 'started';
+        void updateSelectedTracked(patch);
       },
     ),
   );

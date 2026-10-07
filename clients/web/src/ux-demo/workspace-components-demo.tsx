@@ -104,6 +104,7 @@ export const inspectorTab = signal<InspectorTab>('info');
 export const inspectorCategory = signal('feature');
 export const inspectorPriority = signal<TicketRowProps['priority']>('high');
 export const inspectorStatus = signal<TicketRowProps['status']>('started');
+export const inspectorStartedPhase = signal<TicketRowProps['startedPhase']>('planning');
 export const inspectorTitle = signal('Build TicketList and TicketBoard around shared responsive TicketRow');
 export const inspectorTitleDraft = signal(inspectorTitle.value);
 export const inspectorTitleEditing = signal(false);
@@ -543,6 +544,8 @@ function demoInspectorProps(slug?: string): TicketInspectorProps {
     titleEditing: inspectorTitleEditing.value,
     titleDraft: inspectorTitleDraft.value,
     status: inspectorStatus.value,
+    startedPhase: inspectorStartedPhase.value,
+    canEditStartedPhase: true,
     priority: inspectorPriority.value,
     category: inspectorCategory.value,
     tags: inspectorTags.value,

@@ -310,6 +310,32 @@ describe('TicketRow', () => {
     expect(inactive).not.toContain('ticket-list-row__claim');
     expect(inactive).not.toContain('ticket-list-row__owner');
     expect(inactive).toContain('Final testing');
+    const column = String(
+      TicketRow({
+        slug: 'HS2-PHASE',
+        title: 'Remote verification',
+        status: 'started',
+        startedPhase: 'final_testing',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+        presentation: 'column',
+      }),
+    );
+    expect(column).toContain('Final testing');
+    expect(column).toContain('data-component="status-badge"');
+    const unphasedColumn = String(
+      TicketRow({
+        slug: 'HS2-NOPHASE',
+        title: 'Ordinary work',
+        status: 'started',
+        priority: 'default',
+        category: 'task',
+        tags: [],
+        presentation: 'column',
+      }),
+    );
+    expect(unphasedColumn).not.toContain('data-component="status-badge"');
     const active = String(
       TicketRow({
         slug: 'HS2-ACTIVE',

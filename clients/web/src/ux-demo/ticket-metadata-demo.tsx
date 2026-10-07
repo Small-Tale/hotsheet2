@@ -1,5 +1,6 @@
 import { signal } from 'kerfjs';
 
+import type { StartedPhase } from '../api';
 import {
   type AttachmentLabelEditing,
   attachmentLabelEditingDraft,
@@ -38,11 +39,23 @@ export function TicketStatusMenuDemo() {
     <section class="metadata-control-demo" aria-label="TicketStatusMenu demo">
       <div>
         <span>Status</span>
-        <TicketStatusMenu value="started" />
+        <TicketStatusMenu
+          value={statusMenuDemoStatus.value}
+          startedPhase={statusMenuDemoStartedPhase.value || undefined}
+          canEditStartedPhase
+        />
+      </div>
+      <div>
+        <span>Read-only provider</span>
+        <TicketStatusMenu value="started" startedPhase="final_testing" disabled />
       </div>
     </section>
   );
 }
+export const statusMenuDemoStatus = signal<
+  'not_started' | 'started' | 'completed' | 'verified' | 'backlog' | 'archive'
+>('started');
+export const statusMenuDemoStartedPhase = signal<StartedPhase | ''>('planning');
 export function TicketInfoPanelDemo() {
   return (
     <div class="info-panel-demo">

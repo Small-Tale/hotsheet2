@@ -27,6 +27,7 @@ import { AppTab } from '@kerfjs/ui/app-tab';
 import { Catalog } from '@kerfjs/ui/catalog';
 import { FloatingToolbar } from '@kerfjs/ui/floating-toolbar';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { openPopupMenuAt, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { Row } from '@kerfjs/ui/row';
 import { TabBar } from '@kerfjs/ui/tab-bar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -79,6 +80,7 @@ import { showTicketReaderDialog } from '../components/ticket-reader';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
 import { AccountsSettings, TicketSourcesSettings } from '../components/ticket-sources-settings';
+import { statusMenuAnchorY } from '../components/ticket-status-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { TrashSettings } from '../components/trash-settings';
 import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
@@ -90,6 +92,7 @@ import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
@@ -370,6 +373,8 @@ import {
   setGalleryDemoAnnotationEndpoint,
   shiftGalleryDemo,
   showAttachmentDemoMenu,
+  statusMenuDemoStartedPhase,
+  statusMenuDemoStatus,
   TicketAttachmentsDemo,
   TicketCategorySelectDemo,
   TicketCodeReviewDemo,
@@ -411,6 +416,7 @@ import {
   type InspectorLiveClaimDemo,
   inspectorOpen,
   inspectorPriority,
+  inspectorStartedPhase,
   inspectorStatus,
   inspectorTab,
   inspectorTags,
@@ -3177,8 +3183,37 @@ demoListeners.add(
   }),
 );
 demoListeners.add(
-  delegate(root, 'change', DEMO_FIELDS.inspectorStatus.selector, (_event, target) => {
-    inspectorStatus.value = (target as FormControl).value as typeof inspectorStatus.value;
+  delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.openInspectorStatusMenu.selector, (_event, target) => {
+    const menu = target.closest('.ticket-status-menu')?.querySelector<PopupMenuElement>('[data-inspector-status-menu]');
+    if (!menu) return;
+    const rect = target.getBoundingClientRect();
+    openPopupMenuAt(menu, rect.left, statusMenuAnchorY(rect.bottom, window.innerWidth, window.innerHeight));
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStatus.selector, (_event, target) => {
+    const value = (target as HTMLElement).dataset.ticketStatus;
+    if (!value) return;
+    if (target.closest('.metadata-control-demo')) {
+      statusMenuDemoStatus.value = value as typeof statusMenuDemoStatus.value;
+      statusMenuDemoStartedPhase.value = '';
+    } else {
+      inspectorStatus.value = value as typeof inspectorStatus.value;
+      inspectorStartedPhase.value = undefined;
+    }
+  }),
+);
+demoListeners.add(
+  delegate(root, 'click', INSPECTOR_AND_EDITOR_ACTIONS.setInspectorStartedPhase.selector, (_event, target) => {
+    const phase = (target as HTMLElement).dataset.startedPhase;
+    if (phase === undefined) return;
+    if (target.closest('.metadata-control-demo')) {
+      statusMenuDemoStatus.value = 'started';
+      statusMenuDemoStartedPhase.value = phase as typeof statusMenuDemoStartedPhase.value;
+    } else {
+      inspectorStatus.value = 'started';
+      inspectorStartedPhase.value = (phase || undefined) as typeof inspectorStartedPhase.value;
+    }
   }),
 );
 // The reader demo edits its own ticket's title; every other surface edits the inspector demo ticket's

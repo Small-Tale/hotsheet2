@@ -1175,7 +1175,6 @@ export async function startHotSheetWebClient() {
     return Boolean(
       ticket &&
       current &&
-      ticket.status === 'started' &&
       canUpdateSelected() &&
       defaultProviders.value[current.id]?.sources.some(
         (source) => source.connectionId === ticket.connection_id && source.provider === 'git',
@@ -3442,7 +3441,7 @@ export async function startHotSheetWebClient() {
   }
   const projectTabRefresh = createProjectTabRefreshCoordinator<Project, ProjectTicketRefresh>({
     waitUntilSafe: async () => {
-      for (let open = openSelect(); open; open = openSelect())
+      for (let open = openMetadataPopup(); open; open = openMetadataPopup())
         await new Promise<void>((resolve) => {
           open.addEventListener(
             'wa-after-hide',
@@ -3689,7 +3688,10 @@ export async function startHotSheetWebClient() {
         };
     }
   }
-  const openSelect = () => [...document.querySelectorAll<Control>('wa-select')].find((node) => node.open);
+  const openMetadataPopup = () =>
+    [...document.querySelectorAll<Control>('wa-select, wa-dropdown[data-inspector-status-menu]')].find(
+      (node) => node.open,
+    );
   function beginLocalTicketMutation() {
     // A refresh may already have passed the barrier and be waiting on an older
     // ticket snapshot. Invalidate that active-project response before applying

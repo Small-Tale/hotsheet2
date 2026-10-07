@@ -2,3 +2,9 @@
   display: inline-grid;
   width: max-content;
 }
+.ticket-status-menu__popup {
+  position: fixed;
+  z-index: 60;
+  width: 1px;
+  height: 1px;
+}

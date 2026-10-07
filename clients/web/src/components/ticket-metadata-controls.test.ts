@@ -8,11 +8,16 @@ import { groupAttachments, TicketAttachments } from './ticket-attachments';
 import { TicketCategorySelect } from './ticket-category-select';
 import { TicketInfoPanel } from './ticket-info-panel';
 import { TicketPrioritySelect } from './ticket-priority-select';
-import { TicketStatusMenu } from './ticket-status-menu';
+import { statusMenuAnchorY, TicketStatusMenu } from './ticket-status-menu';
 import { TicketTimeline } from './ticket-timeline';
 
 describe('ticket metadata controls and inspector panels', () => {
-  it('offers all Started phases only when editing a git-backed Started ticket (HS2-YSZ711)', () => {
+  it('reserves phone space above the Started submenu', () => {
+    expect(statusMenuAnchorY(269, 390, 844)).toBeCloseTo(354.48);
+    expect(statusMenuAnchorY(400, 390, 844)).toBe(400);
+    expect(statusMenuAnchorY(269, 1280, 844)).toBe(269);
+  });
+  it('offers Started phases in the status submenu only for editable git tickets (HS2-HHKJSC)', () => {
     const ticket = {
       status: 'started' as const,
       priority: 'high' as const,
@@ -21,13 +26,14 @@ describe('ticket metadata controls and inspector panels', () => {
       details: '',
     };
     const editable = String(TicketInfoPanel({ ...ticket, startedPhase: 'planning', canEditStartedPhase: true }));
-    expect(editable).toContain('name="inspector-started-phase"');
-    expect(editable).toContain('value="planning"');
+    expect(editable).not.toContain('name="inspector-started-phase"');
+    expect(editable).toContain('aria-label="Change status, Planning"');
     for (const phase of ['', 'analyzing', 'planning', 'working', 'initial_testing', 'integrating', 'final_testing'])
-      expect(editable).toContain(`<wa-option value="${phase}"`);
-    expect(String(TicketInfoPanel({ ...ticket, canEditStartedPhase: false }))).not.toContain('inspector-started-phase');
-    expect(String(TicketInfoPanel({ ...ticket, status: 'completed', canEditStartedPhase: true }))).not.toContain(
-      'inspector-started-phase',
+      expect(editable).toContain(`data-started-phase="${phase}"`);
+    expect(editable).toContain('data-action="set-inspector-started-phase"');
+    expect(String(TicketInfoPanel({ ...ticket, canEditStartedPhase: false }))).not.toContain('data-started-phase=');
+    expect(String(TicketInfoPanel({ ...ticket, status: 'completed', canEditStartedPhase: true }))).toContain(
+      'data-started-phase=',
     );
   });
 
@@ -101,22 +107,16 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(status).toContain('aria-label="Change status, Completed"');
     // The app-owned wrapper carries the placement class; the Kerf Select root keeps only its own classes.
     expect(status).toContain('<span class="ticket-status-menu">');
-    expect(status).toContain('kui-select kui-select--custom-selected kui-select--label-hidden"');
-    expect(status).toContain('name="inspector-status"');
-    expect(status).toMatch(
-      /<span[^>]*slot="start" class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><span class="status-badge status-badge--completed/,
-    );
-    expect(status).toMatch(/<wa-option value="verified"><span[^>]*slot="start" class="kui-select__icon"/);
-    // Kerf 5.0.0-beta.56 renders Web Awesome's reflected divider defaults (separator role).
-    expect(status).toMatch(/<wa-divider[^>]*role="separator"[^>]*><\/wa-divider><wa-option value="backlog"/);
-    expect(status).toContain('<wa-option value="archive"');
+    expect(status).toContain('class="status-badge status-badge--completed');
+    expect(status).toContain('data-inspector-status-menu="true"');
+    expect(status).toContain('data-ticket-status="verified"');
+    expect(status).toContain('<wa-divider');
+    expect(status).toContain('data-ticket-status="archive"');
     expect(status).toContain('data-lucide="badge-check"');
     expect(status.match(/data-lucide=/g)).toHaveLength(7);
-    // Kerf props, not consumer part overrides, drop the trigger chrome and caret: the inline presentation
-    // fits the trigger to the badge (KF-V2Y51V, HS2-WQ8T6B); the badge is semibold through its own prop
-    // (HS2-4APEJP).
-    expect(status).toContain('data-presentation="inline"');
-    expect(status).toContain('data-caret="false"');
+    // The app-owned badge is the trigger; Kerf PopupMenu provides the nested actions.
+    expect(status).toContain('data-action="open-inspector-status-menu"');
+    expect(status).toContain('aria-haspopup="menu"');
     expect(status).toContain('status-badge--semibold');
     const css = readFileSync(new URL('./ticket-status-menu.css', import.meta.url), 'utf8');
     expect(css).not.toContain('status-badge');
@@ -189,8 +189,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(readOnly).toContain('data-font="default" data-border="none">Tags</h2>');
     expect(readOnly).not.toContain('data-action="open-ticket-tag-popover"');
     expect(readOnly).not.toContain('data-action="add-ticket-note"');
-    expect(readOnly).toContain('aria-label="Status, Started"');
-    expect(readOnly).toMatch(/name="inspector-status"[^>]*disabled/);
+    expect(readOnly).toContain('status-badge--started');
+    expect(readOnly).not.toContain('data-inspector-status-menu');
     const timeline = String(
       TicketTimeline({ entries: [{ id: 'one', time: 'Now', title: 'One event', subtitle: 'Optional detail' }] }),
     );

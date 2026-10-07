@@ -232,11 +232,12 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
     await page.keyboard.press(key);
     expect(await reader.evaluate((host) => host.contains(document.activeElement))).toBe(true);
   }
-  const status = reader.locator('wa-select[name="inspector-status"]');
+  const status = reader.locator('[data-action="open-inspector-status-menu"]');
+  const statusMenu = reader.locator('[data-inspector-status-menu]');
   await status.click();
-  await expect(status).toHaveJSProperty('open', true);
+  await expect(statusMenu).toHaveJSProperty('open', true);
   await page.keyboard.press('Escape');
-  await expect(status).toHaveJSProperty('open', false);
+  await expect(statusMenu).toHaveJSProperty('open', false);
   await page.waitForTimeout(200);
   await expect(reader).toBeVisible();
   await page.mouse.click(4, 4);
