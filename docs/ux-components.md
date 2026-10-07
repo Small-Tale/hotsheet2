@@ -2424,7 +2424,11 @@ and all five heading suppressions are gone. Kerf `expandedOverflow="visible"` al
 grouped-search root overflow override (HS2-PV2AG1, KF-M8SV15). The gallery filename now uses
 `ToolbarText tone="dark"` (HS2-V5VS0A, KF-7288MD), removing its cross-component color rule.
 The workspace header now expresses its 176px, 224px, 416px, and 480px thresholds through
-Kerf `hideBelow`/`showBelow` props and `wireToolbarVisibility` (HS2-BBG8ZC, KF-MXE9YV).
+Kerf `hideBelow`/`showBelow` props (HS2-BBG8ZC, KF-MXE9YV). Hot Sheet's five fixed
+pixel thresholds are wired by `wireWorkspaceToolbarVisibility`, which watches only the
+workspace toolbar's width and relevant markup. It preserves Kerf's visibility marker and
+avoids the document-wide CSS probe that remeasured every control during terminal output
+and ordinary typing (HS2-TC93GZ).
 The rail keeps its wrapping controls and omits its formerly hidden overflow menu. The
 `KF-MXE9YV` suppression is removed; `src/kerf-ui-profile.test.ts` pins the remaining app
 wrapper exceptions so they can change only deliberately.

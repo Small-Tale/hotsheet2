@@ -6,7 +6,6 @@ import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/r
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
-import { wireToolbarVisibility } from '@kerfjs/ui/wire-toolbar-visibility';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
 
@@ -371,6 +370,7 @@ import {
   saveProjectWorkspaceSession,
 } from '../workspace-session';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
+import { wireWorkspaceToolbarVisibility } from '../workspace-toolbar-visibility';
 import { installDevelopmentDiagnostics } from './development-bootstrap';
 import { createHotSheetInteractionBindings, type InteractionBindingsPort } from './interaction-bindings';
 import { wireHotSheetInteractions } from './wire-interactions';
@@ -5268,7 +5268,7 @@ export async function startHotSheetWebClient() {
       },
     },
   });
-  const disposeToolbarVisibility = wireToolbarVisibility(appRoot);
+  const disposeToolbarVisibility = wireWorkspaceToolbarVisibility(appRoot);
 
   const savedViewMenuRoot = document.createElement('div');
   document.body.append(savedViewMenuRoot);

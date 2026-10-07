@@ -24,6 +24,42 @@ const project = {
   apiPath: '/__hotsheet/project-api/demo-checkout',
 };
 
+test('keeps workspace toolbar visibility responsive without CSS probe work during terminal mutations (HS2-TC93GZ)', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = Reflect.get(CSSStyleDeclaration.prototype, 'setProperty');
+    (window as Window & { __toolbarProbeWrites?: number }).__toolbarProbeWrites = 0;
+    CSSStyleDeclaration.prototype.setProperty = function (name, value, priority) {
+      if (name.endsWith('toolbar-visibility-length'))
+        (window as Window & { __toolbarProbeWrites?: number }).__toolbarProbeWrites =
+          ((window as Window & { __toolbarProbeWrites?: number }).__toolbarProbeWrites ?? 0) + 1;
+      Reflect.apply(original, this, [name, value, priority]);
+    };
+  });
+  await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const sort = page.locator('[data-hide-below="416px"]').first();
+  await expect(sort).toBeVisible();
+  expect(await page.evaluate(() => (window as Window & { __toolbarProbeWrites?: number }).__toolbarProbeWrites)).toBe(
+    0,
+  );
+  await page.evaluate(() => {
+    const terminal = document.querySelector('[data-component="terminal-viewport"]') ?? document.body;
+    for (let index = 0; index < 100; index += 1) terminal.append(document.createElement('span'));
+  });
+  expect(await page.evaluate(() => (window as Window & { __toolbarProbeWrites?: number }).__toolbarProbeWrites)).toBe(
+    0,
+  );
+  await page.setViewportSize({ width: 390, height: 800 });
+  await expect(sort).toHaveAttribute('data-toolbar-width-hidden', 'true');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(sort).not.toHaveAttribute('data-toolbar-width-hidden', 'true');
+});
+
 /** Real application + event-shaped fixtures; only transport is replaced. */
 async function haltedSessionFixture(page: Page) {
   await mockProject(page);
