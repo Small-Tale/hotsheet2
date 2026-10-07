@@ -910,7 +910,10 @@ inputs (default source first) until the project file is written or setup migrati
 them forward; legacy store-only/serverless APIs retain their old paths rather than creating
 `<ticket-store>/.hotsheet`. Global settings and ticket-source discovery are unchanged.
 Settings rewrites replace each scope file atomically so concurrent CLI and server readers see
-complete JSON before or after a write.
+complete JSON before or after a write. `set`, `unset`, and migration hold a cross-process
+lock for the entire read-modify-write transaction of each scope, preventing concurrent
+writers from silently dropping different keys. Lock files live under
+`${HOTSHEET_HOME}/settings-locks`, outside the committed project settings directory.
 
 `trash_cleanup_days` is a positive whole number stored in Shared scope. Its documented and
 runtime default is 30. The server validates checkout-scoped writes, the generic CLI settings

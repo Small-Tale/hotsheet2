@@ -13,10 +13,13 @@
 //! Device/app-only settings (window geometry, theme) are the client's concern and never
 //! live here.
 
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 
+use crate::file_lock::FileLock;
 use crate::store::write_file_atomically;
 
 const SETTINGS_SCHEMA_KEY: &str = "$hotsheetSchema";
@@ -223,6 +226,36 @@ impl Settings {
         }
     }
 
+    /// Keep the transaction lock in the machine home: a project-owned shared settings
+    /// file may be committed, but its persistent lock file must never become project data.
+    fn lock_scope(&self, scope: Scope) -> Result<FileLock, SettingsError> {
+        let path = self.path(scope);
+        // Resolve aliases without creating the target directory for a no-op unset or
+        // migration. Those operations historically leave missing project scopes missing.
+        let mut ancestor = path.parent().expect("settings path has a parent");
+        let mut missing = Vec::new();
+        while !ancestor.exists() {
+            missing.push(ancestor.file_name().expect("path has an existing ancestor"));
+            ancestor = ancestor.parent().expect("path has an existing ancestor");
+        }
+        let mut canonical = ancestor.canonicalize()?;
+        for component in missing.into_iter().rev() {
+            canonical.push(component);
+        }
+        canonical.push(path.file_name().expect("settings path has a file name"));
+        let digest = Sha256::digest(canonical.to_string_lossy().as_bytes());
+        let home = self.global_home.clone().unwrap_or_else(hotsheet_home);
+        let lock_dir = home.join("settings-locks");
+        std::fs::create_dir_all(&lock_dir)?;
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(lock_dir.join(format!("{digest:x}.lock")))?;
+        Ok(FileLock::acquire(file)?)
+    }
+
     fn read_map(
         &self,
         path: &Path,
@@ -329,6 +362,7 @@ impl Settings {
                 }
             })?;
         }
+        let _lock = self.lock_scope(scope)?;
         let mut map = self.map(scope)?;
         map.insert(key.to_string(), value);
         self.write(scope, &map)
@@ -344,6 +378,7 @@ impl Settings {
 
     /// Remove a key from a scope; returns whether it was present.
     pub fn unset(&self, key: &str, scope: Scope) -> Result<bool, SettingsError> {
+        let _lock = self.lock_scope(scope)?;
         let mut map = self.map(scope)?;
         let existed = map.remove(key).is_some();
         if existed {
@@ -387,6 +422,7 @@ impl Settings {
         scope: Scope,
         map: &Map<String, Value>,
     ) -> Result<(), SettingsError> {
+        let _lock = self.lock_scope(scope)?;
         self.write(scope, map)
     }
 
@@ -394,6 +430,7 @@ impl Settings {
     /// user key. Missing scopes stay missing and already-current bytes are left untouched.
     pub fn migrate_existing(&self) -> Result<(), SettingsError> {
         for scope in [Scope::Global, Scope::Shared, Scope::Local] {
+            let _lock = self.lock_scope(scope)?;
             let current_exists = self.path(scope).is_file();
             let map = self.map(scope)?;
             if current_exists || (!map.is_empty() && scope != Scope::Global) {
@@ -473,9 +510,84 @@ impl Scope {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::sync::{Arc, Barrier};
 
     fn root() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()
+    }
+
+    #[test]
+    fn independent_writers_keep_every_interleaved_set_and_unset() {
+        let project = root();
+        let home = root();
+        let barrier = Arc::new(Barrier::new(25));
+        std::thread::scope(|threads| {
+            let project = &project;
+            let home = &home;
+            for index in 0..24 {
+                let barrier = barrier.clone();
+                threads.spawn(move || {
+                    let settings =
+                        Settings::for_project_with_global_home(project.path(), home.path());
+                    barrier.wait();
+                    settings
+                        .set(&format!("key-{index}"), json!(index), Scope::Shared)
+                        .unwrap();
+                });
+            }
+            barrier.wait();
+        });
+        let settings = Settings::for_project_with_global_home(project.path(), home.path());
+        let map = settings.map(Scope::Shared).unwrap();
+        for index in 0..24 {
+            assert_eq!(map.get(&format!("key-{index}")), Some(&json!(index)));
+        }
+
+        let barrier = Arc::new(Barrier::new(25));
+        std::thread::scope(|threads| {
+            let project = &project;
+            let home = &home;
+            for index in 0..24 {
+                let barrier = barrier.clone();
+                threads.spawn(move || {
+                    let settings =
+                        Settings::for_project_with_global_home(project.path(), home.path());
+                    barrier.wait();
+                    if index % 2 == 0 {
+                        assert!(
+                            settings
+                                .unset(&format!("key-{index}"), Scope::Shared)
+                                .unwrap()
+                        );
+                    } else {
+                        settings
+                            .set(&format!("new-{index}"), json!(index), Scope::Shared)
+                            .unwrap();
+                    }
+                });
+            }
+            barrier.wait();
+        });
+        let map = settings.map(Scope::Shared).unwrap();
+        for index in 0..24 {
+            let expected = (index % 2 != 0).then(|| json!(index));
+            assert_eq!(map.get(&format!("key-{index}")).cloned(), expected);
+            assert_eq!(map.get(&format!("new-{index}")).cloned(), expected);
+        }
+        let project_files = std::fs::read_dir(project.path().join(SETTINGS_DIR))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(project_files, [std::ffi::OsString::from("settings.json")]);
+    }
+
+    #[test]
+    fn no_op_unset_does_not_create_project_settings_directory() {
+        let project = root();
+        let home = root();
+        let settings = Settings::for_project_with_global_home(project.path(), home.path());
+        assert!(!settings.unset("absent", Scope::Shared).unwrap());
+        assert!(!project.path().join(SETTINGS_DIR).exists());
     }
 
     #[test]

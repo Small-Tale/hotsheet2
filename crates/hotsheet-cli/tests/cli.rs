@@ -4276,6 +4276,42 @@ fn settings_shared_and_local_scopes() {
 }
 
 #[test]
+fn simultaneous_cli_settings_writers_keep_each_key() {
+    let project = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    hs(project.path()).args(["init"]).assert().success();
+    let binary = assert_cmd::cargo::cargo_bin("hotsheet-cli");
+    let children = (0..16)
+        .map(|index| {
+            std::process::Command::new(&binary)
+                .env("HOTSHEET_HOME", home.path())
+                .arg("-C")
+                .arg(project.path())
+                .args([
+                    "settings",
+                    "set",
+                    &format!("parallel-{index}"),
+                    &index.to_string(),
+                ])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    for child in children {
+        assert!(child.wait_with_output().unwrap().status.success());
+    }
+    let map: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(project.path().join(".hotsheet2/settings.json")).unwrap(),
+    )
+    .unwrap();
+    for index in 0..16 {
+        assert_eq!(map[format!("parallel-{index}")], serde_json::json!(index));
+    }
+}
+
+#[test]
 fn settings_use_the_current_checkout_when_projects_share_a_store() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("shared.hs2");
