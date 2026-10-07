@@ -6,7 +6,7 @@
   height: 100%;
   overflow: hidden;
   flex-direction: column;
-  background: var(--wa-color-surface-lowered);
+  background: var(--wa-color-surface-default);
 }
 .terminal-dashboard-controls {
   display: flex;
