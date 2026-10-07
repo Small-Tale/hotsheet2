@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 
 import type { TerminalDashboardGroup } from './components/terminal-dashboard';
-import { TerminalSnapshotRefresh } from './terminal-snapshot-refresh';
+import { sameTerminalDashboardSnapshot, TerminalSnapshotRefresh } from './terminal-snapshot-refresh';
 
 const group = (projectId: string, id: string): TerminalDashboardGroup => ({
   projectId,
@@ -38,4 +38,26 @@ it('rejects stale same-project snapshots, accepts authoritative empty state and 
     updated,
   );
   expect(refresh.merge(updated, [{ projectId: 'a', version: latest, group: group('a', 'new') }], [])).toEqual([]);
+});
+
+it('publishes only changed terminal snapshots across empty, refill, and connection transitions', () => {
+  const empty = { ...group('a', 'session'), sessions: [] },
+    session = group('a', 'session');
+  expect(sameTerminalDashboardSnapshot([empty], [{ ...empty, sessions: [] }])).toBe(true);
+  expect(sameTerminalDashboardSnapshot([empty], [session])).toBe(false);
+  expect(sameTerminalDashboardSnapshot([session], [structuredClone(session)])).toBe(true);
+  expect(
+    sameTerminalDashboardSnapshot(
+      [session],
+      [{ ...session, sessions: [{ ...session.sessions[0], scrollback: 'new' }] }],
+    ),
+  ).toBe(false);
+  expect(
+    sameTerminalDashboardSnapshot(
+      [session],
+      [{ ...session, sessions: [{ ...session.sessions[0], aiConnection: 'connected' }] }],
+    ),
+  ).toBe(false);
+  expect(sameTerminalDashboardSnapshot([session], [empty])).toBe(false);
+  expect(sameTerminalDashboardSnapshot([session], [])).toBe(false);
 });

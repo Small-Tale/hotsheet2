@@ -1999,6 +1999,9 @@ empty-action generic requests such as `ToolSearch` follow the same lifecycle. Th
 authoritative resolution immediately removes the popup even while this client's Allow or
 Deny HTTP response is still in flight; a delayed response is idempotent and cannot
 resurrect or duplicate the resolved request.
+A `permission_asked` event also refreshes terminal connection state; the client derives
+the refreshed snapshot before publishing it and skips an unchanged snapshot, so a prompt
+does not cause extra whole-app render passes (HS2-2RN05B).
 For an externally launched interactive Claude session, that event is emitted only from
 Claude Code's `PermissionRequest` hook after its native modes and allow/deny/ask rules
 determine that a dialog is actually required. Ordinary reads and other inherently or

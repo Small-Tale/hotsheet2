@@ -301,7 +301,7 @@ import {
   withoutTerminalName,
 } from '../terminal-names';
 import { terminalDrawerActivation, terminalProjectOwner } from '../terminal-project-scope';
-import { TerminalSnapshotRefresh } from '../terminal-snapshot-refresh';
+import { sameTerminalDashboardSnapshot, TerminalSnapshotRefresh } from '../terminal-snapshot-refresh';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT, type TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
@@ -1460,11 +1460,11 @@ export async function startHotSheetWebClient() {
   const terminalFirstSeen = new Map<string, number>();
   let aiConnectionTimer: ReturnType<typeof setTimeout> | undefined;
   /** Mark each terminal connected to Hot Sheet or not; re-derives locally (no request) when a grace ends. */
-  function applyAiConnectionStates() {
+  function applyAiConnectionStates(snapshot = terminalGroups.peek()) {
     clearTimeout(aiConnectionTimer);
     aiConnectionTimer = undefined;
-    const { groups, nextCheckInMs } = deriveAiConnectionStates(terminalGroups.value, terminalFirstSeen, Date.now());
-    terminalGroups.value = groups;
+    const { groups, nextCheckInMs } = deriveAiConnectionStates(snapshot, terminalFirstSeen, Date.now());
+    if (!sameTerminalDashboardSnapshot(terminalGroups.peek(), groups)) terminalGroups.value = groups;
     if (nextCheckInMs !== undefined) aiConnectionTimer = setTimeout(applyAiConnectionStates, nextCheckInMs);
   }
   async function refreshTerminalDashboard(quiet = false, targetProject?: Project) {
@@ -1512,12 +1512,12 @@ export async function startHotSheetWebClient() {
     );
     if (!quiet && generation !== terminalDashboardGeneration) return;
     // A failed fetch is not a resumed session. Keep the last snapshot for still-open projects.
-    terminalGroups.value = terminalSnapshotRefresh.merge(
+    const merged = terminalSnapshotRefresh.merge(
       terminalGroups.peek(),
       results.map((group, index) => ({ projectId: fetchProjects[index].id, version: versions[index], group })),
       projects.value.map((project) => project.id),
     );
-    applyAiConnectionStates();
+    applyAiConnectionStates(merged);
     if (!quiet) {
       terminalDashboardMessage.value =
         openProjects.length > 0 && terminalGroups.value.length === 0 ? 'Terminal snapshots could not be loaded.' : '';
