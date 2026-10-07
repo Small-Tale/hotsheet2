@@ -2415,6 +2415,12 @@ HS2-6999AW advances the same web-client and compatibility-spike pins to 5.0.0-be
 The release includes toolbar visibility and measurement fixes plus stricter UI Doctor
 composition checks; Hot Sheet validates its existing toolbar, Catalog, and workspace
 flows against the updated packages.
+HS2-BMSHSC advances the same five exact pins to 5.0.0-beta.85. This release exposes the
+documented Pane `--kui-pane-scrollbar-gutter` token in Kerf's public component catalog,
+generated guidance, and composition metadata, so doctor and ESLint accept it. Hot Sheet
+does not currently set this token; its existing Pane, toolbar, and Catalog flows remain
+covered by the upgrade gates.
+
 Beta.80's component-style doctor checks recognize explicit classes matching five application
 component roots: AppLoadingIndicator, SettingsWorkspace, TicketRowContextMenu,
 TicketSourceSetupDialog, and TicketSourcesSettings (HS2-8ZM85Z). Their existing selectors
