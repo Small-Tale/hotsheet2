@@ -11,6 +11,7 @@ import type { ConversationMessage } from '../src/ai-conversation';
 import type { FullTicket, MediaAnnotation, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
+import { seedLocalGitTickets } from './real-ticket-fixture';
 import { realTicketServer } from './real-ticket-server';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
@@ -17546,6 +17547,124 @@ test('paginates the merged Completed column through completed then verified when
   expect(statusRequests.indexOf('completed:100')).toBeLessThan(statusRequests.indexOf('verified'));
   await expect(completedMore()).toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/claude/hs2-f2n4zn-merged-completed-paginated.png', fullPage: true });
+});
+
+test('measures real local Git board performance for a 100-ticket verification and refill (HS2-NY9MC5)', async ({
+  page,
+}, testInfo) => {
+  test.skip(process.env.HOTSHEET_REAL_WORLD_PERFORMANCE !== '1', 'Run npm run test:real-world-performance.');
+  test.setTimeout(300_000);
+  const server = await realTicketServer({
+    autoCommit: true,
+    seed: (fixture) => seedLocalGitTickets(fixture, [{ status: 'completed', count: 200 }]).then(() => undefined),
+  });
+  try {
+    await mockProject(page);
+    await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
+      const incoming = new URL(route.request().url()),
+        path = incoming.pathname.replace(
+          '/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout',
+          `/checkouts/${server.checkoutId}`,
+        );
+      const response = await route.fetch({
+        url: `${server.url}${path}${incoming.search}`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
+      const response = await route.fetch({
+        url: `${server.url}/providers`,
+        headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+      });
+      await route.fulfill({ response });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByLabel('Columns view').click();
+    const completed = page.locator('[data-column-id="completed"]'),
+      verified = page.locator('[data-column-id="verified"]'),
+      rows = (column: Locator) => column.locator('[data-ticket-slug]');
+    await expect(rows(completed)).toHaveCount(100, { timeout: 60_000 });
+    await expect(rows(verified)).toHaveCount(0);
+    await completed.getByRole('button', { name: 'Select all Completed tickets' }).click();
+    await expect(completed.locator('[data-selected="true"]')).toHaveCount(100);
+    await rows(completed).first().click({ button: 'right' });
+    const menu = page.getByRole('menu', { name: 'Ticket actions' });
+    await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
+    await page.evaluate(() => {
+      const scope = window as typeof window & {
+        boardPerf?: { start: number; verifiedMs?: number; refillMs?: number; sawCompletedDrop?: boolean };
+      };
+      scope.boardPerf = { start: performance.now() };
+      const watch = () => {
+        const current = scope.boardPerf!;
+        const completedRows = document.querySelectorAll('[data-column-id="completed"] [data-ticket-slug]').length;
+        if (completedRows < 100) current.sawCompletedDrop = true;
+        if (
+          current.verifiedMs === undefined &&
+          document.querySelectorAll('[data-column-id="verified"] [data-ticket-slug]').length === 100
+        )
+          current.verifiedMs = performance.now() - current.start;
+        if (current.refillMs === undefined && completedRows === 100 && current.sawCompletedDrop)
+          current.refillMs = performance.now() - current.start;
+        if (current.verifiedMs === undefined || current.refillMs === undefined) requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
+    });
+    await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
+    await expect(rows(verified)).toHaveCount(100, { timeout: 180_000 });
+    await expect(rows(completed)).toHaveCount(100, { timeout: 180_000 });
+    const measurement = await page.evaluate(
+      () => (window as typeof window & { boardPerf?: { verifiedMs?: number; refillMs?: number } }).boardPerf,
+    );
+    expect(measurement?.verifiedMs).toBeGreaterThan(0);
+    expect(measurement?.refillMs).toBeGreaterThan(0);
+    const [persistedVerified, persistedCompleted] = await Promise.all([
+      server.request<{ items: TicketRow[] }>(
+        `/checkouts/${server.checkoutId}/tickets?status=verified&page_size=200&counts=false`,
+      ),
+      server.request<{ items: TicketRow[] }>(
+        `/checkouts/${server.checkoutId}/tickets?status=completed&page_size=200&counts=false`,
+      ),
+    ]);
+    expect(persistedVerified.items).toHaveLength(100);
+    expect(persistedCompleted.items).toHaveLength(100);
+    const gitStatus = spawnSync('git', ['-C', server.store, 'status', '--porcelain', '--', 'tickets'], {
+      env: withoutGitRepositoryEnv(process.env),
+      encoding: 'utf8',
+    });
+    expect(gitStatus.status).toBe(0);
+    expect(gitStatus.stdout.trim()).toBe('');
+    const committedVerified = spawnSync(
+      'git',
+      ['-C', server.store, 'grep', '-l', 'status: verified', 'HEAD', '--', 'tickets'],
+      {
+        env: withoutGitRepositoryEnv(process.env),
+        encoding: 'utf8',
+      },
+    );
+    expect(committedVerified.status).toBe(0);
+    expect(committedVerified.stdout.trim().split('\n')).toHaveLength(100);
+    const report = {
+      generatedAt: new Date().toISOString(),
+      host: { platform: process.platform, arch: process.arch, node: process.version, serverBuild: 'debug' },
+      fixture: { source: 'disposable committed local Git store', completed: 200, selected: 100, remote: false },
+      browser: testInfo.project.name || 'chromium',
+      verifiedVisibleMs: Math.round(measurement!.verifiedMs!),
+      completedRefillVisibleMs: Math.round(measurement!.refillMs!),
+      refillAfterVerifiedMs: Math.round(measurement!.refillMs! - measurement!.verifiedMs!),
+    };
+    console.log(`Real local Git board performance: ${JSON.stringify(report)}`);
+    await testInfo.attach('real-git-board-performance.json', {
+      body: JSON.stringify(report, null, 2),
+      contentType: 'application/json',
+    });
+  } finally {
+    await server.stop();
+  }
 });
 
 test('stores the shell-history inheritance opt-out locally and applies it only to new terminals', async ({ page }) => {

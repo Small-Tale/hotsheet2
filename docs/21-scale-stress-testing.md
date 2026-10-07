@@ -84,3 +84,21 @@ handshake, and blocks the bare remote's receive hook through a FIFO handshake. O
 local-mutation return remains time-bounded; push startup and final remote observation are
 event-driven so a loaded host cannot consume an arbitrary startup allowance before the
 nonblocking assertion begins.
+
+## Local Git board flow
+
+Run `npm run test:real-world-performance` from `clients/web` for a repeatable
+client UI measurement against a real disposable Git ticket store and server. The
+fixture helper seeds and commits 200 Completed tickets, confirms that the store
+is clean and has no remote, and deletes the workspace after the run. Other UI
+performance scenarios can reuse the same helper with different status/count groups.
+
+The browser switches to Columns, selects the first 100 visible Completed tickets
+through the column header, and changes their status to Verified from the context
+menu. Its `real-git-board-performance.json` Playwright attachment records elapsed
+milliseconds from the action to 100 rows appearing in Verified and to the next
+100 rows appearing in Completed. The test asserts both final row counts. Timings
+are exploratory because local CPU and disk load vary; compare runs on the same
+machine and build profile rather than treating one number as a fixed CI budget.
+The suite is opt-in so ordinary browser CI does not pay for the 200-ticket fixture
+and 100-ticket Git mutation.

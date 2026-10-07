@@ -11,8 +11,16 @@ import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 
 const execute = promisify(execFile);
 
+export interface RealTicketFixtureContext {
+  store: string;
+  root: string;
+  env: NodeJS.ProcessEnv;
+}
+
 /** Real ticket storage, index, and HTTP mutations, isolated from the developer's registry. */
-export async function realTicketServer() {
+export async function realTicketServer(
+  options: { seed?: (fixture: RealTicketFixtureContext) => Promise<void>; autoCommit?: boolean } = {},
+) {
   const repo = fileURLToPath(new URL('../../../', import.meta.url)),
     suffix = process.platform === 'win32' ? '.exe' : '',
     cli = process.env.HOTSHEET_TEST_CLI_BIN ?? resolve(repo, `target/debug/hotsheet-cli${suffix}`),
@@ -30,7 +38,7 @@ export async function realTicketServer() {
     env = {
       ...withoutGitRepositoryEnv(process.env),
       HOTSHEET_HOME: resolve(directory, 'home'),
-      HOTSHEET_NO_AUTOCOMMIT: '1',
+      HOTSHEET_NO_AUTOCOMMIT: options.autoCommit ? undefined : '1',
       GIT_AUTHOR_NAME: 'Hot Sheet browser test',
       GIT_AUTHOR_EMAIL: 'browser@example.invalid',
       GIT_COMMITTER_NAME: 'Hot Sheet browser test',
@@ -39,6 +47,7 @@ export async function realTicketServer() {
   await mkdir(root);
   try {
     await execute(cli, ['init', '--standalone', '--at', store, '--prefix', 'HS2'], { cwd: root, env });
+    await options.seed?.({ store, root, env });
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
     throw error;
