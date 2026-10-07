@@ -409,8 +409,12 @@ reports expiry, denial, cancellation, revoked credentials, and SAML reauthorizat
 requirements. GitHub Enterprise derives its web origin from the configured `/api/v3` API
 base. The web dialog has no manual credential-reference field for GitHub: sign-in supplies
 the credential, and editing keeps the existing one (HS2-48GA17). A pre-registered key
-(`hotsheet key set`) can still be named in `providers.json` as a headless/advanced path. New
-connections need no user-chosen id: a create request with an empty `id` gets a readable
+(`hotsheet key set`) can still be named in `providers.json` as a headless/advanced path.
+The machine server shares each managed GitHub sign-in bundle in process memory across
+provider and account requests, so concurrent reads need one OS credential-store approval.
+The cache is cleared when `keys.json` changes and updated when the server replaces or
+deletes a credential; CLI reads continue to use the OS store directly (HS2-EG3ANE).
+New connections need no user-chosen id: a create request with an empty `id` gets a readable
 unique one (`github-small-tale-hotsheet2`, then `-2`, …), and a blank display name defaults to
 the provider name ("GitHub Issues"). After sign-in the repository field is a searchable list of
 every repository the app can reach, gathered across all of the user's app installations with

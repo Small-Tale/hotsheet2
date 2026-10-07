@@ -9,6 +9,7 @@ mod ai_tool_discovery;
 pub mod client_drive;
 pub mod code_review;
 pub mod commands;
+mod credential_cache;
 mod custom_views;
 pub mod dist_work_loop;
 pub mod github_app_config;
@@ -32,6 +33,7 @@ use std::path::Path as FsPath;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use credential_cache::{CachedSecretStore, ManagedSecretCache};
 use multistore::{StoreEntry, StoreHost, StoreInfo};
 
 use axum::body::Bytes;
@@ -99,6 +101,8 @@ pub struct AppState {
     injected_providers: ProviderRegistry,
     /// Reuse live provider adapters so short-lived read caches span checkout requests.
     live_providers: LiveProviderCache,
+    /// One Keychain read per managed sign-in per metadata revision, shared by requests.
+    managed_secrets: ManagedSecretCache,
     /// Keeps the fs-watchers of `POST /stores`-registered stores alive, by store id (the
     /// default store's watcher is held by the server binary). Removing one stops it.
     watchers: Arc<Mutex<std::collections::HashMap<String, WatchHandle>>>,
@@ -340,6 +344,7 @@ impl AppState {
             host,
             injected_providers: ProviderRegistry::default(),
             live_providers: Arc::default(),
+            managed_secrets: ManagedSecretCache::default(),
             watchers: Arc::default(),
             presence: presence::Presence::default(),
             project_hosted: Arc::default(),
@@ -546,6 +551,7 @@ impl AppState {
             hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
         self.plugin_dirs = Arc::new(vec![home.join("plugins")]);
         self.machine_home = Arc::new(home);
+        self.managed_secrets = ManagedSecretCache::default();
         self
     }
 
@@ -572,8 +578,12 @@ impl AppState {
         lifecycle::InstanceRegistry::at(self.machine_home.join("instances"))
     }
 
-    fn key_registry(&self) -> KeyRegistry<OsKeychain> {
-        KeyRegistry::new(self.machine_home.as_ref().clone(), OsKeychain)
+    fn key_registry(&self) -> KeyRegistry<CachedSecretStore<OsKeychain>> {
+        KeyRegistry::new(
+            self.machine_home.as_ref().clone(),
+            self.managed_secrets
+                .store(self.machine_home.as_ref().clone(), OsKeychain),
+        )
     }
 
     /// Override checkout-registry storage (primarily for hermetic tests).
