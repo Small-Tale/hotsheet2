@@ -35,7 +35,19 @@ args = ["--print"]
 content = "arg"
 interrupt = true
 resume_flag = "--conversation"
-model_catalog_args = ["models"]
+# `agy` can also be an IDE launcher. Do not execute it during background discovery
+# until the installed binary can be identified as the agent CLI (HS2-V8VPW1).
+models = [
+  { id = "gemini-3.8-flash-medium", label = "Gemini 3.8 Flash (Medium)", effort_levels = ["low", "medium", "high"] },
+  { id = "gemini-3.8-flash-high", label = "Gemini 3.8 Flash (High)", effort_levels = ["low", "medium", "high"] },
+  { id = "gemini-3.7-flash-medium", label = "Gemini 3.7 Flash (Medium)", effort_levels = ["low", "medium", "high"] },
+  { id = "gemini-3.7-flash-high", label = "Gemini 3.7 Flash (High)", effort_levels = ["low", "medium", "high"] },
+  { id = "gemini-3.6-flash-medium", label = "Gemini 3.6 Flash (Medium)", effort_levels = ["low", "medium", "high"] },
+  { id = "gemini-3.6-flash-high", label = "Gemini 3.6 Flash (High)", effort_levels = ["low", "medium", "high"] },
+  { id = "gemini-3.1-pro-high", label = "Gemini 3.1 Pro (High)", effort_levels = ["low", "medium", "high"] },
+]
+default_model = "gemini-3.8-flash-medium"
+default_effort = "medium"
 model_flag = "--model"
 effort_flag = "--effort"
 runtime_effort_levels = ["low", "medium", "high"]
