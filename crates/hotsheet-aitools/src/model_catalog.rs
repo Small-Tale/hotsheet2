@@ -6,6 +6,7 @@
 //! complete fallback when discovery is unsupported or unavailable.
 
 use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use hotsheet_plugins::{AiToolDescriptor, ModelSpec, Plugin};
@@ -43,6 +44,7 @@ pub struct CommandModelCatalog {
     args: Vec<String>,
     effort_levels: Vec<String>,
     default_effort: Option<String>,
+    identity_policy: Option<String>,
 }
 
 impl CommandModelCatalog {
@@ -57,11 +59,29 @@ impl CommandModelCatalog {
             args,
             effort_levels,
             default_effort,
+            identity_policy: None,
+        }
+    }
+
+    /// Configure a declarative, read-only identity check before any executable probe.
+    pub fn with_identity_policy(mut self, policy: Option<String>) -> Self {
+        self.identity_policy = policy;
+        self
+    }
+
+    fn safe_program(&self) -> Result<PathBuf, String> {
+        match self.identity_policy.as_deref() {
+            None => Ok(PathBuf::from(&self.program)),
+            Some("native-default-install") => native_default_install(&self.program),
+            Some(policy) => Err(format!(
+                "unsupported catalog executable identity policy '{policy}'"
+            )),
         }
     }
 
     fn output(&self, args: &[String], cwd: Option<&Path>) -> Result<String, String> {
-        let mut command = hotsheet_ticketing::git::launch(&self.program);
+        let program = self.safe_program()?;
+        let mut command = hotsheet_ticketing::git::launch(&program);
         command.args(args);
         if let Some(cwd) = cwd {
             command.current_dir(cwd);
@@ -82,6 +102,11 @@ impl CommandModelCatalog {
 
 impl RuntimeModelCatalogSource for CommandModelCatalog {
     fn version(&self) -> Result<String, String> {
+        // A rejected launcher gets its own cache key. A previously accepted CLI must not
+        // keep showing its live catalog after PATH changes to an IDE launcher.
+        if self.identity_policy.is_some() && self.safe_program().is_err() {
+            return Ok("unidentified-catalog-executable".into());
+        }
         let args = vec!["--version".to_string()];
         let value = self.output(&args, None)?.trim().to_string();
         (!value.is_empty())
@@ -91,12 +116,95 @@ impl RuntimeModelCatalogSource for CommandModelCatalog {
 
     fn discover(&self, cwd: &Path) -> Result<RuntimeModelCatalog, String> {
         let output = self.output(&self.args, Some(cwd))?;
-        Ok(parse_command_catalog(
-            &output,
-            &self.effort_levels,
-            self.default_effort.as_deref(),
-        ))
+        Ok(
+            if self.identity_policy.as_deref() == Some("native-default-install") {
+                parse_aligned_catalog(&output, &self.effort_levels, self.default_effort.as_deref())
+            } else {
+                parse_command_catalog(&output, &self.effort_levels, self.default_effort.as_deref())
+            },
+        )
     }
+}
+
+/// The documented installer places a native executable at this path. Inspect the first
+/// PATH match without running it: an IDE script or application symlink is never probed.
+fn native_default_install(program: &str) -> Result<PathBuf, String> {
+    #[cfg(not(windows))]
+    let home = std::env::var_os("HOME").ok_or("HOME is unavailable")?;
+    #[cfg(windows)]
+    let expected = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .ok_or("LOCALAPPDATA is unavailable")?
+        .join("agy/bin/agy.exe");
+    #[cfg(not(windows))]
+    let expected = PathBuf::from(home).join(".local/bin/agy");
+    #[cfg(windows)]
+    let executable_name = if program.to_ascii_lowercase().ends_with(".exe") {
+        program.to_string()
+    } else {
+        format!("{program}.exe")
+    };
+    #[cfg(not(windows))]
+    let executable_name = program.to_string();
+    let first = if Path::new(program).components().count() > 1 {
+        PathBuf::from(program)
+    } else {
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+            .map(|directory| directory.join(&executable_name))
+            .find(|path| path.is_file())
+            .ok_or_else(|| format!("{program} is not on PATH"))?
+    };
+    let metadata = std::fs::symlink_metadata(&first).map_err(|error| error.to_string())?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err("catalog executable is not a regular file".into());
+    }
+    #[cfg(unix)]
+    if std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o111 == 0 {
+        return Err("catalog executable is not executable".into());
+    }
+    if first.canonicalize().ok() != expected.canonicalize().ok() || !expected.is_file() {
+        return Err("catalog executable is outside the documented CLI install path".into());
+    }
+    let mut magic = [0u8; 4];
+    std::fs::File::open(&first)
+        .and_then(|mut file| file.read_exact(&mut magic))
+        .map_err(|error| error.to_string())?;
+    let native = magic == *b"\x7fELF"
+        || magic[..2] == *b"MZ"
+        || matches!(
+            magic,
+            [0xcf, 0xfa, 0xed, 0xfe]
+                | [0xfe, 0xed, 0xfa, 0xcf]
+                | [0xca, 0xfe, 0xba, 0xbe]
+                | [0xbe, 0xba, 0xfe, 0xca]
+        );
+    if !native {
+        return Err("catalog executable is not a native CLI binary".into());
+    }
+    Ok(first)
+}
+
+/// Antigravity CLI prints an id followed by at least two spaces (or a tab) and a label.
+/// Reject other text so an unsupported output never becomes a bogus model id.
+fn parse_aligned_catalog(
+    output: &str,
+    effort_levels: &[String],
+    default_effort: Option<&str>,
+) -> RuntimeModelCatalog {
+    let rows = output
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            let offset = line.find('\t').or_else(|| line.find("  "))?;
+            let (id, label) = line.split_at(offset);
+            let id = id.trim();
+            let label = label.trim();
+            (!id.is_empty() && !id.contains(char::is_whitespace) && !label.is_empty())
+                .then(|| format!("{id}\t{label}"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    parse_command_catalog(&rows, effort_levels, default_effort)
 }
 
 fn parse_command_catalog(
@@ -376,6 +484,19 @@ mod tests {
         );
         assert_eq!(catalog.models[0].effort_levels, ["low", "high"]);
         assert_eq!(catalog.models[0].default_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn aligned_catalog_accepts_documented_cli_columns_and_ignores_other_text() {
+        let catalog = parse_aligned_catalog(
+            "gemini-3.8-flash-high     Gemini 3.8 Flash (High)\nunsupported catalog\ngemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)\n",
+            &["low".into(), "high".into()],
+            Some("high"),
+        );
+        assert_eq!(catalog.models.len(), 2);
+        assert_eq!(catalog.models[0].id, "gemini-3.8-flash-high");
+        assert_eq!(catalog.models[0].label, "Gemini 3.8 Flash (High)");
+        assert_eq!(catalog.models[1].id, "gemini-3.8-flash-medium");
     }
 
     fn catalog(model: &str, default: bool) -> RuntimeModelCatalog {

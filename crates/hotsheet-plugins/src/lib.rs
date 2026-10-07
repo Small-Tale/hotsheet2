@@ -219,6 +219,9 @@ pub struct DriveSpec {
     /// the stable id from its display label; an id-only line uses the id as its label.
     #[serde(default)]
     pub model_catalog_args: Vec<String>,
+    /// Optional read-only executable identity policy before runtime model probes.
+    #[serde(default)]
+    pub model_catalog_identity: Option<String>,
     /// Spawn transport flags used to apply the selected model/effort to the next turn.
     #[serde(default)]
     pub model_flag: Option<String>,

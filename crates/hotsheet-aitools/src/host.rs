@@ -46,17 +46,21 @@ pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
                     spec.runtime_effort_levels.clone(),
                     spec.runtime_default_effort.clone(),
                 )
+                .with_identity_policy(spec.model_catalog_identity.clone())
             }),
         }))),
         "acp" => Some(if spec.model_catalog_args.is_empty() {
             Box::new(AcpDrive::default())
         } else {
-            Box::new(AcpDrive::with_model_catalog(CommandModelCatalog::new(
-                spec.program.clone(),
-                spec.model_catalog_args.clone(),
-                spec.runtime_effort_levels.clone(),
-                spec.runtime_default_effort.clone(),
-            )))
+            Box::new(AcpDrive::with_model_catalog(
+                CommandModelCatalog::new(
+                    spec.program.clone(),
+                    spec.model_catalog_args.clone(),
+                    spec.runtime_effort_levels.clone(),
+                    spec.runtime_default_effort.clone(),
+                )
+                .with_identity_policy(spec.model_catalog_identity.clone()),
+            ))
         }),
         _ => None,
     }

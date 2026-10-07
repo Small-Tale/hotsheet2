@@ -35,8 +35,10 @@ args = ["--print"]
 content = "arg"
 interrupt = true
 resume_flag = "--conversation"
-# `agy` can also be an IDE launcher. Do not execute it during background discovery
-# until the installed binary can be identified as the agent CLI (HS2-V8VPW1).
+# The IDE also installs an `agy` launcher. Only probe the documented native CLI
+# install at the default path; other launchers keep this bundled catalog.
+model_catalog_args = ["models"]
+model_catalog_identity = "native-default-install"
 models = [
   { id = "gemini-3.8-flash-medium", label = "Gemini 3.8 Flash (Medium)", effort_levels = ["low", "medium", "high"] },
   { id = "gemini-3.8-flash-high", label = "Gemini 3.8 Flash (High)", effort_levels = ["low", "medium", "high"] },

@@ -76,12 +76,15 @@ impl SpawnDrive {
             resume_flag: Some("--conversation".into()),
             model_flag: Some("--model".into()),
             effort_flag: Some("--effort".into()),
-            model_catalog: Some(CommandModelCatalog::new(
-                "agy".into(),
-                vec!["models".into()],
-                vec!["low".into(), "medium".into(), "high".into()],
-                Some("medium".into()),
-            )),
+            model_catalog: Some(
+                CommandModelCatalog::new(
+                    "agy".into(),
+                    vec!["models".into()],
+                    vec!["low".into(), "medium".into(), "high".into()],
+                    Some("medium".into()),
+                )
+                .with_identity_policy(Some("native-default-install".into())),
+            ),
         })
     }
 

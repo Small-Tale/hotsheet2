@@ -1066,10 +1066,14 @@ saves one provider's entry without changing the default.
 The bundled Codex manifest therefore remains a useful offline fallback, while a reachable
 Codex app-server supplies its current paginated `model/list` catalog at runtime.
 OpenCode declares its installed-runtime catalog command (`opencode models`). Antigravity
-uses a bundled model list from its CLI documentation because `agy` may resolve to the IDE
-launcher on a user's machine. Background startup and AI-settings refresh never execute
-`agy` for model discovery. A future identity check may enable its live catalog
-(HS2-V8VPW1); the exact model-id input remains available for other installed models.
+uses the [documented `agy models` output](https://www.antigravity.google/docs/cli/headless/)
+only when the first `agy` on `PATH` is a regular native executable at the
+[default agent CLI install location](https://www.antigravity.google/docs/cli/install/):
+`~/.local/bin/agy` on macOS/Linux or the user-local `agy/bin/agy.exe` on Windows.
+The read-only path and file-format check precedes even `agy --version`, so an IDE
+launcher, script, or symlink leaves the bundled catalog in use (HS2-V8VPW1). A
+custom install directory keeps that fallback until it has a reliable identity
+signal (HS2-6FVRZS). The exact model-id input remains available for other models.
 OpenCode applies a selected model through ACP `session/set_config_option`; Antigravity passes
 the selected model and effort through its declared `--model`/`--effort` spawn flags.
 Bundled provider manifests also describe offline fallback catalogs. The Claude manifest

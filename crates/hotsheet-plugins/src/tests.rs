@@ -398,7 +398,11 @@ fn antigravity_is_a_spawn_resume_plugin() {
     assert_eq!(drive.transport, "spawn");
     assert_eq!(drive.program, "agy");
     assert_eq!(drive.resume_flag.as_deref(), Some("--conversation"));
-    assert!(drive.model_catalog_args.is_empty());
+    assert_eq!(drive.model_catalog_args, ["models"]);
+    assert_eq!(
+        drive.model_catalog_identity.as_deref(),
+        Some("native-default-install")
+    );
     assert_eq!(
         drive.default_model.as_deref(),
         Some("gemini-3.8-flash-medium")
