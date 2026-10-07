@@ -6980,6 +6980,21 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
   await page.goto('/ux-demo?component=app-shell');
   const workArea = page.locator('.app-shell__work-area');
   await expect(workArea).toBeVisible();
+  // The wrapper is transparent; Kerf's sunken Pane paints the work surface.
+  await expect(workArea).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  const workPane = page.locator('.app-shell__main').locator('xpath=ancestor::*[@data-component="pane"][1]');
+  await expect(workPane).toHaveAttribute('data-appearance', 'sunken');
+  await expect(workPane.locator('.kui-pane__content').first()).toHaveCSS(
+    'background-color',
+    await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.backgroundColor = 'var(--wa-color-surface-lowered)';
+      document.body.append(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    }),
+  );
   const sidebarRegion = page.locator('#app-left-rail');
   expect(
     await sidebarRegion.evaluate((node) => {
