@@ -37,6 +37,11 @@ developer-specific clone path. Local and remote project variants retain 16 px
 dialog spacing and 8 px field/action clusters. Remote choices use shared multiline ListItem
 rows with their native padding and interaction treatment, 4 px connected text/list spacing,
 and character-wrapped full checkout paths within a width-constrained scrollable list (HS2-XX5Y2X).
+On another device, **Open a project** lists only registered checkout roots that are still
+directories on the server (HS2-HFP3HM). A deleted or inaccessible folder disappears from
+the picker on its next open; its registration remains available for recovery and other
+server operations. If a folder disappears after the list loads, opening it reports the
+usual project-open error.
 
 Ticket copy/cut/paste shortcuts run only while the ticket work area owns focus and a
 ticket list or board is present. The work area shows one continuous focus outline around

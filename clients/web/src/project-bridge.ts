@@ -1255,8 +1255,8 @@ async function openPreparedLocalProject(
   };
 }
 
-/** List the checkouts the bootstrap server currently knows about, for the remote/cross-device project
- * picker: a non-loopback client can't browse the server filesystem, so it picks from these (HS2-VFNCXG).
+/** List openable checkouts for the remote/cross-device project picker: a non-loopback client
+ * can't browse the server filesystem, so it picks from these (HS2-VFNCXG, HS2-HFP3HM).
  * This queries the same singleton bootstrap server `openLocalProject` opens projects through — it was
  * never wired to the client's `GET /__hotsheet/checkouts`, so the remote picker only ever errored
  * (HS2-QMR41J). Dependencies are injectable for testing. */
@@ -1267,7 +1267,20 @@ export async function listServerCheckouts(
 ): Promise<Checkout[]> {
   const store = await resolveStore();
   const instance = await ensure(store);
-  return request<Checkout[]>({ url: instance.url, secret: instance.secret, serverStore: store }, '/checkouts');
+  const checkouts = await request<Checkout[]>(
+    { url: instance.url, secret: instance.secret, serverStore: store },
+    '/checkouts',
+  );
+  const available = await Promise.all(
+    checkouts.map(async (checkout) => {
+      try {
+        return (await stat(checkout.root)).isDirectory();
+      } catch {
+        return false;
+      }
+    }),
+  );
+  return checkouts.filter((_, index) => available[index]);
 }
 
 export async function proxyProjectRequest(projectId: string, path: string, request: Request): Promise<Response> {

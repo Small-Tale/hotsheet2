@@ -94,6 +94,13 @@ describe.skipIf(!live)('remote project picker against a real server (HS2-MTS80S)
     expect(payload.some((checkout) => checkout.id === session.id)).toBe(true);
     // The route must forward the server's real wire shape, not a reshaped convenience body.
     expect(payload).toEqual(listed);
+
+    // Deleting a registered folder must remove it from the phone picker on the next open,
+    // while the server may retain its registration for history and recovery.
+    await rm(projectRoot, { recursive: true, force: true });
+    const afterDeletion = await createDevApp().request('/__hotsheet/checkouts');
+    expect(afterDeletion.status).toBe(200);
+    expect((await afterDeletion.json()) as Checkout[]).not.toContainEqual(expect.objectContaining({ id: session.id }));
   }, 120_000);
 
   it('keeps ticket sources with their project and lists machine-wide accounts (HS2-SM9PM8)', async () => {

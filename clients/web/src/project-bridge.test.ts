@@ -1008,16 +1008,26 @@ describe('remote project checkouts (HS2-QMR41J, HS2-VFNCXG)', () => {
     expect(await response.json()).toEqual({ error: 'server unreachable' });
   });
   it('queries the bootstrap server GET /checkouts through its running instance', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'hs2-picker-'));
     const ensure = vi.fn().mockResolvedValue({ pid: 1, url: 'http://127.0.0.1:9', secret: 'shh' });
-    const request = vi.fn().mockResolvedValue([{ id: 'x', root: '/r', alias: 'x', stores: [] }]);
+    const request = vi.fn().mockResolvedValue([
+      { id: 'x', root, alias: 'x', stores: [] },
+      { id: 'gone', root: resolve(root, 'deleted'), alias: 'gone', stores: [] },
+    ]);
     const resolveStore = vi.fn().mockResolvedValue('/home/server-bootstrap.hs2');
-    const result = await listServerCheckouts(ensure as never, request as never, resolveStore as never);
-    expect(ensure).toHaveBeenCalledWith('/home/server-bootstrap.hs2');
-    expect(request).toHaveBeenCalledWith(
-      { url: 'http://127.0.0.1:9', secret: 'shh', serverStore: '/home/server-bootstrap.hs2' },
-      '/checkouts',
-    );
-    expect(result).toEqual([{ id: 'x', root: '/r', alias: 'x', stores: [] }]);
+    try {
+      const result = await listServerCheckouts(ensure as never, request as never, resolveStore as never);
+      expect(ensure).toHaveBeenCalledWith('/home/server-bootstrap.hs2');
+      expect(request).toHaveBeenCalledWith(
+        { url: 'http://127.0.0.1:9', secret: 'shh', serverStore: '/home/server-bootstrap.hs2' },
+        '/checkouts',
+      );
+      expect(result).toEqual([{ id: 'x', root, alias: 'x', stores: [] }]);
+      await writeFile(resolve(root, 'deleted'), 'not a project directory');
+      expect(await listServerCheckouts(ensure as never, request as never, resolveStore as never)).toEqual(result);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 
