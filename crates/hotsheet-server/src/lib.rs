@@ -2736,6 +2736,14 @@ async fn identify_github_account(
             ));
         }
         let keys = state.key_registry();
+        if !keys
+            .list()
+            .map_err(provider_transfer_error)?
+            .iter()
+            .any(|key| key.provider == account)
+        {
+            return Err(ApiError::not_found(&account));
+        }
         let raw = keys.get(&account).map_err(|error| match error {
             hotsheet_ticketing::SecretError::NotFound(_) => ApiError::not_found(&account),
             other => provider_transfer_error(other),

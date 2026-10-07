@@ -16069,7 +16069,11 @@ async fn identify_account_rejects_missing_and_unmanaged_credentials() {
     let app = app(state.with_machine_home(home.path()));
     let response = app
         .clone()
-        .oneshot(authed("POST", "/accounts/github-app-missing/identity", None))
+        .oneshot(authed(
+            "POST",
+            "/accounts/github-app-missing/identity",
+            None,
+        ))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
