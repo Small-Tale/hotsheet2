@@ -1283,8 +1283,14 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
   const rows = rail.locator('[data-component="ticket-list-row"]');
   const blurTarget = rail.getByRole('button', { name: 'List view', exact: true });
   await expect(rows).toHaveCount(7);
-  // The rail offers Columns as well (HS2-656Q43).
-  await expect(rail.getByRole('button', { name: 'Columns view', exact: true })).toHaveCount(1);
+  // Exercise the rail's Columns projection before the search and notification transitions
+  // so the control is verified as a working mode, not merely present (HS2-YJJ1MJ).
+  const columns = rail.getByRole('button', { name: 'Columns view', exact: true });
+  await columns.click();
+  await expect(columns).toHaveAttribute('aria-pressed', 'true');
+  await expect(rail.locator('[data-component="ticket-board"]')).toBeVisible();
+  await rail.getByRole('button', { name: 'List view', exact: true }).click();
+  await expect(rows).toHaveCount(7);
   await rail.getByRole('button', { name: 'Notifications view', exact: true }).click();
   await expect(rail.getByRole('button', { name: 'Notifications view', exact: true })).toHaveAttribute(
     'aria-pressed',
