@@ -774,6 +774,13 @@ showing as disconnected (HS2-XYSXVT). A headless `PreToolUse` does not imply an 
 session. Lifecycle hooks print nothing, because a `SessionStart` hook's output would otherwise
 become model context.
 
+The hook also sends its session id. The server ignores a `SessionEnd` for an older session
+after a new `SessionStart` (for example, Codex `/clear`) has reported in the same terminal.
+The id remains internal to the server; terminal APIs expose only the connected state.
+`/mcp` in Codex tests the MCP server connection, not whether the project lifecycle and
+permission hooks ran. Use Codex `/hooks` to inspect their trust and enabled state. A
+successful interactive permission prompt reaching Hot Sheet also proves the bridge is live.
+
 A tool runs a project hook only once it is installed and, for Codex, trusted. A reported
 connection therefore shows that the session's hooks are live, and its permission prompts reach
 the app. A missing report means they stay in the terminal. Codex trusts each hook entry by

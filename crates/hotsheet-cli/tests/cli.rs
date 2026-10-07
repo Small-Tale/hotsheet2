@@ -77,6 +77,7 @@ fn retained_permission_hook_uses_restarted_server_route() {
         assert_eq!(body["agent"], "codex");
         assert_eq!(body["action"], "git push");
         assert_eq!(body["terminal_id"], "codex-7");
+        assert_eq!(body["session_id"], "codex-retained");
         let reply = r#"{"decision":"allow"}"#;
         write!(
             reader.get_mut(),
@@ -271,8 +272,12 @@ fn permission_hook_reports_session_start_and_end_as_the_terminals_ai_connection(
     assert_eq!(started.1, "terminal-secret");
     let body: serde_json::Value = serde_json::from_str(&started.2).unwrap();
     assert_eq!(body["agent"], "codex");
+    assert_eq!(body["session_id"], "s-1");
     let ended = hook(r#"{"hook_event_name":"SessionEnd","session_id":"s-1","reason":"exit"}"#);
-    assert_eq!(ended.0, "DELETE /terminals/codex-7/ai-connection HTTP/1.1");
+    assert_eq!(
+        ended.0,
+        "DELETE /terminals/codex-7/ai-connection?session_id=s-1 HTTP/1.1"
+    );
 }
 
 #[cfg(unix)]

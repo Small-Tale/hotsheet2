@@ -1430,6 +1430,71 @@ async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgott
 }
 
 #[tokio::test]
+async fn terminal_ai_connection_ignores_stale_session_end_after_clear() {
+    // Codex /clear starts a new session in the retained terminal. A late end for the previous
+    // session must not unplug the new one, including when a halt exists.
+    let (_dir, state) = state();
+    let router = app(state);
+    let send = |method: &'static str, path: &'static str, body: Option<&'static str>| {
+        let router = router.clone();
+        async move { router.oneshot(authed(method, path, body)).await.unwrap() }
+    };
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"codex-clear"}"#)
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    for session in ["old", "new"] {
+        let body = format!(r#"{{"agent":"codex","session_id":"{session}"}}"#);
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(authed(
+                    "POST",
+                    "/terminals/codex-clear/ai-connection",
+                    Some(&body),
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NO_CONTENT
+        );
+    }
+    send(
+        "POST",
+        "/terminals/codex-clear/halt",
+        Some(r#"{"error_type":"overloaded","message":"Retry later."}"#),
+    )
+    .await;
+    let stale = send(
+        "DELETE",
+        "/terminals/codex-clear/ai-connection?session_id=old",
+        None,
+    )
+    .await;
+    assert_eq!(stale.status(), StatusCode::NO_CONTENT);
+    let still_connected = body_json(send("GET", "/terminals", None).await).await;
+    assert_eq!(still_connected[0]["ai_connection"]["agent"], "codex");
+    assert!(still_connected[0].get("halt").is_some());
+
+    let current = send(
+        "DELETE",
+        "/terminals/codex-clear/ai-connection?session_id=new",
+        None,
+    )
+    .await;
+    assert_eq!(current.status(), StatusCode::NO_CONTENT);
+    let ended = body_json(send("GET", "/terminals", None).await).await;
+    assert!(ended[0].get("ai_connection").is_none());
+    assert!(ended[0].get("halt").is_none());
+}
+
+#[tokio::test]
 async fn a_restart_prunes_names_of_terminals_that_did_not_survive() {
     use hotsheet_server::terminal_broker::TerminalBroker;
 

@@ -3233,7 +3233,8 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
         if let (false, Some((url, secret))) = (terminal.is_empty(), hook_server_route()) {
             let env_agent = std::env::var("HOTSHEET_AGENT").ok();
             let agent = installed_agent.or(env_agent.as_deref());
-            let _ = report_terminal_session(&url, &secret, &terminal, &session, agent);
+            let session_id = input.get("session_id").and_then(serde_json::Value::as_str);
+            let _ = report_terminal_session(&url, &secret, &terminal, &session, agent, session_id);
         }
         return Ok(());
     }
@@ -3262,6 +3263,7 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
             let request = serde_json::json!({
                 "project": project, "connection": connection, "tool": tool, "action": action,
                 "agent": agent, "terminal_id": terminal,
+                "session_id": input.get("session_id").and_then(serde_json::Value::as_str),
             });
             match ask_server(&url, &secret, &request) {
                 Ok(reply) => Some(decision_from_server(&reply)),
@@ -3484,6 +3486,7 @@ fn report_terminal_session(
     terminal: &str,
     session: &hotsheet_cli::permission_hook::SessionHookEvent,
     agent: Option<&str>,
+    session_id: Option<&str>,
 ) -> Result<()> {
     use hotsheet_cli::permission_hook::SessionHookEvent;
     let endpoint = |route: &str| {
@@ -3501,8 +3504,16 @@ fn report_terminal_session(
             .send_string(&body.to_string())?;
         Ok(())
     };
-    let delete = |route: &str| -> Result<()> {
-        ureq::delete(&endpoint(route))
+    let delete = |route: &str, session_id: Option<&str>| -> Result<()> {
+        let url = match session_id.filter(|id| !id.is_empty()) {
+            Some(id) => format!(
+                "{}?session_id={}",
+                endpoint(route),
+                urlencoding_component(id)
+            ),
+            None => endpoint(route),
+        };
+        ureq::delete(&url)
             .set("X-Hotsheet-Secret", secret)
             .timeout(std::time::Duration::from_secs(5))
             .call()?;
@@ -3516,9 +3527,12 @@ fn report_terminal_session(
             "halt",
             serde_json::json!({ "error_type": error_type, "message": message, "agent": agent }),
         ),
-        SessionHookEvent::Resumed => delete("halt"),
-        SessionHookEvent::Connected => post("ai-connection", serde_json::json!({ "agent": agent })),
-        SessionHookEvent::Disconnected => delete("ai-connection"),
+        SessionHookEvent::Resumed => delete("halt", None),
+        SessionHookEvent::Connected => post(
+            "ai-connection",
+            serde_json::json!({ "agent": agent, "session_id": session_id }),
+        ),
+        SessionHookEvent::Disconnected => delete("ai-connection", session_id),
     }
 }
 

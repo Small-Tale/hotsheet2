@@ -7567,6 +7567,9 @@ struct AskBody {
     /// live even if its earlier SessionStart event never reached the server (HS2-XYSXVT).
     #[serde(default)]
     terminal_id: Option<String>,
+    /// Identifies the reporting session so a late end from an earlier session cannot clear it.
+    #[serde(default)]
+    session_id: Option<String>,
 }
 
 /// A disconnected hook is no longer waiting for a decision. Remove its pending prompt
@@ -7647,6 +7650,7 @@ async fn ask_permission(State(state): State<AppState>, Json(body): Json<AskBody>
             Path(terminal_id.to_owned()),
             Json(TerminalAiConnectionReq {
                 agent: body.agent.clone(),
+                session_id: body.session_id.clone(),
             }),
         )
         .await;
@@ -8531,6 +8535,9 @@ pub struct TerminalAiConnection {
     /// RFC 3339 time the session reported in.
     #[serde(default)]
     at: String,
+    /// Internal lifecycle identity; the terminal API need not expose Codex/Claude session ids.
+    #[serde(skip)]
+    session_id: Option<String>,
 }
 
 /// Why a terminal's AI session stopped: the tool's error category and message (for example
@@ -9634,6 +9641,8 @@ fn forget_terminal_halt_if(state: &AppState, id: &str, at: Option<&str>) -> bool
 struct TerminalAiConnectionReq {
     #[serde(default)]
     agent: Option<String>,
+    #[serde(default)]
+    session_id: Option<String>,
 }
 
 /// `POST /terminals/{id}/ai-connection` — an AI session in the terminal started with Hot Sheet's
@@ -9665,6 +9674,7 @@ async fn connect_terminal_ai(
         at: OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .unwrap_or_default(),
+        session_id: body.session_id.filter(|id| !id.is_empty()),
     };
     let changed = state
         .terminal_ai_connections
@@ -9683,23 +9693,46 @@ async fn connect_terminal_ai(
 async fn disconnect_terminal_ai(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    Query(query): Query<TerminalAiConnectionEndQuery>,
 ) -> StatusCode {
+    let Some(removed) = forget_terminal_ai_connection_if(&state, &id, query.session_id.as_deref())
+    else {
+        return StatusCode::NO_CONTENT;
+    };
     if forget_terminal_halt(&state, &id) {
         emit_terminal_halted(&state, &id, None);
     }
-    if forget_terminal_ai_connection(&state, &id) {
+    if removed {
         emit_terminal_ai_connection(&state, &id, None);
     }
     StatusCode::NO_CONTENT
 }
 
+#[derive(Default, Deserialize)]
+struct TerminalAiConnectionEndQuery {
+    session_id: Option<String>,
+}
+
 fn forget_terminal_ai_connection(state: &AppState, id: &str) -> bool {
-    state
-        .terminal_ai_connections
-        .lock()
-        .unwrap()
-        .remove(id)
-        .is_some()
+    forget_terminal_ai_connection_if(state, id, None).unwrap_or(false)
+}
+
+/// `None` means this end belongs to a different session; `Some(false)` means no report exists.
+fn forget_terminal_ai_connection_if(
+    state: &AppState,
+    id: &str,
+    session_id: Option<&str>,
+) -> Option<bool> {
+    let mut connections = state.terminal_ai_connections.lock().unwrap();
+    if session_id.is_some_and(|expected| {
+        connections
+            .get(id)
+            .and_then(|connection| connection.session_id.as_deref())
+            != Some(expected)
+    }) {
+        return None;
+    }
+    Some(connections.remove(id).is_some())
 }
 
 fn emit_terminal_ai_connection(state: &AppState, id: &str, message: Option<String>) {

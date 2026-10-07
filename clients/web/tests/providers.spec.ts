@@ -6048,6 +6048,21 @@ test('recovers a missing Codex connection when its interactive permission hook r
     expect(permissionExit, permissionError).toBe(0);
     expect(JSON.parse(permissionOutput).hookSpecificOutput.decision.behavior).toBe('allow');
 
+    // /clear starts a new Codex session in the same terminal. A delayed end from the prior
+    // session must leave the tab and tile connected to the new session.
+    hook({ hook_event_name: 'SessionStart', session_id: 'session-2', source: 'clear' });
+    hook({ hook_event_name: 'SessionEnd', session_id: 'session-1', reason: 'other' });
+    await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
+    await expect(connection.locator('[data-lucide="plug"]')).toBeVisible();
+    await expect(connection.locator('[data-lucide="unplug"]')).toHaveCount(0);
+    await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
+    await expect(tileConnection.locator('[data-lucide="plug"]')).toBeVisible();
+    await drawer.screenshot({ path: test.info().outputPath('hs2-xysxvt-clear-connected-drawer-1280.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
+    await tab.screenshot({ path: test.info().outputPath('hs2-xysxvt-clear-connected-tab-390.png') });
+    await page.setViewportSize({ width: 1280, height: 800 });
+
     // Halt warnings take precedence; clearing the halt restores the connection.
     expect(
       (
@@ -6071,7 +6086,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
 
     // Codex exits: SessionEnd clears it everywhere.
-    hook({ hook_event_name: 'SessionEnd', session_id: 'session-1', reason: 'exit' });
+    hook({ hook_event_name: 'SessionEnd', session_id: 'session-2', reason: 'exit' });
     await expect(connection).toHaveAttribute('data-ai-connection', 'missing');
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'missing');
     expect((await server.request<Array<{ ai_connection?: unknown }>>('/terminals'))[0].ai_connection).toBeUndefined();
