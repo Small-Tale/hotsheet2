@@ -3829,10 +3829,15 @@ export async function startHotSheetWebClient() {
             for (const event of response.events)
               if (event.kind === 'terminal_renamed') applyTerminalRenamed(current, event.id, event.message);
             // A terminal's AI session halted or resumed (HS2-HJ4D1H), or connected to or left Hot Sheet
-            // (HS2-EV1XK3): refetch so its tab marks it.
+            // (HS2-EV1XK3): refetch so its tab marks it. A visible permission ask independently
+            // proves a live hook and must refresh the terminal even if its connection event was
+            // missed or arrived on another change-stream page (HS2-XYSXVT).
             if (
               response.events.some(
-                (event) => event.kind === 'terminal_halted' || event.kind === 'terminal_ai_connection',
+                (event) =>
+                  event.kind === 'terminal_halted' ||
+                  event.kind === 'terminal_ai_connection' ||
+                  event.kind === 'permission_asked',
               )
             )
               void refreshTerminalDashboard(true, current);

@@ -6243,14 +6243,15 @@ test('warns when an AI tab never connects to Hot Sheet, and clears once it does 
   await page.screenshot({ path: test.info().outputPath('hs2-ev1xk3-missing-390.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  // After /hooks the restarted session reports in; the change event refetches and clears the warning.
+  // A permission request proves the hook reached the server. Even if its separate terminal
+  // connection event is missed, this event refetches the terminal and clears the warning.
   connected = true;
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   cursor += 1;
   await polls.shift()!.fulfill({
     json: {
       cursor,
-      events: [{ store: '', kind: 'terminal_ai_connection', id: 'codex-01TAB', slug: '', message: 'codex' }],
+      events: [{ store: '', kind: 'permission_asked', id: '77', slug: 'Bash', message: null }],
       overflow: false,
     },
   });

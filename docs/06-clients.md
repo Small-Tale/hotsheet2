@@ -2453,7 +2453,9 @@ set by `POST /terminals/{id}/ai-connection` from the session's `SessionStart` ho
 successful interactive permission hook's authenticated `/permissions/ask` request. The latter
 updates the indicator while the answer is pending if `SessionStart` was missed (HS2-XYSXVT).
 It is cleared by `DELETE` from `SessionEnd` or by killing the terminal. Each change emits a
-`terminal_ai_connection` event, and the client refetches its terminals on that event.
+`terminal_ai_connection` event. The client refetches its terminals on that event and on a
+`permission_asked` event, so a visible prompt reconciles the indicator even if the separate
+connection event was missed (HS2-XYSXVT).
 
 - **Connected:** the drawer tab and dashboard tile show a neutral Lucide `plug` icon ("Codex is connected to Hot
   Sheet: its permission prompts come to the app"). This applies to any terminal, including a

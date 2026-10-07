@@ -771,7 +771,9 @@ and `SessionEnd` DELETEs it. An authenticated interactive `PermissionRequest` al
 terminal id in `/permissions/ask`; the server marks it connected as soon as the request arrives,
 including while the answer is pending, so a missed `SessionStart` cannot leave a live bridge
 showing as disconnected (HS2-XYSXVT). A headless `PreToolUse` does not imply an interactive
-session. Lifecycle hooks print nothing, because a `SessionStart` hook's output would otherwise
+session. The client also reloads terminal state when a permission request arrives, so the
+visible prompt and connection icon reconcile together even if the connection event is missed.
+Lifecycle hooks print nothing, because a `SessionStart` hook's output would otherwise
 become model context.
 
 The hook also sends its session id. The server ignores a `SessionEnd` for an older session
