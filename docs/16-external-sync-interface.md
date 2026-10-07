@@ -414,7 +414,11 @@ connections need no user-chosen id: a create request with an empty `id` gets a r
 unique one (`github-small-tale-hotsheet2`, then `-2`, …), and a blank display name defaults to
 the provider name ("GitHub Issues"). After sign-in the repository field is a searchable list of
 every repository the app can reach, gathered across all of the user's app installations with
-`Link: rel="next"` pagination (HS2-27T5WT). GitHub only exposes repositories the app is
+`Link: rel="next"` pagination (HS2-27T5WT). Editing an existing connection reloads this list
+using its saved account; both the issue repository and optional attachment assets repository
+offer those choices while
+retaining their current values. A failed lookup leaves manual path entry available (HS2-Y5588D).
+GitHub only exposes repositories the app is
 installed on, so the list response also reports each installation's account, whether it grants
 `all` or `selected` repositories, and its settings page; the dialog explains a missing
 repository, links to **Change access** for limited installations and to **Add another account

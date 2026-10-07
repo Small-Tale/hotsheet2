@@ -892,13 +892,13 @@ function demoContent(item: DemoDefinition) {
                 state: 'waiting',
                 copied: true,
               }
-            : scenario === 'authorized' || scenario === 'authorized-existing-default'
+            : scenario === 'authorized' || scenario === 'authorized-existing-default' || editing
               ? {
                   session: 'demo',
                   userCode: 'ABCD-EFGH',
                   verificationUri: 'https://github.com/login/device',
                   state: 'authorized',
-                  repositories: ['small-tale/hotsheet2'],
+                  repositories: ['small-tale/hotsheet2', 'small-tale/hotsheet-assets'],
                   installations: [{ account: 'small-tale', selection: 'all' }],
                 }
               : undefined

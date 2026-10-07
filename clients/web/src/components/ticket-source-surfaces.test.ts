@@ -288,9 +288,56 @@ describe('ticket source surfaces', () => {
       }),
     );
     expect(configured).toContain('Currently enabled.');
+    expect(configured).toContain('Attachment assets repository (optional)');
     expect(configured).toContain(
-      'name="attachment-repo" label="Attachment assets repository (optional)" placeholder="owner/repository" value="acme/assets"',
+      'name="attachment-repo" autocomplete="off" placeholder="owner/repository" value="acme/assets"',
     );
+    const listedEdit = String(
+      ProviderSetupForm({
+        kind: 'github',
+        connection: {
+          id: 'github-main',
+          provider: 'github',
+          locator: 'acme/issues',
+          name: 'Issues',
+          default: false,
+          settings: { attachment_repo: 'acme/assets' },
+        },
+        auth: {
+          session: 'edit:github-main',
+          userCode: '',
+          verificationUri: '',
+          state: 'authorized',
+          repositories: ['acme/issues', 'acme/assets'],
+        },
+      }),
+    );
+    expect(listedEdit).toContain('name="connection-locator" required list="provider-setup-github-repositories"');
+    expect(listedEdit).toContain('name="attachment-repo" list="provider-setup-github-repositories"');
+    expect(listedEdit).toContain('<option value="acme/assets"></option>');
+    const failedEdit = String(
+      ProviderSetupForm({
+        kind: 'github',
+        connection: {
+          id: 'github-main',
+          provider: 'github',
+          locator: 'acme/issues',
+          name: 'Issues',
+          default: false,
+          settings: { attachment_repo: 'acme/assets' },
+        },
+        auth: {
+          session: 'edit:github-main',
+          userCode: '',
+          verificationUri: '',
+          state: 'authorized',
+          message: 'Access expired',
+        },
+      }),
+    );
+    expect(failedEdit).toContain('You can enter a repository path manually.');
+    expect(failedEdit).toContain('value="acme/issues"');
+    expect(failedEdit).not.toContain('provider-setup-github-repositories');
     expect(configured).toContain('name="attachment-folder" label="Attachment folder" value="evidence"');
     expect(configured).toContain('name="attachment-branch" label="Attachment branch" value="media"');
     const remote = String(

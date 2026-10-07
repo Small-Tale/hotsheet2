@@ -147,6 +147,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly removeExternalProvider: () => Promise<void>;
   readonly toggleProviderDisabled: () => Promise<void>;
   readonly refreshGitHubRepositories: () => Promise<void>;
+  readonly loadEditingGitHubRepositories: (connection: ProviderConnection, current: Project) => Promise<void>;
   readonly chooseGitHubEnterprise: (enterprise: boolean) => void;
   readonly copyGitHubCode: () => Promise<void>;
   readonly reopenGitHubSignIn: () => void;
@@ -259,6 +260,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     removeExternalProvider,
     toggleProviderDisabled,
     refreshGitHubRepositories,
+    loadEditingGitHubRepositories,
     chooseGitHubEnterprise,
     copyGitHubCode,
     reopenGitHubSignIn,
@@ -1058,6 +1060,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       providerEditingId.value = connection.id;
       providerRemovingId.value = undefined;
       providerSettingsError.value = '';
+      void loadEditingGitHubRepositories(connection, current);
     }),
   );
   lifetime.add(

@@ -896,6 +896,9 @@ and identity-less legacy entries remain conservatively blocking.
   issue attachments (HS2-8BAHRJ, HS2-DH55NG). The repository must use `owner/repository`;
   the folder defaults to `hotsheet-attachments` and the branch to `main`. An existing
   configuration appears when editing, and clearing the repository turns attachments off.
+  Both the issue and assets repository fields list the signed-in account's reachable
+  repositories on creation and edit. Editing preserves the current choices and allows
+  manual paths if that account's repository lookup fails (HS2-Y5588D).
   The connection's attachment capability updates after save, so ticket forms accept files
   only while an assets repository is configured.
   Multiple connections of one provider type are

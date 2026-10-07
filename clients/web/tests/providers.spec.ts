@@ -2600,7 +2600,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
   await expect(providerForm.getByText('3 repositories available.')).toBeVisible();
   await repository.fill('small-tale/hotsheet2');
-  const attachmentRepo = providerForm.locator('wa-input[name="attachment-repo"] input');
+  const attachmentRepo = providerForm.locator('input[name="attachment-repo"]');
   await expect(providerForm).toContainText('Enter a repository and save to enable attachments.');
   await attachmentRepo.fill('small-tale/assets');
   await providerForm.locator('wa-input[name="attachment-folder"] input').fill('evidence');
@@ -2608,7 +2608,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.screenshot({ path: '/private/tmp/hs2-8bahrj-assets-setup-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
   await providerForm.locator('wa-input[name="attachment-branch"]').scrollIntoViewIfNeeded();
-  await expect(providerForm.locator('wa-input[name="attachment-repo"]')).toBeVisible();
+  await expect(attachmentRepo).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-8bahrj-assets-setup-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await attachmentRepo.fill('invalid');
@@ -2664,11 +2664,20 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   // Editing a source from its project offers its details, this project's default, Disable, and
   // Remove from this project; there is no machine-wide catalog (HS2-3SCH1K, HS2-SM9PM8).
   await sourcesPanel.getByRole('button', { name: 'Edit GitHub Issues' }).click();
-  await expect(providerForm.locator('wa-input[name="connection-locator"]')).toHaveJSProperty(
-    'value',
-    'small-tale/hotsheet2',
+  await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
+  await expect(providerForm.locator('input[name="connection-locator"]')).toHaveValue('small-tale/hotsheet2');
+  await expect(providerForm.locator('input[name="attachment-repo"]')).toHaveValue('small-tale/assets');
+  await expect(providerForm.locator('input[name="attachment-repo"]')).toHaveAttribute(
+    'list',
+    'provider-setup-github-repositories',
   );
-  await expect(providerForm.locator('wa-input[name="attachment-repo"]')).toHaveJSProperty('value', 'small-tale/assets');
+  // Let the dialog's entrance animation settle before recording visual evidence.
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: '/private/tmp/hs2-y5588d-edit-repositories-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await providerForm.locator('input[name="connection-locator"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: '/private/tmp/hs2-y5588d-edit-repositories-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1100, height: 760 });
   await expect(providerForm).toContainText('Currently enabled.');
   await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
   const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');
@@ -2677,7 +2686,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   // Owned by this project alone, so there is no "shared with" note.
   await expect(setup.locator('.ticket-source-setup__scope-hint')).toHaveCount(0);
   await providerForm.getByLabel('Display name').fill('GitHub Primary');
-  await providerForm.locator('wa-input[name="attachment-repo"] input').fill('');
+  await providerForm.locator('input[name="attachment-repo"]').fill('');
   const updates: Array<Record<string, unknown>> = [];
   page.on('request', (request) => {
     if (request.method() === 'PATCH' && new URL(request.url()).pathname.includes('/provider-connections/'))

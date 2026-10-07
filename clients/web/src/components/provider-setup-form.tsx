@@ -124,7 +124,7 @@ export function ProviderSetupForm({
     signedIn = auth?.state === 'authorized',
     // A new GitHub connection starts from sign-in; its settings appear once GitHub has authorized it.
     showFields = kind !== 'github' || editing || signedIn,
-    choosing = kind === 'github' && !editing && signedIn && auth.repositories !== undefined,
+    choosing = kind === 'github' && signedIn && auth.repositories !== undefined,
     limited = (auth?.installations ?? []).filter((installation) => installation.selection !== 'all'),
     githubAccounts = accounts.filter((account) => account.provider === 'github'),
     // A new GitLab or Jira source can start from an account signed in on this computer (HS2-F5HNJN).
@@ -356,6 +356,7 @@ export function ProviderSetupForm({
                 list="provider-setup-github-repositories"
                 autocomplete="off"
                 placeholder="Search your repositories…"
+                value={connection?.locator ?? ''}
               />
               <datalist id="provider-setup-github-repositories">
                 {repositories.map((repository) => (
@@ -435,20 +436,23 @@ export function ProviderSetupForm({
           )}
           {kind === 'github' && (
             <>
-              <wa-input
-                class="provider-setup-form__wide"
-                name="attachment-repo"
-                label="Attachment assets repository (optional)"
-                placeholder="owner/repository"
-                value={attachmentRepo}
-              >
-                <span slot="hint">
+              <label class="provider-setup-form__wide provider-setup-form__field">
+                Attachment assets repository (optional)
+                <input
+                  class="provider-setup-form__field-control"
+                  name="attachment-repo"
+                  list={choosing ? 'provider-setup-github-repositories' : undefined}
+                  autocomplete="off"
+                  placeholder="owner/repository"
+                  value={attachmentRepo}
+                />
+                <small class="provider-setup-form__field-hint">
                   {attachmentRepo
                     ? 'Currently enabled. Clear this field and save to turn attachments off. '
                     : 'Enter a repository and save to enable attachments. '}
                   The Hot Sheet GitHub App needs write access; files are committed there and linked in issues.
-                </span>
-              </wa-input>
+                </small>
+              </label>
               <wa-input
                 name="attachment-folder"
                 label="Attachment folder"
@@ -525,6 +529,11 @@ export function ProviderSetupForm({
       {error && (
         <p class="provider-setup-form__error" role="alert">
           {error}
+        </p>
+      )}
+      {editing && auth?.message && (
+        <p class="provider-setup-form__error" role="alert">
+          Could not load GitHub repositories: {auth.message}. You can enter a repository path manually.
         </p>
       )}
     </form>

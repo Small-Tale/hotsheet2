@@ -674,6 +674,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerEditingId.value = id;
     providerRemovingId.value = id;
     providerSettingsError.value = '';
+    void loadEditingGitHubRepositories(connection, current);
   }
 
   /** Make one of this project's sources the default for new tickets. */
@@ -899,6 +900,23 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
           message: reason instanceof Error ? reason.message : String(reason),
         };
     }
+  }
+
+  /** Populate both repository choices when editing an existing GitHub source. */
+  async function loadEditingGitHubRepositories(connection: ProviderConnection, current: Project) {
+    const credential = (connection.settings.credential as { secret?: unknown } | undefined)?.secret;
+    githubAuth.value = undefined;
+    if (connection.provider !== 'github' || typeof credential !== 'string' || !credential) return;
+    const session = `edit:${connection.id}:${credential}`;
+    githubAuth.value = {
+      session,
+      userCode: '',
+      verificationUri: '',
+      state: 'authorized',
+      account: credential,
+      credential,
+    };
+    await loadGitHubRepositories(new Api(current.apiPath), session, credential);
   }
 
   /** Re-list after the user granted the app more repositories on GitHub (HS2-27T5WT). */
@@ -1140,6 +1158,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     removeExternalProvider,
     toggleProviderDisabled,
     refreshGitHubRepositories,
+    loadEditingGitHubRepositories,
     chooseGitHubEnterprise,
     copyGitHubCode,
     reopenGitHubSignIn,
