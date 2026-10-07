@@ -158,11 +158,15 @@ when no other source owns the id. Id-shape errors name the provider that raised 
 (HS2-GKERTK).
 Checkout lists tolerate an unavailable external source: they return available tickets
 with a partial-data warning instead of failing the entire collection. The live GitHub
-adapter shares a ten-second issue-list snapshot across summary and board reads and
-invalidates it after successful writes. After a GitHub rate-limit response, the adapter
+adapter shares a ten-second issue-list snapshot across summary and board reads. Later
+refreshes request only issues updated since the prior GitHub response's `Date` (overlapping
+the last second), then merge them by issue number. If that header is absent, the newest
+cached issue update supplies the cursor. It performs a full walk every 15 minutes
+to remove externally deleted issues, and invalidates the snapshot after successful writes.
+After a GitHub rate-limit response, the adapter
 honors `Retry-After` or the reset time (60 seconds when neither is supplied) before
-trying the remote again. These bounded read states reduce duplicate requests without
-changing GitHub's authority for tickets (HS2-190BAS).
+trying the remote again. These bounded read states reduce duplicate and sustained page
+requests without changing GitHub's authority for tickets (HS2-190BAS, HS2-F9NSAJ).
 
 Cross-provider operations are explicit compositions, not background synchronization
 and not assumed atomic transactions. Copying a ticket asks the destination provider

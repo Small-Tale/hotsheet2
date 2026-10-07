@@ -14357,6 +14357,7 @@ struct PagedGitHub {
     issues: Mutex<Vec<serde_json::Value>>,
     page_size: usize,
     requests: std::sync::atomic::AtomicUsize,
+    server_date: Mutex<String>,
 }
 
 impl PagedGitHub {
@@ -14370,6 +14371,7 @@ impl PagedGitHub {
             ),
             page_size,
             requests: std::sync::atomic::AtomicUsize::new(0),
+            server_date: Mutex::new("Wed, 26 Aug 2026 00:10:00 GMT".into()),
         }
     }
 
@@ -14394,13 +14396,27 @@ impl GitHubTransport for PagedGitHub {
             None => (url.to_owned(), 1),
         };
         let issues = self.issues.lock().unwrap();
+        let since = url
+            .split("&since=")
+            .nth(1)
+            .and_then(|value| value.split('&').next());
+        let matching = issues
+            .iter()
+            .filter(|issue| {
+                since.is_none_or(|since| issue["updated_at"].as_str().unwrap_or("") > since)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
         let start = (page - 1) * self.page_size;
-        let end = (start + self.page_size).min(issues.len());
+        let end = (start + self.page_size).min(matching.len());
         let mut response = github_response(
             200,
-            serde_json::Value::Array(issues.get(start..end).unwrap_or_default().to_vec()),
+            serde_json::Value::Array(matching.get(start..end).unwrap_or_default().to_vec()),
         );
-        if end < issues.len() {
+        response
+            .headers
+            .insert("date".into(), self.server_date.lock().unwrap().clone());
+        if end < matching.len() {
             response.headers.insert(
                 "link".into(),
                 format!("<{base}&page={}>; rel=\"next\"", page + 1),
@@ -14418,15 +14434,31 @@ async fn paged_github_checkout(
     tempfile::TempDir,
     tempfile::TempDir,
 ) {
+    paged_github_checkout_with_cache(transport, false).await
+}
+
+async fn paged_github_checkout_with_cache(
+    transport: Arc<PagedGitHub>,
+    cache_reads: bool,
+) -> (
+    axum::Router,
+    tempfile::TempDir,
+    tempfile::TempDir,
+    tempfile::TempDir,
+) {
     let (primary, st) = state();
     let checkout = tempfile::tempdir().unwrap();
     let registry = tempfile::tempdir().unwrap();
+    let mut provider = GitHubProvider::new(
+        GitHubConfig::new("github-paged", "acme/repo", "fixture-token"),
+        transport,
+    );
+    if cache_reads {
+        provider = provider.with_live_read_state();
+    }
     let router = app(st
         .with_checkout_registry(registry.path().join("checkouts.json"))
-        .with_ticket_provider(Arc::new(GitHubProvider::new(
-            GitHubConfig::new("github-paged", "acme/repo", "fixture-token"),
-            transport,
-        ))));
+        .with_ticket_provider(Arc::new(provider)));
     checkout_call(
         &router,
         "POST",
@@ -14440,6 +14472,40 @@ async fn paged_github_checkout(
     )
     .await;
     (router, primary, checkout, registry)
+}
+
+#[tokio::test]
+async fn checkout_reuses_a_multi_page_github_snapshot_then_reads_only_recent_issues() {
+    let transport = Arc::new(PagedGitHub::new(1..=25, 10));
+    let (router, _primary, _checkout, _registry) =
+        paged_github_checkout_with_cache(transport.clone(), true).await;
+    let uri = "/checkouts/paged/tickets?page_size=50&sort=title";
+    let first = checkout_call(&router, "GET", uri, None).await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 25);
+    assert_eq!(first["counts"]["total"], 25);
+    assert_eq!(transport.request_count(), 3, "one initial multi-page walk");
+    let repeated = checkout_call(&router, "GET", uri, None).await;
+    assert_eq!(repeated["counts"]["total"], 25);
+    assert_eq!(
+        transport.request_count(),
+        3,
+        "shared snapshot serves the next checkout read"
+    );
+
+    let mut new_issue = github_issue(26, "issue 26");
+    new_issue["updated_at"] = "2026-08-26T00:11:00Z".into();
+    transport.issues.lock().unwrap().push(new_issue);
+    *transport.server_date.lock().unwrap() = "Wed, 26 Aug 2026 00:12:00 GMT".into();
+    tokio::time::sleep(std::time::Duration::from_secs(10) + std::time::Duration::from_millis(20))
+        .await;
+    let refreshed = checkout_call(&router, "GET", uri, None).await;
+    assert_eq!(refreshed["items"].as_array().unwrap().len(), 26);
+    assert_eq!(refreshed["counts"]["total"], 26);
+    assert_eq!(
+        transport.request_count(),
+        4,
+        "only one incremental page after the TTL"
+    );
 }
 
 #[tokio::test]

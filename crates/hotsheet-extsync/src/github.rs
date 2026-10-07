@@ -15,6 +15,8 @@ use hotsheet_ticketing::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc2822;
 
 use crate::github_attachments::{self, AttachmentMarker, GitHubAttachmentRepository};
 use crate::note_trailer;
@@ -24,6 +26,8 @@ use hotsheet_ticketing::wire::ApiAttachment;
 const NATIVE_KEYSET_PAGE: usize = 100;
 /// Coalesce the summary and status-scoped board reads issued together by one project refresh.
 const ISSUE_LIST_CACHE_TTL: Duration = Duration::from_secs(10);
+/// Reconcile removals, which GitHub's `since` filter cannot report.
+const ISSUE_LIST_FULL_REFRESH_INTERVAL: Duration = Duration::from_secs(15 * 60);
 
 const API_VERSION: &str = "2022-11-28";
 
@@ -194,7 +198,17 @@ pub struct GitHubProvider {
     rate_limited_until: Option<Arc<Mutex<Option<Instant>>>>,
 }
 
-type IssueListCache = Arc<Mutex<Option<(Instant, Vec<GitHubIssue>)>>>;
+type IssueListCache = Arc<Mutex<Option<IssueSnapshot>>>;
+type GitHubIssuePage = (Vec<GitHubIssue>, Option<String>, Option<OffsetDateTime>);
+
+struct IssueSnapshot {
+    checked_at: Instant,
+    full_scan_at: Instant,
+    /// GitHub's response Date, measured before the walk; avoids rereading a large
+    /// set whose newest issue update predates the first snapshot.
+    server_watermark: Option<OffsetDateTime>,
+    issues: Vec<GitHubIssue>,
+}
 
 impl GitHubProvider {
     pub fn new(config: GitHubConfig, transport: Arc<dyn GitHubTransport>) -> Self {
@@ -207,10 +221,15 @@ impl GitHubProvider {
     }
 
     pub fn live(config: GitHubConfig) -> Self {
-        let mut provider = Self::new(config, Arc::new(UreqGitHubTransport));
-        provider.issues_cache = Some(Arc::new(Mutex::new(None)));
-        provider.rate_limited_until = Some(Arc::new(Mutex::new(None)));
-        provider
+        Self::new(config, Arc::new(UreqGitHubTransport)).with_live_read_state()
+    }
+
+    /// Share live read state across server requests, including custom transports used
+    /// by host integration tests.
+    pub fn with_live_read_state(mut self) -> Self {
+        self.issues_cache = Some(Arc::new(Mutex::new(None)));
+        self.rate_limited_until = Some(Arc::new(Mutex::new(None)));
+        self
     }
 
     fn endpoint(&self, suffix: &str) -> String {
@@ -564,7 +583,7 @@ impl GitHubProvider {
         cursor: Option<&str>,
         updated_after: Option<&str>,
         limit: usize,
-    ) -> Result<(Vec<GitHubIssue>, Option<String>), ProviderError> {
+    ) -> Result<GitHubIssuePage, ProviderError> {
         let mut url = if let Some(cursor) = cursor {
             let api_prefix = format!("{}/", self.config.api_base.trim_end_matches('/'));
             if !cursor.starts_with(&api_prefix) || !cursor.contains("/issues?") {
@@ -587,6 +606,10 @@ impl GitHubProvider {
             }
         }
         let response = self.request("GET", &url, None)?;
+        let server_time = response
+            .headers
+            .get("date")
+            .and_then(|date| OffsetDateTime::parse(date, &Rfc2822).ok());
         let next = response
             .headers
             .get("link")
@@ -596,39 +619,100 @@ impl GitHubProvider {
             .into_iter()
             .filter(|issue| issue.pull_request.is_none())
             .collect();
-        Ok((issues, next))
+        Ok((issues, next, server_time))
     }
 
     fn list_issues(&self, updated_after: Option<&str>) -> Result<Vec<GitHubIssue>, ProviderError> {
         if updated_after.is_none() {
             if let Some(cache) = &self.issues_cache {
                 if let Ok(mut cached) = cache.lock() {
-                    if let Some((at, issues)) = cached.as_ref() {
-                        if at.elapsed() < ISSUE_LIST_CACHE_TTL {
-                            return Ok(issues.clone());
+                    if let Some(snapshot) = cached.as_ref() {
+                        if snapshot.checked_at.elapsed() < ISSUE_LIST_CACHE_TTL {
+                            return Ok(snapshot.issues.clone());
                         }
                     }
                     // Keep this per-provider lock through the refresh: parallel board columns
                     // share one GitHub walk instead of all consuming the remaining API budget.
-                    let issues = self.fetch_issues(None)?;
-                    *cached = Some((Instant::now(), issues.clone()));
+                    if let Some(snapshot) = cached.as_mut() {
+                        if snapshot.full_scan_at.elapsed() < ISSUE_LIST_FULL_REFRESH_INTERVAL {
+                            if let Some(since) =
+                                incremental_since(snapshot.server_watermark, &snapshot.issues)
+                            {
+                                let (changed, server_time) = self.fetch_issues(Some(&since))?;
+                                merge_issue_changes(&mut snapshot.issues, changed);
+                                snapshot.checked_at = Instant::now();
+                                snapshot.server_watermark =
+                                    server_time.or(snapshot.server_watermark);
+                                return Ok(snapshot.issues.clone());
+                            }
+                        }
+                    }
+                    let (issues, server_watermark) = self.fetch_issues(None)?;
+                    let now = Instant::now();
+                    *cached = Some(IssueSnapshot {
+                        checked_at: now,
+                        full_scan_at: now,
+                        server_watermark,
+                        issues: issues.clone(),
+                    });
                     return Ok(issues);
                 }
             }
         }
-        self.fetch_issues(updated_after)
+        self.fetch_issues(updated_after).map(|(issues, _)| issues)
     }
 
-    fn fetch_issues(&self, updated_after: Option<&str>) -> Result<Vec<GitHubIssue>, ProviderError> {
+    fn fetch_issues(
+        &self,
+        updated_after: Option<&str>,
+    ) -> Result<(Vec<GitHubIssue>, Option<OffsetDateTime>), ProviderError> {
         let mut cursor = None;
         let mut issues = Vec::new();
+        let mut server_watermark = None;
         loop {
-            let (page, next) = self.issue_page(cursor.as_deref(), updated_after, 100)?;
+            let (page, next, server_time) =
+                self.issue_page(cursor.as_deref(), updated_after, 100)?;
+            if cursor.is_none() {
+                server_watermark = server_time;
+            }
             issues.extend(page);
             let Some(next) = next else { break };
             cursor = Some(next);
         }
-        Ok(issues)
+        Ok((issues, server_watermark))
+    }
+}
+
+/// GitHub's `since` is strictly after its timestamp. Re-read the latest second so
+/// updates sharing that second with the current high-water mark cannot be missed.
+fn incremental_since(
+    server_watermark: Option<OffsetDateTime>,
+    issues: &[GitHubIssue],
+) -> Option<String> {
+    let newest = server_watermark.or_else(|| {
+        issues
+            .iter()
+            .map(|issue| Timestamp::new(issue.updated_at.clone()).instant())
+            .collect::<Option<Vec<_>>>()?
+            .into_iter()
+            .max()
+    })?;
+    Some(Timestamp::from_datetime(newest - time::Duration::seconds(1)).to_string())
+}
+
+fn merge_issue_changes(issues: &mut Vec<GitHubIssue>, changed: Vec<GitHubIssue>) {
+    let mut by_number = issues
+        .iter()
+        .enumerate()
+        .map(|(index, issue)| (issue.number, index))
+        .collect::<HashMap<_, _>>();
+    for issue in changed {
+        if let Some(&index) = by_number.get(&issue.number) {
+            issues[index] = issue;
+        } else {
+            by_number.insert(issue.number, issues.len());
+            issues.push(issue);
+        }
     }
 }
 
@@ -761,7 +845,7 @@ impl TicketProvider for GitHubProvider {
                 next_cursor: (end < rows.len()).then(|| end.to_string()),
             });
         }
-        let (issues, next_cursor) =
+        let (issues, next_cursor, _) =
             self.issue_page(cursor, query.updated_after.as_deref(), limit)?;
         Ok(ProviderTicketPage {
             items: filter_provider_ticket_page(
@@ -795,7 +879,7 @@ impl TicketProvider for GitHubProvider {
         }
         self.check_query_filters(query)?;
         keyset_page_from_native_pages(query, after, resume, limit, |cursor| {
-            let (issues, next) =
+            let (issues, next, _) =
                 self.issue_page(cursor, query.updated_after.as_deref(), NATIVE_KEYSET_PAGE)?;
             Ok((
                 issues
@@ -2549,6 +2633,223 @@ mod tests {
             "three"
         );
         assert_eq!(transport.requests.lock().unwrap().len(), 5);
+    }
+
+    #[test]
+    fn live_snapshot_merges_incremental_pages_and_bounds_sustained_reads() {
+        let mut first = response(200, json!([issue(1, "one", "")]));
+        first
+            .headers
+            .insert("date".into(), "Wed, 26 Aug 2026 00:10:00 GMT".into());
+        first.headers.insert(
+            "link".into(),
+            "<https://api.test/repos/acme/widgets/issues?page=2>; rel=\"next\"".into(),
+        );
+        let changed = json!({
+            "number": 1, "title": "one edited", "body": "", "state": "open",
+            "state_reason": null, "html_url": "https://github.com/acme/widgets/issues/1",
+            "created_at": "2026-08-26T00:00:00Z", "updated_at": "2026-08-26T00:11:00Z",
+            "closed_at": null, "labels": [], "assignees": [], "pull_request": null
+        });
+        let mut added = issue(3, "three", "");
+        added["updated_at"] = "2026-08-26T00:11:00Z".into();
+        let transport = FakeTransport::with(vec![
+            first,
+            response(200, json!([issue(2, "two", "")])),
+            response(200, json!([changed, added])),
+            response(200, json!([])),
+        ]);
+        let mut provider = provider(transport.clone());
+        provider.issues_cache = Some(Arc::new(Mutex::new(None)));
+        let titles = |provider: &GitHubProvider| {
+            provider
+                .query(&TicketQuery::default())
+                .unwrap()
+                .into_iter()
+                .map(|ticket| ticket.title)
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(titles(&provider), ["one", "two"]);
+        assert_eq!(titles(&provider), ["one", "two"]);
+        assert_eq!(transport.requests.lock().unwrap().len(), 2);
+
+        provider
+            .issues_cache
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
+        assert_eq!(titles(&provider), ["one edited", "two", "three"]);
+        assert_eq!(titles(&provider), ["one edited", "two", "three"]);
+        let requests = transport.requests.lock().unwrap();
+        assert_eq!(
+            requests.len(),
+            3,
+            "one incremental request replaces a full two-page walk"
+        );
+        assert!(requests[2].1.contains("since=2026-08-26T00:09:59Z"));
+        drop(requests);
+
+        provider
+            .issues_cache
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
+        assert_eq!(titles(&provider), ["one edited", "two", "three"]);
+        assert_eq!(transport.requests.lock().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn live_snapshot_reconciles_external_deletions_and_invalidates_after_writes() {
+        let transport = FakeTransport::with(vec![
+            response(200, json!([issue(1, "one", ""), issue(2, "two", "")])),
+            response(200, json!([])),
+            response(200, json!([issue(2, "two", "")])),
+            response(201, issue(3, "three", "")),
+            response(200, json!([issue(2, "two", ""), issue(3, "three", "")])),
+        ]);
+        let mut provider = provider(transport.clone());
+        provider.issues_cache = Some(Arc::new(Mutex::new(None)));
+        let ids = |provider: &GitHubProvider| {
+            provider
+                .query(&TicketQuery::default())
+                .unwrap()
+                .into_iter()
+                .map(|ticket| ticket.native_id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(&provider), ["1", "2"]);
+        {
+            let mut cache = provider.issues_cache.as_ref().unwrap().lock().unwrap();
+            cache.as_mut().unwrap().checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
+        }
+        assert_eq!(
+            ids(&provider),
+            ["1", "2"],
+            "incremental reads cannot see deletions"
+        );
+        {
+            let mut cache = provider.issues_cache.as_ref().unwrap().lock().unwrap();
+            cache.as_mut().unwrap().full_scan_at =
+                Instant::now() - ISSUE_LIST_FULL_REFRESH_INTERVAL;
+            cache.as_mut().unwrap().checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
+        }
+        assert_eq!(ids(&provider), ["2"]);
+        assert!(!transport.requests.lock().unwrap()[2].1.contains("since="));
+
+        provider
+            .request(
+                "POST",
+                &provider.endpoint("issues"),
+                Some(&json!({"title":"three"})),
+            )
+            .unwrap();
+        assert_eq!(ids(&provider), ["2", "3"]);
+        assert_eq!(transport.requests.lock().unwrap().len(), 5);
+    }
+
+    #[test]
+    fn live_snapshot_keeps_old_data_when_an_incremental_page_is_rate_limited() {
+        let mut first_incremental = response(200, json!([issue(1, "one edited", "")]));
+        first_incremental.headers.insert(
+            "link".into(),
+            "<https://api.test/repos/acme/widgets/issues?page=2>; rel=\"next\"".into(),
+        );
+        let mut limited = response(429, json!({"message":"rate limited"}));
+        limited.headers.insert("retry-after".into(), "60".into());
+        let transport = FakeTransport::with(vec![
+            response(200, json!([issue(1, "one", "")])),
+            first_incremental,
+            limited,
+            response(
+                200,
+                json!([issue(1, "one edited", ""), issue(2, "two", "")]),
+            ),
+        ]);
+        let mut provider = provider(transport.clone());
+        provider.issues_cache = Some(Arc::new(Mutex::new(None)));
+        provider.rate_limited_until = Some(Arc::new(Mutex::new(None)));
+        assert_eq!(provider.query(&TicketQuery::default()).unwrap().len(), 1);
+        provider
+            .issues_cache
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
+        assert!(matches!(
+            provider.query(&TicketQuery::default()),
+            Err(ProviderError::RateLimited { .. })
+        ));
+        assert_eq!(
+            provider
+                .issues_cache
+                .as_ref()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .issues[0]
+                .title,
+            "one"
+        );
+        assert!(matches!(
+            provider.query(&TicketQuery::default()),
+            Err(ProviderError::RateLimited { .. })
+        ));
+        assert_eq!(transport.requests.lock().unwrap().len(), 3);
+        *provider
+            .rate_limited_until
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap() = None;
+        let refreshed = provider.query(&TicketQuery::default()).unwrap();
+        assert_eq!(refreshed.len(), 2);
+        assert_eq!(refreshed[0].title, "one edited");
+        assert_eq!(transport.requests.lock().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn live_snapshot_refills_after_an_empty_first_scan() {
+        let mut empty = response(200, json!([]));
+        empty
+            .headers
+            .insert("date".into(), "Wed, 26 Aug 2026 00:10:00 GMT".into());
+        let mut added = issue(1, "first issue", "");
+        added["updated_at"] = "2026-08-26T00:11:00Z".into();
+        let transport = FakeTransport::with(vec![empty, response(200, json!([added]))]);
+        let mut provider = provider(transport.clone());
+        provider.issues_cache = Some(Arc::new(Mutex::new(None)));
+        assert!(provider.query(&TicketQuery::default()).unwrap().is_empty());
+        provider
+            .issues_cache
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
+        let tickets = provider.query(&TicketQuery::default()).unwrap();
+        assert_eq!(tickets[0].title, "first issue");
+        assert_eq!(transport.requests.lock().unwrap().len(), 2);
+        assert!(
+            transport.requests.lock().unwrap()[1]
+                .1
+                .contains("since=2026-08-26T00:09:59Z")
+        );
     }
 
     #[test]
