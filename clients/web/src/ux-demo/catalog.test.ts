@@ -390,6 +390,8 @@ describe('UX demo catalog', () => {
         'State adapter composing the cataloged TicketInspector and its placeholder/corrupt variants.',
       'ticket-notes': 'Notes section composed into TicketInspector / TicketInfoPanel (demoed).',
       'ticket-row-context-menu': 'Context menu for TicketRow (demoed via TicketList/TicketBoard).',
+      'ticket-source-icon':
+        'Source identity glyph composed into the cataloged TicketRow, TicketInspector, and TicketSourcesSettings demos.',
       'ticket-tag-editor':
         'Tag-editing helpers composed into TicketInfoPanel (demoed); TagPicker is the standalone entry.',
       'workspace-composition-surfaces':
