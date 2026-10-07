@@ -513,17 +513,17 @@ test('restores an unsaved edit from its local recovery copy after a reload (HS2-
       return route.fulfill({ json: [] });
     return route.continue();
   });
+  let openedOnce = false;
   const open = async () => {
     await page.goto('/');
     const row = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT"]');
-    // A reload restores the remembered project on its own; the first visit opens it explicitly.
-    if (!(await row.isVisible().catch(() => false))) {
-      const opener = page.getByRole('button', { name: 'Open project' });
-      if (await opener.isVisible().catch(() => false)) {
-        await opener.click();
-        await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-      }
+    if (!openedOnce) {
+      await page.getByRole('button', { name: 'Open project' }).click();
+      await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+      openedOnce = true;
     }
+    // After reload, the remembered project must restore the row without another open.
+    await expect(row).toBeVisible();
     await row.click();
     const inspector = page.locator('#app-right-rail');
     await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
