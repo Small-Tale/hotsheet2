@@ -1,8 +1,31 @@
 import { describe, expect, it } from 'vitest';
 
-import { deduplicateTitle, TicketHistory, type TicketSnapshot } from './ticket-operations';
+import {
+  deduplicateTitle,
+  MAX_TICKET_HISTORY_TRANSACTIONS,
+  TicketHistory,
+  type TicketSnapshot,
+} from './ticket-operations';
 
 describe('ticket operation history', () => {
+  it('retains only recent undo operations across repeated edits and redo', async () => {
+    const ticket: TicketSnapshot = { slug: 'HS2-ONE', count: 0 };
+    const history = new TicketHistory(
+      () => ticket,
+      async (_slug, patch) => {
+        Object.assign(ticket, patch);
+        return true;
+      },
+    );
+    for (let count = 1; count <= MAX_TICKET_HISTORY_TRANSACTIONS + 5; count += 1)
+      await history.execute(ticket.slug, { count });
+    for (let count = 0; count < MAX_TICKET_HISTORY_TRANSACTIONS; count += 1) expect(await history.undo()).toBe(true);
+    expect(ticket.count).toBe(5);
+    expect(await history.undo()).toBe(false);
+    for (let count = 0; count < MAX_TICKET_HISTORY_TRANSACTIONS; count += 1) expect(await history.redo()).toBe(true);
+    expect(ticket.count).toBe(MAX_TICKET_HISTORY_TRANSACTIONS + 5);
+    expect(await history.redo()).toBe(false);
+  });
   it('walks mixed operations through repeated undo and redo in order', async () => {
     const ticket: TicketSnapshot = { slug: 'HS2-ONE', status: 'not_started', up_next: false };
     const history = new TicketHistory(

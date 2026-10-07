@@ -17,7 +17,9 @@ The web client keeps a separate undo/redo history per checkout. Inspector field
 edits, Up Next toggles, and sidebar drops are individual transactions. Undo changes
 only fields that still equal the local operation's after-state, so an interleaved
 remote update wins while untouched fields can still be restored; redo uses the same
-field-aware rule, and a new edit after undo clears redo.
+field-aware rule, and a new edit after undo clears redo. The browser keeps the most recent 30
+transactions per open checkout and drops that history when the checkout closes, bounding
+retained patches and undo callbacks during long sessions.
 
 Following HS1, Cmd/Ctrl+C and X retain structured selected-ticket data while writing
 readable text to the system clipboard. Cmd/Ctrl+V copies the ticket content and uses

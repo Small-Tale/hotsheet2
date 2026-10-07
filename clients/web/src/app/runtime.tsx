@@ -1803,6 +1803,8 @@ export async function startHotSheetWebClient() {
   function disposeProjectTicketReaders(ids: readonly string[]) {
     const closing = new Set(ids),
       result = disposeTicketReaderFrames(linkedReaderStack.value, closing);
+    // Undo callbacks may capture complete tickets and attachments from a closed checkout.
+    for (const id of ids) histories.delete(id);
     for (const frame of result.disposed) {
       const saves = linkedReaderAutosaves.get(frame.id);
       saves?.details.cancel();

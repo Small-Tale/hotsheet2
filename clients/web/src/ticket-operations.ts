@@ -14,6 +14,9 @@ type Transaction =
   | { kind: 'fields'; changes: Change[] }
   | { kind: 'external'; undo: () => Promise<boolean>; redo: () => Promise<boolean> };
 
+/** Bound retained patches and external undo closures during a long-lived browser session. */
+export const MAX_TICKET_HISTORY_TRANSACTIONS = 30;
+
 /** Project-scoped, field-aware history. Remote changes win over stale undo entries. */
 export class TicketHistory {
   private undoStack: Transaction[] = [];
@@ -34,12 +37,15 @@ export class TicketHistory {
     });
     if (changes.length !== operations.length) return false;
     for (const change of changes) if (!(await this.apply(change.slug, change.after))) return false;
-    this.undoStack.push({ kind: 'fields', changes });
-    this.redoStack = [];
+    this.record({ kind: 'fields', changes });
     return true;
   }
   recordExternal(undo: () => Promise<boolean>, redo: () => Promise<boolean>): void {
-    this.undoStack.push({ kind: 'external', undo, redo });
+    this.record({ kind: 'external', undo, redo });
+  }
+  private record(transaction: Transaction): void {
+    this.undoStack.push(transaction);
+    if (this.undoStack.length > MAX_TICKET_HISTORY_TRANSACTIONS) this.undoStack.shift();
     this.redoStack = [];
   }
   async undo(): Promise<boolean> {

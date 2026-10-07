@@ -592,6 +592,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         }
         return false;
       } finally {
+        if (mutationGenerations.get(slug) === generation) mutationGenerations.delete(slug);
         releaseRefresh();
       }
     });
