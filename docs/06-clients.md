@@ -1389,7 +1389,9 @@ and identity-less legacy entries remain conservatively blocking.
   as a bridge. If the native watcher cannot start at all, it falls back to that poll with a
   two-second idle backoff. Changes are announced as checkout-scoped `repository_changed`
   invalidations over the existing WebSocket/long-poll stream. The active client then fetches one authoritative
-  snapshot; the status surface never introduces simple polling.
+  snapshot; activating a project also loads its status once. Ticket collection refreshes,
+  including live ticket invalidations and batch operations, preserve the current repository
+  snapshot without requesting Git status. The status surface never introduces simple polling.
 
   The real inspector's attachment surface materializes ordinary-sized browsed and
   dropped files before upload, so a macOS promised screenshot cannot disappear while

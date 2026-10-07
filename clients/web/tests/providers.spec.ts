@@ -8140,7 +8140,37 @@ test('refreshes repository status from the project long-poll stream without simp
   });
   await expect(summary.getByRole('button')).toHaveAccessibleName(/3 ahead/);
   expect(statusRequests).toBe(2);
+  for (let cursor = 6; cursor <= 8; cursor += 1) {
+    await expect.poll(() => pending.length).toBeGreaterThan(0);
+    const ticketRefresh = page.waitForResponse((response) =>
+      response.url().includes('/checkouts/demo-checkout/tickets'),
+    );
+    await pending.shift()!.fulfill({
+      json: {
+        cursor,
+        events: [{ store: 'demo-checkout', kind: 'changed', id: '01', slug: 'HS2-DEMO01' }],
+        overflow: false,
+      },
+    });
+    await ticketRefresh;
+    expect(statusRequests).toBe(2);
+    await expect(summary.getByRole('button')).toHaveAccessibleName(/3 ahead/);
+  }
+  await expect(page.locator('[data-component="server-busy-message"]')).not.toContainText('Checking repository');
+  await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
   await summary.screenshot({ path: '/private/tmp/hs2-tr9369-proactive-repository-status.png' });
+  await page.screenshot({ path: '/private/tmp/hs2-q17w3p-after-ticket-updates.png' });
+  await expect.poll(() => pending.length).toBeGreaterThan(0);
+  ahead = 4;
+  await pending.shift()!.fulfill({
+    json: {
+      cursor: 9,
+      events: [{ store: 'demo-checkout', kind: 'repository_changed', id: 'demo-checkout', slug: '' }],
+      overflow: false,
+    },
+  });
+  await expect(summary.getByRole('button')).toHaveAccessibleName(/4 ahead/);
+  expect(statusRequests).toBe(3);
 });
 
 test('keeps exactly 24px above and below the nearly full-height ticket reader', async ({ page }) => {

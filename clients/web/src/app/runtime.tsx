@@ -2271,7 +2271,7 @@ export async function startHotSheetWebClient() {
       // project's live change stream, so the switch must not show loading or the busy indicator.
       quiet = cached;
     await Promise.all([
-      refreshProject({ showLoading: !cached, quiet }),
+      refreshProject({ showLoading: !cached, quiet, refreshRepository: true }),
       refreshCommands(current, quiet),
       refreshCustomViews(current, quiet),
       settingsRefresh,
@@ -3194,7 +3194,8 @@ export async function startHotSheetWebClient() {
   async function refreshProject({
     showLoading = true,
     quiet = false,
-  }: { showLoading?: boolean; quiet?: boolean } = {}) {
+    refreshRepository = false,
+  }: { showLoading?: boolean; quiet?: boolean; refreshRepository?: boolean } = {}) {
     const current = project(),
       generation = ++projectRefreshGeneration;
     if (!current) return;
@@ -3213,13 +3214,15 @@ export async function startHotSheetWebClient() {
         board = boardRefreshSpec(view, current.id, { rows: tickets.value, pages: boardColumnPages.value });
       const [index, repositoryResult] = await Promise.all([
         loadProjectTicketRefresh(client, current.id, query, board),
-        client
-          .repositoryStatus(current.id)
-          .then((status) => ({ status, error: '' }))
-          .catch((reason: unknown) => ({
-            status: null,
-            error: reason instanceof Error ? reason.message : String(reason),
-          })),
+        refreshRepository
+          ? client
+              .repositoryStatus(current.id)
+              .then((status) => ({ status, error: '' }))
+              .catch((reason: unknown) => ({
+                status: null,
+                error: reason instanceof Error ? reason.message : String(reason),
+              }))
+          : Promise.resolve(undefined),
       ]);
       if (!active()) return;
       markProjectWarm(current.id);
@@ -3263,8 +3266,10 @@ export async function startHotSheetWebClient() {
         !corruptTickets.value.some((ticket) => corruptTicketKey(ticket) === selectedCorruptKey.value)
       )
         selectedCorruptKey.value = undefined;
-      repository.value = repositoryResult.status;
-      repositoryError.value = repositoryResult.error;
+      if (repositoryResult) {
+        repository.value = repositoryResult.status;
+        repositoryError.value = repositoryResult.error;
+      }
       projectProjectionById.value = {
         ...projectProjectionById.value,
         [current.id]: {

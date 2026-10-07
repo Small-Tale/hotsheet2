@@ -51,7 +51,7 @@ export interface ProjectLifecycleDependencies {
   setPermissionAutomation: (projectId: string, automation: PermissionAutomation) => void;
   startPermissionUpdates: () => void;
   syncProjectChangeStreams: () => void;
-  refreshProject: () => Promise<unknown>;
+  refreshProject: (options?: { refreshRepository?: boolean }) => Promise<unknown>;
   refreshCommands: (project: Project) => Promise<unknown>;
   refreshCustomViews: (project: Project) => Promise<unknown>;
   refreshDriveConnections: (project: Project, restoreDrawerTabs: boolean) => Promise<unknown>;
@@ -262,7 +262,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     }
     presentOpenedProjectSetup(value);
     await Promise.all([
-      dependencies.refreshProject(),
+      dependencies.refreshProject({ refreshRepository: true }),
       dependencies.refreshCommands(value),
       dependencies.refreshCustomViews(value),
       dependencies.refreshDriveConnections(value, true),
