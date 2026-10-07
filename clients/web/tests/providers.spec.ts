@@ -4349,6 +4349,10 @@ test('centers, focuses, and opens the magnified terminal from its footer', async
   const magnified = page.getByRole('dialog', { name: 'Magnified Codex Main' }),
     magnifiedTile = magnified.locator('[data-component="terminal-tile"]');
   await expect(magnified.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect
+    .poll(() => magnifiedTile.evaluate((node) => getComputedStyle(node, '::after').borderTopWidth))
+    .toBe('2px');
+  await magnifiedTile.screenshot({ path: '/private/tmp/hs2-ez86d2-magnified-focus.png' });
   const geometry = await magnified.evaluate((element) => {
     const overlay = element.getBoundingClientRect(),
       tile = element.querySelector('[data-component="terminal-tile"]')!.getBoundingClientRect();
@@ -6889,6 +6893,14 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   );
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
   await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect
+    .poll(() =>
+      drawer
+        .locator('[data-component="terminal-session"]:not([hidden])')
+        .evaluate((node) => getComputedStyle(node, '::after').borderTopWidth),
+    )
+    .toBe('2px');
+  await drawer.screenshot({ path: '/private/tmp/hs2-ez86d2-drawer-focus.png' });
   await page.keyboard.type('focused immediately');
   await expect
     .poll(() =>
@@ -6900,6 +6912,14 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
       ),
     )
     .toContain('focused immediately');
+  await drawer.getByRole('button', { name: 'New drawer item' }).focus();
+  await expect
+    .poll(() =>
+      drawer
+        .locator('[data-component="terminal-session"]:not([hidden])')
+        .evaluate((node) => getComputedStyle(node, '::after').content),
+    )
+    .toBe('none');
   await page.screenshot({ path: '/private/tmp/hs2-h2m7sp-new-terminal-focus.png', fullPage: true });
 });
 

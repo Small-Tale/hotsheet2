@@ -2231,7 +2231,9 @@ cannot expose an unrelated gray surface. The computed tile height derives the 5:
 from the card width, then adds the tokenized frame/footer chrome, so repeated viewport changes
 cannot push the terminal outside its card. Dashboard
 previews never accept terminal input. Click opens and focuses a separate interactive viewport
-centered over a full-browser dimming layer; click-away restores the grid. Its footer exposes
+centered over a full-browser dimming layer; click-away restores the grid. The interactive tile
+and dedicated drawer terminal show an inset focus outline while focus is within either surface
+(HS2-EZ86D2). The tile footer exposes
 an external-open action, and both that action and a footer double-click open the terminal in
 its project's maximized drawer. A grid-tile double-click does the same, while right-click
 exposes shared Open/Hide menu items. A Lucide ellipsis in the shared grid/magnified card footer

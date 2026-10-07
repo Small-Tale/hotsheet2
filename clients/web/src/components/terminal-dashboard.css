@@ -146,6 +146,7 @@
 .terminal-tile {
   --terminal-tile-frame-inset: var(--wa-space-s);
   --terminal-tile-footer-height: remify(43.2px);
+  position: relative;
   display: flex;
   min-width: 0;
   width: var(--terminal-tile-width);
@@ -165,6 +166,19 @@
 .terminal-tile[data-preview-only='true']:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 2px;
+}
+.terminal-tile[data-preview-only='false']:focus-within {
+  z-index: 1;
+}
+.terminal-tile[data-preview-only='false']:focus-within::after {
+  position: absolute;
+  z-index: 1;
+  border: 2px solid var(--wa-color-focus);
+  border-radius: inherit;
+  box-sizing: border-box;
+  content: '';
+  pointer-events: none;
+  inset: 0;
 }
 .terminal-tile__preview {
   position: relative;
@@ -615,6 +629,7 @@
    shared viewport rules so the dedicated presentation wins in every connection state; the drawer
    configures it only through its `mobile` and `focus` props. */
 .terminal-session {
+  position: relative;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -624,6 +639,15 @@
 }
 .terminal-session[hidden] {
   display: none;
+}
+.terminal-session:focus-within::after {
+  position: absolute;
+  z-index: 1;
+  border: 2px solid var(--wa-color-focus);
+  box-sizing: border-box;
+  content: '';
+  pointer-events: none;
+  inset: 0;
 }
 .terminal-session .terminal-viewport {
   position: relative;
