@@ -265,6 +265,7 @@ commands-and-ai	delegate	document.body	'click'	'[data-action="remove-project-sou
 commands-and-ai	delegate	document.body	'click'	'[data-action="use-github-account"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="use-provider-account"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="sign-out-account"]'
+commands-and-ai	delegate	document.body	'click'	'[data-action="identify-github-account"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="request-unused-account-source-removal"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="cancel-unused-account-source-removal"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="remove-unused-account-source"]'
