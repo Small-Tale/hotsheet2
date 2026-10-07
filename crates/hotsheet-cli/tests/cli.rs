@@ -1584,21 +1584,28 @@ fn format_activation_requires_an_explicit_pre_release_acknowledgement() {
         .args(["init", "--prefix", "HS"])
         .assert()
         .success();
-    let slug = new_ticket(dir.path(), "Migrate my shard");
     let store = hotsheet_ticketing::FsStore::open(dir.path()).unwrap();
-    let ticket = store
-        .list_tickets()
-        .unwrap()
-        .into_iter()
-        .find(|ticket| ticket.slug == slug)
-        .unwrap();
-    let suffix_path = store.ticket_path(&ticket.id);
-    let id = ticket.id.to_string();
-    let prefix_path = dir
-        .path()
-        .join("tickets")
-        .join(&id[..2])
-        .join(format!("{id}.md"));
+    // A ULID's random suffix can equal its first two characters. Then the
+    // legacy and current shard paths coincide and there is no move to test.
+    let (slug, suffix_path, prefix_path) = loop {
+        let slug = new_ticket(dir.path(), "Migrate my shard");
+        let ticket = store
+            .list_tickets()
+            .unwrap()
+            .into_iter()
+            .find(|ticket| ticket.slug == slug)
+            .unwrap();
+        let suffix_path = store.ticket_path(&ticket.id);
+        let id = ticket.id.to_string();
+        let prefix_path = dir
+            .path()
+            .join("tickets")
+            .join(&id[..2])
+            .join(format!("{id}.md"));
+        if suffix_path != prefix_path {
+            break (slug, suffix_path, prefix_path);
+        }
+    };
     std::fs::create_dir_all(prefix_path.parent().unwrap()).unwrap();
     std::fs::rename(&suffix_path, &prefix_path).unwrap();
     std::fs::write(
