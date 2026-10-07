@@ -1159,6 +1159,14 @@ export function storeNeedsServerUpgrade(
   );
 }
 
+/** A locally selected binary must match the server already serving this store. */
+export function serverNeedsSelectedBuild(
+  server: ServerCompatibility | undefined,
+  selectedRevision: string | undefined,
+): boolean {
+  return Boolean(selectedRevision && server?.build_revision !== selectedRevision);
+}
+
 function supportsSafeRestart(server: ServerCompatibility | undefined): boolean {
   return server?.capabilities?.lifecycle_restart === true && server.capabilities.lifecycle_quiescence === true;
 }
@@ -1208,16 +1216,23 @@ async function openPreparedLocalProject(
     target: SessionTarget = { url: instance.url, secret: instance.secret, root, serverStore: plan.serverStore };
   let metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
   const cli = ticketStore ? await cliCompatibility(ticketStore, runProcess) : undefined;
-  let compatibility = assessCompatibility(metadata, undefined, process.env.HOT_SHEET_BUILD_REVISION);
+  const selectedRevision = process.env.HOT_SHEET_BUILD_REVISION;
+  let compatibility = assessCompatibility(metadata, undefined, selectedRevision);
   if (
-    (compatibility.kind === 'server_too_old' || storeNeedsServerUpgrade(metadata, cli)) &&
+    (compatibility.kind === 'server_too_old' ||
+      storeNeedsServerUpgrade(metadata, cli) ||
+      serverNeedsSelectedBuild(metadata, selectedRevision)) &&
     supportsSafeRestart(metadata)
   ) {
     instance = await restartForUpgrade(plan.serverStore, target, instance);
     target = { url: instance.url, secret: instance.secret, root, serverStore: plan.serverStore };
     metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
-    compatibility = assessCompatibility(metadata, undefined, process.env.HOT_SHEET_BUILD_REVISION);
+    compatibility = assessCompatibility(metadata, undefined, selectedRevision);
   }
+  if (selectedRevision && (serverNeedsSelectedBuild(metadata, selectedRevision) || compatibility.sourceStale))
+    throw new Error(
+      'The running Hot Sheet server does not match the current local build. Run `npm run server:rebuild` or `npm run server:rebuild:release`, then reopen the project.',
+    );
   if (ticketStore && cli) requireStoreSchemaCompatibility(metadata, cli, 'open');
   requireCompatibleServer(compatibility);
   const opened = await serverRequest<{

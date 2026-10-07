@@ -397,9 +397,13 @@ and identity-less legacy entries remain conservatively blocking.
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
   open starts the new binary; `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`
   for other devices on the LAN. The production host prefers **release** binaries (HS2-D2JQ9A): when
-  `target/release/hotsheet-server` exists and `HOTSHEET_SERVER_BIN` is unset, it launches the release
-  server, CLI, and migrator together (never a release CLI beside a debug server) and logs which build
-  it uses. `server:rebuild:release` builds those and stops the running machine server, and
+  `HOTSHEET_SERVER_BIN` is unset, it probes the release server's build/source revision and uses the
+  release binary set only when current. Otherwise it chooses a current debug server with its debug
+  companions. If neither server binary matches the workspace source, startup requests a rebuild.
+  The host compares an already running server with its selected build before opening a project;
+  it uses a supported quiescent restart for a mismatch or stops with a rebuild/reopen instruction.
+  Explicit binary overrides remain authoritative. `server:rebuild:release` builds the release set
+  and stops the running machine server, and
   `prod:rebuild-lan` runs it before serving the production client on `0.0.0.0`.
 
 - **Render budgets.** Development builds expose root render-pass and DOM-mutation

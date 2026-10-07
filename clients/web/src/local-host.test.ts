@@ -56,29 +56,59 @@ describe('local production host (HS2-587N4D)', () => {
 describe('release binaries for the production host (HS2-D2JQ9A)', () => {
   const root = '/repo',
     release = (name: string) => `/repo/target/release/${name}`,
+    debug = (name: string) => `/repo/target/debug/${name}`,
     built =
       (...names: string[]) =>
       (path: string) =>
-        names.some((name) => path === release(name));
+        names.some((name) => path === release(name) || path === debug(name)),
+    current = () => ({
+      build_revision: 'source-sha256:current',
+      source_revision: 'source-sha256:current',
+      source_stale: false,
+    });
 
   it('switches every binary to its release build together once a release server exists', () => {
-    expect(releaseBinaryEnvironment(root, {}, built('hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate'))).toEqual({
+    expect(
+      releaseBinaryEnvironment(root, {}, built('hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate'), current),
+    ).toEqual({
       HOTSHEET_SERVER_BIN: release('hotsheet-server'),
       HOTSHEET_CLI_BIN: release('hotsheet-cli'),
       HOTSHEET_MIGRATE_BIN: release('hotsheet-migrate'),
+      HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
     });
   });
 
   it('never pairs a stale release CLI with the debug server', () => {
-    expect(releaseBinaryEnvironment(root, {}, built('hotsheet-cli', 'hotsheet-migrate'))).toEqual({});
+    expect(
+      releaseBinaryEnvironment(root, {}, built('hotsheet-server', 'hotsheet-cli', 'hotsheet-migrate'), (path) =>
+        path === release('hotsheet-server')
+          ? { build_revision: 'old', source_revision: 'current', source_stale: true }
+          : current(),
+      ),
+    ).toEqual({ HOTSHEET_SERVER_BIN: debug('hotsheet-server'), HOT_SHEET_BUILD_REVISION: 'source-sha256:current' });
+  });
+
+  it('rejects stale release and debug servers before opening a project', () => {
+    expect(() =>
+      releaseBinaryEnvironment(root, {}, built('hotsheet-server'), () => ({
+        build_revision: 'old',
+        source_revision: 'current',
+        source_stale: true,
+      })),
+    ).toThrow('No current Hot Sheet server binary');
   });
 
   it('keeps explicit overrides and skips release binaries that are not built', () => {
-    expect(releaseBinaryEnvironment(root, { HOTSHEET_SERVER_BIN: '/custom/server' }, built('hotsheet-server'))).toEqual(
-      {},
-    );
     expect(
-      releaseBinaryEnvironment(root, { HOTSHEET_CLI_BIN: '/custom/cli' }, built('hotsheet-server', 'hotsheet-cli')),
-    ).toEqual({ HOTSHEET_SERVER_BIN: release('hotsheet-server') });
+      releaseBinaryEnvironment(root, { HOTSHEET_SERVER_BIN: '/custom/server' }, built('hotsheet-server'), current),
+    ).toEqual({});
+    expect(
+      releaseBinaryEnvironment(
+        root,
+        { HOTSHEET_CLI_BIN: '/custom/cli' },
+        built('hotsheet-server', 'hotsheet-cli'),
+        current,
+      ),
+    ).toEqual({ HOTSHEET_SERVER_BIN: release('hotsheet-server'), HOT_SHEET_BUILD_REVISION: 'source-sha256:current' });
   });
 });

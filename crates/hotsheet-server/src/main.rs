@@ -38,6 +38,10 @@ struct Cli {
     #[arg(long)]
     stop: bool,
 
+    /// Print this binary's build/source revision status as JSON, without opening a store.
+    #[arg(long)]
+    revision_status: bool,
+
     /// With --stop, also kill every terminal retained by this project's detached broker.
     #[arg(long, requires = "stop")]
     kill_all_terminals: bool,
@@ -108,6 +112,20 @@ const DEFAULT_SHUTDOWN_DRAIN_MS: u64 = 5_000;
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    if cli.revision_status {
+        let status =
+            hotsheet_server::source_revision::SourceRevisionMonitor::current_build().status();
+        println!(
+            "{}",
+            serde_json::json!({
+                "build_revision": status.build_revision,
+                "source_revision": status.source_revision,
+                "source_stale": status.source_stale,
+            })
+        );
+        return Ok(());
+    }
 
     if let Some(socket) = cli.terminal_broker_process.as_ref() {
         let project = cli.terminal_broker_project.clone().unwrap_or_default();

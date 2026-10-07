@@ -41,6 +41,7 @@ import {
   revealCommand,
   runGitCommand,
   safelyRestartServer,
+  serverNeedsSelectedBuild,
   setupRefreshNotices,
   storeNeedsServerUpgrade,
   superviseServer,
@@ -1286,5 +1287,13 @@ describe('machine server supervision', () => {
         selected_store_schema: 2,
       }),
     ).toBe(false);
+  });
+
+  it('recognizes a running server whose revision differs from the locally selected binary', () => {
+    const server = { generation: 'hs2', protocol: { min: 1, max: 1 }, build_revision: 'old' };
+    expect(serverNeedsSelectedBuild(server, 'current')).toBe(true);
+    expect(serverNeedsSelectedBuild(server, 'old')).toBe(false);
+    expect(serverNeedsSelectedBuild(server, undefined)).toBe(false);
+    expect(serverNeedsSelectedBuild(undefined, 'current')).toBe(true);
   });
 });

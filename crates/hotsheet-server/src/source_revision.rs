@@ -82,25 +82,69 @@ impl SourceRevisionMonitor {
     }
 }
 
-/// Hash the build-relevant server crate source independently of Git metadata. This keeps
-/// local builds deterministic and avoids false staleness from unrelated repository commits.
+/// Hash local workspace source independently of Git metadata. Covering every local crate
+/// is conservative: a change in a server dependency can never leave an old binary marked
+/// current, even when Cargo's workspace dependency graph changes later.
 pub fn revision_for_source_root(root: &Path) -> io::Result<String> {
     let (files, _) = source_fingerprint(root)?;
     hash_source_files(root, &files)
 }
 
 fn source_fingerprint(root: &Path) -> io::Result<(Vec<PathBuf>, SourceFingerprint)> {
-    if !root.join("Cargo.toml").is_file() || !root.join("src").is_dir() {
+    if !root.join("Cargo.toml").is_file() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             "server source root is unavailable",
         ));
     }
     let mut files = vec![PathBuf::from("Cargo.toml")];
-    if root.join("build.rs").is_file() {
-        files.push(PathBuf::from("build.rs"));
+    if root.join("crates/hotsheet-server/src").is_dir() {
+        if root.join("Cargo.lock").is_file() {
+            files.push(PathBuf::from("Cargo.lock"));
+        }
+        if root
+            .join("crates/hotsheet-server/github-app-client-id.txt")
+            .is_file()
+        {
+            files.push(PathBuf::from(
+                "crates/hotsheet-server/github-app-client-id.txt",
+            ));
+        }
+        for bundled in [
+            "plugins",
+            ".claude/skills/hotsheet",
+            ".agents/skills/hotsheet",
+        ] {
+            if root.join(bundled).is_dir() {
+                collect_source_files(root, &root.join(bundled), &mut files)?;
+            }
+        }
+        let mut crates = fs::read_dir(root.join("crates"))?.collect::<Result<Vec<_>, _>>()?;
+        crates.sort_by_key(fs::DirEntry::file_name);
+        for entry in crates {
+            if !entry.file_type()?.is_dir() || !entry.path().join("Cargo.toml").is_file() {
+                continue;
+            }
+            let relative = entry.path().strip_prefix(root).unwrap().to_path_buf();
+            files.push(relative.join("Cargo.toml"));
+            if entry.path().join("build.rs").is_file() {
+                files.push(relative.join("build.rs"));
+            }
+            if entry.path().join("src").is_dir() {
+                collect_source_files(root, &entry.path().join("src"), &mut files)?;
+            }
+        }
+    } else if root.join("src").is_dir() {
+        if root.join("build.rs").is_file() {
+            files.push(PathBuf::from("build.rs"));
+        }
+        collect_source_files(root, &root.join("src"), &mut files)?;
+    } else {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "server source root is unavailable",
+        ));
     }
-    collect_source_files(root, &root.join("src"), &mut files)?;
     files.sort();
 
     let mut entries = Vec::with_capacity(files.len());
@@ -215,5 +259,43 @@ mod tests {
             SourceRevisionMonitor::for_source_root("release-1", root.path().join("missing"));
         assert_eq!(unavailable.status().source_revision, None);
         assert!(!unavailable.status().source_stale);
+    }
+
+    #[test]
+    fn workspace_revision_changes_when_a_sibling_crate_changes() {
+        let workspace = tempfile::tempdir().unwrap();
+        fs::write(workspace.path().join("Cargo.toml"), "[workspace]\n").unwrap();
+        fs::write(workspace.path().join("Cargo.lock"), "lock-v1").unwrap();
+        for name in ["hotsheet-server", "hotsheet-ticketing"] {
+            let crate_root = workspace.path().join("crates").join(name);
+            fs::create_dir_all(crate_root.join("src")).unwrap();
+            fs::write(
+                crate_root.join("Cargo.toml"),
+                format!("[package]\nname='{name}'\n"),
+            )
+            .unwrap();
+            fs::write(crate_root.join("src/lib.rs"), "pub const VALUE: u8 = 1;\n").unwrap();
+        }
+        let built = revision_for_source_root(workspace.path()).unwrap();
+        let monitor = SourceRevisionMonitor::for_source_root(&built, workspace.path());
+        assert!(!monitor.status().source_stale);
+        fs::write(
+            workspace
+                .path()
+                .join("crates/hotsheet-ticketing/src/lib.rs"),
+            "pub const VALUE: u16 = 22;\n",
+        )
+        .unwrap();
+        assert!(monitor.status().source_stale);
+        let sibling_revision = revision_for_source_root(workspace.path()).unwrap();
+        fs::write(workspace.path().join("Cargo.lock"), "lock-v2").unwrap();
+        let lock_revision = revision_for_source_root(workspace.path()).unwrap();
+        assert_ne!(sibling_revision, lock_revision);
+        fs::create_dir_all(workspace.path().join("plugins/codex")).unwrap();
+        fs::write(workspace.path().join("plugins/codex/SKILL.md"), "changed").unwrap();
+        assert_ne!(
+            lock_revision,
+            revision_for_source_root(workspace.path()).unwrap()
+        );
     }
 }

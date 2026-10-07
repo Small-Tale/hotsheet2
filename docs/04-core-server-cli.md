@@ -436,18 +436,21 @@ application API. It reports the HS2 generation, semantic application version, op
 build revision, inclusive API-protocol and store-schema ranges, server start time when
 available, and lifecycle capabilities. Hard compatibility is based on protocol-range
 intersection, not exact version or revision equality, so rolling compatible builds can
-coexist. Local development builds also hash their build-relevant server source at compile
-time and cheaply monitor that same source tree at runtime. The handshake reports the
-built and current source revisions plus `source_stale`; the client can therefore warn
-that the detached server needs a rebuild/restart without treating unrelated monorepo Git
-commits as staleness. Release/explicit-revision builds omit local source probing, and an
+coexist. Local development builds hash the workspace Rust crate sources, manifests,
+lockfile, and bundled plugin guidance at compile time and cheaply monitor them at runtime.
+The binary's `--revision-status` command reports the same build/source status without
+opening a store. The handshake reports the built and current source revisions plus
+`source_stale`; the client can therefore detect a detached server built before a
+dependency change without treating unrelated Git commits as staleness. Explicitly
+revisioned release builds omit local source probing, and an
 unavailable source tree is not reported as stale. Missing or invalid metadata is an
 explicit unknown state. The server advertises authenticated restart and quiescence only
 with its admission gate active. A restart first refuses new mutations/background passes,
 then proceeds only when mutations, sync/drive passes, commands, setup refreshes, AI turns,
 permission requests, authentication flows, and server-owned terminals are quiescent;
 broker-hosted terminals may survive the process replacement. The client uses this path for
-protocol or store-schema upgrades only when both capabilities are explicit, waits for the
+protocol or store-schema upgrades and local-host build replacement only when both
+capabilities are explicit, waits for the
 old registration to be relinquished, and then supervises the replacement. Ambiguous writes
 are never replayed across recovery. Remote restart remains a separately authorized concern.
 If a registered local process remains alive but cannot answer its health probe, automatic

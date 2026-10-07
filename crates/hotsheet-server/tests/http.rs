@@ -2516,20 +2516,21 @@ async fn lifecycle_restart_preserves_active_work_then_closes_mutation_admission(
 #[tokio::test]
 async fn compatibility_reports_a_server_built_from_older_local_source() {
     let source = tempfile::tempdir().unwrap();
-    std::fs::create_dir(source.path().join("src")).unwrap();
-    std::fs::write(
-        source.path().join("Cargo.toml"),
-        "[package]\nname='server'\n",
-    )
-    .unwrap();
-    std::fs::write(
-        source.path().join("src/lib.rs"),
-        "pub const VALUE: u8 = 1;\n",
-    )
-    .unwrap();
+    std::fs::write(source.path().join("Cargo.toml"), "[workspace]\n").unwrap();
+    std::fs::write(source.path().join("Cargo.lock"), "lock-v1").unwrap();
+    for name in ["hotsheet-server", "hotsheet-ticketing"] {
+        let crate_root = source.path().join("crates").join(name);
+        std::fs::create_dir_all(crate_root.join("src")).unwrap();
+        std::fs::write(
+            crate_root.join("Cargo.toml"),
+            format!("[package]\nname='{name}'\n"),
+        )
+        .unwrap();
+        std::fs::write(crate_root.join("src/lib.rs"), "pub const VALUE: u8 = 1;\n").unwrap();
+    }
     let built = revision_for_source_root(source.path()).unwrap();
     std::fs::write(
-        source.path().join("src/lib.rs"),
+        source.path().join("crates/hotsheet-ticketing/src/lib.rs"),
         "pub const VALUE: u16 = 22;\n",
     )
     .unwrap();
@@ -2549,6 +2550,26 @@ async fn compatibility_reports_a_server_built_from_older_local_source() {
     assert_eq!(value["build_revision"], built);
     assert!(value["source_revision"].as_str().is_some());
     assert_eq!(value["source_stale"], true);
+}
+
+#[test]
+fn server_binary_reports_its_revision_without_opening_a_store() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_hotsheet-server"))
+        .arg("--revision-status")
+        .arg("-C")
+        .arg("/this-store-does-not-exist")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let status: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        status["build_revision"]
+            .as_str()
+            .unwrap()
+            .starts_with("source-sha256:")
+    );
+    assert_eq!(status["build_revision"], status["source_revision"]);
+    assert_eq!(status["source_stale"], false);
 }
 
 #[tokio::test]

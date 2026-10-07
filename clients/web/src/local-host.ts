@@ -16,11 +16,36 @@ import { getRequestListener } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type MiddlewareHandler } from 'hono';
 
+import { spawnSync } from './child-process';
 import { createDevApp } from './dev-server';
 import { developmentRepositoryRoot } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
 export const LOCAL_HOST_DEFAULT_PORT = 4175;
+
+interface BinaryRevisionStatus {
+  build_revision?: string | null;
+  source_revision?: string | null;
+  source_stale?: boolean;
+}
+
+function binaryRevisionStatus(path: string): BinaryRevisionStatus | undefined {
+  try {
+    const result = spawnSync(path, ['--revision-status'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return result.status === 0 ? (JSON.parse(result.stdout.toString()) as BinaryRevisionStatus) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function currentRevision(status: BinaryRevisionStatus | undefined): string | undefined {
+  if (!status || status.source_stale !== false || !status.build_revision) return undefined;
+  return status.build_revision === status.source_revision ? status.build_revision : undefined;
+}
 
 /** The Rust binaries the bridge launches, by the environment variable that overrides each. */
 const HOST_BINARIES = {
@@ -33,16 +58,32 @@ const HOST_BINARIES = {
  * Release builds of the bridge's binaries for a production host (HS2-D2JQ9A). The bridge defaults to
  * `target/debug`, whose server is many times slower at hashing and walking stores. When a release
  * server is built, every binary not already set in `environment` switches to its release build
- * together, so a stale release CLI is never paired with a debug server.
+ * together, so a stale release CLI is never paired with a debug server. A local binary is
+ * eligible only when its embedded revision matches the current workspace source.
  */
 export function releaseBinaryEnvironment(
   repositoryRoot: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
   exists: (path: string) => boolean = existsSync,
+  inspect: (path: string) => BinaryRevisionStatus | undefined = binaryRevisionStatus,
 ): Record<string, string> {
   const release = (name: string) => resolve(repositoryRoot, 'target/release', name);
-  if (environment.HOTSHEET_SERVER_BIN || !exists(release(HOST_BINARIES.HOTSHEET_SERVER_BIN))) return {};
-  const chosen: Record<string, string> = {};
+  const debug = (name: string) => resolve(repositoryRoot, 'target/debug', name);
+  if (environment.HOTSHEET_SERVER_BIN) return {};
+  const releaseRevision = exists(release(HOST_BINARIES.HOTSHEET_SERVER_BIN))
+    ? currentRevision(inspect(release(HOST_BINARIES.HOTSHEET_SERVER_BIN)))
+    : undefined;
+  if (!releaseRevision) {
+    const debugRevision = exists(debug(HOST_BINARIES.HOTSHEET_SERVER_BIN))
+      ? currentRevision(inspect(debug(HOST_BINARIES.HOTSHEET_SERVER_BIN)))
+      : undefined;
+    if (!debugRevision)
+      throw new Error(
+        'No current Hot Sheet server binary is available. Run `npm run server:rebuild` or `npm run server:rebuild:release`.',
+      );
+    return { HOTSHEET_SERVER_BIN: debug(HOST_BINARIES.HOTSHEET_SERVER_BIN), HOT_SHEET_BUILD_REVISION: debugRevision };
+  }
+  const chosen: Record<string, string> = { HOT_SHEET_BUILD_REVISION: releaseRevision };
   for (const [variable, name] of Object.entries(HOST_BINARIES)) {
     if (!environment[variable] && exists(release(name))) chosen[variable] = release(name);
   }
@@ -109,7 +150,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const release = releaseBinaryEnvironment(developmentRepositoryRoot());
   Object.assign(process.env, release);
   console.log(
-    release.HOTSHEET_SERVER_BIN
+    'HOTSHEET_SERVER_BIN' in release && release.HOTSHEET_SERVER_BIN.includes('/target/release/')
       ? `Using release Hot Sheet binaries (${release.HOTSHEET_SERVER_BIN}).`
       : 'Using debug Hot Sheet binaries; run `npm run server:rebuild:release` for a faster server.',
   );

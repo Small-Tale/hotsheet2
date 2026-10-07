@@ -1,6 +1,16 @@
+import { fileURLToPath } from 'node:url';
+
 import { expect, test } from '@playwright/test';
 
 import type { CompatibilityAssessment } from '../src/compatibility';
+import { releaseBinaryEnvironment } from '../src/local-host';
+
+test('selects a current local server binary from the real checkout', () => {
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  const selected = releaseBinaryEnvironment(root, {});
+  expect(selected.HOTSHEET_SERVER_BIN).toMatch(/\/target\/(?:debug|release)\/hotsheet-server$/);
+  expect(selected.HOT_SHEET_BUILD_REVISION).toMatch(/^source-sha256:[0-9a-f]{64}$/);
+});
 
 async function openWithCompatibility(page: import('@playwright/test').Page, compatibility: CompatibilityAssessment) {
   await page.route('**/*', (route) => {

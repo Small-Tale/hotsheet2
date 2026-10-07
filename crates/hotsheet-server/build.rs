@@ -11,6 +11,12 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=github-app-client-id.txt");
     println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=../../Cargo.toml");
+    println!("cargo:rerun-if-changed=../../Cargo.lock");
+    println!("cargo:rerun-if-changed=../../crates");
+    println!("cargo:rerun-if-changed=../../plugins");
+    println!("cargo:rerun-if-changed=../../.claude/skills/hotsheet");
+    println!("cargo:rerun-if-changed=../../.agents/skills/hotsheet");
 
     let bundled_github_client_id = std::env::var("HOTSHEET_GITHUB_APP_CLIENT_ID")
         .ok()
@@ -32,7 +38,8 @@ fn main() {
         return;
     }
 
-    let root = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
+    let root =
+        PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir")).join("../..");
     let revision = source_revision::revision_for_source_root(&root)
         .expect("hash hotsheet-server source for the local build");
     println!("cargo:rustc-env=HOT_SHEET_BUILD_REVISION={revision}");
