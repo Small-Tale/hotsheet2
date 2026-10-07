@@ -188,6 +188,7 @@ describe('application shell components', () => {
     expect(css).toContainSource('.app-shell[data-mode="terminals"] .app-shell__work-area { border-top: 0; }');
     const shell = String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never }));
     expect(shell).toMatch(/class="kui-pane"[^>]*data-appearance="sunken"/);
+    expect(shell).toMatch(/class="kui-pane"[^>]*data-chrome-dividers="none"/);
     expect(css).not.toMatch(/\.app-shell__work-area \{[^}]*background: var\(--wa-color-surface-lowered\)/);
     expect(css).not.toMatch(/\.app-shell__workspace \{[^}]*background: var\(--wa-color-surface-lowered\)/);
   });

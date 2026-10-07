@@ -2010,6 +2010,8 @@ test('paints the AppShell work surface once through its sunken Pane (HS2-7G8PZ3)
       pane = shell.locator('.app-shell__main').locator('xpath=ancestor::*[@data-component="pane"][1]'),
       content = pane.locator('.kui-pane__content').first();
     await expect(pane).toHaveAttribute('data-appearance', 'sunken');
+    await expect(pane).toHaveAttribute('data-chrome-dividers', 'none');
+    await expect(shell.locator('.app-shell__work-area')).toHaveCSS('border-top-width', '1px');
     await expect(content).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expect(shell.locator('.app-shell__work-area')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expect(shell.locator('.app-shell__workspace')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');

@@ -226,6 +226,9 @@ export function AppShell({
         // shell sits inside a window, where the insets are zero.
         mainPane={{
           appearance: 'sunken',
+          // The toolbar and project strip form one header; the work-area border below the strip
+          // supplies the content boundary (HS2-090AGV).
+          chromeDividers: 'none',
           safeAreaEdges: ['block-start', 'inline-start', 'inline-end'],
           contentLabel: 'Workspace',
         }}

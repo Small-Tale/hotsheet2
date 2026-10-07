@@ -293,7 +293,10 @@ and identity-less legacy entries remain conservatively blocking.
   changes and switching between desktop tabs and the mobile Select.
   On non-mobile project tabs, the current ticket view, notification view, or settings
   category replaces the redundant project name in the compact main-toolbar title. The
-  separate large page-header row is omitted, and the ticket-view action moves to the far
+  main toolbar and project strip share one header without a divider between them; the
+  content boundary remains below the strip. The same divider-free join applies to the
+  compact mobile toolbar and project row (HS2-090AGV). The separate large
+  page-header row is omitted, and the ticket-view action moves to the far
   trailing edge of ProjectTabBar. Selecting the already-current project tab while the
   Notifications or Settings view is open returns to the ticket view the user last had open,
   list or columns, remembered in the workspace preferences across reloads; on a ticket view
