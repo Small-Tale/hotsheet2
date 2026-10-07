@@ -186,6 +186,10 @@ describe('application shell components', () => {
     // toolbar/tab-bar/page-header above it; terminals mode uses the tab-bar border instead.
     expect(css).toMatch(/\.app-shell__work-area \{[^}]*border-top: 1px solid var\(--wa-color-surface-border\)/);
     expect(css).toContainSource('.app-shell[data-mode="terminals"] .app-shell__work-area { border-top: 0; }');
+    const shell = String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never }));
+    expect(shell).toMatch(/class="kui-pane"[^>]*data-appearance="sunken"/);
+    expect(css).not.toMatch(/\.app-shell__work-area \{[^}]*background: var\(--wa-color-surface-lowered\)/);
+    expect(css).not.toMatch(/\.app-shell__workspace \{[^}]*background: var\(--wa-color-surface-lowered\)/);
   });
   it('draws one continuous focus outline around the ticket work area', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');

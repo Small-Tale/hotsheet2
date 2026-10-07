@@ -48,7 +48,6 @@
   flex: 1;
   flex-direction: column;
   border-top: 1px solid var(--wa-color-surface-border);
-  background: var(--wa-color-surface-lowered);
   outline: 0 solid transparent;
   outline-offset: -2px;
   transition: outline-color 0.12s ease;
@@ -105,7 +104,6 @@
   overflow: auto;
   overflow-anchor: none;
   flex: 1;
-  background: var(--wa-color-surface-lowered);
 }
 .app-shell__workspace[data-presentation='edge-to-edge'] {
   padding: remify(16px) 0 0;

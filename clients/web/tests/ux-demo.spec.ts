@@ -2010,6 +2010,21 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
   }
 });
 
+test('paints the AppShell work surface once through its sunken Pane (HS2-7G8PZ3)', async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/ux-demo?component=app-shell');
+    const shell = page.locator('[data-component="app-shell"]'),
+      pane = shell.locator('.app-shell__main').locator('xpath=ancestor::*[@data-component="pane"][1]'),
+      content = pane.locator('.kui-pane__content').first();
+    await expect(pane).toHaveAttribute('data-appearance', 'sunken');
+    await expect(content).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(shell.locator('.app-shell__work-area')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(shell.locator('.app-shell__workspace')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await page.screenshot({ path: `/private/tmp/hs2-7g8pz3-app-shell-${width}.png`, animations: 'disabled' });
+  }
+});
+
 test('round-trips AppShell presentation and work-area focus-ring settings (HS2-8ZJMCE)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });

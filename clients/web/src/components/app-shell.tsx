@@ -224,7 +224,11 @@ export function AppShell({
         // unsafe area while its surface reaches the edge), and the ticket scrollers deeper in the
         // column carry the bottom inset as padding inside themselves (HS2-4A29RR). On desktop the
         // shell sits inside a window, where the insets are zero.
-        mainPane={{ safeAreaEdges: ['block-start', 'inline-start', 'inline-end'], contentLabel: 'Workspace' }}
+        mainPane={{
+          appearance: 'sunken',
+          safeAreaEdges: ['block-start', 'inline-start', 'inline-end'],
+          contentLabel: 'Workspace',
+        }}
         mainToolbar={{
           label: 'Workspace toolbar',
           dividerSides: '',

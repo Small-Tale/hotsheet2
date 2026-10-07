@@ -90,6 +90,11 @@ screen-level CSS must not replace it with a smaller minimum.
 AppShell configures the components it composes through props rather than cross-component CSS
 (HS2-DR549A):
 
+The Workbench main Pane uses `appearance="sunken"` for the ticket work surface. The work area
+and workspace scroller are transparent so Web Awesome's semi-transparent lowered color is painted
+only once (HS2-7G8PZ3). Other lowered surfaces in the component catalog and standalone controls
+retain their own backgrounds where they do not cover the Pane's work surface.
+
 - **`presentation`.** `framed` (the default, as the UX demo stages it) draws a bordered window. `viewport`
   fills its container edge to edge; `MainShell` passes it for the application root, so no global
   stylesheet restyles the shell.
