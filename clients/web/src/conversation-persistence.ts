@@ -57,3 +57,23 @@ export function saveConversationStates(
 ): void {
   storage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify(states));
 }
+
+/** Keep storage serialization off the per-event path while bounding crash-recovery lag. */
+export function createConversationPersistence(flushLatest: () => void) {
+  let quietTimer: ReturnType<typeof setTimeout> | undefined;
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const flush = () => {
+    if (quietTimer === undefined && deadlineTimer === undefined) return;
+    if (quietTimer !== undefined) clearTimeout(quietTimer);
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+    quietTimer = undefined;
+    deadlineTimer = undefined;
+    flushLatest();
+  };
+  const schedule = () => {
+    if (quietTimer !== undefined) clearTimeout(quietTimer);
+    quietTimer = setTimeout(flush, 250);
+    deadlineTimer ??= setTimeout(flush, 1_000);
+  };
+  return { schedule, flush };
+}

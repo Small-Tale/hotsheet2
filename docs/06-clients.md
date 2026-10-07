@@ -1279,8 +1279,10 @@ and identity-less legacy entries remain conservatively blocking.
   before a new turn is appended. Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their
-  turn. Transcript and activity state is validated and persisted device-locally after every
-  transition, so a client reload restores the exact received history. On server restart, the
+  turn. Transcript and activity state is validated and persisted device-locally. Streamed
+  changes are coalesced after 250 ms of quiet or at least once per second during a sustained
+  stream, then flushed on turn completion and page hide so a reload restores received history
+  without serializing the full transcript for every output event (HS2-TC93GZ). On server restart, the
   client pairs that history with the server's durable newest-first session catalog and recreates
   each latest connection/session before restoring eligible drawer tabs; corrupt local entries or
   one unavailable provider are isolated instead of discarding other conversations (HS2-YHQCS2).

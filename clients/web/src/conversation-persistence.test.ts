@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CONVERSATION_STORAGE_KEY, loadConversationStates, saveConversationStates } from './conversation-persistence';
+import {
+  CONVERSATION_STORAGE_KEY,
+  createConversationPersistence,
+  loadConversationStates,
+  saveConversationStates,
+} from './conversation-persistence';
+
+afterEach(() => vi.useRealTimers());
 
 describe('durable AI conversation state (HS2-YHQCS2)', () => {
   it('round-trips completed and in-progress transcript state across client reloads', () => {
@@ -38,5 +45,48 @@ describe('durable AI conversation state (HS2-YHQCS2)', () => {
       good: { messages: [{ id: 'u', role: 'user', content: 'hello' }] },
     });
     expect(loadConversationStates({ getItem: () => '{broken' })).toEqual({});
+  });
+});
+
+describe('streamed conversation persistence (HS2-TC93GZ)', () => {
+  it('coalesces bursts, writes the latest state, and bounds sustained streams', () => {
+    vi.useFakeTimers();
+    let latest = 'first';
+    const writes: string[] = [];
+    const persistence = createConversationPersistence(() => writes.push(latest));
+    persistence.schedule();
+    vi.advanceTimersByTime(200);
+    latest = 'second';
+    persistence.schedule();
+    expect(writes).toEqual([]);
+    vi.advanceTimersByTime(249);
+    expect(writes).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(writes).toEqual(['second']);
+    for (let elapsed = 0; elapsed < 1_000; elapsed += 100) {
+      latest = `stream-${elapsed}`;
+      persistence.schedule();
+      vi.advanceTimersByTime(100);
+    }
+    expect(writes).toEqual(['second', 'stream-900']);
+    vi.advanceTimersByTime(1_000);
+    expect(writes).toHaveLength(2);
+  });
+
+  it('flushes the latest state once on completion or page hide and cancels pending timers', () => {
+    vi.useFakeTimers();
+    let latest = 'partial';
+    const writes: string[] = [];
+    const persistence = createConversationPersistence(() => writes.push(latest));
+    persistence.schedule();
+    latest = 'complete';
+    persistence.flush();
+    persistence.flush();
+    vi.advanceTimersByTime(2_000);
+    expect(writes).toEqual(['complete']);
+    latest = 'next turn';
+    persistence.schedule();
+    persistence.flush();
+    expect(writes).toEqual(['complete', 'next turn']);
   });
 });

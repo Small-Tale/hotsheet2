@@ -23470,6 +23470,48 @@ test('restores an idle server failure when a persisted conversation still has an
   await expect(drawer.getByRole('alert')).toContainText('Selected model is at capacity');
 });
 
+test('coalesces streamed conversation storage writes and flushes before reload (HS2-TC93GZ)', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = localStorage.setItem.bind(localStorage);
+    (window as typeof window & { __conversationStorageWrites: number }).__conversationStorageWrites = 0;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'hotsheet.ai-conversations.v1')
+        (window as typeof window & { __conversationStorageWrites: number }).__conversationStorageWrites += 1;
+      original(key, value);
+    };
+  });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  const composer = drawer.getByLabel('Message Codex');
+  const before = await page.evaluate(
+    () => (window as typeof window & { __conversationStorageWrites: number }).__conversationStorageWrites,
+  );
+  await composer.fill('background-output-only');
+  await composer.press('Enter');
+  await expect(drawer).toContainText('background event 19');
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as typeof window & { __conversationStorageWrites: number }).__conversationStorageWrites,
+      ),
+    )
+    .toBeGreaterThan(before);
+  const writes = await page.evaluate(
+    () => (window as typeof window & { __conversationStorageWrites: number }).__conversationStorageWrites,
+  );
+  expect(writes - before).toBeLessThan(5);
+  await page.reload();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.ai-conversations.v1') ?? ''))
+    .toContain('background event 19');
+});
+
 test('keeps an accepted new conversation turn streaming after an older idle connection snapshot resolves (HS2-AZVE3P)', async ({
   page,
 }) => {

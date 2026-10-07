@@ -188,7 +188,11 @@ import {
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { withControlledOpen } from '../controlled-open';
-import { loadConversationStates, saveConversationStates } from '../conversation-persistence';
+import {
+  createConversationPersistence,
+  loadConversationStates,
+  saveConversationStates,
+} from '../conversation-persistence';
 import { syncConversationScroll } from '../conversation-scroll';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import {
@@ -885,6 +889,13 @@ export async function startHotSheetWebClient() {
     conversationSelections = signal<Record<string, { model?: string; effort?: string }>>({}),
     conversationConnectionId = signal<string | undefined>(undefined),
     conversationOpen = signal(false);
+  const conversationPersistence = createConversationPersistence(() => {
+    try {
+      saveConversationStates(localStorage, conversationStates.peek());
+    } catch {
+      /* storage quota/privacy mode must not interrupt a live turn */
+    }
+  });
 
   const aiConfigurationController = createAiConfigurationController({
     selectedProjectId,
@@ -3528,11 +3539,7 @@ export async function startHotSheetWebClient() {
   async function refreshDriveConnections(current=project(),restoreDrawerTabs=false,quiet=false){if(!current)return;if(project()?.id===current.id&&!aiConfigurationController.restoreAiConfiguration(current))void refreshAiConfiguration(current);try{const startGeneration=conversationStartGeneration,pendingAtRequest=new Set(pendingConversationStarts),client=new Api(current.apiPath,'',{trackBusy:!quiet}),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(startGeneration===conversationStartGeneration&&projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(conversationStates.peek()[connection.id]?.activeAssistantId&&!pendingAtRequest.has(connection.id)&&!pendingConversationStarts.has(connection.id))updateConversation(connection.id,state=>!state.activeAssistantId?state:!activeIds.has(connection.id)?applyConversationEvent(state,{type:'done',reason:'interrupted'}):reconcileConversationConnection(state,connection));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
   function replaceConversationStates(states: Record<string, ConversationState>) {
     conversationStates.value = states;
-    try {
-      saveConversationStates(localStorage, states);
-    } catch {
-      /* storage quota/privacy mode must not interrupt a live turn */
-    }
+    conversationPersistence.schedule();
   }
   function updateConversation(connectionId: string, update: (state: ConversationState) => ConversationState) {
     const conversations = conversationStates.peek();
@@ -3774,10 +3781,12 @@ export async function startHotSheetWebClient() {
                   key = `${current.id}:${event.id}`;
                 serverResolvedPermission(key, resolution);
               }
-              if (event.kind === 'turn_event' && event.turn && acceptedTurns.has(event.turn))
+              if (event.kind === 'turn_event' && event.turn && acceptedTurns.has(event.turn)) {
                 updateConversation(event.turn.connection_id, (state) =>
                   applyConversationEvent(state, event.turn!.event),
                 );
+                if (event.turn.event.type === 'done') conversationPersistence.flush();
+              }
               if (event.kind === 'activity' && event.activity) {
                 const activity = event.activity,
                   connection = conversationForActivity(current, activity.tool, activity.session);
@@ -5605,6 +5614,7 @@ export async function startHotSheetWebClient() {
   // Unsaved text edits reach the server when the page hides; their local copies survive either way.
   const flushOnHide = () => {
     flushProjectSessionPersistence();
+    conversationPersistence.flush();
     void flushTicketDrafts();
     flushCommandAutosaves();
   };
