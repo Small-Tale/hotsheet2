@@ -1199,6 +1199,7 @@ async function mockProject(
           turnEvent(running, { type: 'output', content: `background event ${index}`, truncated: false });
         return route.fulfill({ status: 202, json: running });
       }
+      if (body.content === 'Start sustained output') return route.fulfill({ status: 202, json: running });
       if (body.content === 'Export the referenced proof.') {
         turnEvent(running, {
           type: 'output',
@@ -23576,6 +23577,80 @@ test('coalesces streamed conversation storage writes and flushes before reload (
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('hotsheet.ai-conversations.v1') ?? ''))
     .toContain('background event 19');
+});
+
+test('bounds app renders during a sustained conversation stream (HS2-0PFQ8V)', async ({ page }, testInfo) => {
+  await mockProject(page);
+  let connectionId: string | undefined,
+    cursor = 0;
+  const sockets: import('@playwright/test').WebSocketRoute[] = [];
+  await page.route('**/ws/poll*', (route) => route.fulfill({ json: { cursor, events: [], overflow: false } }));
+  page.on('request', (request) => {
+    const match = new URL(request.url()).pathname.match(/\/drive\/connections\/([^/]+)\/turns$/);
+    if (match && request.method() === 'POST') connectionId = decodeURIComponent(match[1]);
+  });
+  await page.routeWebSocket(/\/ws\/sync(?:\?|$)/, (route) => {
+    sockets.push(route);
+    route.onClose(() => {
+      const index = sockets.indexOf(route);
+      if (index >= 0) sockets.splice(index, 1);
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await expect.poll(() => sockets.length).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  const composer = drawer.getByLabel('Message Codex');
+  await resetRenderMetrics(page);
+  await composer.fill('Start sustained output');
+  await composer.press('Enter');
+  await expect.poll(() => connectionId).toBeTruthy();
+  let resumeStream!: () => void;
+  const streamPaused = new Promise<void>((resolve) => {
+    resumeStream = resolve;
+  });
+  const stream = (async () => {
+    for (let index = 1; index <= 21; index += 1) {
+      if (index === 4) await streamPaused;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      cursor += 1;
+      sockets[0].send(
+        JSON.stringify({
+          cursor,
+          store: '/work/demo.hs2',
+          kind: 'turn_event',
+          id: connectionId,
+          slug: 'codex',
+          turn: {
+            connection_id: connectionId,
+            event:
+              index <= 20
+                ? { type: 'output', content: `stream chunk ${index} ` }
+                : { type: 'done', reason: 'completed' },
+          },
+        }),
+      );
+    }
+  })();
+  await expect(drawer).toContainText('stream chunk 3');
+  await page.getByRole('button', { name: 'Search tickets' }).first().click();
+  const search = page.getByRole('searchbox', { name: 'Search tickets' }).first();
+  await search.fill('stability');
+  await expect(search).toHaveText('stability');
+  await resetRenderMetrics(page);
+  resumeStream();
+  await stream;
+  await expect(drawer).toContainText('stream chunk 20');
+  const metrics = await renderMetrics(page);
+  expect(metrics?.passes).toBeLessThan(16);
+  await expect(search).toHaveText('stability');
+  await drawer.locator('.terminal-drawer__rail').dispatchEvent('dblclick');
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  await page.screenshot({ path: testInfo.outputPath('conversation-stream-wide.png') });
 });
 
 test('keeps an accepted new conversation turn streaming after an older idle connection snapshot resolves (HS2-AZVE3P)', async ({

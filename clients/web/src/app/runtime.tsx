@@ -192,6 +192,7 @@ import {
   loadConversationStates,
   saveConversationStates,
 } from '../conversation-persistence';
+import { createConversationRenderScheduler } from '../conversation-render-scheduler';
 import { syncConversationScroll } from '../conversation-scroll';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import {
@@ -889,6 +890,10 @@ export async function startHotSheetWebClient() {
     conversationSelections = signal<Record<string, { model?: string; effort?: string }>>({}),
     conversationConnectionId = signal<string | undefined>(undefined),
     conversationOpen = signal(false);
+  const conversationRenderRevision = signal(0);
+  const conversationRenderScheduler = createConversationRenderScheduler(() => {
+    conversationRenderRevision.value += 1;
+  });
   const conversationPersistence = createConversationPersistence(() => {
     try {
       saveConversationStates(localStorage, conversationStates.peek());
@@ -1013,14 +1018,16 @@ export async function startHotSheetWebClient() {
             !Object.hasOwn(driveConnectionsByProject.value, project.id),
         )
         .map((project) => project.id),
-    episodes: () =>
-      projectHaltedSessions(
+    episodes: () => {
+      void conversationRenderRevision.value;
+      return projectHaltedSessions(
         projects.value,
         terminalGroups.value,
         terminalDrawerChatsByProject.value,
         driveConnectionsByProject.value,
-        conversationStates.value,
-      ),
+        conversationStates.peek(),
+      );
+    },
     paused: () => notificationsPaused.value,
     permissionVisible: () =>
       !notificationsPaused.value &&
@@ -3542,16 +3549,25 @@ export async function startHotSheetWebClient() {
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary.
   async function refreshDriveConnections(current=project(),restoreDrawerTabs=false,quiet=false){if(!current)return;if(project()?.id===current.id&&!aiConfigurationController.restoreAiConfiguration(current))void refreshAiConfiguration(current);try{const startGeneration=conversationStartGeneration,pendingAtRequest=new Set(pendingConversationStarts),client=new Api(current.apiPath,'',{trackBusy:!quiet}),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(startGeneration===conversationStartGeneration&&projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(conversationStates.peek()[connection.id]?.activeAssistantId&&!pendingAtRequest.has(connection.id)&&!pendingConversationStarts.has(connection.id))updateConversation(connection.id,state=>!state.activeAssistantId?state:!activeIds.has(connection.id)?applyConversationEvent(state,{type:'done',reason:'interrupted'}):reconcileConversationConnection(state,connection));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
-  function replaceConversationStates(states: Record<string, ConversationState>) {
+  function replaceConversationStates(states: Record<string, ConversationState>, streamed = false) {
     conversationStates.value = states;
     conversationPersistence.schedule();
+    if (streamed) conversationRenderScheduler.schedule();
+    else conversationRenderScheduler.immediate();
   }
-  function updateConversation(connectionId: string, update: (state: ConversationState) => ConversationState) {
+  function updateConversation(
+    connectionId: string,
+    update: (state: ConversationState) => ConversationState,
+    streamed = false,
+  ) {
     const conversations = conversationStates.peek();
-    replaceConversationStates({
-      ...conversations,
-      [connectionId]: update(conversations[connectionId] ?? EMPTY_CONVERSATION),
-    });
+    replaceConversationStates(
+      {
+        ...conversations,
+        [connectionId]: update(conversations[connectionId] ?? EMPTY_CONVERSATION),
+      },
+      streamed,
+    );
   }
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
@@ -3787,8 +3803,10 @@ export async function startHotSheetWebClient() {
                 serverResolvedPermission(key, resolution);
               }
               if (event.kind === 'turn_event' && event.turn && acceptedTurns.has(event.turn)) {
-                updateConversation(event.turn.connection_id, (state) =>
-                  applyConversationEvent(state, event.turn!.event),
+                updateConversation(
+                  event.turn.connection_id,
+                  (state) => applyConversationEvent(state, event.turn!.event),
+                  event.turn.event.type !== 'done',
                 );
                 if (event.turn.event.type === 'done') conversationPersistence.flush();
               }
@@ -3796,7 +3814,7 @@ export async function startHotSheetWebClient() {
                 const activity = event.activity,
                   connection = conversationForActivity(current, activity.tool, activity.session);
                 if (connection)
-                  updateConversation(connection.id, (state) => applyConversationActivity(state, activity));
+                  updateConversation(connection.id, (state) => applyConversationActivity(state, activity), true);
               }
             }
             if (
@@ -5045,7 +5063,7 @@ export async function startHotSheetWebClient() {
   function HotSheetApp() {
     void permissionRevision.value;
     if (conversationOpen.value || terminalDrawerVisible.value || shellMode.value === 'terminals')
-      void conversationStates.value;
+      void conversationRenderRevision.value;
     const ticketScrollGeneration = ticketScrollMemory.beforeRender(ticketScrollScope(), ticketScrollRoot()),
       nextTicketCollectionKey = activeTicketCollectionKey(),
       progressiveRenderPass = skipNextTicketMotion,

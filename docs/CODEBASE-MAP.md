@@ -67,6 +67,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       registration-inventory.txt # Ordered pre-extraction delegate/native/adapter contract, checked by interaction-wiring.test.ts
     src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
     src/ai-conversation.ts   #   Per-connection receipt-ordered multi-turn message/activity transitions across streamed output, permission pauses, replay, and terminal outcomes; provider failure feedback and authoritative idle-connection reconciliation (HS2-AZVE3P)
+    src/conversation-render-scheduler.ts # Bounds app-root conversation rendering during sustained output, with immediate final/interactive publication (HS2-0PFQ8V)
     src/conversation-scroll.ts # Bottom-aware transcript pinning that preserves intentional scrollback
     src/conversation-export.ts # Portable .hotsheet-chat range, manifest, transcript, summary, selected structured assets, collision-lineage, and resume contract
     src/conversation-export-bridge.ts # Trusted host folder chooser plus validated bundle filesystem read/write boundary

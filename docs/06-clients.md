@@ -1282,8 +1282,10 @@ and identity-less legacy entries remain conservatively blocking.
   turn. Transcript and activity state is validated and persisted device-locally. Streamed
   changes are coalesced after 250 ms of quiet or at least once per second during a sustained
   stream, then flushed on turn completion and page hide so a reload restores received history
-  without serializing the full transcript for every output event (HS2-TC93GZ). On server restart, the
-  client pairs that history with the server's durable newest-first session catalog and recreates
+  without serializing the full transcript for every output event (HS2-TC93GZ). In-memory state
+  accepts each event in order, while the app publishes stream-driven conversation views at most
+  once per 80 ms; turn completion and direct user actions publish immediately (HS2-0PFQ8V).
+  On server restart, the client pairs that history with the server's durable newest-first session catalog and recreates
   each latest connection/session before restoring eligible drawer tabs; corrupt local entries or
   one unavailable provider are isolated instead of discarding other conversations (HS2-YHQCS2).
   Stop appears only for a busy connection advertising `interrupt`; Enter sends and
