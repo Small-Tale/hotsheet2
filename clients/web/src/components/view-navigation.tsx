@@ -78,7 +78,6 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                       <LoadingSpinner size={9.92} label="Searching this view" />
                     ) : (
                       <>
-                        {item.searchCount ? <LucideIcon size={9.92} icon={Search} name="search" /> : null}
                         <Badge
                           appearance="quiet"
                           size="compact"
@@ -91,7 +90,16 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                                 : undefined
                           }
                         >
-                          {item.countPartial ? `≥${item.count}` : String(item.count)}
+                          {item.searchCount ? (
+                            <span class="view-navigation__search-count">
+                              <LucideIcon size={9.92} icon={Search} name="search" />
+                              <span>{item.countPartial ? `≥${item.count}` : String(item.count)}</span>
+                            </span>
+                          ) : item.countPartial ? (
+                            `≥${item.count}`
+                          ) : (
+                            String(item.count)
+                          )}
                         </Badge>
                       </>
                     )}

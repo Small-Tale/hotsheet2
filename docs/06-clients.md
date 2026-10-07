@@ -974,7 +974,8 @@ and identity-less legacy entries remain conservatively blocking.
   background searches update the other active collections and shared custom-view counts.
   Trash remains outside this live-search fan-out and keeps its canonical collection count.
   Pending searchable-view counts use a compact spinner;
-  settled search-derived counts use a small magnifying-glass marker and remain inside the
+  settled search-derived counts put a small magnifying-glass marker beside the number inside
+  the same badge and remain inside the
   selected item's blue bounds. Moving focus away from an unchanged search preserves those
   settled results and counts without issuing another request. The workspace's Kerf-managed
   collapsible search adopts the project-persisted open signal: its canonical magnifier moves

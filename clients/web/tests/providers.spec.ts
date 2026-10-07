@@ -17689,6 +17689,26 @@ test('searches only the current view before updating scoped sidebar counts', asy
   await expect.poll(() => requests.slice(1).sort()).toEqual(['archive', 'backlog']);
   const selectedCount = navigation.getByRole('button', { name: /Queue/ }).locator('.view-navigation__count');
   await expect(selectedCount).toHaveAttribute('data-search-count', 'true');
+  const searchBadge = selectedCount.locator('[data-component="badge"]');
+  const searchBadgeGeometry = await searchBadge.evaluate((node) => {
+    const badge = node.getBoundingClientRect(),
+      icon = node.querySelector('[data-lucide="search"]')!.getBoundingClientRect(),
+      number = node.querySelector('.view-navigation__search-count > span')!.getBoundingClientRect();
+    return {
+      badgeLeft: badge.left,
+      badgeRight: badge.right,
+      iconLeft: icon.left,
+      iconRight: icon.right,
+      iconCenterY: icon.top + icon.height / 2,
+      numberLeft: number.left,
+      numberCenterY: number.top + number.height / 2,
+    };
+  });
+  expect(searchBadgeGeometry.iconLeft).toBeGreaterThanOrEqual(searchBadgeGeometry.badgeLeft);
+  expect(searchBadgeGeometry.iconRight).toBeLessThan(searchBadgeGeometry.numberLeft);
+  expect(searchBadgeGeometry.numberLeft).toBeLessThan(searchBadgeGeometry.badgeRight);
+  expect(searchBadgeGeometry.iconCenterY).toBeCloseTo(searchBadgeGeometry.numberCenterY, 0);
+  await navigation.screenshot({ path: '/private/tmp/hs2-41szwd-search-counts.png' });
   await page.getByLabel('Columns view').click();
   const board = page.locator('[data-component="ticket-board"]');
   await expect(board.getByRole('region', { name: 'Backlog column' })).toHaveCount(0);

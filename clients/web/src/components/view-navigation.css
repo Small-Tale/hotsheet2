@@ -2,6 +2,11 @@
   /* A dragged ticket over a view row uses Kerf's drag-target state (set by the drag handler). */
   --kui-list-item-drag-target-background: var(--wa-color-brand-fill-normal);
 }
+.view-navigation__search-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kui-space-2xs);
+}
 .saved-view-context-menu {
   position: fixed;
   z-index: 1001;
