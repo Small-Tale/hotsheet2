@@ -18296,6 +18296,7 @@ test('shows new-project feedback when a project has no tickets', async ({ page }
 test('shows local tickets and a partial-data warning when a GitHub source is rate limited (HS2-190BAS)', async ({
   page,
 }) => {
+  let partial = true;
   await mockProject(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -18323,7 +18324,9 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
                 completed_today: 0,
                 completion_trend: [0, 0, 0, 0, 0, 0, 0],
               },
-        source_errors: ["github-mixed: provider 'github-mixed' is rate limited; retry after 60s"],
+        ...(partial
+          ? { source_errors: ["github-mixed: provider 'github-mixed' is rate limited; retry after 60s"] }
+          : {}),
       },
     });
   });
@@ -18332,6 +18335,7 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.getByText("provider 'github-mixed' is rate limited", { exact: false })).toBeVisible();
+  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('≥1 open');
   await expect(page.getByText('No tickets yet')).toHaveCount(0);
   await page.getByLabel('Columns view').click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
@@ -18339,7 +18343,108 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'false');
+  await expect(
+    page.getByRole('navigation', { name: 'Ticket views' }).locator('.view-navigation__count').first(),
+  ).toContainText('≥1');
   await page.screenshot({ path: '/private/tmp/hs2-190bas-partial-wide.png', fullPage: true, animations: 'disabled' });
+  partial = false;
+  await page.reload();
+  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('1 open');
+  await expect(page.locator('[data-component="project-work-summary"]')).not.toContainText('≥');
+  await expect(page.getByText("provider 'github-mixed' is rate limited", { exact: false })).toHaveCount(0);
+});
+
+test('keeps healthy search rows while hiding incomplete sidebar totals, then restores counts on recovery (HS2-NX6JQJ)', async ({
+  page,
+}) => {
+  let partial = true;
+  await mockProject(page);
+  await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    if (route.request().method() !== 'GET' || !params.get('text')?.startsWith('partial')) return route.fallback();
+    return route.fulfill({
+      json: {
+        items: [notStartedRow],
+        counts: {
+          total: 1,
+          queued: 1,
+          backlog: 0,
+          archive: 0,
+          open: 1,
+          up_next: 0,
+          active: 0,
+          started: 0,
+          completed_today: 0,
+        },
+        ...(partial ? { source_errors: ['github-mixed: provider unavailable'] } : {}),
+      },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Search tickets' }).click();
+  const search = page.getByRole('searchbox', { name: 'Search tickets' }),
+    navigation = page.getByRole('navigation', { name: 'Ticket views' });
+  await search.fill('partial probe');
+  await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
+  await expect(page.getByText('provider unavailable')).toBeVisible();
+  await expect(navigation.getByLabel('Searching this view')).toHaveCount(0);
+  await expect(navigation.getByRole('button', { name: 'Queue' }).locator('.view-navigation__count')).toHaveCount(0);
+  await expect(navigation.getByRole('button', { name: 'Backlog' }).locator('.view-navigation__count')).toHaveCount(0);
+  partial = false;
+  await search.fill('partial recovered');
+  await expect(navigation.getByLabel('1 search results').first()).toBeVisible();
+  await expect(page.getByText('provider unavailable')).toHaveCount(0);
+});
+
+test('marks continuation totals partial while retaining both healthy pages (HS2-NX6JQJ)', async ({ page }) => {
+  let partial = true;
+  const secondRow = {
+    ...notStartedRow,
+    id: '08',
+    native_id: '08',
+    qualified_id: 'git-local:08',
+    slug: 'HS2-NEXT08',
+    title: 'Second local ticket',
+  };
+  await mockProject(page);
+  await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    if (route.request().method() !== 'GET' || !params.has('page_size')) return route.fallback();
+    const continuation = params.has('cursor');
+    return route.fulfill({
+      json: {
+        items: partial ? (continuation ? [secondRow] : [notStartedRow]) : [notStartedRow, secondRow],
+        ...(partial && !continuation ? { next_cursor: 'next' } : {}),
+        counts: {
+          total: continuation || !partial ? 2 : 1,
+          queued: continuation || !partial ? 2 : 1,
+          backlog: 0,
+          archive: 0,
+          open: continuation || !partial ? 2 : 1,
+          up_next: 0,
+          active: 0,
+          started: 0,
+          completed_today: 0,
+        },
+        ...(partial && continuation ? { source_errors: ['github-mixed: provider unavailable on continuation'] } : {}),
+      },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Load more tickets' }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-NEXT08"]')).toBeVisible();
+  await expect(page.getByText('provider unavailable on continuation')).toBeVisible();
+  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('≥2 open');
+  partial = false;
+  await page.reload();
+  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('2 open');
+  await expect(page.locator('[data-component="project-work-summary"]')).not.toContainText('≥');
+  await expect(page.getByText('provider unavailable on continuation')).toHaveCount(0);
 });
 
 test('shows view-specific feedback when a populated project has no tickets in the selected view', async ({ page }) => {

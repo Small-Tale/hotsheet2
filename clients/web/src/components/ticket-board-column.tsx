@@ -9,6 +9,7 @@ export interface TicketBoardColumnProps {
   title: string;
   tickets: TicketRowProps[];
   totalCount?: number;
+  countPartial?: boolean;
   selectionRoot?: boolean;
   continuation?: { loading: boolean };
   /** Snap a horizontally scrolling board to this column's start edge (the paged board layout). */
@@ -20,6 +21,7 @@ export function TicketBoardColumn({
   title,
   tickets,
   totalCount = tickets.length,
+  countPartial = false,
   selectionRoot = true,
   continuation,
   scrollSnap = false,
@@ -44,7 +46,9 @@ export function TicketBoardColumn({
             aria-label={`Select all ${title} tickets`}
           >
             <span class="ticket-board-column__title">{title}</span>
-            <span aria-label={`${totalCount} tickets`}>{totalCount}</span>
+            <span aria-label={`${countPartial ? 'At least ' : ''}${totalCount} tickets`}>
+              {countPartial ? `≥${totalCount}` : totalCount}
+            </span>
           </button>
         </h2>
       </header>
@@ -65,7 +69,8 @@ export function TicketBoardColumn({
         ) : (
           totalCount > tickets.length && (
             <div class="ticket-board-column__progress" data-ticket-progressive-loading="true" role="status">
-              {tickets.length} of {totalCount} loaded
+              {tickets.length} of {countPartial ? 'at least ' : ''}
+              {totalCount} loaded
             </div>
           )
         )}

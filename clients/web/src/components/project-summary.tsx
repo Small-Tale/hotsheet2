@@ -6,6 +6,7 @@ export interface ProjectSummaryProps {
   completedToday: number;
   inProgress: number;
   trend: number[];
+  partial?: boolean;
   projectId?: string;
   chartTone?: 'brand' | 'success';
   chartMaximum?: number;
@@ -29,6 +30,7 @@ export function ProjectSummary({
   completedToday,
   inProgress,
   trend,
+  partial = false,
   projectId,
   chartTone = 'brand',
   chartMaximum,
@@ -38,7 +40,7 @@ export function ProjectSummary({
   const chartLength = Math.max(trend.length, backgroundTrend?.length ?? 0);
   const alignedTrend = Array.from({ length: chartLength }, (_, index) => trend.at(index - chartLength) ?? 0);
   const maximum = chartDomainMaximum([...alignedTrend, ...(backgroundTrend ?? [])], chartMaximum);
-  const chartLabel = `Tickets completed over the last ${chartLength} days: ${alignedTrend.join(', ')}${backgroundTrend ? `. All projects: ${backgroundTrend.join(', ')}` : ''}`;
+  const chartLabel = `${partial ? 'At least these tickets were' : 'Tickets'} completed over the last ${chartLength} days: ${alignedTrend.join(', ')}${backgroundTrend ? `. All projects: ${backgroundTrend.join(', ')}` : ''}`;
   return (
     <button
       type="button"
@@ -50,7 +52,7 @@ export function ProjectSummary({
       data-chart-background={String(Boolean(backgroundTrend))}
       {...NAVIGATION_AND_TABS_ACTIONS.openProjectStats.attrs}
       data-project-id={projectId}
-      aria-label={`Open project statistics: ${completedToday} completed today, ${inProgress} in progress`}
+      aria-label={`Open project statistics: ${partial ? 'at least ' : ''}${completedToday} completed today, ${partial ? 'at least ' : ''}${inProgress} in progress`}
     >
       <span class="project-summary__content">
         <span class="project-summary__chart" role="img" aria-label={chartLabel}>
@@ -89,8 +91,14 @@ export function ProjectSummary({
           })}
         </span>
         <span class="project-summary__counts">
-          <strong>{completedToday} completed today</strong>
-          <span>{inProgress} in progress</span>
+          <strong>
+            {partial ? '≥' : ''}
+            {completedToday} completed today
+          </strong>
+          <span>
+            {partial ? '≥' : ''}
+            {inProgress} in progress
+          </span>
         </span>
       </span>
     </button>

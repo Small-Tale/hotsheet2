@@ -8,6 +8,7 @@ export interface ProjectTicketRefresh {
   ticketCounts?: CheckoutTicketCounts;
   nextCursor?: string;
   ticketsError?: string;
+  sourceErrors?: string[];
   /** Per-column paging state when the refresh loaded board columns independently (HS2-HNZZHC). */
   boardPages?: Record<string, BoardColumnPage>;
 }
@@ -148,6 +149,7 @@ export async function loadProjectTicketRefresh(
             tickets: columns.value.tickets.filter((ticket) => !corruptSlugs.has(ticket.slug)),
             ticketCounts: columns.value.counts,
             boardPages: columns.value.pages,
+            ...(columns.value.sourceErrors.length ? { sourceErrors: columns.value.sourceErrors } : {}),
             ...(columns.value.sourceErrors.length ? { ticketsError: columns.value.sourceErrors.join(' · ') } : {}),
           }
         : { ticketsError: message(columns.reason) }),
@@ -173,6 +175,7 @@ export async function loadProjectTicketRefresh(
             : {
                 ticketCounts: ticketPage?.counts,
                 nextCursor: ticketPage?.next_cursor,
+                ...(ticketPage?.source_errors?.length ? { sourceErrors: ticketPage.source_errors } : {}),
                 ...(ticketPage?.source_errors?.length ? { ticketsError: ticketPage.source_errors.join(' · ') } : {}),
               }),
         }

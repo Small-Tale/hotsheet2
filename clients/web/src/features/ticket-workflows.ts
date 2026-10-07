@@ -1262,7 +1262,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           // bounded pages instead of one whole-checkout response (HS2-CYXS0N).
           destinationApi.checkoutTicketRowsPaged(destination.id, { fields: 'title' }),
         ]),
-        titles = destinationRows.map((ticket) => ticket.title);
+        titles = destinationRows.items.map((ticket) => ticket.title);
+      if (destinationRows.sourceErrors.length)
+        throw new Error(
+          `Cannot check destination titles while a ticket source is unavailable: ${destinationRows.sourceErrors.join(' · ')}`,
+        );
       for (const source of sources) {
         const title = deduplicateTitle(source.title, titles);
         titles.push(title);
@@ -1680,7 +1684,11 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       void Promise.allSettled(
         projects.value.map(async (project) => ({
           project,
-          rows: await new Api(project.apiPath).checkoutTickets(project.id, { text: query, compact: true, limit: 500 }),
+          result: await new Api(project.apiPath).checkoutTickets(project.id, {
+            text: query,
+            compact: true,
+            limit: 500,
+          }),
         })),
       ).then((results) => {
         const active = ticketCloseDialog.value;
@@ -1697,7 +1705,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
             continue;
           }
-          for (const row of result.value.rows) {
+          if (result.value.result.partial || result.value.result.truncated)
+            errors.push(`Search results may be incomplete for ${result.value.project.name}.`);
+          for (const row of result.value.result.items) {
             const candidate = duplicateTarget(result.value.project, row);
             candidates.set(duplicateTargetKey(candidate), candidate);
           }
@@ -1706,7 +1716,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           ...active,
           candidates: [...candidates.values()].slice(0, 20),
           searching: false,
-          error: candidates.size || !errors.length ? '' : errors[0],
+          error: errors.join(' · '),
         };
       });
     }, 150);

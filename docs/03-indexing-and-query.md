@@ -316,6 +316,13 @@ query(filter, sort, text?, paging) -> TicketRow[]
   `x-hotsheet-partial: true` when a source was omitted. A fresh page after recovery
   includes the source again; callers restart pagination rather than continuing a
   partial cursor when they need the recovered source's older rows (HS2-190BAS).
+  The web client carries partial status through checkout search, sidebar search counts,
+  continuation pages, and bounded title/lookup reads. It keeps healthy search rows visible,
+  warns when a source failed, and omits incomplete search counts. Project, view, board,
+  tab, and operations-sidebar totals are marked as lower bounds until a fresh healthy read
+  clears the partial state. Its unpaged client method retains the partial and truncated
+  headers alongside the row array; title deduplication refuses an incomplete destination
+  read because it cannot guarantee a unique title (HS2-NX6JQJ).
   The unpaged array is **bounded** by `CHECKOUT_READ_MAX_ROWS` (500), the same ceiling as a
   page (HS2-CYXS0N):
   - without `limit`, a read that would return more than 500 rows fails with

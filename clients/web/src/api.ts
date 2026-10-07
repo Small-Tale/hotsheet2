@@ -312,6 +312,12 @@ export interface CheckoutTicketPage {
   counts: CheckoutTicketCounts;
   source_errors?: string[];
 }
+/** Unpaged checkout rows retain the server's partial/truncated response headers. */
+export interface CheckoutTicketRows {
+  items: TicketRow[];
+  partial: boolean;
+  truncated: boolean;
+}
 /** A checkout page requested with `counts=false`: the server returns `counts: null`. */
 export interface CheckoutTicketRowsPage {
   items: TicketRow[];
@@ -724,7 +730,12 @@ export class Api {
   // `trackBusy` defaults to true so ordinary loads and mutations drive the server-busy indicator.
   // Idle long-poll streams (e.g. pollEvents) pass false: they sit pending by design and must not
   // read as the server being busy (HS2-MW1V3M).
-  private async request<T>(path: string, requested: RequestInit = {}, trackRequest = true): Promise<T> {
+  private async request<T>(
+    path: string,
+    requested: RequestInit = {},
+    trackRequest = true,
+    onResponse?: (response: Response) => void,
+  ): Promise<T> {
     const init = withHumanActor(path, requested);
     const headers = new Headers(init.headers);
     headers.set('X-Hotsheet-Secret', this.secret);
@@ -739,6 +750,7 @@ export class Api {
           (await response.json().catch(() => null))?.error ?? `${response.status}`,
           response.status,
         );
+      onResponse?.(response);
       return response.status === 204 ? (undefined as T) : await response.json();
     } finally {
       if (trackBusy) endServerRequest();
@@ -832,7 +844,7 @@ export class Api {
       { method: 'POST', body },
     );
   };
-  checkoutTickets = (checkout: string, query?: string | CheckoutTicketQuery) => {
+  checkoutTickets = async (checkout: string, query?: string | CheckoutTicketQuery): Promise<CheckoutTicketRows> => {
     const options = typeof query === 'string' ? { text: query } : (query ?? {}),
       params = new URLSearchParams();
     for (const [key, value] of Object.entries(options)) {
@@ -841,7 +853,18 @@ export class Api {
       params.set(key, key === 'text' && typeof value === 'string' ? value.trim() : String(value));
     }
     const suffix = params.size ? `?${params}` : '';
-    return this.request<TicketRow[]>(`/checkouts/${encodeURIComponent(checkout)}/tickets${suffix}`);
+    let partial = false,
+      truncated = false;
+    const items = await this.request<TicketRow[]>(
+      `/checkouts/${encodeURIComponent(checkout)}/tickets${suffix}`,
+      {},
+      true,
+      (response) => {
+        partial = response.headers.get('x-hotsheet-partial') === 'true';
+        truncated = response.headers.get('x-hotsheet-truncated') === 'true';
+      },
+    );
+    return { items, partial, truncated };
   };
   checkoutTicketPage = (checkout: string, pageSize = 200, cursor?: string, query: CheckoutTicketQuery = {}) =>
     this.request<CheckoutTicketPage>(
@@ -860,18 +883,20 @@ export class Api {
    */
   checkoutTicketRowsPaged = async (checkout: string, query: CheckoutTicketQuery = {}) => {
     const rows: TicketRow[] = [],
-      seen = new Set<string>();
+      seen = new Set<string>(),
+      sourceErrors = new Set<string>();
     let cursor: string | undefined;
     do {
       const page = await this.checkoutTicketRowsPage(checkout, 500, cursor, query);
       rows.push(...page.items);
+      page.source_errors?.forEach((message) => sourceErrors.add(message));
       cursor = page.next_cursor;
       if (cursor !== undefined) {
         if (seen.has(cursor)) throw new Error('Checkout pagination returned a repeated cursor.');
         seen.add(cursor);
       }
     } while (cursor !== undefined);
-    return rows;
+    return { items: rows, sourceErrors: [...sourceErrors] };
   };
   /** Completion-confidence calibration across the checkout's git stores (HS2-Q1WCCY). */
   checkoutConfidenceReport = (checkout: string) =>

@@ -70,8 +70,26 @@ describe('loadProjectTicketRefresh', () => {
       ticketCounts: counts,
       nextCursor: undefined,
       ticketsError: "github-mixed: provider 'github-mixed' is rate limited",
+      sourceErrors: ["github-mixed: provider 'github-mixed' is rate limited"],
       corruptTickets: [],
     });
+  });
+
+  it('replaces an empty partial page with recovered source rows on the next refresh', async () => {
+    const recovered = { id: '02', slug: 'HS2-REMOTE', title: 'Recovered ticket', tags: [] };
+    const client = {
+      checkoutTicketPage: vi
+        .fn()
+        .mockResolvedValueOnce({ items: [], counts, source_errors: ['github-mixed: provider unavailable'] })
+        .mockResolvedValueOnce({ items: [recovered], counts }),
+      checkoutCorruptTickets: vi.fn().mockResolvedValue([]),
+    };
+    const first = await loadProjectTicketRefresh(client, 'checkout');
+    expect(first).toMatchObject({ tickets: [], sourceErrors: ['github-mixed: provider unavailable'] });
+    const second = await loadProjectTicketRefresh(client, 'checkout');
+    expect(second.tickets).toEqual([recovered]);
+    expect(second.sourceErrors).toBeUndefined();
+    expect(second.ticketsError).toBeUndefined();
   });
 
   it('keeps corrupt entries available when the healthy-ticket index fails', async () => {

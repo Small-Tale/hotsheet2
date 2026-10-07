@@ -399,6 +399,7 @@ export async function startHotSheetWebClient() {
     corruptTickets = signal<CorruptTicket[]>([]),
     selectedTicket = signal<FullTicket | null>(null);
   const ticketCountsByProject = signal<Record<string, CheckoutTicketCounts>>({});
+  const partialSourcesByProject = signal<Record<string, boolean>>({});
   // The server-authoritative 7-day completion trend and today's completion count, retained per project so a
   // local mutation (which drops the exact counts snapshot) does not force the sidebar graph to be re-derived
   // from the partially-loaded rows — which is wrong until the next authoritative refresh (HS2-BRDMBB).
@@ -413,7 +414,7 @@ export async function startHotSheetWebClient() {
     projectId: string;
     signature: string;
     generation: number;
-    values: Record<string, number>;
+    values: Partial<Record<string, number>>;
     pending: string[];
   }
   const sidebarSearchCounts = signal<SidebarSearchCounts | undefined>(undefined);
@@ -1335,6 +1336,11 @@ export async function startHotSheetWebClient() {
           board,
         );
       if (!active()) return;
+      if (index.tickets)
+        partialSourcesByProject.value = {
+          ...partialSourcesByProject.value,
+          [current.id]: Boolean(index.sourceErrors?.length),
+        };
       if (index.tickets) {
         const mergedTickets = mergeRetainedCreatedRows(
           index.tickets,
@@ -2614,7 +2620,23 @@ export async function startHotSheetWebClient() {
   }
 
   let searchTimer: number | undefined,
-    searchGeneration = 0;
+    searchGeneration = 0,
+    searchPartialWarning = '',
+    searchReplacedError = '';
+  function updateSearchPartialWarning(message: string) {
+    if (message) {
+      if (error.value && error.value !== searchPartialWarning) searchReplacedError = error.value;
+      searchPartialWarning = message;
+      error.value = message;
+    } else if (error.value === searchPartialWarning) {
+      error.value = searchReplacedError;
+      searchPartialWarning = '';
+      searchReplacedError = '';
+    } else {
+      searchPartialWarning = '';
+      searchReplacedError = '';
+    }
+  }
   // Kerf's managed TokenSearchModel owns the workspace search text, its chips, and the in-place tag
   // completion (HS2-5JXBQY); `searchQuery`/`searchTokens` are projections of its state for the rest
   // of the app, and every change schedules the debounced ticket search.
@@ -2672,12 +2694,16 @@ export async function startHotSheetWebClient() {
       active.generation === state.generation
     );
   }
-  function updateSidebarSearchCount(state: SidebarSearchCounts, view: TicketView, count: number) {
+  function updateSidebarSearchCount(state: SidebarSearchCounts, view: TicketView, count?: number) {
     const active = sidebarSearchCounts.value;
     if (!activeSidebarSearchCount(state) || !active) return;
+    const values =
+      count === undefined
+        ? Object.fromEntries(Object.entries(active.values).filter(([id]) => id !== view))
+        : { ...active.values, [view]: count };
     sidebarSearchCounts.value = {
       ...active,
-      values: { ...active.values, [view]: count },
+      values,
       pending: active.pending.filter((id) => id !== view),
     };
   }
@@ -2687,20 +2713,23 @@ export async function startHotSheetWebClient() {
     view: TicketView,
     effective: EffectiveTicketSearch,
     state: SidebarSearchCounts,
-    first?: { rows: WireTicketRow[]; cursor?: string; query: CheckoutTicketQuery },
+    first?: { rows: WireTicketRow[]; cursor?: string; query: CheckoutTicketQuery; sourceErrors?: string[] },
   ) {
     let count = first ? matchedSearchRows(first.rows, effective).length : 0,
       cursor = first?.cursor;
+    const sourceErrors = new Set(first?.sourceErrors ?? []);
     const query = first?.query ?? searchRequest(effective, view);
     do {
       if (!first || cursor) {
         const page = await client.checkoutTicketPage(current.id, 500, cursor, query);
         count += matchedSearchRows(page.items, effective).length;
+        page.source_errors?.forEach((message) => sourceErrors.add(message));
         cursor = page.next_cursor;
       } else cursor = undefined;
       first = undefined;
     } while (cursor && activeSidebarSearchCount(state));
-    updateSidebarSearchCount(state, view, count);
+    updateSidebarSearchCount(state, view, sourceErrors.size ? undefined : count);
+    if (sourceErrors.size && activeSidebarSearchCount(state)) updateSearchPartialWarning([...sourceErrors].join(' · '));
   }
   function combinedCustomViewSearch(view: CustomView, effective: EffectiveTicketSearch) {
     return customViewSearch(view, effective.text, effective.tokens);
@@ -2710,7 +2739,7 @@ export async function startHotSheetWebClient() {
     selected: TicketView,
     effective: EffectiveTicketSearch,
     state: SidebarSearchCounts,
-    first: { rows: WireTicketRow[]; cursor?: string; query: CheckoutTicketQuery },
+    first: { rows: WireTicketRow[]; cursor?: string; query: CheckoutTicketQuery; sourceErrors?: string[] },
     refreshEveryView: boolean,
   ) {
     const client = new Api(current.apiPath),
@@ -2718,8 +2747,10 @@ export async function startHotSheetWebClient() {
       selectedSearch = selectedDefinition ? combinedCustomViewSearch(selectedDefinition, effective) : effective;
     try {
       await countSearchView(client, current, selected, selectedSearch, state, first);
-    } catch {
-      updateSidebarSearchCount(state, selected, 0);
+    } catch (reason) {
+      updateSidebarSearchCount(state, selected);
+      if (activeSidebarSearchCount(state))
+        updateSearchPartialWarning(reason instanceof Error ? reason.message : String(reason));
     }
     if (!refreshEveryView || !activeSidebarSearchCount(state)) return;
     const views = ticketSearchCountViews(customViewsFor(current.id).map((view) => view.id));
@@ -2731,8 +2762,10 @@ export async function startHotSheetWebClient() {
             viewSearch = definition ? combinedCustomViewSearch(definition, effective) : effective;
           try {
             await countSearchView(client, current, view, viewSearch, state);
-          } catch {
-            updateSidebarSearchCount(state, view, 0);
+          } catch (reason) {
+            updateSidebarSearchCount(state, view);
+            if (activeSidebarSearchCount(state))
+              updateSearchPartialWarning(reason instanceof Error ? reason.message : String(reason));
           }
         }),
     );
@@ -2751,6 +2784,7 @@ export async function startHotSheetWebClient() {
       searchTimer = undefined;
     }
     if (!current || (!effective.text && !effective.tokens.length)) {
+      updateSearchPartialWarning('');
       ticketPageQuery.value = {};
       searchMatchKeys.value = undefined;
       sidebarSearchCounts.value = undefined;
@@ -2782,10 +2816,15 @@ export async function startHotSheetWebClient() {
           project()?.id === current.id &&
           selectedView.value === view &&
           searchSignature() === signature,
+        sourceErrors = new Set(page.source_errors ?? []),
         allMatches = boolean
           ? await collectMatchingSearchPages(
               page,
-              (cursor) => client.checkoutTicketPage(current.id, 500, cursor, query),
+              async (cursor) => {
+                const next = await client.checkoutTicketPage(current.id, 500, cursor, query);
+                next.source_errors?.forEach((message) => sourceErrors.add(message));
+                return next;
+              },
               (row) => matchedSearchRows([row], effective).length === 1,
               active,
             )
@@ -2799,6 +2838,7 @@ export async function startHotSheetWebClient() {
       tickets.value = mergeTicketLinkRows(tickets.value, rows);
       ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: tickets.value };
       searchMatchKeys.value = new Set(matched.map(ticketSearchKey));
+      updateSearchPartialWarning([...sourceErrors].join(' · '));
       // Sidebar counts report the search-bar query per view, so a shared view alone shows ordinary counts.
       if (countSidebar)
         void refreshSidebarSearchCounts(
@@ -2806,7 +2846,7 @@ export async function startHotSheetWebClient() {
           view,
           barEffective,
           countState,
-          { rows, cursor: boolean ? undefined : page.next_cursor, query },
+          { rows, cursor: boolean ? undefined : page.next_cursor, query, sourceErrors: [...sourceErrors] },
           !countsComplete,
         );
     } catch (reason) {
@@ -2935,7 +2975,7 @@ export async function startHotSheetWebClient() {
       results = await Promise.allSettled(
         candidates.map(async (item) => ({
           project: item,
-          tickets: await new Api(item.apiPath).checkoutTickets(item.id, {
+          result: await new Api(item.apiPath).checkoutTickets(item.id, {
             text: reference.slug,
             compact: true,
             limit: 500,
@@ -2944,9 +2984,16 @@ export async function startHotSheetWebClient() {
       ),
       linkProjects = results.flatMap((result) =>
         result.status === 'fulfilled'
-          ? [{ id: result.value.project.id, name: result.value.project.name, tickets: result.value.tickets }]
+          ? [{ id: result.value.project.id, name: result.value.project.name, tickets: result.value.result.items }]
           : [],
       );
+    if (
+      results.some(
+        (result) => result.status === 'rejected' || result.value.result.partial || result.value.result.truncated,
+      )
+    )
+      error.value =
+        'Linked-ticket search results may be incomplete because a source failed or reached its result limit.';
     for (const item of linkProjects)
       ticketRowsByProject.value = {
         ...ticketRowsByProject.value,
@@ -3237,6 +3284,11 @@ export async function startHotSheetWebClient() {
       ]);
       if (!active()) return;
       markProjectWarm(current.id);
+      if (index.tickets)
+        partialSourcesByProject.value = {
+          ...partialSourcesByProject.value,
+          [current.id]: Boolean(index.sourceErrors?.length),
+        };
       const mergedTickets = index.tickets
           ? mergeRetainedCreatedRows(index.tickets, pendingCreatedTickets.retain(current.id, index.tickets))
           : undefined,
@@ -3330,6 +3382,10 @@ export async function startHotSheetWebClient() {
       ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: tickets.value };
       ticketCountsByProject.value = { ...ticketCountsByProject.value, [current.id]: page.counts };
       recordAuthoritativeTicketTrend(current.id, page.counts);
+      if (page.source_errors?.length) {
+        partialSourcesByProject.value = { ...partialSourcesByProject.value, [current.id]: true };
+        error.value = page.source_errors.join(' · ');
+      }
       ticketNextCursor.value = page.next_cursor;
       if (searchQuery.value.trim() || searchTokens.value.length) {
         const effective = effectiveSearch(searchQuery.value, searchTokens.value),
@@ -3447,6 +3503,10 @@ export async function startHotSheetWebClient() {
       ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: next };
       ticketCountsByProject.value = { ...ticketCountsByProject.value, [current.id]: page.counts };
       recordAuthoritativeTicketTrend(current.id, page.counts);
+      if (page.source_errors?.length) {
+        partialSourcesByProject.value = { ...partialSourcesByProject.value, [current.id]: true };
+        error.value = page.source_errors.join(' · ');
+      }
       const loaded = statuses.reduce((sum, status) => sum + countTicketsForStatus(next, status), 0);
       boardColumnPages.value = {
         ...boardColumnPages.value,
@@ -3519,6 +3579,11 @@ export async function startHotSheetWebClient() {
         ticketCountsByProject.value = { ...ticketCountsByProject.value, [target.id]: snapshot.ticketCounts };
         recordAuthoritativeTicketTrend(target.id, snapshot.ticketCounts);
       }
+      if (snapshot.tickets)
+        partialSourcesByProject.value = {
+          ...partialSourcesByProject.value,
+          [target.id]: Boolean(snapshot.sourceErrors?.length),
+        };
       scheduleClaimLeaseExpiry();
     },
   });
@@ -3979,13 +4044,15 @@ export async function startHotSheetWebClient() {
       };
     }
     const counts = projectTicketCounts(current.id),
+      countsPartial = partialSourcesByProject.value[current.id] ?? false,
       searchCounts = sidebarSearchCounts.value,
       searchActive =
         searchBarActive() && searchCounts?.projectId === current.id && searchCounts.signature === searchSignature(),
       searchView = (id: TicketView, fallback?: number) => ({
         count: searchActive ? searchCounts.values[id] : fallback,
         countLoading: searchActive && searchCounts.pending.includes(id),
-        searchCount: searchActive && !searchCounts.pending.includes(id),
+        searchCount: searchActive && !searchCounts.pending.includes(id) && searchCounts.values[id] !== undefined,
+        countPartial: !searchActive && countsPartial,
       }),
       repo = repository.value,
       completionTrend = counts.completion_trend ?? ticketCompletionTrend(tickets.value),
@@ -3994,7 +4061,15 @@ export async function startHotSheetWebClient() {
         { id: 'backlog', label: 'Backlog', ...searchView('backlog', counts.backlog), icon: 'backlog' as const },
         { id: 'archive', label: 'Archive', ...searchView('archive', counts.archive), icon: 'archive' as const },
         ...((counts.trash ?? 0) > 0 || selectedView.value === 'trash'
-          ? [{ id: 'trash' as const, label: 'Trash', count: counts.trash ?? 0, icon: 'trash' as const }]
+          ? [
+              {
+                id: 'trash' as const,
+                label: 'Trash',
+                count: counts.trash ?? 0,
+                countPartial: countsPartial,
+                icon: 'trash' as const,
+              },
+            ]
           : []),
         ...customViewsFor(current.id).map((view) => {
           const id = customTicketViewId(view.id);
@@ -4071,6 +4146,7 @@ export async function startHotSheetWebClient() {
         openCount: counts.open,
         upNextCount: counts.up_next,
         activeCount: counts.active,
+        countsPartial,
         collapseControl: true,
       },
     };
@@ -4488,6 +4564,7 @@ export async function startHotSheetWebClient() {
         return {
           ...group,
           totalCount: total,
+          countPartial: partialSourcesByProject.value[selectedProjectId.value] ?? false,
           tickets: group.tickets.slice(0, renderedTicketLimit.value).map(row),
           continuation,
         };
@@ -4703,6 +4780,7 @@ export async function startHotSheetWebClient() {
           completedToday: counts.completed_today,
           inProgress: counts.started,
           trend,
+          partial: partialSourcesByProject.value[item.id] ?? false,
         };
       }),
     };
@@ -4745,6 +4823,7 @@ export async function startHotSheetWebClient() {
             : {}),
           upNextCount: counts.up_next,
           activeTicketCount: counts.active,
+          countsPartial: partialSourcesByProject.value[item.id] ?? false,
           operation:
             job && (!(job.kind === 'backup' && job.status === 'succeeded') || backupUnverified)
               ? {

@@ -587,7 +587,8 @@ describe('bounded whole-checkout reads', () => {
       .spyOn(globalThis, 'fetch')
       .mockImplementation(() => Promise.resolve(new Response(JSON.stringify(pages.shift()), { status: 200 })));
     const rows = await new Api('/api').checkoutTicketRowsPaged('demo', { fields: 'title' });
-    expect(rows.map((row) => row.title)).toEqual(['One', 'Two']);
+    expect(rows.items.map((row) => row.title)).toEqual(['One', 'Two']);
+    expect(rows.sourceErrors).toEqual([]);
     const urls = fetchMock.mock.calls.map(([url]) => new URL(url as string, 'http://host'));
     expect(urls).toHaveLength(2);
     for (const url of urls) {
@@ -614,6 +615,20 @@ describe('bounded whole-checkout reads', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockRestore();
   });
+  it('aggregates partial-source errors across bounded pages', async () => {
+    const pages = [
+      { items: [{ slug: 'HS2-ONE' }], next_cursor: 'next', counts: null, source_errors: ['source unavailable'] },
+      { items: [{ slug: 'HS2-TWO' }], counts: null },
+    ];
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(() => Promise.resolve(new Response(JSON.stringify(pages.shift()), { status: 200 })));
+    await expect(new Api('/api').checkoutTicketRowsPaged('demo')).resolves.toMatchObject({
+      items: [{ slug: 'HS2-ONE' }, { slug: 'HS2-TWO' }],
+      sourceErrors: ['source unavailable'],
+    });
+    fetchMock.mockRestore();
+  });
   it('keeps counts and summary days on ordinary checkout pages', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
@@ -634,6 +649,20 @@ describe('bounded whole-checkout reads', () => {
       '/api/checkouts/demo/tickets?text=HS2-QQRY00&compact=true&limit=500',
       expect.any(Object),
     );
+    fetchMock.mockRestore();
+  });
+  it('retains partial and truncated flags on unpaged checkout rows', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify([{ slug: 'HS2-ONE' }]), {
+        status: 200,
+        headers: { 'x-hotsheet-partial': 'true', 'x-hotsheet-truncated': 'true' },
+      }),
+    );
+    await expect(new Api('/api').checkoutTickets('demo', { limit: 1 })).resolves.toMatchObject({
+      items: [{ slug: 'HS2-ONE' }],
+      partial: true,
+      truncated: true,
+    });
     fetchMock.mockRestore();
   });
 });

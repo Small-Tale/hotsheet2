@@ -78,6 +78,10 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-project-id="demo"');
     expect(markup).toContain('aria-label="Open project statistics: 8 completed today, 2 in progress"');
     expect(markup.match(/data-bar=/g)).toHaveLength(2);
+    const partial = String(ProjectSummary({ completedToday: 8, inProgress: 2, trend: [1, 4], partial: true }));
+    expect(partial).toContain('≥8 completed today');
+    expect(partial).toContain('≥2 in progress');
+    expect(partial).toContain('at least 8 completed today');
   });
 
   it('uses an explicit shared chart domain without allowing bars to overflow it', () => {

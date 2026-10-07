@@ -46,6 +46,7 @@ export interface ProjectSidebarProps {
   openCount: number;
   upNextCount: number;
   activeCount: number;
+  countsPartial?: boolean;
   collapseControl?: boolean;
 }
 
@@ -63,8 +64,18 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
   // this inner content box rather than on the pane footer (HS2-KMDJRH).
   const footer = (
     <div class="project-sidebar__footer-content">
-      <p class="project-sidebar__work-summary" data-component="project-work-summary">
-        {props.openCount} open, {props.upNextCount} up next, {props.activeCount} active
+      <p
+        class="project-sidebar__work-summary"
+        data-component="project-work-summary"
+        aria-label={
+          props.countsPartial
+            ? `At least ${props.openCount} open, ${props.upNextCount} up next, and ${props.activeCount} active`
+            : undefined
+        }
+      >
+        {props.countsPartial
+          ? `≥${props.openCount} open · ≥${props.upNextCount} up next · ≥${props.activeCount} active`
+          : `${props.openCount} open, ${props.upNextCount} up next, ${props.activeCount} active`}
       </p>
       <div class="project-sidebar__drive-row">
         <DriveControl
@@ -106,6 +117,7 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
           completedToday={props.completedToday}
           inProgress={props.inProgress}
           trend={props.completionTrend}
+          partial={props.countsPartial}
         />
       </div>
       <RepositorySummary

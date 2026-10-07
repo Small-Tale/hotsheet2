@@ -1,5 +1,11 @@
 # Feature Coverage Matrix
 
+HS2-NX6JQJ covers partial checkout reads beyond the initial collection: the web API
+retains unpaged partial/truncated headers and page-walk source errors; refresh unit tests
+preserve healthy rows and source diagnostics through empty-then-refill recovery. Browser
+tests exercise partial project/view totals, search rows with hidden incomplete search
+counts, continuation-page warnings, unpaged duplicate-target search warnings, and recovery.
+
 HS2-RBQYVZ covers legacy-project registration cleanup in
 `clients/web/src/project-bridge.test.ts`: live and stale HS1 locks, a live saved-list
 instance, exact and symlink-alias project/MCP-channel matching, malformed files, and repeated

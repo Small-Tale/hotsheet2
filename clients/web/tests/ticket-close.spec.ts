@@ -198,6 +198,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
       const query = url.searchParams.get('text');
       const results = query ? (target ? [canonical] : [collision]) : rows;
       return route.fulfill({
+        headers: target && query && !url.searchParams.has('page_size') ? { 'x-hotsheet-partial': 'true' } : undefined,
         json: url.searchParams.has('page_size')
           ? { items: results, counts: { all: results.length, queue: results.length, backlog: 0, archive: 0 } }
           : results,
@@ -226,6 +227,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   const candidate = dialog.getByRole('button', { name: /HS2-1S6DS9.*Hot Sheet 2.*Canonical checkout registry repair/ });
   await expect(dialog.getByRole('button', { name: /HS2-1S6DS9.*Kerf.*Different local ticket/ })).toBeVisible();
   await expect(candidate).toBeVisible();
+  await expect(dialog.getByRole('alert')).toContainText('Search results may be incomplete for Hot Sheet 2');
   await expect(dialog.locator('.ticket-close-dialog__form')).toHaveCSS('gap', '16px');
   await expect(dialog.locator('.ticket-close-dialog__results')).toHaveCSS('padding', '4px');
   await page.screenshot({ path: '/private/tmp/hs2-sbw2xd-cross-project-duplicate-wide.png', fullPage: true });

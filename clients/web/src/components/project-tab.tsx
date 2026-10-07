@@ -32,6 +32,7 @@ export interface ProjectTabProps {
   notificationCount?: number;
   upNextCount?: number;
   activeTicketCount?: number;
+  countsPartial?: boolean;
   operation?: { label: string; state: 'running' | 'failed' | 'succeeded' | 'interrupted'; percent?: number };
 }
 
@@ -89,14 +90,17 @@ export function ProjectTab({
   notificationCount = 0,
   upNextCount = 0,
   activeTicketCount = 0,
+  countsPartial = false,
   operation,
 }: ProjectTabProps) {
   const normalizedUpNextCount = Math.max(0, Math.trunc(upNextCount)),
     normalizedActiveTicketCount = Math.max(0, Math.trunc(activeTicketCount));
   const workLabel = [
-    normalizedUpNextCount > 0 ? `${normalizedUpNextCount} Up Next ticket${normalizedUpNextCount === 1 ? '' : 's'}` : '',
+    normalizedUpNextCount > 0
+      ? `${countsPartial ? 'At least ' : ''}${normalizedUpNextCount} Up Next ticket${normalizedUpNextCount === 1 ? '' : 's'}`
+      : '',
     normalizedActiveTicketCount > 0
-      ? `${normalizedActiveTicketCount} active ticket${normalizedActiveTicketCount === 1 ? '' : 's'}`
+      ? `${countsPartial ? 'at least ' : ''}${normalizedActiveTicketCount} active ticket${normalizedActiveTicketCount === 1 ? '' : 's'}`
       : '',
   ]
     .filter(Boolean)
@@ -112,6 +116,7 @@ export function ProjectTab({
     >
       {normalizedActiveTicketCount > 0 && <ProjectTabActivityRing count={normalizedActiveTicketCount} />}
       <span class="project-tab__work-count" aria-hidden="true">
+        {countsPartial ? '≥' : ''}
         {projectTabUpNextLabel(normalizedUpNextCount)}
       </span>
     </span>

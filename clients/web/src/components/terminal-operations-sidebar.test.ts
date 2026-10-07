@@ -19,6 +19,9 @@ describe('TerminalOperationsSidebar', () => {
       trend: [1, 3, 6],
     });
   });
+  it('marks the aggregate incomplete when one project has a partial source', () => {
+    expect(aggregateTerminalProjectSummaries([{ ...projects[0], partial: true }, projects[1]]).partial).toBe(true);
+  });
 
   it('adds an aggregate group only when multiple projects are open', () => {
     const multiple = String(TerminalOperationsSidebar({ projects })),

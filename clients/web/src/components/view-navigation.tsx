@@ -28,6 +28,7 @@ export interface ViewNavigationItem {
   id: string;
   label: string;
   count?: number;
+  countPartial?: boolean;
   countLoading?: boolean;
   searchCount?: boolean;
   attention?: boolean;
@@ -82,9 +83,15 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                           appearance="quiet"
                           size="compact"
                           tone={item.attention ? 'danger' : 'neutral'}
-                          label={item.searchCount ? `${item.count} search results` : undefined}
+                          label={
+                            item.countPartial
+                              ? `At least ${item.count} results; a ticket source is unavailable`
+                              : item.searchCount
+                                ? `${item.count} search results`
+                                : undefined
+                          }
                         >
-                          {String(item.count)}
+                          {item.countPartial ? `≥${item.count}` : String(item.count)}
                         </Badge>
                       </>
                     )}

@@ -12,6 +12,7 @@ export interface TerminalProjectSummary {
   completedToday: number;
   inProgress: number;
   trend: number[];
+  partial?: boolean;
 }
 
 export function aggregateTerminalProjectSummaries(projects: readonly TerminalProjectSummary[]): TerminalProjectSummary {
@@ -22,6 +23,7 @@ export function aggregateTerminalProjectSummaries(projects: readonly TerminalPro
     completedToday: projects.reduce((sum, project) => sum + project.completedToday, 0),
     inProgress: projects.reduce((sum, project) => sum + project.inProgress, 0),
     trend,
+    ...(projects.some((project) => project.partial) ? { partial: true } : {}),
   };
 }
 
@@ -47,6 +49,7 @@ export function terminalOperationsPanel({
             completedToday={group.completedToday}
             inProgress={group.inProgress}
             trend={group.trend}
+            partial={group.partial}
             projectId={group.id}
             size="compact"
             chartTone={group.id === 'all' ? 'success' : 'brand'}
