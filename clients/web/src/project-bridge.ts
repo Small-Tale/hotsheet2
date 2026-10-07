@@ -30,6 +30,7 @@ export interface ProjectSession {
   needsHs1Migration: boolean;
   hs1ImportCompleted: boolean;
   hs1CleanupEligible: boolean;
+  hs1RegistrationRepairAvailable: boolean;
   hs1SourcePath?: string;
   hs1DatabasePath?: string;
   hs1PostgresVersion?: string;
@@ -605,14 +606,8 @@ async function sameHs1Directory(candidate: string, directory: string): Promise<b
   }
 }
 
-/** Remove only HS1 registrations for this checkout after verified backup and before live-data deletion. */
-export async function reconcileHs1Registrations(
-  root: string,
-  legacyHome = hs1LegacyHome(),
-  probe: ProcessProbe = processIsRunning,
-): Promise<void> {
+async function hs1Registrations(root: string, legacyHome: string) {
   const directory = resolve(root, '.hotsheet');
-  await requireHs1Stopped(directory, probe);
   const projectsPath = resolve(legacyHome, 'projects.json');
   const projectsRaw = await optionalFile(projectsPath);
   let projects: string[] | undefined;
@@ -627,22 +622,6 @@ export async function reconcileHs1Registrations(
   }
   const projectMatches = projects ? await Promise.all(projects.map((entry) => sameHs1Directory(entry, directory))) : [];
   const saved = projectMatches.includes(true);
-  if (saved) {
-    const instanceRaw = await optionalFile(resolve(legacyHome, 'instance.json'));
-    if (instanceRaw !== undefined) {
-      let instance: unknown;
-      try {
-        instance = JSON.parse(instanceRaw);
-      } catch {
-        throw new Error('Cannot verify the Hot Sheet 1 app instance; no files were removed.');
-      }
-      const pid = typeof instance === 'object' && instance !== null ? (instance as { pid?: unknown }).pid : undefined;
-      if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0)
-        throw new Error('Cannot verify the Hot Sheet 1 app instance; no files were removed.');
-      if (probe(pid))
-        throw new Error(`Hot Sheet 1 is still running (process ${pid}). Quit it, then retry; no files were removed.`);
-    }
-  }
   const mcpPath = resolve(root, '.mcp.json');
   const mcpRaw = await optionalFile(mcpPath);
   let mcp: Record<string, unknown> | undefined;
@@ -672,6 +651,43 @@ export async function reconcileHs1Registrations(
         matchingKeys.push(key);
         break;
       }
+    }
+  }
+  return { projectsPath, projects, projectMatches, saved, mcpPath, mcp, servers, matchingKeys };
+}
+
+/** Detect exact HS1 registrations left by cleanup runs that predate registry reconciliation. */
+export async function hasHs1Registrations(root: string, legacyHome = hs1LegacyHome()): Promise<boolean> {
+  const registrations = await hs1Registrations(root, legacyHome);
+  return registrations.saved || registrations.matchingKeys.length > 0;
+}
+
+/** Remove only HS1 registrations for this checkout after verified backup and before live-data deletion. */
+export async function reconcileHs1Registrations(
+  root: string,
+  legacyHome = hs1LegacyHome(),
+  probe: ProcessProbe = processIsRunning,
+): Promise<void> {
+  const directory = resolve(root, '.hotsheet');
+  await requireHs1Stopped(directory, probe);
+  const { projectsPath, projects, projectMatches, saved, mcpPath, mcp, servers, matchingKeys } = await hs1Registrations(
+    root,
+    legacyHome,
+  );
+  if (saved) {
+    const instanceRaw = await optionalFile(resolve(legacyHome, 'instance.json'));
+    if (instanceRaw !== undefined) {
+      let instance: unknown;
+      try {
+        instance = JSON.parse(instanceRaw);
+      } catch {
+        throw new Error('Cannot verify the Hot Sheet 1 app instance; no files were removed.');
+      }
+      const pid = typeof instance === 'object' && instance !== null ? (instance as { pid?: unknown }).pid : undefined;
+      if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0)
+        throw new Error('Cannot verify the Hot Sheet 1 app instance; no files were removed.');
+      if (probe(pid))
+        throw new Error(`Hot Sheet 1 is still running (process ${pid}). Quit it, then retry; no files were removed.`);
     }
   }
   if (saved && projects)
@@ -1216,6 +1232,9 @@ async function openPreparedLocalProject(
     hs1MarkerPath = resolve(root, HS1_MARKER),
     hs1DataPresent = await exists(hs1MarkerPath),
     imported = await hasCompletedHs1Import(activeStore, root),
+    backedUp = imported && (await hasHs1Backup(activeStore, root)),
+    registrationRepairAvailable =
+      !hs1DataPresent && backedUp ? await hasHs1Registrations(root).catch(() => true) : false,
     hs1PostgresVersion = hs1DataPresent ? (await readFile(hs1MarkerPath, 'utf8').catch(() => '')).trim() : '';
   sessions.set(opened.checkout.id, { ...target, ticketStore: activeStore });
   return {
@@ -1230,7 +1249,8 @@ async function openPreparedLocalProject(
     needsTicketSetup: opened.checkout.sources.length === 0,
     needsHs1Migration: hs1DataPresent && !imported,
     hs1ImportCompleted: imported,
-    hs1CleanupEligible: hs1DataPresent && imported && (await hasHs1Backup(activeStore, root)),
+    hs1CleanupEligible: hs1DataPresent && backedUp,
+    hs1RegistrationRepairAvailable: registrationRepairAvailable,
     ...(hs1DataPresent ? { hs1SourcePath, hs1DatabasePath, hs1PostgresVersion } : {}),
   };
 }

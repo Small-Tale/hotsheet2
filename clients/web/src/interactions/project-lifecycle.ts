@@ -233,7 +233,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
       if (!current) return;
       dismissHs1CleanupPrompt(localStorage, current.id, hs1SourceIdentity(current));
       projects.value = projects.value.map((item) =>
-        item.id === current.id ? { ...item, hs1CleanupEligible: false } : item,
+        item.id === current.id ? { ...item, hs1CleanupEligible: false, hs1RegistrationRepairAvailable: false } : item,
       );
     }),
   );

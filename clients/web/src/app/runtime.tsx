@@ -90,7 +90,13 @@ import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner'
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
 import { corruptTicketKey, type CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
-import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from '../components/hs1-migration';
+import {
+  Hs1CleanupBanner,
+  Hs1JobBanner,
+  Hs1MigrationBanner,
+  Hs1MigrationDialog,
+  Hs1RegistrationRepairBanner,
+} from '../components/hs1-migration';
 import { MainShell } from '../components/main-shell';
 import { ManualModelDialog } from '../components/manual-model-dialog';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
@@ -5025,6 +5031,10 @@ export async function startHotSheetWebClient() {
             )}{' '}
             {current.hs1CleanupEligible &&
               !hs1CleanupPromptDismissed(localStorage, current.id, hs1SourceIdentity(current)) && <Hs1CleanupBanner />}
+            {current.hs1RegistrationRepairAvailable &&
+              !hs1CleanupPromptDismissed(localStorage, current.id, hs1SourceIdentity(current)) && (
+                <Hs1RegistrationRepairBanner />
+              )}
             {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
             {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
             {notificationsPaused.value && (

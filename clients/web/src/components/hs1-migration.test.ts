@@ -3,7 +3,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import type { MigrationJob } from '../migration-progress';
-import { Hs1CleanupBanner, Hs1JobBanner, Hs1MigrationBanner, Hs1MigrationDialog } from './hs1-migration';
+import {
+  Hs1CleanupBanner,
+  Hs1JobBanner,
+  Hs1MigrationBanner,
+  Hs1MigrationDialog,
+  Hs1RegistrationRepairBanner,
+} from './hs1-migration';
 
 describe('HS1 migration presentation', () => {
   it('uses canonical dialog spacing and StateBanner customization tokens', () => {
@@ -94,6 +100,13 @@ describe('HS1 migration presentation', () => {
     expect(markup).toContain('class="kui-state-banner__action"><div class="hs1-cleanup-banner__actions"');
     expect(markup).toContain('data-action="remove-hs1-data"');
     expect(markup).toContain('data-action="dismiss-hs1-cleanup"');
+  });
+  it('offers registration repair without suggesting the old database still exists', () => {
+    const markup = String(Hs1RegistrationRepairBanner());
+    expect(markup).toContain('data-tone="warning"');
+    expect(markup).toContain('may reopen this imported project');
+    expect(markup).toContain('Repair old app registration');
+    expect(markup).toContain('data-action="remove-hs1-data"');
   });
 });
 

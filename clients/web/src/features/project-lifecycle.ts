@@ -381,10 +381,15 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
 
   async function removeOldHs1Data() {
     const current = dependencies.project();
+    const repair = Boolean(current?.hs1RegistrationRepairAvailable && !current.hs1CleanupEligible);
     if (
       !current ||
-      !current.hs1CleanupEligible ||
-      !window.confirm('Delete the old Hot Sheet 1 files from this project? Backups will be kept.')
+      (!current.hs1CleanupEligible && !repair) ||
+      !window.confirm(
+        repair
+          ? 'Repair this project’s old Hot Sheet 1 saved-project and channel registrations? The verified backup and project files will be kept.'
+          : 'Delete the old Hot Sheet 1 files from this project? Backups will be kept.',
+      )
     )
       return;
     try {
@@ -399,6 +404,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
           ? {
               ...item,
               hs1CleanupEligible: false,
+              hs1RegistrationRepairAvailable: false,
               needsHs1Migration: false,
               hs1DatabasePath: undefined,
               hs1SourcePath: undefined,
@@ -407,7 +413,9 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
           : item,
       );
       dependencies.showToast(
-        `Removed ${result.removed?.length ?? 0} old Hot Sheet 1 item${result.removed?.length === 1 ? '' : 's'}; backups were kept.`,
+        repair
+          ? 'Repaired the old Hot Sheet 1 project registration; the verified backup was kept.'
+          : `Removed ${result.removed?.length ?? 0} old Hot Sheet 1 item${result.removed?.length === 1 ? '' : 's'}; backups were kept.`,
       );
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);

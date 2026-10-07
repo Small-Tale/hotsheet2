@@ -2,7 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import type { MigrationJob, MigrationProgress } from '../src/migration-progress';
 
-async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs1') {
+async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' | 'repair' = 'hs1') {
   let job: MigrationJob | undefined;
   const listeners = new Set<() => void>();
   const publish = () => {
@@ -11,9 +11,11 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs
     listeners.clear();
   };
   const state = {
-    imported: initialState === 'imported',
-    remote: initialState === 'imported',
-    deleted: false,
+    imported: initialState !== 'hs1',
+    remote: initialState !== 'hs1',
+    deleted: initialState === 'repair',
+    repair: initialState === 'repair',
+    legacyRunning: false,
     providerRequests: 0,
   };
   // Intercept the fixture API only: routing every Vite module adds thousands of browser/worker
@@ -86,6 +88,7 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs
               needsHs1Migration: false,
               hs1ImportCompleted: true,
               hs1CleanupEligible: state.remote && !state.deleted,
+              hs1RegistrationRepairAvailable: state.repair,
               ...(state.deleted ? {} : { hs1DatabasePath: '/work/legacy/.hotsheet/db', hs1PostgresVersion: '17' }),
             }
           : {
@@ -114,8 +117,15 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' = 'hs
         },
       });
     if (path === '/__hotsheet/projects/legacy/hs1-data' && request.method() === 'DELETE') {
+      if (state.legacyRunning)
+        return route.fulfill({
+          status: 400,
+          json: { error: 'Hot Sheet 1 is still running. Quit it, then retry; no files were removed.' },
+        });
       state.deleted = true;
-      return route.fulfill({ json: { removed: ['db', 'attachments', 'settings.json'] } });
+      const removed = state.repair ? [] : ['db', 'attachments', 'settings.json'];
+      state.repair = false;
+      return route.fulfill({ json: { removed } });
     }
     if (path.endsWith('/providers')) {
       state.providerRequests += 1;
@@ -359,6 +369,35 @@ test('persists HS1 cleanup dismissal until the saved dismissal is cleared', asyn
   await reloadRestoredProject(page);
   await expect(banner).toBeVisible();
   expect(state.deleted).toBe(false);
+});
+
+test('repairs preexisting HS1 registrations after an older cleanup, then stays repaired on restore', async ({
+  page,
+}, testInfo) => {
+  const { state } = await mockHs1Project(page, 'repair');
+  await page.setViewportSize({ width: 760, height: 720 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const banner = page.locator('.hs1-cleanup-banner > [data-component="state-banner"]');
+  await expect(banner).toContainText('Hot Sheet 1 may reopen this imported project');
+  await expect(banner).toHaveAttribute('data-tone', 'warning');
+  await banner.screenshot({ path: testInfo.outputPath('hs1-registration-repair-banner.png'), animations: 'disabled' });
+
+  state.legacyRunning = true;
+  page.once('dialog', (prompt) => prompt.accept());
+  await banner.getByRole('button', { name: 'Repair old app registration…' }).click();
+  await expect(page.locator('.app-error')).toContainText('Hot Sheet 1 is still running');
+  await expect(banner).toBeVisible();
+  expect(state.repair).toBe(true);
+
+  state.legacyRunning = false;
+  page.once('dialog', (prompt) => prompt.accept());
+  await banner.getByRole('button', { name: 'Repair old app registration…' }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(page.locator('.app-toast')).toContainText('Repaired the old Hot Sheet 1 project registration');
+  await reloadRestoredProject(page);
+  await expect(banner).toHaveCount(0);
 });
 
 test('keeps background import failure and retry owned by its project across navigation and reload', async ({

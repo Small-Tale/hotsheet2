@@ -321,6 +321,16 @@ may not have open at once):
    cleanup records the same dismissal so a stale or concurrently recreated marker does
    not make the banner recur.
 
+   Projects cleaned by older HS2 builds may have no `.hotsheet/db/PG_VERSION` marker yet
+   still appear in the old app's saved-project list or matching MCP channel settings.
+   Opening a verified imported-and-backed-up project checks those registrations without
+   changing them and offers **Repair old app registration** when any remain. The action
+   reuses the backup-gated cleanup endpoint: it rechecks the remote proof, refuses a live
+   Hot Sheet 1 app, project lock, or channel, preserves unrelated registrations, and
+   returns an empty removed-files list when the old database is already gone. Reopening
+   after repair no longer offers the action. Malformed registry files report a repair
+   error without changing either file.
+
 ### Background ownership and progress protocol
 
 `POST /__hotsheet/projects/migration-jobs` accepts canonical project, source, destination,

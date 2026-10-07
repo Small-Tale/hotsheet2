@@ -19,6 +19,7 @@ export interface Project {
   needsHs1Migration?: boolean;
   hs1ImportCompleted?: boolean;
   hs1CleanupEligible?: boolean;
+  hs1RegistrationRepairAvailable?: boolean;
   hs1SourcePath?: string;
   hs1DatabasePath?: string;
   hs1PostgresVersion?: string;

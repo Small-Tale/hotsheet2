@@ -14,6 +14,12 @@ reconciliation. The opt-in real-server migration flow in
 the removal, an unrelated saved project and HS2 MCP entry survive, and the migrated
 project is absent from the legacy app's restart list.
 
+HS2-J9X3JK covers registration repair after an older cleanup removed the database
+marker: bridge unit tests detect saved-list-only and channel-only leftovers without
+changing unrelated entries; the real-server migration flow reopens with a repair offer,
+refuses a live legacy app, repairs without deleting more files, and reopens cleanly. The
+browser flow verifies the warning banner, live-app error, successful repair, and restore.
+
 HS2-JY6JZE keeps provider links across a server/client restart. Checkout-registry unit
 tests cover reopen, discovery, git-store relink, explicit source replacement, and
 removal; CLI tests cover setup refresh with a linked provider;

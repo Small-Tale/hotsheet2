@@ -134,13 +134,60 @@ describe.skipIf(process.env.HOTSHEET_LIVE_SERVER !== '1')('background migration 
       expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8'))).toEqual([
         resolve(workspace, 'other/.hotsheet'),
       ]);
-      expect(JSON.parse(await readFile(mcpPath, 'utf8'))).toEqual({
-        mcpServers: { hotsheet: { command: 'hotsheet-mcp', args: ['--path', store] } },
-      });
+      const repairedMcp = JSON.parse(await readFile(mcpPath, 'utf8')) as {
+        mcpServers: Record<string, { args: string[] }>;
+      };
+      expect(Object.keys(repairedMcp.mcpServers)).toEqual(['hotsheet']);
+      expect(repairedMcp.mcpServers.hotsheet.args).toEqual(['--path', store]);
       // Restoring the old app from its saved project list no longer opens this project.
       expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8')) as string[]).not.toContain(
         resolve(root, '.hotsheet'),
       );
+      // Older cleanup builds removed the database marker but left these registrations behind.
+      await writeFile(
+        resolve(legacyHome, 'projects.json'),
+        JSON.stringify([resolve(root, '.hotsheet'), resolve(workspace, 'other/.hotsheet')]),
+      );
+      await writeFile(
+        mcpPath,
+        JSON.stringify({
+          mcpServers: {
+            'hotsheet-channel-project': { command: 'legacy', args: ['--data-dir', resolve(root, '.hotsheet')] },
+            hotsheet: { command: 'hotsheet-mcp', args: ['--path', store] },
+          },
+        }),
+      );
+      const repairOpen = await app.request('/__hotsheet/projects/open', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ root }),
+      });
+      expect(await repairOpen.json()).toMatchObject({
+        hs1ImportCompleted: true,
+        hs1CleanupEligible: false,
+        hs1RegistrationRepairAvailable: true,
+      });
+      await writeFile(resolve(legacyHome, 'instance.json'), JSON.stringify({ pid: process.pid }));
+      expect((await app.request(`/__hotsheet/projects/${session.id}/hs1-data`, { method: 'DELETE' })).status).toBe(400);
+      expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8'))).toHaveLength(2);
+      await rm(resolve(legacyHome, 'instance.json'));
+      const repaired = await app.request(`/__hotsheet/projects/${session.id}/hs1-data`, { method: 'DELETE' });
+      expect(repaired.status).toBe(200);
+      expect(await repaired.json()).toEqual({ removed: [] });
+      expect(JSON.parse(await readFile(resolve(legacyHome, 'projects.json'), 'utf8'))).toEqual([
+        resolve(workspace, 'other/.hotsheet'),
+      ]);
+      const afterRepairMcp = JSON.parse(await readFile(mcpPath, 'utf8')) as {
+        mcpServers: Record<string, { args: string[] }>;
+      };
+      expect(Object.keys(afterRepairMcp.mcpServers)).toEqual(['hotsheet']);
+      expect(afterRepairMcp.mcpServers.hotsheet.args).toEqual(['--path', store]);
+      const repairedOpen = await app.request('/__hotsheet/projects/open', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ root }),
+      });
+      expect(await repairedOpen.json()).toMatchObject({ hs1RegistrationRepairAvailable: false });
       // Replaying terminal history must not undo an intentional later relink.
       const replacement = resolve(workspace, 'replacement.hs2');
       await mkdir(replacement);

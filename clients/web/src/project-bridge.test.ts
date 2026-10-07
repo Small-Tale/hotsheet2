@@ -18,6 +18,7 @@ import {
   developmentSetupAssetsFingerprint,
   folderChooserCommand,
   forgetVerifiedServer,
+  hasHs1Registrations,
   hs1ChannelSlug,
   hs1MigrationArgs,
   linkedTicketStore,
@@ -698,12 +699,14 @@ describe('Hot Sheet 1 project import bridge', () => {
         }),
       );
       if (process.platform !== 'win32') await chmod(resolve(root, '.mcp.json'), 0o600);
+      expect(await hasHs1Registrations(root, home)).toBe(true);
       await expect(reconcileHs1Registrations(root, home, (pid) => pid === 82)).rejects.toThrow(
         /still running.*82.*no files were removed/i,
       );
       expect(JSON.parse(await readFile(resolve(home, 'projects.json'), 'utf8'))).toHaveLength(2);
       await reconcileHs1Registrations(root, home, () => false);
       await reconcileHs1Registrations(root, home, () => false);
+      expect(await hasHs1Registrations(root, home)).toBe(false);
       expect(JSON.parse(await readFile(resolve(home, 'projects.json'), 'utf8'))).toEqual([resolve(other, '.hotsheet')]);
       expect(JSON.parse(await readFile(resolve(root, '.mcp.json'), 'utf8'))).toEqual({
         otherSetting: true,
@@ -727,12 +730,40 @@ describe('Hot Sheet 1 project import bridge', () => {
       const projects = JSON.stringify([resolve(root, '.hotsheet')]);
       await writeFile(resolve(home, 'projects.json'), projects);
       await writeFile(resolve(root, '.mcp.json'), '{invalid');
+      await expect(hasHs1Registrations(root, home)).rejects.toThrow(/MCP configuration/);
       await expect(reconcileHs1Registrations(root, home, () => false)).rejects.toThrow(/MCP configuration/);
       expect(await readFile(resolve(home, 'projects.json'), 'utf8')).toBe(projects);
       await writeFile(resolve(root, '.mcp.json'), '{}');
       await writeFile(resolve(home, 'projects.json'), '{}');
+      await expect(hasHs1Registrations(root, home)).rejects.toThrow(/saved project list/);
       await expect(reconcileHs1Registrations(root, home, () => false)).rejects.toThrow(/saved project list/);
       expect(await readFile(resolve(root, '.mcp.json'), 'utf8')).toBe('{}');
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+  it('detects saved-list and channel-only registrations after an older cleanup removed the database', async () => {
+    const parent = await mkdtemp(resolve(tmpdir(), 'hotsheet-hs1-repair-detection-')),
+      root = resolve(parent, 'legacy'),
+      other = resolve(parent, 'other'),
+      home = resolve(parent, 'home');
+    try {
+      await mkdir(resolve(root, '.hotsheet'), { recursive: true });
+      await mkdir(home);
+      await writeFile(resolve(home, 'projects.json'), JSON.stringify([resolve(other, '.hotsheet')]));
+      expect(await hasHs1Registrations(root, home)).toBe(false);
+      await writeFile(resolve(home, 'projects.json'), JSON.stringify([resolve(root, '.hotsheet')]));
+      expect(await hasHs1Registrations(root, home)).toBe(true);
+      await writeFile(resolve(home, 'projects.json'), '[]');
+      await writeFile(
+        resolve(root, '.mcp.json'),
+        JSON.stringify({
+          mcpServers: { 'hotsheet-channel-legacy': { args: ['--data-dir', resolve(root, '.hotsheet')] } },
+        }),
+      );
+      expect(await hasHs1Registrations(root, home)).toBe(true);
+      await reconcileHs1Registrations(root, home, () => false);
+      expect(await hasHs1Registrations(root, home)).toBe(false);
     } finally {
       await rm(parent, { recursive: true, force: true });
     }

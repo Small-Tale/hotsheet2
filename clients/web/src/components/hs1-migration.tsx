@@ -150,6 +150,32 @@ export function Hs1CleanupBanner() {
   );
 }
 
+export function Hs1RegistrationRepairBanner() {
+  return (
+    <div class="hs1-cleanup-banner">
+      <StateBanner
+        title="Hot Sheet 1 may reopen this imported project"
+        detail="An old saved-project or channel registration remains after the local database was removed."
+        tone="warning"
+        urgency="status"
+        copyLayout="stacked"
+        actionPlacement="below"
+        icon={<LucideIcon icon={Database} name="database" />}
+        action={
+          <div class="hs1-cleanup-banner__actions">
+            <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissHs1Cleanup.attrs}>
+              Dismiss
+            </button>
+            <button type="button" {...PROJECT_LIFECYCLE_ACTIONS.removeHs1Data.attrs}>
+              Repair old app registration…
+            </button>
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
 export function Hs1JobBanner({
   job,
   details = false,
