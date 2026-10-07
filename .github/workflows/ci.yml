@@ -86,11 +86,26 @@ jobs:
       - name: Build the CLI (the conformance test drives target/debug/hotsheet-cli)
         run: cargo build --bin hotsheet-cli
 
+      - name: Install web client dependencies
+        working-directory: clients/web
+        run: npm ci
+
+      - name: Install Playwright Chromium and Linux dependencies
+        working-directory: clients/web
+        run: |
+          # apt mirrors can stall during --with-deps; keep the gate bounded and retry a transient failure.
+          for attempt in 1 2; do
+            if timeout --kill-after=15s 6m npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright dependency install attempt $attempt failed or timed out"
+          done
+          echo "::error::Playwright dependency install failed after two bounded attempts"
+          exit 1
+
       - name: Web client lint, typecheck, unit tests, and production build
         working-directory: clients/web
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
           npm run lint
           npm run typecheck
           npm run test:unit

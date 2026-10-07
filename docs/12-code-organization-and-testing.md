@@ -381,7 +381,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   floors, close remaining web coverage gaps, and add the macOS matrix leg for
   terminal/native-client surfaces.
 - The web gate installs Playwright Chromium and its Linux dependencies after `npm ci`
-  with `npx playwright install --with-deps chromium`. The Vitest suite includes real-browser
+  with `npx playwright install --with-deps chromium`. CI runs that step with two bounded
+  six-minute attempts, so a stalled Linux package mirror fails clearly instead of holding
+  the whole job indefinitely (HS2-47BAAC). The Vitest suite includes real-browser
   local-host and stable-dev tests, so browser setup is required before `test:unit` as well
   as before the Playwright E2E suite.
 - The `check` job also validates the feature double-coverage matrix. Its validator accepts
