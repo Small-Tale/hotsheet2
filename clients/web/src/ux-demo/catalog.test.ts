@@ -451,6 +451,8 @@ describe('UX demo catalog', () => {
         source: string;
         styleSources?: string[];
         rendersAs?: string[];
+        parents: { mode: string; entries: string[] };
+        zones: Array<{ id: string; jsx?: { prop: string }; accepts: string[] }>;
         boundaries: { rootClass: string | null; publicClasses: string[]; placeableClasses?: string[] };
       }>;
     };
