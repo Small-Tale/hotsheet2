@@ -2676,7 +2676,7 @@ test('aligns ticket source marks with their names in project settings (HS2-Q93H9
     settings.locator('.ticket-provider-settings__store[data-source-id="git-local"]'),
     settings.locator('.ticket-provider-settings__source-row').first(),
   ]) {
-    const icon = await row.locator('[data-component="ticket-source-icon"]').boundingBox();
+    const icon = await row.locator('[data-component="ticket-source-icon"]').first().boundingBox();
     const name = await row.locator('.ticket-provider-settings__connection-copy strong').first().boundingBox();
     expect(icon && name).toBeTruthy();
     expect(Math.abs(icon!.y + icon!.height / 2 - (name!.y + name!.height / 2))).toBeLessThanOrEqual(6);
