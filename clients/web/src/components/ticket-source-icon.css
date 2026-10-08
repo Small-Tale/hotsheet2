@@ -2,11 +2,7 @@
   display: inline-grid;
   place-items: center;
   flex: none;
-  box-sizing: content-box;
-  padding: remify(1px);
-  margin: remify(-1px);
-  border-radius: 5px;
-  color: var(--wa-color-text-normal);
+  color: var(--wa-color-surface-lowered);
   vertical-align: middle;
 }
 .ticket-source-icon[data-size='list'] {

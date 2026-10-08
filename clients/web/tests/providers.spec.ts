@@ -2605,7 +2605,7 @@ test('opens the native folder chooser directly from Add project and only onboard
   expect(openedRoots).toEqual(['.', '/work/other', '/work/other']);
 });
 
-test('changes a project source color and updates card and inspector badges (HS2-068Q55)', async ({ page }) => {
+test('changes a project source color and updates card and inspector badges (HS2-068Q55) @ci-smoke', async ({ page }) => {
   await mockProject(page);
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -2618,23 +2618,17 @@ test('changes a project source color and updates card and inspector badges (HS2-
   await expect(page.locator('.app-toast')).toContainText('Ticket source color updated.');
   await expect(color).toHaveValue('#3b82f6');
   await page.getByLabel('List view').click();
-  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS(
-    'background-color',
-    'rgb(59, 130, 246)',
-  );
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
   await ticketRow.click();
   await expect(page.locator('.ticket-inspector__source-identity [data-component="ticket-source-icon"]')).toHaveCSS(
-    'background-color',
+    'color',
     'rgb(59, 130, 246)',
   );
   await page.getByLabel('Settings view').click();
   await color.selectOption('transparent');
   await expect(color).toHaveValue('transparent');
   await page.getByLabel('List view').click();
-  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS(
-    'background-color',
-    'rgba(0, 0, 0, 0)',
-  );
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).not.toHaveAttribute('style', /color/);
 });
 
 test('uses one provider dialog for onboarding, repeated connection creation, and editing', async ({ page }) => {

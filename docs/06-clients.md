@@ -654,12 +654,14 @@ and identity-less legacy entries remain conservatively blocking.
   [16-external-sync-interface.md](16-external-sync-interface.md#project-owned-sources-machine-wide-accounts-hs2-sm9pm8)).
   **Project Settings → Ticket sources** shows only the sources this project owns, with its
   own default (HS2-3SCH1K). Each row edits its source (details, this project's default,
-  source icon background color from the custom color palette, transparent by default,
+  source mark fill color from the custom color palette, transparent by default,
   **Disable / Enable**) and its trailing **Remove from this project** action opens that
   editor at an inline confirmation; a source shared with another project (attached
   headlessly) says "Also used by …". There is no list of other projects' connections.
   A warning banner appears when two sources from the same provider share an icon color.
-  Ticket cards show the outlined source mark directly after the type icon; the inspector
+  Ticket cards show the source mark directly after the type icon; Git and GitHub use
+  their filled data-source logo exports, with the selected color on the mark itself
+  and the lowered surface color for Transparent. The inspector
   toolbar shows it beside the ticket number, including in the terminal rail.
   When adding a provider source, **Use as this project's default ticket source** starts
   checked only if the project has no default source. The user can change that choice before

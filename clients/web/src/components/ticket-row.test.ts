@@ -26,7 +26,8 @@ describe('TicketRow', () => {
     for (const presentation of ['list', 'column'] as const) {
       const markup = String(TicketRow({ ...ticket, presentation }));
       expect(markup).toContain('data-provider="github"');
-      expect(markup).toContain('background-color: #3b82f6');
+      expect(markup).toContain('style="color: #3b82f6"');
+      expect(markup).toContain('fill="currentColor"');
       expect(markup.indexOf('task category')).toBeLessThan(markup.indexOf('data-provider="github"'));
     }
   });

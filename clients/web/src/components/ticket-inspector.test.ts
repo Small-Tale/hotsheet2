@@ -24,7 +24,7 @@ describe('TicketInspector', () => {
       }),
     );
     expect(markup).toContain('data-provider="gitlab"');
-    expect(markup).toContain('background-color: #ef4444');
+    expect(markup).toContain('style="color: #ef4444"');
     expect(markup.indexOf('data-provider="gitlab"')).toBeLessThan(markup.indexOf('Copy ticket number HS2-TEST'));
   });
   it('shortens a GitHub issue in the toolbar without changing its copy target', () => {
