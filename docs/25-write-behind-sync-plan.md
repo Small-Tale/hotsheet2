@@ -1,4 +1,4 @@
-# Durable write-behind for ticket providers (proposal; HS2-BH3CSK)
+# Durable write-behind for ticket providers (HS2-BH3CSK)
 
 ## What is slow now
 
@@ -134,3 +134,22 @@ PATCH requests against a designated issue. It requires
 `HOTSHEET_REAL_PROVIDER_BENCH=1`, `HOTSHEET_BENCH_GITHUB_REPOSITORY`,
 `HOTSHEET_BENCH_GITHUB_ISSUE`, and `HOTSHEET_BENCH_GITHUB_TOKEN`; run it only against
 an issue meant for benchmarking. It was not run for this measurement.
+
+### Phase 2 durable Jira admission (HS2-056R8P)
+
+An explicit server flag, `HOTSHEET_JIRA_WRITE_BEHIND=1`, opens a separate Jira
+field-edit route. It stores the operation ID, ticket base snapshot and concurrency
+token, patch, and per-ticket sequence in `${HOTSHEET_HOME}/outbox/<store-id>.sqlite`.
+SQLite WAL with full synchronous commits makes batch admission atomic and replayable
+after restart. The initial queue limit is 1,000 unconfirmed operations; a full queue
+returns HTTP 429. Credentials are never stored in this database.
+
+Only title, details, category, priority, and tags can enter this queue. The 202
+response and read DTOs identify provisional tickets with `pending_operation_ids`.
+The direct provider and checkout full/list/search paths apply pending operations
+before search, sorting, and cursor selection. Summary counts do not change for
+these fields. A pending read uses a complete native Jira list to preserve search
+and order; this opt-in path's full-list cost must be measured before broader
+rollout. Native PATCH routes retain their existing
+synchronous behavior. Phase 3 still owns dispatch, confirmation, conflict handling,
+retry/attention states, events, and the pending-state UI.

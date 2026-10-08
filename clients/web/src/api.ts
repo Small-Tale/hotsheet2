@@ -31,6 +31,8 @@ export type Capabilities = Record<
   /** Existing attachments can be renamed, deleted, regrouped, and annotated (HS2-HSA64D). Older servers omit it. */
   attachment_edit?: boolean;
   attachment_crop?: boolean;
+  /** Host may expose an opt-in durable provisional field-edit endpoint. */
+  write_behind?: boolean;
   /** Structured, revisable ratings and the provider feedback query. */
   ai_feedback?: boolean;
 };
@@ -210,6 +212,8 @@ export interface Attachment extends AttachmentMetadata {
 }
 export interface Ticket {
   qualified_id: string;
+  /** Local provider intents awaiting remote acknowledgement. */
+  pending_operation_ids?: string[];
   native_id: string;
   native_url?: string;
   title: string;

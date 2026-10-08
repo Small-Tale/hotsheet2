@@ -111,8 +111,19 @@ errors. Providers own remote calls, opaque native page cursors, bounded page ret
 streaming count summaries, native mapping, concurrency tokens, rate-limit interpretation,
 and provider-specific durable metadata. The built-in compatibility fallback may materialize
 a provider query, but GitHub, GitLab, and Jira implement the bounded contract directly.
-The [write-behind proposal](25-write-behind-sync-plan.md) specifies a future durable
-pending-intent overlay for slow providers; current external mutations remain synchronous.
+The [write-behind plan](25-write-behind-sync-plan.md) now includes an opt-in Jira
+field-edit admission route. `HOTSHEET_JIRA_WRITE_BEHIND=1` enables
+`POST /providers/{connection_id}/tickets/queued` for Jira connections. Its JSON body
+is `{ "operations": [{ "operation_id": "stable-key", "native_id": "KEY-1",
+"patch": { "title": "New title" } }] }`; the response is HTTP 202 with one
+`{ operation_id, state: "queued", ticket }` item per operation. Each ticket carries
+`pending_operation_ids`; it remains provisional while those IDs are present. The
+batch is accepted in one durable SQLite transaction; identical retries return the
+same intent, changed retries fail with 409, and a full queue returns 429. The route
+accepts Jira title, details, category, priority, and tags only. Direct provider and
+checkout reads overlay accepted edits before search, sort, and keyset paging. The
+existing PATCH endpoints remain synchronous. Dispatch, conflict handling, and the
+pending-state UI are the next phase; a 202 response does not mean Jira was changed.
 Successful direct-provider and checkout-scoped external ticket PATCH responses expose
 redacted `Server-Timing` phases: `provider_read` (remote version fetch),
 `provider_token` (concurrency comparison), `provider_write` (remote mutation),

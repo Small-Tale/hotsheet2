@@ -232,6 +232,12 @@ async fn main() -> Result<()> {
             drive_root.join("sessions.json"),
             drive_root.join("homes"),
         )?;
+    if std::env::var("HOTSHEET_JIRA_WRITE_BEHIND").as_deref() == Ok("1") {
+        let outbox_path = hotsheet_plugins::hotsheet_home()
+            .join("outbox")
+            .join(format!("{store_id}.sqlite"));
+        state = state.with_jira_outbox(outbox_path, 1_000)?;
+    }
 
     // Detached terminal hosting is the default: normal server stops/restarts disconnect from
     // the broker without killing its PTYs. `--no-terminal-broker` is an explicit diagnostic

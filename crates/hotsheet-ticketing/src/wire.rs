@@ -14,13 +14,13 @@ use hotsheet_model::{
     ClaimEvent, CloseReason, Confidence, NoteKind, Priority, ReviewRequest, Status, Ticket,
     Timestamp,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::auto_context::{self, AutoContextEntry, TicketAutoContext};
 
 /// The full ticket on the wire (unlike the frontmatter-only serde on [`Ticket`],
 /// this carries the Markdown body and the notes).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiTicket {
     /// Project-scoped provider connection that owns this ticket.
     pub connection_id: String,
@@ -32,6 +32,9 @@ pub struct ApiTicket {
     pub native_url: Option<String>,
     /// Provider-native optimistic-concurrency token (opaque to callers).
     pub concurrency_token: Option<String>,
+    /// Provisional local writes that have not been acknowledged by the provider.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_operation_ids: Vec<String>,
     pub id: String,
     pub slug: String,
     pub title: String,
@@ -90,14 +93,14 @@ pub struct ApiTicket {
     pub latest_confidence: Option<u8>,
     pub attachments: Vec<ApiAttachment>,
     /// Non-fatal, mutation-specific feedback for the caller. Never persisted.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
     /// Computed standing guidance; never persisted in the ticket file.
     pub auto_context: Vec<TicketAutoContext>,
 }
 
 /// One note entry on the wire.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiNote {
     pub id: String,
     pub kind: NoteKind,
@@ -123,7 +126,7 @@ pub struct ApiNote {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiAttachment {
     pub id: String,
     pub filename: String,
@@ -157,6 +160,7 @@ impl ApiTicket {
             qualified_id: format!("{connection_id}:{native_id}"),
             native_url,
             concurrency_token: Some(t.updated_at.as_str().to_string()),
+            pending_operation_ids: Vec::new(),
             id: native_id,
             slug: t.slug.clone(),
             title: t.title.clone(),

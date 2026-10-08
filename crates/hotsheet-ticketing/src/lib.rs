@@ -29,6 +29,7 @@ pub mod overlay;
 pub mod ports;
 pub mod pricing;
 pub mod provider;
+pub mod provider_outbox;
 pub mod registry;
 pub mod roster;
 pub mod secrets;

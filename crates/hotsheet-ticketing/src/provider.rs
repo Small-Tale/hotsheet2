@@ -293,6 +293,9 @@ pub struct ProviderCapabilities {
     #[serde(default)]
     pub ai_feedback: bool,
     pub offline_mutation: bool,
+    /// Supports durable provisional field edits when the host enables its outbox.
+    #[serde(default)]
+    pub write_behind: bool,
     pub history: bool,
     pub watch: bool,
     pub provider_idempotency: bool,
@@ -339,6 +342,7 @@ impl ProviderCapabilities {
             note_confidence: true,
             ai_feedback: true,
             offline_mutation: true,
+            write_behind: false,
             history: true,
             watch: true,
             provider_idempotency: false,
@@ -383,7 +387,7 @@ pub struct TransferProvenance {
     pub source: TicketRef,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderPatch {
     pub expected_token: Option<String>,
     pub title: Option<String>,

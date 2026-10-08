@@ -20,6 +20,8 @@ pub mod media;
 pub mod multistore;
 pub mod notifications;
 mod presence;
+mod provider_overlay;
+mod provider_write_behind;
 pub mod repository_browser;
 pub mod source_revision;
 pub mod sync_loop;
@@ -52,6 +54,7 @@ use hotsheet_model::{
 };
 use hotsheet_ticketing::checkout_order::{AfterKey, MergeKey};
 use hotsheet_ticketing::checkout_page;
+use hotsheet_ticketing::provider_outbox::{OutboxAdmission, OutboxError, ProviderOutbox};
 use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, NotWorkingReport, OpError,
@@ -102,6 +105,8 @@ pub struct AppState {
     injected_providers: ProviderRegistry,
     /// Reuse live provider adapters so short-lived read caches span checkout requests.
     live_providers: LiveProviderCache,
+    /// Experimental durable Jira field-edit admission. None keeps every existing write synchronous.
+    jira_outbox: Option<Arc<Mutex<ProviderOutbox>>>,
     /// One Keychain read per managed sign-in per metadata revision, shared by requests.
     managed_secrets: ManagedSecretCache,
     /// Keeps the fs-watchers of `POST /stores`-registered stores alive, by store id (the
@@ -347,6 +352,7 @@ impl AppState {
             host,
             injected_providers: ProviderRegistry::default(),
             live_providers: Arc::default(),
+            jira_outbox: None,
             managed_secrets: ManagedSecretCache::default(),
             watchers: Arc::default(),
             presence: presence::Presence::default(),
@@ -557,6 +563,20 @@ impl AppState {
         self.machine_home = Arc::new(home);
         self.managed_secrets = ManagedSecretCache::default();
         self
+    }
+
+    /// Opt in to durable Jira field-edit admission. The database belongs in the machine
+    /// home, outside both the Git ticket store and its disposable search index.
+    pub fn with_jira_outbox(
+        mut self,
+        path: impl AsRef<FsPath>,
+        max_pending: usize,
+    ) -> Result<Self, OutboxError> {
+        self.jira_outbox = Some(Arc::new(Mutex::new(ProviderOutbox::open(
+            path,
+            max_pending,
+        )?)));
+        Ok(self)
     }
 
     /// Root the machine-local cache (browser/ffmpeg video posters) at `dir` instead of
@@ -1852,6 +1872,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/providers/{connection_id}/tickets",
             get(list_provider_tickets).post(create_provider_ticket),
+        )
+        .route(
+            "/providers/{connection_id}/tickets/queued",
+            post(provider_write_behind::queue_jira_updates),
         )
         .route(
             "/providers/{connection_id}/ai-feedback",
@@ -3453,6 +3477,82 @@ fn provider_for(
     Ok(provider)
 }
 
+fn provider_read_get(
+    state: &AppState,
+    connection_id: &str,
+    id: &str,
+) -> Result<ApiTicket, ApiError> {
+    let provider = provider_for(state, connection_id)?;
+    if provider.descriptor().capabilities.write_behind {
+        if let Some(outbox) = &state.jira_outbox {
+            let guard = outbox.lock().map_err(|_| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "provider outbox lock poisoned",
+                )
+            })?;
+            return provider_overlay::get(provider.as_ref(), &guard, connection_id, id)
+                .map_err(provider_transfer_error);
+        }
+    }
+    provider.get(id).map_err(provider_transfer_error)
+}
+
+fn provider_read_query(
+    state: &AppState,
+    connection_id: &str,
+    query: &TicketQuery,
+) -> Result<Vec<ApiTicket>, ApiError> {
+    let provider = provider_for(state, connection_id)?;
+    if provider.descriptor().capabilities.write_behind {
+        if let Some(outbox) = &state.jira_outbox {
+            let guard = outbox.lock().map_err(|_| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "provider outbox lock poisoned",
+                )
+            })?;
+            return provider_overlay::query(provider.as_ref(), &guard, connection_id, query)
+                .map_err(provider_transfer_error);
+        }
+    }
+    provider.query(query).map_err(provider_transfer_error)
+}
+
+fn provider_read_query_after(
+    state: &AppState,
+    connection_id: &str,
+    query: &TicketQuery,
+    after: Option<&MergeKey>,
+    resume: Option<&str>,
+    limit: usize,
+) -> Result<hotsheet_ticketing::ProviderKeysetPage, ApiError> {
+    let provider = provider_for(state, connection_id)?;
+    if provider.descriptor().capabilities.write_behind {
+        if let Some(outbox) = &state.jira_outbox {
+            let guard = outbox.lock().map_err(|_| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "provider outbox lock poisoned",
+                )
+            })?;
+            return provider_overlay::query_after(
+                provider.as_ref(),
+                &guard,
+                connection_id,
+                query,
+                after,
+                resume,
+                limit,
+            )
+            .map_err(provider_transfer_error);
+        }
+    }
+    provider
+        .query_after(query, after, resume, limit)
+        .map_err(provider_transfer_error)
+}
+
 fn forget_live_provider(state: &AppState, connection_id: &str) {
     if let Ok(mut providers) = state.live_providers.lock() {
         providers.remove(connection_id);
@@ -3533,21 +3633,14 @@ async fn list_provider_tickets(
     Query(params): Query<ListParams>,
 ) -> Result<Json<Vec<ApiTicket>>, ApiError> {
     let query = params.into_query(state.store.root())?;
-    let provider = provider_for(&state, &connection_id)?;
-    provider
-        .query(&query)
-        .map(Json)
-        .map_err(provider_transfer_error)
+    provider_read_query(&state, &connection_id, &query).map(Json)
 }
 
 async fn get_provider_ticket(
     State(state): State<AppState>,
     Path((connection_id, id)): Path<(String, String)>,
 ) -> Result<Json<ApiTicket>, ApiError> {
-    provider_for(&state, &connection_id)?
-        .get(&id)
-        .map(Json)
-        .map_err(provider_transfer_error)
+    provider_read_get(&state, &connection_id, &id).map(Json)
 }
 
 async fn restore_provider_ticket(
@@ -5241,19 +5334,10 @@ fn merge_checkout_page(
                     ..Default::default()
                 });
             }
-            let provider = match provider_for(state, &source.connection_id) {
-                Ok(provider) => provider,
-                Err(error) => {
-                    failed_sources[source_index] =
-                        Some(format!("{}: {}", source.connection_id, error.message));
-                    return Ok(checkout_page::SourceBatch {
-                        exhausted: true,
-                        ..Default::default()
-                    });
-                }
-            };
             let query = params.clone().into_query(state.store.root())?;
-            let page = match provider.query_after(
+            let page = match provider_read_query_after(
+                state,
+                &source.connection_id,
                 &hotsheet_ticketing::unbounded_query(&query),
                 request.after,
                 request.resume,
@@ -5262,7 +5346,7 @@ fn merge_checkout_page(
                 Ok(page) => page,
                 Err(error) => {
                     failed_sources[source_index] =
-                        Some(format!("{}: {error}", source.connection_id));
+                        Some(format!("{}: {}", source.connection_id, error.message));
                     return Ok(checkout_page::SourceBatch {
                         exhausted: true,
                         ..Default::default()
@@ -5756,12 +5840,32 @@ fn probe_provider_source(
     if connection_disabled(state, connection_id)? {
         return Ok(None);
     }
-    match provider_for(state, connection_id)?.get(id) {
+    let provider = provider_for(state, connection_id)?;
+    let result = if provider.descriptor().capabilities.write_behind {
+        if let Some(outbox) = &state.jira_outbox {
+            let guard = outbox.lock().map_err(|_| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "provider outbox lock poisoned",
+                )
+            })?;
+            provider_overlay::get(provider.as_ref(), &guard, connection_id, id)
+        } else {
+            provider
+                .get(id)
+                .map_err(provider_overlay::OverlayReadError::from)
+        }
+    } else {
+        provider
+            .get(id)
+            .map_err(provider_overlay::OverlayReadError::from)
+    };
+    match result {
         Ok(ticket) => Ok(Some(ticket)),
-        Err(
+        Err(provider_overlay::OverlayReadError::Provider(
             hotsheet_ticketing::ProviderError::NotFound { .. }
             | hotsheet_ticketing::ProviderError::InvalidNativeId { .. },
-        ) => Ok(None),
+        )) => Ok(None),
         Err(error) => Err(provider_transfer_error(error)),
     }
 }

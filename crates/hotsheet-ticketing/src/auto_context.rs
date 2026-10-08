@@ -25,7 +25,7 @@ pub struct AutoContextEntry {
 }
 
 /// One guidance block that applies to a ticket, retaining its provenance.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TicketAutoContext {
     pub source: AutoContextSource,
     pub key: String,
