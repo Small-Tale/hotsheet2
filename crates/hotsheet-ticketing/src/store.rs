@@ -229,6 +229,7 @@ fn unique_attachment_filename<'a>(
 pub struct FsStore {
     root: PathBuf,
     push_after_commit: bool,
+    defer_autocommit: bool,
     #[cfg(test)]
     background_push_observer: Option<BackgroundPushObserver>,
 }
@@ -251,6 +252,7 @@ impl FsStore {
         let store = Self {
             root,
             push_after_commit: true,
+            defer_autocommit: false,
             #[cfg(test)]
             background_push_observer: None,
         };
@@ -277,6 +279,7 @@ impl FsStore {
         Ok(Self {
             root,
             push_after_commit: true,
+            defer_autocommit: false,
             #[cfg(test)]
             background_push_observer: None,
         })
@@ -287,6 +290,14 @@ impl FsStore {
     #[must_use]
     pub fn with_deferred_push(mut self) -> Self {
         self.push_after_commit = false;
+        self
+    }
+
+    /// Write through the normal mutation APIs without committing each ticket. The caller
+    /// must commit the touched paths after the batch, including when a later item fails.
+    #[must_use]
+    pub fn with_deferred_autocommit(mut self) -> Self {
+        self.defer_autocommit = true;
         self
     }
 
@@ -509,6 +520,9 @@ impl FsStore {
         extra_paths: &[PathBuf],
     ) -> Result<PathBuf, StoreError> {
         let path = self.write_ticket(ticket)?;
+        if self.defer_autocommit {
+            return Ok(path);
+        }
         let status = serde_json::to_value(ticket.status)
             .ok()
             .and_then(|v| v.as_str().map(str::to_string))
@@ -2368,6 +2382,49 @@ mod tests {
             store
                 .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
                 .is_ok()
+        );
+    }
+
+    #[test]
+    fn deferred_autocommit_writes_tickets_then_commits_touched_paths_once() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        assert!(store.autocommit("initial store").unwrap());
+        let original_head = git_stdout(dir.path(), &["rev-parse", "HEAD"]).unwrap();
+        let deferred = store.clone().with_deferred_autocommit();
+        let first = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        let second = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAW"));
+        deferred.write_ticket_committing(&first).unwrap();
+        deferred.write_ticket_committing(&second).unwrap();
+        assert_eq!(
+            git_stdout(dir.path(), &["rev-parse", "HEAD"]).unwrap(),
+            original_head
+        );
+        assert!(
+            store
+                .autocommit_paths(
+                    "batch",
+                    &[store.ticket_path(&first.id), store.ticket_path(&second.id)],
+                )
+                .unwrap()
+        );
+        assert_eq!(
+            git_stdout(
+                dir.path(),
+                &[
+                    "rev-list",
+                    "--count",
+                    &format!("{}..HEAD", original_head.trim())
+                ]
+            )
+            .unwrap()
+            .trim(),
+            "1"
+        );
+        assert!(
+            git_stdout(dir.path(), &["status", "--porcelain"])
+                .unwrap()
+                .is_empty()
         );
     }
 

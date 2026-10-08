@@ -7639,6 +7639,15 @@ async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_a
         .await
         .unwrap();
     assert_eq!(batched.status(), StatusCode::OK);
+    assert!(
+        batched
+            .headers()
+            .get("server-timing")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("worklist;dur=")
+    );
     assert_eq!(body_json(batched).await[0]["category"], "bug");
     // HS2-XF81CJ: a bulk operation's single actor applies to every update.
     let bulk_completed = app
@@ -7670,6 +7679,39 @@ async fn checkout_ticket_routes_resolve_qualified_ids_for_notes_restore_assign_a
         transition["actor"],
         serde_json::json!({"role":"human","id":"dana"})
     );
+
+    // A later item can fail after an earlier item has been written. The successful
+    // prefix must still reach the index and remain visible to subsequent requests.
+    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    let token = bulk[0]["updated_at"].as_str().unwrap();
+    let partial = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/qual/batch",
+            Some(
+                &serde_json::json!({"updates":[
+                    {"id":qualified_id,"title":"First batch edit","expected_token":token},
+                    {"id":qualified_id,"title":"Second batch edit","expected_token":token}
+                ]})
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(partial.status(), StatusCode::CONFLICT);
+    let after_partial = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/qual/tickets/{qualified_id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(after_partial["title"], "First batch edit");
 
     app.clone()
         .oneshot(authed(

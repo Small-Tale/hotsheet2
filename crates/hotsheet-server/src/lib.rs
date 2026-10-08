@@ -1171,33 +1171,45 @@ impl AppState {
     /// change tagged with the store it happened in. The index now carries the file's
     /// hash, so the watcher sees "no change" and won't re-emit.
     fn changed_in(&self, entry: &StoreEntry, kind: &str, t: &Ticket) {
-        let text = to_file_string(t);
-        let path = entry.store.ticket_path(&t.id).display().to_string();
+        let _ = self.changed_many_in(entry, kind, std::slice::from_ref(t));
+    }
+
+    /// Publish a batch after every file has been written. Rebuild each affected checkout
+    /// worklist once instead of once per ticket.
+    fn changed_many_in(&self, entry: &StoreEntry, kind: &str, tickets: &[Ticket]) -> [Duration; 3] {
         let store_id = multistore::store_url_id(&entry.store);
-        if let Ok(mut writes) = self.local_write_hashes.lock() {
-            writes.insert(
-                (
-                    store_id.clone(),
-                    t.id.to_string(),
-                    hash_bytes(text.as_bytes()),
-                ),
-                std::time::Instant::now(),
-            );
+        let mut index_time = Duration::ZERO;
+        let mut event_time = Duration::ZERO;
+        for t in tickets {
+            let text = to_file_string(t);
+            let path = entry.store.ticket_path(&t.id).display().to_string();
+            let hash = hash_bytes(text.as_bytes());
+            if let Ok(mut writes) = self.local_write_hashes.lock() {
+                writes.insert(
+                    (store_id.clone(), t.id.to_string(), hash.clone()),
+                    std::time::Instant::now(),
+                );
+            }
+            let index_started = Instant::now();
+            if let Ok(index) = entry.index.lock() {
+                let _ = index.upsert(t, &path, &hash);
+            }
+            index_time += index_started.elapsed();
+            let event_started = Instant::now();
+            self.emit(ChangeEvent {
+                cursor: None,
+                store: store_id.clone(),
+                kind: kind.to_string(),
+                id: t.id.to_string(),
+                slug: t.slug.clone(),
+                message: None,
+                activity: None,
+                assignment: None,
+                turn: None,
+            });
+            event_time += event_started.elapsed();
         }
-        if let Ok(index) = entry.index.lock() {
-            let _ = index.upsert(t, &path, &hash_bytes(text.as_bytes()));
-        }
-        self.emit(ChangeEvent {
-            cursor: None,
-            store: store_id,
-            kind: kind.to_string(),
-            id: t.id.to_string(),
-            slug: t.slug.clone(),
-            message: None,
-            activity: None,
-            assignment: None,
-            turn: None,
-        });
+        let worklist_started = Instant::now();
         if let Ok(checkouts) = self.checkout_registry.list() {
             for checkout in checkouts.into_iter().filter(|checkout| {
                 checkout
@@ -1210,8 +1222,10 @@ impl AppState {
                 }
             }
         }
+        let worklist_time = worklist_started.elapsed();
         // A write is worth pushing promptly — wake the background sync loop (HS2-731C2X).
         self.kick_sync();
+        [index_time, event_time, worklist_time]
     }
 
     /// Remove a hard-purged ticket from the live index and publish one deletion event.
@@ -5767,7 +5781,8 @@ async fn batch_update_checkout_tickets(
     State(state): State<AppState>,
     Path(reference): Path<String>,
     Json(req): Json<CheckoutBatchReq>,
-) -> Result<Json<Vec<ResolvedTicket>>, ApiError> {
+) -> Result<(HeaderMap, Json<Vec<ResolvedTicket>>), ApiError> {
+    let started = Instant::now();
     if req.updates.is_empty() {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -5794,17 +5809,79 @@ async fn batch_update_checkout_tickets(
         }
         resolved.push((entry, ticket.id.to_string(), item));
     }
+    let admission_time = started.elapsed();
     let mut updated = Vec::with_capacity(resolved.len());
+    let mut pending =
+        std::collections::BTreeMap::<std::path::PathBuf, (StoreEntry, Vec<Ticket>)>::new();
+    let mut failure = None;
     for (entry, native_id, item) in resolved {
-        updated.push(ResolvedTicket {
-            store: multistore::store_url_id(&entry.store),
-            ticket: contextualize_api_ticket(
-                do_update(&state, &entry, &native_id, item.update)?,
-                &settings,
-            )?,
-        });
+        let mut deferred_entry = entry.clone();
+        deferred_entry.store = deferred_entry.store.with_deferred_autocommit();
+        let result = do_update_with_ticket(&state, &deferred_entry, &native_id, item.update, false)
+            .and_then(|(ticket, changed)| {
+                contextualize_api_ticket(ticket, &settings).map(|ticket| (ticket, changed))
+            });
+        match result {
+            Ok((ticket, changed)) => {
+                updated.push(ResolvedTicket {
+                    store: multistore::store_url_id(&entry.store),
+                    ticket,
+                });
+                pending
+                    .entry(entry.store.root().to_path_buf())
+                    .or_insert_with(|| (entry, Vec::new()))
+                    .1
+                    .push(changed);
+            }
+            Err(error) => {
+                failure = Some(error);
+                break;
+            }
+        }
     }
-    Ok(Json(updated))
+    let write_time = started.elapsed() - admission_time;
+    let mut git_time = Duration::ZERO;
+    let mut index_time = Duration::ZERO;
+    let mut event_time = Duration::ZERO;
+    let mut worklist_time = Duration::ZERO;
+    for (_, (entry, tickets)) in pending {
+        let paths = tickets
+            .iter()
+            .map(|ticket| entry.store.ticket_path(&ticket.id))
+            .collect::<Vec<_>>();
+        let git_started = Instant::now();
+        if let Err(error) = entry
+            .store
+            .autocommit_paths("Update selected Hot Sheet tickets", &paths)
+        {
+            eprintln!("warning: hotsheet batch autocommit failed: {error}");
+        }
+        git_time += git_started.elapsed();
+        let [index, events, worklist] = state.changed_many_in(&entry, "updated", &tickets);
+        index_time += index;
+        event_time += events;
+        worklist_time += worklist;
+    }
+    if let Some(error) = failure {
+        return Err(error);
+    }
+    let ms = |duration: Duration| duration.as_secs_f64() * 1000.0;
+    let timing = format!(
+        "admission;dur={:.1}, write;dur={:.1}, git;dur={:.1}, index;dur={:.1}, events;dur={:.1}, worklist;dur={:.1}, total;dur={:.1}",
+        ms(admission_time),
+        ms(write_time),
+        ms(git_time),
+        ms(index_time),
+        ms(event_time),
+        ms(worklist_time),
+        ms(started.elapsed()),
+    );
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "server-timing",
+        axum::http::HeaderValue::from_str(&timing).expect("numeric server timing"),
+    );
+    Ok((headers, Json(updated)))
 }
 async fn delete_checkout_ticket_note(
     State(state): State<AppState>,
@@ -6996,6 +7073,16 @@ fn do_update(
     id: &str,
     req: UpdateReq,
 ) -> Result<ApiTicket, ApiError> {
+    do_update_with_ticket(state, entry, id, req, true).map(|(response, _)| response)
+}
+
+fn do_update_with_ticket(
+    state: &AppState,
+    entry: &StoreEntry,
+    id: &str,
+    req: UpdateReq,
+    publish: bool,
+) -> Result<(ApiTicket, Ticket), ApiError> {
     let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
     let note_text = req.note.clone();
     if req
@@ -7114,12 +7201,14 @@ fn do_update(
             None => updated,
         },
     };
-    state.changed_in(entry, "updated", &latest);
+    if publish {
+        state.changed_in(entry, "updated", &latest);
+    }
     let mut response = api_ticket(entry, &latest)?;
     if let Some(text) = note_text.filter(|text| !text.is_empty()) {
         response.warnings = ops::attachment_reference_warnings(&entry.store, &latest, &text);
     }
-    Ok(response)
+    Ok((response, latest))
 }
 
 #[derive(Debug, Deserialize)]

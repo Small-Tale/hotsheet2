@@ -17676,7 +17676,7 @@ test('paginates the merged Completed column through completed then verified when
   await page.screenshot({ path: '/private/tmp/claude/hs2-f2n4zn-merged-completed-paginated.png', fullPage: true });
 });
 
-test('measures real local Git board performance for a 100-ticket verification and refill (HS2-NY9MC5, HS2-GAJHRC, HS2-KA1VJS)', async ({
+test('measures real local Git board performance for a 100-ticket verification and refill (HS2-NY9MC5, HS2-GAJHRC, HS2-KA1VJS, HS2-0JZDQ8)', async ({
   page,
 }, testInfo) => {
   test.skip(process.env.HOTSHEET_REAL_WORLD_PERFORMANCE !== '1', 'Run npm run test:real-world-performance.');
@@ -17686,6 +17686,7 @@ test('measures real local Git board performance for a 100-ticket verification an
     seed: (fixture) => seedLocalGitTickets(fixture, [{ status: 'completed', count: 200 }]).then(() => undefined),
   });
   try {
+    let batchServerTiming = '';
     await mockProject(page);
     await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/**', async (route) => {
       const incoming = new URL(route.request().url()),
@@ -17697,6 +17698,8 @@ test('measures real local Git board performance for a 100-ticket verification an
         url: `${server.url}${path}${incoming.search}`,
         headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
       });
+      if (route.request().method() === 'POST' && path.endsWith('/batch'))
+        batchServerTiming = response.headers()['server-timing'] ?? '';
       await route.fulfill({ response });
     });
     await page.route('**/__hotsheet/project-api/demo-checkout/providers', async (route) => {
@@ -17765,6 +17768,11 @@ test('measures real local Git board performance for a 100-ticket verification an
       };
       requestAnimationFrame(watch);
     });
+    const headBefore = spawnSync('git', ['-C', server.store, 'rev-parse', 'HEAD'], {
+      env: withoutGitRepositoryEnv(process.env),
+      encoding: 'utf8',
+    }).stdout.trim();
+    const batchStartedAt = Date.now();
     await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
     await expect(rows(verified)).toHaveCount(100, { timeout: 180_000 });
     await expect(rows(completed)).toHaveCount(100, { timeout: 180_000 });
@@ -17795,6 +17803,8 @@ test('measures real local Git board performance for a 100-ticket verification an
         { timeout: 180_000 },
       )
       .toBe(100);
+    const persistedMs = Date.now() - batchStartedAt;
+    const queryStartedAt = Date.now();
     const [persistedVerified, persistedCompleted] = await Promise.all([
       server.request<{ items: TicketRow[] }>(
         `/checkouts/${server.checkoutId}/tickets?status=verified&page_size=200&counts=false`,
@@ -17803,6 +17813,7 @@ test('measures real local Git board performance for a 100-ticket verification an
         `/checkouts/${server.checkoutId}/tickets?status=completed&page_size=200&counts=false`,
       ),
     ]);
+    const pageQueryMs = Date.now() - queryStartedAt;
     expect(persistedVerified.items).toHaveLength(100);
     expect(persistedCompleted.items).toHaveLength(100);
     await expect
@@ -17831,6 +17842,14 @@ test('measures real local Git board performance for a 100-ticket verification an
     );
     expect(committedVerified.status).toBe(0);
     expect(committedVerified.stdout.trim().split('\n')).toHaveLength(100);
+    const batchCommits = spawnSync('git', ['-C', server.store, 'rev-list', '--count', `${headBefore}..HEAD`], {
+      env: withoutGitRepositoryEnv(process.env),
+      encoding: 'utf8',
+    });
+    expect(batchCommits.status).toBe(0);
+    expect(Number(batchCommits.stdout.trim())).toBe(1);
+    expect(batchServerTiming).toContain('admission;dur=');
+    expect(batchServerTiming).toContain('worklist;dur=');
     const report = {
       generatedAt: new Date().toISOString(),
       host: { platform: process.platform, arch: process.arch, node: process.version, serverBuild: 'debug' },
@@ -17842,6 +17861,10 @@ test('measures real local Git board performance for a 100-ticket verification an
       optimisticPaintMs: Math.round(measurement!.optimisticPaintMs!),
       completedRefillVisibleMs: Math.round(measurement!.refillMs!),
       refillAfterVerifiedMs: Math.round(measurement!.refillMs! - measurement!.verifiedMs!),
+      persistedMs,
+      batchCommits: Number(batchCommits.stdout.trim()),
+      batchServerTiming,
+      pageQueryMs,
     };
     console.log(`Real local Git board performance: ${JSON.stringify(report)}`);
     await testInfo.attach('real-git-board-performance.json', {

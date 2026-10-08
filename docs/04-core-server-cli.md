@@ -681,6 +681,16 @@ deadline. The shared
   the subsequent checkout worklist refresh queries only indexed active Up Next rows instead
   of scanning the store. It's a no-op when the store isn't a git repo, and
   `HOTSHEET_NO_AUTOCOMMIT` disables it for batch work.
+  A checkout-scoped multi-ticket update validates every concurrency token before writing,
+  then writes the affected ticket files and commits their paths once per Git store. It
+  refreshes the live index and regenerates each affected checkout worklist once after the
+  commit, while publishing an update event for each ticket. A later update error still
+  commits and publishes the earlier successful items, matching the existing partial-write
+  behavior. Other staged or untracked files are not included in the batch commit.
+  The checkout batch response includes `Server-Timing` measurements for admission,
+  ticket writes, Git commit, index refresh, event publication, worklist refresh, and total
+  handling time. These timings describe local server work; clients can measure their
+  subsequent page query separately.
   Aggressive fetch/rebase/merge-on-conflict is the sync engine (`docs/03`; HS2-19); the
   semantic merge driver (§2.7) resolves concurrent edits. Bounded `ls`/full-text reads and
   slug resolution for `show` use the same file-backed SQLite index as the server. Opening
