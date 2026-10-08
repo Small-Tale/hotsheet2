@@ -1,6 +1,6 @@
 //! Deterministic Markdown activity notes for media-annotation batches.
 
-use hotsheet_model::MediaAnnotation;
+use hotsheet_model::{AnnotationPoint, AnnotationShape, MediaAnnotation};
 
 fn percent(value: u32) -> String {
     format!("{:.1}%", f64::from(value) / 100.0)
@@ -13,6 +13,10 @@ fn time(value: u64) -> String {
     format!("{minutes:02}:{seconds:02}.{milliseconds:03}")
 }
 
+fn point(point: &AnnotationPoint) -> String {
+    format!("{},{}", percent(point.x), percent(point.y))
+}
+
 fn location(annotation: &MediaAnnotation) -> String {
     let rectangle = format!(
         "(x {}, y {}, w {}, h {})",
@@ -21,14 +25,30 @@ fn location(annotation: &MediaAnnotation) -> String {
         percent(annotation.width),
         percent(annotation.height)
     );
+    let geometry = match &annotation.shape {
+        None | Some(AnnotationShape::Rect) => rectangle,
+        Some(AnnotationShape::Strike) => format!("strike {rectangle}"),
+        Some(AnnotationShape::Freehand { points, closed }) => format!(
+            "{} freehand through {} points {rectangle}",
+            if *closed { "closed" } else { "open" },
+            points.len()
+        ),
+        Some(AnnotationShape::Arrow { points }) => match (points.first(), points.last()) {
+            (Some(start), Some(end)) => format!("arrow from {} to {}", point(start), point(end)),
+            _ => format!("arrow {rectangle}"),
+        },
+        Some(AnnotationShape::Insertion { point: location }) => {
+            format!("insertion at {}", point(location))
+        }
+    };
     match (annotation.start_ms, annotation.end_ms) {
         (Some(start), Some(end)) if start == end => {
-            format!("{rectangle} at {}", time(start))
+            format!("{geometry} at {}", time(start))
         }
         (Some(start), Some(end)) => {
-            format!("{rectangle} from {} to {}", time(start), time(end))
+            format!("{geometry} from {} to {}", time(start), time(end))
         }
-        _ => rectangle,
+        _ => geometry,
     }
 }
 
@@ -103,6 +123,7 @@ mod tests {
             start_ms: None,
             end_ms: None,
             text: text.into(),
+            shape: None,
         }
     }
 
@@ -145,5 +166,39 @@ mod tests {
 
         let (_, body) = annotation_change_activity("clip.mp4", &[], &[point]).unwrap();
         assert!(body.contains("Added `(x 12.1%, y 54.0%, w 9.4%, h 2.5%) at 01:01.005`"));
+    }
+
+    #[test]
+    fn shape_activity_names_direction_and_geometry() {
+        let mut arrow = annotation("arrow", "Move here");
+        arrow.x = 1_200;
+        arrow.y = 4_000;
+        arrow.width = 4_800;
+        arrow.height = 1;
+        arrow.shape = Some(AnnotationShape::Arrow {
+            points: vec![
+                AnnotationPoint { x: 1_200, y: 4_000 },
+                AnnotationPoint { x: 6_000, y: 4_000 },
+            ],
+        });
+        let (_, body) = annotation_change_activity("proof.png", &[], &[arrow]).unwrap();
+        assert!(body.contains("arrow from 12.0%,40.0% to 60.0%,40.0%"));
+
+        let mut strike = annotation("strike", "Remove");
+        strike.shape = Some(AnnotationShape::Strike);
+        let mut insertion = annotation("insert", "Add");
+        insertion.x = 9_999;
+        insertion.y = 9_999;
+        insertion.width = 1;
+        insertion.height = 1;
+        insertion.shape = Some(AnnotationShape::Insertion {
+            point: AnnotationPoint {
+                x: 10_000,
+                y: 10_000,
+            },
+        });
+        let (_, body) = annotation_change_activity("proof.png", &[], &[strike, insertion]).unwrap();
+        assert!(body.contains("strike (x 12.1%, y 54.0%"));
+        assert!(body.contains("insertion at 100.0%,100.0%"));
     }
 }

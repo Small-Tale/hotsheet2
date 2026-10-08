@@ -50,3 +50,10 @@ headless bootstrap creates and, when `-C` selects a store, that store's schema. 
 bootstrap compares it with the active project's authenticated server range before writing
 the new repository. If an older detached server cannot host it, creation is refused with
 project-scoped restart guidance and no partially usable store is left behind.
+
+Attachment annotations with explicit shapes use the guarded ticket marker
+`hotsheet/v3-annotation-shapes`. The marker is introduced when a ticket first contains
+a shape field and remains when shapes are later removed. A v2 reader rejects that
+string before deserializing or rewriting the
+ticket, so it cannot discard the geometry. Rectangle-only files continue to use
+`hotsheet/v2-bounded-notes` without a store-wide activation.

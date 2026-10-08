@@ -35,6 +35,21 @@ const SHARD_ID_PREFIX_2: &str = "id-prefix-2";
 const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
 const FINDER_METADATA_FILE: &str = ".DS_Store";
 
+fn ticket_write_schema(ticket: &Ticket) -> u32 {
+    if ticket.schema >= hotsheet_model::SHAPE_SCHEMA_VERSION
+        || ticket.attachments.iter().any(|attachment| {
+            attachment
+                .annotations
+                .iter()
+                .any(|annotation| annotation.shape.is_some())
+        })
+    {
+        hotsheet_model::SHAPE_SCHEMA_VERSION
+    } else {
+        SCHEMA_VERSION
+    }
+}
+
 /// Store metadata (`hotsheet-store.json`, `docs/02` §2.3). camelCase on disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -418,7 +433,7 @@ impl FsStore {
         path: PathBuf,
     ) -> Result<PathBuf, StoreError> {
         let mut normalized = ticket.clone();
-        normalized.schema = SCHEMA_VERSION;
+        normalized.schema = ticket_write_schema(&normalized);
         if !normalized.status.is_active() {
             normalized.up_next = false;
         }
@@ -970,7 +985,7 @@ impl FsStore {
                 fs::create_dir(&dir)?;
                 fs::write(dir.join(name), &item.bytes)?;
             }
-            normalized.schema = SCHEMA_VERSION;
+            normalized.schema = ticket_write_schema(&normalized);
             fs::write(&staged_ticket, to_file_string(&normalized))?;
             for item in attachments {
                 let final_dir = attachment_root.join(item.id.to_string());
@@ -1158,6 +1173,7 @@ impl FsStore {
             text,
         });
         ticket.updated_at = now;
+        ticket.schema = ticket_write_schema(&ticket);
         self.write_ticket_committing(&ticket)?;
         Ok(ticket)
     }

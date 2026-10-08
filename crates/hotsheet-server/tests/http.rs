@@ -6392,6 +6392,55 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         .await
         .unwrap();
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    for (kind, payload) in [
+        (
+            "strike",
+            r#"{"id":"strike","x":1000,"y":2000,"width":5000,"height":1,"shape":{"type":"strike"}}"#,
+        ),
+        (
+            "freehand",
+            r#"{"id":"freehand","x":1000,"y":2000,"width":5000,"height":1,"shape":{"type":"freehand","points":[{"x":1000,"y":2000},{"x":6000,"y":2000},{"x":3000,"y":2000}],"closed":false}}"#,
+        ),
+        (
+            "arrow",
+            r#"{"id":"arrow","x":1000,"y":2000,"width":5000,"height":1,"shape":{"type":"arrow","points":[{"x":1000,"y":2000},{"x":6000,"y":2000}]}}"#,
+        ),
+        (
+            "insertion",
+            r#"{"id":"insertion","x":9999,"y":9999,"width":1,"height":1,"shape":{"type":"insertion","point":{"x":10000,"y":10000}}}"#,
+        ),
+    ] {
+        let shaped = body_json(
+            app.clone()
+                .oneshot(authed(
+                    "PUT",
+                    &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+                    Some(&format!(r#"{{"annotations":[{payload}]}}"#)),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(shaped["schema"], hotsheet_model::SHAPE_SCHEMA_VERSION);
+        assert_eq!(
+            shaped["attachments"][0]["annotations"][0]["shape"]["type"],
+            kind
+        );
+        if kind == "arrow" {
+            assert!(
+                shaped["notes"].as_array().unwrap().last().unwrap()["text"]
+                    .as_str()
+                    .unwrap()
+                    .contains("arrow from 10.0%,20.0% to 60.0%,20.0%")
+            );
+        }
+    }
+    let invalid_points = app.clone().oneshot(authed(
+        "PUT",
+        &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+        Some(r#"{"annotations":[{"id":"bad-arrow","x":1000,"y":2000,"width":5000,"height":1,"shape":{"type":"arrow","points":[{"x":1000,"y":2000}]}}]}"#),
+    )).await.unwrap();
+    assert_eq!(invalid_points.status(), StatusCode::BAD_REQUEST);
     let video_removed = body_json(
         app.clone()
             .oneshot(authed(

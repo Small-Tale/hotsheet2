@@ -1072,6 +1072,7 @@ mod tests {
                 start_ms: None,
                 end_ms: None,
                 text: "Keep this".to_string(),
+                shape: None,
             });
         store.write_ticket(&ticket).unwrap();
         std::fs::remove_file(staging.path().join("first.png")).unwrap();

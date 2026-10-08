@@ -574,6 +574,7 @@ mod tests {
                 start_ms: None,
                 end_ms: None,
                 text: "Keep annotation".into(),
+                shape: None,
             });
         f.store.write_ticket(&ticket).unwrap();
         std::fs::remove_file(

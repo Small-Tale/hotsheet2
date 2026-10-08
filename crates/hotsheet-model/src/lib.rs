@@ -18,12 +18,14 @@ pub use enums::{CloseReason, NoteKind, Priority, ReviewKind, StartedPhase, Statu
 pub use format::{ParseError, parse_file, to_file_string};
 pub use ids::{Ulid, derive_slug};
 pub use ticket::{
-    AiFeedback, AiFeedbackRating, Attachment, AttachmentActor, AttachmentActorRole,
-    AttachmentMetadata, AttachmentPurpose, ClaimEvent, ClaimEventKind, Confidence, ConfidenceError,
-    ExternalLink, MediaAnnotation, Note, NoteActor, ReviewRequest, Ticket,
-    validate_media_annotations,
+    AiFeedback, AiFeedbackRating, AnnotationPoint, AnnotationShape, Attachment, AttachmentActor,
+    AttachmentActorRole, AttachmentMetadata, AttachmentPurpose, ClaimEvent, ClaimEventKind,
+    Confidence, ConfidenceError, ExternalLink, MediaAnnotation, Note, NoteActor, ReviewRequest,
+    Ticket, validate_media_annotations,
 };
 pub use timestamp::Timestamp;
 
 /// Frontmatter format version represented by the guarded `schema:` marker.
 pub const SCHEMA_VERSION: u32 = 2;
+/// Ticket guard required whenever an attachment contains shape geometry.
+pub const SHAPE_SCHEMA_VERSION: u32 = 3;

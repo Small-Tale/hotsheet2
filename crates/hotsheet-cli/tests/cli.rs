@@ -4301,7 +4301,9 @@ fn annotate_attachment_replaces_once_and_rejects_invalid_batches() {
         .arg(&annotations)
         .assert()
         .failure()
-        .stderr(predicate::str::contains("bounded non-empty rectangles"));
+        .stderr(predicate::str::contains(
+            "valid shape geometry and bounding boxes",
+        ));
     assert_eq!(after, git_output(root, &["rev-parse", "HEAD"]));
     hs(root)
         .args(["annotate", &slug, attachment_id, "--clear"])
@@ -4327,6 +4329,55 @@ fn annotate_attachment_replaces_once_and_rejects_invalid_batches() {
             .id,
         "stdin"
     );
+
+    for (kind, payload) in [
+        (
+            "strike",
+            r#"{"id":"strike","x":1000,"y":2000,"width":5000,"height":1,"shape":{"type":"strike"}}"#,
+        ),
+        (
+            "freehand",
+            r#"{"id":"freehand","x":1000,"y":2000,"width":5000,"height":1,"shape":{"type":"freehand","points":[{"x":1000,"y":2000},{"x":6000,"y":2000},{"x":3000,"y":2000}]}}"#,
+        ),
+        (
+            "arrow",
+            r#"{"id":"arrow","x":1000,"y":2000,"width":5000,"height":1,"shape":{"type":"arrow","points":[{"x":1000,"y":2000},{"x":6000,"y":2000}]}}"#,
+        ),
+        (
+            "insertion",
+            r#"{"id":"insertion","x":9999,"y":9999,"width":1,"height":1,"shape":{"type":"insertion","point":{"x":10000,"y":10000}}}"#,
+        ),
+    ] {
+        hs(root)
+            .args(["annotate", &slug, attachment_id, "--file", "-"])
+            .write_stdin(format!("[{}]", payload))
+            .assert()
+            .success();
+        let shaped = hotsheet_ticketing::ops::resolve(
+            &hotsheet_ticketing::FsStore::open(root).unwrap(),
+            &slug,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(shaped.schema, hotsheet_model::SHAPE_SCHEMA_VERSION);
+        assert_eq!(
+            serde_json::to_value(&shaped.attachments[0].annotations[0]).unwrap()["shape"]["type"],
+            kind
+        );
+        assert!(
+            hotsheet_model::to_file_string(&shaped)
+                .contains("schema: hotsheet/v3-annotation-shapes")
+        );
+    }
+    hs(root)
+        .args(["annotate", &slug, attachment_id, "--clear"])
+        .assert()
+        .success();
+    let cleared =
+        hotsheet_ticketing::ops::resolve(&hotsheet_ticketing::FsStore::open(root).unwrap(), &slug)
+            .unwrap()
+            .unwrap();
+    assert_eq!(cleared.schema, hotsheet_model::SHAPE_SCHEMA_VERSION);
 }
 
 #[test]

@@ -784,6 +784,7 @@ fn fts_matches_attachment_filenames() {
             start_ms: None,
             end_ms: None,
             text: "Inspect this edge".into(),
+            shape: None,
         }],
     });
     ticket.completed_at = Some(Timestamp::new("2026-09-01T03:00:00Z"));

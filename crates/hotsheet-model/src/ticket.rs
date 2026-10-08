@@ -234,11 +234,60 @@ pub struct MediaAnnotation {
     pub end_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub text: String,
+    /// Optional geometry beyond the legacy bounding rectangle. Presence requires the
+    /// guarded ticket schema v3 so older writers cannot silently discard it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<AnnotationShape>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AnnotationPoint {
+    pub x: u32,
+    pub y: u32,
+}
+
+fn default_closed() -> bool {
+    true
+}
+
+fn is_closed(value: &bool) -> bool {
+    *value
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AnnotationShape {
+    Rect,
+    Strike,
+    Freehand {
+        points: Vec<AnnotationPoint>,
+        #[serde(default = "default_closed", skip_serializing_if = "is_closed")]
+        closed: bool,
+    },
+    Arrow {
+        points: Vec<AnnotationPoint>,
+    },
+    Insertion {
+        point: AnnotationPoint,
+    },
+}
+
+fn point_box(points: &[AnnotationPoint]) -> Option<(u32, u32, u32, u32)> {
+    let min_x = points.iter().map(|point| point.x).min()?;
+    let min_y = points.iter().map(|point| point.y).min()?;
+    let max_x = points.iter().map(|point| point.x).max()?;
+    let max_y = points.iter().map(|point| point.y).max()?;
+    if max_x > 10_000 || max_y > 10_000 {
+        return None;
+    }
+    let x = min_x.min(9_999);
+    let y = min_y.min(9_999);
+    Some((x, y, max_x.max(x + 1) - x, max_y.max(y + 1) - y))
 }
 
 /// Shared validation for a complete replacement batch of media annotations.
 pub fn validate_media_annotations(annotations: &[MediaAnnotation]) -> Result<(), &'static str> {
-    const ERROR: &str = "annotations require unique ids, bounded non-empty rectangles, and complete ordered time ranges";
+    const ERROR: &str = "annotations require unique ids, valid shape geometry and bounding boxes, and complete ordered time ranges";
     let mut seen = std::collections::HashSet::new();
     for annotation in annotations {
         let valid_rectangle = annotation.width > 0
@@ -250,7 +299,42 @@ pub fn validate_media_annotations(annotations: &[MediaAnnotation]) -> Result<(),
             (None, None) => true,
             _ => false,
         };
-        if !seen.insert(&annotation.id) || !valid_rectangle || !valid_time {
+        let valid_shape = match &annotation.shape {
+            None | Some(AnnotationShape::Rect | AnnotationShape::Strike) => true,
+            Some(AnnotationShape::Freehand { points, .. }) if points.len() >= 3 => {
+                point_box(points).is_some_and(|bounds| {
+                    bounds
+                        == (
+                            annotation.x,
+                            annotation.y,
+                            annotation.width,
+                            annotation.height,
+                        )
+                })
+            }
+            Some(AnnotationShape::Arrow { points }) if points.len() >= 2 => point_box(points)
+                .is_some_and(|bounds| {
+                    bounds
+                        == (
+                            annotation.x,
+                            annotation.y,
+                            annotation.width,
+                            annotation.height,
+                        )
+                }),
+            Some(AnnotationShape::Insertion { point }) => point_box(std::slice::from_ref(point))
+                .is_some_and(|bounds| {
+                    bounds
+                        == (
+                            annotation.x,
+                            annotation.y,
+                            annotation.width,
+                            annotation.height,
+                        )
+                }),
+            _ => false,
+        };
+        if !seen.insert(&annotation.id) || !valid_rectangle || !valid_time || !valid_shape {
             return Err(ERROR);
         }
     }
@@ -791,6 +875,7 @@ mod tests {
             start_ms: Some(5),
             end_ms: Some(5),
             text: String::new(),
+            shape: None,
         };
         assert!(validate_media_annotations(&[]).is_ok());
         assert!(validate_media_annotations(std::slice::from_ref(&annotation)).is_ok());
@@ -829,6 +914,107 @@ mod tests {
             },
         ] {
             assert!(validate_media_annotations(&[invalid]).is_err());
+        }
+    }
+
+    #[test]
+    fn media_annotation_shapes_validate_points_and_exact_bounding_boxes() {
+        let point = |x, y| AnnotationPoint { x, y };
+        let base = MediaAnnotation {
+            id: "shape".into(),
+            x: 1_000,
+            y: 2_000,
+            width: 5_000,
+            height: 1,
+            start_ms: None,
+            end_ms: None,
+            text: String::new(),
+            shape: None,
+        };
+        let valid = [
+            MediaAnnotation {
+                shape: Some(AnnotationShape::Rect),
+                ..base.clone()
+            },
+            MediaAnnotation {
+                shape: Some(AnnotationShape::Strike),
+                ..base.clone()
+            },
+            MediaAnnotation {
+                shape: Some(AnnotationShape::Freehand {
+                    points: vec![
+                        point(1_000, 2_000),
+                        point(6_000, 2_000),
+                        point(3_000, 2_000),
+                    ],
+                    closed: true,
+                }),
+                ..base.clone()
+            },
+            MediaAnnotation {
+                shape: Some(AnnotationShape::Arrow {
+                    points: vec![point(1_000, 2_000), point(6_000, 2_000)],
+                }),
+                ..base.clone()
+            },
+            MediaAnnotation {
+                x: 9_999,
+                y: 9_999,
+                width: 1,
+                height: 1,
+                shape: Some(AnnotationShape::Insertion {
+                    point: point(10_000, 10_000),
+                }),
+                ..base.clone()
+            },
+        ];
+        for annotation in valid {
+            assert!(
+                validate_media_annotations(std::slice::from_ref(&annotation)).is_ok(),
+                "{annotation:?}"
+            );
+        }
+        let invalid = [
+            MediaAnnotation {
+                shape: Some(AnnotationShape::Freehand {
+                    points: vec![point(1_000, 2_000), point(6_000, 2_000)],
+                    closed: false,
+                }),
+                ..base.clone()
+            },
+            MediaAnnotation {
+                shape: Some(AnnotationShape::Arrow {
+                    points: vec![point(1_000, 2_000)],
+                }),
+                ..base.clone()
+            },
+            MediaAnnotation {
+                shape: Some(AnnotationShape::Arrow {
+                    points: vec![point(1_000, 2_000), point(10_001, 2_000)],
+                }),
+                ..base.clone()
+            },
+            MediaAnnotation {
+                width: 4_999,
+                shape: Some(AnnotationShape::Arrow {
+                    points: vec![point(1_000, 2_000), point(6_000, 2_000)],
+                }),
+                ..base.clone()
+            },
+            MediaAnnotation {
+                x: 10_000,
+                width: 0,
+                shape: Some(AnnotationShape::Insertion {
+                    point: point(10_000, 2_000),
+                }),
+                ..base.clone()
+            },
+        ];
+        for annotation in invalid {
+            assert!(
+                validate_media_annotations(std::slice::from_ref(&annotation)).is_err(),
+                "{annotation:?}"
+            );
         }
     }
 }

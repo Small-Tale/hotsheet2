@@ -18,6 +18,7 @@ use crate::ticket::{AttachmentActorRole, Confidence, Note, NoteActor, Ticket};
 use crate::timestamp::Timestamp;
 
 const GUARDED_SCHEMA_V2: &str = "hotsheet/v2-bounded-notes";
+const GUARDED_SCHEMA_V3: &str = "hotsheet/v3-annotation-shapes";
 
 /// Frontmatter keys the current schema defines. Anything else parsed from a file's
 /// frontmatter is retained in [`Ticket::extra`]. Kept in sync with `Ticket`'s fields
@@ -214,10 +215,25 @@ fn frontmatter_to_string(t: &Ticket) -> String {
     for (k, v) in &t.extra {
         mapping.insert(Value::String(k.clone()), v.clone());
     }
-    if t.schema == crate::SCHEMA_VERSION {
+    let schema = if t.attachments.iter().any(|attachment| {
+        attachment
+            .annotations
+            .iter()
+            .any(|annotation| annotation.shape.is_some())
+    }) {
+        t.schema.max(crate::SHAPE_SCHEMA_VERSION)
+    } else {
+        t.schema
+    };
+    if schema == crate::SCHEMA_VERSION {
         mapping.insert(
             Value::String("schema".into()),
             Value::String(GUARDED_SCHEMA_V2.into()),
+        );
+    } else if schema == crate::SHAPE_SCHEMA_VERSION {
+        mapping.insert(
+            Value::String("schema".into()),
+            Value::String(GUARDED_SCHEMA_V3.into()),
         );
     }
     serde_yaml::to_string(&Value::Mapping(mapping)).expect("a YAML mapping always serializes")
@@ -229,10 +245,12 @@ fn normalize_schema_marker(mapping: &mut Mapping) -> Result<(), ParseError> {
         return Ok(());
     };
     if let Value::String(marker) = value {
-        if marker != GUARDED_SCHEMA_V2 {
-            return Err(ParseError::UnsupportedSchema(marker.clone()));
-        }
-        mapping.insert(key, Value::Number(crate::SCHEMA_VERSION.into()));
+        let schema = match marker.as_str() {
+            GUARDED_SCHEMA_V2 => crate::SCHEMA_VERSION,
+            GUARDED_SCHEMA_V3 => crate::SHAPE_SCHEMA_VERSION,
+            _ => return Err(ParseError::UnsupportedSchema(marker.clone())),
+        };
+        mapping.insert(key, Value::Number(schema.into()));
     }
     Ok(())
 }
@@ -856,6 +874,7 @@ mod tests {
                 start_ms: Some(1000),
                 end_ms: Some(2000),
                 text: "Review **this**".into(),
+                shape: None,
             }],
         }];
 
@@ -863,6 +882,82 @@ mod tests {
         let back = parse_file(&text).expect("parses");
         assert_eq!(back, t);
         assert_eq!(to_file_string(&back), text);
+    }
+
+    #[test]
+    fn shaped_annotations_round_trip_under_guarded_schema_without_changing_legacy_files() {
+        use crate::ticket::{AnnotationPoint, AnnotationShape, Attachment, MediaAnnotation};
+        let point = |x, y| AnnotationPoint { x, y };
+        let shapes = [
+            (AnnotationShape::Rect, (1_000, 2_000, 5_000, 1)),
+            (AnnotationShape::Strike, (1_000, 2_000, 5_000, 1)),
+            (
+                AnnotationShape::Freehand {
+                    points: vec![
+                        point(1_000, 2_000),
+                        point(6_000, 2_000),
+                        point(3_000, 2_000),
+                    ],
+                    closed: true,
+                },
+                (1_000, 2_000, 5_000, 1),
+            ),
+            (
+                AnnotationShape::Freehand {
+                    points: vec![
+                        point(1_000, 2_000),
+                        point(6_000, 2_000),
+                        point(3_000, 2_000),
+                    ],
+                    closed: false,
+                },
+                (1_000, 2_000, 5_000, 1),
+            ),
+            (
+                AnnotationShape::Arrow {
+                    points: vec![point(1_000, 2_000), point(6_000, 2_000)],
+                },
+                (1_000, 2_000, 5_000, 1),
+            ),
+            (
+                AnnotationShape::Insertion {
+                    point: point(10_000, 10_000),
+                },
+                (9_999, 9_999, 1, 1),
+            ),
+        ];
+        let legacy = to_file_string(&sample());
+        assert!(legacy.contains("schema: hotsheet/v2-bounded-notes"));
+        for (shape, (x, y, width, height)) in shapes {
+            let mut ticket = sample();
+            ticket.schema = crate::SHAPE_SCHEMA_VERSION;
+            ticket.attachments.push(Attachment {
+                id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC4"),
+                filename: "proof.png".into(),
+                created_at: "2026-08-20T06:00:00Z".into(),
+                batch_id: None,
+                batch_label: None,
+                actor: None,
+                purpose: None,
+                annotations: vec![MediaAnnotation {
+                    id: "mark".into(),
+                    x,
+                    y,
+                    width,
+                    height,
+                    start_ms: None,
+                    end_ms: None,
+                    text: String::new(),
+                    shape: Some(shape),
+                }],
+            });
+            let encoded = to_file_string(&ticket);
+            assert!(encoded.contains("schema: hotsheet/v3-annotation-shapes"));
+            let decoded = parse_file(&encoded).unwrap();
+            assert_eq!(decoded, ticket);
+            assert_eq!(to_file_string(&decoded), encoded);
+        }
+        assert_eq!(to_file_string(&sample()), legacy);
     }
 
     #[test]

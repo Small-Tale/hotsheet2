@@ -216,12 +216,25 @@ string `id`, a rectangle (`x`, `y`, `width`, `height`) normalized to the integer
 0–10,000, and optional `text`. Timed media additionally stores an inclusive
 `start_ms`/`end_ms` pair; equal endpoints represent a point annotation. Missing
 `annotations` remains equivalent to an empty sequence, preserving older HS2 files.
+The optional `shape` object has a `type` of `rect`, `strike`, `freehand`, `arrow`, or
+`insertion`. Omitted shape means `rect`. `strike` uses the top-level rectangle;
+`freehand` has at least three `{x, y}` points and an optional `closed` boolean (true
+by default); `arrow` has at least two points, with its head at the last point; and
+`insertion` has one `point`. Points use the same 0–10,000 coordinates. For point-based
+shapes the top-level rectangle is the exact point bounding box, with a one-unit
+minimum width and height; a point at 10,000 uses origin 9,999 on that axis. This
+keeps the legacy rectangle fields useful for simple readers. Shape-bearing tickets
+use `schema: hotsheet/v3-annotation-shapes`. Older binaries that know only the v2
+guard reject these tickets with `upgrade_required` before they can rewrite and lose
+shape data. A ticket keeps the v3 guard after its last shape is removed; tickets
+that have never held a shape retain the v2 marker and unchanged file format.
 Each persisted annotation batch also appends an `activity` note whose summary identifies
-the attachment and whose Markdown body records added, updated, and removed rectangles.
+the attachment and whose Markdown body records added, updated, and removed shapes.
 The annotation replacement and its activity note are one store commit, so readers never
 observe metadata without the corresponding history entry.
-The store validates every replacement batch for unique ids, non-empty rectangles fully within
-the normalized media bounds, and either no time range or a complete ordered pair. Invalid
+The store validates every replacement batch for unique ids, shape point counts and bounds,
+exact point bounding boxes, non-empty rectangles fully within the normalized media bounds,
+and either no time range or a complete ordered pair. Invalid
 batches change nothing; identical batches create neither a commit nor a note. CLI, MCP, and
 server writes share this validation. The activity note records the supplied actor when one
 is available.

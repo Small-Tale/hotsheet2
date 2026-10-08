@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-3BKWTY covers media annotation shapes in `hotsheet-model` validation and
+canonical v2/v3 round-trip tests, `hotsheet-ticketing` activity and wire tests,
+and real CLI, MCP, and server annotation flows. The CLI test also verifies that
+the v3 ticket guard remains after shapes are cleared; invalid point geometry is
+rejected by both model and server tests. Gallery rendering and editing have
+separate tickets (`HS2-N1EH4W`, `HS2-C46J3X`).
+
 HS2-NX6JQJ covers partial checkout reads beyond the initial collection: the web API
 retains unpaged partial/truncated headers and page-walk source errors; refresh unit tests
 preserve healthy rows and source diagnostics through empty-then-refill recovery. Browser

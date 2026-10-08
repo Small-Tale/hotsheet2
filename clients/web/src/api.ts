@@ -179,6 +179,11 @@ export interface MediaAnnotation {
   start_ms?: number;
   end_ms?: number;
   text: string;
+  shape?:
+    | { type: 'rect' | 'strike' }
+    | { type: 'freehand'; points: { x: number; y: number }[]; closed?: boolean }
+    | { type: 'arrow'; points: { x: number; y: number }[] }
+    | { type: 'insertion'; point: { x: number; y: number } };
 }
 export type AttachmentActorRole = 'human' | 'ai' | 'system' | 'unknown';
 export type AttachmentPurpose = 'problem_evidence' | 'correctness_evidence' | 'reference' | 'other';

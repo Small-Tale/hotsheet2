@@ -3073,6 +3073,25 @@ mod tests {
         let unchanged = call(&backend, "hotsheet_annotate_attachment", args);
         assert!(unchanged.get("error").is_none());
         assert_eq!(store.read_ticket(&ticket.id).unwrap().notes.len(), 1);
+        let shaped = call(
+            &backend,
+            "hotsheet_annotate_attachment",
+            json!({
+                "id": ticket.slug,
+                "attachment": attachment_id.to_string(),
+                "annotations": [{"id":"arrow","x":1000,"y":2000,"width":5000,"height":1,
+                    "shape":{"type":"arrow","points":[{"x":1000,"y":2000},{"x":6000,"y":2000}]}}]
+            }),
+        );
+        assert_eq!(
+            shaped["attachments"][0]["annotations"][0]["shape"]["type"],
+            "arrow"
+        );
+        let read = call(&backend, "hotsheet_get", json!({ "id": ticket.slug }));
+        assert_eq!(
+            read["attachments"][0]["annotations"][0]["shape"]["points"][1]["x"],
+            6000
+        );
         let invalid = call(
             &backend,
             "hotsheet_annotate_attachment",
@@ -3086,9 +3105,9 @@ mod tests {
             invalid["error"]
                 .as_str()
                 .unwrap()
-                .contains("bounded non-empty rectangles")
+                .contains("valid shape geometry and bounding boxes")
         );
-        assert_eq!(store.read_ticket(&ticket.id).unwrap().notes.len(), 1);
+        assert_eq!(store.read_ticket(&ticket.id).unwrap().notes.len(), 2);
     }
 
     #[test]

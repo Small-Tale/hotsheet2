@@ -666,7 +666,24 @@ mod tests {
                 start_ms: None,
                 end_ms: None,
                 text: "Inspect this edge".into(),
+                shape: None,
             }],
+        });
+        ticket.attachments[0].annotations.push(MediaAnnotation {
+            id: "arrow-1".into(),
+            x: 100,
+            y: 200,
+            width: 300,
+            height: 1,
+            start_ms: None,
+            end_ms: None,
+            text: "Move here".into(),
+            shape: Some(hotsheet_model::AnnotationShape::Arrow {
+                points: vec![
+                    hotsheet_model::AnnotationPoint { x: 100, y: 200 },
+                    hotsheet_model::AnnotationPoint { x: 400, y: 200 },
+                ],
+            }),
         });
 
         let api = ApiTicket::from(&ticket);
@@ -674,5 +691,9 @@ mod tests {
         let json = serde_json::to_value(api).unwrap();
         assert_eq!(json["attachments"][0]["annotations"][0]["id"], "region-1");
         assert_eq!(json["attachments"][0]["annotations"][0]["x"], 100);
+        assert_eq!(
+            json["attachments"][0]["annotations"][1]["shape"]["type"],
+            "arrow"
+        );
     }
 }
