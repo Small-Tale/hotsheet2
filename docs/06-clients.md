@@ -3307,6 +3307,9 @@ For note-driven feedback, only an unanswered ask is active: among regular and
 the response and clears Needs review; the answered ask then uses the ordinary note
 presentation rather than retaining feedback styling or an editor. Activity/status notes
 are neutral, and a later `feedback_needed` note opens it again.
+The reader's reply to a feedback request is a draft for a new note. Background ticket
+refresh preserves that reply without comparing it to the request note or showing a note
+edit conflict; actual edits to existing notes still reconcile against their source text.
 When a description opens the exchange, activity/status notes remain neutral and the first
 regular note answers it. A later first-class feedback request supersedes the description.
 For compatibility with HS1 and early HS2 automation, a regular note containing the

@@ -7,6 +7,10 @@ anchor, Started submenu, and dismissal in Chromium and WebKit via
 ticket, project tab, terminal, attachment, saved view, drive options, and terminal
 visibility surfaces.
 
+HS2-NF1D35 covers repeated refresh of a feedback reply draft and genuine feedback-draft
+note edit conflicts in `clients/web/src/ticket-field-reconciliation.test.ts`, plus a
+running-browser feedback reply across a ticket refresh in `clients/web/tests/providers.spec.ts`.
+
 HS2-3BKWTY covers media annotation shapes in `hotsheet-model` validation and
 canonical v2/v3 round-trip tests, `hotsheet-ticketing` activity and wire tests,
 and real CLI, MCP, and server annotation flows. The CLI test also verifies that

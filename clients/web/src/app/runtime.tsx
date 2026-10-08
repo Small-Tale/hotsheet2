@@ -328,7 +328,11 @@ import { loadLastTicketCategory } from '../ticket-category-preference';
 import { type DuplicateTarget } from '../ticket-close';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
 import { loadTicketEditorSizes } from '../ticket-editor-size';
-import { reconcileActiveDraft, type TicketFieldConflict } from '../ticket-field-reconciliation';
+import {
+  reconcileActiveDraft,
+  reconcileReaderNoteDraft,
+  type TicketFieldConflict,
+} from '../ticket-field-reconciliation';
 import { parseTicketLinkReference, resolveTicketLink, type TicketLinkMatch } from '../ticket-link-resolution';
 import { animateTicketMotion, captureTicketMotion, waitForTicketMotionSettled } from '../ticket-motion';
 import { type ClipboardTicket, type TicketHistory, type TicketSnapshot } from '../ticket-operations';
@@ -3254,27 +3258,30 @@ export async function startHotSheetWebClient() {
     if (readerNoteId && !readerNoteAutosave.pending()) {
       const remote = refreshed.notes.find((note) => note.id === readerNoteId)?.text ?? '',
         previousNote = previous.notes.find((note) => note.id === readerNoteId)?.text ?? '',
-        next = reconcileActiveDraft(readerNoteDraftBase, readerNoteDraft.value, remote);
-      readerNoteDraftBase = next.base;
-      if (next.kind === 'adopt-remote' || next.kind === 'converged' || next.kind === 'merged') {
-        readerNoteDraft.value = next.draft;
-        settledConflictKey = `note:${readerNoteId}`;
-      }
-      // A clean merge of both edits still has to be saved (HS2-A4XCXE).
-      if (next.kind === 'merged') {
-        syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
-        readerNoteAutosave.schedule({ id: readerNoteId, value: next.draft });
-      }
-      if (next.kind === 'conflict' && !conflict) {
-        readerNoteAutosave.cancel();
-        conflict = {
-          key: `note:${readerNoteId}`,
-          field: 'note',
-          label: 'Note',
-          base: previousNote,
-          mine: readerNoteDraft.value,
-          theirs: remote,
-        };
+        next = reconcileReaderNoteDraft(previous, refreshed, readerNoteId, readerNoteDraftBase, readerNoteDraft.value);
+      if (!next) settledConflictKey = `note:${readerNoteId}`;
+      else {
+        readerNoteDraftBase = next.base;
+        if (next.kind === 'adopt-remote' || next.kind === 'converged' || next.kind === 'merged') {
+          readerNoteDraft.value = next.draft;
+          settledConflictKey = `note:${readerNoteId}`;
+        }
+        // A clean merge of both edits still has to be saved (HS2-A4XCXE).
+        if (next.kind === 'merged') {
+          syncFocusedDraftControl(document.activeElement, next.mine, next.draft);
+          readerNoteAutosave.schedule({ id: readerNoteId, value: next.draft });
+        }
+        if (next.kind === 'conflict' && !conflict) {
+          readerNoteAutosave.cancel();
+          conflict = {
+            key: `note:${readerNoteId}`,
+            field: 'note',
+            label: 'Note',
+            base: previousNote,
+            mine: readerNoteDraft.value,
+            theirs: remote,
+          };
+        }
       }
     }
     selectedTicket.value = refreshed;

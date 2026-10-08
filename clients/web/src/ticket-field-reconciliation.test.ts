@@ -5,6 +5,7 @@ import {
   isTicketConcurrencyConflict,
   rebaseDraftValue,
   reconcileActiveDraft,
+  reconcileReaderNoteDraft,
   reconcileTicketPatch,
   ticketFieldText,
 } from './ticket-field-reconciliation';
@@ -115,6 +116,33 @@ describe('field-aware ticket reconciliation', () => {
     expect(reconcileActiveDraft('base', 'same', 'same')).toEqual({ kind: 'converged', base: 'same', draft: 'same' });
     expect(reconcileActiveDraft('base', 'mine', 'theirs')).toEqual({ kind: 'conflict', base: 'theirs', draft: 'mine' });
     expect(reconcileActiveDraft('', '', '')).toEqual({ kind: 'unchanged', base: '', draft: '' });
+  });
+
+  it('keeps a feedback reply through repeated refreshes while still detecting real reader note edits', () => {
+    const request = { ...ticket().notes[0], kind: 'feedback_needed' as const, text: 'Please review this phase' },
+      before = ticket({ notes: [request] }),
+      refreshed = ticket({ notes: [{ ...request }] });
+    expect(reconcileReaderNoteDraft(before, refreshed, 'N1', '', 'I checked it')).toBeUndefined();
+    expect(reconcileReaderNoteDraft(refreshed, refreshed, 'N1', '', 'I checked it')).toBeUndefined();
+    expect(
+      reconcileReaderNoteDraft(
+        before,
+        ticket({ notes: [{ ...request, text: 'Please review the new phase' }] }),
+        'N1',
+        '',
+        'I checked it',
+      ),
+    ).toBeUndefined();
+    const edit = ticket({ notes: [{ ...request, kind: 'feedback_draft', text: 'Original draft' }] });
+    expect(
+      reconcileReaderNoteDraft(
+        edit,
+        ticket({ notes: [{ ...edit.notes[0], text: 'Other edit' }] }),
+        'N1',
+        'Original draft',
+        'My edit',
+      ),
+    ).toEqual({ kind: 'conflict', base: 'Other edit', draft: 'My edit' });
   });
 
   it('merges disjoint concurrent edits of the same text field instead of conflicting (HS2-A4XCXE)', () => {

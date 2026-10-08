@@ -50,6 +50,19 @@ export function reconcileActiveDraft(base: string, draft: string, remote: string
   return { kind: 'conflict', base: remote, draft };
 }
 
+/** A feedback response is a new note, not an edit of the request note it is displayed beneath. */
+export function reconcileReaderNoteDraft(
+  previous: FullTicket,
+  refreshed: FullTicket,
+  noteId: string,
+  base: string,
+  draft: string,
+): DraftReconciliation | undefined {
+  const source = previous.notes.find((note) => note.id === noteId);
+  if (source?.kind === 'feedback_needed') return undefined;
+  return reconcileActiveDraft(base, draft, refreshed.notes.find((note) => note.id === noteId)?.text ?? '');
+}
+
 /** Text fields a concurrent edit can merge line by line; `blocked_reason` stores `null` for empty. */
 const TEXT_FIELDS = new Set(['details', 'title', 'blocked_reason', 'note']);
 

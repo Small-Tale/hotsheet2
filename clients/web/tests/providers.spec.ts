@@ -8151,6 +8151,17 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
   await expect(choices.nth(1)).toHaveAttribute('aria-pressed', 'true');
   await expect(choices.nth(1).locator('img')).toHaveAttribute('src', /\/tickets\/HS2-DEMO01\/attachments\/A1$/);
   await note.getByRole('textbox', { name: 'Feedback response' }).fill('The two options can be combined.');
+  const refreshedTicket = page.waitForResponse(
+    (response) => response.request().method() === 'GET' && /\/tickets\//.test(new URL(response.url()).pathname),
+  );
+  await page.getByLabel('Columns view').evaluate((button: HTMLElement) => {
+    button.click();
+  });
+  await refreshedTicket;
+  await expect(note.getByRole('textbox', { name: 'Feedback response' })).toHaveValue(
+    'The two options can be combined.',
+  );
+  await expect(page.getByRole('dialog').getByText('Resolve note conflict')).toHaveCount(0);
   await note.screenshot({ path: '/private/tmp/hs2-6eeeqb-feedback-choices.png' });
   await note.getByRole('button', { name: 'Respond' }).click();
   await expect
