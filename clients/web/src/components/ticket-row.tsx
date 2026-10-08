@@ -57,6 +57,8 @@ export interface TicketRowProps {
    * Shown as the compact pill among the row's other pills; ignored for any other status.
    */
   latestConfidence?: number;
+  pendingOperationCount?: number;
+  pendingSyncState?: 'queued' | 'sending' | 'rate_limited' | 'needs_attention';
   cutPending?: boolean;
   presentation?: TicketRowPresentation;
   listEdge?: TicketRowListEdge;
@@ -234,6 +236,22 @@ export function TicketRow(raw: TicketRowProps) {
                 </span>
               )}
               {props.blocked && <BlockedBadge compact />}
+              {Boolean(props.pendingOperationCount) && (
+                <span
+                  class="ticket-list-row__pending-sync"
+                  data-state={props.pendingSyncState ?? 'queued'}
+                  title={`${props.pendingOperationCount} local edit${props.pendingOperationCount === 1 ? '' : 's'} awaiting Jira confirmation`}
+                >
+                  {props.pendingSyncState === 'needs_attention'
+                    ? 'Sync needs attention'
+                    : props.pendingSyncState === 'sending'
+                      ? 'Sending…'
+                      : props.pendingSyncState === 'rate_limited'
+                        ? 'Waiting for Jira'
+                        : 'Pending sync'}
+                  {props.pendingOperationCount! > 1 ? ` (${props.pendingOperationCount})` : ''}
+                </span>
+              )}
               {props.busy && (
                 <span class="ticket-list-row__owner" aria-label={props.agentName} title={props.agentName}>
                   {props.agentName}

@@ -22,6 +22,7 @@ import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
 import { COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
+import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { beginInteractionTiming } from '../interaction-performance';
 import { chordFromEvent, saveShortcutOverrides, type ShortcutChord, shortcutDef } from '../keyboard-shortcuts';
 import { loadLucideCatalog } from '../lucide-catalog';
@@ -153,6 +154,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly useProviderAccount: (id: string) => void;
   readonly setProjectDefaultSource: (id: string) => Promise<void>;
   readonly setProjectSourceColor: (id: string, color: string) => Promise<void>;
+  readonly retryProviderOutbox: (connectionId: string, operationId: string) => Promise<void>;
+  readonly discardProviderOutbox: (connectionId: string, operationId: string) => Promise<void>;
   readonly providerSettingsError: Signal<string>;
   readonly createdGitTicketStore: Signal<string>;
   readonly ticketSourceSetupNavigation: Signal<'none' | 'push' | 'pop'>;
@@ -270,6 +273,8 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     useProviderAccount,
     setProjectDefaultSource,
     setProjectSourceColor,
+    retryProviderOutbox,
+    discardProviderOutbox,
     providerSettingsError,
     createdGitTicketStore,
     ticketSourceSetupNavigation,
@@ -1191,6 +1196,18 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       const option = target as HTMLInputElement;
       const id = option.dataset.sourceId;
       if (id && option.checked) void setProjectSourceColor(id, option.value);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.retryProviderOutbox.selector, (_event, target) => {
+      const { connectionId, operationId } = (target as HTMLElement).dataset;
+      if (connectionId && operationId) void retryProviderOutbox(connectionId, operationId);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.discardProviderOutbox.selector, (_event, target) => {
+      const { connectionId, operationId } = (target as HTMLElement).dataset;
+      if (connectionId && operationId) void discardProviderOutbox(connectionId, operationId);
     }),
   );
   lifetime.add(

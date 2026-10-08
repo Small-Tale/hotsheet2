@@ -50,6 +50,8 @@ pub enum OutboxError {
     },
     #[error("projected ticket must be a JSON object with connection_id and native_id")]
     InvalidProjectionTicket,
+    #[error("operation {0} is not in a state that allows this transition")]
+    InvalidTransition(String),
 }
 
 /// One caller-supplied stable operation id and the provider ticket version it edits.
@@ -138,6 +140,30 @@ pub enum OutboxState {
     Confirmed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DispatchState {
+    Queued,
+    Sending,
+    RateLimited,
+    NeedsAttention,
+    Confirmed,
+    Discarded,
+}
+
+impl DispatchState {
+    fn from_db(value: &str) -> Self {
+        match value {
+            "sending" => Self::Sending,
+            "rate_limited" => Self::RateLimited,
+            "needs_attention" => Self::NeedsAttention,
+            "confirmed" => Self::Confirmed,
+            "discarded" => Self::Discarded,
+            _ => Self::Queued,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutboxOperation {
     pub operation_id: String,
@@ -148,6 +174,11 @@ pub struct OutboxOperation {
     pub base_ticket: Value,
     pub patch: ProviderPatch,
     pub state: OutboxState,
+    pub dispatch_state: DispatchState,
+    pub attempts: i64,
+    pub next_attempt_at: i64,
+    pub last_error: Option<String>,
+    pub conflict: Option<Value>,
 }
 
 /// Project Jira's supported provisional fields onto an authoritative full ticket.
@@ -250,10 +281,39 @@ impl ProviderOutbox {
                 patch_json TEXT NOT NULL,
                 payload_json TEXT NOT NULL,
                 state TEXT NOT NULL CHECK (state IN ('queued', 'confirmed')),
+                dispatch_state TEXT NOT NULL DEFAULT 'queued',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                conflict_json TEXT,
                 UNIQUE (connection_id, native_id, sequence)
             );
             CREATE INDEX IF NOT EXISTS provider_outbox_pending
                 ON provider_outbox (state, connection_id, native_id, sequence);",
+        )?;
+        for (name, definition) in [
+            ("dispatch_state", "TEXT NOT NULL DEFAULT 'queued'"),
+            ("attempts", "INTEGER NOT NULL DEFAULT 0"),
+            ("next_attempt_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("last_error", "TEXT"),
+            ("conflict_json", "TEXT"),
+        ] {
+            let present: bool = db.query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('provider_outbox') WHERE name = ?1)",
+                [name],
+                |row| row.get(0),
+            )?;
+            if !present {
+                db.execute_batch(&format!(
+                    "ALTER TABLE provider_outbox ADD COLUMN {name} {definition}"
+                ))?;
+            }
+        }
+        db.execute_batch(
+            "UPDATE provider_outbox SET dispatch_state = 'confirmed'
+             WHERE state = 'confirmed' AND dispatch_state = 'queued';
+             UPDATE provider_outbox SET dispatch_state = 'queued'
+             WHERE state = 'queued' AND dispatch_state = 'sending';",
         )?;
         Ok(Self { db, max_pending })
     }
@@ -363,15 +423,182 @@ impl ProviderOutbox {
         )
     }
 
+    pub fn recent_for_connection(
+        &self,
+        connection_id: &str,
+        limit: usize,
+    ) -> Result<Vec<OutboxOperation>, OutboxError> {
+        list_in(
+            &self.db,
+            "SELECT operation_id FROM provider_outbox
+             WHERE connection_id = ?1 AND (
+               state = 'queued' OR rowid IN (
+                 SELECT rowid FROM provider_outbox
+                 WHERE connection_id = ?1 AND state = 'confirmed'
+                 ORDER BY rowid DESC LIMIT ?2
+               )
+             ) ORDER BY rowid DESC",
+            params![connection_id, limit as i64],
+        )
+    }
+
     /// Future dispatch can mark an acknowledged intent without losing its idempotency key.
     /// Repeating confirmation is a no-op; an unknown id returns false.
     pub fn confirm(&mut self, operation_id: &str) -> Result<bool, OutboxError> {
         let changed = self.db.execute(
-            "UPDATE provider_outbox SET state = 'confirmed'
-             WHERE operation_id = ?1 AND state = 'queued'",
+            "UPDATE provider_outbox SET state = 'confirmed', dispatch_state = 'confirmed',
+             next_attempt_at = 0, last_error = NULL
+             WHERE operation_id = ?1 AND state = 'queued' AND dispatch_state = 'sending'",
             [operation_id],
         )?;
         Ok(changed > 0)
+    }
+
+    /// A readback can prove an uncertain write landed even after dispatch was reset.
+    pub fn settle_applied(&mut self, operation_id: &str) -> Result<bool, OutboxError> {
+        let changed = self.db.execute(
+            "UPDATE provider_outbox SET state = 'confirmed', dispatch_state = 'confirmed',
+             next_attempt_at = 0, last_error = NULL
+             WHERE operation_id = ?1 AND state = 'queued' AND dispatch_state != 'sending'",
+            [operation_id],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Claim only the first pending intent for each ticket. A transaction excludes a second
+    /// dispatcher and keeps later local intent behind an attention state.
+    pub fn claim_ready(
+        &mut self,
+        now: i64,
+        limit: usize,
+    ) -> Result<Vec<OutboxOperation>, OutboxError> {
+        let tx = self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let ids = list_in(
+            &tx,
+            "SELECT operation_id FROM provider_outbox AS candidate
+             WHERE state = 'queued'
+               AND dispatch_state IN ('queued', 'rate_limited')
+               AND next_attempt_at <= ?1
+               AND NOT EXISTS (
+                 SELECT 1 FROM provider_outbox AS earlier
+                 WHERE earlier.connection_id = candidate.connection_id
+                   AND earlier.native_id = candidate.native_id
+                   AND earlier.state = 'queued' AND earlier.sequence < candidate.sequence
+               )
+             ORDER BY sequence LIMIT ?2",
+            params![now, limit as i64],
+        )?;
+        let mut claimed = Vec::with_capacity(ids.len());
+        for operation in ids {
+            tx.execute(
+                "UPDATE provider_outbox SET dispatch_state = 'sending', attempts = attempts + 1
+                 WHERE operation_id = ?1",
+                [&operation.operation_id],
+            )?;
+            claimed.push(get_in(&tx, &operation.operation_id)?.expect("claimed row exists"));
+        }
+        tx.commit()?;
+        Ok(claimed)
+    }
+
+    pub fn defer(
+        &mut self,
+        operation_id: &str,
+        until: i64,
+        error: &str,
+        rate_limited: bool,
+    ) -> Result<(), OutboxError> {
+        let state = if rate_limited {
+            "rate_limited"
+        } else {
+            "queued"
+        };
+        let changed = self.db.execute(
+            "UPDATE provider_outbox SET dispatch_state = ?2, next_attempt_at = ?3,
+             last_error = ?4 WHERE operation_id = ?1 AND state = 'queued'
+             AND dispatch_state = 'sending'",
+            params![operation_id, state, until, error],
+        )?;
+        if changed == 0 {
+            return Err(OutboxError::InvalidTransition(operation_id.into()));
+        }
+        Ok(())
+    }
+
+    pub fn needs_attention(
+        &mut self,
+        operation_id: &str,
+        error: &str,
+        conflict: Option<&Value>,
+    ) -> Result<(), OutboxError> {
+        let changed = self.db.execute(
+            "UPDATE provider_outbox SET dispatch_state = 'needs_attention', last_error = ?2,
+             conflict_json = ?3 WHERE operation_id = ?1 AND state = 'queued'
+             AND dispatch_state = 'sending'",
+            params![
+                operation_id,
+                error,
+                conflict.map(serde_json::to_string).transpose()?
+            ],
+        )?;
+        if changed == 0 {
+            return Err(OutboxError::InvalidTransition(operation_id.into()));
+        }
+        Ok(())
+    }
+
+    pub fn retry(&mut self, operation_id: &str) -> Result<(), OutboxError> {
+        let changed = self.db.execute(
+            "UPDATE provider_outbox SET dispatch_state = 'queued', next_attempt_at = 0,
+             last_error = NULL WHERE operation_id = ?1 AND state = 'queued'
+             AND dispatch_state = 'needs_attention'",
+            [operation_id],
+        )?;
+        if changed == 0 {
+            return Err(OutboxError::InvalidTransition(operation_id.into()));
+        }
+        Ok(())
+    }
+
+    pub fn discard(&mut self, operation_id: &str) -> Result<(), OutboxError> {
+        let changed = self.db.execute(
+            "UPDATE provider_outbox SET state = 'confirmed', dispatch_state = 'discarded'
+             WHERE operation_id = ?1 AND state = 'queued'
+             AND dispatch_state IN ('queued', 'rate_limited', 'needs_attention')",
+            [operation_id],
+        )?;
+        if changed == 0 {
+            return Err(OutboxError::InvalidTransition(operation_id.into()));
+        }
+        Ok(())
+    }
+
+    pub fn defer_connection(&mut self, connection_id: &str, until: i64) -> Result<(), OutboxError> {
+        self.db.execute(
+            "UPDATE provider_outbox SET next_attempt_at = MAX(next_attempt_at, ?2),
+             dispatch_state = 'rate_limited' WHERE connection_id = ?1 AND state = 'queued'
+             AND dispatch_state IN ('queued', 'rate_limited')",
+            params![connection_id, until],
+        )?;
+        Ok(())
+    }
+
+    pub fn record_conflict(
+        &mut self,
+        operation_id: &str,
+        conflict: &Value,
+    ) -> Result<(), OutboxError> {
+        let changed = self.db.execute(
+            "UPDATE provider_outbox SET conflict_json = ?2 WHERE operation_id = ?1
+             AND state = 'queued' AND dispatch_state = 'sending'",
+            params![operation_id, serde_json::to_string(conflict)?],
+        )?;
+        if changed == 0 {
+            return Err(OutboxError::InvalidTransition(operation_id.into()));
+        }
+        Ok(())
     }
 }
 
@@ -379,7 +606,8 @@ fn get_in(db: &Connection, operation_id: &str) -> Result<Option<OutboxOperation>
     let row = db
         .query_row(
             "SELECT operation_id, connection_id, native_id, sequence, base_token,
-                    base_ticket_json, patch_json, state
+                    base_ticket_json, patch_json, state, dispatch_state, attempts,
+                    next_attempt_at, last_error, conflict_json
              FROM provider_outbox WHERE operation_id = ?1",
             [operation_id],
             |row| {
@@ -392,6 +620,11 @@ fn get_in(db: &Connection, operation_id: &str) -> Result<Option<OutboxOperation>
                     row.get::<_, String>(5)?,
                     row.get::<_, String>(6)?,
                     row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, i64>(9)?,
+                    row.get::<_, i64>(10)?,
+                    row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
                 ))
             },
         )
@@ -405,6 +638,11 @@ fn get_in(db: &Connection, operation_id: &str) -> Result<Option<OutboxOperation>
         base_json,
         patch_json,
         state,
+        dispatch_state,
+        attempts,
+        next_attempt_at,
+        last_error,
+        conflict_json,
     )) = row
     else {
         return Ok(None);
@@ -422,6 +660,13 @@ fn get_in(db: &Connection, operation_id: &str) -> Result<Option<OutboxOperation>
         } else {
             OutboxState::Confirmed
         },
+        dispatch_state: DispatchState::from_db(&dispatch_state),
+        attempts,
+        next_attempt_at,
+        last_error,
+        conflict: conflict_json
+            .map(|value| serde_json::from_str(&value))
+            .transpose()?,
     }))
 }
 
@@ -517,6 +762,7 @@ mod tests {
         {
             let mut outbox = ProviderOutbox::open(&path, 2).unwrap();
             outbox.admit_batch(&[admission("one", "42", "A")]).unwrap();
+            assert_eq!(outbox.claim_ready(0, 2).unwrap().len(), 1);
             assert!(outbox.confirm("one").unwrap());
             assert!(!outbox.confirm("one").unwrap());
             outbox.admit_batch(&[admission("two", "42", "B")]).unwrap();
@@ -545,6 +791,119 @@ mod tests {
                 .unwrap()[0]
                 .sequence,
             3
+        );
+    }
+
+    #[test]
+    fn dispatch_claims_one_per_ticket_and_survives_rate_limit_attention_and_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("dispatch.sqlite");
+        let mut outbox = ProviderOutbox::open(&path, 5).unwrap();
+        outbox
+            .admit_batch(&[
+                admission("first", "42", "First"),
+                admission("later", "42", "Later"),
+                admission("other", "43", "Other"),
+            ])
+            .unwrap();
+        let claimed = outbox.claim_ready(100, 5).unwrap();
+        assert_eq!(
+            claimed
+                .iter()
+                .map(|item| item.operation_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first", "other"]
+        );
+        assert_eq!(outbox.get("first").unwrap().unwrap().attempts, 1);
+        outbox.defer("first", 200, "Jira 429", true).unwrap();
+        outbox.defer_connection("github-main", 200).unwrap();
+        assert!(outbox.claim_ready(199, 5).unwrap().is_empty());
+        let claimed = outbox.claim_ready(200, 5).unwrap();
+        assert_eq!(
+            claimed
+                .iter()
+                .map(|item| item.operation_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first"]
+        );
+        outbox
+            .needs_attention(
+                "first",
+                "uncertain response",
+                Some(&json!({"title":"Remote"})),
+            )
+            .unwrap();
+        assert_eq!(
+            outbox.get("first").unwrap().unwrap().conflict,
+            Some(json!({"title":"Remote"}))
+        );
+        assert!(outbox.claim_ready(201, 5).unwrap().is_empty());
+        outbox.retry("first").unwrap();
+        assert_eq!(outbox.claim_ready(201, 5).unwrap().len(), 1);
+        assert!(outbox.confirm("first").unwrap());
+        assert_eq!(outbox.claim_ready(201, 5).unwrap()[0].operation_id, "later");
+        drop(outbox);
+        let mut reopened = ProviderOutbox::open(&path, 5).unwrap();
+        assert_eq!(
+            reopened.get("later").unwrap().unwrap().dispatch_state,
+            DispatchState::Queued
+        );
+        reopened.discard("later").unwrap();
+        assert_eq!(
+            reopened.get("later").unwrap().unwrap().dispatch_state,
+            DispatchState::Discarded
+        );
+        assert_eq!(reopened.pending_count().unwrap(), 1);
+        assert!(!reopened.confirm("later").unwrap());
+    }
+
+    #[test]
+    fn recent_status_keeps_old_pending_operations_alongside_bounded_history() {
+        let mut outbox = ProviderOutbox::open(":memory:", 3).unwrap();
+        outbox
+            .admit_batch(&[admission("old", "42", "Old")])
+            .unwrap();
+        assert_eq!(outbox.claim_ready(0, 1).unwrap().len(), 1);
+        outbox.needs_attention("old", "review", None).unwrap();
+        for (id, native_id) in [("newer", "43"), ("newest", "44")] {
+            outbox.admit_batch(&[admission(id, native_id, id)]).unwrap();
+            assert_eq!(outbox.claim_ready(0, 3).unwrap().len(), 1);
+            assert!(outbox.confirm(id).unwrap());
+        }
+        let recent = outbox.recent_for_connection("github-main", 1).unwrap();
+        assert_eq!(
+            recent
+                .iter()
+                .map(|item| item.operation_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["newest", "old"]
+        );
+    }
+
+    #[test]
+    fn opening_a_phase_two_outbox_adds_dispatch_columns_without_replacing_the_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("legacy.sqlite");
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(
+            "CREATE TABLE provider_outbox (
+                operation_id TEXT PRIMARY KEY, connection_id TEXT NOT NULL,
+                native_id TEXT NOT NULL, sequence INTEGER NOT NULL, base_token TEXT,
+                base_ticket_json TEXT NOT NULL, patch_json TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                state TEXT NOT NULL CHECK (state IN ('queued', 'confirmed')),
+                UNIQUE (connection_id, native_id, sequence)
+            );",
+        )
+        .unwrap();
+        drop(db);
+        let mut outbox = ProviderOutbox::open(&path, 2).unwrap();
+        outbox
+            .admit_batch(&[admission("migrated", "42", "New")])
+            .unwrap();
+        assert_eq!(
+            outbox.claim_ready(0, 1).unwrap()[0].dispatch_state,
+            DispatchState::Sending
         );
     }
 

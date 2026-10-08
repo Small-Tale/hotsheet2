@@ -668,7 +668,12 @@ and identity-less legacy entries remain conservatively blocking.
   and the lowered surface color for Transparent. Column cards vertically center the
   compact source mark with the type icon and ticket number. The inspector
   toolbar shows it wholly inside the toolbar with a tight gap beside the ticket
-  number, including in the terminal rail.
+  number, including in the terminal rail. For an opt-in Jira write-behind source,
+  supported field edits show a
+  provisional pending count on the ticket row. The inspector shows queued,
+  sending, rate-limited, attention, confirmed, and discarded operations; it offers
+  retry or discard when no write is in flight. The local field value remains
+  visible until Jira confirms it or the user discards it.
   When adding a provider source, **Use as this project's default ticket source** starts
   checked only if the project has no default source. The user can change that choice before
   connecting; editing a source shows whether that source is the current default (HS2-VM6YG9).

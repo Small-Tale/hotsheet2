@@ -51,6 +51,22 @@ describe('TicketRow', () => {
       'class="ticket-list-row__slug">Small-Tale/hotsheet2#5</span>',
     );
   });
+  it('distinguishes provisional Jira edits that need attention from queued edits', () => {
+    const ticket: TicketRowProps = {
+      slug: 'ENG-9',
+      title: 'Local title',
+      status: 'not_started',
+      priority: 'default',
+      category: 'task',
+      tags: [],
+      pendingOperationCount: 2,
+      pendingSyncState: 'needs_attention',
+    };
+    const markup = String(TicketRow(ticket));
+    expect(markup).toContain('data-state="needs_attention"');
+    expect(markup).toContain('Sync needs attention (2)');
+    expect(String(TicketRow({ ...ticket, pendingSyncState: 'queued' }))).toContain('Pending sync (2)');
+  });
   it('normalizes fallbacks, tags, and boolean defaults', () => {
     expect(
       normalizeTicketRowProps({

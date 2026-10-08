@@ -32,6 +32,8 @@ export const INSPECTOR_AND_EDITOR_ACTIONS = {
   setInspectorStatus: action('set-inspector-status'),
   setInspectorStartedPhase: action('set-inspector-started-phase'),
   openCodeReview: action('open-code-review'),
+  retryProviderOutbox: action('retry-provider-outbox'),
+  discardProviderOutbox: action('discard-provider-outbox'),
 } as const;
 
 /**

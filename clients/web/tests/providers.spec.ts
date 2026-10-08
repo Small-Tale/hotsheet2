@@ -9771,6 +9771,81 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
   ).toBe(false);
 });
 
+test('shows Jira outbox attention and lets a user retry then discard an edit (HS2-YSF8TV) @ci-smoke', async ({
+  page,
+}) => {
+  await mockProject(page);
+  const external = {
+    ...row,
+    id: 'PROJ-7',
+    native_id: 'PROJ-7',
+    qualified_id: 'jira-1:PROJ-7',
+    connection_id: 'jira-1',
+    slug: 'JIRA-7',
+    title: 'Pending Jira edit',
+    pending_operation_ids: ['op-attention'],
+  };
+  const externalFull = { ...full, ...external, details: 'Local draft' };
+  let state = 'needs_attention';
+  const operation = () => ({
+    operation_id: 'op-attention',
+    connection_id: 'jira-1',
+    native_id: 'PROJ-7',
+    state,
+    attempts: 1,
+    next_attempt_at: 0,
+    last_error: state === 'needs_attention' ? 'Jira rejected the write' : null,
+    conflict: null,
+  });
+  await page.route('**/providers', (route) =>
+    route.fulfill({
+      json: [
+        {
+          connection_id: 'git-local',
+          provider: 'git',
+          display_name: 'Hot Sheet git',
+          locator: '/tickets',
+          default: true,
+          capabilities: { update: true, notes: true },
+        },
+        {
+          connection_id: 'jira-1',
+          provider: 'jira',
+          display_name: 'Jira',
+          locator: 'https://jira.test',
+          default: false,
+          capabilities: { update: true, write_behind: true },
+        },
+      ],
+    }),
+  );
+  await page.route('**/providers/jira-1/outbox*', (route) => {
+    const method = route.request().method();
+    if (method === 'GET') return route.fulfill({ json: [operation()] });
+    if (method === 'POST') state = 'queued';
+    if (method === 'DELETE') state = 'discarded';
+    return route.fulfill({ json: operation() });
+  });
+  await page.route(/\/checkouts\/demo-checkout\/tickets(?:\/|\?|$)/, (route) => {
+    const path = decodeURIComponent(new URL(route.request().url()).pathname);
+    if (path.endsWith('/tickets'))
+      return route.fulfill({ json: { items: [row, external], counts: { total: 2, queued: 2, open: 2 } } });
+    if (path.endsWith('/tickets/jira-1:PROJ-7')) return route.fulfill({ json: externalFull });
+    return route.fallback();
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="JIRA-7"]').click();
+  const sync = page.getByRole('region', { name: 'Jira sync status' });
+  await expect(sync).toContainText('Needs attention');
+  await expect(sync).toContainText('Jira rejected the write');
+  await sync.getByRole('button', { name: 'Retry' }).click();
+  await expect(sync).toContainText('Queued locally');
+  await sync.getByRole('button', { name: 'Discard local edit' }).click();
+  await expect(sync).toContainText('Local edit discarded');
+});
+
 test('omits separators below every right-sidebar toolbar state', async ({ page }) => {
   await mockProject(page);
   await page.goto('/');

@@ -39,6 +39,50 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-ticket-slug="Small-Tale/hotsheet2#5"');
     expect(markup).toContain('aria-label="Copy ticket number Small-Tale/hotsheet2#5"');
   });
+  it('shows Jira operation states with controls only when retry or discard is safe', () => {
+    const markup = String(
+      TicketInspector({
+        ...base,
+        pendingOperations: [
+          {
+            operation_id: 'stuck',
+            connection_id: 'jira-eng',
+            native_id: 'ENG-9',
+            state: 'needs_attention',
+            attempts: 3,
+            next_attempt_at: 0,
+            last_error: 'Credential expired',
+          },
+          {
+            operation_id: 'sending',
+            connection_id: 'jira-eng',
+            native_id: 'ENG-9',
+            state: 'sending',
+            attempts: 1,
+            next_attempt_at: 0,
+          },
+          {
+            operation_id: 'done',
+            connection_id: 'jira-eng',
+            native_id: 'ENG-9',
+            state: 'confirmed',
+            attempts: 1,
+            next_attempt_at: 0,
+          },
+        ],
+      }),
+    );
+    expect(markup).toContain('Jira sync');
+    expect(markup).toContain('Credential expired');
+    expect(markup).toContain(
+      'data-action="retry-provider-outbox" data-connection-id="jira-eng" data-operation-id="stuck"',
+    );
+    expect(markup).toContain(
+      'data-action="discard-provider-outbox" data-connection-id="jira-eng" data-operation-id="stuck"',
+    );
+    expect(markup).not.toContain('data-operation-id="sending"');
+    expect(markup).toContain('Confirmed by Jira');
+  });
   it('allows the sidebar title to wrap without a line cap', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');

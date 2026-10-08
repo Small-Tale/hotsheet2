@@ -57,6 +57,32 @@
   --ticket-info-panel-blocked-reason-height: var(--hs-blocked-reason-reader-height, auto);
   --note-card-editor-height: var(--hs-note-reader-height, auto);
 }
+.ticket-inspector__outbox {
+  display: grid;
+  gap: var(--kui-space-xs);
+  margin: var(--kui-space-s);
+  border: 1px solid var(--wa-color-warning-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  padding: var(--kui-space-s);
+  background: var(--wa-color-warning-fill-quiet);
+}
+.ticket-inspector__outbox-operation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--kui-space-xs);
+}
+.ticket-inspector__outbox-operation small {
+  flex-basis: 100%;
+}
+.ticket-inspector__outbox-operation button {
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-s);
+  padding: var(--kui-space-2xs) var(--kui-space-xs);
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+  cursor: pointer;
+}
 /* Touch screens size these editors to their content instead of a stored resize height
    (textarea-sizing.css, HS2-6PC150). Same specificity as the presentation rules, so it wins by order. */
 @supports (field-sizing: content) {

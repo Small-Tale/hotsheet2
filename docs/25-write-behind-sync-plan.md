@@ -153,3 +153,32 @@ and order; this opt-in path's full-list cost must be measured before broader
 rollout. Native PATCH routes retain their existing
 synchronous behavior. Phase 3 still owns dispatch, confirmation, conflict handling,
 retry/attention states, events, and the pending-state UI.
+
+### Phase 3 Jira dispatch and pending controls (HS2-YSF8TV)
+
+When the same flag is set, the server starts a two-second dispatch loop. Each pass
+claims at most four ready operations, only the oldest unconfirmed operation for a
+ticket. Claims and states are persisted in the outbox; startup requeues a `sending`
+operation for readback before any new write. A Jira rate limit defers its connection
+until `Retry-After` or a conservative fallback, while transient errors use bounded
+backoff and enter attention after eight attempts. A manual retry opens another
+eight-attempt window. Authentication, missing tickets, and unsupported writes
+require attention.
+
+The worker reads Jira before writing. A field edit already present is confirmed
+without another PUT, including after a timed-out success. Otherwise, it rebases
+the patch onto the fresh token. The local value wins for the five admitted fields;
+overwritten remote values are retained for review. A provider acknowledgement
+that does not contain the edit enters `needs_attention`. Unsupported status,
+claim, dependency, note, and attachment operations still use their synchronous
+paths and never enter this queue.
+
+The operation-status route lists recent results and supports retry from attention
+and discard while no write is in flight. Discard reads Jira after any attempted
+send: an already applied edit is marked confirmed; otherwise local projection is
+removed. A never-sent edit can be discarded while Jira is offline. The web
+client submits eligible single and homogeneous batch Jira field edits with stable
+operation IDs, keeps the provisional ticket visible, and shows pending counts and
+states in ticket rows and the inspector. The inspector offers retry and discard
+when those transitions are available. Other providers and non-field Jira edits
+remain synchronous.

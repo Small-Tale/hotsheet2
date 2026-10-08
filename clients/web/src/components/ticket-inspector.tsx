@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide';
 
-import type { CodeReview, DuplicateBacklink, StartedPhase, TicketCloseReason } from '../api';
+import type { CodeReview, DuplicateBacklink, ProviderOutboxOperation, StartedPhase, TicketCloseReason } from '../api';
 import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
@@ -83,6 +83,8 @@ export interface TicketInspectorProps {
   latestConfidence?: number;
   /** A live claim lease: who is actively working on the ticket and its ETA progress (HS2-QKNQXC). */
   liveClaim?: LiveClaimNoticeProps;
+  /** Recent Jira write-behind states for this ticket, including confirmed history. */
+  pendingOperations?: readonly ProviderOutboxOperation[];
   duplicateTarget?: DuplicateTargetSummary;
   duplicateBacklinks?: readonly DuplicateBacklink[];
   duplicateBacklinkInaccessibleProjects?: readonly string[];
@@ -160,6 +162,7 @@ export function ticketInspectorPanel({
   closeReason,
   latestConfidence,
   liveClaim,
+  pendingOperations = [],
   duplicateTarget,
   duplicateBacklinks = [],
   duplicateBacklinkInaccessibleProjects = [],
@@ -395,6 +398,54 @@ export function ticketInspectorPanel({
   );
   const content = (
     <div class="ticket-inspector__body" data-component="ticket-inspector-body" {...identity}>
+      {activeTab === 'info' && pendingOperations.length > 0 && (
+        <section class="ticket-inspector__outbox" aria-label="Jira sync status">
+          <strong>Jira sync</strong>
+          {pendingOperations.map((operation) => (
+            <div class="ticket-inspector__outbox-operation" data-state={operation.state}>
+              <span>
+                {operation.state === 'needs_attention'
+                  ? 'Needs attention'
+                  : operation.state === 'rate_limited'
+                    ? 'Waiting for Jira rate limit'
+                    : operation.state === 'sending'
+                      ? 'Sending…'
+                      : operation.state === 'queued'
+                        ? 'Queued locally'
+                        : operation.state === 'confirmed'
+                          ? 'Confirmed by Jira'
+                          : 'Local edit discarded'}
+              </span>
+              {operation.last_error && <small>{operation.last_error}</small>}
+              {operation.conflict && (
+                <small>Remote values changed while this edit was pending; local fields take precedence.</small>
+              )}
+              {operation.state === 'needs_attention' && (
+                <button
+                  type="button"
+                  {...INSPECTOR_AND_EDITOR_ACTIONS.retryProviderOutbox.attrs}
+                  data-connection-id={operation.connection_id}
+                  data-operation-id={operation.operation_id}
+                >
+                  Retry
+                </button>
+              )}
+              {(operation.state === 'queued' ||
+                operation.state === 'rate_limited' ||
+                operation.state === 'needs_attention') && (
+                <button
+                  type="button"
+                  {...INSPECTOR_AND_EDITOR_ACTIONS.discardProviderOutbox.attrs}
+                  data-connection-id={operation.connection_id}
+                  data-operation-id={operation.operation_id}
+                >
+                  Discard local edit
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
       {activeTab === 'info' && (
         <TicketInfoPanel
           status={status}

@@ -64,6 +64,44 @@ describe('qualified checkout ticket routes (HS2-HX0VM9)', () => {
   });
 });
 
+describe('Jira outbox client contract (HS2-YSF8TV)', () => {
+  it('uses stable operation ids and provider-scoped status, retry, and discard paths', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('[]', { status: 200 }));
+    try {
+      const api = new Api('/api');
+      await api.queueProviderUpdates('jira eng', [
+        { operation_id: 'op-1', native_id: 'ENG-9', patch: { priority: 'high' } },
+      ]);
+      await api.providerOutbox('jira eng');
+      await api.retryProviderOutbox('jira eng', 'op-1');
+      await api.discardProviderOutbox('jira eng', 'op-1');
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        '/api/providers/jira%20eng/tickets/queued',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            operations: [{ operation_id: 'op-1', native_id: 'ENG-9', patch: { priority: 'high' } }],
+          }),
+        }),
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/providers/jira%20eng/outbox', expect.anything());
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        3,
+        '/api/providers/jira%20eng/outbox/op-1',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        4,
+        '/api/providers/jira%20eng/outbox/op-1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+});
+
 describe('attachment filename transport', () => {
   it('encodes macOS screenshot names as an ASCII-safe header value', () => {
     const encoded = encodeAttachmentFilename('Screenshot 2026-08-31 at 8.49.09 AM.png');

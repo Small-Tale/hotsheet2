@@ -206,6 +206,19 @@
   font-weight: 700;
   white-space: nowrap;
 }
+.ticket-list-row__pending-sync {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--wa-border-radius-pill);
+  padding: remify(2px) remify(7px);
+  color: var(--wa-color-warning-on-quiet);
+  background: var(--wa-color-warning-fill-quiet);
+  font-size: var(--wa-font-size-2xs);
+}
+.ticket-list-row__pending-sync[data-state='needs_attention'] {
+  color: var(--wa-color-danger-on-quiet);
+  background: var(--wa-color-danger-fill-quiet);
+}
 .ticket-list-row__feedback-icon {
   display: inline-flex;
   width: remify(12.8px);

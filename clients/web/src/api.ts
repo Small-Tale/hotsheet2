@@ -223,6 +223,25 @@ export interface Ticket {
   notes?: Note[];
   attachments?: Attachment[];
 }
+
+export type ProviderOutboxState = 'queued' | 'sending' | 'rate_limited' | 'needs_attention' | 'confirmed' | 'discarded';
+
+export interface ProviderOutboxOperation {
+  operation_id: string;
+  connection_id: string;
+  native_id: string;
+  state: ProviderOutboxState;
+  attempts: number;
+  next_attempt_at: number;
+  last_error?: string;
+  conflict?: Record<string, unknown>;
+}
+
+export interface QueuedProviderResult {
+  operation_id: string;
+  state: ProviderOutboxState;
+  ticket: FullTicket;
+}
 export interface CheckoutSource {
   connection_id: string;
   provider: string;
@@ -241,6 +260,8 @@ export type { TicketCloseReason } from './ticket-close';
 export type StartedPhase = 'analyzing' | 'planning' | 'working' | 'initial_testing' | 'integrating' | 'final_testing';
 export interface TicketRow {
   connection_id: string;
+  /** Durable external-provider intents still projected onto this ticket. */
+  pending_operation_ids?: string[];
   native_id: string;
   qualified_id: string;
   id: string;
@@ -787,6 +808,32 @@ export class Api {
   /** This project's own ticket-source connections; the bridge scopes the path to the checkout (HS2-SM9PM8). */
   connections = () => this.request<ProviderConnection[]>('/provider-connections');
   tickets = (id: string) => this.request<Ticket[]>(`/providers/${encodeURIComponent(id)}/tickets`);
+  queueProviderUpdates = (
+    connection: string,
+    operations: Array<{ operation_id: string; native_id: string; patch: Record<string, unknown> }>,
+  ) =>
+    this.request<QueuedProviderResult[]>(`/providers/${encodeURIComponent(connection)}/tickets/queued`, {
+      method: 'POST',
+      body: JSON.stringify({
+        operations: operations.map((item) => ({ ...item, patch: prioritiesToWire(item.patch) })),
+      }),
+    });
+  providerOutbox = (connection: string) =>
+    this.request<ProviderOutboxOperation[]>(`/providers/${encodeURIComponent(connection)}/outbox`);
+  retryProviderOutbox = (connection: string, operation: string) =>
+    this.request<ProviderOutboxOperation>(
+      `/providers/${encodeURIComponent(connection)}/outbox/${encodeURIComponent(operation)}`,
+      {
+        method: 'POST',
+      },
+    );
+  discardProviderOutbox = (connection: string, operation: string) =>
+    this.request<ProviderOutboxOperation>(
+      `/providers/${encodeURIComponent(connection)}/outbox/${encodeURIComponent(operation)}`,
+      {
+        method: 'DELETE',
+      },
+    );
   /** Create a ticket source owned by this project: the record and its checkout link in one request. */
   createConnection = (value: ProviderConnection, makeDefault = false) =>
     this.request<ProviderConnection>('/provider-connections', {

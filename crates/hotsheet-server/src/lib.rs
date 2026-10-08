@@ -21,7 +21,7 @@ pub mod multistore;
 pub mod notifications;
 mod presence;
 mod provider_overlay;
-mod provider_write_behind;
+pub mod provider_write_behind;
 pub mod repository_browser;
 pub mod source_revision;
 pub mod sync_loop;
@@ -1876,6 +1876,15 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/providers/{connection_id}/tickets/queued",
             post(provider_write_behind::queue_jira_updates),
+        )
+        .route(
+            "/providers/{connection_id}/outbox",
+            get(provider_write_behind::list_jira_operations),
+        )
+        .route(
+            "/providers/{connection_id}/outbox/{operation_id}",
+            post(provider_write_behind::retry_jira_operation)
+                .delete(provider_write_behind::discard_jira_operation),
         )
         .route(
             "/providers/{connection_id}/ai-feedback",

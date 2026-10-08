@@ -273,6 +273,8 @@ async fn main() -> Result<()> {
         state.clone(),
         hotsheet_server::sync_loop::DEFAULT_INTERVAL,
     );
+    let _jira_dispatch =
+        hotsheet_server::provider_write_behind::spawn_jira_dispatch_loop(state.clone());
 
     // Take the exclusive index-writer lock before binding — a second server on this store
     // would otherwise double-write the index (join-don't-collide, HS2-59).

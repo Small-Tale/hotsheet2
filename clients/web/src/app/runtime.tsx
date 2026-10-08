@@ -48,6 +48,7 @@ import {
   type DuplicateBacklink,
   type FullTicket,
   type PollResponse,
+  type ProviderOutboxOperation,
   type RepositoryStatus,
   revealCorruptTicketFile,
   type TerminalInfo,
@@ -409,6 +410,7 @@ export async function startHotSheetWebClient() {
     selectedProjectId = signal(''),
     tickets = signal<WireTicketRow[]>([]),
     ticketRowsByProject = signal<Record<string, WireTicketRow[]>>({}),
+    providerOutboxOperations = signal<Record<string, ProviderOutboxOperation | undefined>>({}),
     corruptTickets = signal<CorruptTicket[]>([]),
     selectedTicket = signal<FullTicket | null>(null);
   const aiFeedbackDialog = signal<AiFeedbackDialogState | undefined>(undefined);
@@ -2522,6 +2524,8 @@ export async function startHotSheetWebClient() {
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
   };
+  const pendingOperations = (ids?: string[]) =>
+    ids?.map((id) => providerOutboxOperations.value[id]).filter((item) => item !== undefined) ?? [];
   const row = (ticket: WireTicketRow): TicketRowProps => ({
     slug: ticket.slug,
     title: ticket.title,
@@ -2548,7 +2552,58 @@ export async function startHotSheetWebClient() {
     agentName: ticket.worker_label || ticket.claimed_by || 'AI',
     updatedLabel: ago(ticket.updated_at),
     latestConfidence: ticket.latest_confidence,
+    pendingOperationCount: ticket.pending_operation_ids?.length ?? 0,
+    pendingSyncState: pendingOperations(ticket.pending_operation_ids).some((item) => item.state === 'needs_attention')
+      ? 'needs_attention'
+      : pendingOperations(ticket.pending_operation_ids).some((item) => item.state === 'sending')
+        ? 'sending'
+        : pendingOperations(ticket.pending_operation_ids).some((item) => item.state === 'rate_limited')
+          ? 'rate_limited'
+          : 'queued',
   });
+
+  async function refreshProviderOutbox(current: Project) {
+    const connections =
+      defaultProviders.value[current.id]?.sources
+        .filter((source) => source.provider === 'jira')
+        .map((source) => source.connectionId) ?? [];
+    if (!connections.length) return;
+    const client = new Api(current.apiPath);
+    const results = await Promise.allSettled(connections.map((connection) => client.providerOutbox(connection)));
+    const next = { ...providerOutboxOperations.value };
+    for (const result of results)
+      if (result.status === 'fulfilled') for (const operation of result.value) next[operation.operation_id] = operation;
+    providerOutboxOperations.value = next;
+  }
+
+  async function changeProviderOutbox(connectionId: string, operationId: string, action: 'retry' | 'discard') {
+    const current = project();
+    if (!current) return;
+    const client = new Api(current.apiPath);
+    try {
+      const result =
+        action === 'retry'
+          ? await client.retryProviderOutbox(connectionId, operationId)
+          : await client.discardProviderOutbox(connectionId, operationId);
+      providerOutboxOperations.value = { ...providerOutboxOperations.value, [operationId]: result };
+      await projectTabRefresh.request(current);
+      if (selectedTicket.value?.connection_id === connectionId && selectedTicket.value.native_id === result.native_id)
+        selectedTicket.value = (await client.checkoutTicket(current.id, `${connectionId}:${result.native_id}`)).ticket;
+      showToast(
+        result.state === 'confirmed'
+          ? 'Jira already confirmed this edit.'
+          : action === 'retry'
+            ? 'Jira edit queued for retry.'
+            : 'Local edit discarded.',
+      );
+    } catch (reason) {
+      showToast(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+  const retryProviderOutbox = (connectionId: string, operationId: string) =>
+    changeProviderOutbox(connectionId, operationId, 'retry');
+  const discardProviderOutbox = (connectionId: string, operationId: string) =>
+    changeProviderOutbox(connectionId, operationId, 'discard');
 
   function projectTabTicketRows(projectId: string) {
     return projectId === selectedProjectId.value ? tickets.value : (ticketRowsByProject.value[projectId] ?? []);
@@ -3909,6 +3964,7 @@ export async function startHotSheetWebClient() {
             await Promise.all([
               refreshPermissions(),
               refreshTerminalDashboard(true, current),
+              refreshProviderOutbox(current),
               ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
             ]);
           },
@@ -3916,6 +3972,7 @@ export async function startHotSheetWebClient() {
             backgroundProjectRefresh = true;
             try {
               await projectTabRefresh.request(current);
+              await refreshProviderOutbox(current);
             } finally {
               backgroundProjectRefresh = false;
             }
@@ -4268,6 +4325,13 @@ export async function startHotSheetWebClient() {
       ),
       title: ticket.title,
       liveClaim: liveClaimNotice(ticket),
+      pendingOperations: Object.values(providerOutboxOperations.value)
+        .filter((operation): operation is ProviderOutboxOperation =>
+          Boolean(
+            operation && operation.connection_id === ticket.connection_id && operation.native_id === ticket.native_id,
+          ),
+        )
+        .slice(0, 5),
       titleEditing: titleEditingSurface.value === 'inspector',
       titleDraft: titleDraft.value,
       canUpdate: canUpdateSelected(),
@@ -5639,7 +5703,7 @@ export async function startHotSheetWebClient() {
   const interactionBindingsPort: InteractionBindingsPort = {
     openProjectPicker, openRemoteProjectDialog, chooseAndOpenProject, unhealthyServerRecovery, projectDialogOpen, openRemoteCheckout, remoteProjectDialogOpen, importHs1Project,
     chooseHs1TicketStore, hs1MigrationProject, hs1MigrationBusy, hs1SourceIdentity, project, migrationJobDetails, migrationJobs, migrationConnectionErrors,
-    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, identifyGithubAccount, signOutProviderAccount, requestUnusedAccountSourceRemoval, cancelUnusedAccountSourceRemoval, removeUnusedAccountSource, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource, setProjectSourceColor,
+    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, identifyGithubAccount, signOutProviderAccount, requestUnusedAccountSourceRemoval, cancelUnusedAccountSourceRemoval, removeUnusedAccountSource, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource, setProjectSourceColor, retryProviderOutbox, discardProviderOutbox,
     providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView, repositoryDetailActive: repositoryController.repositoryDetailActive,
     repositorySetupStep, repositorySetupError, repositoryFileMenu, repositorySelectedFiles, repositoryComparison, expandedCodeReviewCommits, loadRepositoryDetail, refreshRepositoryStatus,
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,

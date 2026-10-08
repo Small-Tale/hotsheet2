@@ -122,8 +122,17 @@ batch is accepted in one durable SQLite transaction; identical retries return th
 same intent, changed retries fail with 409, and a full queue returns 429. The route
 accepts Jira title, details, category, priority, and tags only. Direct provider and
 checkout reads overlay accepted edits before search, sort, and keyset paging. The
-existing PATCH endpoints remain synchronous. Dispatch, conflict handling, and the
-pending-state UI are the next phase; a 202 response does not mean Jira was changed.
+existing PATCH endpoints remain synchronous. With the opt-in flag set, a bounded
+server worker dispatches up to four ready Jira edits at a time, one per ticket, and
+reconciles remote state before retrying. `GET /providers/{connection_id}/outbox`
+reports recent operations as `queued`, `sending`, `rate_limited`,
+`needs_attention`, `confirmed`, or `discarded`, with attempts, retry time, last
+error, and overwritten remote values for review. `POST` on an operation's
+`/outbox/{operation_id}` path retries an attention state; `DELETE` discards local
+intent after a remote readback, or confirms it if Jira already applied the edit.
+The web client uses this route for supported Jira field edits and shows the
+pending count and operation state in ticket rows and the inspector. A 202 response
+still means durable local acceptance, not Jira confirmation.
 Successful direct-provider and checkout-scoped external ticket PATCH responses expose
 redacted `Server-Timing` phases: `provider_read` (remote version fetch),
 `provider_token` (concurrency comparison), `provider_write` (remote mutation),

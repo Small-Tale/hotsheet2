@@ -2,6 +2,7 @@ import { batch, type Signal } from 'kerfjs';
 
 import {
   Api,
+  ApiHttpError,
   type AttachmentMetadata,
   type Capabilities,
   type CheckoutTicketCounts,
@@ -499,7 +500,13 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           (await api().checkoutTicket(current.id, ticket.qualified_id)).ticket;
         // A draft typed on top of an older value must merge with what the ticket holds now, or the save would
         // silently overwrite a concurrent edit to the same field (HS2-A4XCXE).
-        const rebased = rebaseDraftPatch(patch, base);
+        const queuedFields = new Set(['title', 'details', 'category', 'priority', 'tags']);
+        let useQueue = Boolean(
+          capabilitiesFor(ticket.connection_id)?.write_behind &&
+          Object.keys(patch).length > 0 &&
+          Object.keys(patch).every((field) => queuedFields.has(field)),
+        );
+        const rebased = useQueue ? { patch, recorded: patch } : rebaseDraftPatch(patch, base);
         if (rebased.conflict) {
           if (mutationGenerations.get(slug) === generation) {
             tickets.value = tickets.value.map((item) => (item.slug === slug ? ticketRowFromFull(item, base) : item));
@@ -519,17 +526,47 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         let pending = rebased.patch,
           recorded = rebased.recorded,
           updated: FullTicket | undefined;
+        const operationId = browserRandomId();
         // Token drift from unrelated writes (an AI's notes, lease renewals) can land between a refetch and the
         // retry; rebase and retry a bounded number of times instead of failing the edit (HS2-A4XCXE).
         for (let attempt = 0; !updated; attempt += 1) {
           try {
-            updated = (
-              await api().updateCheckoutTicket(
-                current.id,
-                ticket.qualified_id,
-                base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
-              )
-            ).ticket;
+            if (useQueue) {
+              try {
+                updated = (
+                  await api().queueProviderUpdates(ticket.connection_id, [
+                    {
+                      operation_id: operationId,
+                      native_id: ticket.native_id,
+                      patch: pending,
+                    },
+                  ])
+                )[0]?.ticket;
+              } catch (reason) {
+                if (reason instanceof ApiHttpError && reason.status === 409 && reason.message.includes('unavailable')) {
+                  useQueue = false;
+                } else if (!(reason instanceof ApiHttpError)) {
+                  const accepted = (
+                    await api()
+                      .providerOutbox(ticket.connection_id)
+                      .catch(() => [])
+                  ).some((operation) => operation.operation_id === operationId);
+                  if (accepted) updated = (await api().checkoutTicket(current.id, ticket.qualified_id)).ticket;
+                  else throw reason;
+                } else {
+                  throw reason;
+                }
+              }
+            }
+            if (!updated) {
+              updated = (
+                await api().updateCheckoutTicket(
+                  current.id,
+                  ticket.qualified_id,
+                  base.concurrency_token ? { ...pending, expected_token: base.concurrency_token } : pending,
+                )
+              ).ticket;
+            }
             localTicketChangeAcknowledgements.acknowledge(current.id, {
               store: updated.connection_id,
               id: updated.id,
@@ -958,14 +995,55 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         atomic = canAtomicallyBulkUpdate(before, capabilitiesFor),
         updated: FullTicket[] = [],
         failures: Array<{ slug: string; message: string }> = [];
-      if (atomic)
+      const queuedFields = new Set(['title', 'details', 'category', 'priority', 'tags', 'expected_token']);
+      const queueConnection = before[0]?.connection_id;
+      const canQueueBatch = Boolean(
+        queueConnection &&
+        before.every((ticket) => ticket.connection_id === queueConnection) &&
+        capabilitiesFor(queueConnection)?.write_behind &&
+        requestOperations.every((operation) => Object.keys(operation.patch).every((field) => queuedFields.has(field))),
+      );
+      let queuedBatch = false;
+      if (canQueueBatch && queueConnection) {
+        const queuedOperations = requestOperations.map((operation) => {
+          const ticket = before.find((item) => item.slug === operation.slug)!;
+          const patch = Object.fromEntries(
+            Object.entries(operation.patch).filter(([field]) => field !== 'expected_token'),
+          );
+          return { operation_id: browserRandomId(), native_id: ticket.native_id, patch };
+        });
+        try {
+          const result = await client.queueProviderUpdates(queueConnection, queuedOperations);
+          updated.push(...result.map((item) => item.ticket));
+          queuedBatch = true;
+        } catch (reason) {
+          if (reason instanceof ApiHttpError && reason.status === 409 && reason.message.includes('unavailable')) {
+            // A server without the opt-in flag keeps its synchronous path.
+          } else if (!(reason instanceof ApiHttpError)) {
+            const admitted = (await client.providerOutbox(queueConnection).catch(() => [])).map(
+              (operation) => operation.operation_id,
+            );
+            if (!queuedOperations.every((operation) => admitted.includes(operation.operation_id))) throw reason;
+            updated.push(
+              ...(await Promise.all(
+                queuedOperations.map(
+                  async (operation) =>
+                    (await client.checkoutTicket(current.id, `${queueConnection}:${operation.native_id}`)).ticket,
+                ),
+              )),
+            );
+            queuedBatch = true;
+          } else throw reason;
+        }
+      }
+      if (!queuedBatch && atomic)
         updated.push(
           ...(await client.batchUpdateCheckoutTickets(
             current.id,
             requestOperations.map(({ id, patch }) => ({ id, patch })),
           )),
         );
-      else {
+      else if (!queuedBatch) {
         updateProgress = beginBulkUpdateProgress(requestOperations.length);
         for (const operation of requestOperations) {
           try {
