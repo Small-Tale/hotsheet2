@@ -1681,6 +1681,11 @@ and identity-less legacy entries remain conservatively blocking.
   atomically adds one activity note that links the attachment and lists each added, updated,
   or removed annotation with normalized percentage bounds, optional time range, and caption;
   an unchanged session performs no write and adds no note.
+  While a changed annotation or crop batch saves, the gallery keeps its edit snapshot and
+  defers a requested close or media change. If the request fails, the draft and preview stay
+  visible with Retry save and Discard changes controls. Retry sends the current draft once;
+  Discard restores the persisted attachment state. A successful retry resumes the requested
+  navigation or closes the gallery (HS2-VXCSMZ).
   For a still PNG, JPEG, or WebP attachment on a provider advertising `attachment_crop`,
   markup also offers Crop. Dragging a rectangle on the untouched original previews a crop
   measured in original image pixels. The original bytes stay stored, and one replaceable crop

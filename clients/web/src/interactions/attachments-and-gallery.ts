@@ -85,6 +85,7 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly attachmentGalleryDuration: Signal<number>;
   readonly error: Signal<string>;
   readonly attachmentGalleryMarkup: Signal<boolean>;
+  readonly attachmentGallerySaveState?: Signal<'idle' | 'saving' | 'failed'>;
   readonly attachmentGalleryCropMode: Signal<boolean>;
   readonly attachmentGalleryCrop: Signal<FullTicket['attachments'][number]['crop']>;
   readonly attachmentGalleryOriginalSize: Signal<{ width: number; height: number }>;
@@ -92,6 +93,7 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly restoreGalleryCrop: () => Promise<void>;
   readonly finishGalleryCrop: () => Promise<void>;
   readonly finishGalleryAnnotationSession: () => void;
+  readonly discardGalleryAnnotationSession?: () => void;
   readonly beginGalleryAnnotationSession: () => void;
   readonly attachmentGalleryDrawMode: Signal<boolean>;
   readonly attachmentGalleryTool: Signal<GalleryAnnotationTool>;
@@ -157,6 +159,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     attachmentGalleryDuration,
     error,
     attachmentGalleryMarkup,
+    attachmentGallerySaveState,
     attachmentGalleryCropMode,
     attachmentGalleryCrop,
     attachmentGalleryOriginalSize,
@@ -164,6 +167,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     restoreGalleryCrop,
     finishGalleryCrop,
     finishGalleryAnnotationSession,
+    discardGalleryAnnotationSession,
     beginGalleryAnnotationSession,
     attachmentGalleryDrawMode,
     attachmentGalleryTool,
@@ -737,6 +741,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
   }
   lifetime.add(
     delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryMarkup.selector, () => {
+      if (attachmentGallerySaveState?.value === 'saving') return;
       if (attachmentGalleryMarkup.value) {
         attachmentGalleryMarkup.value = false;
         finishGalleryAnnotationSession();
@@ -748,6 +753,16 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       }
       setGalleryTool('select');
       attachmentGallerySelectedAnnotation.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.retryGallerySave.selector, () => {
+      finishGalleryAnnotationSession();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.discardGallerySave.selector, () => {
+      discardGalleryAnnotationSession?.();
     }),
   );
   lifetime.add(

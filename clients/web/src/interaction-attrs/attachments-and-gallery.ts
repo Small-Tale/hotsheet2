@@ -19,6 +19,8 @@ export const ATTACHMENTS_AND_GALLERY_ACTIONS = {
   openReferencedAttachment: action('open-referenced-attachment'),
   attachmentMenuAction: action('attachment-menu-action'),
   toggleGalleryMarkup: action('toggle-gallery-markup'),
+  retryGallerySave: action('retry-gallery-save'),
+  discardGallerySave: action('discard-gallery-save'),
   toggleGalleryCrop: action('toggle-gallery-crop'),
   restoreGalleryCrop: action('restore-gallery-crop'),
   toggleGalleryDraw: action('toggle-gallery-draw'),

@@ -355,6 +355,8 @@ attachments-and-gallery	delegate	document.body	'click'	'[data-action="open-refer
 attachments-and-gallery	delegate	document.body	'contextmenu'	'[data-attachment-url]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="attachment-menu-action"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="toggle-gallery-markup"]'
+attachments-and-gallery	delegate	document.body	'click'	'[data-action="retry-gallery-save"]'
+attachments-and-gallery	delegate	document.body	'click'	'[data-action="discard-gallery-save"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="toggle-gallery-crop"]'
 attachments-and-gallery	delegate	document.body	'click'	'[data-action="restore-gallery-crop"]'
 attachments-and-gallery	delegateCapture	document.body	'pointerdown'	'[data-gallery-crop-surface="true"]'

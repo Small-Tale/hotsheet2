@@ -48,6 +48,15 @@ describe('AttachmentGallery', () => {
     expect(markup).toContain('aria-label="Restore full image"');
     expect(markup).not.toContain('aria-label="Add rectangle"');
   });
+  it('offers retry and discard controls after a failed markup save', () => {
+    const failed = String(AttachmentGallery({ images, activeUrl: '/a.png', markup: true, saveState: 'failed' }));
+    expect(failed).toContain('Markup was not saved. Retry or discard your changes.');
+    expect(failed).toContain('data-action="retry-gallery-save"');
+    expect(failed).toContain('data-action="discard-gallery-save"');
+    const saving = String(AttachmentGallery({ images, activeUrl: '/a.png', saveState: 'saving' }));
+    expect(saving).toContain('Saving markup…');
+    expect(saving).not.toContain('data-action="retry-gallery-save"');
+  });
   it('scopes the invariant inverse palette to gallery chrome without recoloring source media (HS2-1CACB4)', () => {
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.attachment-gallery \{[^}]*color-scheme: only light;/);

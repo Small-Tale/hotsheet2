@@ -109,7 +109,8 @@ export function createGalleryController(dependencies: GalleryDependencies) {
         originalSize: { width: number; height: number };
       }
     | undefined;
-  let attachmentAnnotationSave = Promise.resolve();
+  const attachmentGallerySaveState = signal<'idle' | 'saving' | 'failed'>('idle');
+  let pendingGalleryReset: { url?: string; source?: GallerySource } | undefined;
 
   let attachmentGallerySvgFrame: number | undefined, attachmentGallerySvgPreviousFrame: number | undefined;
   let attachmentGalleryLivePlayhead = 0,
@@ -198,6 +199,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
                 originalHeight: attachmentGalleryOriginalSize.value.height,
                 annotationNumberOffset,
                 markup: attachmentGalleryMarkup.value,
+                saveState: attachmentGallerySaveState.value,
                 drawMode: attachmentGalleryDrawMode.value,
                 tool: attachmentGalleryTool.value,
                 selectedAnnotation: attachmentGallerySelectedAnnotation.value,
@@ -291,7 +293,15 @@ export function createGalleryController(dependencies: GalleryDependencies) {
 
   /** Show `url` (or close without one). A `source` opens it for that ticket; shifting keeps the current one. */
   function resetAttachmentGallery(url?: string, source?: GallerySource) {
-    finishGalleryAnnotationSession();
+    if (attachmentAnnotationSession) {
+      pendingGalleryReset = { url, source };
+      if (attachmentGallerySaveState.value !== 'saving') finishGalleryAnnotationSession();
+      return;
+    }
+    performGalleryReset(url, source);
+  }
+
+  function performGalleryReset(url?: string, source?: GallerySource) {
     if (attachmentGalleryPreviewUrl.value?.startsWith('blob:')) URL.revokeObjectURL(attachmentGalleryPreviewUrl.value);
     if (!url) gallerySource.value = undefined;
     else if (source) gallerySource.value = source;
@@ -477,6 +487,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       crop: attachment.crop,
       originalSize: attachmentGalleryOriginalSize.value,
     };
+    attachmentGallerySaveState.value = 'idle';
   }
 
   async function beginGalleryCrop() {
@@ -572,15 +583,19 @@ export function createGalleryController(dependencies: GalleryDependencies) {
 
   function finishGalleryAnnotationSession() {
     const session = attachmentAnnotationSession;
-    if (!session) return;
-    attachmentAnnotationSession = undefined;
+    if (!session || attachmentGallerySaveState.value === 'saving') return;
     const annotations = attachmentGalleryAnnotations.value.map((item) => ({ ...item }));
     const crop = attachmentGalleryCrop.value,
       cropChanged = JSON.stringify(session.crop) !== JSON.stringify(crop),
       changed = JSON.stringify(session.before) !== JSON.stringify(annotations) || cropChanged;
     if (!changed) {
-      if (attachmentGalleryCropMode.value && attachmentGalleryUrl.value)
-        resetAttachmentGallery(attachmentGalleryUrl.value);
+      attachmentAnnotationSession = undefined;
+      attachmentGallerySaveState.value = 'idle';
+      const reset = pendingGalleryReset;
+      pendingGalleryReset = undefined;
+      if (reset) performGalleryReset(reset.url, reset.source);
+      else if (attachmentGalleryCropMode.value && attachmentGalleryUrl.value)
+        performGalleryReset(attachmentGalleryUrl.value);
       return;
     }
     const canonical = attachmentGalleryCropMode.value
@@ -592,9 +607,11 @@ export function createGalleryController(dependencies: GalleryDependencies) {
           session.originalSize.width,
           session.originalSize.height,
         );
-    attachmentAnnotationSave = attachmentAnnotationSave.then(async () => {
+    attachmentGallerySaveState.value = 'saving';
+    void (async () => {
+      let result;
       try {
-        const result = cropChanged
+        result = cropChanged
           ? await api().updateCheckoutAttachmentMarkup(
               session.projectId,
               session.qualifiedId,
@@ -608,21 +625,41 @@ export function createGalleryController(dependencies: GalleryDependencies) {
               session.attachmentId,
               canonical,
             );
-        const source = gallerySource.value;
-        if (source?.ticket.id === session.ticketId && source.project.id === session.projectId) {
-          gallerySource.value = { ...source, ticket: result.ticket };
-          source.update?.(result.ticket);
-        }
-        if (selectedTicket.value?.id === session.ticketId && project()?.id === session.projectId)
-          selectedTicket.value = result.ticket;
-        attachmentGalleryRevision.value++;
-        if (attachmentGalleryUrl.value && activeGalleryAttachment()?.id === session.attachmentId)
-          resetAttachmentGallery(attachmentGalleryUrl.value);
-        showToast(cropChanged ? 'Image crop saved.' : 'Annotations saved.');
       } catch (reason) {
         error.value = reason instanceof Error ? reason.message : String(reason);
+        attachmentGallerySaveState.value = 'failed';
+        attachmentGalleryMarkup.value = true;
+        return;
       }
-    });
+      const source = gallerySource.value;
+      if (source?.ticket.id === session.ticketId && source.project.id === session.projectId) {
+        gallerySource.value = { ...source, ticket: result.ticket };
+        source.update?.(result.ticket);
+      }
+      if (selectedTicket.value?.id === session.ticketId && project()?.id === session.projectId)
+        selectedTicket.value = result.ticket;
+      attachmentAnnotationSession = undefined;
+      attachmentGallerySaveState.value = 'idle';
+      error.value = '';
+      attachmentGalleryRevision.value++;
+      const reset = pendingGalleryReset;
+      pendingGalleryReset = undefined;
+      if (reset) performGalleryReset(reset.url, reset.source);
+      else if (attachmentGalleryUrl.value && activeGalleryAttachment()?.id === session.attachmentId)
+        performGalleryReset(attachmentGalleryUrl.value);
+      showToast(cropChanged ? 'Image crop saved.' : 'Annotations saved.');
+    })();
+  }
+
+  function discardGalleryAnnotationSession() {
+    if (!attachmentAnnotationSession || attachmentGallerySaveState.value === 'saving') return;
+    attachmentAnnotationSession = undefined;
+    attachmentGallerySaveState.value = 'idle';
+    error.value = '';
+    const reset = pendingGalleryReset;
+    pendingGalleryReset = undefined;
+    if (reset) performGalleryReset(reset.url, reset.source);
+    else performGalleryReset(attachmentGalleryUrl.value);
   }
 
   function shiftGallery(delta: number) {
@@ -641,6 +678,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     attachmentGalleryGeometry,
     attachmentGalleryScale,
     attachmentGalleryMarkup,
+    attachmentGallerySaveState,
     attachmentGalleryCropMode,
     attachmentGalleryCrop,
     attachmentGalleryCropAvailable,
@@ -671,6 +709,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     attachmentMenuSurfaceProps,
     beginGalleryAnnotationSession,
     finishGalleryAnnotationSession,
+    discardGalleryAnnotationSession,
     shiftGallery,
     get attachmentAnnotationGesture() {
       return attachmentAnnotationGesture;

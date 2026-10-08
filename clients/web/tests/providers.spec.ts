@@ -16861,6 +16861,40 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   expect(writes).toHaveLength(2);
 });
 
+test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ)', async ({ page }) => {
+  await mockProject(page);
+  let attempts = 0;
+  await page.route('**/attachments/A1', (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    attempts += 1;
+    return attempts === 1
+      ? route.fulfill({ status: 503, json: { error: 'Temporary save failure' } })
+      : route.fallback();
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  await gallery.getByRole('button', { name: 'Add rectangle' }).click();
+  const box = (await gallery.locator('[data-gallery-annotation-surface="true"]').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.55);
+  await page.mouse.up();
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
+  await gallery.getByRole('button', { name: 'Finish markup' }).click();
+  await expect(gallery.getByRole('alert')).toContainText('Markup was not saved');
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
+  await gallery.getByRole('button', { name: 'Retry save' }).click();
+  await expect(gallery.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('.app-toast')).toContainText('Annotations saved.');
+  expect(attempts).toBe(2);
+});
+
 test('draws all annotation tools and keeps keyboard edits in one markup batch (HS2-C46J3X)', async ({ page }) => {
   const writes: Array<{ annotations: MediaAnnotation[] }> = [];
   await mockProject(page);

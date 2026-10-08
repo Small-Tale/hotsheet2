@@ -382,6 +382,7 @@ export function AttachmentGallery({
   originalHeight = 0,
   annotationNumberOffset = 0,
   markup = false,
+  saveState = 'idle',
   selectedAnnotation,
   drawMode = false,
   tool = drawMode ? 'rect' : 'select',
@@ -407,6 +408,7 @@ export function AttachmentGallery({
   originalHeight?: number;
   annotationNumberOffset?: number;
   markup?: boolean;
+  saveState?: 'idle' | 'saving' | 'failed';
   selectedAnnotation?: string;
   drawMode?: boolean;
   tool?: GalleryAnnotationTool;
@@ -479,7 +481,7 @@ export function AttachmentGallery({
                   action="toggle-gallery-markup"
                   label={markup ? 'Finish markup' : 'Annotate media'}
                   icon={Pencil}
-                  disabled={!annotationEnabled}
+                  disabled={!annotationEnabled || saveState === 'saving'}
                   className={markup ? 'attachment-gallery__pressed' : ''}
                   count={annotations.length}
                 />
@@ -889,6 +891,23 @@ export function AttachmentGallery({
           </FloatingToolbar>
         </div>
       </footer>
+      {saveState !== 'idle' && (
+        <div class="attachment-gallery__save-banner" role={saveState === 'failed' ? 'alert' : 'status'}>
+          {saveState === 'saving' ? (
+            'Saving markup…'
+          ) : (
+            <>
+              <span>Markup was not saved. Retry or discard your changes.</span>
+              <button type="button" {...ATTACHMENTS_AND_GALLERY_ACTIONS.retryGallerySave.attrs}>
+                Retry save
+              </button>
+              <button type="button" {...ATTACHMENTS_AND_GALLERY_ACTIONS.discardGallerySave.attrs}>
+                Discard changes
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {overlay}
     </dialog>
   );

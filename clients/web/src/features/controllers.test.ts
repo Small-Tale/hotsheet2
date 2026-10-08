@@ -1,4 +1,4 @@
-import { signal } from 'kerfjs';
+import { type Signal, signal } from 'kerfjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ConversationState } from '../ai-conversation';
@@ -762,6 +762,100 @@ describe('gallery source for stacked readers (HS2-97E0QR)', () => {
     owner.finishGalleryAnnotationSession();
     for (let flush = 0; flush < 5; flush += 1) await Promise.resolve();
     expect(saved).toEqual([]);
+  });
+});
+
+describe('gallery save failure recovery (HS2-VXCSMZ)', () => {
+  const ticket = (): FullTicket => ({
+    id: 'one',
+    slug: 'HS2-ONE',
+    title: 'Gallery draft',
+    native_id: 'one',
+    qualified_id: 'git:one',
+    connection_id: 'git',
+    status: 'started',
+    up_next: false,
+    feedback_needed: false,
+    tags: [],
+    blocked_by: [],
+    claim_count: 0,
+    details: '',
+    notes: [],
+    attachments: [{ id: 'image', filename: 'image.png', created_at: '', annotations: [] }],
+  });
+  const controller = (api: Api, selectedTicket: Signal<FullTicket | null>) =>
+    createGalleryController({
+      selectedTicket,
+      project: () => project('a'),
+      api: () => api,
+      attachmentContext: () => ({ checkout: 'a', ticket: 'HS2-ONE', baseUrl: '/api/a' }),
+      showToast: vi.fn(),
+      error: signal(''),
+    });
+
+  it('keeps a failed annotation draft and pending close, then retries once', async () => {
+    const initial = ticket(),
+      selectedTicket = signal<FullTicket | null>(initial),
+      api = new Api('/api/a');
+    let rejectFirst: (error: Error) => void = () => undefined;
+    const save = vi.spyOn(api, 'updateCheckoutAttachmentAnnotations');
+    save.mockImplementationOnce(
+      () =>
+        new Promise((_, reject: (error: Error) => void) => {
+          rejectFirst = reject;
+        }),
+    );
+    save.mockImplementationOnce(async (_checkout, _ticket, _attachment, annotations) => ({
+      store: 'git',
+      ticket: { ...initial, store: 'git', attachments: [{ ...initial.attachments[0], annotations }] },
+    }));
+    const owner = controller(api, selectedTicket),
+      url = owner.galleryImages()[0].url,
+      draft = [{ id: 'mark', x: 1, y: 2, width: 3, height: 4, text: 'draft' }];
+    owner.resetAttachmentGallery(url);
+    owner.beginGalleryAnnotationSession();
+    owner.attachmentGalleryAnnotations.value = draft;
+    owner.resetAttachmentGallery();
+    expect(owner.attachmentGalleryUrl.value).toBe(url);
+    expect(owner.attachmentGallerySaveState.value).toBe('saving');
+    owner.finishGalleryAnnotationSession();
+    expect(save).toHaveBeenCalledTimes(1);
+    rejectFirst(new Error('network offline'));
+    await vi.waitFor(() => {
+      expect(owner.attachmentGallerySaveState.value).toBe('failed');
+    });
+    expect(owner.attachmentGalleryAnnotations.value).toEqual(draft);
+    expect(owner.attachmentGalleryUrl.value).toBe(url);
+    expect(selectedTicket.value).toBe(initial);
+    owner.finishGalleryAnnotationSession();
+    await vi.waitFor(() => {
+      expect(owner.attachmentGallerySaveState.value).toBe('idle');
+    });
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(selectedTicket.value?.attachments[0].annotations).toEqual(draft);
+    expect(owner.attachmentGalleryUrl.value).toBeUndefined();
+  });
+
+  it('discards a failed crop draft and restores persisted metadata', async () => {
+    const initial = ticket(),
+      selectedTicket = signal<FullTicket | null>(initial),
+      api = new Api('/api/a');
+    vi.spyOn(api, 'updateCheckoutAttachmentMarkup').mockRejectedValue(new Error('server rejected crop'));
+    const owner = controller(api, selectedTicket),
+      url = owner.galleryImages()[0].url;
+    owner.resetAttachmentGallery(url);
+    owner.beginGalleryAnnotationSession();
+    owner.attachmentGalleryCrop.value = { x: 2, y: 3, width: 10, height: 12 };
+    owner.finishGalleryAnnotationSession();
+    await vi.waitFor(() => {
+      expect(owner.attachmentGallerySaveState.value).toBe('failed');
+    });
+    expect(owner.attachmentGalleryMarkup.value).toBe(true);
+    owner.discardGalleryAnnotationSession();
+    expect(owner.attachmentGallerySaveState.value).toBe('idle');
+    expect(owner.attachmentGalleryCrop.value).toBeUndefined();
+    expect(owner.attachmentGalleryUrl.value).toBe(url);
+    expect(selectedTicket.value).toBe(initial);
   });
 });
 
