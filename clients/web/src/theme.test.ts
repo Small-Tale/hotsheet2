@@ -113,15 +113,22 @@ describe('shared client theme', () => {
       '--hs-command-gray',
       '--hs-reader-text-scale',
       '--hs-selected-row-overlap',
+      '--hs-ticket-row-content-visibility',
+      '--hs-ticket-row-intrinsic-size',
       '--hs-touch-field-min-font-size',
     ];
     const cssReferences = required.filter(
-      (token) => !token.startsWith('--hs-priority-') && token !== '--hs-category-fallback',
+      (token) =>
+        !token.startsWith('--hs-priority-') &&
+        !token.startsWith('--hs-ticket-row-') &&
+        token !== '--hs-category-fallback',
     );
 
     expect(new Set(definitions)).toEqual(new Set(required));
     expect(definitions).toHaveLength(required.length);
     expect(new Set(references)).toEqual(new Set(cssReferences));
+    expect(allCss).toContain('var(--hs-ticket-row-content-visibility,');
+    expect(allCss).toContain('var(--hs-ticket-row-intrinsic-size,');
   });
 
   it('keeps terminal initialization errors readable on the fixed dark terminal surface', () => {
