@@ -98,12 +98,12 @@
 }
 .hs-dev-review__geometry [data-kind='bounds'] {
   fill: transparent;
-  stroke: #00b9cf;
+  stroke: var(--wa-color-brand-border-loud);
   stroke-width: 1.5px;
   vector-effect: non-scaling-stroke;
 }
 .hs-dev-review__geometry [data-kind='margin'] {
-  fill: rgb(255 163 47 / 28%);
+  fill: color-mix(in srgb, var(--wa-color-warning-border-normal) 45%, transparent);
 }
 .hs-dev-review__utilities {
   position: relative;

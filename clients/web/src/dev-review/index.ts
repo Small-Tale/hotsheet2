@@ -250,7 +250,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
         '<button class="hs-dev-review__feedback" type="button" aria-pressed="true">Feedback</button><button data-action="new-ticket" type="button">New Ticket</button>';
     } else {
       const geometryButton = geometryInspection
-        ? '<button class="hs-dev-review__geometry-toggle" type="button" aria-pressed="true" title="Cyan: component bounds · Amber: positive margins · Click to hide">Geometry</button>'
+        ? '<button class="hs-dev-review__geometry-toggle" type="button" aria-pressed="true" title="Blue: component bounds · Amber: positive margins · Click to hide">Geometry</button>'
         : '';
       const geometryMenuItem =
         !geometryInspection && doc.querySelector('[data-catalog-example-stack]')

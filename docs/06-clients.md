@@ -443,7 +443,7 @@ and identity-less legacy entries remain conservatively blocking.
   attached to a directly created implementation ticket (HS2-X36S5N).
   On the UX catalog, the same disclosure offers **Inspect geometry** (HS2-WWRMFY): a
   development-only, layout-neutral overlay outlines rendered component border boxes in
-  cyan and positive margin areas in amber. It updates on catalog changes, scroll, and
+  brand blue and positive margin areas in warning amber. It updates on catalog changes, scroll, and
   resize, and excludes composition entries whose children own their separate geometry.
   The pressed Geometry button turns it off; feedback capture and CSS Live Edit turn it
   off automatically. Automatic render-storm reporting remains suppressed while
