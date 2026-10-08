@@ -8148,7 +8148,9 @@ test('clicks exact feedback character positions, removes a split, and composes a
     );
 });
 
-test('selects feedback choices with platform modifiers and preserves a freeform response', async ({ page }) => {
+test('selects feedback choices with platform modifiers and preserves a freeform response @ci-smoke', async ({
+  page,
+}) => {
   const patches = await mockProject(page, true, 'choices');
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -8175,7 +8177,7 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
     'The two options can be combined.',
   );
   await expect(page.getByRole('dialog').getByText('Resolve note conflict')).toHaveCount(0);
-  await note.screenshot({ path: '/private/tmp/hs2-6eeeqb-feedback-choices.png' });
+  await note.screenshot({ path: test.info().outputPath('hs2-6eeeqb-feedback-choices.png') });
   await note.getByRole('button', { name: 'Respond' }).click();
   await expect
     .poll(() => patches.find((patch) => patch.note_kind === 'regular')?.note)
@@ -14659,7 +14661,9 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-readonly.png');
 });
 
-test('keeps an open inspector status popup at its trigger after its anchor is morphed away', async ({ page }) => {
+test('keeps an open inspector status popup at its trigger after its anchor is morphed away @ci-smoke', async ({
+  page,
+}) => {
   await mockProject(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
