@@ -28,14 +28,14 @@ Restore Original makes every hidden annotation visible again without rounding dr
   crop, with a cache key that includes the original digest and rectangle; a new crop
   therefore cannot expose stale pixels. Response content type and filename must match
   the encoded rendition. The original route is never substituted for a download.
-- Crop supports still PNG, JPEG, WebP, AVIF, BMP, and ICO; animated PNG, GIF, and WebP; and SVG with explicit
-  pixel dimensions and a valid viewBox. PNG, GIF, and WebP retain every displayed frame, timing,
-  and repeat count. SVG remains vector markup, including animation elements. Animated
-  AVIF, video, and formats without a matching rendition encoder remain unavailable. Decoding
-  failure leaves both metadata and bytes unchanged and returns a useful error.
+- Crop supports still PNG, JPEG, WebP, AVIF, BMP, and ICO; animated PNG, GIF, WebP, and AVIF;
+  and SVG with explicit pixel dimensions and a valid viewBox. Animated crops retain every
+  displayed frame, timing, and repeat count. SVG remains vector markup, including animation
+  elements. Animated AVIF crops currently require at least 16 pixels per side (HS2-QRHB5F).
+  Video and formats without a matching rendition encoder remain unavailable. Decoding or
+  encoding failure leaves both metadata and bytes unchanged and returns a useful error.
   ICO crops retain each source resolution, scaling the crop rectangle to each entry and
   encoding the result as 32-bit RGBA PNG within the ICO for reliable transparency.
-  Animated AVIF sequence support is tracked by HS2-YCV2G9.
 
 ## Readers and providers
 

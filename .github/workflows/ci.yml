@@ -68,6 +68,7 @@ jobs:
       - name: Install the AVIF decoder for the native build
         shell: pwsh
         run: |
+          python -m pip install meson ninja
           $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
           & $vcpkg install dav1d:x64-windows-static-md pkgconf:x64-windows
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -111,7 +112,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Install the AVIF decoder
-        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev
+        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake
 
       - name: Format
         run: cargo fmt --all --check
@@ -231,7 +232,7 @@ jobs:
           tool: cargo-llvm-cov,nextest
 
       - name: Install the AVIF decoder
-        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev
+        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake
 
       - name: Collect Rust coverage
         # `-D warnings` breaks coverage instrumentation builds; unset it here. `--no-report`

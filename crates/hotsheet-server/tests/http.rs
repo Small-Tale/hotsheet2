@@ -6484,6 +6484,11 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
         ("moving.png", "image/png", apng),
         ("vector.svg", "image/svg+xml", svg),
         ("still.avif", "image/avif", avif.into_inner()),
+        (
+            "moving.avif",
+            "image/avif",
+            include_bytes!("fixtures/animated-crop.avif").to_vec(),
+        ),
         ("still.bmp", "image/bmp", still_fixture(ImageFormat::Bmp)),
         ("icon.ico", "image/x-icon", ico),
     ];
@@ -6537,13 +6542,25 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
         let attached = body_json(uploaded).await;
         let attachment_id = attached["attachments"][0]["id"].as_str().unwrap();
         let url = format!("/checkouts/formats/tickets/{id}/attachments/{attachment_id}");
+        let (first_crop, first_dimensions, second_crop, second_dimensions) =
+            if filename == "moving.avif" {
+                (
+                    r#"{"crop":{"x":4,"y":3,"width":20,"height":16},"annotations":[]}"#,
+                    (20, 16),
+                    r#"{"crop":{"x":8,"y":4,"width":16,"height":16},"annotations":[]}"#,
+                    (16, 16),
+                )
+            } else {
+                (
+                    r#"{"crop":{"x":4,"y":3,"width":10,"height":8},"annotations":[]}"#,
+                    (10, 8),
+                    r#"{"crop":{"x":8,"y":4,"width":8,"height":8},"annotations":[]}"#,
+                    (8, 8),
+                )
+            };
         let changed = app
             .clone()
-            .oneshot(authed(
-                "PUT",
-                &format!("{url}/markup"),
-                Some(r#"{"crop":{"x":4,"y":3,"width":10,"height":8},"annotations":[]}"#),
-            ))
+            .oneshot(authed("PUT", &format!("{url}/markup"), Some(first_crop)))
             .await
             .unwrap();
         assert_eq!(changed.status(), StatusCode::OK, "{filename}");
@@ -6566,7 +6583,7 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
         let bytes = rendition.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(
             hotsheet_ticketing::image_crop::original_dimensions(filename, &bytes).unwrap(),
-            (10, 8),
+            first_dimensions,
             "{filename}"
         );
         if filename.ends_with(".gif") {
@@ -6607,6 +6624,30 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
             assert_eq!((bytes[22], bytes[23]), (10, 8));
             assert_eq!(u16::from_le_bytes(bytes[12..14].try_into().unwrap()), 32);
             assert_eq!(u16::from_le_bytes(bytes[28..30].try_into().unwrap()), 32);
+        } else if filename == "moving.avif" {
+            assert_eq!(&bytes[8..12], b"avis");
+            assert_ne!(bytes.as_ref(), original);
+            let too_small = app
+                .clone()
+                .oneshot(authed(
+                    "PUT",
+                    &format!("{url}/markup"),
+                    Some(r#"{"crop":{"x":4,"y":3,"width":8,"height":8},"annotations":[]}"#),
+                ))
+                .await
+                .unwrap();
+            assert_eq!(too_small.status(), StatusCode::BAD_REQUEST);
+            let after_rejection = app
+                .clone()
+                .oneshot(authed("GET", &url, None))
+                .await
+                .unwrap()
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes();
+            assert_eq!(after_rejection, bytes);
         }
         let original_response = app
             .clone()
@@ -6626,11 +6667,7 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
         );
         let recropped = app
             .clone()
-            .oneshot(authed(
-                "PUT",
-                &format!("{url}/markup"),
-                Some(r#"{"crop":{"x":8,"y":4,"width":8,"height":8},"annotations":[]}"#),
-            ))
+            .oneshot(authed("PUT", &format!("{url}/markup"), Some(second_crop)))
             .await
             .unwrap();
         assert_eq!(recropped.status(), StatusCode::OK, "{filename}");
@@ -6646,7 +6683,7 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
             .to_bytes();
         assert_eq!(
             hotsheet_ticketing::image_crop::original_dimensions(filename, &recropped).unwrap(),
-            (8, 8),
+            second_dimensions,
             "{filename}"
         );
         let restored = app

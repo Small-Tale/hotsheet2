@@ -1,5 +1,7 @@
 //! Non-destructive image renditions. Attachment payloads remain the original bytes.
 
+mod avif_animation;
+
 use std::io::Cursor;
 
 use hotsheet_model::ImageCrop;
@@ -30,6 +32,8 @@ pub enum ImageCropError {
     UnsupportedFormat,
     #[error("this image animation cannot be cropped without losing frames")]
     UnsupportedAnimation,
+    #[error("animated AVIF crops must be at least 16 × 16 pixels")]
+    AvifCropTooSmall,
     #[error("image is too large to crop")]
     TooLarge,
     #[error("a crop must be at least 8 × 8 pixels and inside the original image")]
@@ -40,6 +44,8 @@ pub enum ImageCropError {
     Webp(#[from] webp_animation::Error),
     #[error("animated PNG could not be encoded: {0}")]
     Png(#[from] png::EncodingError),
+    #[error("AVIF animation could not be decoded or encoded: {0}")]
+    Avif(String),
     #[error("SVG needs explicit pixel dimensions and a valid viewBox")]
     InvalidSvg,
 }
@@ -234,11 +240,11 @@ fn supported_format(filename: &str, bytes: &[u8]) -> Result<ImageFormat, ImageCr
         "ico" => ImageFormat::Ico,
         _ => return Err(ImageCropError::UnsupportedFormat),
     };
+    if expected == ImageFormat::Avif && animated_avif(bytes) {
+        return Ok(expected);
+    }
     if image::guess_format(bytes).ok() != Some(expected) {
         return Err(ImageCropError::UnsupportedFormat);
-    }
-    if expected == ImageFormat::Avif && animated_avif(bytes) {
-        return Err(ImageCropError::UnsupportedAnimation);
     }
     Ok(expected)
 }
@@ -439,7 +445,9 @@ pub fn original_dimensions(filename: &str, bytes: &[u8]) -> Result<(u32, u32), I
         return Ok(svg_viewport(bytes)?.dimensions);
     }
     let format = supported_format(filename, bytes)?;
-    let dimensions = if format == ImageFormat::Gif {
+    let dimensions = if format == ImageFormat::Avif && animated_avif(bytes) {
+        avif_animation::dimensions(bytes)?
+    } else if format == ImageFormat::Gif {
         GifDecoder::new(Cursor::new(bytes))?.dimensions()
     } else if format == ImageFormat::Png && animated_png(bytes) {
         PngDecoder::new(Cursor::new(bytes))?.dimensions()
@@ -464,7 +472,8 @@ pub fn validate_rendition(
         return Ok(());
     }
     let format = supported_format(filename, bytes)?;
-    if format == ImageFormat::Ico
+    if (format == ImageFormat::Avif && animated_avif(bytes))
+        || format == ImageFormat::Ico
         || format == ImageFormat::Gif
         || (format == ImageFormat::Png && animated_png(bytes))
         || (format == ImageFormat::WebP && animated_webp(bytes))
@@ -709,6 +718,9 @@ pub fn cropped_rendition(
     }
     if format == ImageFormat::WebP && animated_webp(original) {
         return crop_animated_webp(original, crop);
+    }
+    if format == ImageFormat::Avif && animated_avif(original) {
+        return avif_animation::crop(original, crop);
     }
     if format == ImageFormat::Ico {
         return crop_ico(original, crop, dimensions);
