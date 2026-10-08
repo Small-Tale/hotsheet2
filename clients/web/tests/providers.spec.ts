@@ -2635,7 +2635,7 @@ test('opens the native folder chooser directly from Add project and only onboard
 
 test('changes a project source color and updates card and inspector badges (HS2-068Q55) @ci-smoke', async ({
   page,
-}) => {
+}, testInfo) => {
   await mockProject(page);
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -2651,7 +2651,7 @@ test('changes a project source color and updates card and inspector badges (HS2-
   await expect(appearance).toContainText('Location');
   await expect(appearance.locator('[data-component="ticket-source-color-picker"]')).toBeVisible();
   await page.screenshot({
-    path: '/private/tmp/hs2-xkehak-source-dialog.png',
+    path: testInfo.outputPath('hs2-xkehak-source-dialog.png'),
     animations: 'disabled',
   });
   await expect(
