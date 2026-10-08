@@ -8,8 +8,8 @@ use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Tim
 use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
-    ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderPatch,
-    ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
+    ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderMutationTiming,
+    ProviderPatch, ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
     checkout_order::MergeKey, compare_provider_tickets, filter_provider_ticket_page,
     keyset_page_from_native_pages, keyset_page_from_rows, provider_text_matches, unbounded_query,
 };
@@ -977,9 +977,20 @@ impl TicketProvider for GitHubProvider {
     fn update(
         &self,
         native_id: &str,
-        _now: Timestamp,
+        now: Timestamp,
         patch: ProviderPatch,
     ) -> Result<ApiTicket, ProviderError> {
+        self.update_timed(native_id, now, patch)
+            .map(|(ticket, _)| ticket)
+    }
+
+    fn update_timed(
+        &self,
+        native_id: &str,
+        _now: Timestamp,
+        patch: ProviderPatch,
+    ) -> Result<(ApiTicket, ProviderMutationTiming), ProviderError> {
+        let mut timing = ProviderMutationTiming::default();
         validate_number(native_id)?;
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
@@ -993,7 +1004,10 @@ impl TicketProvider for GitHubProvider {
                 capability: "dependencies",
             });
         }
+        let read_started = Instant::now();
         let current = self.issue(native_id)?;
+        timing.remote_read = read_started.elapsed();
+        let token_started = Instant::now();
         if patch
             .expected_token
             .as_deref()
@@ -1004,6 +1018,7 @@ impl TicketProvider for GitHubProvider {
                 message: "issue changed since it was read".into(),
             });
         }
+        timing.token_check = token_started.elapsed();
         let current_ticket = self.api_ticket(current.clone(), vec![]);
         let category = patch.category.unwrap_or(current_ticket.category);
         let priority = patch.priority.unwrap_or(current_ticket.priority);
@@ -1051,13 +1066,18 @@ impl TicketProvider for GitHubProvider {
         if let Some(reason) = close_reason {
             payload["state_reason"] = json!(github_state_reason(reason));
         }
+        let write_started = Instant::now();
         let response = self.request(
             "PATCH",
             &self.endpoint(&format!("issues/{native_id}")),
             Some(&payload),
         )?;
+        timing.remote_write = write_started.elapsed();
+        let ack_started = Instant::now();
         let issue: GitHubIssue = self.json(response)?;
-        Ok(self.api_ticket(issue, vec![]))
+        let ticket = self.api_ticket(issue, vec![]);
+        timing.acknowledgement = ack_started.elapsed();
+        Ok((ticket, timing))
     }
 
     fn add_note(
@@ -1757,12 +1777,63 @@ mod tests {
         }
     }
 
+    struct DelayedTransport {
+        inner: Arc<FakeTransport>,
+        read_delay: Duration,
+        write_delay: Duration,
+    }
+
+    impl GitHubTransport for DelayedTransport {
+        fn request(
+            &self,
+            method: &str,
+            url: &str,
+            headers: &[(&str, String)],
+            body: Option<&Value>,
+        ) -> Result<HttpResponse, String> {
+            std::thread::sleep(if method == "GET" {
+                self.read_delay
+            } else {
+                self.write_delay
+            });
+            self.inner.request(method, url, headers, body)
+        }
+    }
+
     fn response(status: u16, body: Value) -> HttpResponse {
         HttpResponse {
             status,
             headers: HashMap::new(),
             body: body.to_string(),
         }
+    }
+
+    #[test]
+    fn timed_update_separates_remote_read_token_write_and_acknowledgement() {
+        let inner = FakeTransport::with(vec![
+            response(200, issue(42, "before", "details")),
+            response(200, issue(42, "after", "details")),
+        ]);
+        let github = provider(Arc::new(DelayedTransport {
+            inner,
+            read_delay: Duration::from_millis(3),
+            write_delay: Duration::from_millis(5),
+        }));
+        let (ticket, timing) = github
+            .update_timed(
+                "42",
+                Timestamp::new("2026-10-08T00:00:00Z"),
+                ProviderPatch {
+                    title: Some("after".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(ticket.title, "after");
+        assert!(timing.remote_read >= Duration::from_millis(3));
+        assert!(timing.remote_write >= Duration::from_millis(5));
+        assert!(timing.token_check <= timing.remote_read);
+        assert_eq!(timing.queue_wait, Duration::ZERO);
     }
 
     fn issue(number: u64, title: &str, body: &str) -> Value {

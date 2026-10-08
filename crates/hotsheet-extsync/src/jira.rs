@@ -1,11 +1,12 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
 use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
-    ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderPatch,
-    ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
+    ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderMutationTiming,
+    ProviderPatch, ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
     checkout_order::MergeKey, compare_provider_tickets, filter_provider_ticket_page,
     keyset_page_from_native_pages, keyset_page_from_rows, provider_text_matches, unbounded_query,
 };
@@ -639,16 +640,30 @@ impl TicketProvider for JiraProvider {
     fn update(
         &self,
         native_id: &str,
-        _: Timestamp,
+        now: Timestamp,
         patch: ProviderPatch,
     ) -> Result<ApiTicket, ProviderError> {
+        self.update_timed(native_id, now, patch)
+            .map(|(ticket, _)| ticket)
+    }
+
+    fn update_timed(
+        &self,
+        native_id: &str,
+        _: Timestamp,
+        patch: ProviderPatch,
+    ) -> Result<(ApiTicket, ProviderMutationTiming), ProviderError> {
+        let mut timing = ProviderMutationTiming::default();
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
         }
         if patch.started_phase.is_some() {
             return self.unsupported("started_phase");
         }
+        let read_started = Instant::now();
         let current = self.issue(native_id)?;
+        timing.remote_read = read_started.elapsed();
+        let token_started = Instant::now();
         if patch
             .expected_token
             .as_deref()
@@ -659,6 +674,7 @@ impl TicketProvider for JiraProvider {
                 message: "issue changed since it was read".into(),
             });
         }
+        timing.token_check = token_started.elapsed();
         if patch.status.is_some() {
             return self.unsupported("status transitions");
         }
@@ -683,12 +699,17 @@ impl TicketProvider for JiraProvider {
             "priority":{"name":priority_name(patch.priority.unwrap_or_else(||current.fields.priority.as_ref().and_then(|value|parse_priority(&value.name)).unwrap_or_default()))},
             "labels":patch.tags.unwrap_or(current.fields.labels)
         });
+        let write_started = Instant::now();
         self.request(
             "PUT",
             &self.endpoint(&format!("issue/{native_id}")),
             Some(&json!({"fields":fields})),
         )?;
-        self.get(native_id)
+        timing.remote_write = write_started.elapsed();
+        let ack_started = Instant::now();
+        let ticket = self.get(native_id)?;
+        timing.acknowledgement = ack_started.elapsed();
+        Ok((ticket, timing))
     }
 
     fn add_note(

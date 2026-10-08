@@ -113,6 +113,12 @@ and provider-specific durable metadata. The built-in compatibility fallback may 
 a provider query, but GitHub, GitLab, and Jira implement the bounded contract directly.
 The [write-behind proposal](25-write-behind-sync-plan.md) specifies a future durable
 pending-intent overlay for slow providers; current external mutations remain synchronous.
+Successful direct-provider and checkout-scoped external ticket PATCH responses expose
+redacted `Server-Timing` phases: `provider_read` (remote version fetch),
+`provider_token` (concurrency comparison), `provider_write` (remote mutation),
+`provider_ack` (response decoding or readback), `provider_queue` (zero until a durable
+queue exists), and `provider_total` (host handling). Only numeric durations are sent;
+credentials, URLs, ticket content, and native identities are absent (HS2-ZHN7XS).
 
 ## 16.5 Default git provider
 

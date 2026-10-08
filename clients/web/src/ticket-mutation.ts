@@ -23,10 +23,12 @@ export function ticketRowFromFull(previous: TicketRow, ticket: FullTicket): Tick
 }
 
 export interface MutationTiming {
-  slug: string;
+  slug?: string;
+  count?: number;
   optimistic_ms: number;
   request_ms: number;
-  outcome: 'committed' | 'rolled_back' | 'stale';
+  queue_ms?: number;
+  outcome: 'committed' | 'partial' | 'rolled_back' | 'stale';
 }
 
 export function reportMutationTiming(timing: MutationTiming): void {

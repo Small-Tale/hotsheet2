@@ -1,11 +1,12 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
 use hotsheet_ticketing::ops::NoteMetadataInput;
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
-    ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderPatch,
-    ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
+    ProviderDescriptor, ProviderDraft, ProviderError, ProviderKeysetPage, ProviderMutationTiming,
+    ProviderPatch, ProviderTicketPage, ProviderTicketSummary, SortKey, TicketProvider, TicketQuery,
     checkout_order::MergeKey, compare_provider_tickets, filter_provider_ticket_page,
     keyset_page_from_native_pages, keyset_page_from_rows, provider_text_matches, unbounded_query,
 };
@@ -632,16 +633,30 @@ impl TicketProvider for GitLabProvider {
     fn update(
         &self,
         native_id: &str,
-        _: Timestamp,
+        now: Timestamp,
         patch: ProviderPatch,
     ) -> Result<ApiTicket, ProviderError> {
+        self.update_timed(native_id, now, patch)
+            .map(|(ticket, _)| ticket)
+    }
+
+    fn update_timed(
+        &self,
+        native_id: &str,
+        _: Timestamp,
+        patch: ProviderPatch,
+    ) -> Result<(ApiTicket, ProviderMutationTiming), ProviderError> {
+        let mut timing = ProviderMutationTiming::default();
         if patch.blocked_reason.is_some() {
             return self.unsupported("blocked_reason");
         }
         if patch.started_phase.is_some() {
             return self.unsupported("started_phase");
         }
+        let read_started = Instant::now();
         let current = self.issue(native_id)?;
+        timing.remote_read = read_started.elapsed();
+        let token_started = Instant::now();
         if patch
             .expected_token
             .as_deref()
@@ -652,6 +667,7 @@ impl TicketProvider for GitLabProvider {
                 message: "issue changed since it was read".into(),
             });
         }
+        timing.token_check = token_started.elapsed();
         if patch
             .blocked_by
             .as_ref()
@@ -672,12 +688,17 @@ impl TicketProvider for GitLabProvider {
         {
             description.push_str(&suffix);
         }
+        let write_started = Instant::now();
         let response = self.request("PUT", &self.endpoint(&format!("issues/{native_id}")), Some(&json!({
             "title":patch.title.unwrap_or(current.title), "description":description,
             "labels":mapped_labels(&category, priority, &tags, Some(status)).join(","),
             "state_event": if matches!(status, Status::Completed | Status::Verified | Status::Archive | Status::Deleted) { "close" } else { "reopen" }
         })))?;
-        Ok(self.ticket(self.json(response)?, vec![]))
+        timing.remote_write = write_started.elapsed();
+        let ack_started = Instant::now();
+        let ticket = self.ticket(self.json(response)?, vec![]);
+        timing.acknowledgement = ack_started.elapsed();
+        Ok((ticket, timing))
     }
 
     fn add_note(

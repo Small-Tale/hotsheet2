@@ -487,7 +487,9 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     finishTiming();
     // Serialize the network section per ticket so the user's own rapid sequential edits each base off the
     // previous edit's committed token (last-write-wins) instead of self-conflicting (HS2-K9SG2R).
+    const queuedAt = performance.now();
     return singleTicketMutationSequencer.enqueue(slug, async () => {
+      const queueWait = performance.now() - queuedAt;
       try {
         // Base off the last edit this client committed for the ticket (its up-to-date token), falling back to
         // the pre-edit selection or a fresh fetch. A real external write still fails the token check below.
@@ -508,6 +510,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
               slug,
               optimistic_ms: optimistic,
               request_ms: performance.now() - started,
+              queue_ms: queueWait,
               outcome: 'rolled_back',
             });
           }
@@ -546,7 +549,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             const conflict = reconciled.conflicts[0];
             // prettier-ignore
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-            if(conflict){showFieldConflict(conflict);reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,outcome:'rolled_back'});return false}
+            if(conflict){showFieldConflict(conflict);reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,queue_ms:queueWait,outcome:'rolled_back'});return false}
             recorded = { ...recorded, ...adoptMergedDrafts(pending, reconciled.retry) };
             if (Object.keys(reconciled.retry).length === 0) updated = remote;
             else {
@@ -563,6 +566,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             slug,
             optimistic_ms: optimistic,
             request_ms: performance.now() - started,
+            queue_ms: queueWait,
             outcome: 'stale',
           });
           return true;
@@ -576,6 +580,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           slug,
           optimistic_ms: optimistic,
           request_ms: performance.now() - started,
+          queue_ms: queueWait,
           outcome: 'committed',
         });
         return true;
@@ -589,6 +594,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             slug,
             optimistic_ms: optimistic,
             request_ms: performance.now() - started,
+            queue_ms: queueWait,
             outcome: 'rolled_back',
           });
         }
@@ -902,6 +908,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
   }
   async function applyBulkOperations(current: Project, operations: BulkOperation[]): Promise<BulkApplyResult> {
     if (operations.length === 0) return { complete: false, succeeded: new Set<string>() };
+    const projectionStarted = performance.now();
     const finishTiming = beginInteractionTiming('bulk-ticket-change', {
         count: operations.length,
         project: current.id,
@@ -934,6 +941,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       }
     });
     finishTiming();
+    const projectionMs = performance.now() - projectionStarted,
+      requestStarted = performance.now();
     let updateProgress: BulkUpdateHandle | undefined;
     try {
       const client = new Api(current.apiPath),
@@ -1007,6 +1016,12 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         : '';
       if (failure) reportBulkFailure(current, failure);
       else if (project()?.id === current.id) error.value = '';
+      reportMutationTiming({
+        count: operations.length,
+        optimistic_ms: projectionMs,
+        request_ms: performance.now() - requestStarted,
+        outcome: failures.length ? 'partial' : 'committed',
+      });
       return { complete: failures.length === 0, succeeded };
     } catch (reason) {
       suppressBulkTicketMotion(operations.length);
@@ -1020,6 +1035,12 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           selectedTicket.value = selectedBefore;
       });
       reportBulkFailure(current, reason instanceof Error ? reason.message : String(reason));
+      reportMutationTiming({
+        count: operations.length,
+        optimistic_ms: projectionMs,
+        request_ms: performance.now() - requestStarted,
+        outcome: 'rolled_back',
+      });
       return { complete: false, succeeded: new Set<string>() };
     } finally {
       updateProgress?.finish();

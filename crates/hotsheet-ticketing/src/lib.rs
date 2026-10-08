@@ -59,11 +59,11 @@ pub use provider::{
     AiFeedbackRecord, GitProvider, MutationContext, NotWorkingReport, ProjectTicketRef,
     ProviderCapabilities, ProviderConfigRegistry, ProviderConnection, ProviderDescriptor,
     ProviderDraft, ProviderError, ProviderEvidence, ProviderKeysetItem, ProviderKeysetPage,
-    ProviderPatch, ProviderRegistry, ProviderTicketPage, ProviderTicketSummary, TicketProvider,
-    TicketRef, TransferError, TransferOutcome, TransferProvenance, compare_provider_tickets,
-    copy_between, filter_provider_ticket_page, generate_connection_id, git_connection_id,
-    keyset_page_from_native_pages, keyset_page_from_rows, move_between, provider_text_matches,
-    unbounded_query,
+    ProviderMutationTiming, ProviderPatch, ProviderRegistry, ProviderTicketPage,
+    ProviderTicketSummary, TicketProvider, TicketRef, TransferError, TransferOutcome,
+    TransferProvenance, compare_provider_tickets, copy_between, filter_provider_ticket_page,
+    generate_connection_id, git_connection_id, keyset_page_from_native_pages,
+    keyset_page_from_rows, move_between, provider_text_matches, unbounded_query,
 };
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};

@@ -56,9 +56,9 @@ use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, NotWorkingReport, OpError,
     OsKeychain, ProjectTicketRef, ProviderConfigRegistry, ProviderConnection, ProviderDraft,
-    ProviderEvidence, ProviderPatch, ProviderRegistry, STORE_METADATA_FILE, Settings, SortKey,
-    StoreError, StoreRegistry, TicketPatch, TicketQuery, TicketRef, auto_context, copy_between,
-    move_between, ops,
+    ProviderEvidence, ProviderMutationTiming, ProviderPatch, ProviderRegistry, STORE_METADATA_FILE,
+    Settings, SortKey, StoreError, StoreRegistry, TicketPatch, TicketQuery, TicketRef,
+    auto_context, copy_between, move_between, ops,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -3625,8 +3625,13 @@ async fn update_provider_ticket(
     State(state): State<AppState>,
     Path((connection_id, id)): Path<(String, String)>,
     Json(req): Json<UpdateReq>,
-) -> Result<Json<ApiTicket>, ApiError> {
-    Ok(Json(do_provider_update(&state, &connection_id, &id, req)?))
+) -> Result<(HeaderMap, Json<ApiTicket>), ApiError> {
+    let started = Instant::now();
+    let (ticket, timing) = do_provider_update(&state, &connection_id, &id, req)?;
+    Ok((
+        provider_timing_headers(timing, started.elapsed()),
+        Json(ticket),
+    ))
 }
 
 /// A provider-scoped source ledger. Unsupported connections fail explicitly so a
@@ -3728,7 +3733,7 @@ fn do_provider_update(
     connection_id: &str,
     id: &str,
     req: UpdateReq,
-) -> Result<ApiTicket, ApiError> {
+) -> Result<(ApiTicket, ProviderMutationTiming), ApiError> {
     if let Some(feedback) = req.ai_feedback.clone() {
         req.validate_feedback_only()?;
         let provider = provider_for(state, connection_id)?;
@@ -3747,7 +3752,7 @@ fn do_provider_update(
                 _ => provider_transfer_error(error),
             })?;
         reindex_hosted_provider_write(state, connection_id, id);
-        return Ok(ticket);
+        return Ok((ticket, ProviderMutationTiming::default()));
     }
     let provider = provider_for(state, connection_id)?;
     if req.note_id.is_some() && !provider.supports_note_edit() {
@@ -3803,8 +3808,8 @@ fn do_provider_update(
     let note_id = req.note_id.clone();
     let note_kind = req.note_kind.unwrap_or(NoteKind::Regular);
     let note_summary = req.note_summary.clone();
-    let mut ticket = provider
-        .update(
+    let (mut ticket, timing) = provider
+        .update_timed(
             id,
             timestamp.clone(),
             ProviderPatch {
@@ -3866,7 +3871,26 @@ fn do_provider_update(
         _ => {}
     }
     reindex_hosted_provider_write(state, connection_id, id);
-    Ok(ticket)
+    Ok((ticket, timing))
+}
+
+fn provider_timing_headers(timing: ProviderMutationTiming, total: Duration) -> HeaderMap {
+    let ms = |duration: Duration| duration.as_secs_f64() * 1000.0;
+    let value = format!(
+        "provider_read;dur={:.1}, provider_token;dur={:.1}, provider_write;dur={:.1}, provider_ack;dur={:.1}, provider_queue;dur={:.1}, provider_total;dur={:.1}",
+        ms(timing.remote_read),
+        ms(timing.token_check),
+        ms(timing.remote_write),
+        ms(timing.acknowledgement),
+        ms(timing.queue_wait),
+        ms(total),
+    );
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "server-timing",
+        axum::http::HeaderValue::from_str(&value).expect("numeric provider timing"),
+    );
+    headers
 }
 
 /// A provider-route write to a hosted git store reindexes and broadcasts the ticket at
@@ -5958,17 +5982,19 @@ async fn update_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
     Json(req): Json<UpdateReq>,
-) -> Result<Json<ResolvedTicket>, ApiError> {
+) -> Result<(HeaderMap, Json<ResolvedTicket>), ApiError> {
+    let started = Instant::now();
     let (_, settings) = checkout_settings(&state, &reference)?;
     let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
     if source.provider != "git" {
-        return Ok(Json(ResolvedTicket {
-            store: source.connection_id.clone(),
-            ticket: contextualize_api_ticket(
-                do_provider_update(&state, &source.connection_id, &native_id, req)?,
-                &settings,
-            )?,
-        }));
+        let (ticket, timing) = do_provider_update(&state, &source.connection_id, &native_id, req)?;
+        return Ok((
+            provider_timing_headers(timing, started.elapsed()),
+            Json(ResolvedTicket {
+                store: source.connection_id.clone(),
+                ticket: contextualize_api_ticket(ticket, &settings)?,
+            }),
+        ));
     }
     let entry = state.hosted_source(&source).ok_or_else(|| {
         ApiError::new(
@@ -5976,10 +6002,16 @@ async fn update_checkout_ticket(
             "checkout links an unhosted git source",
         )
     })?;
-    Ok(Json(ResolvedTicket {
-        store: multistore::store_url_id(&entry.store),
-        ticket: contextualize_api_ticket(do_update(&state, &entry, &native_id, req)?, &settings)?,
-    }))
+    Ok((
+        HeaderMap::new(),
+        Json(ResolvedTicket {
+            store: multistore::store_url_id(&entry.store),
+            ticket: contextualize_api_ticket(
+                do_update(&state, &entry, &native_id, req)?,
+                &settings,
+            )?,
+        }),
+    ))
 }
 
 #[derive(Deserialize)]

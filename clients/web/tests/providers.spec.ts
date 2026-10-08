@@ -20753,7 +20753,7 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   expect(mutationRequests.filter((value) => value.includes('/tickets/'))).toEqual([]);
 });
 
-test('shows non-atomic provider updates in the app loading indicator (HS2-TPF3EB)', async ({ page }) => {
+test('shows non-atomic provider updates in the app loading indicator (HS2-TPF3EB) @ci-smoke', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 0, 400, false, 2, false, false, false),
     mutationRequests: string[] = [];
   page.on('request', (request) => {
@@ -20762,6 +20762,13 @@ test('shows non-atomic provider updates in the app loading indicator (HS2-TPF3EB
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.evaluate(() => {
+    (window as Window & { __bulkTiming?: unknown }).__bulkTiming = undefined;
+    document.addEventListener('hotsheet:mutation-timing', (event) => {
+      const timing = (event as CustomEvent<{ count?: number }>).detail;
+      if (timing.count === 2) (window as Window & { __bulkTiming?: unknown }).__bulkTiming = timing;
+    });
+  });
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]');
   await first.click();
@@ -20771,14 +20778,27 @@ test('shows non-atomic provider updates in the app loading indicator (HS2-TPF3EB
   await expect(loading).toHaveAttribute('data-loading-kind', 'tickets');
   await expect(loading).toContainText(/Updating tickets… [01] of 2/);
   await expect(page.locator('.app-toast')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-967bwm-best-effort-progress.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('hs2-967bwm-best-effort-progress.png'), fullPage: true });
   await expect.poll(() => patches.filter((patch) => patch.up_next === true).length).toBe(2);
   await expect(loading).toHaveCount(0);
   expect(mutationRequests.filter((value) => value.endsWith('/batch'))).toEqual([]);
   expect(mutationRequests.filter((value) => value.includes('/tickets/'))).toHaveLength(2);
+  const timing = await page.evaluate(
+    () =>
+      (
+        window as Window & {
+          __bulkTiming?: { count: number; optimistic_ms: number; request_ms: number; outcome: string };
+        }
+      ).__bulkTiming,
+  );
+  expect(timing).toMatchObject({ count: 2, outcome: 'committed' });
+  expect(timing?.optimistic_ms).toBeGreaterThanOrEqual(0);
+  expect(timing?.request_ms).toBeGreaterThan(0);
 });
 
-test('keeps successful best-effort writes when another selected ticket fails (HS2-967BWM)', async ({ page }) => {
+test('keeps successful best-effort writes when another selected ticket fails (HS2-967BWM) @ci-smoke', async ({
+  page,
+}) => {
   const patches = await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, false);
   await page.route('**/tickets/*08', (route) =>
     route.request().method() === 'PATCH'
@@ -20788,6 +20808,13 @@ test('keeps successful best-effort writes when another selected ticket fails (HS
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.evaluate(() => {
+    (window as Window & { __bulkOutcome?: string }).__bulkOutcome = undefined;
+    document.addEventListener('hotsheet:mutation-timing', (event) => {
+      const timing = (event as CustomEvent<{ count?: number; outcome: string }>).detail;
+      if (timing.count === 2) (window as Window & { __bulkOutcome?: string }).__bulkOutcome = timing.outcome;
+    });
+  });
   const first = page.locator('[data-ticket-slug="HS2-DEMO01"]'),
     second = page.locator('[data-ticket-slug="HS2-START02"]');
   await first.click();
@@ -20804,6 +20831,7 @@ test('keeps successful best-effort writes when another selected ticket fails (HS
     'Remove from Up Next',
   );
   await expect(second.locator('[data-action="toggle-row-up-next"]')).toHaveAttribute('aria-label', 'Add to Up Next');
+  expect(await page.evaluate(() => (window as Window & { __bulkOutcome?: string }).__bulkOutcome)).toBe('partial');
 });
 
 test('keeps optimistically archived verified tickets hidden through an intermediate change event', async ({ page }) => {

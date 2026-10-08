@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use hotsheet_model::{
     CloseReason, Confidence, NoteKind, Priority, ReviewRequest, Status, Timestamp, Ulid,
@@ -398,6 +399,17 @@ pub struct ProviderPatch {
     /// Who is making the change (HS2-32QDZ3). The git provider attributes the status
     /// activity it appends; external trackers attribute changes to their own account.
     pub actor: Option<hotsheet_model::NoteActor>,
+}
+
+/// Redacted phase durations for one synchronous provider update. No ticket content,
+/// credentials, URLs, or provider identifiers are retained in this value.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ProviderMutationTiming {
+    pub remote_read: Duration,
+    pub token_check: Duration,
+    pub remote_write: Duration,
+    pub acknowledgement: Duration,
+    pub queue_wait: Duration,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -940,6 +952,16 @@ pub trait TicketProvider: Send + Sync {
         now: Timestamp,
         patch: ProviderPatch,
     ) -> Result<ApiTicket, ProviderError>;
+    /// Hosts can request phase timing without requiring every provider to instrument itself.
+    fn update_timed(
+        &self,
+        native_id: &str,
+        now: Timestamp,
+        patch: ProviderPatch,
+    ) -> Result<(ApiTicket, ProviderMutationTiming), ProviderError> {
+        self.update(native_id, now, patch)
+            .map(|ticket| (ticket, ProviderMutationTiming::default()))
+    }
     fn add_note(
         &self,
         native_id: &str,

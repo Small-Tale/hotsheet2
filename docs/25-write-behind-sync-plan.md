@@ -87,3 +87,50 @@ does not contain the intent; read back or use provider acknowledgement semantics
 The local Git path stays synchronous for now: its measured persistence is under one
 second for this case and gives immediate file durability. Revisit it only if a new
 profile shows a concrete remaining bottleneck.
+
+### Phase 1 measurement (HS2-ZHN7XS)
+
+Provider ticket PATCH now reports redacted read, token-check, write, acknowledgement,
+queue-wait, and total durations in `Server-Timing`. Queue wait is zero while there is
+no durable provider outbox. The web client emits optimistic projection, request, and
+single-ticket sequencer wait durations through `hotsheet:mutation-timing`; bulk events
+include their count. These measurements preserve synchronous mutation semantics.
+
+The controlled GitHub, GitLab, and Jira fake transports wait 2 ms for each GET
+and 3 ms for each PATCH or PUT. Jira's current update path also reads the issue
+and comments after PUT to acknowledge the result. GitLab and GitHub decode the
+write response as their acknowledgement.
+One local run of `cargo test -p hotsheet-extsync --test provider_latency -- --nocapture`
+measured serial writes as follows; the numbers include test runner scheduling and are
+diagnostic, not a real provider service-level claim:
+
+| Provider | Tickets | Batch elapsed | Per-ticket p50 / p95 | Read p50 / p95 | Write p50 / p95 |   Ack p50 / p95 |
+| :------- | ------: | ------------: | -------------------: | -------------: | --------------: | --------------: |
+| GitHub   |       1 |        9.0 ms |         9.0 / 9.0 ms |   3.7 / 3.7 ms |    4.2 / 4.2 ms | response decode |
+| GitHub   |      20 |      147.4 ms |         7.5 / 8.4 ms |   3.2 / 3.5 ms |    4.4 / 4.9 ms | response decode |
+| GitHub   |     100 |      785.3 ms |        7.6 / 10.4 ms |   3.1 / 3.7 ms |    4.5 / 6.3 ms | response decode |
+| GitLab   |       1 |        9.5 ms |         9.5 / 9.5 ms |   3.5 / 3.5 ms |    5.1 / 5.1 ms |    0.0 / 0.0 ms |
+| GitLab   |      20 |      153.4 ms |         7.8 / 8.4 ms |   3.2 / 3.6 ms |    4.6 / 4.9 ms |    0.1 / 1.0 ms |
+| GitLab   |     100 |      790.3 ms |        7.6 / 10.1 ms |   3.1 / 4.2 ms |    4.6 / 5.1 ms |    0.0 / 0.1 ms |
+| Jira     |       1 |       14.7 ms |       14.7 / 14.7 ms |   3.5 / 3.5 ms |    4.6 / 4.6 ms |    6.6 / 6.6 ms |
+| Jira     |      20 |      285.6 ms |       14.3 / 15.9 ms |   3.2 / 3.8 ms |    4.6 / 5.1 ms |    6.5 / 7.7 ms |
+| Jira     |     100 |     1451.2 ms |       14.0 / 19.1 ms |   3.2 / 4.0 ms |    4.6 / 5.1 ms |    6.2 / 8.7 ms |
+
+In a controlled 100-ticket run that returned a 429 for every twentieth GET, five
+mutations failed explicitly; the current synchronous path did not queue them. The
+roughly 0.8-second fake GitHub and GitLab 100-ticket results exceed the 601.6 ms
+measured local Git 100-ticket server work above; Jira takes about 1.5 seconds with
+its acknowledgement readback. These are controlled adapter costs, not live-provider
+latency claims. Real provider round trips and rate limits should be measured before
+committing to a write-behind implementation. The strongest phase 2 candidate is
+Jira serial 20- and 100-ticket field edits because the required read, PUT, and
+readback amplify latency. GitHub and GitLab multi-ticket field edits follow closely;
+GitHub status updates use the same read/write path. Single-ticket edits and the local
+Git batch do not yet justify an outbox. Jira status transitions use a separate action
+and were not measured in this field-edit fixture.
+
+An ignored opt-in test, `opt_in_real_github_mutation_latency`, performs three same-title
+PATCH requests against a designated issue. It requires
+`HOTSHEET_REAL_PROVIDER_BENCH=1`, `HOTSHEET_BENCH_GITHUB_REPOSITORY`,
+`HOTSHEET_BENCH_GITHUB_ISSUE`, and `HOTSHEET_BENCH_GITHUB_TOKEN`; run it only against
+an issue meant for benchmarking. It was not run for this measurement.

@@ -3402,8 +3402,10 @@ ticket, or repository status. Responses carry a per-ticket generation: late resp
 are ignored. Single-ticket reads, mutations, attachment operations, and code review
 use the ticket's qualified `connection:native` identifier, so linked external sources route directly without probing every source
 (HS2-HX0VM9). The current failed request restores its captured projection and
-shows the error. The client emits `hotsheet:mutation-timing` with optimistic and request
-phase durations for local profiling.
+shows the error. The client emits `hotsheet:mutation-timing` with optimistic projection,
+request, and single-ticket sequencer queue-wait durations for local profiling. Bulk
+events include their ticket count and measure projection and the complete request sequence
+(HS2-ZHN7XS).
 
 Bulk mutations hold event-driven collection refreshes until their authoritative atomic
 batch or best-effort request sequence settles. Their optimistic rows therefore cannot

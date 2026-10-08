@@ -379,7 +379,7 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   flagged `HOTSHEET_LIVE_RUNNER`, keeping the default tier fast. The normal `check` job
   runs a bounded Chromium Playwright smoke group covering deep links, gallery save retry,
   image/video freehand strokes, feedback replies, popup anchoring, concurrent autosave,
-  and ticket context menus (HS2-28MBS9). The full browser suite
+  bulk provider projection, and ticket context menus (HS2-28MBS9, HS2-ZHN7XS). The full browser suite
   remains a local gate for affected changes. **Pending (HS2-FPXSD0):** raise measured coverage
   floors, close remaining web coverage gaps, and add the macOS matrix leg for
   terminal/native-client surfaces.

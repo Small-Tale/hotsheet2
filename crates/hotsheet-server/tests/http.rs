@@ -13205,6 +13205,18 @@ async fn github_up_next_survives_provider_route_refresh_and_can_be_cleared() {
         .await
         .unwrap();
     assert_eq!(set.status(), StatusCode::OK);
+    let timing = set.headers()["server-timing"].to_str().unwrap();
+    for phase in [
+        "provider_read",
+        "provider_token",
+        "provider_write",
+        "provider_ack",
+        "provider_queue",
+        "provider_total",
+    ] {
+        assert!(timing.contains(&format!("{phase};dur=")), "{timing}");
+    }
+    assert!(!timing.contains("fixture-token"));
     assert_eq!(body_json(set).await["up_next"], true);
     let queued = body_json(
         app.clone()
@@ -13458,17 +13470,22 @@ async fn checkout_sources_aggregate_and_route_external_provider_mutations() {
     )
     .await;
     assert_eq!(created["qualified_id"], "github-main:12");
-    let updated = body_json(
-        app.clone()
-            .oneshot(authed(
-                "PATCH",
-                "/checkouts/external/tickets/github-main:11",
-                Some(r#"{"title":"updated remotely"}"#),
-            ))
-            .await
-            .unwrap(),
-    )
-    .await;
+    let updated_response = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            "/checkouts/external/tickets/github-main:11",
+            Some(r#"{"title":"updated remotely"}"#),
+        ))
+        .await
+        .unwrap();
+    let timing = updated_response.headers()["server-timing"]
+        .to_str()
+        .unwrap();
+    assert!(timing.contains("provider_read;dur="));
+    assert!(timing.contains("provider_ack;dur="));
+    assert!(!timing.contains("fixture-token"));
+    let updated = body_json(updated_response).await;
     assert_eq!(updated["store"], "github-main");
     assert_eq!(updated["qualified_id"], "github-main:11");
     let cleared = body_json(
