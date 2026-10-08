@@ -111,7 +111,10 @@ impl Server {
 
     /// Wait until discovery has probed the hanging tool; return every probe's pid so far.
     fn slow_tool_pids(&self) -> Vec<i32> {
-        let deadline = Instant::now() + Duration::from_secs(10);
+        // Catalog warmup is scheduled after the server registers itself. Under a busy
+        // parallel suite, that background task can start well after `ready()` returns;
+        // this wait is setup, not the probe/queue latency assertion below.
+        let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             let pids: Vec<i32> = fs::read_to_string(self.slow_tool_calls())
                 .unwrap_or_default()
