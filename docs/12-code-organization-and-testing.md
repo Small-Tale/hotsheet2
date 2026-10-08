@@ -391,6 +391,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   as before the Playwright smoke group. `npm run test:ci:browser` starts its own local
   Vite server, selects tests marked `@ci-smoke`, and uses two browser workers with a
   12-minute CI timeout. Run `npm run test:e2e` for the full browser suite locally.
+  A separate bounded WebKit job runs the inspector popup-anchor regression marked
+  `@ci-webkit` (HS2-HASXWP), covering the Safari engine without delaying the main
+  Chromium gate.
 - The `check` job also validates the feature double-coverage matrix. Its validator accepts
   formatter-padded Markdown cells, ignores table separators, and checks every feature row
   and evidence reference, including rejecting rows outside the matrix markers. Repository guidance

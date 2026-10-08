@@ -10,6 +10,41 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  webkit-popup:
+    name: WebKit popup anchor
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Install web client dependencies
+        working-directory: clients/web
+        run: npm ci
+
+      - name: Install Playwright WebKit and Linux dependencies
+        working-directory: clients/web
+        run: |
+          for attempt in 1 2; do
+            if timeout --kill-after=15s 6m npx playwright install --with-deps webkit; then
+              exit 0
+            fi
+            echo "::warning::WebKit dependency install attempt $attempt failed or timed out"
+          done
+          echo "::error::WebKit dependency install failed after two bounded attempts"
+          exit 1
+
+      - name: Verify popup anchor recovery in WebKit
+        working-directory: clients/web
+        timeout-minutes: 5
+        run: npm run test:ci:webkit
+
   windows-credential-store:
     name: Windows Credential Manager
     runs-on: windows-latest

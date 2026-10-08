@@ -23,6 +23,7 @@
     "test:unit": "vitest run",
     "test:e2e": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins && playwright test",
     "test:ci:browser": "playwright test tests/providers.spec.ts --workers=2 --grep @ci-smoke",
+    "test:ci:webkit": "playwright test tests/providers.spec.ts --browser=webkit --workers=1 --grep @ci-webkit",
     "test:performance": "HOTSHEET_WEB_PERFORMANCE_GATE=1 playwright test tests/providers.spec.ts --workers=1 -g 'projects Up Next immediately|projects a newly created ticket'",
     "test:real-world-performance": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins && HOTSHEET_REAL_WORLD_PERFORMANCE=1 playwright test tests/providers.spec.ts --workers=1 -g 'real local Git board performance'",
     "stress:scale": "node scripts/scale-stress.mjs"

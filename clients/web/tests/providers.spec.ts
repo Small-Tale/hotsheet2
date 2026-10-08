@@ -14661,7 +14661,7 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-readonly.png');
 });
 
-test('keeps an open inspector status popup at its trigger after its anchor is morphed away @ci-smoke', async ({
+test('keeps an open inspector status popup at its trigger after its anchor is morphed away @ci-smoke @ci-webkit', async ({
   page,
 }) => {
   await mockProject(page);
