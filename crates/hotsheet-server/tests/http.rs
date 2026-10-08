@@ -6402,6 +6402,257 @@ async fn image_crop_serves_rendition_and_preserves_original_through_restore() {
 }
 
 #[tokio::test]
+async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
+    use image::{
+        AnimationDecoder, DynamicImage, ImageFormat, Rgba, RgbaImage,
+        codecs::gif::{GifDecoder, GifEncoder, Repeat},
+    };
+    use std::io::Cursor;
+
+    let mut gif = Vec::new();
+    {
+        let mut encoder = GifEncoder::new(&mut gif);
+        encoder.set_repeat(Repeat::Finite(2)).unwrap();
+        for red in [40, 180] {
+            encoder
+                .encode_frame(image::Frame::from_parts(
+                    RgbaImage::from_pixel(20, 16, Rgba([red, 0, 0, 255])),
+                    0,
+                    0,
+                    image::Delay::from_numer_denom_ms(100, 1),
+                ))
+                .unwrap();
+        }
+    }
+    let mut webp_encoder = webp_animation::Encoder::new((20, 16)).unwrap();
+    webp_encoder
+        .add_frame(&[40, 0, 0, 255].repeat(20 * 16), 0)
+        .unwrap();
+    webp_encoder
+        .add_frame(&[180, 0, 0, 255].repeat(20 * 16), 100)
+        .unwrap();
+    let webp = webp_encoder.finalize(200).unwrap().to_vec();
+    let mut apng = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut apng, 20, 16);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.set_animated(2, 3).unwrap();
+        let mut writer = encoder.write_header().unwrap();
+        for red in [40, 180] {
+            writer.set_frame_delay(1, 10).unwrap();
+            writer
+                .write_image_data(&[red, 0, 0, 255].repeat(20 * 16))
+                .unwrap();
+        }
+        writer.finish().unwrap();
+    }
+    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="16"><rect width="20" height="16"><animate attributeName="opacity" values="0;1" dur="1s"/></rect></svg>"#.to_vec();
+    let mut avif = Cursor::new(Vec::new());
+    DynamicImage::ImageRgba8(RgbaImage::from_pixel(20, 16, Rgba([20, 30, 40, 255])))
+        .write_to(&mut avif, ImageFormat::Avif)
+        .unwrap();
+    let still_fixture = |format| {
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(RgbaImage::from_pixel(20, 16, Rgba([20, 30, 40, 255])))
+            .write_to(&mut bytes, format)
+            .unwrap();
+        bytes.into_inner()
+    };
+    let fixtures = [
+        ("moving.gif", "image/gif", gif),
+        ("moving.webp", "image/webp", webp),
+        ("moving.png", "image/png", apng),
+        ("vector.svg", "image/svg+xml", svg),
+        ("still.avif", "image/avif", avif.into_inner()),
+        ("still.bmp", "image/bmp", still_fixture(ImageFormat::Bmp)),
+        ("icon.ico", "image/x-icon", still_fixture(ImageFormat::Ico)),
+    ];
+    let (primary, state) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let app = app(state
+        .with_cache_dir(cache.path())
+        .with_checkout_registry(registry.path().join("checkouts.json")));
+    let registration = serde_json::json!({ "root": checkout.path(), "alias": "formats", "stores": [primary.path()] });
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts",
+                Some(&registration.to_string())
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    for (filename, mime, original) in fixtures {
+        let created = body_json(
+            app.clone()
+                .oneshot(authed(
+                    "POST",
+                    "/checkouts/formats/tickets",
+                    Some(r#"{"title":"Format crop"}"#),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let id = created["qualified_id"].as_str().unwrap();
+        let uploaded = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/checkouts/formats/tickets/{id}/attachments"))
+                    .header("x-hotsheet-secret", SECRET)
+                    .header("x-hotsheet-filename", filename)
+                    .body(Body::from(original.clone()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(uploaded.status(), StatusCode::CREATED, "{filename}");
+        let attached = body_json(uploaded).await;
+        let attachment_id = attached["attachments"][0]["id"].as_str().unwrap();
+        let url = format!("/checkouts/formats/tickets/{id}/attachments/{attachment_id}");
+        let changed = app
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("{url}/markup"),
+                Some(r#"{"crop":{"x":4,"y":3,"width":10,"height":8},"annotations":[]}"#),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(changed.status(), StatusCode::OK, "{filename}");
+        let rendition = app
+            .clone()
+            .oneshot(authed("GET", &url, None))
+            .await
+            .unwrap();
+        assert_eq!(rendition.status(), StatusCode::OK, "{filename}");
+        assert_eq!(
+            rendition.headers()[header::CONTENT_TYPE],
+            mime,
+            "{filename}"
+        );
+        assert_eq!(
+            rendition.headers()["x-hotsheet-filename"],
+            filename,
+            "{filename}"
+        );
+        let bytes = rendition.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            hotsheet_ticketing::image_crop::original_dimensions(filename, &bytes).unwrap(),
+            (10, 8),
+            "{filename}"
+        );
+        if filename.ends_with(".gif") {
+            assert_eq!(
+                GifDecoder::new(Cursor::new(&bytes))
+                    .unwrap()
+                    .into_frames()
+                    .collect_frames()
+                    .unwrap()
+                    .len(),
+                2
+            );
+        } else if filename.ends_with(".webp") {
+            assert_eq!(
+                webp_animation::Decoder::new(&bytes)
+                    .unwrap()
+                    .into_iter()
+                    .count(),
+                2
+            );
+        } else if filename == "moving.png" {
+            assert_eq!(
+                image::codecs::png::PngDecoder::new(Cursor::new(&bytes))
+                    .unwrap()
+                    .apng()
+                    .unwrap()
+                    .into_frames()
+                    .collect_frames()
+                    .unwrap()
+                    .len(),
+                2
+            );
+        } else if filename.ends_with(".svg") {
+            assert!(std::str::from_utf8(&bytes).unwrap().contains("<animate"));
+        }
+        let original_response = app
+            .clone()
+            .oneshot(authed("GET", &format!("{url}/original"), None))
+            .await
+            .unwrap();
+        assert_eq!(
+            original_response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .as_ref(),
+            original,
+            "{filename}"
+        );
+        let recropped = app
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("{url}/markup"),
+                Some(r#"{"crop":{"x":8,"y":4,"width":8,"height":8},"annotations":[]}"#),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(recropped.status(), StatusCode::OK, "{filename}");
+        let recropped = app
+            .clone()
+            .oneshot(authed("GET", &url, None))
+            .await
+            .unwrap()
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes();
+        assert_eq!(
+            hotsheet_ticketing::image_crop::original_dimensions(filename, &recropped).unwrap(),
+            (8, 8),
+            "{filename}"
+        );
+        let restored = app
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("{url}/markup"),
+                Some(r#"{"crop":null,"annotations":[]}"#),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(restored.status(), StatusCode::OK, "{filename}");
+        let full = app
+            .clone()
+            .oneshot(authed("GET", &url, None))
+            .await
+            .unwrap();
+        assert_eq!(
+            full.into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .as_ref(),
+            original,
+            "{filename}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     let (primary, st) = state();
     let extra = tempfile::tempdir().unwrap();

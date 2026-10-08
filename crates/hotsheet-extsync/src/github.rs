@@ -1386,17 +1386,16 @@ impl GitHubProvider {
         {
             if let Some(crop) = markup.crop {
                 let original = self.asset_bytes(&marker, marker.sha.as_deref())?;
-                let (decoded, _) =
-                    hotsheet_ticketing::image_crop::decode_original(&marker.filename, &original)
-                        .map_err(|error| ProviderError::Conflict {
-                            ticket: format!("{}:{native_id}", self.config.connection_id),
-                            message: error.to_string(),
-                        })?;
-                let normalized = hotsheet_ticketing::image_crop::normalize_crop(
-                    crop,
-                    (decoded.width(), decoded.height()),
+                let dimensions = hotsheet_ticketing::image_crop::original_dimensions(
+                    &marker.filename,
+                    &original,
                 )
                 .map_err(|error| ProviderError::Conflict {
+                    ticket: format!("{}:{native_id}", self.config.connection_id),
+                    message: error.to_string(),
+                })?;
+                let normalized = hotsheet_ticketing::image_crop::normalize_crop(crop, dimensions)
+                    .map_err(|error| ProviderError::Conflict {
                     ticket: format!("{}:{native_id}", self.config.connection_id),
                     message: error.to_string(),
                 })?;

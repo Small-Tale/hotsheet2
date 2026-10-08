@@ -19,7 +19,6 @@ use hotsheet_model::{
     Attachment, Note, NoteKind, ParseError, SCHEMA_VERSION, Ticket, Timestamp, Ulid, parse_file,
     to_file_string,
 };
-use image::GenericImageView;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 
@@ -1229,6 +1228,11 @@ impl FsStore {
                     "jpg" | "jpeg" => "jpeg",
                     "png" => "png",
                     "webp" => "webp",
+                    "gif" => "gif",
+                    "avif" => "avif",
+                    "svg" => "svg",
+                    "bmp" => "bmp",
+                    "ico" => "ico",
                     _ => "unsupported",
                 };
                 if extension(&attachment.filename) != extension(&name) {
@@ -1387,8 +1391,12 @@ impl FsStore {
         let next_crop = if let Some(requested) = crop_change {
             if let Some(requested) = requested {
                 let (metadata, bytes) = self.read_attachment(ticket_id, attachment_id)?;
-                let (image, _) = crate::image_crop::decode_original(&metadata.filename, &bytes)?;
-                crate::image_crop::normalize_crop(requested, image.dimensions())?
+                let dimensions = crate::image_crop::original_dimensions(&metadata.filename, &bytes)?;
+                let normalized = crate::image_crop::normalize_crop(requested, dimensions)?;
+                if let Some(crop) = normalized {
+                    crate::image_crop::validate_animated_rendition(&metadata.filename, &bytes, crop)?;
+                }
+                normalized
             } else {
                 None
             }

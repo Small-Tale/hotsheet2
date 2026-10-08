@@ -48,6 +48,9 @@ libc.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+image.workspace = true
+webp-animation.workspace = true
+png.workspace = true
 hotsheet-mcp.workspace = true
 libc.workspace = true
 tower.workspace = true

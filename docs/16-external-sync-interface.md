@@ -438,7 +438,7 @@ they need live credentials:
 | ------------------------------------------------------- | ---------------- | ------------------------------------------------------- | ------ | ---- |
 | `attachments` (add and read)                            | yes, store files | only with `attachment_repo`; assets repo + link comment | no     | no   |
 | `attachment_edit` (rename, delete, labels, annotations) | yes              | no                                                      | no     | no   |
-| `attachment_crop` (reversible still-image crop)         | yes              | with `attachment_repo`                                  | no     | no   |
+| `attachment_crop` (reversible image crop)               | yes              | with `attachment_repo`                                  | no     | no   |
 
 In the web dialog a new GitHub connection starts from sign-in (HS2-1JT25R): its other settings
 stay hidden and **Connect** stays disabled until GitHub authorizes. **Sign in with GitHub**

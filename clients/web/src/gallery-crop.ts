@@ -2,9 +2,39 @@ import type { Attachment, MediaAnnotation } from './api';
 
 export type ImageCrop = NonNullable<Attachment['crop']>;
 
-/** Recognize supported still bytes before offering an editor the server would reject. */
+/** Recognize crop-capable image bytes before offering an editor the server would reject. */
 export function croppableImageHeader(filename: string, bytes: Uint8Array): boolean {
   const name = filename.toLowerCase();
+  if (/\.gif$/.test(name))
+    return bytes.length >= 10 && (ascii(bytes, 0, 6) === 'GIF87a' || ascii(bytes, 0, 6) === 'GIF89a');
+  if (/\.bmp$/.test(name)) return bytes.length >= 26 && ascii(bytes, 0, 2) === 'BM';
+  if (/\.ico$/.test(name)) return bytes.length >= 6 && [0, 0, 1, 0].every((value, index) => bytes[index] === value);
+  if (/\.avif$/.test(name)) {
+    if (bytes.length < 16 || ascii(bytes, 4, 8) !== 'ftyp') return false;
+    const size = Math.min(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0), bytes.length);
+    const brands = Array.from({ length: Math.floor((size - 8) / 4) }, (_, index) =>
+      ascii(bytes, 8 + index * 4, 12 + index * 4),
+    );
+    return brands.includes('avif') && !brands.includes('avis') && !brands.includes('msf1');
+  }
+  if (/\.svg$/.test(name)) {
+    const text = new TextDecoder().decode(bytes.subarray(0, 8192));
+    if (/<!DOCTYPE/i.test(text)) return false;
+    const root = text.match(/^\s*(?:<\?xml[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)*<svg\b([^>]*)>/i)?.[1];
+    if (!root) return false;
+    const dimension = (attribute: string) => {
+      const value = root.match(new RegExp(`\\b${attribute}=["']([0-9]+)(?:px)?["']`, 'i'))?.[1];
+      return value ? Number(value) : 0;
+    };
+    const width = dimension('width'),
+      height = dimension('height');
+    if (!width || !height || width * height > 40_000_000) return false;
+    const viewBox = root
+      .match(/\bviewBox=["']([^"']+)["']/i)?.[1]
+      ?.split(/[\s,]+/)
+      .map(Number);
+    return !viewBox || (viewBox.length === 4 && viewBox.every(Number.isFinite) && viewBox[2] > 0 && viewBox[3] > 0);
+  }
   if (/\.jpe?g$/.test(name)) return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   if (/\.png$/.test(name)) {
     if (bytes.length < 8 || ![137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value))
@@ -13,7 +43,7 @@ export function croppableImageHeader(filename: string, bytes: Uint8Array): boole
     for (let offset = 8; offset + 12 <= bytes.length;) {
       const length = view.getUint32(offset),
         kind = String.fromCharCode(...bytes.subarray(offset + 4, offset + 8));
-      if (kind === 'acTL') return false;
+      if (kind === 'acTL') return true;
       if (kind === 'IDAT') return true;
       offset += 12 + length;
     }
@@ -27,11 +57,15 @@ export function croppableImageHeader(filename: string, bytes: Uint8Array): boole
     )
       return false;
     const kind = String.fromCharCode(...bytes.subarray(12, 16));
-    if (kind === 'ANIM') return false;
-    if (kind === 'VP8X') return bytes.length >= 21 && (bytes[20] & 0x02) === 0;
+    if (kind === 'ANIM') return true;
+    if (kind === 'VP8X') return bytes.length >= 21;
     return kind === 'VP8 ' || kind === 'VP8L';
   }
   return false;
+}
+
+function ascii(bytes: Uint8Array, start: number, end: number): string {
+  return String.fromCharCode(...bytes.subarray(start, end));
 }
 
 /** Annotation coordinates are ten-thousandths of the immutable original image. */

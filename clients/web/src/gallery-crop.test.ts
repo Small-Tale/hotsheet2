@@ -16,7 +16,7 @@ const original: MediaAnnotation[] = [
 const crop = { x: 200, y: 100, width: 400, height: 400 };
 
 describe('gallery crop coordinates', () => {
-  it('offers crop only for still PNG, JPEG, and WebP headers', () => {
+  it('matches the renderer format and animation gates', () => {
     const png = [137, 80, 78, 71, 13, 10, 26, 10],
       ascii = (value: string) => Array.from(new TextEncoder().encode(value)),
       chunk = (kind: string) => [0, 0, 0, 0, ...ascii(kind), 0, 0, 0, 0],
@@ -36,12 +36,29 @@ describe('gallery crop coordinates', () => {
       ];
     expect(croppableImageHeader('still.png', Uint8Array.from([...png, ...chunk('IDAT')]))).toBe(true);
     expect(croppableImageHeader('moving.png', Uint8Array.from([...png, ...chunk('acTL'), ...chunk('IDAT')]))).toBe(
-      false,
+      true,
     );
     expect(croppableImageHeader('still.jpg', Uint8Array.from([0xff, 0xd8, 0xff]))).toBe(true);
     expect(croppableImageHeader('still.webp', Uint8Array.from(webp('VP8X')))).toBe(true);
-    expect(croppableImageHeader('moving.webp', Uint8Array.from(webp('VP8X', 0x02)))).toBe(false);
-    expect(croppableImageHeader('moving.webp', Uint8Array.from(webp('ANIM')))).toBe(false);
+    expect(croppableImageHeader('moving.webp', Uint8Array.from(webp('VP8X', 0x02)))).toBe(true);
+    expect(croppableImageHeader('moving.webp', Uint8Array.from(webp('ANIM')))).toBe(true);
+    expect(croppableImageHeader('moving.gif', new TextEncoder().encode('GIF89a........'))).toBe(true);
+    expect(croppableImageHeader('still.bmp', Uint8Array.from([...ascii('BM'), ...Array(24).fill(0)]))).toBe(true);
+    expect(croppableImageHeader('icon.ico', Uint8Array.from([0, 0, 1, 0, 1, 0]))).toBe(true);
+    expect(
+      croppableImageHeader(
+        'vector.svg',
+        new TextEncoder().encode('<svg width="20" height="16" viewBox="0 0 20 16"><animate/></svg>'),
+      ),
+    ).toBe(true);
+    expect(croppableImageHeader('vector.svg', new TextEncoder().encode('<svg width="100%" height="16"></svg>'))).toBe(
+      false,
+    );
+    const avif = Uint8Array.from([0, 0, 0, 20, ...ascii('ftypavif'), 0, 0, 0, 0, ...ascii('mif1')]);
+    expect(croppableImageHeader('still.avif', avif)).toBe(true);
+    const animatedAvif = Uint8Array.from([...avif, ...ascii('avis')]);
+    animatedAvif[3] = 24;
+    expect(croppableImageHeader('animated.avif', animatedAvif)).toBe(false);
   });
   it('projects visible marks and preserves hidden originals across edits and restoration', () => {
     const projected = projectGalleryAnnotations(original, crop, 1000, 1000);

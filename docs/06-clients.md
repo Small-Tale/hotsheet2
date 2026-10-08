@@ -1703,7 +1703,7 @@ and identity-less legacy entries remain conservatively blocking.
   visible with Retry save and Discard changes controls. Retry sends the current draft once;
   Discard restores the persisted attachment state. A successful retry resumes the requested
   navigation or closes the gallery (HS2-VXCSMZ).
-  For a still PNG, JPEG, or WebP attachment on a provider advertising `attachment_crop`,
+  For a supported PNG, JPEG, WebP, GIF, AVIF, BMP, ICO, or SVG attachment on a provider advertising `attachment_crop`,
   markup also offers Crop. Dragging a rectangle on the untouched original previews a crop
   measured in original image pixels. The original bytes stay stored, and one replaceable crop
   rectangle makes normal previews, Markdown images, downloads, and AI image fetches show the
