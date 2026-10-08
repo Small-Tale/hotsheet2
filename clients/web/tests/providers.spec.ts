@@ -16465,21 +16465,26 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await gallery.getByRole('button', { name: 'Add rectangle' }).click();
   const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
     box = (await surface.boundingBox())!;
-  page.once('dialog', (dialog) => dialog.accept('Check the selected region'));
   await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.2);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.55);
   await page.mouse.up();
+  await gallery.getByRole('textbox', { name: 'Annotation note' }).fill('Check the selected region');
   const annotation = gallery.getByRole('button', { name: /Annotation 1, rect, comment: Check the selected region/ });
   await expect(annotation).toBeVisible();
   await expect.poll(() => writes.length).toBe(0);
   const before = await annotation.boundingBox(),
     handle = annotation.locator('[data-annotation-handle="se"]');
-  await handle.dragTo(surface, { targetPosition: { x: box.width * 0.65, y: box.height * 0.7 } });
+  const handleBox = (await handle.boundingBox())!,
+    currentSurface = (await surface.boundingBox())!;
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(currentSurface.x + currentSurface.width * 0.65, currentSurface.y + currentSurface.height * 0.7);
+  await page.mouse.up();
   const after = await annotation.boundingBox();
   expect(after!.width).toBeGreaterThan(before!.width);
-  page.once('dialog', (dialog) => dialog.accept('Updated annotation'));
   await annotation.locator('.attachment-gallery__annotation-label').dblclick();
+  await gallery.getByRole('textbox', { name: 'Annotation note' }).fill('Updated annotation');
   const updatedAnnotation = gallery.getByRole('button', { name: /Annotation 1, rect, comment: Updated annotation/ });
   await expect(updatedAnnotation).toBeVisible();
   await expect.poll(() => writes.length).toBe(0);
@@ -16513,6 +16518,148 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await gallery.getByRole('button', { name: 'Finish markup' }).click();
   await page.waitForTimeout(200);
   expect(writes).toHaveLength(2);
+});
+
+test('draws all annotation tools and keeps keyboard edits in one markup batch (HS2-C46J3X)', async ({ page }) => {
+  const writes: Array<{ annotations: MediaAnnotation[] }> = [];
+  await mockProject(page);
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname.includes('/attachments/'))
+      writes.push(request.postDataJSON() as { annotations: MediaAnnotation[] });
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ }),
+    stage = gallery.locator('[data-gallery-zoom-stage="true"]'),
+    surface = gallery.locator('[data-gallery-annotation-surface="true"]');
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  const arrowTool = gallery.getByRole('button', { name: 'arrow tool' }),
+    tinySurface = (await surface.boundingBox())!;
+  await arrowTool.click();
+  await page.mouse.click(tinySurface.x + tinySurface.width * 0.5, tinySurface.y + tinySurface.height * 0.5);
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(0);
+  await expect(arrowTool).toHaveAttribute('aria-pressed', 'true');
+  await stage.focus();
+  await page.keyboard.press('Escape');
+  await expect(arrowTool).toHaveAttribute('aria-pressed', 'false');
+  await gallery.getByRole('button', { name: 'Add rectangle' }).click();
+  await page.mouse.move(tinySurface.x + tinySurface.width * 0.12, tinySurface.y + tinySurface.height * 0.12);
+  await page.mouse.down();
+  await page.mouse.move(tinySurface.x + tinySurface.width * 0.3, tinySurface.y + tinySurface.height * 0.3);
+  await page.keyboard.press('Escape'); // cancel the in-progress gesture
+  await page.mouse.up();
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(0);
+  await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toHaveClass(/attachment-gallery__pressed/);
+  await page.keyboard.press('Escape'); // then return to Select
+  const drag = async (tool: 'strike' | 'arrow' | 'freehand', start: [number, number], end: [number, number]) => {
+    await gallery.getByRole('button', { name: `${tool} tool` }).click();
+    const box = (await surface.boundingBox())!;
+    await page.mouse.move(box.x + box.width * start[0], box.y + box.height * start[1]);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * end[0], box.y + box.height * end[1], {
+      steps: tool === 'freehand' ? 8 : 2,
+    });
+    await page.mouse.up();
+  };
+  await drag('strike', [0.1, 0.15], [0.32, 0.35]);
+  await expect(gallery.locator('.attachment-gallery__annotation[data-shape="strike"]')).toBeVisible();
+  const noteField = gallery.getByRole('textbox', { name: 'Annotation note' });
+  await expect(noteField).toBeFocused();
+  await noteField.fill('Remove **old** copy');
+  await noteField.press('Home');
+  await noteField.press('>');
+  await expect(noteField).toHaveValue('>Remove **old** copy');
+  await stage.focus();
+  await page.keyboard.press('Meta+z');
+  await expect(noteField).toHaveValue('');
+  await page.keyboard.press('Meta+Shift+z');
+  await expect(noteField).toHaveValue('>Remove **old** copy');
+  await gallery.getByRole('button', { name: /bug/ }).click();
+  await expect(gallery.locator('.attachment-gallery__annotation[data-shape="strike"]')).toHaveAttribute(
+    'data-intent-color',
+    'red',
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gallery.screenshot({ path: '/private/tmp/hs2-c46j3x-note-intents-phone.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await gallery.getByRole('button', { name: 'bug', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(gallery.getByRole('button', { name: 'change', exact: true })).toBeFocused();
+  await drag('arrow', [0.4, 0.65], [0.7, 0.3]);
+  const drawnArrow = gallery.locator('.attachment-gallery__annotation[data-shape="arrow"]');
+  await expect(drawnArrow.locator('[data-annotation-handle^="point-"]')).toHaveCount(2);
+  const arrowBoundsBefore = (await drawnArrow.boundingBox())!,
+    arrowHead = (await drawnArrow.locator('[data-annotation-handle="point-1"]').boundingBox())!,
+    arrowSurface = (await surface.boundingBox())!;
+  await page.mouse.move(arrowHead.x + arrowHead.width / 2, arrowHead.y + arrowHead.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(arrowSurface.x + arrowSurface.width * 0.75, arrowSurface.y + arrowSurface.height * 0.2);
+  await page.mouse.up();
+  expect((await drawnArrow.boundingBox())!.width).toBeGreaterThan(arrowBoundsBefore.width);
+  await drag('freehand', [0.65, 0.7], [0.82, 0.85]);
+  await expect(gallery.locator('.attachment-gallery__annotation[data-shape="freehand"]')).toBeVisible();
+  await gallery.getByRole('checkbox', { name: 'Closed outline' }).uncheck();
+  await gallery.getByRole('button', { name: 'insertion tool' }).click();
+  const box = (await surface.boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.8, box.y + box.height * 0.18);
+  await expect(gallery.locator('.attachment-gallery__annotation[data-shape="insertion"]')).toBeVisible();
+  await stage.focus();
+  await page.keyboard.press('r');
+  await page.keyboard.press('Enter');
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(5);
+  await page.keyboard.press('Meta+z');
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(4);
+  await page.keyboard.press('Meta+Shift+z');
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(5);
+  await page.keyboard.press('Tab');
+  const selectedStrike = gallery.locator('.attachment-gallery__annotation[data-shape="strike"]');
+  await expect(selectedStrike).toHaveAttribute('data-selected', 'true');
+  await page.keyboard.press('Meta+d');
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(6);
+  await expect(gallery.getByRole('textbox', { name: 'Annotation note' })).toHaveValue('>Remove **old** copy');
+  const duplicate = gallery.locator('.attachment-gallery__annotation[data-selected="true"]'),
+    duplicateBefore = (await duplicate.boundingBox())!;
+  await page.keyboard.press('ArrowRight');
+  expect((await duplicate.boundingBox())!.x).toBeGreaterThan(duplicateBefore.x);
+  await page.keyboard.press('Meta+z'); // nudge
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(6);
+  expect((await duplicate.boundingBox())!.x).toBeCloseTo(duplicateBefore.x, 1);
+  await page.keyboard.press('Meta+z'); // duplicate
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(5);
+  await expect.poll(() => writes.length).toBe(0);
+  await gallery.screenshot({ path: '/private/tmp/hs2-c46j3x-all-tools-image.png', animations: 'disabled' });
+  await gallery.getByRole('button', { name: 'Finish markup' }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].annotations.map((annotation) => annotation.shape?.type)).toEqual([
+    'strike',
+    'arrow',
+    'freehand',
+    'insertion',
+    'rect',
+  ]);
+  for (const annotation of writes[0].annotations) {
+    const points =
+      annotation.shape?.type === 'freehand' || annotation.shape?.type === 'arrow'
+        ? annotation.shape.points
+        : annotation.shape?.type === 'insertion'
+          ? [annotation.shape.point]
+          : undefined;
+    if (!points) continue;
+    const minX = Math.min(...points.map((point) => point.x)),
+      minY = Math.min(...points.map((point) => point.y)),
+      x = Math.min(minX, 9999),
+      y = Math.min(minY, 9999);
+    expect([annotation.x, annotation.y, annotation.width, annotation.height]).toEqual([
+      x,
+      y,
+      Math.max(...points.map((point) => point.x), x + 1) - x,
+      Math.max(...points.map((point) => point.y), y + 1) - y,
+    ]);
+  }
 });
 
 test('scrubs video without swiping and persists timed-annotation interaction boundaries', async ({ page }) => {
@@ -16775,11 +16922,11 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   const creationPlayhead = Math.round(durationMs / 2);
   await scrubber.fill(String(creationPlayhead));
   await gallery.getByRole('button', { name: 'Add rectangle' }).click();
-  page.once('dialog', (dialog) => dialog.accept('Real pointer annotation'));
   await page.mouse.move(surfaceBox.x + surfaceBox.width * 0.1, surfaceBox.y + surfaceBox.height * 0.1);
   await page.mouse.down();
   await page.mouse.move(surfaceBox.x + surfaceBox.width * 0.4, surfaceBox.y + surfaceBox.height * 0.3, { steps: 4 });
   await page.mouse.up();
+  await gallery.getByRole('textbox', { name: 'Annotation note' }).fill('Real pointer annotation');
   let created = gallery.locator('.attachment-gallery__annotation').filter({ hasText: 'Real pointer annotation' });
   const expectedStart = Math.round(creationPlayhead - durationMs * 0.05);
   let expectedEnd = Math.round(creationPlayhead + durationMs * 0.05);
@@ -16815,7 +16962,23 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   await expect(created).toBeVisible();
   await gallery.screenshot({ path: '/private/tmp/hs2-ewztq9-ppjape-regression-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await gallery.getByRole('button', { name: 'Finish markup, 3 annotations' }).click();
+  const arrowPlayhead = Number(await scrubber.inputValue());
+  await gallery.getByRole('button', { name: 'arrow tool' }).click();
+  const videoSurface = (await gallery.locator('[data-gallery-annotation-surface="true"]').boundingBox())!;
+  await page.mouse.move(videoSurface.x + videoSurface.width * 0.18, videoSurface.y + videoSurface.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(videoSurface.x + videoSurface.width * 0.6, videoSurface.y + videoSurface.height * 0.5, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  const videoArrow = gallery.locator('.attachment-gallery__annotation[data-shape="arrow"]');
+  await expect(videoArrow).toBeVisible();
+  expect(Number(await videoArrow.getAttribute('data-annotation-start'))).toBeLessThanOrEqual(arrowPlayhead);
+  expect(Number(await videoArrow.getAttribute('data-annotation-end'))).toBeGreaterThanOrEqual(arrowPlayhead);
+  await gallery.screenshot({ path: '/private/tmp/hs2-c46j3x-video-arrow.png', animations: 'disabled' });
+  await gallery.getByRole('button', { name: 'Finish markup, 4 annotations' }).click();
+  await expect.poll(() => annotationWrites.length).toBe(2);
+  expect(annotationWrites[1].annotations.at(-1)?.shape?.type).toBe('arrow');
   const swipeStage = gallery.getByLabel(/Video canvas/),
     stageBox = (await swipeStage.boundingBox())!;
   await page.mouse.move(stageBox.x + stageBox.width * 0.75, stageBox.y + stageBox.height * 0.15);

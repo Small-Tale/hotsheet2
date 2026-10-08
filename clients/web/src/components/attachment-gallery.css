@@ -288,6 +288,9 @@
   left: 0;
   cursor: ew-resize;
 }
+.attachment-gallery__annotation i[data-annotation-handle^='point-'] {
+  cursor: move;
+}
 .attachment-gallery__pressed {
   color: var(--wa-color-brand-on-loud) !important;
   background: var(--wa-color-brand-fill-loud) !important;
@@ -315,6 +318,53 @@
   border-left: remify(3px) solid var(--wa-color-brand-border-loud);
   border-radius: var(--wa-border-radius-s);
   background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 90%, transparent);
+}
+.attachment-gallery__editor {
+  display: grid;
+  width: min(remify(760px), 100%);
+  margin-inline: auto;
+  gap: var(--kui-space-xs);
+}
+.attachment-gallery__editor > label {
+  display: grid;
+  gap: var(--kui-space-2xs);
+  color: white;
+}
+.attachment-gallery__editor textarea {
+  width: 100%;
+  min-height: remify(52px);
+  padding: var(--kui-space-xs);
+  color: white;
+  background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 78%, black);
+  border: 1px solid color-mix(in srgb, white 45%, transparent);
+  border-radius: var(--wa-border-radius-s);
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
+}
+.attachment-gallery__selected-note blockquote {
+  color: white;
+}
+.attachment-gallery__intent-list {
+  display: flex;
+  gap: var(--kui-space-2xs);
+  overflow-x: auto;
+}
+.attachment-gallery__intent-list button {
+  flex: none;
+  padding: var(--kui-space-2xs) var(--kui-space-xs);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-pill);
+  color: inherit;
+  background: transparent;
+}
+.attachment-gallery__intent-list button[aria-pressed='true'] {
+  color: var(--wa-color-brand-on-loud);
+  background: var(--wa-color-brand-fill-loud);
+}
+.attachment-gallery__closed-toggle {
+  display: flex !important;
+  align-items: center;
+  gap: var(--kui-space-xs);
 }
 .attachment-gallery__timeline {
   display: grid;
@@ -455,6 +505,12 @@
   height: remify(40px);
 }
 @media (max-width: remify(640px)) {
+  .attachment-gallery__footer-actions[data-markup='true'] {
+    height: remify(84px);
+  }
+  .attachment-gallery__markup-position {
+    --kui-floating-toolbar-inset-block-end: remify(44px);
+  }
   .attachment-gallery__annotation:not([data-selected='true']) .attachment-gallery__annotation-label {
     display: none;
   }

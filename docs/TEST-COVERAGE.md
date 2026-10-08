@@ -18,6 +18,12 @@ heads and strokes, intent colour families, ticket-wide number badges and media-e
 clamping, timed visibility, accessible labels, and selected-note Markdown. A browser
 showcase checks image and video rendering, light and dark media, zoom, and screenshots.
 
+HS2-C46J3X covers drawing and editing every gallery shape, hit testing and clamping,
+tool/keyboard/undo transitions, inline Markdown notes and intent controls, and
+one-batch persistence. Geometry unit tests include point-bound validation and
+overlap picking; production browser tests exercise image and timed video gestures,
+keyboard creation and undo/redo, plus wide and phone captures.
+
 HS2-6FVRZS covers explicitly trusted custom Antigravity CLI directories with a
 real native fixture, an IDE launcher collision on `PATH`, invalid or relative
 trusted paths, and same-version cache invalidation when the trusted path changes.

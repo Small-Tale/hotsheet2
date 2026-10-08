@@ -89,7 +89,7 @@ describe('AttachmentGallery', () => {
     // The footer is an app-owned balanced grid; each cell hosts its own Kerf Toolbar around one control
     // group, so no Kerf root carries an app class (KUI-L022).
     expect(markup).toContain(
-      '<div class="attachment-gallery__footer-actions"><div class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end"',
+      '<div class="attachment-gallery__footer-actions" data-markup="false"><div class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end"',
     );
     expect(markup).toContain('<div class="attachment-gallery__toolbar"><header class="kui-toolbar"');
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);
@@ -205,6 +205,10 @@ describe('AttachmentGallery', () => {
       }),
     );
     expect(markup).toContain('data-action="toggle-gallery-draw"');
+    expect(markup.match(/data-action="select-gallery-tool"/g)).toHaveLength(5);
+    expect(markup).toContain('aria-label="Annotation note"');
+    expect(markup).toContain('data-action="toggle-gallery-intent"');
+    expect(markup).toContain('comment (default)');
     expect(markup).toContain('data-action="delete-gallery-annotation"');
     expect(markup).not.toContain('data-action="set-gallery-range-start"');
     expect(markup).toContain('data-gallery-range-handle="start"');

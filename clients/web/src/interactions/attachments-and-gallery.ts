@@ -1,6 +1,7 @@
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
+import { annotationDefaultIntent } from '../annotation-intents';
 import {
   type Api,
   type AttachmentMetadata,
@@ -13,6 +14,7 @@ import { type AttachmentLabelEditing, createAttachmentLabelEditor } from '../att
 import { browserRandomId } from '../browser-id';
 import { ATTACHMENT_CONTEXT_MENU_HEIGHT, type AttachmentContextMenuKind } from '../components/attachment-context-menu';
 import {
+  attachmentGalleryAnnotationVisible,
   attachmentGalleryDefaultRange,
   type AttachmentGalleryGeometry,
   type AttachmentGalleryImage,
@@ -26,6 +28,16 @@ import {
 } from '../components/attachment-gallery';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { copyText } from '../copy-text';
+import {
+  clampAnnotationCoordinate,
+  drawGalleryAnnotation,
+  type GalleryAnnotationTool,
+  galleryGestureLargeEnough,
+  moveGalleryArrowVertex,
+  pickGalleryAnnotation,
+  resizeGalleryAnnotation,
+  translateGalleryAnnotation,
+} from '../gallery-annotation-editor';
 import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
@@ -75,12 +87,14 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly finishGalleryAnnotationSession: () => void;
   readonly beginGalleryAnnotationSession: () => void;
   readonly attachmentGalleryDrawMode: Signal<boolean>;
+  readonly attachmentGalleryTool: Signal<GalleryAnnotationTool>;
   readonly attachmentGallerySelectedAnnotation: Signal<string | undefined>;
   readonly attachmentGalleryAnnotations: Signal<MediaAnnotation[]>;
   readonly updateGalleryPlaybackPresentation: (milliseconds: number) => void;
   readonly attachmentGalleryPlayhead: Signal<number>;
   attachmentRangeGesture:
-    { pointerId: number; annotationId: string; endpoint: 'start' | 'end'; track: DOMRect } | undefined;
+    | { pointerId: number; annotationId: string; endpoint: 'start' | 'end'; track: DOMRect; before: MediaAnnotation[] }
+    | undefined;
   attachmentAnnotationGesture:
     | {
         kind: 'draw' | 'move' | 'resize';
@@ -90,6 +104,10 @@ export interface AttachmentAndGalleryInteractionsDependencies {
         surface: DOMRect;
         annotation: MediaAnnotation;
         handle?: string;
+        tool: GalleryAnnotationTool;
+        samples: { x: number; y: number }[];
+        startPoint: { x: number; y: number };
+        before: MediaAnnotation[];
       }
     | undefined;
   attachmentGalleryLivePlayhead: number;
@@ -135,6 +153,7 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     finishGalleryAnnotationSession,
     beginGalleryAnnotationSession,
     attachmentGalleryDrawMode,
+    attachmentGalleryTool,
     attachmentGallerySelectedAnnotation,
     attachmentGalleryAnnotations,
     updateGalleryPlaybackPresentation,
@@ -671,11 +690,25 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       },
     ),
   );
-  const clampAnnotation = (value: number) => Math.max(0, Math.min(10_000, Math.round(value)));
+  const snapshotAnnotations = () => structuredClone(attachmentGalleryAnnotations.value),
+    undoAnnotations: MediaAnnotation[][] = [],
+    redoAnnotations: MediaAnnotation[][] = [];
+  let editGroup: string | undefined;
+  function recordAnnotationChange(before: MediaAnnotation[], group?: string) {
+    if (JSON.stringify(before) === JSON.stringify(attachmentGalleryAnnotations.value)) return;
+    if (!group || editGroup !== group) undoAnnotations.push(before);
+    redoAnnotations.length = 0;
+    editGroup = group;
+  }
+  function setGalleryTool(tool: GalleryAnnotationTool) {
+    attachmentGalleryTool.value = tool;
+    attachmentGalleryDrawMode.value = tool !== 'select';
+    editGroup = undefined;
+  }
   function annotationPoint(event: PointerEvent, surface: DOMRect) {
     return {
-      x: clampAnnotation(((event.clientX - surface.left) * 10_000) / surface.width),
-      y: clampAnnotation(((event.clientY - surface.top) * 10_000) / surface.height),
+      x: clampAnnotationCoordinate(((event.clientX - surface.left) * 10_000) / surface.width),
+      y: clampAnnotationCoordinate(((event.clientY - surface.top) * 10_000) / surface.height),
     };
   }
   lifetime.add(
@@ -686,15 +719,26 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       } else {
         beginGalleryAnnotationSession();
         attachmentGalleryMarkup.value = true;
+        undoAnnotations.length = 0;
+        redoAnnotations.length = 0;
       }
-      attachmentGalleryDrawMode.value = false;
+      setGalleryTool('select');
       attachmentGallerySelectedAnnotation.value = undefined;
     }),
   );
   lifetime.add(
     delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryDraw.selector, () => {
-      attachmentGalleryDrawMode.value = !attachmentGalleryDrawMode.value;
+      setGalleryTool(attachmentGalleryTool.value === 'rect' ? 'select' : 'rect');
       attachmentGallerySelectedAnnotation.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryTool.selector, (_event, target) => {
+      const tool = data(target).tool;
+      if (tool === 'select' || tool === 'freehand' || tool === 'arrow' || tool === 'insertion' || tool === 'strike') {
+        setGalleryTool(tool);
+        attachmentGallerySelectedAnnotation.value = undefined;
+      }
     }),
   );
   lifetime.add(
@@ -715,23 +759,70 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryAnnotation.selector,
       (event, target) => {
         event.stopPropagation();
-        const id = data(target).annotationId,
-          annotation = attachmentGalleryAnnotations.value.find((item) => item.id === id);
-        if (!annotation) return;
-        const text = window.prompt('Annotation note (optional)', annotation.text);
-        if (text === null) return;
-        attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
-          item.id === id ? { ...item, text } : item,
+        const id = data(target).annotationId;
+        attachmentGallerySelectedAnnotation.value = id;
+        requestAnimationFrame(() =>
+          document.querySelector<HTMLTextAreaElement>('.attachment-gallery__editor textarea')?.focus(),
         );
       },
     ),
   );
   lifetime.add(
+    delegate(document.body, 'input', ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryNote.selector, (event) => {
+      const id = attachmentGallerySelectedAnnotation.value,
+        field = event.target as HTMLTextAreaElement;
+      if (!id) return;
+      const before = snapshotAnnotations();
+      attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
+        item.id === id ? { ...item, text: field.value } : item,
+      );
+      recordAnnotationChange(before, `note:${id}`);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.selector, (_event, target) => {
+      const id = attachmentGallerySelectedAnnotation.value,
+        intent = data(target).intent,
+        order = ['comment', 'bug', 'change', 'insert', 'remove', 'move', 'question'];
+      if (!id || !intent || !order.includes(intent)) return;
+      const before = snapshotAnnotations();
+      attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) => {
+        if (item.id !== id) return item;
+        const fallback = annotationDefaultIntent(item),
+          selected = new Set(item.intents?.length ? item.intents : [fallback]);
+        if (selected.has(intent)) selected.delete(intent);
+        else selected.add(intent);
+        const intents = order.filter((candidate) => selected.has(candidate));
+        return {
+          ...item,
+          intents: intents.length === 0 || (intents.length === 1 && intents[0] === fallback) ? [] : intents,
+        };
+      });
+      recordAnnotationChange(before);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'change', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryClosed.selector, (event) => {
+      const id = attachmentGallerySelectedAnnotation.value,
+        checked = (event.target as HTMLInputElement).checked;
+      if (!id) return;
+      const before = snapshotAnnotations();
+      attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
+        item.id === id && item.shape?.type === 'freehand'
+          ? { ...item, shape: { ...item.shape, closed: checked } }
+          : item,
+      );
+      recordAnnotationChange(before);
+    }),
+  );
+  lifetime.add(
     delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.deleteGalleryAnnotation.selector, () => {
       const id = attachmentGallerySelectedAnnotation.value;
       if (!id || !window.confirm('Delete this annotation?')) return;
+      const before = snapshotAnnotations();
       attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.filter((item) => item.id !== id);
       attachmentGallerySelectedAnnotation.value = undefined;
+      recordAnnotationChange(before);
     }),
   );
   function setGalleryPlayhead(milliseconds: number, commit = true) {
@@ -781,7 +872,13 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         return;
       event.preventDefault();
       event.stopPropagation();
-      dependencies.attachmentRangeGesture = { pointerId: pointer.pointerId, annotationId, endpoint, track };
+      dependencies.attachmentRangeGesture = {
+        pointerId: pointer.pointerId,
+        annotationId,
+        endpoint,
+        track,
+        before: snapshotAnnotations(),
+      };
     }),
   );
   lifetime.add(
@@ -799,11 +896,13 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       )
         return;
       const current = endpoint === 'start' ? annotation.start_ms : annotation.end_ms;
+      const before = snapshotAnnotations();
       setGalleryAnnotationEndpoint(
         annotation.id,
         endpoint,
         (current ?? 0) + (keyboard.key === 'ArrowLeft' ? -100 : 100),
       );
+      recordAnnotationChange(before, `range:${annotation.id}:${endpoint}`);
     }),
   );
   lifetime.add(
@@ -815,11 +914,24 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
         if (!attachmentGalleryMarkup.value) return;
         const pointer = event as PointerEvent,
           surface = target.getBoundingClientRect(),
-          button = (pointer.target as Element).closest<HTMLElement>('[data-annotation-id]'),
-          handle = (pointer.target as HTMLElement).dataset.annotationHandle;
-        if (button) {
-          const annotation = attachmentGalleryAnnotations.value.find((item) => item.id === button.dataset.annotationId);
-          if (!annotation) return;
+          point = annotationPoint(pointer, surface),
+          handleElement = (pointer.target as Element).closest<HTMLElement>('[data-annotation-handle]'),
+          handle = handleElement?.dataset.annotationHandle,
+          annotation = handle
+            ? attachmentGalleryAnnotations.value.find((item) => item.id === attachmentGallerySelectedAnnotation.value)
+            : pickGalleryAnnotation(
+                attachmentGalleryAnnotations.value.filter((item) =>
+                  attachmentGalleryAnnotationVisible(
+                    item,
+                    dependencies.attachmentGalleryLivePlayhead,
+                    attachmentGalleryDuration.value,
+                  ),
+                ),
+                point,
+                (7 * 10_000) / surface.width,
+                (7 * 10_000) / surface.height,
+              );
+        if (annotation && attachmentGalleryTool.value === 'select') {
           event.preventDefault();
           event.stopPropagation();
           attachmentGallerySelectedAnnotation.value = annotation.id;
@@ -831,16 +943,20 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
             surface,
             annotation: { ...annotation },
             handle,
+            tool: 'select',
+            samples: [],
+            startPoint: point,
+            before: snapshotAnnotations(),
           };
           return;
         }
         attachmentGallerySelectedAnnotation.value = undefined;
-        if (!attachmentGalleryDrawMode.value) return;
+        const tool = attachmentGalleryTool.value;
+        if (tool === 'select') return;
         event.preventDefault();
         event.stopPropagation();
-        const point = annotationPoint(pointer, surface),
-          timed = attachmentGalleryDuration.value > 0,
-          annotation: MediaAnnotation = {
+        const timed = attachmentGalleryDuration.value > 0,
+          base: MediaAnnotation = {
             id: browserRandomId(),
             x: point.x,
             y: point.y,
@@ -853,16 +969,22 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
                   attachmentGalleryDuration.value,
                 )
               : {}),
-          };
-        attachmentGalleryAnnotations.value = [...attachmentGalleryAnnotations.value, annotation];
-        attachmentGallerySelectedAnnotation.value = annotation.id;
+          },
+          created = drawGalleryAnnotation(base, tool, point, point);
+        const before = snapshotAnnotations();
+        attachmentGalleryAnnotations.value = [...attachmentGalleryAnnotations.value, created];
+        attachmentGallerySelectedAnnotation.value = created.id;
         dependencies.attachmentAnnotationGesture = {
           kind: 'draw',
           pointerId: pointer.pointerId,
           startX: pointer.clientX,
           startY: pointer.clientY,
           surface,
-          annotation,
+          annotation: created,
+          tool,
+          samples: [],
+          startPoint: point,
+          before,
         };
       },
     ),
@@ -879,35 +1001,32 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       let next = { ...base };
       if (gesture.kind === 'draw') {
         const point = annotationPoint(event, gesture.surface);
-        next = {
-          ...base,
-          x: Math.min(base.x, point.x),
-          y: Math.min(base.y, point.y),
-          width: Math.max(1, Math.abs(point.x - base.x)),
-          height: Math.max(1, Math.abs(point.y - base.y)),
-        };
+        if (gesture.tool === 'select') return;
+        if (
+          gesture.tool === 'freehand' &&
+          Math.hypot(
+            point.x - (gesture.samples.at(-1)?.x ?? base.x),
+            point.y - (gesture.samples.at(-1)?.y ?? base.y),
+          ) >= Math.min((3 * 10_000) / gesture.surface.width, (3 * 10_000) / gesture.surface.height)
+        )
+          gesture.samples.push(point);
+        next = drawGalleryAnnotation(base, gesture.tool, gesture.startPoint, point, gesture.samples);
       } else if (gesture.kind === 'move') {
-        next = {
-          ...base,
-          x: clampAnnotation(Math.min(10_000 - base.width, base.x + dx)),
-          y: clampAnnotation(Math.min(10_000 - base.height, base.y + dy)),
-        };
+        next = translateGalleryAnnotation(base, dx, dy);
       } else {
         const handle = gesture.handle ?? '',
-          right = base.x + base.width,
-          bottom = base.y + base.height;
-        if (handle.includes('w')) {
-          next.x = clampAnnotation(Math.min(right - 50, base.x + dx));
-          next.width = right - next.x;
-        }
-        if (handle.includes('e'))
-          next.width = clampAnnotation(Math.max(50, Math.min(10_000 - base.x, base.width + dx)));
-        if (handle.includes('n')) {
-          next.y = clampAnnotation(Math.min(bottom - 50, base.y + dy));
-          next.height = bottom - next.y;
-        }
-        if (handle.includes('s'))
-          next.height = clampAnnotation(Math.max(50, Math.min(10_000 - base.y, base.height + dy)));
+          vertex = handle.startsWith('point-') ? Number(handle.slice(6)) : -1;
+        next =
+          vertex >= 0
+            ? moveGalleryArrowVertex(base, vertex, annotationPoint(event, gesture.surface))
+            : resizeGalleryAnnotation(
+                base,
+                handle as 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w',
+                dx,
+                dy,
+                (6 * 10_000) / gesture.surface.width,
+                (6 * 10_000) / gesture.surface.height,
+              );
       }
       attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
         item.id === base.id ? next : item,
@@ -938,31 +1057,234 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       event.preventDefault();
       const annotation = attachmentGalleryAnnotations.value.find((item) => item.id === gesture.annotation.id);
       if (!annotation) return;
-      if (annotation.width < 50 || annotation.height < 50) {
-        attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.filter(
-          (item) => item.id !== annotation.id,
-        );
-        attachmentGallerySelectedAnnotation.value = undefined;
-        return;
-      }
       if (gesture.kind === 'draw') {
-        attachmentGalleryDrawMode.value = false;
-        const text = window.prompt('Annotation note (optional)', '');
-        if (text !== null)
-          attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
-            item.id === annotation.id ? { ...item, text } : item,
-          );
+        const points =
+          annotation.shape?.type === 'freehand' || annotation.shape?.type === 'arrow'
+            ? annotation.shape.points
+            : [
+                { x: annotation.x, y: annotation.y },
+                { x: annotation.x + annotation.width, y: annotation.y + annotation.height },
+              ];
+        if (
+          gesture.tool === 'select' ||
+          !galleryGestureLargeEnough(
+            gesture.tool,
+            points,
+            gesture.surface.width / 10_000,
+            gesture.surface.height / 10_000,
+          )
+        ) {
+          attachmentGalleryAnnotations.value = gesture.before;
+          attachmentGallerySelectedAnnotation.value = undefined;
+          return;
+        }
+        setGalleryTool('select');
+        requestAnimationFrame(() =>
+          document.querySelector<HTMLTextAreaElement>('.attachment-gallery__editor textarea')?.focus(),
+        );
       }
+      recordAnnotationChange(gesture.before);
     },
     { signal: lifetime.signal },
   );
   document.addEventListener(
+    'pointercancel',
+    (event) => {
+      const gesture = dependencies.attachmentAnnotationGesture;
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
+      attachmentGalleryAnnotations.value = gesture.before;
+      dependencies.attachmentAnnotationGesture = undefined;
+      attachmentGallerySelectedAnnotation.value = undefined;
+    },
+    { signal: lifetime.signal },
+  );
+  function insertDefaultGalleryAnnotation(tool: Exclude<GalleryAnnotationTool, 'select'>) {
+    const surface = document.querySelector<HTMLElement>('[data-gallery-annotation-surface="true"]');
+    if (!surface) return;
+    const rect = surface.getBoundingClientRect(),
+      stage = surface.closest<HTMLElement>('[data-gallery-zoom-stage="true"]')?.getBoundingClientRect(),
+      centerX = stage
+        ? Math.max(
+            rect.left,
+            Math.min(rect.right, (Math.max(rect.left, stage.left) + Math.min(rect.right, stage.right)) / 2),
+          )
+        : rect.left + rect.width / 2,
+      centerY = stage
+        ? Math.max(
+            rect.top,
+            Math.min(rect.bottom, (Math.max(rect.top, stage.top) + Math.min(rect.bottom, stage.bottom)) / 2),
+          )
+        : rect.top + rect.height / 2,
+      center = {
+        x: clampAnnotationCoordinate(((centerX - rect.left) * 10_000) / rect.width),
+        y: clampAnnotationCoordinate(((centerY - rect.top) * 10_000) / rect.height),
+      },
+      size = Math.min(rect.width, rect.height) / 5,
+      radiusX = (size * 5_000) / rect.width,
+      radiusY = (size * 5_000) / rect.height,
+      start = { x: clampAnnotationCoordinate(center.x - radiusX), y: clampAnnotationCoordinate(center.y - radiusY) },
+      end = { x: clampAnnotationCoordinate(center.x + radiusX), y: clampAnnotationCoordinate(center.y + radiusY) },
+      base: MediaAnnotation = {
+        id: browserRandomId(),
+        x: center.x,
+        y: center.y,
+        width: 1,
+        height: 1,
+        text: '',
+        ...(attachmentGalleryDuration.value > 0
+          ? attachmentGalleryDefaultRange(dependencies.attachmentGalleryLivePlayhead, attachmentGalleryDuration.value)
+          : {}),
+      },
+      samples =
+        tool === 'freehand'
+          ? Array.from({ length: 10 }, (_, index) => ({
+              x: clampAnnotationCoordinate(center.x + radiusX * Math.cos(((index + 1) * Math.PI * 2) / 12)),
+              y: clampAnnotationCoordinate(center.y + radiusY * Math.sin(((index + 1) * Math.PI * 2) / 12)),
+            }))
+          : [],
+      before = snapshotAnnotations(),
+      created =
+        tool === 'insertion'
+          ? drawGalleryAnnotation(base, tool, center, center)
+          : tool === 'arrow'
+            ? drawGalleryAnnotation(base, tool, { x: start.x, y: end.y }, { x: end.x, y: start.y })
+            : tool === 'freehand'
+              ? drawGalleryAnnotation(
+                  base,
+                  tool,
+                  { x: center.x + radiusX, y: center.y },
+                  { x: center.x + radiusX, y: center.y },
+                  samples,
+                )
+              : drawGalleryAnnotation(base, tool, start, end);
+    attachmentGalleryAnnotations.value = [...attachmentGalleryAnnotations.value, created];
+    attachmentGallerySelectedAnnotation.value = created.id;
+    recordAnnotationChange(before);
+    setGalleryTool('select');
+  }
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (!attachmentGalleryMarkup.value || !attachmentGalleryUrl.value || event.defaultPrevented) return;
+      const target = event.target as HTMLElement;
+      if (target.closest('input, textarea, [contenteditable="true"], [data-gallery-range-handle]')) return;
+      const key = event.key.toLowerCase(),
+        selectedId = attachmentGallerySelectedAnnotation.value,
+        selected = attachmentGalleryAnnotations.value.find((item) => item.id === selectedId),
+        meta = event.metaKey || event.ctrlKey;
+      let handled = true;
+      if (meta && key === 'z') {
+        const source = event.shiftKey ? redoAnnotations : undoAnnotations,
+          destination = event.shiftKey ? undoAnnotations : redoAnnotations,
+          previous = source.pop();
+        if (previous) {
+          destination.push(snapshotAnnotations());
+          attachmentGalleryAnnotations.value = previous;
+          if (selectedId && !previous.some((item) => item.id === selectedId))
+            attachmentGallerySelectedAnnotation.value = undefined;
+          editGroup = undefined;
+        }
+      } else if (meta && key === 'd' && selected) {
+        const before = snapshotAnnotations(),
+          duplicate = translateGalleryAnnotation({ ...selected, id: browserRandomId() }, 200, 200);
+        attachmentGalleryAnnotations.value = [...attachmentGalleryAnnotations.value, duplicate];
+        attachmentGallerySelectedAnnotation.value = duplicate.id;
+        recordAnnotationChange(before);
+      } else if (!meta && !event.altKey && key in { v: 1, r: 1, f: 1, a: 1, i: 1, s: 1 }) {
+        setGalleryTool(
+          ({ v: 'select', r: 'rect', f: 'freehand', a: 'arrow', i: 'insertion', s: 'strike' } as const)[
+            key as 'v' | 'r' | 'f' | 'a' | 'i' | 's'
+          ],
+        );
+      } else if (key === 'escape') {
+        const gesture = dependencies.attachmentAnnotationGesture;
+        if (gesture) {
+          attachmentGalleryAnnotations.value = gesture.before;
+          dependencies.attachmentAnnotationGesture = undefined;
+        } else if (attachmentGalleryTool.value !== 'select') setGalleryTool('select');
+        else if (selectedId) attachmentGallerySelectedAnnotation.value = undefined;
+        else handled = false;
+      } else if (key === 'tab') {
+        const visible = attachmentGalleryAnnotations.value.filter((item) =>
+          attachmentGalleryAnnotationVisible(
+            item,
+            dependencies.attachmentGalleryLivePlayhead,
+            attachmentGalleryDuration.value,
+          ),
+        );
+        const inCanvas = Boolean(target.closest('[data-gallery-zoom-stage="true"]')),
+          focusedAnnotation = Boolean(target.closest('.attachment-gallery__annotation'));
+        if (visible.length && inCanvas && (selectedId || !focusedAnnotation)) {
+          const index = visible.findIndex((item) => item.id === selectedId),
+            next = (index + (event.shiftKey ? -1 : 1) + visible.length) % visible.length;
+          attachmentGallerySelectedAnnotation.value = visible[next].id;
+          document
+            .querySelector<HTMLElement>(
+              `[data-action="select-gallery-annotation"][data-annotation-id="${visible[next].id}"]`,
+            )
+            ?.focus();
+        } else handled = false;
+      } else if (key === 'enter') {
+        if (attachmentGalleryTool.value !== 'select') insertDefaultGalleryAnnotation(attachmentGalleryTool.value);
+        else if (selected) document.querySelector<HTMLTextAreaElement>('.attachment-gallery__editor textarea')?.focus();
+        else handled = false;
+      } else if ((key === 'delete' || key === 'backspace') && selected) {
+        const before = snapshotAnnotations();
+        attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.filter(
+          (item) => item.id !== selected.id,
+        );
+        attachmentGallerySelectedAnnotation.value = undefined;
+        recordAnnotationChange(before);
+      } else if (key.startsWith('arrow') && selected) {
+        const distance = event.shiftKey ? 10 : 1,
+          surface = document
+            .querySelector<HTMLElement>('[data-gallery-annotation-surface="true"]')
+            ?.getBoundingClientRect();
+        if (surface) {
+          const dx =
+              key === 'arrowleft'
+                ? (-distance * 10_000) / surface.width
+                : key === 'arrowright'
+                  ? (distance * 10_000) / surface.width
+                  : 0,
+            dy =
+              key === 'arrowup'
+                ? (-distance * 10_000) / surface.height
+                : key === 'arrowdown'
+                  ? (distance * 10_000) / surface.height
+                  : 0,
+            before = snapshotAnnotations();
+          attachmentGalleryAnnotations.value = attachmentGalleryAnnotations.value.map((item) =>
+            item.id === selected.id ? translateGalleryAnnotation(item, dx, dy) : item,
+          );
+          recordAnnotationChange(before, `nudge:${selected.id}`);
+        }
+      } else handled = false;
+      if (handled) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    },
+    { capture: true, signal: lifetime.signal },
+  );
+  document.addEventListener(
     'pointerup',
     (event) => {
-      if (!dependencies.attachmentRangeGesture || event.pointerId !== dependencies.attachmentRangeGesture.pointerId)
-        return;
+      const gesture = dependencies.attachmentRangeGesture;
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
       dependencies.attachmentRangeGesture = undefined;
       event.preventDefault();
+      recordAnnotationChange(gesture.before);
+    },
+    { signal: lifetime.signal },
+  );
+  document.addEventListener(
+    'pointercancel',
+    (event) => {
+      const gesture = dependencies.attachmentRangeGesture;
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
+      attachmentGalleryAnnotations.value = gesture.before;
+      dependencies.attachmentRangeGesture = undefined;
     },
     { signal: lifetime.signal },
   );

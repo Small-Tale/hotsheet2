@@ -1604,19 +1604,31 @@ and identity-less legacy entries remain conservatively blocking.
   requires a 48px horizontal-dominant movement; controls, scrubbers, vertical motion, and
   cancelled gestures cannot change the selected attachment. Native video-slider drags
   therefore update the playhead and `currentTime` without resetting the media or annotations.
-  Full-screen markup mode follows the exported image/video gallery wireframes: normalized
-  rectangles can be drawn, selected, moved, resized from edges/corners, labeled, edited,
-  and confirmation-deleted. Video and animated-SVG annotations can be points or inclusive
-  time ranges. New timed rectangles span five percent of the media duration before and after
+  Full-screen markup mode offers Select (V), Rectangle (R), Freehand (F), Arrow (A),
+  Insertion (I), and Strike (S). Rectangles and strikes use drag boxes; freehand records
+  a path with a closed-outline toggle; arrows run from tail to head; insertion marks a click.
+  A click or tiny drag does not create a box, freehand path, or arrow. Each completed drawing returns to Select
+  with the new annotation selected. Select moves bodies within the media, scales box and
+  freehand outlines from edge/corner handles, and moves individual arrow vertices.
+  Picking uses the rendered stroke within seven screen points or the filled area;
+  overlapping marks choose the closest stroke, then smaller area, then newest mark.
+  The selected annotation has a Markdown note field and effective-intent chips, including
+  a hint when its shape default is implicit. Duplicate (Command/Ctrl+D) copies the note
+  and intents. Tab cycles annotations; Delete removes the selection; arrows nudge it
+  by one screen point or ten with Shift; Escape cancels a gesture, tool, then selection.
+  A drawing tool plus Enter inserts its default shape at the visible media center;
+  Enter in Select focuses the selected note. Undo and redo keep edits in the local
+  session and no gesture writes during a drag. Video and animated-SVG annotations can be points or inclusive
+  time ranges. New timed shapes span five percent of the media duration before and after
   the playhead, clamped at either media boundary. Timed shapes appear over the media only while
   the playhead is inside their range or its review tolerance (the larger of one second or one
   percent of the media duration), while persistent
   white wireframe-style indicators spanning every point or range remain over the scrubber
-  regardless of selection. Selecting a visible annotation rectangle
+  regardless of selection. Selecting a visible annotation
   adds high-contrast white square-bracket range handles to the timeline; those endpoints can
   be dragged with a real pointer or adjusted with the arrow keys, replacing ambiguous toolbar chevrons. Only the
   selected annotation exposes adjustable range brackets, and clicking empty image or video
-  canvas space clears the rectangle selection and its resize/range handles.
+  canvas space clears the selection and its resize/range handles.
   Saved shapes remain visible when markup mode is off. The gallery draws rectangles,
   strikes with an X, open or filled freehand paths, arrows with filled heads, and
   insertion cursors with proofreading carets. Every stroke has a dark halo and uses
@@ -1625,7 +1637,7 @@ and identity-less legacy entries remain conservatively blocking.
   zoom level, and count across attachments in the ticket. Each shape's accessible
   label includes its number, shape, intents, and note. The selected note appears
   as sanitized Markdown below the media. Shape-specific drawing and editing are
-  tracked separately in `HS2-C46J3X`; the existing rectangle controls remain.
+  covered by `HS2-C46J3X`.
   The gallery annotation action carries the current annotation-count badge, and media-grid
   cards with annotations carry a lower-right annotation marker so review work is visible
   before opening the media. The gallery action menu includes Remove so a user can verify

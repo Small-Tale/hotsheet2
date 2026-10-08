@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MediaAnnotation } from '../api';
 import { wireHotSheetInteractions } from '../app/wire-interactions';
 import type { TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
+import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
 import { KEYBOARD_SHORTCUT_STORAGE_KEY, type ShortcutChord } from '../keyboard-shortcuts';
 import { initialTerminalVisibilityState } from '../terminal-visibility';
 import {
@@ -339,10 +340,12 @@ it('keeps LAN annotation IDs distinct across repeated drawing and empty/refill (
   const annotations = signal<MediaAnnotation[]>([]),
     selected = signal<string | undefined>(undefined),
     markup = signal(true),
-    draw = signal(true);
+    draw = signal(true),
+    tool = signal<GalleryAnnotationTool>('rect');
   const bindings = {
     attachmentGalleryMarkup: markup,
     attachmentGalleryDrawMode: draw,
+    attachmentGalleryTool: tool,
     attachmentGalleryAnnotations: annotations,
     attachmentGallerySelectedAnnotation: selected,
     attachmentGalleryDuration: signal(0),
@@ -368,9 +371,11 @@ it('keeps LAN annotation IDs distinct across repeated drawing and empty/refill (
   const previous = annotations.value.map((item) => item.id);
   annotations.value = [];
   draw.value = false;
+  tool.value = 'select';
   paint();
   expect(annotations.value).toEqual([]);
   draw.value = true;
+  tool.value = 'rect';
   paint();
   expect(previous).not.toContain(selected.value);
   expect(bindings.attachmentAnnotationGesture?.annotation.id).toBe(selected.value);
@@ -410,7 +415,7 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
     expect(registrations.every((registration) => registration.attached)).toBe(true);
     // The gallery's native document listeners all carry the group's lifetime signal.
     const signals = add.mock.calls.map(([, , options]) => (options as AddEventListenerOptions).signal);
-    expect(signals.length).toBe(7);
+    expect(signals.length).toBe(10);
     expect(signals.every((item) => item && !item.aborted)).toBe(true);
 
     // Before teardown the delegated project-dialog dismissal reaches its handler.

@@ -19,6 +19,7 @@ import {
 } from '../components/attachment-gallery';
 import type { AttachmentContextMenuSurface } from '../components/reader-overlay-surfaces';
 import { GallerySurface } from '../components/reader-overlay-surfaces';
+import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
 import type { AttachmentMenu, GallerySource, Project } from '../interactions/types';
 
 export interface GalleryDependencies {
@@ -59,6 +60,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     attachmentGalleryScale = signal<number | undefined>(undefined);
   const attachmentGalleryMarkup = signal(false),
     attachmentGalleryDrawMode = signal(false),
+    attachmentGalleryTool = signal<GalleryAnnotationTool>('select'),
     attachmentGalleryAnnotations = signal<MediaAnnotation[]>([]),
     attachmentGallerySelectedAnnotation = signal<string | undefined>(undefined),
     attachmentGalleryPlayhead = signal(0),
@@ -76,10 +78,15 @@ export function createGalleryController(dependencies: GalleryDependencies) {
         surface: DOMRect;
         annotation: MediaAnnotation;
         handle?: string;
+        tool: GalleryAnnotationTool;
+        samples: { x: number; y: number }[];
+        startPoint: { x: number; y: number };
+        before: MediaAnnotation[];
       }
     | undefined;
   let attachmentRangeGesture:
-    { pointerId: number; annotationId: string; endpoint: 'start' | 'end'; track: DOMRect } | undefined;
+    | { pointerId: number; annotationId: string; endpoint: 'start' | 'end'; track: DOMRect; before: MediaAnnotation[] }
+    | undefined;
   let attachmentSwipeGesture: AttachmentGallerySwipeGesture | undefined;
   let attachmentAnnotationSession:
     | { projectId: string; ticketId: string; qualifiedId: string; attachmentId: string; before: MediaAnnotation[] }
@@ -156,6 +163,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
                 annotationNumberOffset,
                 markup: attachmentGalleryMarkup.value,
                 drawMode: attachmentGalleryDrawMode.value,
+                tool: attachmentGalleryTool.value,
                 selectedAnnotation: attachmentGallerySelectedAnnotation.value,
                 playheadMs: attachmentGalleryLivePlayhead,
                 durationMs: attachmentGalleryDuration.value,
@@ -260,6 +268,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       attachmentMenu.value = undefined;
       attachmentGalleryMarkup.value = false;
       attachmentGalleryDrawMode.value = false;
+      attachmentGalleryTool.value = 'select';
       attachmentGallerySelectedAnnotation.value = undefined;
       attachmentGalleryPlayhead.value = 0;
       attachmentGalleryDuration.value = 0;
@@ -409,6 +418,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     attachmentGalleryScale,
     attachmentGalleryMarkup,
     attachmentGalleryDrawMode,
+    attachmentGalleryTool,
     attachmentGalleryAnnotations,
     attachmentGallerySelectedAnnotation,
     attachmentGalleryPlayhead,

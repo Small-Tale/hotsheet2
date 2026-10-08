@@ -26,6 +26,7 @@ import {
 import { annotationDefaultIntent, annotationIntentColor } from '../annotation-intents';
 import type { MediaAnnotation } from '../api';
 import { isVideoAttachment } from '../attachment-references';
+import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
 import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
@@ -375,6 +376,7 @@ export function AttachmentGallery({
   markup = false,
   selectedAnnotation,
   drawMode = false,
+  tool = drawMode ? 'rect' : 'select',
   playheadMs = 0,
   durationMs = 0,
   playing = false,
@@ -393,6 +395,7 @@ export function AttachmentGallery({
   markup?: boolean;
   selectedAnnotation?: string;
   drawMode?: boolean;
+  tool?: GalleryAnnotationTool;
   playheadMs?: number;
   durationMs?: number;
   playing?: boolean;
@@ -416,6 +419,9 @@ export function AttachmentGallery({
     (annotation) =>
       annotation.id === selectedAnnotation && attachmentGalleryAnnotationVisible(annotation, playheadMs, durationMs),
   );
+  const selectedEditableAnnotation = markup
+    ? annotations.find((annotation) => annotation.id === selectedAnnotation)
+    : undefined;
   const imageData = {
     'data-attachment-url': image.url,
     'data-attachment-name': image.name,
@@ -479,11 +485,14 @@ export function AttachmentGallery({
       <div
         class="attachment-gallery__stage"
         data-gallery-zoom-stage="true"
-        tabindex={video ? '0' : undefined}
+        tabindex={video || markup ? '0' : undefined}
+        role={markup ? 'group' : undefined}
         aria-label={
           video
-            ? 'Video canvas. Space or K plays and pauses; arrow keys step frames; Shift plus arrow, J, or L seeks one second.'
-            : undefined
+            ? `Video canvas. Space or K plays and pauses; arrow keys step frames; Shift plus arrow, J, or L seeks one second.${markup ? ' V, R, F, A, I, and S choose annotation tools; Tab cycles marks; Enter edits the selected note; Escape cancels.' : ''}`
+            : markup
+              ? 'Image annotation canvas. V, R, F, A, I, and S choose tools; Tab cycles marks; Enter edits the selected note; Escape cancels.'
+              : undefined
         }
       >
         <div class="attachment-gallery__canvas">
@@ -554,11 +563,31 @@ export function AttachmentGallery({
                         >
                           {annotation.text}
                         </span>
-                        {annotation.id === selectedAnnotation &&
-                          (shape === 'rect' || shape === 'strike') &&
-                          ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => (
-                            <i data-annotation-handle={handle} />
+                        {markup &&
+                          annotation.id === selectedAnnotation &&
+                          shape === 'arrow' &&
+                          annotation.shape?.type === 'arrow' &&
+                          annotation.shape.points.map((point, index) => (
+                            <i
+                              data-annotation-handle={`point-${index}`}
+                              style={`left:${((point.x - annotation.x) / annotation.width) * 100}%;top:${((point.y - annotation.y) / annotation.height) * 100}%`}
+                            />
                           ))}
+                        {markup &&
+                          annotation.id === selectedAnnotation &&
+                          shape !== 'insertion' &&
+                          shape !== 'arrow' &&
+                          ((annotation.width *
+                            (geometry.naturalWidth * zoom.scale || geometry.availableWidth || 1000)) /
+                            10_000 <
+                            36 ||
+                          (annotation.height *
+                            (geometry.naturalHeight * zoom.scale || geometry.availableHeight || 1000)) /
+                            10_000 <
+                            36
+                            ? ['nw', 'ne', 'se', 'sw']
+                            : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
+                          ).map((handle) => <i data-annotation-handle={handle} />)}
                       </button>
                       <span
                         class="attachment-gallery__annotation-badge"
@@ -579,6 +608,50 @@ export function AttachmentGallery({
         </div>
       </div>
       <footer class="attachment-gallery__footer">
+        {selectedEditableAnnotation && (
+          <section class="attachment-gallery__editor" aria-label="Selected annotation editor">
+            <label>
+              Note (Markdown)
+              <textarea
+                {...ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryNote.attrs}
+                aria-label="Annotation note"
+                rows={2}
+              >
+                {selectedEditableAnnotation.text}
+              </textarea>
+            </label>
+            <div class="attachment-gallery__intent-list" role="group" aria-label="Annotation intents">
+              {(['comment', 'bug', 'change', 'insert', 'remove', 'move', 'question'] as const).map((intent) => {
+                const fallback = annotationDefaultIntent(selectedEditableAnnotation),
+                  chosen = selectedEditableAnnotation.intents?.length ? selectedEditableAnnotation.intents : [fallback];
+                return (
+                  <button
+                    type="button"
+                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.attrs}
+                    data-intent={intent}
+                    aria-pressed={String(chosen.includes(intent))}
+                    title={
+                      intent === fallback && !selectedEditableAnnotation.intents?.length ? 'Default intent' : undefined
+                    }
+                  >
+                    {intent}
+                    {intent === fallback && !selectedEditableAnnotation.intents?.length ? ' (default)' : ''}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedEditableAnnotation.shape?.type === 'freehand' && (
+              <label class="attachment-gallery__closed-toggle">
+                <input
+                  type="checkbox"
+                  {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryClosed.attrs}
+                  checked={selectedEditableAnnotation.shape.closed !== false}
+                />
+                Closed outline
+              </label>
+            )}
+          </section>
+        )}
         {selectedAnnotationNote?.text && (
           <section
             class="attachment-gallery__selected-note"
@@ -700,24 +773,39 @@ export function AttachmentGallery({
             )}
           </div>
         )}
-        <div class="attachment-gallery__footer-actions">
+        <div class="attachment-gallery__footer-actions" data-markup={String(markup)}>
           {markup && (
-            <FloatingToolbar label="Media markup" position="bottom" inset={px(0)}>
-              <ToolbarControlGroup label="Media markup">
-                <GalleryButton
-                  action="toggle-gallery-draw"
-                  label="Add rectangle"
-                  icon={Scan}
-                  className={drawMode ? 'attachment-gallery__pressed' : ''}
-                />
-                <GalleryButton
-                  action="delete-gallery-annotation"
-                  label="Erase selected annotation"
-                  icon={Eraser}
-                  disabled={!selectedAnnotation}
-                />
-              </ToolbarControlGroup>
-            </FloatingToolbar>
+            <span class="attachment-gallery__markup-position">
+              <FloatingToolbar label="Media markup" position="bottom" inset={px(0)}>
+                <ToolbarControlGroup label="Media markup">
+                  <GalleryButton
+                    action="toggle-gallery-draw"
+                    label="Add rectangle"
+                    icon={Scan}
+                    className={tool === 'rect' ? 'attachment-gallery__pressed' : ''}
+                  />
+                  {(['select', 'freehand', 'arrow', 'insertion', 'strike'] as const).map((choice) => (
+                    <button
+                      type="button"
+                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryTool.attrs}
+                      data-tool={choice}
+                      aria-label={`${choice} tool`}
+                      aria-pressed={String(tool === choice)}
+                      title={`${choice} tool`}
+                      class={tool === choice ? 'attachment-gallery__pressed' : undefined}
+                    >
+                      {({ select: 'V', freehand: 'F', arrow: 'A', insertion: 'I', strike: 'S' } as const)[choice]}
+                    </button>
+                  ))}
+                  <GalleryButton
+                    action="delete-gallery-annotation"
+                    label="Erase selected annotation"
+                    icon={Eraser}
+                    disabled={!selectedAnnotation}
+                  />
+                </ToolbarControlGroup>
+              </FloatingToolbar>
+            </span>
           )}
           <FloatingToolbar label="Media zoom" position="bottom-end" inset={px(0)}>
             <ToolbarControlGroup label="Media zoom">
