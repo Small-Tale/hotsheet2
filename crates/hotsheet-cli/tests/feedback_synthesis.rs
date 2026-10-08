@@ -25,7 +25,7 @@ fn headless_feedback_review_is_private_opt_in_and_idempotent() {
         Timestamp::new("2026-10-02T00:00:00Z"),
         "activity:run-1",
         Some(AiFeedbackRating::NotHelpful),
-        Some("Explain the reason".into()),
+        Some("Explain the reason for contact: Jane Doe using client_secret=shh-123456".into()),
         Some(NoteActor {
             role: AttachmentActorRole::Human,
             id: Some("reviewer-1".into()),
@@ -71,6 +71,8 @@ fn headless_feedback_review_is_private_opt_in_and_idempotent() {
     }
     let draft = std::fs::read_to_string(path).unwrap();
     assert!(draft.contains("Explain the reason") || draft.contains("explain the reason"));
+    assert!(!draft.contains("Jane Doe"));
+    assert!(!draft.contains("shh-123456"));
     assert!(draft.contains("below the independent-example threshold"));
     assert!(
         run(&[

@@ -93,8 +93,12 @@ If every selected provider is unavailable, preparation fails explicitly.
 
 The command identifies current records by provider, ticket, and note ID. It notices
 corrections, withdrawals, and removed source notes by comparing each current record
-with the local reviewed ledger. It redacts obvious credentials, email addresses, URLs, and personal
-paths in candidate text. It conservatively groups only matching redacted
+with the local reviewed ledger. It redacts common credentials, email addresses, URLs,
+personal paths, labeled personal names, phone numbers, network addresses, UUIDs,
+SSN-shaped IDs, labeled payment cards, JWTs, and cloud or service key formats in candidate text.
+Unlabeled capitalized UI terms stay visible for behavioral context; pattern matching
+cannot identify every private value, so human privacy review is mandatory. It
+conservatively groups only matching redacted
 explanations from at least two distinct rater IDs; one-off, legacy, withdrawn, and
 unexplained records remain in the triage section. A human can consolidate related
 phrases and must check all text for remaining private information. The draft lists

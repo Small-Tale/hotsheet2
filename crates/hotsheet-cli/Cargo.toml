@@ -33,6 +33,7 @@ time.workspace = true
 tempfile.workspace = true
 ureq.workspace = true
 rpassword.workspace = true
+regex.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

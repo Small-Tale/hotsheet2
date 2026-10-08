@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-ZDEJDR covers labeled names, structured identifiers, cloud and service secrets,
+JWTs, and retained behavioral context in `crates/hotsheet-cli/src/feedback_synthesis.rs`
+unit tests, plus a private draft created through the CLI in
+`crates/hotsheet-cli/tests/feedback_synthesis.rs`.
+
 HS2-XCHANA covers popup anchor recovery after inline style loss or host replacement in
 `clients/web/src/context-menu-position.test.ts`, and the open inspector status menu's
 anchor, Started submenu, and dismissal in Chromium and WebKit via

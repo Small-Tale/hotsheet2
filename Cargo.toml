@@ -44,6 +44,7 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 ureq = "2"
 rpassword = "7.5"
+regex = "1"
 security-framework = "3.7"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_Storage_FileSystem", "Win32_System_IO"] }
 rusqlite = { version = "0.32", features = ["bundled"] }

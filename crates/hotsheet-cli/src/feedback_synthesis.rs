@@ -4,10 +4,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result, bail};
 use hotsheet_model::AiFeedbackRating;
 use hotsheet_ticketing::AiFeedbackRecord;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -102,32 +104,61 @@ fn read_state(path: &Path) -> Result<ReviewState> {
     }
 }
 
-/// Remove obvious credentials, email addresses, personal machine paths, and URLs
-/// before a phrase is placed in a local draft. Human review remains mandatory.
+/// Conservative, bounded patterns for private values in a locally reviewed draft.
+/// Labeled names are removed; unlabeled title-case UI terms remain useful context.
+static REDACTIONS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+    [
+        (r"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*", "[redacted]"),
+        (r"(?i)\b[A-Z][A-Z0-9+.-]*://\S+", "[redacted]"),
+        (r"(?i)(?:\b[A-Z0-9._%+-]+)?@[A-Z0-9._-]+\b", "[redacted]"),
+        (
+            r#"(^|[\s(\[{"'])(?:/[^\s)\]}"']+|~/[^\s)\]}"']+|[A-Za-z]:\\[^\s)\]}"']+)"#,
+            "${1}[redacted]",
+        ),
+        (
+            r"(?i)(\bauthorization\b\s*[:=]\s*)(?:bearer|basic)\s+[^\s,;]+",
+            "${1}[redacted]",
+        ),
+        (
+            r"(?i)(\b(?:token|access[_-]?token|refresh[_-]?token|api[_-]?key|client[_-]?secret|secret|secret access key|password|passwd|authorization|session[_-]?id)\b\s*[:=]\s*)[^\s,;]+",
+            "${1}[redacted]",
+        ),
+        (r"(?i)(\b(?:token|secret|password|bearer)\b\s+)[^\s,;]+", "${1}[redacted]"),
+        (r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/-]{12,}", "${1}[redacted]"),
+        (
+            r"(?i)\b(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|glpat-[A-Za-z0-9_-]+|xox[abprs]-[A-Za-z0-9-]+|sk[_-](?:live[_-])?[A-Za-z0-9_-]+|rk_live_[A-Za-z0-9_-]+|AKIA[A-Z0-9]{16}|ASIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{20,})\b",
+            "[redacted]",
+        ),
+        (r"\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b", "[redacted]"),
+        (r"(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", "[redacted]"),
+        (r"\b\d{3}-\d{2}-\d{4}\b", "[redacted]"),
+        (r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[redacted]"),
+        (
+            r"(?i)(\b(?:phone|mobile|tel|account[_ -]?id|customer[_ -]?id|credit[_ -]?card|card)\b\s*[:=]\s*)\+?[\d(). -]{7,}\d",
+            "${1}[redacted]",
+        ),
+        (
+            r"(?i:\b(?:name|contact|customer|client|user|reviewer|author|patient|person)\s*[:=]\s*)(?:[A-Z][a-z]+(?:[-'][A-Z][a-z]+)?)(?:\s+[A-Z][a-z]+(?:[-'][A-Z][a-z]+)?){0,2}",
+            "[redacted]",
+        ),
+    ]
+    .into_iter()
+    .map(|(pattern, replacement)| (Regex::new(pattern).expect("valid redaction pattern"), replacement))
+    .collect()
+});
+
+/// Remove common private values before text enters a local draft. Patterns cannot
+/// recognize every name or secret, so human review remains mandatory.
 fn redact(input: &str) -> String {
-    let mut words = Vec::new();
-    let mut hide_next = false;
-    for word in input.split_whitespace().take(80) {
-        let trimmed = word.trim_matches(|c: char| ",.;:()[]{}<>\"'".contains(c));
-        let lower = trimmed.to_ascii_lowercase();
-        let sensitive = hide_next
-            || trimmed.contains('@')
-            || trimmed.starts_with('/')
-            || trimmed.starts_with("~/")
-            || lower.contains("://")
-            || lower.starts_with("ghp_")
-            || lower.starts_with("github_pat_")
-            || lower.starts_with("sk-")
-            || lower.starts_with("token=")
-            || lower.starts_with("access_token=")
-            || lower.starts_with("api_key=")
-            || lower.starts_with("apikey=")
-            || lower.starts_with("password=")
-            || (trimmed.len() > 2 && trimmed.as_bytes()[1] == b':' && trimmed.contains('\\'));
-        words.push(if sensitive { "[redacted]" } else { word });
-        hide_next = matches!(lower.as_str(), "token" | "password" | "secret" | "bearer");
+    let mut text = input
+        .split_whitespace()
+        .take(80)
+        .collect::<Vec<_>>()
+        .join(" ");
+    for (pattern, replacement) in REDACTIONS.iter() {
+        text = pattern.replace_all(&text, *replacement).into_owned();
     }
-    words.join(" ")
+    text
 }
 
 fn reference(row: &AiFeedbackRecord) -> String {
@@ -565,6 +596,71 @@ mod tests {
             redact("email me@example.com token ghp_secret path /Users/alice"),
             "email [redacted] token [redacted] path [redacted]"
         );
+    }
+
+    #[test]
+    fn redacts_labeled_people_identifiers_and_uncommon_secrets_without_erasing_feedback() {
+        let input = "For name: Alice Smith, improve Save Draft after phone: +1-415-555-0199 failed. \
+            The request 550e8400-e29b-41d4-a716-446655440000 used api_key: private-key-987 \
+            and Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature123. \
+            The same issue appears with AKIAABCDEFGHIJKLMNOP and 192.168.1.25.";
+        let result = redact(input);
+        for secret in [
+            "Alice",
+            "Smith",
+            "415",
+            "550e8400",
+            "private-key-987",
+            "eyJhbGci",
+            "AKIAABCDEFGHIJKLMNOP",
+            "192.168.1.25",
+        ] {
+            assert!(!result.contains(secret), "leaked {secret}: {result}");
+        }
+        assert!(result.contains("improve Save Draft"));
+        assert!(result.contains("The same issue appears"));
+        let variants = redact(
+            "Keep the loading state after token=opaque123 and password hunter2. \
+             Authorization: Bearer opaque456 @private-user alice@internal \
+             card: 4111 1111 1111 1111 app://private/session",
+        );
+        for secret in [
+            "opaque123",
+            "hunter2",
+            "opaque456",
+            "@private-user",
+            "alice@internal",
+            "4111",
+            "app://private",
+        ] {
+            assert!(!variants.contains(secret), "leaked {secret}: {variants}");
+        }
+        assert!(variants.contains("Keep the loading state"));
+        assert_eq!(
+            redact("Open (/Users/alice/private) again"),
+            "Open ([redacted]) again"
+        );
+    }
+
+    #[test]
+    fn private_review_draft_redacts_structured_values_before_writing() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = row(
+            "private",
+            "rater-1",
+            Some(AiFeedbackRating::NotHelpful),
+            Some(
+                "contact: Jane Doe asked to retain selection after client_secret=shh-123456 and SSN 123-45-6789",
+            ),
+        );
+        let draft = prepare(temp.path(), &["local".into()], vec![source], &[])
+            .unwrap()
+            .unwrap();
+        let content = fs::read_to_string(draft).unwrap();
+        assert!(content.contains("retain selection"));
+        assert!(!content.contains("Jane Doe"));
+        assert!(!content.contains("shh-123456"));
+        assert!(!content.contains("123-45-6789"));
     }
 
     #[test]

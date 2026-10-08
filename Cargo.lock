@@ -795,6 +795,7 @@ dependencies = [
  "hotsheet-tls",
  "libc",
  "predicates",
+ "regex",
  "rpassword",
  "serde",
  "serde_json",
