@@ -307,6 +307,7 @@ impl GitLabProvider {
                     summary: None,
                     confidence,
                     feedback_for: None,
+                    ai_feedback: hotsheet_model::AiFeedback::from_legacy_text(&text),
                     human_edited: false,
                     actor: None,
                     text,
@@ -825,6 +826,7 @@ fn capabilities() -> ProviderCapabilities {
         not_working_report: false,
         // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
         note_confidence: true,
+        ai_feedback: false,
         offline_mutation: false,
         history: true,
         watch: true,
@@ -1056,6 +1058,7 @@ mod tests {
                         summary: None,
                         confidence: Some(score),
                         actor: None,
+                        ai_feedback: None,
                     },
                     "Re-verified.".into(),
                 )
@@ -1321,6 +1324,7 @@ mod tests {
             summary: None,
             confidence: Some(hotsheet_model::Confidence::new(value).unwrap()),
             actor: None,
+            ai_feedback: None,
         };
         let set_status = |status| {
             std::thread::sleep(std::time::Duration::from_millis(1100));

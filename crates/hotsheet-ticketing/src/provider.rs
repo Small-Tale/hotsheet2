@@ -285,11 +285,31 @@ pub struct ProviderCapabilities {
     /// Providers without Hot Sheet note metadata reject a score explicitly.
     #[serde(default)]
     pub note_confidence: bool,
+    /// Structured, revisable AI ratings and provider-scoped feedback retrieval.
+    #[serde(default)]
+    pub ai_feedback: bool,
     pub offline_mutation: bool,
     pub history: bool,
     pub watch: bool,
     pub provider_idempotency: bool,
     pub query_fields: Vec<String>,
+}
+
+/// One current feedback source for review and synthesis. A correction keeps the
+/// same `(connection_id, ticket_id, note_id)` key; a withdrawal has no rating.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AiFeedbackRecord {
+    pub connection_id: String,
+    pub ticket_id: String,
+    pub slug: String,
+    pub note_id: String,
+    pub target: String,
+    pub rating: Option<hotsheet_model::AiFeedbackRating>,
+    pub explanation: Option<String>,
+    pub rater: Option<hotsheet_model::NoteActor>,
+    pub created_at: String,
+    pub edited_at: String,
+    pub legacy: bool,
 }
 
 impl ProviderCapabilities {
@@ -312,6 +332,7 @@ impl ProviderCapabilities {
             atomic_batch: true,
             not_working_report: true,
             note_confidence: true,
+            ai_feedback: true,
             offline_mutation: true,
             history: true,
             watch: true,
@@ -828,6 +849,25 @@ pub trait TicketProvider: Send + Sync {
         self.descriptor().capabilities.note_confidence
     }
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError>;
+    fn ai_feedback_records(&self) -> Result<Vec<AiFeedbackRecord>, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "ai_feedback",
+        })
+    }
+    fn rate_ai_content(
+        &self,
+        _native_id: &str,
+        _now: Timestamp,
+        _feedback: hotsheet_model::AiFeedback,
+        _actor: hotsheet_model::NoteActor,
+        _expected_token: Option<&str>,
+    ) -> Result<ApiTicket, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "ai_feedback",
+        })
+    }
     /// Return one bounded page. The cursor is provider-owned and opaque to the host.
     fn query_page(
         &self,
@@ -931,6 +971,12 @@ pub trait TicketProvider: Send + Sync {
             return Err(ProviderError::Unsupported {
                 connection_id: self.descriptor().connection_id,
                 capability: "note_confidence",
+            });
+        }
+        if metadata.ai_feedback.is_some() && !self.descriptor().capabilities.ai_feedback {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.descriptor().connection_id,
+                capability: "ai_feedback",
             });
         }
         self.add_note_with_summary(native_id, ctx, kind, metadata.summary, text)
@@ -1142,6 +1188,80 @@ impl TicketProvider for GitProvider {
             .collect())
     }
 
+    fn ai_feedback_records(&self) -> Result<Vec<AiFeedbackRecord>, ProviderError> {
+        if !self.capabilities().ai_feedback {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.connection_id.clone(),
+                capability: "ai_feedback",
+            });
+        }
+        let mut records = Vec::new();
+        for ticket in self.store.list_tickets()? {
+            for note in ticket.notes {
+                let Some(feedback) = note.ai_feedback_value() else {
+                    continue;
+                };
+                records.push(AiFeedbackRecord {
+                    connection_id: self.connection_id.clone(),
+                    ticket_id: ticket.id.to_string(),
+                    slug: ticket.slug.clone(),
+                    note_id: note.id.to_string(),
+                    target: feedback.target,
+                    rating: feedback.rating,
+                    explanation: feedback.explanation,
+                    rater: note.actor,
+                    created_at: note.created_at.to_string(),
+                    edited_at: note.edited_at.to_string(),
+                    legacy: note.ai_feedback.is_none(),
+                });
+            }
+        }
+        records.sort_by(|a, b| {
+            a.created_at
+                .cmp(&b.created_at)
+                .then(a.ticket_id.cmp(&b.ticket_id))
+                .then(a.note_id.cmp(&b.note_id))
+        });
+        Ok(records)
+    }
+
+    fn rate_ai_content(
+        &self,
+        native_id: &str,
+        now: Timestamp,
+        feedback: hotsheet_model::AiFeedback,
+        actor: hotsheet_model::NoteActor,
+        expected_token: Option<&str>,
+    ) -> Result<ApiTicket, ProviderError> {
+        if !self.capabilities().ai_feedback {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.connection_id.clone(),
+                capability: "ai_feedback",
+            });
+        }
+        let ticket = self.ticket(native_id)?;
+        if expected_token.is_some_and(|token| token != ticket.updated_at.as_str()) {
+            return Err(ProviderError::Conflict {
+                ticket: ticket.slug,
+                message: "ticket changed since it was read".into(),
+            });
+        }
+        let updated = ops::rate_ai_content(
+            &self.store,
+            &ticket.id,
+            now,
+            &feedback.target,
+            feedback.rating,
+            feedback.explanation,
+            Some(actor),
+        )?;
+        Ok(ApiTicket::from_provider(
+            &updated,
+            &self.connection_id,
+            None,
+        ))
+    }
+
     fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError> {
         Ok(self
             .store
@@ -1301,6 +1421,7 @@ impl TicketProvider for GitProvider {
                 summary,
                 confidence: None,
                 actor: None,
+                ai_feedback: None,
             },
             text,
         )
@@ -1318,6 +1439,12 @@ impl TicketProvider for GitProvider {
             return Err(ProviderError::Unsupported {
                 connection_id: self.connection_id.clone(),
                 capability: "note_confidence",
+            });
+        }
+        if metadata.ai_feedback.is_some() && !self.capabilities().ai_feedback {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.connection_id.clone(),
+                capability: "ai_feedback",
             });
         }
         let ticket = self.ticket(native_id)?;
@@ -1819,6 +1946,14 @@ pub fn copy_between(
             field: "note confidence",
         });
     }
+    if ticket.notes.iter().any(|note| note.ai_feedback.is_some())
+        && !destination.descriptor().capabilities.ai_feedback
+    {
+        return Err(TransferError::UnsupportedField {
+            connection_id: destination_connection.into(),
+            field: "AI feedback",
+        });
+    }
     let draft = ProviderDraft {
         title: ticket.title,
         category: ticket.category,
@@ -1840,8 +1975,32 @@ pub fn copy_between(
         },
         draft,
     )?;
+    let source_note_ids = ticket
+        .notes
+        .iter()
+        .map(|note| note.id.clone())
+        .collect::<Vec<_>>();
     for note in ticket.notes {
         let generated_id = transfer_ulid(operation_id, &format!("note:{}", note.id));
+        let mut ai_feedback = note.ai_feedback.clone();
+        let mut copied_text = note.text.clone();
+        if let Some(feedback) = &mut ai_feedback {
+            for prefix in ["note:", "activity:"] {
+                if let Some(source_id) = feedback.target.strip_prefix(prefix) {
+                    if source_note_ids.iter().any(|id| id == source_id) {
+                        let copied_id = transfer_ulid(operation_id, &format!("note:{source_id}"));
+                        let old_target = feedback.target.clone();
+                        feedback.target = format!("{prefix}{copied_id}");
+                        copied_text = copied_text.replacen(
+                            &format!("AI feedback for {old_target}:"),
+                            &format!("AI feedback for {}:", feedback.target),
+                            1,
+                        );
+                    }
+                    break;
+                }
+            }
+        }
         destination.add_note_with_metadata(
             &created.native_id,
             MutationContext {
@@ -1855,16 +2014,17 @@ pub fn copy_between(
                     .confidence
                     .and_then(|value| Confidence::new(u64::from(value)).ok()),
                 actor: note.actor.clone(),
+                ai_feedback,
                 human_edited: note.human_edited,
             },
-            note.text.clone(),
+            copied_text.clone(),
         )?;
         if note.edited_at != note.created_at {
             destination.edit_note(
                 &created.native_id,
                 &generated_id.to_string(),
                 Timestamp::new(note.edited_at),
-                note.text,
+                copied_text,
             )?;
         }
     }
@@ -2917,6 +3077,7 @@ mod tests {
                     summary: None,
                     confidence: Some(Confidence::new(73).unwrap()),
                     actor: None,
+                    ai_feedback: None,
                 },
                 "## Confidence\n73".into(),
             )
@@ -2942,6 +3103,7 @@ mod tests {
                     summary: None,
                     confidence: Some(Confidence::new(10).unwrap()),
                     actor: None,
+                    ai_feedback: None,
                 },
                 "scored".into(),
             )
@@ -3076,6 +3238,126 @@ mod tests {
                 .find_map(|note| note.confidence),
             Some(73)
         );
+    }
+
+    #[test]
+    fn copy_preserves_structured_rating_and_remaps_note_target() {
+        use hotsheet_model::{AiFeedbackRating, AttachmentActorRole, NoteActor};
+        let (_source_dir, source) = git_provider();
+        let (_dest_dir, dest) = git_provider();
+        let dest = GitProvider::new("destination", dest.store.clone());
+        let source_id = Ulid::new();
+        source
+            .create(
+                ctx(source_id, "2026-08-26T03:00:00Z"),
+                ProviderDraft {
+                    title: "rated".into(),
+                    category: "task".into(),
+                    priority: Priority::Default,
+                    status: Status::NotStarted,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        let source_note = Ulid::new();
+        source
+            .add_note(
+                &source_id.to_string(),
+                ctx(source_note, "2026-08-26T03:01:00Z"),
+                NoteKind::Activity,
+                "AI result".into(),
+            )
+            .unwrap();
+        ops::rate_ai_content(
+            &source.store,
+            &source_id,
+            Timestamp::new("2026-08-26T03:02:00Z"),
+            &format!("note:{source_note}"),
+            Some(AiFeedbackRating::Helpful),
+            Some("clear".into()),
+            Some(NoteActor {
+                role: AttachmentActorRole::Human,
+                id: Some("rater".into()),
+            }),
+        )
+        .unwrap();
+        let registry = ProviderRegistry::default();
+        registry.register(Arc::new(source)).unwrap();
+        registry.register(Arc::new(dest)).unwrap();
+        let outcome = copy_between(
+            &registry,
+            TicketRef {
+                connection_id: "local".into(),
+                native_id: source_id.to_string(),
+            },
+            "destination",
+            "feedback-copy",
+            Timestamp::new("2026-08-26T03:03:00Z"),
+        )
+        .unwrap();
+        let copied = registry
+            .get("destination")
+            .unwrap()
+            .get(&outcome.destination.native_id)
+            .unwrap();
+        assert_eq!(copied.notes.len(), 2);
+        assert_eq!(
+            copied.notes[1].ai_feedback.as_ref().unwrap().target,
+            format!("note:{}", copied.notes[0].id)
+        );
+        assert_eq!(
+            copied.notes[1].ai_feedback.as_ref().unwrap().rating,
+            Some(AiFeedbackRating::Helpful)
+        );
+        assert_eq!(
+            copied.notes[1].feedback_for.as_deref(),
+            Some(copied.notes[0].id.as_str())
+        );
+        assert!(
+            copied.notes[1]
+                .text
+                .starts_with(&format!("AI feedback for note:{}:", copied.notes[0].id))
+        );
+    }
+
+    #[test]
+    fn feedback_ledger_reports_explicit_unsupported_capability() {
+        use hotsheet_model::{AiFeedback, AiFeedbackRating, AttachmentActorRole, NoteActor};
+        let (_dir, provider) = git_provider();
+        let mut capabilities = provider.capabilities();
+        capabilities.ai_feedback = false;
+        let provider = provider.with_test_capabilities(capabilities);
+        assert!(matches!(
+            provider.ai_feedback_records(),
+            Err(ProviderError::Unsupported {
+                capability: "ai_feedback",
+                ..
+            })
+        ));
+        assert!(matches!(
+            provider.rate_ai_content(
+                "missing",
+                Timestamp::new("2026-08-26T03:00:00Z"),
+                AiFeedback {
+                    target: "activity:run-1".into(),
+                    rating: Some(AiFeedbackRating::Helpful),
+                    explanation: None,
+                },
+                NoteActor {
+                    role: AttachmentActorRole::Human,
+                    id: Some("rater".into()),
+                },
+                None,
+            ),
+            Err(ProviderError::Unsupported {
+                capability: "ai_feedback",
+                ..
+            })
+        ));
     }
 
     #[test]

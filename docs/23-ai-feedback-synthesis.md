@@ -1,18 +1,29 @@
-# AI note feedback synthesis (proposed; HS2-355565)
+# AI note feedback synthesis (HS2-355565)
 
 ## Current behavior
 
-The web client's thumbs controls append a regular ticket note beginning
+The web client's thumbs controls save a regular ticket note beginning
 `AI feedback for <target>: Helpful` or `AI feedback for <target>: Not helpful`, followed
 by an optional explanation. For a `note:<id>` target, the Notes UI nests the rating
 inside that source note behind a disclosure and Git-backed parent deletion removes the
 rating. Missing-parent and other-target feedback stays visible. The action preserves an
 auditable response in the ticket; it does not update a model, prompt, agent instruction,
-or future suggestion. Git-backed note targets also carry a structured `feedback_for`
-source id, while ratings and non-note targets remain prose.
-Ticket text search can find these notes, but a reliable feedback-only query, correction
-history, and deduplication need explicit metadata (HS2-2G2336). See [the client
+or future suggestion. Git-backed ratings carry structured target, value, and optional
+explanation metadata; note id, actor, creation time, and edit time supply identity and
+provenance. Repeating a rating from the same rater and target revises its note; a
+withdrawal retains the note with a null rating. The Git commit history retains prior
+versions. Exact legacy prose ratings are normalized on read and marked `legacy` in
+the feedback query. See [the client
 contract](06-clients.md) and [ticket note format](17-ticket-file-format.md).
+
+`GET /providers/{connection_id}/ai-feedback` returns the current feedback source
+ledger for a Git connection, including completed tickets. Each row identifies the
+connection, ticket and feedback note; target, rating, explanation, rater, creation
+time, edit time, and whether it came from legacy prose. Unsupported connections
+return an explicit capability error. A structured rating is written through ticket
+`PATCH` with `ai_feedback: {target, rating, explanation?}` and an actor with a
+stable id; `rating: null` withdraws it. Feedback must be patched separately from
+other ticket fields. Repeated writes by the same rater and target update one note.
 
 ## Recommended process
 
@@ -69,11 +80,9 @@ removed when later evidence contradicts it.
 
 ## Follow-up delivery
 
-- **HS2-2G2336:** store and query structured, revisable ratings while preserving
-  readable notes and existing prose feedback.
+- **HS2-2G2336:** structured, revisable ratings and feedback query (delivered).
 - **HS2-SX1F4J:** build the local draft, deduplication, redaction, cursor, and human
   review flow, with tests. It depends on the structured source contract.
 
-Until those ship, a maintainer can manually search for the exact `AI feedback for`
-prefix, inspect each source ticket, and write a reviewed summary using the rules
-above. Manual review is the only currently available synthesis path.
+Until HS2-SX1F4J ships, a maintainer can query feedback, inspect uncertain legacy
+records, and write a reviewed summary using the rules above.

@@ -30,6 +30,8 @@ export type Capabilities = Record<
   query_fields: string[];
   /** Existing attachments can be renamed, deleted, regrouped, and annotated (HS2-HSA64D). Older servers omit it. */
   attachment_edit?: boolean;
+  /** Structured, revisable ratings and the provider feedback query. */
+  ai_feedback?: boolean;
 };
 export interface ProviderDescriptor {
   connection_id: string;
@@ -128,6 +130,8 @@ export interface Note {
   confidence?: number;
   /** Persisted source note id of AI thumbs feedback; older/provider notes use their text prefix. */
   feedback_for?: string;
+  /** Current rating; null is a withdrawal. Exact legacy prose is normalized on read. */
+  ai_feedback?: { target: string; rating: 'helpful' | 'not_helpful' | null; explanation?: string };
   /** True once a human changed AI-authored text, including after a later revert. */
   human_edited?: boolean;
   /** Who wrote the note, when recorded (HS2-32QDZ3). */

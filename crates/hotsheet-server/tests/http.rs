@@ -63,6 +63,151 @@ impl ClientDriveBackend for FakeClientDriveBackend {
     }
 }
 
+#[tokio::test]
+async fn ai_feedback_http_revisions_are_queryable_without_duplicate_votes() {
+    let (_dir, state) = state();
+    let app = app(state);
+    let providers = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let connection = providers[0]["connection_id"].as_str().unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(r#"{"title":"Feedback source"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap();
+    let uri = format!("/providers/{connection}/tickets/{id}");
+    let feedback_uri = format!("/providers/{connection}/ai-feedback");
+    let rate = |rating: &str, explanation: &str| {
+        serde_json::json!({
+            "ai_feedback": {"target":"activity:run-1", "rating":rating, "explanation":explanation},
+            "actor": {"role":"human", "id":"rater-a"}
+        })
+        .to_string()
+    };
+    let first = body_json(
+        app.clone()
+            .oneshot(authed("PATCH", &uri, Some(&rate("helpful", "Clear"))))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let note_id = first["notes"][0]["id"].as_str().unwrap();
+    assert_eq!(first["notes"][0]["ai_feedback"]["rating"], "helpful");
+    let corrected = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &uri,
+                Some(&rate("not_helpful", "Too broad")),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(corrected["notes"].as_array().unwrap().len(), 1);
+    assert_eq!(corrected["notes"][0]["id"], note_id);
+    let rows = body_json(
+        app.clone()
+            .oneshot(authed("GET", &feedback_uri, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_eq!(rows[0]["rating"], "not_helpful");
+    assert_eq!(rows[0]["rater"]["id"], "rater-a");
+    let withdrawn = serde_json::json!({
+        "ai_feedback": {"target":"activity:run-1", "rating":null},
+        "actor": {"role":"human", "id":"rater-a"}
+    })
+    .to_string();
+    let result = body_json(
+        app.clone()
+            .oneshot(authed("PATCH", &uri, Some(&withdrawn)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(result["notes"][0]["ai_feedback"]["rating"].is_null());
+    let rows = body_json(
+        app.clone()
+            .oneshot(authed("GET", &feedback_uri, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(rows[0]["note_id"], note_id);
+    assert!(rows[0]["rating"].is_null());
+    assert_eq!(rows[0]["legacy"], false);
+    let legacy = serde_json::json!({
+        "note": "AI feedback for activity:old-run: Helpful — keep suggestions like this.\n\nEarlier note"
+    }).to_string();
+    let _ = app
+        .clone()
+        .oneshot(authed("PATCH", &uri, Some(&legacy)))
+        .await
+        .unwrap();
+    let rows = body_json(
+        app.clone()
+            .oneshot(authed("GET", &feedback_uri, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(rows.as_array().unwrap().len(), 2);
+    assert_eq!(rows[1]["target"], "activity:old-run");
+    assert_eq!(rows[1]["legacy"], true);
+    let missing_rater =
+        serde_json::json!({"ai_feedback":{"target":"activity:run-2","rating":"helpful"}})
+            .to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("PATCH", &uri, Some(&missing_rater)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let mixed = serde_json::json!({
+        "ai_feedback":{"target":"activity:run-2","rating":"helpful"},
+        "actor":{"role":"human","id":"rater-a"}, "title":"should not be applied"
+    })
+    .to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("PATCH", &uri, Some(&mixed)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let invalid_target = serde_json::json!({
+        "ai_feedback":{"target":"activity:","rating":"helpful"},
+        "actor":{"role":"human","id":"rater-a"}
+    })
+    .to_string();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("PATCH", &uri, Some(&invalid_target)))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+}
+
 impl PreparedClientDrive for FakePreparedClientDrive {
     fn tool(&self) -> &str {
         &self.tool

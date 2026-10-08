@@ -32,6 +32,9 @@ pub struct Note {
     /// Source note of an AI thumbs rating. Legacy files without this marker retain
     /// their relationship through the known first-line prefix.
     pub feedback_for: Option<Ulid>,
+    /// Structured thumbs feedback. The note id is the stable rating id; edits replace
+    /// its current value and `None` rating records a withdrawal.
+    pub ai_feedback: Option<AiFeedback>,
     /// A human changed the text after AI authorship; remains true even after a revert.
     pub human_edited: bool,
     /// Who wrote the note: the acting role and optional stable id of the mutation that
@@ -48,6 +51,41 @@ pub struct NoteActor {
     pub role: AttachmentActorRole,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AiFeedbackRating {
+    Helpful,
+    NotHelpful,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AiFeedback {
+    /// Stable source identifier, such as `note:<id>` or `activity:<id>`.
+    pub target: String,
+    /// Absent after withdrawal; the source note remains for audit.
+    pub rating: Option<AiFeedbackRating>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
+}
+
+impl AiFeedback {
+    pub fn from_legacy_text(text: &str) -> Option<Self> {
+        let first = text.lines().next()?;
+        let target = Note::ai_feedback_target(text)?;
+        let rating = if first.ends_with("Helpful — keep suggestions like this.") {
+            AiFeedbackRating::Helpful
+        } else {
+            AiFeedbackRating::NotHelpful
+        };
+        let explanation = text[first.len()..].trim();
+        Some(Self {
+            target: target.to_owned(),
+            rating: Some(rating),
+            explanation: (!explanation.is_empty()).then(|| explanation.to_owned()),
+        })
+    }
 }
 
 /// A validated AI completion confidence score: an integer percentage from 0 to 100
@@ -103,11 +141,24 @@ impl std::fmt::Display for Confidence {
 }
 
 impl Note {
+    /// Current structured value or an exact legacy thumbs note. A structured
+    /// withdrawal wins over its still-readable text.
+    pub fn ai_feedback_value(&self) -> Option<AiFeedback> {
+        if let Some(feedback) = &self.ai_feedback {
+            return Some(feedback.clone());
+        }
+        AiFeedback::from_legacy_text(&self.text)
+    }
+
     /// Source note of a thumbs rating written by the web client. New Git notes carry
     /// a marker; the exact legacy prefix remains a link for older and provider notes.
     /// Malformed or non-note targets stay ordinary notes so they cannot disappear.
     pub fn ai_feedback_for_note(&self) -> Option<Ulid> {
-        self.feedback_for
+        self.ai_feedback
+            .as_ref()
+            .and_then(|feedback| feedback.target.strip_prefix("note:"))
+            .and_then(|id| Ulid::from_string(id).ok())
+            .or(self.feedback_for)
             .or_else(|| Self::feedback_parent_from_text(&self.text))
     }
 
@@ -117,7 +168,9 @@ impl Note {
     }
 
     pub fn is_ai_thumbs_feedback(&self) -> bool {
-        self.feedback_for.is_some() || Self::text_is_ai_thumbs_feedback(&self.text)
+        self.ai_feedback.is_some()
+            || self.feedback_for.is_some()
+            || Self::text_is_ai_thumbs_feedback(&self.text)
     }
 
     pub fn text_is_ai_thumbs_feedback(text: &str) -> bool {
@@ -467,6 +520,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: String::new(),
@@ -562,6 +616,30 @@ mod tests {
             "2026-08-20T00:02:00Z",
         ));
         assert!(!ticket.feedback_needed());
+    }
+
+    #[test]
+    fn ai_feedback_legacy_read_and_structured_withdrawal() {
+        let mut rating = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+            NoteKind::Regular,
+            "2026-08-20T00:01:00Z",
+        );
+        rating.text = "AI feedback for activity:run-1: Not helpful — stop suggestions like this.\n\nToo broad".into();
+        assert_eq!(
+            rating.ai_feedback_value().unwrap(),
+            AiFeedback {
+                target: "activity:run-1".into(),
+                rating: Some(AiFeedbackRating::NotHelpful),
+                explanation: Some("Too broad".into()),
+            }
+        );
+        rating.ai_feedback = Some(AiFeedback {
+            target: "activity:run-1".into(),
+            rating: None,
+            explanation: None,
+        });
+        assert_eq!(rating.ai_feedback_value().unwrap().rating, None);
     }
 
     #[test]

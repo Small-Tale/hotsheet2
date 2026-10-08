@@ -91,11 +91,16 @@ export function nestAiFeedback(notes: readonly NoteCardProps[]): NoteCardProps[]
       /^AI feedback for note:([^:\r\n]+): (Helpful — keep suggestions like this\.|Not helpful — stop suggestions like this\.)$/u.exec(
         first,
       );
-    return note.feedbackFor
-      ? { parent: note.feedbackFor, rating: match?.[2], first: match ? first : undefined }
-      : match
-        ? { parent: match[1], rating: match[2], first }
-        : undefined;
+    const structuredParent = note.ratingMetadata?.target.startsWith('note:')
+      ? note.ratingMetadata.target.slice('note:'.length)
+      : undefined;
+    return structuredParent
+      ? { parent: structuredParent, rating: match?.[2], first: match ? first : undefined }
+      : note.feedbackFor
+        ? { parent: note.feedbackFor, rating: match?.[2], first: match ? first : undefined }
+        : match
+          ? { parent: match[1], rating: match[2], first }
+          : undefined;
   };
   const parents = new Set(notes.filter((note) => !target(note)).map((note) => note.id));
   const feedback = new Map<string, NoteCardProps[]>();
@@ -140,7 +145,7 @@ function LoadedTicketNotes({
     .find(
       (note) =>
         (note.kind === 'regular' || note.kind === 'feedback_needed') &&
-        !isAiThumbsFeedback({ text: note.body, feedback_for: note.feedbackFor }),
+        !isAiThumbsFeedback({ text: note.body, feedback_for: note.feedbackFor, ai_feedback: note.ratingMetadata }),
     );
   const activeFeedbackNoteId = latestExchangeNote?.kind === 'feedback_needed' ? latestExchangeNote.id : undefined;
   return (

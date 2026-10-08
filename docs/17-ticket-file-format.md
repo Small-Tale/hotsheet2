@@ -141,6 +141,19 @@ first line; readers still recognize that prefix in older files without the token
 The marker keeps the association if the feedback text is edited. Other note kinds and
 feedback for non-note targets omit it. Older bounded-note readers ignore this token.
 
+New AI thumbs notes also carry `ai_feedback_hex: <UTF-8 JSON in hex>`. The JSON has
+`target` (`note:<id>`, `activity:<id>`, or `conversation:<id>`), `rating`
+(`helpful`, `not_helpful`, or `null` after withdrawal), and optional `explanation`.
+The enclosing note supplies the stable feedback ID, `actor` rater, immutable
+`created_at`, and last revision `edited_at`. Correcting or withdrawing a rating
+edits that same note; its readable text shows the current state. Older readers
+ignore the marker, and current readers derive a rating from the exact legacy
+first-line phrases only when the structured marker is absent. A structured
+withdrawal overrides any old phrase still in the note text.
+Git-to-Git ticket copy preserves this metadata and remaps note/activity targets
+to the copied source note ID. A destination without structured feedback capability
+rejects such a copy before creating a partial ticket.
+
 An AI-authored note gains `human_edited: true` in its marker when an explicit human
 actor persists different text. The original `actor:` stays unchanged. Unchanged saves,
 metadata-only edits, and AI edits do not set the token. Once set, it records that a

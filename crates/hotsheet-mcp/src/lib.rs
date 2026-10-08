@@ -1483,6 +1483,7 @@ mod core_backend {
                                     summary: str_field(body, "note_summary"),
                                     confidence: confidence_change.flatten(),
                                     actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
+                                    ai_feedback: None,
                                 },
                                 text,
                             )

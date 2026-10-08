@@ -307,6 +307,7 @@ struct NoteMetadata {
     summary: Option<String>,
     confidence: Option<Confidence>,
     feedback_for: Option<Ulid>,
+    ai_feedback: Option<crate::ticket::AiFeedback>,
     human_edited: bool,
     actor: Option<NoteActor>,
 }
@@ -349,6 +350,9 @@ fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
         // the whole file (HS2-DWTJ43); writers can only emit validated values.
         confidence: value_after("confidence:").and_then(|value| value.parse().ok()),
         feedback_for: value_after("feedback_for:").and_then(|value| Ulid::from_string(value).ok()),
+        ai_feedback: value_after("ai_feedback_hex:")
+            .and_then(decode_note_summary)
+            .and_then(|value| serde_json::from_str(&value).ok()),
         human_edited: value_after("human_edited:") == Some("true"),
         actor: value_after("actor:")
             .and_then(parse_actor_role)
@@ -384,6 +388,7 @@ fn build_note(metadata: NoteMetadata, block: &str) -> Option<Note> {
         summary: metadata.summary,
         confidence: metadata.confidence,
         feedback_for: metadata.feedback_for,
+        ai_feedback: metadata.ai_feedback,
         human_edited: metadata.human_edited,
         actor: metadata.actor,
         text,
@@ -422,6 +427,12 @@ fn notes_to_string(notes: &[&Note]) -> String {
         if let Some(feedback_for) = n.feedback_for {
             out.push_str(" feedback_for: ");
             out.push_str(&feedback_for.to_string());
+        }
+        if let Some(feedback) = &n.ai_feedback {
+            out.push_str(" ai_feedback_hex: ");
+            out.push_str(&encode_note_summary(
+                &serde_json::to_string(feedback).expect("feedback serializes"),
+            ));
         }
         if n.human_edited {
             out.push_str(" human_edited: true");
@@ -646,6 +657,7 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                ai_feedback: None,
                 human_edited: false,
                 actor: None,
                 text: "Reproduced on macOS; root cause is the pre-theme paint.".into(),
@@ -658,6 +670,7 @@ mod tests {
                 summary: None,
                 confidence: None,
                 feedback_for: None,
+                ai_feedback: None,
                 human_edited: false,
                 actor: None,
                 text: "should the fix also cover the dashboard dedicated view?".into(),
@@ -881,6 +894,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: "half-written reply".into(),
@@ -904,6 +918,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: "   ".into(),
@@ -1019,6 +1034,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: text.into(),
@@ -1055,6 +1071,7 @@ mod tests {
                 summary: Some("Shipped".into()),
                 confidence: Some(Confidence::new(82).unwrap()),
                 feedback_for: None,
+                ai_feedback: None,
                 human_edited: false,
                 actor: None,
                 text: "## Result\nDone\n\n## Confidence\n82".into(),
@@ -1067,6 +1084,7 @@ mod tests {
                 summary: None,
                 confidence: Some(Confidence::new(0).unwrap()),
                 feedback_for: None,
+                ai_feedback: None,
                 human_edited: false,
                 actor: None,
                 text: "zero is a real score".into(),
@@ -1090,6 +1108,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: "unscored".into(),
@@ -1131,6 +1150,7 @@ mod tests {
             summary: Some("Completed café investigation".into()),
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: "completed investigation".into(),
@@ -1185,6 +1205,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: text.into(),
@@ -1250,6 +1271,7 @@ mod tests {
             summary: None,
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: "half-written".into(),

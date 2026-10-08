@@ -4721,7 +4721,7 @@ export async function startHotSheetWebClient() {
       shellMode,
       statsProjectId,
       confidenceReportByProject,
-      canGiveFeedback: () => Boolean(selectedTicket.value && canAddNotes()),
+      canGiveFeedback: () => Boolean(selectedTicket.value && noteCapabilities()?.ai_feedback),
       terminals: {
         terminalGroups,
         drawerTabOrder,
@@ -5582,7 +5582,7 @@ export async function startHotSheetWebClient() {
     closeSavedViewDelete, savedViewDeleteBusy, commandGroupExpanded, persistWorkspacePreferences, commandGroupsCollapsed, toggleSidebarDrive, driveOptionsOpen, driveOptionsAnchor, aiTools,
     aiSettingsLoading, refreshAiConfiguration, driveOverridesByProject, normalizedAiSelection, selectDriveModel, openManualModel, effectiveDriveSelection, openSidebarConversation,
     conversationOpen, openConversationExport, pickConversationMessage, copyConversationSelection, clearConversationSelection, conversationExportDialog, finishConversationExport, updateConversationExportDraft,
-    conversationConnectionId, conversationDrafts, sendConversationTurn, stopConversation, selectConversationProvider, selectConversationModel, selectConversationEffort, canAddNotes,
+    conversationConnectionId, conversationDrafts, sendConversationTurn, stopConversation, selectConversationProvider, selectConversationModel, selectConversationEffort, canAddNotes, canGiveFeedback: () => Boolean(noteCapabilities()?.ai_feedback),
     updateSelected, runCommand, commandDialogId, commandStopConfirmation, commandRuns, commandSettingsEditingId, commandIconSearch, addCommandSetting,
     manualModelDialog, deleteCommandSetting, addCommandGroup, deleteCommandGroup, selectCommandRow, commandSelection, commandSettingsDefinitions, selectCommandSetting,
     reorderCommandSettings, updateCommandSetting, updateCommandAiSelection, effectiveCommandAiSelection, showLoadingActivity, inheritGlobalShellHistory, terminalSettingsMessage, trashSettingsMessagesByProject,

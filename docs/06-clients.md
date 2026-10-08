@@ -3060,7 +3060,7 @@ regions. Fixed action targets, choice indicators, and glyphs remain explicit geo
 (HS2-4Y6SM9).
 
 Thumbs feedback on an AI-authored **note** remains a regular, auditable ticket note with
-a persisted `feedback_for` source-note id. Older and external-provider notes use the
+a persisted `feedback_for` source-note id and structured rating metadata. Older and external-provider notes use the
 exact `AI feedback for note:<id>:` prefix as a compatibility link. The Notes list groups it under the
 referenced parent, hides it by default, and offers a keyboard-accessible **Show AI
 Feedback / Hide AI Feedback** disclosure only when that parent has ratings. Multiple
@@ -3173,9 +3173,13 @@ the speaker, so assistant turns omit the repeated visible attribution while reta
 accessible name with the tool and their feedback controls (HS2-WV9TWE).
 Narration and distilled summaries explicitly say that they may contain
 errors. Thumbs feedback appears only when the composition has a selected ticket whose
-provider accepts notes. The optional explanation and consequence-oriented rating are
-then appended as an ordinary ticket note, so feedback is syncable and auditable rather
-than trapped in browser state. Legacy notes without durable AI provenance are not
+provider supports structured AI feedback. The optional explanation and consequence-oriented rating are
+stored on an ordinary ticket note. A repeated rating from the same browser and target
+corrects that note; clicking the same thumb again offers withdrawal. The browser keeps
+a random rater id locally, and the note records it as human authorship without showing
+the opaque id in the card. The rating remains syncable and auditable. Git-backed
+providers accept the structured write; other providers report an explicit unsupported
+error. Legacy notes without durable AI provenance are not
 guessed from their prose or author-like display text.
 
 **Live claim in the inspector and reader (HS2-QKNQXC).** While a ticket has a live,

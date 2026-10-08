@@ -39,6 +39,7 @@ export interface NoteCardProps {
   /** AI completion confidence (0-100) recorded on this note; absent for unscored notes. */
   confidence?: number;
   feedbackFor?: string;
+  ratingMetadata?: { target: string; rating: 'helpful' | 'not_helpful' | null; explanation?: string };
   /** Thumbs ratings associated with this source note, hidden until expanded. */
   aiFeedback?: readonly NoteCardProps[];
   /** `comfortable` (default) uses the canonical card inset; `compact` the tighter list inset. */

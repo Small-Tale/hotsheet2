@@ -43,6 +43,10 @@ export function noteAuthorship(note: Pick<Note, 'actor' | 'text'>): NoteAuthorsh
     const tool = aiToolName(actor.id);
     return { author: tool, aiAuthored: true, aiTool: tool };
   }
-  if (actor?.role === 'human') return { author: actor.id?.trim() || 'Human', aiAuthored: false };
+  if (actor?.role === 'human')
+    return {
+      author: actor.id?.startsWith('feedback-rater:') ? 'Human' : actor.id?.trim() || 'Human',
+      aiAuthored: false,
+    };
   return { author: 'Hot Sheet', aiAuthored: false };
 }

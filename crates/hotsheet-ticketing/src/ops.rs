@@ -825,6 +825,7 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
         summary: Some(status_label(to).to_string()),
         confidence: None,
         feedback_for: None,
+        ai_feedback: None,
         human_edited: false,
         actor: None,
         text: format!(
@@ -872,6 +873,7 @@ fn append_started_phase_transition(
         summary: Some(started_phase_label(to).to_string()),
         confidence: None,
         feedback_for: None,
+        ai_feedback: None,
         human_edited: false,
         actor: None,
         text: format!(
@@ -925,6 +927,7 @@ pub fn prepare_not_working(
         summary: Some(NOT_WORKING_SUMMARY.into()),
         confidence: None,
         feedback_for: None,
+        ai_feedback: None,
         human_edited: false,
         actor: None,
         text: reporter
@@ -941,6 +944,7 @@ pub fn prepare_not_working(
             summary: None,
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: format!("Not working: {text}"),
@@ -1131,6 +1135,7 @@ pub fn add_note_with_summary(
             summary,
             confidence: None,
             actor: None,
+            ai_feedback: None,
         },
         text,
     )
@@ -1145,6 +1150,8 @@ pub struct NoteMetadataInput {
     pub confidence: Option<Confidence>,
     /// The note's author (HS2-32QDZ3); absent for an unspecified caller.
     pub actor: Option<hotsheet_model::NoteActor>,
+    /// Preserved structured rating during provider copy/import.
+    pub ai_feedback: Option<hotsheet_model::AiFeedback>,
     /// Preserve a source note's human edit history during provider copy.
     pub human_edited: bool,
 }
@@ -1162,6 +1169,7 @@ pub fn add_note_with_metadata(
     let mut t = store.read_ticket(id)?;
     let text = canonicalize_attachment_id_references(store, &t, &text);
     let kind = if kind == NoteKind::Regular
+        && metadata.ai_feedback.is_none()
         && !Note::text_is_ai_thumbs_feedback(&text)
         && Note::text_requests_feedback(&text)
     {
@@ -1179,7 +1187,13 @@ pub fn add_note_with_metadata(
             (!value.is_empty()).then_some(value)
         }),
         confidence: metadata.confidence,
-        feedback_for: Note::feedback_parent_from_text(&text),
+        feedback_for: metadata
+            .ai_feedback
+            .as_ref()
+            .and_then(|feedback| feedback.target.strip_prefix("note:"))
+            .and_then(|id| Ulid::from_string(id).ok())
+            .or_else(|| Note::feedback_parent_from_text(&text)),
+        ai_feedback: metadata.ai_feedback,
         human_edited: metadata.human_edited,
         actor: metadata.actor,
         text,
@@ -1187,6 +1201,104 @@ pub fn add_note_with_metadata(
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
+}
+
+/// Write one rating per rater and target. Repeated feedback revises the original
+/// note, preserving its id and creation time for source-key deduplication.
+pub fn rate_ai_content(
+    store: &FsStore,
+    ticket_id: &Ulid,
+    now: Timestamp,
+    target: &str,
+    rating: Option<hotsheet_model::AiFeedbackRating>,
+    explanation: Option<String>,
+    actor: Option<hotsheet_model::NoteActor>,
+) -> Result<Ticket, StoreError> {
+    if actor
+        .as_ref()
+        .and_then(|actor| actor.id.as_deref())
+        .is_none_or(str::is_empty)
+    {
+        return Err(StoreError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "AI feedback requires a stable rater id",
+        )));
+    }
+    let valid_target = ["note:", "activity:", "conversation:"]
+        .iter()
+        .any(|prefix| {
+            target
+                .strip_prefix(prefix)
+                .is_some_and(|id| !id.is_empty() && !id.chars().any(char::is_whitespace))
+        });
+    if !valid_target {
+        return Err(StoreError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "AI feedback target must be a non-empty note, activity, or conversation id",
+        )));
+    }
+    let mut ticket = store.read_ticket(ticket_id)?;
+    let previous = ticket.notes.iter_mut().rev().find(|note| {
+        note.ai_feedback_value()
+            .is_some_and(|feedback| feedback.target == target)
+            && note.actor.as_ref() == actor.as_ref()
+    });
+    if previous.is_none() && rating.is_none() {
+        return Err(StoreError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "cannot withdraw a rating that does not exist",
+        )));
+    }
+    let detail = explanation
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let feedback = hotsheet_model::AiFeedback {
+        target: target.to_owned(),
+        rating,
+        explanation: detail.clone(),
+    };
+    let label = match rating {
+        Some(hotsheet_model::AiFeedbackRating::Helpful) => "Helpful — keep suggestions like this.",
+        Some(hotsheet_model::AiFeedbackRating::NotHelpful) => {
+            "Not helpful — stop suggestions like this."
+        }
+        None => "Withdrawn.",
+    };
+    let text = [
+        format!("AI feedback for {target}: {label}"),
+        detail.unwrap_or_default(),
+    ]
+    .into_iter()
+    .filter(|line| !line.is_empty())
+    .collect::<Vec<_>>()
+    .join("\n\n");
+    if let Some(note) = previous {
+        note.ai_feedback = Some(feedback);
+        note.feedback_for = target
+            .strip_prefix("note:")
+            .and_then(|id| Ulid::from_string(id).ok());
+        note.text = text;
+        note.edited_at = now.clone();
+    } else {
+        ticket.notes.push(Note {
+            id: Ulid::new(),
+            kind: NoteKind::Regular,
+            created_at: now.clone(),
+            edited_at: now.clone(),
+            summary: None,
+            confidence: None,
+            feedback_for: target
+                .strip_prefix("note:")
+                .and_then(|id| Ulid::from_string(id).ok()),
+            ai_feedback: Some(feedback),
+            human_edited: false,
+            actor,
+            text,
+        });
+    }
+    ticket.updated_at = now;
+    store.write_ticket_committing(&ticket)?;
+    Ok(ticket)
 }
 
 /// The ticket's current completion confidence (HS2-DWTJ43), derived at read time and
@@ -3048,6 +3160,7 @@ mod tests {
                     summary: None,
                     confidence: confidence.map(|value| Confidence::new(value).unwrap()),
                     actor: None,
+                    ai_feedback: None,
                 },
                 "note".into(),
             )
@@ -3126,6 +3239,7 @@ mod tests {
             summary: None,
             confidence: confidence.map(|value| Confidence::new(value).unwrap()),
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: text.into(),
@@ -3636,6 +3750,97 @@ mod tests {
         assert_eq!(remaining.notes[0].id, other);
         assert_eq!(remaining.notes[1].ai_feedback_for_note(), Some(other));
         assert_eq!(store.read_ticket(&id).unwrap().notes, remaining.notes);
+    }
+
+    #[test]
+    fn ai_feedback_revision_withdrawal_and_refill_keep_one_source_note() {
+        use hotsheet_model::{AiFeedbackRating, AttachmentActorRole, NoteActor};
+        let (_dir, store) = store();
+        let id = Ulid::new();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let actor = Some(NoteActor {
+            role: AttachmentActorRole::Human,
+            id: Some("rater-1".into()),
+        });
+        let rate = |at, value, detail| {
+            rate_ai_content(
+                &store,
+                &id,
+                ts(at),
+                "activity:run-1",
+                value,
+                detail,
+                actor.clone(),
+            )
+            .unwrap()
+        };
+        let first = rate(
+            "2026-08-19T00:01:00Z",
+            Some(AiFeedbackRating::Helpful),
+            Some("clear".into()),
+        );
+        let rating_id = first.notes[0].id;
+        assert_eq!(first.notes[0].created_at.as_str(), "2026-08-19T00:01:00Z");
+        let corrected = rate(
+            "2026-08-19T00:02:00Z",
+            Some(AiFeedbackRating::NotHelpful),
+            Some("too broad".into()),
+        );
+        assert_eq!(corrected.notes.len(), 1);
+        assert_eq!(corrected.notes[0].id, rating_id);
+        assert_eq!(
+            corrected.notes[0].ai_feedback_value().unwrap().rating,
+            Some(AiFeedbackRating::NotHelpful)
+        );
+        let withdrawn = rate("2026-08-19T00:03:00Z", None, None);
+        assert_eq!(withdrawn.notes[0].ai_feedback_value().unwrap().rating, None);
+        assert!(withdrawn.notes[0].text.contains("Withdrawn"));
+        let restored = rate(
+            "2026-08-19T00:04:00Z",
+            Some(AiFeedbackRating::Helpful),
+            None,
+        );
+        assert_eq!(restored.notes.len(), 1);
+        assert_eq!(restored.notes[0].id, rating_id);
+        let persisted = store.read_ticket(&id).unwrap();
+        assert_eq!(
+            persisted.notes[0].ai_feedback_value().unwrap().rating,
+            Some(AiFeedbackRating::Helpful)
+        );
+        let second_actor = Some(NoteActor {
+            role: AttachmentActorRole::Human,
+            id: Some("rater-2".into()),
+        });
+        let two = rate_ai_content(
+            &store,
+            &id,
+            ts("2026-08-19T00:05:00Z"),
+            "activity:run-1",
+            Some(AiFeedbackRating::Helpful),
+            None,
+            second_actor,
+        )
+        .unwrap();
+        assert_eq!(two.notes.len(), 2);
+        assert!(
+            rate_ai_content(
+                &store,
+                &id,
+                ts("2026-08-19T00:06:00Z"),
+                "",
+                Some(AiFeedbackRating::Helpful),
+                None,
+                actor
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -1838,6 +1838,10 @@ pub fn app(state: AppState) -> Router {
             get(list_provider_tickets).post(create_provider_ticket),
         )
         .route(
+            "/providers/{connection_id}/ai-feedback",
+            get(list_provider_ai_feedback),
+        )
+        .route(
             "/providers/{connection_id}/tickets/{id}",
             get(get_provider_ticket).patch(update_provider_ticket),
         )
@@ -3596,12 +3600,126 @@ async fn update_provider_ticket(
     Ok(Json(do_provider_update(&state, &connection_id, &id, req)?))
 }
 
+/// A provider-scoped source ledger. Unsupported connections fail explicitly so a
+/// synthesis caller cannot mistake an unreadable provider for zero feedback.
+async fn list_provider_ai_feedback(
+    State(state): State<AppState>,
+    Path(connection_id): Path<String>,
+) -> Result<Json<Vec<hotsheet_ticketing::AiFeedbackRecord>>, ApiError> {
+    let provider = provider_for(&state, &connection_id)?;
+    provider
+        .ai_feedback_records()
+        .map(Json)
+        .map_err(|error| match error {
+            hotsheet_ticketing::ProviderError::Unsupported { .. } => {
+                ApiError::new(StatusCode::NOT_IMPLEMENTED, error.to_string())
+            }
+            _ => provider_transfer_error(error),
+        })
+}
+
+fn do_rate_ai_feedback(
+    state: &AppState,
+    entry: &StoreEntry,
+    id: &str,
+    feedback: AiFeedbackReq,
+    actor: Option<&ActorReq>,
+    expected_token: Option<&str>,
+) -> Result<(ApiTicket, Ticket), ApiError> {
+    let (feedback, note_actor) = parse_ai_feedback(feedback, actor)?;
+    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    if expected_token.is_some_and(|expected| expected != ticket.updated_at.as_str()) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "ticket changed since it was read",
+        ));
+    }
+    let updated = ops::rate_ai_content(
+        &entry.store,
+        &ticket.id,
+        now(),
+        &feedback.target,
+        feedback.rating,
+        feedback.explanation,
+        Some(note_actor),
+    )
+    .map_err(|error| {
+        if error.is_io_kind(std::io::ErrorKind::InvalidInput) {
+            ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+        } else {
+            ApiError::from(error)
+        }
+    })?;
+    state.changed_in(entry, "updated", &updated);
+    Ok((api_ticket(entry, &updated)?, updated))
+}
+
+fn parse_ai_feedback(
+    feedback: AiFeedbackReq,
+    actor: Option<&ActorReq>,
+) -> Result<(hotsheet_model::AiFeedback, hotsheet_model::NoteActor), ApiError> {
+    let Some(actor) = parse_actor(actor)? else {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "AI feedback requires a rater actor",
+        ));
+    };
+    let note_actor = hotsheet_ticketing::actor::note_actor(Some(&actor)).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "AI feedback requires a rater actor",
+        )
+    })?;
+    if note_actor.id.as_deref().is_none_or(str::is_empty) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "AI feedback requires a stable rater id",
+        ));
+    }
+    let rating =
+        serde_json::from_value::<Option<hotsheet_model::AiFeedbackRating>>(feedback.rating)
+            .map_err(|error| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("AI feedback rating: {error}"),
+                )
+            })?;
+    Ok((
+        hotsheet_model::AiFeedback {
+            target: feedback.target,
+            rating,
+            explanation: feedback.explanation,
+        },
+        note_actor,
+    ))
+}
+
 fn do_provider_update(
     state: &AppState,
     connection_id: &str,
     id: &str,
     req: UpdateReq,
 ) -> Result<ApiTicket, ApiError> {
+    if let Some(feedback) = req.ai_feedback.clone() {
+        req.validate_feedback_only()?;
+        let provider = provider_for(state, connection_id)?;
+        let (feedback, actor) = parse_ai_feedback(feedback, req.actor.as_ref())?;
+        let ticket = provider
+            .rate_ai_content(id, now(), feedback, actor, req.expected_token.as_deref())
+            .map_err(|error| match error {
+                hotsheet_ticketing::ProviderError::Unsupported { .. } => {
+                    ApiError::new(StatusCode::NOT_IMPLEMENTED, error.to_string())
+                }
+                hotsheet_ticketing::ProviderError::Store(ref store_error)
+                    if store_error.is_io_kind(std::io::ErrorKind::InvalidInput) =>
+                {
+                    ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+                }
+                _ => provider_transfer_error(error),
+            })?;
+        reindex_hosted_provider_write(state, connection_id, id);
+        return Ok(ticket);
+    }
     let provider = provider_for(state, connection_id)?;
     if req.note_id.is_some() && !provider.supports_note_edit() {
         return Err(ApiError::new(
@@ -3710,6 +3828,7 @@ fn do_provider_update(
                         summary: note_summary,
                         confidence: note_confidence,
                         actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
+                        ai_feedback: None,
                     },
                     note,
                 )
@@ -7083,6 +7202,17 @@ fn do_update_with_ticket(
     req: UpdateReq,
     publish: bool,
 ) -> Result<(ApiTicket, Ticket), ApiError> {
+    if let Some(feedback) = req.ai_feedback.clone() {
+        req.validate_feedback_only()?;
+        return do_rate_ai_feedback(
+            state,
+            entry,
+            id,
+            feedback,
+            req.actor.as_ref(),
+            req.expected_token.as_deref(),
+        );
+    }
     let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
     let note_text = req.note.clone();
     if req
@@ -7195,6 +7325,7 @@ fn do_update_with_ticket(
                     summary: req.note_summary,
                     confidence: confidence_change.flatten(),
                     actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
+                    ai_feedback: None,
                 },
                 text,
             )?,
@@ -11363,6 +11494,9 @@ struct UpdateReq {
     blocked_reason: Option<Option<String>>,
     /// Optional note to append alongside the field update.
     note: Option<String>,
+    /// Rating revision. This is a feedback-only update; repeated ratings from the
+    /// same actor and target retain one source note id.
+    ai_feedback: Option<AiFeedbackReq>,
     /// Existing note ULID to edit; absent appends a new note.
     note_id: Option<String>,
     /// Kind of the appended note; defaults to regular for older clients.
@@ -11380,7 +11514,40 @@ struct UpdateReq {
     actor: Option<ActorReq>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct AiFeedbackReq {
+    target: String,
+    /// Required; JSON null explicitly withdraws the current rating.
+    rating: serde_json::Value,
+    explanation: Option<String>,
+}
+
 impl UpdateReq {
+    fn validate_feedback_only(&self) -> Result<(), ApiError> {
+        if self.title.is_some()
+            || self.details.is_some()
+            || self.category.is_some()
+            || self.priority.is_some()
+            || self.status.is_some()
+            || self.started_phase.is_some()
+            || self.tags.is_some()
+            || self.up_next.is_some()
+            || self.blocked_by.is_some()
+            || self.blocked_reason.is_some()
+            || self.note.is_some()
+            || self.note_id.is_some()
+            || self.note_kind.is_some()
+            || self.note_summary.is_some()
+            || self.note_confidence.is_some()
+        {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "AI feedback must be updated separately from ticket fields and notes",
+            ));
+        }
+        Ok(())
+    }
+
     /// Validate the optional note confidence as a JSON integer from 0 to 100.
     ///
     /// Appending: a score needs a non-empty note, and null means "no score".

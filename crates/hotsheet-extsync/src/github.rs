@@ -475,6 +475,7 @@ impl GitHubProvider {
                     summary: None,
                     confidence,
                     feedback_for: None,
+                    ai_feedback: hotsheet_model::AiFeedback::from_legacy_text(&text),
                     human_edited: false,
                     actor: None,
                     text,
@@ -1417,6 +1418,7 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         not_working_report: false,
         // Comment trailers for scores are HS2-5YNASC; until then a score fails explicitly.
         note_confidence: true,
+        ai_feedback: false,
         offline_mutation: false,
         history: true,
         watch: true,
@@ -1960,6 +1962,7 @@ mod tests {
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(82).unwrap()),
                     actor: None,
+                    ai_feedback: None,
                 },
                 "## Result\nDone.".into(),
             )
@@ -3086,6 +3089,7 @@ mod tests {
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(77).unwrap()),
                     actor: None,
+                    ai_feedback: None,
                 },
                 "Hot Sheet live comment validation".into(),
             )
@@ -3149,6 +3153,7 @@ mod tests {
                     summary: None,
                     confidence: Some(hotsheet_model::Confidence::new(88).unwrap()),
                     actor: None,
+                    ai_feedback: None,
                 },
                 "Hot Sheet live re-completion validation".into(),
             )

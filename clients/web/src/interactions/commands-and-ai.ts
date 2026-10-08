@@ -28,6 +28,21 @@ import { toggleCollapsedCommandGroup } from '../workspace-preferences';
 import { data } from './dom';
 import { type Control, type Project } from './types';
 
+let sessionFeedbackRaterId: string | undefined;
+function feedbackRaterId(): string {
+  if (sessionFeedbackRaterId) return sessionFeedbackRaterId;
+  try {
+    const key = 'hotsheet.aiFeedbackRaterId';
+    const saved = window.localStorage.getItem(key);
+    if (saved) return (sessionFeedbackRaterId = saved);
+    const id = `feedback-rater:${crypto.randomUUID()}`;
+    window.localStorage.setItem(key, id);
+    return (sessionFeedbackRaterId = id);
+  } catch {
+    return (sessionFeedbackRaterId = `feedback-rater:${crypto.randomUUID()}`);
+  }
+}
+
 /** Live application bindings used by this handler group. */
 export interface CommandAndAiInteractionsDependencies {
   readonly commandGroupExpanded: Signal<boolean>;
@@ -66,7 +81,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly selectConversationModel: (model: string) => void;
   readonly selectConversationEffort: (effort: string) => void;
   readonly selectedTicket: Signal<FullTicket | null>;
-  readonly canAddNotes: () => boolean;
+  readonly canGiveFeedback: () => boolean;
   readonly updateSelected: (patch: Record<string, unknown>) => Promise<boolean>;
   readonly showToast: (message: string) => void;
   commandLongPressFired: boolean;
@@ -191,7 +206,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     selectConversationModel,
     selectConversationEffort,
     selectedTicket,
-    canAddNotes,
+    canGiveFeedback,
     updateSelected,
     showToast,
     runCommand,
@@ -543,20 +558,33 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       const ticket = selectedTicket.value,
         rating = data(target).aiFeedbackRating,
         targetId = data(target).aiFeedbackTarget;
-      if (!ticket || !targetId || !['helpful', 'not-helpful'].includes(rating ?? '') || !canAddNotes()) return;
+      if (!ticket || !targetId || !['helpful', 'not-helpful'].includes(rating ?? '') || !canGiveFeedback()) return;
+      const rater = feedbackRaterId();
+      const wireRating = rating === 'helpful' ? 'helpful' : 'not_helpful';
+      const previous = ticket.notes.find((note) => note.ai_feedback?.target === targetId && note.actor?.id === rater);
+      if (previous?.ai_feedback?.rating === wireRating && window.confirm('Withdraw your previous rating?')) {
+        void updateSelected({
+          ai_feedback: { target: targetId, rating: null },
+          actor: { role: 'human', id: rater },
+        }).then((saved) => {
+          if (saved) showToast('AI feedback withdrawn.');
+        });
+        return;
+      }
       const detail = window
         .prompt(
           rating === 'helpful'
             ? 'What should Hot Sheet keep doing? (optional)'
             : 'What should Hot Sheet change or stop doing? (optional)',
+          previous?.ai_feedback?.explanation ?? '',
         )
         ?.trim();
       if (detail === undefined) return;
-      const consequence =
-          rating === 'helpful' ? 'Helpful — keep suggestions like this.' : 'Not helpful — stop suggestions like this.',
-        note = [`AI feedback for ${targetId}: ${consequence}`, detail].filter(Boolean).join('\n\n');
-      void updateSelected({ note, note_kind: 'regular' }).then((saved) => {
-        if (saved) showToast('AI feedback saved as a ticket note.');
+      void updateSelected({
+        ai_feedback: { target: targetId, rating: wireRating, explanation: detail || null },
+        actor: { role: 'human', id: rater },
+      }).then((saved) => {
+        if (saved) showToast(previous ? 'AI feedback updated.' : 'AI feedback saved as a ticket note.');
       });
     }),
   );

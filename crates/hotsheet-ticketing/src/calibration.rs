@@ -233,6 +233,7 @@ mod tests {
                     summary: None,
                     confidence: Some(Confidence::new(value).unwrap()),
                     actor: None,
+                    ai_feedback: None,
                 },
                 "## Confidence".into(),
             )

@@ -8,7 +8,7 @@ import WebSocket from 'ws';
 
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { ConversationMessage } from '../src/ai-conversation';
-import type { FullTicket, MediaAnnotation, TicketRow } from '../src/api';
+import type { FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 import { seedLocalGitTickets } from './real-ticket-fixture';
@@ -1114,6 +1114,7 @@ async function mockProject(
         update: canUpdate,
         close: true,
         notes: true,
+        ai_feedback: true,
         note_edit: canUpdate,
         note_delete: canUpdate,
         attachments: true,
@@ -1154,6 +1155,7 @@ async function mockProject(
               default: connection.id === checkoutDefaultSource,
               capabilities: {
                 ...capabilities,
+                ai_feedback: false,
                 attachments: connection.provider === 'github' && Boolean(connection.settings.attachment_repo),
               },
             })),
@@ -1894,6 +1896,36 @@ async function mockProject(
                   text: body.note,
                 }
               : undefined;
+        const rating = body.ai_feedback as
+          { target: string; rating: 'helpful' | 'not_helpful' | null; explanation?: string } | undefined;
+        const ratingNotes = [...selectedFull.notes] as Note[];
+        if (rating) {
+          const existingIndex = ratingNotes.findIndex(
+            (note) => note.ai_feedback?.target === rating.target && note.actor?.id === body.actor?.id,
+          );
+          const label =
+            rating.rating === 'helpful'
+              ? 'Helpful — keep suggestions like this.'
+              : rating.rating === 'not_helpful'
+                ? 'Not helpful — stop suggestions like this.'
+                : 'Withdrawn.';
+          const updated = {
+            ...(existingIndex >= 0
+              ? ratingNotes[existingIndex]
+              : {
+                  id: `N-response-${patches.length}`,
+                  kind: 'regular' as const,
+                  created_at: '2026-09-02T02:01:00Z',
+                }),
+            edited_at: '2026-09-02T02:01:00Z',
+            actor: body.actor,
+            ai_feedback: rating,
+            feedback_for: rating.target.startsWith('note:') ? rating.target.slice(5) : undefined,
+            text: [`AI feedback for ${rating.target}: ${label}`, rating.explanation].filter(Boolean).join('\n\n'),
+          };
+          if (existingIndex >= 0) ratingNotes[existingIndex] = updated;
+          else ratingNotes.push(updated);
+        }
         selectedFull = {
           ...selectedFull,
           ...body,
@@ -1901,7 +1933,7 @@ async function mockProject(
           updated_at: '2026-08-30T02:00:00Z',
           feedback_needed: appendedNote ? false : (selectedFull as { feedback_needed?: boolean }).feedback_needed,
           notes: [
-            ...selectedFull.notes,
+            ...ratingNotes,
             ...(statusNote ? [statusNote] : []),
             ...(phaseNote ? [phaseNote] : []),
             ...(appendedNote ? [appendedNote] : []),
@@ -13945,7 +13977,12 @@ for (const width of [1280, 390]) {
     page.once('dialog', (dialog) => dialog.accept('Keep the short status summary.'));
     await parent.getByRole('button', { name: 'Helpful — keep suggestions like this' }).click();
     await expect
-      .poll(() => patches.some((patch) => String(patch.note).startsWith('AI feedback for note:N1: Helpful')))
+      .poll(() =>
+        patches.some((patch) => {
+          const feedback = patch.ai_feedback as { target: string; rating: string } | undefined;
+          return feedback?.target === 'note:N1' && feedback.rating === 'helpful';
+        }),
+      )
       .toBe(true);
     await expect(parent.locator('.note-card__ai-feedback')).toBeVisible();
     await expect(inspector.locator('.ticket-notes__list > *')).toHaveCount(3);
@@ -13963,6 +14000,15 @@ for (const width of [1280, 390]) {
     await expect(reloaded.locator('.note-card__ai-feedback')).toHaveAttribute('open', '');
     await expect(reloaded.getByText('Keep the short status summary.')).toBeVisible();
     await reloaded.screenshot({ path: `/private/tmp/hs2-9r3xy0-feedback-${width}.png` });
+    page.once('dialog', (dialog) => dialog.accept('Avoid the long summary.'));
+    await reloaded.getByRole('button', { name: 'Not helpful — stop suggestions like this' }).click();
+    await expect.poll(() => patches.filter((patch) => Boolean(patch.ai_feedback)).length).toBe(2);
+    await expect(reloaded.locator('.note-card__ai-feedback [data-component="note-card"]')).toHaveCount(1);
+    page.once('dialog', (dialog) => dialog.accept());
+    await reloaded.getByRole('button', { name: 'Not helpful — stop suggestions like this' }).click();
+    await expect.poll(() => patches.filter((patch) => Boolean(patch.ai_feedback)).length).toBe(3);
+    await expect(reloaded.locator('.note-card__ai-feedback [data-component="note-card"]')).toHaveCount(1);
+    await expect(reloaded).toContainText('Withdrawn.');
     await reloaded.getByRole('button', { name: 'Delete note' }).first().click();
     await expect(page.locator('#app-right-rail [data-note-id="N1"]')).toHaveCount(0);
     await expect(page.locator('#app-right-rail')).not.toContainText('Keep the short status summary.');
@@ -14695,12 +14741,14 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await conversationHost.getByRole('button', { name: 'Helpful — keep suggestions like this' }).last().click();
   await expect
     .poll(() =>
-      patches.some(
-        (patch) =>
-          typeof patch.note === 'string' &&
-          patch.note.includes('AI feedback for activity:activity-1: Helpful') &&
-          patch.note.includes('Keep the concise summaries.'),
-      ),
+      patches.some((patch) => {
+        const feedback = patch.ai_feedback as { target: string; rating: string; explanation?: string } | undefined;
+        return (
+          feedback?.target === 'activity:activity-1' &&
+          feedback.rating === 'helpful' &&
+          feedback.explanation === 'Keep the concise summaries.'
+        );
+      }),
     )
     .toBe(true);
   await expect(page.locator('.app-toast')).toContainText('AI feedback saved as a ticket note.');

@@ -2658,6 +2658,7 @@ fn cmd_provider_edit(
                 summary: input.note_summary,
                 confidence: input.note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),
+                ai_feedback: None,
             },
             note,
         )?;
@@ -4468,6 +4469,7 @@ fn cmd_edit(
                 summary: note_summary,
                 confidence: note_confidence.flatten(),
                 actor: hotsheet_ticketing::actor::note_actor(actor),
+                ai_feedback: None,
             },
             text,
         )?;

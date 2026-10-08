@@ -119,6 +119,7 @@ pub fn api_scored_in_current_cycle(ticket: &crate::wire::ApiTicket) -> bool {
                 .confidence
                 .and_then(|score| hotsheet_model::Confidence::new(u64::from(score)).ok()),
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text: note.text.clone(),
@@ -258,6 +259,7 @@ mod tests {
                 summary: None,
                 confidence: Some(Confidence::new(80).unwrap()),
                 actor: None,
+                ai_feedback: None,
             },
             "## Confidence\n80".into(),
         )

@@ -1,6 +1,7 @@
 import type { Note } from './api';
 
-type RelevantNote = Pick<Note, 'id' | 'kind' | 'created_at'> & Partial<Pick<Note, 'text' | 'feedback_for'>>;
+type RelevantNote = Pick<Note, 'id' | 'kind' | 'created_at'> &
+  Partial<Pick<Note, 'text' | 'feedback_for' | 'ai_feedback'>>;
 type FullFeedbackTicket = { feedback_needed?: boolean; details: string; notes: readonly RelevantNote[] };
 
 export const DETAILS_FEEDBACK_ID = 'ticket-details';
@@ -13,8 +14,9 @@ export function textRequestsFeedback(text: string) {
   return text.split('\n').some((line) => !line.trimStart().startsWith('>') && line.includes('FEEDBACK NEEDED'));
 }
 
-export function isAiThumbsFeedback(note: Partial<Pick<Note, 'text' | 'feedback_for'>>): boolean {
+export function isAiThumbsFeedback(note: Partial<Pick<Note, 'text' | 'feedback_for' | 'ai_feedback'>>): boolean {
   return Boolean(
+    note.ai_feedback ||
     note.feedback_for ||
     /^AI feedback for .+: (Helpful — keep suggestions like this\.|Not helpful — stop suggestions like this\.)$/u.test(
       note.text?.split(/\r?\n/, 1)[0] ?? '',

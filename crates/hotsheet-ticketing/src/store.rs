@@ -1147,6 +1147,7 @@ impl FsStore {
             summary: Some(summary),
             confidence: None,
             feedback_for: None,
+            ai_feedback: None,
             human_edited: false,
             actor: None,
             text,
