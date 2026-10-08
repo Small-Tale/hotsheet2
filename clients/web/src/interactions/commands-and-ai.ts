@@ -1187,10 +1187,10 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     }),
   );
   lifetime.add(
-    delegate(document.body, 'change', 'select[name="project-source-color"]', (_event, target) => {
-      const select = target as HTMLSelectElement;
-      const id = select.dataset.sourceId;
-      if (id) void setProjectSourceColor(id, select.value);
+    delegate(document.body, 'change', 'input[name="project-source-color"][data-source-id]', (_event, target) => {
+      const option = target as HTMLInputElement;
+      const id = option.dataset.sourceId;
+      if (id && option.checked) void setProjectSourceColor(id, option.value);
     }),
   );
   lifetime.add(

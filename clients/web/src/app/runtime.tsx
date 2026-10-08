@@ -5400,6 +5400,11 @@ export async function startHotSheetWebClient() {
               (source) => source.connectionId === providerEditingId.value && source.default,
             ),
           )}
+          sourceColor={
+            defaultProviders.value[ticketSourceSetupProject.value?.id ?? '']?.sources.find(
+              (source) => source.connectionId === providerEditingId.value,
+            )?.color
+          }
           hasProjectDefault={Boolean(
             defaultProviders.value[ticketSourceSetupProject.value?.id ?? '']?.sources.some((source) => source.default),
           )}

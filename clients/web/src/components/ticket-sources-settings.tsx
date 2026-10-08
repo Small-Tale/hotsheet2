@@ -10,9 +10,10 @@ import { Cable, Database, LogOut, Unlink } from 'lucide';
 
 import type { ProviderAccount } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
-import { COMMAND_CUSTOMIZATION_COLORS, resolveCommandColor } from './customization-palette';
+import { resolveCommandColor } from './customization-palette';
 import { ProviderIcon, type ProviderIconKind } from './provider-icon';
 import { type ExternalProviderKind, providerName } from './provider-setup-form';
+import { TicketSourceColorPicker } from './ticket-source-color-picker';
 import { TicketSourceIcon } from './ticket-source-icon';
 
 /** One ticket source this project's checkout owns (HS2-3SCH1K, HS2-SM9PM8). */
@@ -84,18 +85,6 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
           resolveCommandColor(candidate.color) === resolveCommandColor(source.color),
       ) < index,
   );
-  const colorChoice = (source: ProjectTicketSource) => (
-    <label class="ticket-provider-settings__color-choice">
-      Icon color
-      <select name="project-source-color" data-source-id={source.connectionId}>
-        {COMMAND_CUSTOMIZATION_COLORS.map((option) => (
-          <option value={option.value} selected={option.value === resolveCommandColor(source.color)}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
   return (
     <div class="ticket-provider-settings ticket-sources-settings" data-component="ticket-sources-settings">
       <section>
@@ -157,7 +146,15 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                       />
                     </span>
                     {copy}
-                    {colorChoice(source)}
+                    <details class="ticket-provider-settings__appearance">
+                      <summary aria-label={`Edit icon color for ${source.name}`}>Edit icon color</summary>
+                      <form>
+                        <TicketSourceColorPicker
+                          source={{ provider: source.provider, name: source.name, color: source.color }}
+                          sourceId={source.connectionId}
+                        />
+                      </form>
+                    </details>
                   </div>
                 ) : (
                   <div class="ticket-provider-settings__source-row">
@@ -180,7 +177,6 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                       trailingActionIcon={<LucideIcon icon={Unlink} name="unlink" />}
                       trailingActionAttributes={{ 'data-source-id': source.connectionId }}
                     />
-                    {colorChoice(source)}
                   </div>
                 );
               })}

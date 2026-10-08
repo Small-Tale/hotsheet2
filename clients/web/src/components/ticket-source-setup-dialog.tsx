@@ -61,6 +61,8 @@ export interface TicketSourceSetupDialogProps {
   removingProviderId?: string;
   /** Whether the edited connection is this project's default source. */
   projectDefault?: boolean;
+  /** Project-local icon color of the connection being edited. */
+  sourceColor?: string;
   /** Whether this project already has any default ticket source. */
   hasProjectDefault?: boolean;
   /** Machine-wide sign-ins a new source can reuse (HS2-SM9PM8). */
@@ -86,6 +88,7 @@ export function TicketSourceSetupDialog({
   providerError = '',
   removingProviderId,
   projectDefault = false,
+  sourceColor,
   hasProjectDefault = false,
   accounts = [],
   chosenAccount,
@@ -258,6 +261,7 @@ export function TicketSourceSetupDialog({
         auth={githubAuth}
         error={providerError}
         defaultChoice={editing ? projectDefault : !hasProjectDefault}
+        sourceColor={sourceColor}
         accounts={accounts}
         chosenAccount={chosenAccount}
       />

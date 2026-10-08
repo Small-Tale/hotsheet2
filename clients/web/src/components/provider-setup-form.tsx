@@ -16,6 +16,7 @@ import { DEFAULT_GITHUB_ATTACHMENT_BRANCH, DEFAULT_GITHUB_ATTACHMENT_FOLDER } fr
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { FlowBackButton } from './flow-back-button';
 import { ProviderIcon } from './provider-icon';
+import { TicketSourceColorPicker } from './ticket-source-color-picker';
 
 export type ExternalProviderKind = 'github' | 'gitlab' | 'jira';
 
@@ -74,6 +75,8 @@ export interface ProviderSetupFormProps {
   accounts?: readonly ProviderAccount[];
   /** The GitLab or Jira account whose credential, email, and site prefill a new source (HS2-F5HNJN). */
   chosenAccount?: string;
+  /** This checkout's mark color for the connection being edited. */
+  sourceColor?: string;
 }
 
 /** What identifies a GitLab or Jira account in the picker: its host, plus the Jira email. */
@@ -112,6 +115,7 @@ export function ProviderSetupForm({
   defaultChoice,
   accounts = [],
   chosenAccount,
+  sourceColor,
 }: ProviderSetupFormProps) {
   const labels = {
       github: ['GitHub Issues', 'owner/repository', 'GitHub credential reference'],
@@ -541,6 +545,14 @@ export function ProviderSetupForm({
             </wa-checkbox>
           )}
         </Grid>
+      )}
+      {editing && (
+        <div class="provider-setup-form__source-color">
+          <TicketSourceColorPicker
+            source={{ provider: kind, name: connection?.name ?? providerName(kind), color: sourceColor }}
+          />
+          <small>This icon color applies only to this project.</small>
+        </div>
       )}
       {error && (
         <p class="provider-setup-form__error" role="alert">

@@ -1,0 +1,49 @@
+.ticket-source-color-picker {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.ticket-source-color-picker legend {
+  margin-bottom: var(--wa-space-xs);
+  font-weight: 600;
+}
+.ticket-source-color-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(remify(72px), 1fr));
+  gap: var(--wa-space-xs);
+}
+.ticket-source-color-picker__choice {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--wa-space-2xs);
+  min-width: 0;
+  border: 1px solid var(--wa-color-neutral-border-quiet);
+  border-radius: var(--wa-border-radius-m);
+  padding: var(--wa-space-xs);
+  background: color-mix(in srgb, var(--ticket-source-choice-color) 15%, var(--wa-color-surface-default));
+  cursor: pointer;
+}
+.ticket-source-color-picker__choice:has(input:checked) {
+  border-color: var(--wa-color-brand-border-normal);
+  box-shadow: 0 0 0 2px var(--wa-color-brand-border-normal);
+}
+.ticket-source-color-picker__choice:focus-within {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: 2px;
+}
+.ticket-source-color-picker__choice input {
+  position: absolute;
+  opacity: 0;
+}
+.ticket-source-color-picker__preview {
+  display: grid;
+  width: remify(28px);
+  height: remify(28px);
+  place-items: center;
+}
+.ticket-source-color-picker__label {
+  color: var(--wa-color-text-normal);
+  font-size: var(--wa-font-size-2xs);
+}

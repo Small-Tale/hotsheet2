@@ -130,6 +130,14 @@
 .provider-setup-form__account-copy strong {
   overflow-wrap: anywhere;
 }
+.provider-setup-form__source-color {
+  display: grid;
+  gap: var(--wa-space-xs);
+  margin-top: var(--wa-space-m);
+}
+.provider-setup-form__source-color > small {
+  color: var(--wa-color-neutral-on-quiet);
+}
 /* iOS zooms into a focused field under 16px (HS2-8JPRRC). */
 @media (pointer: coarse) {
   .provider-setup-form__field-control {

@@ -406,8 +406,13 @@ describe('ticket source surfaces', () => {
     ];
     const repeated = String(TicketSourcesSettings({ sources }));
     expect(repeated).toContain('Some ticket sources look alike');
-    expect(repeated).toContain('name="project-source-color" data-source-id="gh-a"');
-    expect(repeated).toContain('name="project-source-color" data-source-id="gh-b"');
+    expect(repeated).not.toContain('name="project-source-color"');
+    expect(repeated).toContain('data-action="edit-provider-connection"');
+    const gitEditor = String(
+      TicketSourcesSettings({ sources: [{ ...sources[0], connectionId: 'git-local', provider: 'git' }] }),
+    );
+    expect(gitEditor).toContain('Edit icon color for Alpha');
+    expect(gitEditor).toContain('name="project-source-color" value="#3b82f6" data-source-id="git-local" checked');
     expect(repeated).toContain('data-provider="github"');
     expect(
       String(TicketSourcesSettings({ sources: [{ ...sources[0], color: 'transparent' }, sources[1]] })),

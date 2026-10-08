@@ -11,6 +11,7 @@ import {
 } from '../api';
 import { isRemoteClient } from '../client-origin';
 import { copyWhenReady } from '../clipboard-when-ready';
+import { resolveCommandColor } from '../components/customization-palette';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
 import { type ExternalProviderKind, type GithubAuthState, providerName } from '../components/provider-setup-form';
 import { githubAttachmentSettings } from '../github-attachment-settings';
@@ -548,7 +549,11 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         kind === 'github'
           ? (githubAuth.value?.credential ?? (typeof existingCredential === 'string' ? existingCredential : ''))
           : read('credential-reference'),
-      makeDefault = values.get('make-default') === 'on';
+      makeDefault = values.get('make-default') === 'on',
+      sourceColor = read('project-source-color'),
+      previousColor = defaultProviders.value[current.id]?.sources.find(
+        (item) => item.connectionId === editingId,
+      )?.color;
     if (!locator || (kind !== 'jira' && !locator.includes('/'))) {
       providerSettingsError.value =
         kind === 'jira' ? 'Enter the Jira project key.' : 'Enter a namespace/repository path.';
@@ -617,6 +622,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
           : await client.createConnection(connection, makeDefault);
       if (editingId && makeDefault !== wasProjectDefault)
         await client.setCheckoutDefaultSource(current.id, makeDefault ? editingId : null);
+      if (editingId && sourceColor && resolveCommandColor(sourceColor) !== resolveCommandColor(previousColor))
+        await client.setCheckoutSourceColor(current.id, editingId, sourceColor);
       await reloadProviderDescriptors(client, current);
       projects.value = projects.value.map((item) =>
         item.id === current.id ? { ...item, needsTicketSetup: false } : item,

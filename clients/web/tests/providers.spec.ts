@@ -2615,10 +2615,15 @@ test('changes a project source color and updates card and inspector badges (HS2-
   const ticketRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'git');
   await page.getByLabel('Settings view').click();
-  const color = page.locator('select[name="project-source-color"][data-source-id="git-local"]');
-  await color.selectOption('#3b82f6');
+  const appearance = page.locator('.ticket-provider-settings__store[data-source-id="git-local"] details');
+  await appearance.locator('summary').click();
+  await expect(appearance.locator('[data-component="ticket-source-color-picker"]')).toBeVisible();
+  await expect(
+    appearance.locator('.ticket-source-color-picker__preview [data-component="ticket-source-icon"]'),
+  ).toHaveCount(9);
+  await appearance.locator('input[name="project-source-color"][value="#3b82f6"]').check();
   await expect(page.locator('.app-toast')).toContainText('Ticket source color updated.');
-  await expect(color).toHaveValue('#3b82f6');
+  await expect(appearance.locator('input[name="project-source-color"][value="#3b82f6"]')).toBeChecked();
   await page.getByLabel('List view').click();
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
   await ticketRow.click();
@@ -2627,8 +2632,9 @@ test('changes a project source color and updates card and inspector badges (HS2-
     'rgb(59, 130, 246)',
   );
   await page.getByLabel('Settings view').click();
-  await color.selectOption('transparent');
-  await expect(color).toHaveValue('transparent');
+  if ((await appearance.getAttribute('open')) === null) await appearance.locator('summary').click();
+  await appearance.locator('input[name="project-source-color"][value="transparent"]').check();
+  await expect(appearance.locator('input[name="project-source-color"][value="transparent"]')).toBeChecked();
   await page.getByLabel('List view').click();
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).not.toHaveAttribute('style', /color/);
 });
@@ -2644,7 +2650,15 @@ test('centers the compact source mark with the type icon and ticket number in co
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   const type = await row.locator('.ticket-list-row__category-icon').boundingBox();
   const source = await row.locator('.ticket-list-row__source .ticket-source-icon').boundingBox();
-  const number = await row.locator('.ticket-list-row__slug').boundingBox();
+  const number = await row.locator('.ticket-list-row__slug').evaluate((element) => {
+    const text = element.firstChild;
+    if (!text) return null;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 1);
+    const box = range.getBoundingClientRect();
+    return { y: box.y, height: box.height };
+  });
   expect(type && source && number).toBeTruthy();
   const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
   expect(Math.abs(middle(source!) - middle(type!))).toBeLessThanOrEqual(3);
@@ -2938,6 +2952,11 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.setViewportSize({ width: 1100, height: 760 });
   await expect(providerForm).toContainText('Currently enabled.');
   await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
+  const colorPicker = providerForm.locator('[data-component="ticket-source-color-picker"]');
+  await expect(
+    colorPicker.locator('.ticket-source-color-picker__preview [data-component="ticket-source-icon"]'),
+  ).toHaveCount(9);
+  await colorPicker.getByRole('radio', { name: 'Purple' }).check();
   const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');
   await expect(footer.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
   await expect(footer.getByRole('button', { name: 'Disable' })).toBeVisible();
@@ -2946,12 +2965,17 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await providerForm.getByLabel('Display name').fill('GitHub Primary');
   await providerForm.locator('input[name="attachment-repo"]').fill('');
   const updates: Array<Record<string, unknown>> = [];
+  const colorUpdates: Array<Record<string, unknown>> = [];
   page.on('request', (request) => {
-    if (request.method() === 'PATCH' && new URL(request.url()).pathname.includes('/provider-connections/'))
-      updates.push(request.postDataJSON());
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'PATCH' && path.includes('/provider-connections/')) updates.push(request.postDataJSON());
+    if (request.method() === 'PUT' && path.endsWith('/sources/github-small-tale-hotsheet2/color'))
+      colorUpdates.push(request.postDataJSON());
   });
   await setup.getByRole('button', { name: 'Save changes' }).click();
   await expect.poll(() => updates.length).toBe(1);
+  await expect.poll(() => colorUpdates.length).toBe(1);
+  expect(colorUpdates[0]).toMatchObject({ color: '#8b5cf6' });
   expect(updates[0].settings).not.toHaveProperty('attachment_repo');
   await expect(setup).toHaveJSProperty('open', false);
   await expect(sourcesPanel.getByRole('button', { name: 'Edit GitHub Primary' })).toBeVisible();
