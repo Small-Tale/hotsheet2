@@ -397,10 +397,9 @@ function WorkspaceOverflowControls({
 /**
  * The workspace controls as Toolbar zone content: view-mode switcher, sort, selection
  * actions, the collapsible ticket search, and the narrow-width overflow menu, each a
- * cataloged ToolbarControlGroup (or the TicketSearchField that renders one). There is no
- * wrapper element; the enclosing Toolbar zone (or the workspace-grid rail's own grid) owns
- * layout (HS2-EZ1N7Z). The groups yield to the open search and the search field sizes itself through
- * Kerf ToolbarControlGroup props, chosen by `presentation` (HS2-8FS5BJ, HS2-DAMHD1).
+ * cataloged ToolbarControlGroup (or the TicketSearchField that renders one). The toolbar
+ * groups search and More in an app-owned flex slot; the rail owns its wrapped rows. Search
+ * sizing remains Kerf-owned (HS2-8FS5BJ, HS2-DAMHD1, HS2-NZK4KA).
  */
 export function WorkspaceControls({
   mode,
@@ -417,6 +416,7 @@ export function WorkspaceControls({
   selectedTicketsMutable = true,
 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings' || mode === 'notifications';
+  const visibleSearchOpen = searchOpen && !projectActionsDisabled;
   const ticketActionsDisabled = projectActionsDisabled || selectedTicketCount === 0 || !selectedTicketsMutable;
   const visibleSortOptions = mode === 'board' ? sortOptions.filter((option) => option.value !== 'status') : sortOptions;
   const sortChoices: ReadonlyArray<SelectChoice<WorkspaceSort>> = visibleSortOptions.map((option) => {
@@ -494,8 +494,8 @@ export function WorkspaceControls({
       disabled={projectActionsDisabled}
       autofocus
       collapsible
-      expanded={searchOpen}
-      helpOpen={searchHelpOpen}
+      expanded={visibleSearchOpen}
+      helpOpen={searchHelpOpen && visibleSearchOpen}
       layout={rail ? 'row' : 'inline'}
     />
   );
@@ -504,7 +504,7 @@ export function WorkspaceControls({
       mode={mode}
       projectActionsDisabled={projectActionsDisabled}
       ticketActionsDisabled={ticketActionsDisabled}
-      searchOpen={searchOpen}
+      searchOpen={visibleSearchOpen}
       sort={sort}
       sortDirection={sortDirection}
       visibleSortOptions={visibleSortOptions}
@@ -525,7 +525,7 @@ export function WorkspaceControls({
           className="view-mode-switcher"
           shape="pill"
           visibility="yield-to-expanded-sibling"
-          hideBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 176)}
+          hideBelow={px(visibleSearchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 176)}
         >
           {viewSwitcher}
         </ToolbarControlGroup>
@@ -545,7 +545,7 @@ export function WorkspaceControls({
           shape="pill"
           focusRing="outline"
           visibility="yield-to-expanded-sibling"
-          hideBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 416)}
+          hideBelow={px(visibleSearchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 416)}
         >
           {sortSelect}
         </ToolbarControlGroup>
@@ -566,7 +566,7 @@ export function WorkspaceControls({
           selectedChrome="outline"
           selectedTone="pop"
           visibility="yield-to-expanded-sibling"
-          hideBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 480)}
+          hideBelow={px(visibleSearchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 480)}
         >
           {utilityButtons}
         </ToolbarControlGroup>
@@ -574,7 +574,7 @@ export function WorkspaceControls({
       {rail ? (
         searchField
       ) : (
-        <div class="workspace-header__search-actions" data-search-open={String(searchOpen)}>
+        <div class="workspace-header__search-actions" data-search-open={String(visibleSearchOpen)}>
           {searchField}
           {overflowControls}
         </div>

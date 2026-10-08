@@ -45,6 +45,7 @@ function feedbackRaterId(): string {
 
 /** Live application bindings used by this handler group. */
 export interface CommandAndAiInteractionsDependencies {
+  readonly searchOpen: Signal<boolean>;
   readonly commandGroupExpanded: Signal<boolean>;
   readonly persistWorkspacePreferences: () => void;
   readonly project: () => Project | undefined;
@@ -174,6 +175,7 @@ export interface CommandAndAiInteractionsDependencies {
 export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteractionsDependencies) {
   const lifetime = createScope();
   const {
+    searchOpen,
     commandGroupExpanded,
     persistWorkspacePreferences,
     project,
@@ -928,6 +930,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       const mode = (data(target).segmentValue ?? data(target).viewMode) as WorkspaceViewMode,
         finishTiming = beginInteractionTiming('workspace-mode-change', { mode });
       resetProgressiveTicketRendering();
+      if (mode === 'settings' || mode === 'notifications') searchOpen.value = false;
       viewMode.value = mode;
       persistWorkspacePreferences();
       if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });

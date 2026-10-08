@@ -219,6 +219,24 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     expect(css).not.toContain('@keyframes');
   });
 
+  it('collapses a disabled collapsible field even when its caller supplies expanded (HS2-6ZK9KF)', () => {
+    const searchModel = model('is:open', 'Started');
+    const markup = String(
+      TicketSearchField({
+        id: 'search',
+        label: 'Search',
+        model: searchModel,
+        collapsible: true,
+        expanded: true,
+        disabled: true,
+      }),
+    );
+    expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="false"/);
+    expect(markup).toContain('data-collapsible="true" data-expanded="false"');
+    expect(markup).not.toContain('>Started</span>');
+    expect(searchModel.state.value.query).toContain('Started');
+  });
+
   it("gives the form field the grouped field's chip-color hook on its rendered root (HS2-RXHZVR)", () => {
     const markup = String(TicketSearchFormField({ id: 'form-search', label: 'View query', model: model('is:open') }));
     // Kerf renders `className` on the form-field root (KF-5G8WJ0), the same hook the grouped field uses.

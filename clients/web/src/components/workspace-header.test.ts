@@ -27,6 +27,17 @@ function searchModelWith(text: string, tags: readonly string[]) {
 }
 
 describe('WorkspaceHeader', () => {
+  it('collapses disabled search in Notifications and Settings even if an open state is supplied (HS2-6ZK9KF)', () => {
+    for (const mode of ['notifications', 'settings'] as const) {
+      const markup = String(WorkspaceControls({ mode, searchOpen: true }));
+      expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="false"/);
+      expect(markup).toContain('data-search-open="false"');
+      expect(markup).toContain('data-token-search-keep-open="true"');
+    }
+    expect(String(WorkspaceControls({ mode: 'list', searchOpen: true }))).toMatch(
+      /class="kui-toolbar-control-group ticket-search-field"[^>]*data-expanded="true"/,
+    );
+  });
   it('projects a compact primary heading when the project view title moves into the main toolbar', () => {
     const markup = String(WorkspaceIdentity({ projectName: 'Queue', id: 'workspace-page-title', headingLevel: 1 }));
     // The identity is a real ToolbarText, so a Toolbar leading zone accepts it (HS2-EZ1N7Z).
@@ -90,26 +101,6 @@ describe('WorkspaceHeader', () => {
         sortDirection: 'descending',
       }),
     );
-    expect(markup).not.toContain('All Tickets');
-    expect(markup).toContain('data-component="toolbar-text"');
-    expect(markup).toContain('data-hide-below="1024px"');
-    expect(markup).toContain('<span class="kui-toolbar-text__text">Hot Sheet 2');
-    expect(markup).toContain('aria-label="View mode"');
-    expect(markup).toContain(
-      'data-segment-value="settings" data-selected="true" aria-label="Settings view" aria-pressed="true"',
-    );
-    expect(markup).toContain('data-token-search-editor="workspace-search"');
-    expect(markup).toContain('role="searchbox" aria-label="Search tickets"');
-    expect(markup).toContain('contenteditable="false"');
-    expect(markup).toMatch(
-      /data-token-search-text data-empty="false">NOT <\/span><span class="kui-token-search__token"[^>]*data-token-value="tag:server">.*tag:server.*data-token-search-text data-empty="false"> AND tag:cl<\/span>/s,
-    );
-    expect(markup).toContain('aria-label="Edit tag:server"');
-    expect(markup).toContain('>tag:server</button>');
-    expect(markup).toContain('aria-label="Remove tag:server"');
-    // The settings view disables the field, and Kerf renders no suggestions for a disabled field; an
-    // enabled field shows Kerf's in-flow rows without the committed tag (HS2-5JXBQY).
-    expect(markup).not.toContain('kui-token-search__suggestion');
     const enabled = String(
       WorkspaceControls({
         mode: 'list',
@@ -117,10 +108,30 @@ describe('WorkspaceHeader', () => {
         searchModel: searchModelWith('NOT tag:server AND tag:cl', ['client', 'server']),
       }),
     );
+    expect(markup).not.toContain('All Tickets');
+    expect(markup).toContain('data-component="toolbar-text"');
+    expect(markup).toContain('data-hide-below="224px"');
+    expect(markup).toContain('<span class="kui-toolbar-text__text">Hot Sheet 2');
+    expect(markup).toContain('aria-label="View mode"');
+    expect(markup).toContain(
+      'data-segment-value="settings" data-selected="true" aria-label="Settings view" aria-pressed="true"',
+    );
+    expect(markup).not.toContain('data-token-search-editor="workspace-search"');
+    expect(enabled).toContain('data-token-search-editor="workspace-search"');
+    expect(enabled).toContain('role="searchbox" aria-label="Search tickets"');
+    expect(enabled).toMatch(
+      /data-token-search-text data-empty="false">NOT <\/span><span class="kui-token-search__token"[^>]*data-token-value="tag:server">.*tag:server.*data-token-search-text data-empty="false"> AND tag:cl<\/span>/s,
+    );
+    expect(enabled).toContain('aria-label="Edit tag:server"');
+    expect(enabled).toContain('>tag:server</button>');
+    expect(enabled).toContain('aria-label="Remove tag:server"');
+    // The settings view disables the field, and Kerf renders no suggestions for a disabled field; an
+    // enabled field shows Kerf's in-flow rows without the committed tag (HS2-5JXBQY).
+    expect(markup).not.toContain('kui-token-search__suggestion');
     expect(enabled).toContain('class="kui-token-search__suggestion" data-token-search-suggestion="tag:client"');
     expect(enabled).not.toContain('data-token-search-suggestion="tag:server"');
-    expect(markup).toContain('data-action="edit-ticket-search-token"');
-    expect(markup).toContain('data-action="clear-ticket-search"');
+    expect(enabled).toContain('data-action="edit-ticket-search-token"');
+    expect(enabled).toContain('data-action="clear-ticket-search"');
     expect(markup).toContain('name="workspace-sort"');
     expect(markup).toContain('aria-label="Sort tickets: Priority, descending"');
     expect(markup).toContain('<wa-option value="priority"');
@@ -128,10 +139,9 @@ describe('WorkspaceHeader', () => {
       'class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><svg data-lucide="arrow-down-wide-narrow"',
     );
     expect(markup).not.toContain('<input type="checkbox"');
-    expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="true")/);
-    expect(markup).toContain('data-collapsible="true" data-expanded="true"');
+    expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="false")/);
     expect(markup).not.toContain('workspace-header__search-tokens');
-    expect(markup).toContain('aria-label="Search syntax help"');
+    expect(enabled).toContain('aria-label="Search syntax help"');
     expect(markup).not.toContain('aria-label="Date and time helper"');
     expect(
       String(
@@ -142,16 +152,18 @@ describe('WorkspaceHeader', () => {
         }),
       ),
     ).toContain('aria-label="Date and time helper"');
-    expect(markup).toContain('aria-label="Search syntax"');
-    expect(markup).toContain('<dt>Tags</dt>');
-    expect(markup).toContain('<dt>Content</dt>');
-    expect(markup).toContain('<dt>Workflow</dt>');
-    expect(markup).toContain('<code>is:closed</code>');
-    expect(markup).toContain('<code>is:duplicate</code>');
-    expect(markup).toContain('<dt>Dates</dt>');
-    expect(markup).toContain('<strong>Combine filters</strong>');
-    expect(markup).toContain('local, relative, and ISO 8601 dates work');
-    expect(markup).toContain('updated-after:2026-09-01T11:05');
+    expect(markup).not.toContain('aria-label="Search syntax"');
+    const enabledWithHelp = String(WorkspaceControls({ mode: 'list', searchOpen: true, searchHelpOpen: true }));
+    expect(enabledWithHelp).toContain('aria-label="Search syntax"');
+    expect(enabledWithHelp).toContain('<dt>Tags</dt>');
+    expect(enabledWithHelp).toContain('<dt>Content</dt>');
+    expect(enabledWithHelp).toContain('<dt>Workflow</dt>');
+    expect(enabledWithHelp).toContain('<code>is:closed</code>');
+    expect(enabledWithHelp).toContain('<code>is:duplicate</code>');
+    expect(enabledWithHelp).toContain('<dt>Dates</dt>');
+    expect(enabledWithHelp).toContain('<strong>Combine filters</strong>');
+    expect(enabledWithHelp).toContain('local, relative, and ISO 8601 dates work');
+    expect(enabledWithHelp).toContain('updated-after:2026-09-01T11:05');
     expect(markup).not.toContain('class="workspace-header__search-button"');
     expect(markup).not.toContain('data-action="open-global-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('ticket-search-field'));

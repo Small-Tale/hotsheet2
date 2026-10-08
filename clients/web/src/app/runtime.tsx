@@ -2020,6 +2020,7 @@ export async function startHotSheetWebClient() {
   function switchWorkspaceView(mode: WorkspaceViewMode) {
     setShellMode('project');
     resetProgressiveTicketRendering();
+    if (mode === 'settings' || mode === 'notifications') searchOpen.value = false;
     viewMode.value = mode;
     persistWorkspacePreferences();
     if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
@@ -2365,7 +2366,7 @@ export async function startHotSheetWebClient() {
       const composerOpenedByUser = composerExpanded.value;
       selectedView.value =
         stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView;
-      searchOpen.value = stored.searchOpen;
+      searchOpen.value = stored.searchOpen && (viewMode.value === 'list' || viewMode.value === 'board');
       replaceTicketSearch(workspaceSearchModel, stored.searchQuery);
       searchMatchKeys.value = undefined;
       inspectorTab.value = stored.inspectorTab;
@@ -5081,7 +5082,7 @@ export async function startHotSheetWebClient() {
       <MainShell
         tabs={tabs}
         mode="project"
-        workspaceSearchOpen={searchOpen.value}
+        workspaceSearchOpen={searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')}
         mobile={viewportMobile.value}
         sidebar={sidebarSurfacePanel(sidebarSurfaceProps())}
         sidebarVisible={!sidebarCollapsed.value}
@@ -5094,14 +5095,14 @@ export async function startHotSheetWebClient() {
               projectName={workspaceTitle}
               id="workspace-page-title"
               headingLevel={1}
-              searchOpen={searchOpen.value}
+              searchOpen={searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')}
             />
           )
         }
         headerActions={
           <WorkspaceControls
             mode={viewMode.value}
-            searchOpen={searchOpen.value}
+            searchOpen={searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')}
             searchModel={workspaceSearchModel}
             searchHelpOpen={searchHelpOpen.value}
             sort={sort.value}

@@ -1032,6 +1032,9 @@ and identity-less legacy entries remain conservatively blocking.
   needed for the full controls, the title, view switcher, sort, and selection star yield;
   search stays beside a persistent More menu. More includes the same capability-checked
   Up Next toggle and keeps the empty search open while the menu is used (HS2-NZK4KA).
+  A disabled collapsible search renders closed even with a nonempty query. Switching to
+  Notifications or Settings collapses the workspace search without clearing its query;
+  returning to a ticket view restores that active query (HS2-6ZK9KF).
   Explicit lifecycle expressions and filter chips narrow the
   selected collection. Boolean expressions that cannot be represented as one provider query
   walk every compact cursor page for that collection, retain only client-side matches, and

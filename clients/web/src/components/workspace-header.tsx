@@ -34,7 +34,12 @@ export function WorkspaceHeader({
       className="workspace-header"
       dividerSides=""
       responsive="none"
-      leading={<WorkspaceIdentity projectName={projectName} searchOpen={searchOpen} />}
+      leading={
+        <WorkspaceIdentity
+          projectName={projectName}
+          searchOpen={searchOpen && mode !== 'notifications' && mode !== 'settings'}
+        />
+      }
       trailing={
         controlsVisible ? (
           <WorkspaceControls

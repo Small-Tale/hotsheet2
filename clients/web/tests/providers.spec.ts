@@ -5671,6 +5671,38 @@ test('keeps production workspace search and More on one row through a phone resi
   await expect(page.locator('[data-workspace-overflow-action="toggle-selected-up-next"]')).toBeVisible();
 });
 
+test('collapses nonempty search on disabled workspace views and restores its query on return (HS2-6ZK9KF)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1728, height: 971 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
+  const search = toolbar.locator('.ticket-search-field');
+  const modes = toolbar.getByRole('group', { name: 'View mode', exact: true });
+  await toolbar.getByRole('button', { name: 'Search tickets' }).click();
+  await expect(search).toHaveAttribute('data-expanded', 'true');
+  await toolbar.getByRole('searchbox', { name: 'Search tickets' }).fill('Started');
+  await modes.getByRole('button', { name: 'Notifications view' }).click();
+  await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
+  await expect(search).toHaveAttribute('data-expanded', 'false');
+  await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
+  await page.screenshot({ path: '/private/tmp/hs2-6zk9kf-notifications.png', animations: 'disabled' });
+  await modes.getByRole('button', { name: 'List view' }).click();
+  await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Started');
+  await modes.getByRole('button', { name: 'Settings view' }).click();
+  await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
+  await expect(search).toHaveAttribute('data-expanded', 'false');
+  await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
+  await page.screenshot({ path: '/private/tmp/hs2-6zk9kf-settings.png', animations: 'disabled' });
+  await page.reload();
+  await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
+  await expect(search).toHaveAttribute('data-expanded', 'false');
+  await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
+});
+
 test('keeps a scrolled-back transcript in place while selecting a message range', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

@@ -3,7 +3,7 @@ import '@kerfjs/ui/token-search-field.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { TokenSearchField } from '@kerfjs/ui/token-search-field';
-import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
+import { createTokenSearchModel, type TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { action } from 'kerfjs/actions';
 import { CircleHelp } from 'lucide';
@@ -25,6 +25,10 @@ export const TICKET_SEARCH_ACTIONS = {
   toggleHelp: action('toggle-ticket-search-help'),
   applyDate: action('apply-ticket-search-date'),
 } as const;
+
+// Kerf keeps a collapsible field visually open while its model has content. A disabled
+// field shows an empty display model so it can close without clearing the real query.
+const disabledCollapsedModel = createTokenSearchModel();
 
 /** Native input names inside a field's date helper, resolved relative to that field. */
 export const TICKET_SEARCH_DATE_INPUT = 'ticket-search-date';
@@ -298,14 +302,14 @@ export function TicketSearchField({
   surfaces = 'floating',
   layout = 'inline',
 }: TicketSearchFieldProps) {
-  const open = collapsible ? expanded : true,
+  const open = collapsible ? expanded && !disabled : true,
     // Inferred, not annotated: `Omit` over Kerf's union props (beta.64 `trailing` XOR `trailingAction`)
     // would collapse the branches.
     field = {
       presentation: 'toolbar-group' as const,
       id,
       label,
-      model,
+      model: disabled && collapsible ? disabledCollapsedModel : model,
       placeholder,
       disabled,
       autofocus,
@@ -321,11 +325,7 @@ export function TicketSearchField({
     },
     content = (
       <>
-        {collapsible ? (
-          <TokenSearchField {...field} collapsible expanded={expanded} />
-        ) : (
-          <TokenSearchField {...field} />
-        )}
+        {collapsible ? <TokenSearchField {...field} collapsible expanded={open} /> : <TokenSearchField {...field} />}
         {open && surfaces === 'floating' ? (
           <TicketSearchSurfaces id={id} model={model} helpOpen={helpOpen} help={help} />
         ) : (

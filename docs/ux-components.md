@@ -461,12 +461,12 @@ does not introduce polling or another network request.
 
 ### 2.3 `WorkspaceHeader` — feature floor
 
-`WorkspaceControls` (`clients/web/src/components/workspace-controls.tsx`) renders no wrapper
-element: it is Toolbar zone content — the view-mode, sort, and selection
-`ToolbarControlGroup`s, the `TicketSearchField`, and the narrow-width overflow menu in its
-own borderless nested-dropdown group — so the application shell's header Toolbar and the
-demo's `WorkspaceHeader` Toolbar host them as cataloged children, and the workspace-grid
-rail's own grid places the same groups (HS2-EZ1N7Z). `WorkspaceIdentity` is a real
+`WorkspaceControls` (`clients/web/src/components/workspace-controls.tsx`) is Toolbar zone
+content: the view-mode, sort, and selection `ToolbarControlGroup`s are direct children, while
+an app-owned flex slot keeps `TicketSearchField` beside the narrow-width overflow menu.
+The application shell's header Toolbar and the demo's `WorkspaceHeader` Toolbar host those
+controls; the workspace-grid rail places its groups directly (HS2-EZ1N7Z, HS2-NZK4KA).
+`WorkspaceIdentity` is a real
 `ToolbarText` for the leading zone. The non-rail groups (view switcher, sort, selection
 actions, overflow menu) set Kerf's `visibility="yield-to-expanded-sibling"`: on a compact
 (480px or less) toolbar they leave the row while the search is expanded and return when it
@@ -2732,6 +2732,7 @@ API groups below, and adopted the first two: the workspace header Toolbar takes
 identity once the toolbar is narrower than Kerf's `narrow` breakpoint, so the app's stacked
 grid rules are gone) and `ProjectTab` passes Kerf's `attention` prop, tinting the name through
 the public `--kui-app-tab-attention-color` token (78). `HS2-PKPGGZ` adopts the rest. The
+current workspace header uses inline search and keeps it on the first row (HS2-NZK4KA).
 FloatingToolbar parent gap (`HS2-10KEHN`) persists in beta.60, so the doctor adapter accepts
 that version too. HS2-PKPGGZ then adopted the rest of beta.60 and took `KUI-L019` from 78 to 10:
 region surfaces and the focus-mode popup layer are `--kui-resizable-region-background` /
