@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17059,7 +17059,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   test.setTimeout(60_000);
   await mockProject(page);
   const reportedVideoPath = process.env.HOTSHEET_MEDIA_TEST_VIDEO,
-    reportedVideo = reportedVideoPath && existsSync(reportedVideoPath) ? readFileSync(reportedVideoPath) : undefined,
+    reportedVideo = reportedVideoPath ? readFileSync(reportedVideoPath) : undefined,
     videoName = reportedVideo && reportedVideoPath ? basename(reportedVideoPath) : 'walkthrough.mp4',
     annotationWrites: Array<{ annotations: MediaAnnotation[] }> = [],
     initialAnnotations: MediaAnnotation[] = [
@@ -17083,7 +17083,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
     if (route.request().method() === 'GET') {
       const headers = {
           'accept-ranges': 'bytes',
-          'content-type': reportedVideo ? 'video/quicktime' : 'video/mp4',
+          'content-type': reportedVideo && videoName.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4',
           'x-hotsheet-filename': videoName,
         },
         rangeHeader = route.request().headers().range,
@@ -17191,31 +17191,37 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   const scrubber = gallery.getByRole('slider', { name: 'Video position' });
   await expect.poll(async () => Number(await scrubber.getAttribute('max'))).toBeGreaterThan(2500);
   const durationMs = Number(await scrubber.getAttribute('max'));
+  const decodedFrameNear = (targetMs: number, toleranceMs: number) =>
+    video.evaluate(
+      (node, { targetMs, toleranceMs }) =>
+        new Promise<number>((resolve, reject) => {
+          let active = true;
+          const seen: number[] = [],
+            timeout = window.setTimeout(() => {
+              active = false;
+              reject(new Error(`paused seek did not present ${targetMs} ms; saw ${seen.join(', ')}`));
+            }, 5000),
+            watch = () => {
+              (node as HTMLVideoElement).requestVideoFrameCallback((_now, metadata) => {
+                if (!active) return;
+                seen.push(metadata.mediaTime);
+                if (Math.abs(metadata.mediaTime * 1000 - targetMs) < toleranceMs) {
+                  active = false;
+                  window.clearTimeout(timeout);
+                  resolve(metadata.mediaTime);
+                } else watch();
+              });
+            };
+          watch();
+        }),
+      { targetMs, toleranceMs },
+    );
   if (reportedVideo) {
     await expect.poll(() => video.evaluate((node) => (node as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2);
     const firstFrame = await video.screenshot();
     for (const fraction of [0.9, 0.2, 0.72, 0.35]) {
       const targetMs = Math.round(durationMs * fraction),
-        presented = video.evaluate(
-          (node, target) =>
-            new Promise<number>((resolve, reject) => {
-              const seen: number[] = [],
-                timeout = window.setTimeout(() => {
-                  reject(new Error(`paused seek did not present the requested decoded frame; saw ${seen.join(', ')}`));
-                }, 5000),
-                watch = () => {
-                  (node as HTMLVideoElement).requestVideoFrameCallback((_now, metadata) => {
-                    seen.push(metadata.mediaTime);
-                    if (Math.abs(metadata.mediaTime * 1000 - target) < 150) {
-                      window.clearTimeout(timeout);
-                      resolve(metadata.mediaTime);
-                    } else watch();
-                  });
-                };
-              watch();
-            }),
-          targetMs,
-        );
+        presented = decodedFrameNear(targetMs, 150);
       await scrubber.fill(String(targetMs));
       expect(Math.abs((await presented) * 1000 - targetMs)).toBeLessThan(150);
     }
@@ -17227,28 +17233,16 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   await page.mouse.down();
   let heldFrameA: Buffer | undefined;
   if (reportedVideo) {
-    const decoded = video.evaluate(
-      (node) =>
-        new Promise<number>((resolve) => {
-          (node as HTMLVideoElement).requestVideoFrameCallback((_now, metadata) => {
-            resolve(metadata.mediaTime);
-          });
-        }),
-    );
+    // A multi-step pointer move issues several seeks. Its first decoded frame can belong
+    // to an intermediate pointer position, so wait for the final target frame.
+    const decoded = decodedFrameNear(Math.round(durationMs * 0.2), 180);
     await page.mouse.move(scrubberBox.x + scrubberBox.width * 0.2, scrubberBox.y + scrubberBox.height / 2, {
       steps: 8,
     });
     const playhead = Number(await scrubber.inputValue());
     expect(Math.abs((await decoded) * 1000 - playhead)).toBeLessThan(180);
     heldFrameA = await video.screenshot();
-    const nextDecoded = video.evaluate(
-      (node) =>
-        new Promise<number>((resolve) => {
-          (node as HTMLVideoElement).requestVideoFrameCallback((_now, metadata) => {
-            resolve(metadata.mediaTime);
-          });
-        }),
-    );
+    const nextDecoded = decodedFrameNear(Math.round(durationMs * 0.8), 180);
     await page.mouse.move(scrubberBox.x + scrubberBox.width * 0.8, scrubberBox.y + scrubberBox.height / 2, {
       steps: 8,
     });

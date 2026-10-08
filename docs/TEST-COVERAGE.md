@@ -49,6 +49,9 @@ tool/keyboard/undo transitions, inline Markdown notes and intent controls, and
 one-batch persistence. Geometry unit tests include point-bound validation and
 overlap picking; production browser tests exercise image and timed video gestures,
 keyboard creation and undo/redo, plus wide and phone captures.
+HS2-DE781D runs that video scrub browser case with a checked-in four-second H.264
+fixture in Chromium CI. It checks final decoded frames after both paused seeks and
+held-pointer drags; intermediate drag frames are allowed while the pointer is moving.
 
 HS2-6FVRZS covers explicitly trusted custom Antigravity CLI directories with a
 real native fixture, an IDE launcher collision on `PATH`, invalid or relative

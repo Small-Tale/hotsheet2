@@ -390,7 +390,11 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   local-host and stable-dev tests, so browser setup is required before `test:unit` as well
   as before the Playwright smoke group. `npm run test:ci:browser` starts its own local
   Vite server, selects tests marked `@ci-smoke`, and uses two browser workers with a
-  12-minute CI timeout. Run `npm run test:e2e` for the full browser suite locally.
+  12-minute CI timeout. The video scrub smoke case uses the checked-in four-second,
+  30-fps H.264 fixture at `clients/web/tests/fixtures/video-scrub.mp4` to check decoded
+  frames across paused seeks and held-pointer movement (HS2-DE781D). It waits for the
+  final requested frame because a multi-step drag also decodes intermediate positions.
+  Run `npm run test:e2e` for the full browser suite locally.
   A separate bounded WebKit job runs the inspector popup-anchor regression marked
   `@ci-webkit` (HS2-HASXWP), covering the Safari engine without delaying the main
   Chromium gate.

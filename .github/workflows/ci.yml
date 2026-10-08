@@ -149,6 +149,8 @@ jobs:
       - name: Web Chromium smoke flows
         working-directory: clients/web
         timeout-minutes: 12
+        env:
+          HOTSHEET_MEDIA_TEST_VIDEO: tests/fixtures/video-scrub.mp4
         run: npm run test:ci:browser
 
       - name: Migrator tests + coverage (vitest + Rust-import conformance)
