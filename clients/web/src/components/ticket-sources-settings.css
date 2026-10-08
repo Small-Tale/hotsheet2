@@ -44,6 +44,7 @@
 .ticket-provider-settings__store-icon {
   display: flex;
   flex: none;
+  align-self: flex-start;
 }
 .ticket-provider-settings__source-row {
   display: flex;

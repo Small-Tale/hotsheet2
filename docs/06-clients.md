@@ -658,6 +658,8 @@ and identity-less legacy entries remain conservatively blocking.
   **Disable / Enable**) and its trailing **Remove from this project** action opens that
   editor at an inline confirmation; a source shared with another project (attached
   headlessly) says "Also used by …". There is no list of other projects' connections.
+  Source marks align with each row's name line, including local Git sources with a
+  second locator line.
   A warning banner appears when two sources from the same provider share an icon color.
   Ticket cards show the source mark directly after the type icon; Git and GitHub use
   their filled data-source logo exports, with the selected color on the mark itself
