@@ -23,6 +23,7 @@ import { SHELL_AND_GLOBAL_ACTIONS, SHELL_AND_GLOBAL_TARGETS } from '../interacti
 import { TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
+import { acceptsProjectTabFileDrag, projectTabDroppedFiles } from '../project-tab-file-drop';
 import { cycleTabId } from '../tab-cycle';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT } from '../terminal-viewport';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
@@ -87,6 +88,7 @@ export interface ShellAndGlobalInteractionsDependencies {
   readonly terminalDrawerSelected: Signal<string>;
   readonly selectDrawerItem: (id: string) => void;
   readonly openTicketComposer: (trigger?: HTMLElement) => void;
+  readonly addNewTicketFiles: (files: FileList | File[]) => Promise<void>;
   readonly ticketWorkAreaFocused: () => boolean;
   readonly ordinaryTextSelected: () => boolean;
   clipboard: { tickets: ClipboardTicket[]; cut: boolean; source: Project } | undefined;
@@ -152,6 +154,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     terminalDrawerSelected,
     selectDrawerItem,
     openTicketComposer,
+    addNewTicketFiles,
     ticketWorkAreaFocused,
     ordinaryTextSelected,
     copySelection,
@@ -378,6 +381,49 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       event.stopPropagation();
       clearTicketDrag();
       void copyDraggedTickets(destination, drag);
+    }),
+  );
+  // OS file drops use the same project tab target as ticket-copy drags, but stage the
+  // files in that project's new-ticket composer (HS2-Z2KY20).
+  lifetime.add(
+    delegate(document.body, 'dragover', '[data-ticket-drop-project]', (event, target) => {
+      const transfer = (event as DragEvent).dataTransfer;
+      if (
+        !acceptsProjectTabFileDrag(
+          Boolean(dependencies.draggedTickets),
+          projects.value.some((item) => item.id === data(target).ticketDropProject),
+          transfer,
+        )
+      )
+        return;
+      event.preventDefault();
+      (target as HTMLElement).dataset.dropTarget = 'true';
+      (target as HTMLElement).dataset.draggingFile = 'true';
+      if (transfer) transfer.dropEffect = 'copy';
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'dragleave', '[data-ticket-drop-project]', (_event, target) => {
+      if (!data(target).draggingFile) return;
+      delete (target as HTMLElement).dataset.dropTarget;
+      delete (target as HTMLElement).dataset.draggingFile;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'drop', '[data-ticket-drop-project]', (event, target) => {
+      const destination = projects.value.find((item) => item.id === data(target).ticketDropProject),
+        files = projectTabDroppedFiles(
+          Boolean(dependencies.draggedTickets),
+          Boolean(destination),
+          (event as DragEvent).dataTransfer,
+        );
+      if (!files.length || !destination) return;
+      event.preventDefault();
+      event.stopPropagation();
+      delete (target as HTMLElement).dataset.dropTarget;
+      delete (target as HTMLElement).dataset.draggingFile;
+      selectProjectTab(destination.id);
+      void addNewTicketFiles(files);
     }),
   );
   lifetime.add(

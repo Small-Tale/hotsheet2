@@ -1623,13 +1623,14 @@ and identity-less legacy entries remain conservatively blocking.
   or removed annotation with normalized percentage bounds, optional time range, and caption;
   an unchanged session performs no write and adds no note.
   New-ticket attachment evidence follows the same safety policy before a ticket exists:
-  users can drop files on the collapsed New ticket launcher or anywhere on the expanded
-  composer, inspect and remove the staged filenames, and cancel to discard the entire
-  pending set. Creation first persists the ticket and then uploads each staged file in
-  order. A create failure leaves the draft and evidence available to retry; partial upload
-  failures keep the created ticket, continue valid siblings, and direct the user to retry
-  failed files from that ticket's Attachments tab. Providers must advertise both create
-  and attachment capabilities before the composer accepts evidence.
+  users can drop files on the collapsed New ticket launcher, an open project tab, or anywhere
+  on the expanded composer. A project-tab drop selects that project and opens its new-ticket
+  composer with the files staged there. Users can inspect and remove the staged filenames,
+  and cancel to discard the entire pending set. Creation first persists the ticket and then
+  uploads each staged file in order. A create failure leaves the draft and evidence available
+  to retry; partial upload failures keep the created ticket, continue valid siblings, and
+  direct the user to retry failed files from that ticket's Attachments tab. Providers must
+  advertise both create and attachment capabilities before the composer accepts evidence.
   The title also accepts leading tag shorthand: `[client] [Needs Review] Fix selection`
   creates `Fix selection` with `client` and `Needs-Review` tags. The client sends the
   original title and renders the authoritative normalized ticket returned by the server,

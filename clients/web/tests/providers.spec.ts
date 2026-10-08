@@ -20373,6 +20373,72 @@ test('drops selected tickets on another project tab to copy them there', async (
   await page.screenshot({ path: '/private/tmp/hs2-skp8cw-dropped-started-tickets.png', fullPage: true });
 });
 
+test('drops files on another project tab to stage a new ticket in that project (HS2-Z2KY20)', async ({ page }) => {
+  const creates: string[] = [],
+    uploads: string[] = [];
+  await mockProject(page);
+  await page.route('**/__hotsheet/projects/open', (route) => {
+    const root = route.request().postDataJSON().root as string;
+    return route.fulfill({
+      status: 201,
+      json:
+        root === '/work/other'
+          ? { ...project, id: 'other-checkout', root, name: 'other', apiPath: '/__hotsheet/project-api/other-checkout' }
+          : project,
+    });
+  });
+  await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+  page.on('request', (request) => {
+    if (request.method() !== 'POST') return;
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith('/tickets')) creates.push(path);
+    if (path.endsWith('/attachments'))
+      uploads.push(`${path}:${decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? '')}`);
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Add project' }).click();
+  await page.getByRole('tab', { name: 'demo' }).click();
+  const destination = page.locator('[data-ticket-drop-project="other-checkout"]');
+  await destination.evaluate((node) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['first proof'], 'first-proof.txt', { type: 'text/plain' }));
+    node.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(destination).toHaveAttribute('data-dragging-file', 'true');
+  await expect(destination).toHaveAttribute('data-drop-target', 'true');
+  await destination.dispatchEvent('dragleave');
+  await expect(destination).not.toHaveAttribute('data-drop-target');
+  await destination.evaluate((node) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['first proof'], 'first-proof.txt', { type: 'text/plain' }));
+    transfer.items.add(new File(['second proof'], 'second-proof.txt', { type: 'text/plain' }));
+    node.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(page.getByRole('tab', { name: 'other' })).toHaveAttribute('aria-selected', 'true');
+  await expect(destination).not.toHaveAttribute('data-drop-target');
+  const form = page.locator('[data-action="create-ticket-form"]');
+  await expect(form.getByText('first-proof.txt')).toBeVisible();
+  await expect(form.getByText('second-proof.txt')).toBeVisible();
+  await form.screenshot({ path: '/private/tmp/hs2-z2ky20-project-tab-file-drop-wide.png' });
+  await page.setViewportSize({ width: 940, height: 844 });
+  await form.screenshot({ path: '/private/tmp/hs2-z2ky20-project-tab-file-drop-narrow.png' });
+  await form.locator('wa-input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
+    node.value = 'Created from project tab drop';
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await form.getByRole('button', { name: 'Create ticket' }).click();
+  await expect.poll(() => creates).toEqual(['/__hotsheet/project-api/other-checkout/checkouts/other-checkout/tickets']);
+  await expect
+    .poll(() => uploads)
+    .toEqual([
+      '/__hotsheet/project-api/other-checkout/checkouts/other-checkout/tickets/git-local%3A02/attachments:first-proof.txt',
+      '/__hotsheet/project-api/other-checkout/checkouts/other-checkout/tickets/git-local%3A02/attachments:second-proof.txt',
+    ]);
+});
+
 test('switches already-open projects from cache within one frame and rejects stale refreshes', async ({ page }) => {
   const otherRow = {
     ...row,
