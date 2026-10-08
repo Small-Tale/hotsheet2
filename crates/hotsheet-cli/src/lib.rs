@@ -23,7 +23,30 @@ pub use hotsheet_aitools::launch_safety;
 pub mod permission_hook;
 pub mod plugin;
 pub mod setup;
+#[path = "../../hotsheet-server/src/source_revision.rs"]
+#[allow(dead_code)]
+mod source_revision;
 pub mod workloop;
+
+/// Emit the local build/source revision for the bridge's binary selection probe.
+/// Both CLI binaries handle this before parsing their normal commands or opening a store.
+pub fn print_revision_status_if_requested() -> bool {
+    if std::env::args_os().len() != 2
+        || std::env::args_os().nth(1).as_deref() != Some(std::ffi::OsStr::new("--revision-status"))
+    {
+        return false;
+    }
+    let status = source_revision::SourceRevisionMonitor::current_build().status();
+    println!(
+        "{}",
+        serde_json::json!({
+            "build_revision": status.build_revision,
+            "source_revision": status.source_revision,
+            "source_stale": status.source_stale,
+        })
+    );
+    true
+}
 
 pub use setup::{SetupReport, run_setup};
 

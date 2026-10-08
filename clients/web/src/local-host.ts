@@ -57,9 +57,9 @@ const HOST_BINARIES = {
 /**
  * Release builds of the bridge's binaries for a production host (HS2-D2JQ9A). The bridge defaults to
  * `target/debug`, whose server is many times slower at hashing and walking stores. When a release
- * server is built, every binary not already set in `environment` switches to its release build
- * together, so a stale release CLI is never paired with a debug server. A local binary is
- * eligible only when its embedded revision matches the current workspace source.
+ * server is built, each binary prefers its current release build and falls back to its current
+ * debug build independently. A local binary is eligible only when its embedded revision matches
+ * the current workspace source and the selected server revision.
  */
 export function releaseBinaryEnvironment(
   repositoryRoot: string,
@@ -69,23 +69,29 @@ export function releaseBinaryEnvironment(
 ): Record<string, string> {
   const release = (name: string) => resolve(repositoryRoot, 'target/release', name);
   const debug = (name: string) => resolve(repositoryRoot, 'target/debug', name);
-  if (environment.HOTSHEET_SERVER_BIN) return {};
-  const releaseRevision = exists(release(HOST_BINARIES.HOTSHEET_SERVER_BIN))
-    ? currentRevision(inspect(release(HOST_BINARIES.HOTSHEET_SERVER_BIN)))
-    : undefined;
-  if (!releaseRevision) {
-    const debugRevision = exists(debug(HOST_BINARIES.HOTSHEET_SERVER_BIN))
-      ? currentRevision(inspect(debug(HOST_BINARIES.HOTSHEET_SERVER_BIN)))
-      : undefined;
-    if (!debugRevision)
-      throw new Error(
-        'No current Hot Sheet server binary is available. Run `npm run server:rebuild` or `npm run server:rebuild:release`.',
-      );
-    return { HOTSHEET_SERVER_BIN: debug(HOST_BINARIES.HOTSHEET_SERVER_BIN), HOT_SHEET_BUILD_REVISION: debugRevision };
-  }
-  const chosen: Record<string, string> = { HOT_SHEET_BUILD_REVISION: releaseRevision };
+  const chosen: Record<string, string> = {};
+  let expectedRevision: string | undefined;
   for (const [variable, name] of Object.entries(HOST_BINARIES)) {
-    if (!environment[variable] && exists(release(name))) chosen[variable] = release(name);
+    if (environment[variable]) continue;
+    let selected: { path: string; revision: string } | undefined;
+    for (const path of [release(name), debug(name)]) {
+      const revision = exists(path) ? currentRevision(inspect(path)) : undefined;
+      if (revision && (!expectedRevision || revision === expectedRevision)) {
+        selected = { path, revision };
+        break;
+      }
+    }
+    if (!selected)
+      throw new Error(
+        `No current Hot Sheet ${name} binary is available. Run \`npm run server:rebuild\` or \`npm run server:rebuild:release\`.`,
+      );
+    chosen[variable] = selected.path;
+    if (variable === 'HOTSHEET_SERVER_BIN') {
+      expectedRevision = selected.revision;
+      chosen.HOT_SHEET_BUILD_REVISION = selected.revision;
+    } else if (!expectedRevision) {
+      expectedRevision = selected.revision;
+    }
   }
   return chosen;
 }

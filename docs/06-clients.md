@@ -398,8 +398,10 @@ and identity-less legacy entries remain conservatively blocking.
   open starts the new binary; `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`
   for other devices on the LAN. The production host prefers **release** binaries (HS2-D2JQ9A): when
   `HOTSHEET_SERVER_BIN` is unset, it probes the release server's build/source revision and uses the
-  release binary set only when current. Otherwise it chooses a current debug server with its debug
-  companions. If neither server binary matches the workspace source, startup requests a rebuild.
+  release server only when current. It probes the CLI and migrator independently, preferring each
+  current release binary and falling back to its current debug binary. Every chosen binary must
+  match the workspace source and the selected server revision. If a required binary has no current
+  build, startup requests a rebuild before project setup or migration can run.
   The host compares an already running server with its selected build before opening a project;
   it uses a supported quiescent restart for a mismatch or stops with a rebuild/reopen instruction.
   Explicit binary overrides remain authoritative. `server:rebuild:release` builds the release set

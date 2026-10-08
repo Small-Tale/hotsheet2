@@ -39,6 +39,9 @@ struct Cli {
 }
 
 fn main() -> Result<()> {
+    if hotsheet_cli::print_revision_status_if_requested() {
+        return Ok(());
+    }
     let cli = Cli::parse();
     if !cli.hold_job_lock.is_empty() {
         use std::io::Write;

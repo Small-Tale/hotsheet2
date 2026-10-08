@@ -1040,6 +1040,9 @@ impl LsFilters {
 }
 
 fn main() -> Result<()> {
+    if hotsheet_cli::print_revision_status_if_requested() {
+        return Ok(());
+    }
     let mut cli = Cli::parse();
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Resolve which store to operate on: an explicit -C, else $HOTSHEET_STORE, else a

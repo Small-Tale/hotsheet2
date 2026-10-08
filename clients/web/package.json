@@ -6,7 +6,7 @@
     "dev": "node scripts/stable-dev.mjs",
     "dev:hot": "vite --host 127.0.0.1",
     "dev:rebuild-lan": "npm run server:rebuild && npm run dev -- --host 0.0.0.0",
-    "server:rebuild": "cd ../.. && cargo build -p hotsheet-server && cargo install --path crates/hotsheet-cli --force && ./target/debug/hotsheet-cli serve -C \"${HOTSHEET_HOME:-$HOME/.hotsheet2}/server-bootstrap.hs2\" --stop",
+    "server:rebuild": "cd ../.. && cargo build -p hotsheet-server -p hotsheet-cli && cargo install --path crates/hotsheet-cli --force && ./target/debug/hotsheet-cli serve -C \"${HOTSHEET_HOME:-$HOME/.hotsheet2}/server-bootstrap.hs2\" --stop",
     "prod": "npm run build && npm run build:host && node dist-host/local-host.js",
     "server:rebuild:release": "cd ../.. && cargo build --release -p hotsheet-server -p hotsheet-cli && ./target/release/hotsheet-cli serve -C \"${HOTSHEET_HOME:-$HOME/.hotsheet2}/server-bootstrap.hs2\" --stop",
     "prod:rebuild-lan": "npm run server:rebuild:release && npm run prod -- --host 0.0.0.0",

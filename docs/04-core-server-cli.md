@@ -439,7 +439,9 @@ intersection, not exact version or revision equality, so rolling compatible buil
 coexist. Local development builds hash the workspace Rust crate sources, manifests,
 lockfile, and bundled plugin guidance at compile time and cheaply monitor them at runtime.
 The binary's `--revision-status` command reports the same build/source status without
-opening a store. The handshake reports the built and current source revisions plus
+opening a store. The CLI and standalone migrator expose the same no-store probe so the
+local host can verify each companion before using it for setup or migration. The
+handshake reports the built and current source revisions plus
 `source_stale`; the client can therefore detect a detached server built before a
 dependency change without treating unrelated Git commits as staleness. Explicitly
 revisioned release builds omit local source probing, and an
