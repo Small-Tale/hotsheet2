@@ -60,7 +60,9 @@ HS2-HHKJSC covers the git-backed Started phase submenu and column-card label wit
 `clients/web/src/components/ticket-row.test.ts`. Browser flows in
 `clients/web/tests/providers.spec.ts` set and clear a phase, preserve lifecycle status,
 and inspect wide/phone menus; the reader test covers Escape. HS2-YSZ711 originally
-covered the separate picker before the menu change.
+covered the separate picker before the menu change. HS2-0VXN1A adds a full-app
+pointer sweep over Started phase rows in that browser flow; it was run in WebKit
+at the recorded viewport and in Chromium to verify the safe-triangle fix.
 
 HS2-TPF3EB moves non-atomic provider update progress from toasts to the app-level loading
 indicator. `clients/web/src/bulk-update-progress.test.ts` covers start, advance, repeat,

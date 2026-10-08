@@ -14612,7 +14612,7 @@ test('hides title and tag mutation affordances when the provider cannot update',
 });
 
 test('edits and clears the Started phase without changing lifecycle status', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize({ width: 1240, height: 1062 });
   await mockProject(page);
   const patches: Record<string, unknown>[] = [];
   page.on('request', (request) => {
@@ -14630,6 +14630,19 @@ test('edits and clears the Started phase without changing lifecycle status', asy
   await status.locator('[data-action="open-inspector-status-menu"]').click();
   await status.locator('[data-ticket-status="started"]').hover();
   await page.waitForTimeout(300);
+  for (const startedPhase of [
+    '',
+    'analyzing',
+    'planning',
+    'working',
+    'initial_testing',
+    'integrating',
+    'final_testing',
+  ]) {
+    const row = status.locator(`[data-started-phase="${startedPhase}"]`);
+    await row.hover();
+    await expect.poll(() => row.evaluate((element) => element.matches(':hover')), startedPhase).toBe(true);
+  }
   await page.screenshot({
     path: '/private/tmp/hs2-hhkjsc-menu-wide.png',
     clip: { x: 780, y: 220, width: 350, height: 455 },

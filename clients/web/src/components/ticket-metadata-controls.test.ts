@@ -120,7 +120,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(status).toContain('status-badge--semibold');
     const css = readFileSync(new URL('./ticket-status-menu.css', import.meta.url), 'utf8');
     expect(css).not.toContain('status-badge');
-    expect(css).not.toContain('::part(');
+    // The submenu safe triangle is the only Web Awesome part exception (HS2-0VXN1A).
+    expect([...css.matchAll(/::part\(([^)]+)\)/g)].map((match) => match[1])).toEqual(['submenu']);
     expect(css).not.toContain('wa-select');
   });
 

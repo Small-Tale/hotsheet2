@@ -74,6 +74,9 @@ The inspector and reader status badge opens a status menu. For git-backed ticket
 Started opens a submenu with all six phases and a No phase choice. Changing a phase
 on an already Started ticket preserves its lifecycle status; choosing a phase from
 another status moves the ticket to Started. External providers omit the phase submenu.
+Every phase row responds to pointer hover and click in WebKit as well as Chromium. The
+status menu disables pointer hit testing on Web Awesome's submenu safe triangle, which
+otherwise overlays rows in WebKit (HS2-0VXN1A).
 In the inspector and reader, Add tag is a distinct button that opens its own anchored,
 viewport-contained popover with a labeled autocomplete field. Enter or comma can add
 repeated tags, Escape restores focus to the trigger, and read-only providers omit the

@@ -8,3 +8,8 @@
   width: 1px;
   height: 1px;
 }
+
+/* WebKit hit-tests Web Awesome's fixed safe triangle over submenu rows, blocking hover and clicks. */
+.ticket-status-menu wa-dropdown-item::part(submenu)::before {
+  pointer-events: none;
+}
