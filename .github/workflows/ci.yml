@@ -112,7 +112,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Install the AVIF decoder
-        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake
+        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake nasm
 
       - name: Format
         run: cargo fmt --all --check
@@ -232,7 +232,7 @@ jobs:
           tool: cargo-llvm-cov,nextest
 
       - name: Install the AVIF decoder
-        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake
+        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev meson ninja-build cmake nasm
 
       - name: Collect Rust coverage
         # `-D warnings` breaks coverage instrumentation builds; unset it here. `--no-report`
