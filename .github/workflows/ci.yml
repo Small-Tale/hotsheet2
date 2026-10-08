@@ -48,6 +48,7 @@ jobs:
   windows-credential-store:
     name: Windows Credential Manager
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -63,6 +64,21 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-credentials-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-credentials-
+
+      - name: Install the AVIF decoder for the native build
+        shell: pwsh
+        run: |
+          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
+          & $vcpkg install dav1d:x64-windows-static-md pkgconf:x64-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installed = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed'
+          $pkgconf = Join-Path $installed 'x64-windows/tools/pkgconf/pkgconf.exe'
+          $pkgconfig = Join-Path $installed 'x64-windows-static-md/lib/pkgconfig'
+          if (!(Test-Path $pkgconf) -or !(Test-Path (Join-Path $pkgconfig 'dav1d.pc'))) {
+            throw 'dav1d or pkgconf is missing from the vcpkg installation'
+          }
+          "PKG_CONFIG=$pkgconf" >> $env:GITHUB_ENV
+          "PKG_CONFIG_PATH=$pkgconfig" >> $env:GITHUB_ENV
 
       - name: Compile and exercise the native credential adapter
         run: cargo test -p hotsheet-ticketing windows_credential_manager_round_trip
@@ -93,6 +109,9 @@ jobs:
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
+
+      - name: Install the AVIF decoder
+        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev
 
       - name: Format
         run: cargo fmt --all --check
@@ -210,6 +229,9 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov,nextest
+
+      - name: Install the AVIF decoder
+        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev
 
       - name: Collect Rust coverage
         # `-D warnings` breaks coverage instrumentation builds; unset it here. `--no-report`
