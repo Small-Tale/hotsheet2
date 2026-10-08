@@ -2793,7 +2793,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(providerForm.getByText('3 repositories available.')).toBeVisible();
   await repository.fill('small-tale/hotsheet2');
   const attachmentRepo = providerForm.locator('input[name="attachment-repo"]');
-  await expect(providerForm).toContainText('Enter a repository and save to enable attachments.');
+  await expect(providerForm).toContainText('Enter an assets repository and save to configure attachments.');
   await attachmentRepo.fill('small-tale/assets');
   await providerForm.locator('wa-input[name="attachment-folder"] input').fill('evidence');
   await providerForm.locator('wa-input[name="attachment-branch"] input').fill('media');

@@ -1300,7 +1300,10 @@ impl GitHubProvider {
             "content": BASE64.encode(bytes),
             "branch": assets.branch,
         });
-        match self.request("PUT", &url, Some(&body)) {
+        match self
+            .request("PUT", &url, Some(&body))
+            .map_err(|error| asset_repository_access_error(error, &assets.repository))
+        {
             Ok(response) => {
                 let written: GitHubContentWrite = self.json(response)?;
                 Ok(written.content)
@@ -1328,6 +1331,26 @@ impl GitHubProvider {
             connection_id: self.config.connection_id.clone(),
             capability,
         })
+    }
+}
+
+fn asset_repository_access_error(error: ProviderError, repository: &str) -> ProviderError {
+    match error {
+        ProviderError::Authentication {
+            connection_id,
+            message,
+        } if message
+            .to_ascii_lowercase()
+            .contains("resource not accessible by integration") =>
+        {
+            ProviderError::Authentication {
+                connection_id,
+                message: format!(
+                    "Cannot write attachment to {repository}: the Hot Sheet GitHub App needs Contents (read and write) permission and access to this repository. The app owner must enable Contents permission, and the installation owner must approve the update before retrying. GitHub said: {message}"
+                ),
+            }
+        }
+        other => other,
     }
 }
 
@@ -3312,6 +3335,34 @@ mod tests {
             attachment.purpose,
             Some(hotsheet_model::AttachmentPurpose::ProblemEvidence)
         );
+    }
+
+    #[test]
+    fn attachment_permission_failure_names_the_required_app_and_installation_access() {
+        let transport = FakeTransport::with(vec![
+            response(200, json!([])),
+            response(
+                403,
+                json!({"message": "Resource not accessible by integration"}),
+            ),
+        ]);
+        let error = assets_provider(transport.clone())
+            .add_attachment(
+                "42",
+                evidence(ATTACHMENT_ID, "proof.png"),
+                b"proof".to_vec(),
+            )
+            .unwrap_err();
+        let ProviderError::Authentication { message, .. } = error else {
+            panic!("expected GitHub authentication error");
+        };
+        assert!(message.contains("acme/assets"), "{message}");
+        assert!(message.contains("Contents (read and write)"), "{message}");
+        assert!(
+            message.contains("installation owner must approve"),
+            "{message}"
+        );
+        assert_eq!(transport.requests.lock().unwrap().len(), 2);
     }
 
     #[test]

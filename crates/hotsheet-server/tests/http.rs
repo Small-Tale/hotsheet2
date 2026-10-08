@@ -17092,16 +17092,37 @@ async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_ba
         GitHubConfig::new("github-bare", "acme/other", "fixture-token"),
         bare_transport.clone(),
     );
+    let denied_transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, serde_json::json!([])),
+                github_response(
+                    403,
+                    serde_json::json!({"message": "Resource not accessible by integration"}),
+                ),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let denied = GitHubProvider::new(
+        GitHubConfig::new("github-denied", "acme/denied", "fixture-token").with_attachments(
+            hotsheet_extsync::GitHubAttachmentRepository::new("acme/assets", None, None).unwrap(),
+        ),
+        denied_transport.clone(),
+    );
     let app = app(st
         .with_checkout_registry(registry.path().join("checkouts.json"))
         .with_ticket_provider(Arc::new(assets))
-        .with_ticket_provider(Arc::new(bare)));
+        .with_ticket_provider(Arc::new(bare))
+        .with_ticket_provider(Arc::new(denied)));
     let registration = serde_json::json!({
         "root": checkout.path(),
         "alias": "external-assets",
         "sources": [
             {"connection_id":"github-assets","provider":"github","locator":"acme/repo"},
-            {"connection_id":"github-bare","provider":"github","locator":"acme/other"}
+            {"connection_id":"github-bare","provider":"github","locator":"acme/other"},
+            {"connection_id":"github-denied","provider":"github","locator":"acme/denied"}
         ],
         "default_source": "github-assets"
     })
@@ -17175,11 +17196,20 @@ async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_ba
         "{message}"
     );
     // A GitHub source without an assets repository refuses the upload by capability.
-    let refused = app.oneshot(upload("github-bare")).await.unwrap();
+    let refused = app.clone().oneshot(upload("github-bare")).await.unwrap();
     assert_eq!(refused.status(), StatusCode::CONFLICT);
     let message = body_json(refused).await.to_string();
     assert!(message.contains("attachments"), "{message}");
     assert!(bare_transport.requests.lock().unwrap().is_empty());
+    let denied = app.clone().oneshot(upload("github-denied")).await.unwrap();
+    assert_eq!(denied.status(), StatusCode::CONFLICT);
+    let message = body_json(denied).await.to_string();
+    assert!(message.contains("Contents (read and write)"), "{message}");
+    assert!(
+        message.contains("installation owner must approve"),
+        "{message}"
+    );
+    assert_eq!(denied_transport.requests.lock().unwrap().len(), 1);
     assert!(transport.responses.lock().unwrap().is_empty());
 }
 

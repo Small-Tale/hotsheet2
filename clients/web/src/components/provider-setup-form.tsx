@@ -462,9 +462,11 @@ export function ProviderSetupForm({
                 />
                 <small class="provider-setup-form__field-hint">
                   {attachmentRepo
-                    ? 'Currently enabled. Clear this field and save to turn attachments off. '
-                    : 'Enter a repository and save to enable attachments. '}
-                  The Hot Sheet GitHub App needs write access; files are committed there and linked in issues.
+                    ? 'Assets repository configured. Clear this field and save to remove it. '
+                    : 'Enter an assets repository and save to configure attachments. '}
+                  The Hot Sheet GitHub App needs Contents (read and write) permission and access to this repository. Its
+                  installation owner must approve new permissions before uploads work. Files are committed here and
+                  linked in issues.
                 </small>
               </label>
               <wa-input

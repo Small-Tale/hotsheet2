@@ -54,6 +54,7 @@ describe('ticket source surfaces', () => {
     expect(
       form({ ...blank, session: 's', state: 'authorized', enterpriseUrl: 'https://ghe.test', repositories: [] }),
     ).toContain('Signed in to ghe.test.');
+    expect(form({ ...blank, session: 's', state: 'authorized' })).toContain('Contents (read and write) permission');
     const denied = form({ ...blank, session: 's', state: 'denied' });
     expect(denied).toContain('GitHub sign in was denied. Try again.');
     expect(denied).toContain('data-action="start-github-sign-in"');
@@ -270,7 +271,7 @@ describe('ticket source surfaces', () => {
     expect(signedIn).toContain('<wa-input class="provider-setup-form__wide" name="connection-name"');
     expect(signedIn).toContain('<wa-checkbox class="provider-setup-form__wide" name="make-default"');
     expect(signedIn).toContain('name="attachment-repo"');
-    expect(signedIn).toContain('Enter a repository and save to enable attachments.');
+    expect(signedIn).toContain('Enter an assets repository and save to configure attachments.');
     expect(signedIn).toContain('name="attachment-folder" label="Attachment folder" value="hotsheet-attachments"');
     expect(signedIn).toContain('name="attachment-branch" label="Attachment branch" value="main"');
     expect(signedIn).not.toContain('name="api-base"');
@@ -287,7 +288,7 @@ describe('ticket source surfaces', () => {
         },
       }),
     );
-    expect(configured).toContain('Currently enabled.');
+    expect(configured).toContain('Assets repository configured.');
     expect(configured).toContain('Attachment assets repository (optional)');
     expect(configured).toContain(
       'name="attachment-repo" autocomplete="off" placeholder="owner/repository" value="acme/assets"',

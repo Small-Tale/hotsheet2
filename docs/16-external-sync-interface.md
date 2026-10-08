@@ -270,11 +270,18 @@ file to a configured **assets repository** through the Contents API and links it
 issue comment. The connection settings keep the original plugin's keys:
 `attachment_repo` (`owner/repo`), `attachment_folder` (default `hotsheet-attachments`), and
 `attachment_branch` (default `main`). The web GitHub connection form accepts the optional
-assets repository plus its folder and branch, and shows whether attachments are enabled;
+assets repository plus its folder and branch, and shows whether one is configured;
 clearing the repository turns them off. The headless path is `github-connect
 --attachment-repo/--attachment-folder/--attachment-branch/--no-attachments`, and a
 reconnect without them keeps the repository. The provider reports `attachments: true` only
 when `attachment_repo` is set; otherwise an upload fails with an explicit capability error.
+The configured GitHub App also needs **Contents: read and write** permission on the assets
+repository, and its installation must include that repository. The first-party app currently
+does not grant Contents access, so selecting an assets repository alone does not make uploads
+work. An app owner must enable Contents permission in GitHub App settings, then each
+installation owner must approve the new permission. Until then, GitHub rejects the Contents
+API write with `Resource not accessible by integration`; the upload error explains this
+requirement and names the assets repository.
 
 - **Upload:** `PUT /repos/{assets}/contents/{folder}/{attachment-id}-{safe-name}` on the
   branch (the plugin's `[A-Za-z0-9._-]` sanitizer). The attachment id keeps the path unique
@@ -443,6 +450,9 @@ ID, so an unconfigured release cannot silently ship.
 
 The first-party app is registered for any-account installation with Device Flow enabled,
 webhooks disabled, Metadata read-only, Issues read/write, and all other permissions disabled.
+Its missing Contents permission currently blocks assets-repository attachment uploads as
+described above; enabling it requires a GitHub App registration change and installation
+owner approval.
 GitHub Enterprise Server installations require a separately registered app and Client ID on
 each host. Operators configure those public IDs on the server as a JSON origin map, for
 example `HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS='{"https://github.example.com":"Iv…"}'`.
