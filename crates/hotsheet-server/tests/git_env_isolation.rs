@@ -4,7 +4,7 @@
 //! `GIT_INDEX_FILE`, and friends point at a throwaway *sentinel* repository, which must
 //! stay byte-for-byte unchanged.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -81,6 +81,29 @@ fn snapshot_with_observer(
         }
     }
     unreachable!()
+}
+
+fn assert_sentinel_unchanged(before: &BTreeMap<PathBuf, Vec<u8>>, sentinel: &Path, stage: &str) {
+    let after = snapshot(sentinel);
+    let changed: Vec<_> = before
+        .keys()
+        .chain(after.keys())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|path| before.get(*path) != after.get(*path))
+        .map(|path| {
+            format!(
+                "{} ({} -> {} bytes)",
+                path.display(),
+                before.get(path).map(Vec::len).unwrap_or(0),
+                after.get(path).map(Vec::len).unwrap_or(0)
+            )
+        })
+        .collect();
+    assert!(
+        changed.is_empty(),
+        "the inherited GIT_DIR repository changed during {stage}; changed paths: {changed:?}"
+    );
 }
 
 #[test]
@@ -208,6 +231,7 @@ fn server_ticket_writes_ignore_an_inherited_git_repository_environment() {
     let sentinel = sentinel_repo(root.path());
     let before = snapshot(&sentinel);
     let (server, info, store, log) = hostile_server(root.path(), &sentinel);
+    assert_sentinel_unchanged(&before, &sentinel, "server startup");
     let server_log = || std::fs::read_to_string(&log).unwrap_or_default();
 
     let response = ureq::post(&format!("{}/tickets", info.url))
@@ -216,6 +240,7 @@ fn server_ticket_writes_ignore_an_inherited_git_repository_environment() {
         .send_string(r#"{"title":"isolated server ticket"}"#)
         .unwrap();
     assert!(response.status() < 300);
+    assert_sentinel_unchanged(&before, &sentinel, "ticket creation");
 
     // The committing write lands in the store's own history.
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -234,11 +259,7 @@ fn server_ticket_writes_ignore_an_inherited_git_repository_environment() {
     assert_eq!(git(&store, &["rev-parse", "--is-bare-repository"]), "false");
     drop(server);
 
-    assert_eq!(
-        before,
-        snapshot(&sentinel),
-        "the inherited GIT_DIR repository must be byte-for-byte untouched"
-    );
+    assert_sentinel_unchanged(&before, &sentinel, "server shutdown");
     assert_eq!(git(&sentinel, &["config", "--get", "core.bare"]), "false");
     assert_eq!(git(&sentinel, &["rev-list", "--count", "HEAD"]), "1");
 }
@@ -284,6 +305,7 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
     git(&checkout, &["init", "-q", "-b", "main"]);
     let checkout = std::fs::canonicalize(&checkout).unwrap();
     let (server, info, _store, log) = hostile_server(root.path(), &sentinel);
+    assert_sentinel_unchanged(&before, &sentinel, "server startup");
 
     // What a launched process sees: the probed variables, then git's own answer.
     let probe = "printf 'env=%s|%s|%s|%s\\n' \"${GIT_DIR-unset}\" \"${GIT_WORK_TREE-unset}\" \
@@ -305,6 +327,7 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
         .send_string(&definitions.to_string())
         .unwrap();
     assert!(saved.status() < 300);
+    assert_sentinel_unchanged(&before, &sentinel, "command setup");
     let run: serde_json::Value = ureq::post(&format!("{}/commands/probe/run", info.url))
         .set("x-hotsheet-secret", &info.secret)
         .call()
@@ -326,6 +349,7 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
     assert_eq!(finished["exit_code"], 0, "command output: {output}");
     assert!(output.contains(expected_env), "command output: {output}");
     assert!(output.contains(&expected_top), "command output: {output}");
+    assert_sentinel_unchanged(&before, &sentinel, "command run");
 
     let terminal: serde_json::Value = ureq::post(&format!("{}/terminals", info.url))
         .set("x-hotsheet-secret", &info.secret)
@@ -351,11 +375,8 @@ fn launched_commands_and_terminals_drop_an_inherited_git_repository_environment(
     let scrollback = read["scrollback"].as_str().unwrap();
     assert!(scrollback.contains(expected_env), "terminal: {scrollback}");
     assert!(scrollback.contains(&expected_top), "terminal: {scrollback}");
+    assert_sentinel_unchanged(&before, &sentinel, "terminal run");
     drop(server);
 
-    assert_eq!(
-        before,
-        snapshot(&sentinel),
-        "the inherited GIT_DIR repository must be byte-for-byte untouched"
-    );
+    assert_sentinel_unchanged(&before, &sentinel, "server shutdown");
 }
