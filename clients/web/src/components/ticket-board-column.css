@@ -4,6 +4,8 @@
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--kui-space-xs);
+  --hs-ticket-row-content-visibility: auto;
+  --hs-ticket-row-intrinsic-size: auto 72px;
 }
 .ticket-board-column[data-scroll-snap='start'] {
   scroll-snap-align: start;

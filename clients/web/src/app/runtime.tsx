@@ -658,6 +658,17 @@ export async function startHotSheetWebClient() {
   // spinner. Both are scoped to the active project+view and cleared when that changes.
   const boardColumnPages = signal<Record<string, BoardColumnPage>>({}),
     boardColumnLoading = signal<Record<string, boolean>>({});
+  function boardPagesWithVisibleLimit(
+    pages: Record<string, BoardColumnPage>,
+    previous: Record<string, BoardColumnPage> = boardColumnPages.value,
+  ) {
+    return Object.fromEntries(
+      Object.entries(pages).map(([id, page]) => {
+        const prior = Object.hasOwn(previous, id) ? previous[id] : undefined;
+        return [id, { ...page, visible: prior?.visible ?? BOARD_COLUMN_PAGE_SIZE }];
+      }),
+    );
+  }
   function resetBoardColumnPages() {
     boardColumnPages.value = {};
     boardColumnLoading.value = {};
@@ -1353,7 +1364,7 @@ export async function startHotSheetWebClient() {
           index.tickets,
           pendingCreatedTickets.retain(current.id, index.tickets),
         );
-        boardColumnPages.value = index.boardPages ?? {};
+        boardColumnPages.value = boardPagesWithVisibleLimit(index.boardPages ?? {});
         ticketPageQuery.value = query;
         tickets.value = mergedTickets;
         ticketNextCursor.value = index.nextCursor;
@@ -3318,7 +3329,7 @@ export async function startHotSheetWebClient() {
           // Board columns load independently and restore any column the user had paged to its loaded length
           // in the same refresh, so the commit below is one assignment with no collapse-then-expand flash
           // (HS2-8NBGBX, HS2-HNZZHC). A list refresh leaves no per-column pages behind.
-          boardColumnPages.value = index.boardPages ?? {};
+          boardColumnPages.value = boardPagesWithVisibleLimit(index.boardPages ?? {});
           tickets.value = finalTickets;
           ticketNextCursor.value = index.nextCursor;
           ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: finalTickets };
@@ -3495,6 +3506,18 @@ export async function startHotSheetWebClient() {
     const current = project(),
       view = selectedView.value;
     if (!current || boardColumnLoading.value[columnId]) return;
+    const pageState = Object.hasOwn(boardColumnPages.value, columnId) ? boardColumnPages.value[columnId] : undefined,
+      visible = pageState?.visible ?? BOARD_COLUMN_PAGE_SIZE,
+      loaded =
+        ticketBoardGroups(visibleTickets(), view, hideVerifiedColumn()).find((group) => group.id === columnId)?.tickets
+          .length ?? 0;
+    if (loaded > visible) {
+      boardColumnPages.value = {
+        ...boardColumnPages.value,
+        [columnId]: { ...pageState, loaded: pageState?.loaded ?? loaded, visible: visible + BOARD_COLUMN_PAGE_SIZE },
+      };
+      return;
+    }
     // A column pages its ordered statuses in turn (HS2-F2N4ZN): the merged Completed column exhausts
     // `completed`, then continues into `verified`, so verified rows beyond the initial global page stay
     // reachable through its own Load more. Single-status columns keep a one-entry status list.
@@ -3523,13 +3546,10 @@ export async function startHotSheetWebClient() {
       const loaded = statuses.reduce((sum, status) => sum + countTicketsForStatus(next, status), 0);
       boardColumnPages.value = {
         ...boardColumnPages.value,
-        [columnId]: applyBoardColumnFetch(
-          statuses,
-          boardColumnPages.value[columnId],
-          target.status,
-          page.next_cursor,
-          loaded,
-        ),
+        [columnId]: {
+          ...applyBoardColumnFetch(statuses, boardColumnPages.value[columnId], target.status, page.next_cursor, loaded),
+          visible: visible + BOARD_COLUMN_PAGE_SIZE,
+        },
       };
       // Do not reset the global progressive-render cap here — that would collapse the already-rendered rows
       // in the other columns. The appended rows render within the current cap and grow via continueProgressiveTicketRendering.
@@ -4516,9 +4536,15 @@ export async function startHotSheetWebClient() {
     return { kind: 'view', viewLabel: ticketViewTitle(selectedView.value) };
   }
   function workspaceSurfaceProps(): WorkspaceSurfaceProps {
-    const shown = visibleTickets(),
+    const waitingForBoardPages =
+        viewMode.value === 'board' &&
+        isPerColumnBoardView(selectedView.value, workspaceSearchActive()) &&
+        Object.keys(boardColumnPages.value).length === 0,
+      shown = waitingForBoardPages ? [] : visibleTickets(),
       current = project(),
-      emptyState = workspaceEmptyState(),
+      emptyState: TicketEmptyStateProps | undefined = waitingForBoardPages
+        ? { kind: error.value ? 'view-error' : 'view-loading', viewLabel: ticketViewTitle(selectedView.value) }
+        : workspaceEmptyState(),
       collectionLoading = emptyState?.kind === 'view-loading',
       hasMore = Boolean(ticketNextCursor.value) && !collectionLoading,
       more = hasMore ? <TicketPageMore loading={ticketPageLoading.value} /> : undefined;
@@ -4569,10 +4595,15 @@ export async function startHotSheetWebClient() {
             groups[0]?.id);
       const columns = groups.map((group) => {
         const total = ticketBoardGroupTotal(group.id, group.tickets.length, selectedView.value, counts, hideVerified),
-          status = boardColumnStatus(group.id);
+          status = boardColumnStatus(group.id),
+          visible = Object.hasOwn(boardColumnPages.value, group.id)
+            ? (boardColumnPages.value[group.id].visible ?? BOARD_COLUMN_PAGE_SIZE)
+            : BOARD_COLUMN_PAGE_SIZE,
+          hasCachedRows = group.tickets.length > visible;
         const continuation =
           perColumn && status
-            ? counts && boardColumnHasMore(total, group.tickets.length, boardColumnPages.value[group.id])
+            ? hasCachedRows ||
+              (counts && boardColumnHasMore(total, group.tickets.length, boardColumnPages.value[group.id]))
               ? { loading: boardColumnLoading.value[group.id] }
               : undefined
             : !collectionLoading && hasMore && globalColumnId === group.id
@@ -4582,7 +4613,7 @@ export async function startHotSheetWebClient() {
           ...group,
           totalCount: total,
           countPartial: partialSourcesByProject.value[selectedProjectId.value] ?? false,
-          tickets: group.tickets.slice(0, renderedTicketLimit.value).map(row),
+          tickets: group.tickets.slice(0, Math.min(renderedTicketLimit.value, perColumn ? visible : Infinity)).map(row),
           continuation,
         };
       });
@@ -5539,7 +5570,7 @@ export async function startHotSheetWebClient() {
     setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, terminalCopy, terminalPaste, terminalEditMenu, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
     openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
     closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, resetTerminalName, viewportMobile, sidebarCollapsed, inspectorCollapsed, revealInspectorOverlay,
-    selectTickets, selectionOrder, visibleTickets, selectedView, hideVerifiedColumn, cancelTicketDrafts, openTicketReader, ticketContextMenu,
+    selectTickets, selectionOrder, visibleTickets, selectedView, cancelTicketDrafts, openTicketReader, ticketContextMenu,
     selectedRows, executeBulkTicketAction, tickets, openNotWorking, openTicketClose, copySelection, pasteSelection, openBulkTicketDialog,
     restoreTrashedTickets, bulkTicketDialog, openEmptyTrash, emptyTrash, setTicketCloseReason, searchTicketCloseTargets, ticketCloseDialog, submitTicketClose,
     closeTicketCloseDialog, openDuplicateTarget, notWorkingNote, scheduleProjectSessionPersistence, presentNotWorkingDialog, addNotWorkingFiles, draftScope, notWorkingTarget,

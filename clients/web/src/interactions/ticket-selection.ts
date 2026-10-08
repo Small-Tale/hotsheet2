@@ -10,10 +10,8 @@ import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from '..
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { shouldAutoOpenInspectorOnTap } from '../mobile-layout';
-import { ticketBoardGroups } from '../ticket-board-layout';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { duplicateTargetKey } from '../ticket-close';
-import { type TicketView } from '../ticket-views';
 import { deleteDraftFiles } from '../workspace-session';
 import { data } from './dom';
 import { type Control, type NotWorkingTarget, type PendingEvidence } from './types';
@@ -33,8 +31,6 @@ export interface TicketSelectionInteractionsDependencies {
   readonly terminalRailScreen: Signal<'root' | 'ticket'>;
   readonly selectedTicket: Signal<FullTicket | null>;
   readonly visibleTickets: () => WireTicketRow[];
-  readonly selectedView: Signal<TicketView>;
-  readonly hideVerifiedColumn: () => boolean;
   readonly cancelTicketDrafts: () => void;
   readonly selectedCorruptKey: Signal<string | undefined>;
   ticketSelectionAnchor: string | undefined;
@@ -87,8 +83,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     terminalRailScreen,
     selectedTicket,
     visibleTickets,
-    selectedView,
-    hideVerifiedColumn,
     cancelTicketDrafts,
     selectedCorruptKey,
     setInspectorVisible,
@@ -187,10 +181,9 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       const column = target.closest<HTMLElement>('[data-component="ticket-board-column"]'),
         columnId = column?.dataset.columnId;
       if (!columnId) return;
-      const slugs =
-        ticketBoardGroups(visibleTickets(), selectedView.value, hideVerifiedColumn())
-          .find((group) => group.id === columnId)
-          ?.tickets.map((ticket) => ticket.slug) ?? [];
+      const slugs = [...column.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')].map(
+        (ticket) => data(ticket).ticketSlug!,
+      );
       cancelTicketDrafts();
       selectedCorruptKey.value = undefined;
       selectedTicketSlugs.value = slugs;
@@ -522,7 +515,13 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
         ordered = selectionOrder(row);
       if (matchesShortcut('select-all-tickets', keyboard, keyboardShortcutOverrides.value, appleShortcutPlatform)) {
         event.preventDefault();
-        const next = selectAllTickets(visibleTickets().map((ticket) => ticket.slug));
+        const board = row.closest('[data-component="ticket-board"]'),
+          selectable = board
+            ? [...board.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')].map(
+                (ticket) => data(ticket).ticketSlug!,
+              )
+            : visibleTickets().map((ticket) => ticket.slug),
+          next = selectAllTickets(selectable);
         dependencies.ticketSelectionAnchor = next.anchor;
         selectedTicketSlugs.value = [...next.selected];
         return;

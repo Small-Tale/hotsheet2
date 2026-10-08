@@ -36,6 +36,17 @@ describe('ticketBoardGroups', () => {
     const groups = ticketBoardGroups(queue, 'all', true);
     expect(groups.map((group) => group.title)).toEqual(['Not Started', 'Started', 'Completed']);
     expect(groups.at(-1)?.tickets.map((item) => item.status)).toEqual(['completed', 'verified']);
+    const interleaved = [
+      { ...ticket('verified'), slug: 'VF-1' },
+      { ...ticket('completed'), slug: 'CP-1' },
+      { ...ticket('verified'), slug: 'VF-2' },
+      { ...ticket('completed'), slug: 'CP-2' },
+    ];
+    expect(
+      ticketBoardGroups(interleaved, 'all', true)
+        .at(-1)
+        ?.tickets.map((item) => item.slug),
+    ).toEqual(['CP-1', 'CP-2', 'VF-1', 'VF-2']);
   });
 
   it('uses one column for Backlog and keeps Archive disjoint from Verified and Trash', () => {

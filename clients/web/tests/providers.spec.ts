@@ -17371,9 +17371,8 @@ test('loads each board column independently, 100 rows at a time in the active so
   await expect(columnRows('Verified')).toHaveCount(2);
   await expect(columnMore('Started')).toHaveCount(0);
   await expect(columnMore('Verified')).toHaveCount(0);
-  // Long columns load their own first page of 100 and offer more.
-  await expect(page.locator('[data-ticket-slug="HS2-CP099"]')).toBeAttached();
-  await expect(page.locator('[data-ticket-slug="HS2-CP100"]')).toHaveCount(0);
+  // Completed keeps another page in memory but initially displays only 100 rows.
+  await expect(columnRows('Completed')).toHaveCount(100);
   await expect(columnMore('Not Started')).toBeAttached();
   await expect(columnMore('Completed')).toBeAttached();
   expect(globalBoardRequests).toBe(listRequests);
@@ -17382,7 +17381,7 @@ test('loads each board column independently, 100 rows at a time in the active so
     new Set(['not_started', 'started', 'completed', 'verified']),
   );
   for (const url of initial) {
-    expect(url.searchParams.get('page_size')).toBe('100');
+    expect(url.searchParams.get('page_size')).toBe(url.searchParams.get('status') === 'completed' ? '200' : '100');
     expect(url.searchParams.get('collection')).toBe('queue');
     expect(url.searchParams.get('sort')).toBeTruthy();
   }
@@ -17410,6 +17409,11 @@ test('loads each board column independently, 100 rows at a time in the active so
   await expect(page.locator('[data-ticket-slug="HS2-NS204"]')).toBeAttached();
   await expect(columnMore('Not Started')).toHaveCount(0);
   await expect(columnRows('Started')).toHaveCount(4);
+  const beforeCachedReveal = boardRequests.length;
+  await columnMore('Completed').click();
+  await expect(columnRows('Completed')).toHaveCount(169);
+  expect(boardRequests).toHaveLength(beforeCachedReveal);
+  await expect(columnMore('Completed')).toHaveCount(0);
 });
 
 test('refills the loaded Completed page promptly after verifying and archiving 100 of 309 tickets (HS2-CE1E7J)', async ({
@@ -17495,8 +17499,10 @@ test('refills the loaded Completed page promptly after verifying and archiving 1
   await completedColumn.locator('[data-ticket-slug]').first().click({ button: 'right' });
   await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
   await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
-  await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(0);
+  await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
+  // The next 100 appear from cache while a further page waits for the batch to commit.
   await expect(completedColumn.getByRole('button', { name: 'Loading…' })).toBeVisible();
+  await expect(verifiedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
   await expect(completedColumn.getByLabel('209 tickets')).toBeVisible();
   releaseVerify();
   await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
@@ -17508,6 +17514,81 @@ test('refills the loaded Completed page promptly after verifying and archiving 1
   await expect(verifiedColumn.locator('[data-ticket-slug]')).toHaveCount(0);
   releaseArchive();
   await expect(completedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
+});
+
+test('rolls a rejected bulk move back across the prefetched Completed page (HS2-KA1VJS)', async ({ page }) => {
+  await mockProject(page);
+  const completed = Array.from({ length: 200 }, (_, index) => ({
+      ...row,
+      id: `rollback-${index}`,
+      native_id: `rollback-${index}`,
+      qualified_id: `git-local:rollback-${index}`,
+      slug: `HS2-RB${String(index).padStart(3, '0')}`,
+      title: `Rollback ${index}`,
+      status: 'completed',
+      up_next: false,
+    })),
+    counts = {
+      total: 200,
+      queued: 200,
+      backlog: 0,
+      archive: 0,
+      open: 0,
+      up_next: 0,
+      active: 0,
+      started: 0,
+      verified: 0,
+      completed_today: 0,
+    };
+  await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() !== 'GET') return route.fallback();
+    return route.fulfill({
+      json: boardStatusPage(
+        url.searchParams.get('status') === 'completed' || !url.searchParams.has('status') ? completed : [],
+        url,
+        counts,
+      ),
+    });
+  });
+  let rejectBatch!: () => void;
+  const batchGate = new Promise<void>((resolve) => {
+    rejectBatch = resolve;
+  });
+  await page.route('**/checkouts/demo-checkout/batch', async (route) => {
+    await batchGate;
+    await route.fulfill({ status: 409, json: { error: 'Ticket modified concurrently by another client.' } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Columns view').click();
+  const completedColumn = page.locator('[data-column-id="completed"]'),
+    verifiedColumn = page.locator('[data-column-id="verified"]'),
+    completedRows = completedColumn.locator('[data-ticket-slug]');
+  await expect(completedRows).toHaveCount(100);
+  await completedColumn.getByRole('button', { name: 'Select all Completed tickets' }).click();
+  await expect(completedColumn.locator('[data-selected="true"]')).toHaveCount(100);
+  await completedRows.first().click({ button: 'right' });
+  const menu = page.getByRole('menu', { name: 'Ticket actions' });
+  await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
+  await menu.locator('[data-context-field="status"][data-context-value="verified"]').click();
+  await expect(verifiedColumn.locator('[data-ticket-slug]')).toHaveCount(100);
+  await expect(completedRows).toHaveCount(100);
+  rejectBatch();
+  await expect(page.getByRole('alert').filter({ hasText: 'modified concurrently' })).toBeVisible();
+  await expect(verifiedColumn.locator('[data-ticket-slug]')).toHaveCount(0);
+  await expect(completedRows).toHaveCount(100);
+  await expect(completedColumn.locator('[data-selected="true"]')).toHaveCount(100);
+  await completedColumn.getByRole('button', { name: 'Load more tickets' }).click();
+  await expect(completedRows).toHaveCount(200);
+  expect(
+    new Set(
+      await completedRows.evaluateAll((elements) =>
+        elements.map((element) => element.getAttribute('data-ticket-slug')),
+      ),
+    ).size,
+  ).toBe(200);
 });
 
 test('paginates the merged Completed column through completed then verified when Verified is hidden (HS2-F2N4ZN)', async ({
@@ -17569,31 +17650,33 @@ test('paginates the merged Completed column through completed then verified when
   const board = page.locator('[data-component="ticket-board"]');
   const column = (name: string) => board.getByRole('region', { name: `${name} column`, exact: true });
   const completedMore = () => column('Completed').getByRole('button', { name: 'Load more tickets' });
-  // Verified is merged away; Completed carries the whole done total and starts with 100 completed rows.
+  // Verified is merged away; Completed carries the whole done total and displays 100 completed rows.
   await expect(column('Verified')).toHaveCount(0);
   await expect(column('Completed').getByLabel('230 tickets')).toBeVisible();
-  await expect(page.locator('[data-ticket-slug="HS2-CP099"]')).toBeAttached();
+  await expect(column('Completed').locator('[data-ticket-slug]')).toHaveCount(100);
+  await expect(column('Completed').locator('[data-ticket-slug^="HS2-VF"]')).toHaveCount(0);
   await expect(completedMore()).toBeAttached();
-  expect(statusRequests).not.toContain('verified');
+  expect(statusRequests).toContain('verified');
 
-  // The next page finishes `completed`; the column must still offer more because verified rows remain.
+  // The next page is already cached; Completed stays ahead of Verified in the merged column.
+  const beforeCachedReveal = statusRequests.length;
   await completedMore().scrollIntoViewIfNeeded();
   await completedMore().click();
-  await expect(page.locator('[data-ticket-slug="HS2-CP149"]')).toBeAttached();
-  expect(statusRequests).toContain('completed:100');
-  expect(statusRequests).not.toContain('verified');
-  await expect(page.locator('[data-ticket-slug="HS2-VF000"]')).toHaveCount(0);
+  await expect(column('Completed').locator('[data-ticket-slug]')).toHaveCount(200);
+  await expect(column('Completed').locator('[data-ticket-slug^="HS2-CP"]')).toHaveCount(150);
+  await expect(column('Completed').locator('[data-ticket-slug^="HS2-VF"]')).toHaveCount(50);
+  expect(statusRequests).toHaveLength(beforeCachedReveal);
   await expect(completedMore()).toBeAttached();
 
-  // Then it walks into the `verified` stream until the column is complete.
+  // Then it continues the `verified` stream until the column is complete.
   await completedMore().click();
   await expect(page.locator('[data-ticket-slug="HS2-VF079"]')).toBeAttached();
-  expect(statusRequests.indexOf('completed:100')).toBeLessThan(statusRequests.indexOf('verified'));
+  expect(statusRequests).toContain('verified:50');
   await expect(completedMore()).toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/claude/hs2-f2n4zn-merged-completed-paginated.png', fullPage: true });
 });
 
-test('measures real local Git board performance for a 100-ticket verification and refill (HS2-NY9MC5, HS2-GAJHRC)', async ({
+test('measures real local Git board performance for a 100-ticket verification and refill (HS2-NY9MC5, HS2-GAJHRC, HS2-KA1VJS)', async ({
   page,
 }, testInfo) => {
   test.skip(process.env.HOTSHEET_REAL_WORLD_PERFORMANCE !== '1', 'Run npm run test:real-world-performance.');
@@ -17647,7 +17730,6 @@ test('measures real local Git board performance for a 100-ticket verification an
           refillMs?: number;
           optimisticUpdateMs?: number;
           optimisticPaintMs?: number;
-          sawCompletedDrop?: boolean;
         };
       };
       scope.boardPerf = { start: Number.NaN };
@@ -17673,12 +17755,11 @@ test('measures real local Git board performance for a 100-ticket verification an
         }
         const completedRows = document.querySelectorAll('[data-column-id="completed"] [data-ticket-slug]').length;
         const verifiedRows = document.querySelectorAll('[data-column-id="verified"] [data-ticket-slug]').length;
-        if (completedRows < 100) current.sawCompletedDrop = true;
         if (current.firstVerifiedMs === undefined && verifiedRows > 0)
           current.firstVerifiedMs = performance.now() - current.start;
         if (current.verifiedMs === undefined && verifiedRows === 100)
           current.verifiedMs = performance.now() - current.start;
-        if (current.refillMs === undefined && completedRows === 100 && current.sawCompletedDrop)
+        if (current.refillMs === undefined && completedRows === 100 && verifiedRows === 100)
           current.refillMs = performance.now() - current.start;
         if (current.verifiedMs === undefined || current.refillMs === undefined) requestAnimationFrame(watch);
       };
@@ -17702,8 +17783,18 @@ test('measures real local Git board performance for a 100-ticket verification an
         ).boardPerf,
     );
     expect(measurement?.verifiedMs).toBeGreaterThan(0);
-    expect(measurement!.verifiedMs!).toBeLessThanOrEqual(100);
     expect(measurement?.refillMs).toBeGreaterThan(0);
+    await expect
+      .poll(
+        async () =>
+          (
+            await server.request<{ items: TicketRow[] }>(
+              `/checkouts/${server.checkoutId}/tickets?status=verified&page_size=200&counts=false`,
+            )
+          ).items.length,
+        { timeout: 180_000 },
+      )
+      .toBe(100);
     const [persistedVerified, persistedCompleted] = await Promise.all([
       server.request<{ items: TicketRow[] }>(
         `/checkouts/${server.checkoutId}/tickets?status=verified&page_size=200&counts=false`,
@@ -17714,6 +17805,16 @@ test('measures real local Git board performance for a 100-ticket verification an
     ]);
     expect(persistedVerified.items).toHaveLength(100);
     expect(persistedCompleted.items).toHaveLength(100);
+    await expect
+      .poll(
+        () =>
+          spawnSync('git', ['-C', server.store, 'status', '--porcelain', '--', 'tickets'], {
+            env: withoutGitRepositoryEnv(process.env),
+            encoding: 'utf8',
+          }).stdout.trim(),
+        { timeout: 180_000 },
+      )
+      .toBe('');
     const gitStatus = spawnSync('git', ['-C', server.store, 'status', '--porcelain', '--', 'tickets'], {
       env: withoutGitRepositoryEnv(process.env),
       encoding: 'utf8',
@@ -17747,6 +17848,24 @@ test('measures real local Git board performance for a 100-ticket verification an
       body: JSON.stringify(report, null, 2),
       contentType: 'application/json',
     });
+    await page.setViewportSize({ width: 1840, height: 900 });
+    await page.screenshot({ path: '/private/tmp/hs2-ka1vjs-refilled-wide.png', fullPage: true });
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await completed.scrollIntoViewIfNeeded();
+    await completed.locator('[data-ticket-slug]').first().scrollIntoViewIfNeeded();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              resolve();
+            }),
+          ),
+        ),
+    );
+    await page.screenshot({ path: '/private/tmp/hs2-ka1vjs-refilled-narrow.png', fullPage: true });
+    expect(measurement!.verifiedMs!).toBeLessThanOrEqual(100);
+    expect(measurement!.refillMs!).toBeLessThanOrEqual(100);
   } finally {
     await server.stop();
   }
@@ -23546,10 +23665,16 @@ test('loads board columns independently from the real server (HS2-HNZZHC)', asyn
     await expect(column('Completed').getByLabel('105 tickets')).toBeVisible();
     await expect(more('Completed')).toBeAttached();
     await expect.poll(() => column('Completed').locator('[data-ticket-slug]').count(), { timeout: 15_000 }).toBe(100);
-    expect(boardRequests.every((url) => url.searchParams.get('page_size') === '100')).toBe(true);
+    expect(
+      boardRequests.every(
+        (url) => url.searchParams.get('page_size') === (url.searchParams.get('status') === 'completed' ? '200' : '100'),
+      ),
+    ).toBe(true);
+    const beforeCachedReveal = boardRequests.length;
     await more('Completed').scrollIntoViewIfNeeded();
     await more('Completed').click();
     await expect.poll(() => rows('Completed').count(), { timeout: 15_000 }).toBe(105);
+    expect(boardRequests).toHaveLength(beforeCachedReveal);
     await expect(more('Completed')).toHaveCount(0);
   } finally {
     await server.stop();

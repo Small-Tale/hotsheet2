@@ -214,20 +214,20 @@ describe('loadBoardColumnRefresh (HS2-HNZZHC)', () => {
     const byStatus = (status: string) => result.tickets.filter((ticket) => ticket.status === status).length;
     expect(byStatus('not_started')).toBe(75);
     expect(byStatus('started')).toBe(4);
-    expect(byStatus('completed')).toBe(100);
+    expect(byStatus('completed')).toBe(169);
     expect(byStatus('verified')).toBe(2);
     expect(result.pages.started).toEqual({ loaded: 4, exhausted: true, streams: { started: { exhausted: true } } });
     expect(result.pages.completed).toEqual({
-      loaded: 100,
-      exhausted: false,
-      streams: { completed: { cursor: '100', exhausted: false } },
+      loaded: 169,
+      exhausted: true,
+      streams: { completed: { exhausted: true } },
     });
-    // Exactly one request carries counts; every request pages 100 rows in the view's sort.
+    // Exactly one request carries counts. Completed warms a second page in the same sort.
     expect(result.counts).toBe(counts);
     expect(client.checkoutTicketPage).toHaveBeenCalledTimes(1);
     expect(client.checkoutTicketRowsPage).toHaveBeenCalledTimes(3);
     for (const call of [...client.checkoutTicketPage.mock.calls, ...client.checkoutTicketRowsPage.mock.calls]) {
-      expect(call[1]).toBe(BOARD_COLUMN_PAGE_SIZE);
+      expect(call[1]).toBe(call[3].status === 'completed' ? BOARD_COLUMN_PAGE_SIZE * 2 : BOARD_COLUMN_PAGE_SIZE);
       expect(call[3]).toMatchObject({ collection: 'queue', sort: 'updated' });
     }
   });
@@ -241,9 +241,9 @@ describe('loadBoardColumnRefresh (HS2-HNZZHC)', () => {
       .filter((call) => call[3].status === 'completed')
       .map((call) => call[1]);
     expect(completedSizes).toEqual([500, 120]);
-    // A column below one page still loads a full first page, not its smaller previous length.
+    // Completed keeps a second page ready even when its previous loaded length was smaller.
     const shrunk = await loadBoardColumnRefresh(client, 'demo', {}, columns.slice(2, 3), { completed: 30 });
-    expect(shrunk.tickets).toHaveLength(100);
+    expect(shrunk.tickets).toHaveLength(200);
   });
 
   it('pages a merged Completed column into Verified only after Completed is exhausted', async () => {
@@ -254,11 +254,11 @@ describe('loadBoardColumnRefresh (HS2-HNZZHC)', () => {
       {},
       merged,
     );
-    expect(short.tickets.filter((ticket) => ticket.status === 'verified')).toHaveLength(70);
+    expect(short.tickets.filter((ticket) => ticket.status === 'verified')).toHaveLength(90);
     expect(short.pages.completed).toEqual({
-      loaded: 100,
-      exhausted: false,
-      streams: { completed: { exhausted: true }, verified: { cursor: '70', exhausted: false } },
+      loaded: 120,
+      exhausted: true,
+      streams: { completed: { exhausted: true }, verified: { exhausted: true } },
     });
     const long = await loadBoardColumnRefresh(
       fakeClient({ completed: rows('completed', 150), verified: rows('verified', 5) }),
@@ -266,9 +266,10 @@ describe('loadBoardColumnRefresh (HS2-HNZZHC)', () => {
       {},
       merged,
     );
-    expect(long.tickets.every((ticket) => ticket.status === 'completed')).toBe(true);
-    expect(long.pages.completed.streams).toEqual({ completed: { cursor: '100', exhausted: false } });
-    // Verified rows the column already showed are restored even while Completed has more.
+    expect(long.tickets.filter((ticket) => ticket.status === 'completed')).toHaveLength(150);
+    expect(long.tickets.filter((ticket) => ticket.status === 'verified')).toHaveLength(5);
+    expect(long.pages.completed.streams).toEqual({ completed: { exhausted: true }, verified: { exhausted: true } });
+    // Verified rows the column already showed remain loaded alongside Completed.
     const restored = await loadBoardColumnRefresh(
       fakeClient({ completed: rows('completed', 150), verified: rows('verified', 5) }),
       'demo',

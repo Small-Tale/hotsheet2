@@ -70,6 +70,8 @@ export function isPerColumnBoardView(view: TicketView, searchActive: boolean): b
  * keeps `completed` and `verified` streams and pages them in order (HS2-F2N4ZN). */
 export interface BoardColumnPage {
   loaded: number;
+  /** Rows exposed from the loaded page cache; extra Completed rows can be ready without painting. */
+  visible?: number;
   exhausted?: boolean;
   streams?: Record<string, BoardColumnStream>;
 }
@@ -102,7 +104,7 @@ export function applyBoardColumnFetch(
   const streams: Record<string, BoardColumnStream> = { ...(page?.streams ?? {}) };
   streams[status] = { cursor: nextCursor, exhausted: !nextCursor };
   const exhausted = statuses.every((item) => (streams[item] as BoardColumnStream | undefined)?.exhausted === true);
-  return { loaded, exhausted, streams };
+  return { loaded, ...(page?.visible === undefined ? {} : { visible: page.visible }), exhausted, streams };
 }
 
 /** Whether a column still has more rows to load: its authoritative total (from the whole-checkout

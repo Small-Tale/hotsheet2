@@ -40,14 +40,16 @@ export function ticketBoardGroups(
   if (view === 'archive') return [{ id: 'archive', title: 'Archive', tickets: tickets.filter(isArchivedTicket) }];
   if (view === 'trash') return [{ id: 'trash', title: 'Trash', tickets: [...tickets] }];
 
-  const completedStatuses = hideVerified ? ['completed', 'verified'] : ['completed'];
   const groups: TicketBoardGroup[] = [
     { id: 'not-started', title: 'Not Started', tickets: tickets.filter((ticket) => ticket.status === 'not_started') },
     { id: 'started', title: 'Started', tickets: tickets.filter((ticket) => ticket.status === 'started') },
     {
       id: 'completed',
       title: 'Completed',
-      tickets: tickets.filter((ticket) => completedStatuses.includes(ticket.status ?? '')),
+      tickets: [
+        ...tickets.filter((ticket) => ticket.status === 'completed'),
+        ...(hideVerified ? tickets.filter((ticket) => ticket.status === 'verified') : []),
+      ],
     },
   ];
 

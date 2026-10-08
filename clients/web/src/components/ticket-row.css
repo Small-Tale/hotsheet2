@@ -2,6 +2,8 @@
   width: 100%;
   min-width: 0;
   container-type: inline-size;
+  content-visibility: var(--hs-ticket-row-content-visibility, visible);
+  contain-intrinsic-size: var(--hs-ticket-row-intrinsic-size, none);
 }
 .ticket-list-row {
   position: relative;

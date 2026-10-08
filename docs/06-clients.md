@@ -974,16 +974,19 @@ and identity-less legacy entries remain conservatively blocking.
   the last loaded row. The loaded rows still live in one flat union, so selection, the inspector,
   mutations, and cross-column drag are unaffected. **Columns also load independently from the start**
   (HS2-HNZZHC): the board never splits one global page across columns. Every status column reads its own
-  first page of 100 rows in the active sort (only the first request carries counts; the rest pass
-  `counts=false`), so a short column shows all of its tickets immediately and never a lone Load more,
-  and each Load more reads that column's next 100. A refresh (live change, tab reactivation, list↔board
+  first visible page of 100 rows in the active sort (only the first request carries counts; the rest pass
+  `counts=false`), so a short column shows all of its tickets immediately and never a lone Load more.
+  Completed warms one additional 100-row page without displaying it. Its first Load more reveals those
+  cached rows; later Load more actions read the next 100 from the server. A refresh (live change, tab reactivation, list↔board
   switch) reloads each column back to its loaded length in one commit, in pages of at most 500, so an
   external change does not reset a column's pagination. Warm project tabs keep their column cursors with
   their rows. Mobile uses the same per-column loading in its paged board layout (HS2-ZYJMDP).
-  A bulk status change preserves projected checkout totals while its request is pending. If moving the
-  loaded rows exposes more tickets in their old column, that column immediately shows **Loading…** and
-  refills its first page after the batch commits, without waiting for the next live-change poll
-  (HS2-CE1E7J). Archiving the moved batch removes those rows from Verified immediately.
+  A bulk status change preserves projected checkout totals while its request is pending. Moving the
+  visible Completed page reveals the cached next page in the same optimistic render, without waiting
+  for the local Git batch to commit (HS2-KA1VJS). Offscreen board cards defer their layout and paint,
+  so displaying the moved and replacement pages together stays within the interaction budget. If no cached rows remain, that column shows
+  **Loading…** and refills after the batch commits (HS2-CE1E7J). Archiving the moved batch removes
+  those rows from Verified immediately. Rows outside the displayed page do not enter column selection.
   Single-collection Backlog/Archive/Trash boards and search keep the global cursor.
   A column pages an _ordered list_ of statuses, not just one: when the **Hide Verified column** setting
   merges Verified into Completed, that column exhausts its `completed` stream and then continues into

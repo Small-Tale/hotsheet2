@@ -13,8 +13,10 @@ export interface ProjectTicketRefresh {
   boardPages?: Record<string, BoardColumnPage>;
 }
 
-/** Rows each board column loads per page (HS2-8NBGBX, HS2-HNZZHC). */
+/** Rows each board column displays per page (HS2-8NBGBX, HS2-HNZZHC). */
 export const BOARD_COLUMN_PAGE_SIZE = 100;
+/** Keep one extra Completed page ready for an optimistic bulk move (HS2-KA1VJS). */
+const COMPLETED_COLUMN_INITIAL_ROWS = BOARD_COLUMN_PAGE_SIZE * 2;
 /** The server's largest page (`CHECKOUT_READ_MAX_ROWS`). */
 const MAX_CHECKOUT_PAGE_SIZE = 500;
 
@@ -85,7 +87,7 @@ export async function loadBoardColumnRefresh(
       page: BoardColumnPage | undefined;
     for (const [index, status] of column.statuses.entries()) {
       const previousExhausted = index === 0 || page?.streams?.[column.statuses[index - 1]]?.exhausted === true,
-        remaining = BOARD_COLUMN_PAGE_SIZE - rows.length,
+        remaining = (column.id === 'completed' ? COMPLETED_COLUMN_INITIAL_ROWS : BOARD_COLUMN_PAGE_SIZE) - rows.length,
         target = Math.max(wants[status] ?? 0, previousExhausted ? remaining : 0);
       if (target <= 0) continue;
       const stream = await loadStream(status, target);

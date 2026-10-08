@@ -115,6 +115,9 @@ describe('board pagination', () => {
           verified: { cursor: undefined, exhausted: true },
         },
       });
+      expect(
+        applyBoardColumnFetch(statuses, { ...afterCompletedDone, visible: 100 }, 'verified', 'v1', 200),
+      ).toMatchObject({ loaded: 200, visible: 100 });
     });
 
     it('drives a full completed→verified walk with next/apply until exhausted', () => {
