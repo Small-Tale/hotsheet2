@@ -14274,6 +14274,27 @@ for (const width of [1280, 390]) {
     await disclosure.press('Enter');
     await expect(reloaded.locator('.note-card__ai-feedback')).toHaveAttribute('open', '');
     await expect(reloaded.getByText('Keep the short status summary.')).toBeVisible();
+    const feedbackLayout = await reloaded.locator('.note-card__ai-feedback').evaluate((details) => {
+      const summary = details.querySelector('summary')!,
+        firstEntry = details.querySelector<HTMLElement>('.note-card__ai-feedback-entry')!,
+        nestedNote = firstEntry.querySelector<HTMLElement>('.note-card')!;
+      return {
+        summaryWidth: summary.getBoundingClientRect().width,
+        detailsWidth: details.getBoundingClientRect().width,
+        arrowWidth: getComputedStyle(summary, '::before').width,
+        nativeArrow: getComputedStyle(summary, '::after').display,
+        firstBorder: getComputedStyle(firstEntry).borderTopWidth,
+        noteBorder: getComputedStyle(nestedNote).borderTopWidth,
+        noteInset: getComputedStyle(nestedNote).paddingLeft,
+      };
+    });
+    expect(feedbackLayout.summaryWidth).toBeLessThan(feedbackLayout.detailsWidth * 0.75);
+    expect(feedbackLayout.arrowWidth).not.toBe('auto');
+    expect(feedbackLayout.nativeArrow).toBe('none');
+    expect(feedbackLayout.firstBorder).toBe('0px');
+    expect(feedbackLayout.noteBorder).toBe('0px');
+    expect(feedbackLayout.noteInset).toBe('0px');
+    await disclosure.blur();
     await reloaded.screenshot({ path: `/private/tmp/hs2-9r3xy0-feedback-${width}.png` });
     await reloaded.getByRole('button', { name: 'Not helpful — stop suggestions like this' }).click();
     await feedbackDialog.getByLabel('What should Hot Sheet change or stop doing?').fill('Avoid the long summary.');

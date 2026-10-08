@@ -3235,6 +3235,9 @@ the opaque id in the card. The rating remains syncable and auditable. Git-backed
 providers accept the structured write; other providers report an explicit unsupported
 error. Legacy notes without durable AI provenance are not
 guessed from their prose or author-like display text.
+Feedback notes nested below an AI note stay behind a small quiet disclosure with a
+chevron beside its label. Expanded feedback starts without a separator, and its
+notes use a flat surface without an extra border or inset (HS2-2V52Z6).
 
 **Live claim in the inspector and reader (HS2-QKNQXC).** While a ticket has a live,
 non-expired claim lease, the inspector and reader header leads its status notices with a
