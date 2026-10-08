@@ -139,6 +139,153 @@ fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
 }
 
 #[test]
+fn headless_flow_activity_and_notifications_preserve_filters_ack_and_errors() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("tickets");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", listener.local_addr().unwrap()),
+            "secret": "feed-test-secret",
+            "store_path": store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let requests = [
+        ("GET", "/analytics/tickets", 200, r#"{"total":2}"#),
+        (
+            "GET",
+            "/activity?ticket=HS-1&session=agent%201&min_importance=high&limit=5",
+            200,
+            r#"[{"id":"activity-1"}]"#,
+        ),
+        (
+            "GET",
+            "/notifications?checkout=web&store=git&ticket=HS-1&recipient=reviewer%40example.com",
+            200,
+            r#"[{"id":"notice-1","acknowledged":false}]"#,
+        ),
+        (
+            "POST",
+            "/notifications/notice-1/ack",
+            200,
+            r#"{"id":"notice-1","acknowledged":true}"#,
+        ),
+        (
+            "POST",
+            "/notifications/missing/ack",
+            404,
+            r#"{"error":"unknown notification"}"#,
+        ),
+    ];
+    let server = std::thread::spawn(move || {
+        for (method, path, status, body) in requests {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert_eq!(line.trim_end(), format!("{method} {path} HTTP/1.1"));
+            let mut secret = None;
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("x-hotsheet-secret:") {
+                    secret = Some(value.trim().to_string());
+                }
+            }
+            assert_eq!(secret.as_deref(), Some("feed-test-secret"));
+            write!(
+                reader.get_mut(),
+                "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+    });
+    let cli = |args: &[&str]| {
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", &home)
+            .args(["-C", store.to_str().unwrap()])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    for (args, expected) in [
+        (vec!["ticket-flow"], "\"total\": 2"),
+        (
+            vec![
+                "activity",
+                "--ticket",
+                "HS-1",
+                "--session",
+                "agent 1",
+                "--min-importance",
+                "high",
+                "--limit",
+                "5",
+            ],
+            "activity-1",
+        ),
+        (
+            vec![
+                "notifications",
+                "list",
+                "--checkout",
+                "web",
+                "--store",
+                "git",
+                "--ticket",
+                "HS-1",
+                "--recipient",
+                "reviewer@example.com",
+            ],
+            "notice-1",
+        ),
+        (
+            vec!["notifications", "ack", "notice-1"],
+            "\"acknowledged\": true",
+        ),
+    ] {
+        let output = cli(&args);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains(expected));
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("feed-test-secret"));
+    }
+    let missing = cli(&["notifications", "ack", "missing"]);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("unknown notification"));
+    assert!(!String::from_utf8_lossy(&missing.stderr).contains("feed-test-secret"));
+    server.join().unwrap();
+
+    std::fs::remove_file(hotsheet_cli::external_launch::instance_path(&home, &store)).unwrap();
+    let offline = cli(&["notifications", "list"]);
+    assert!(!offline.status.success());
+    assert!(String::from_utf8_lossy(&offline.stderr).contains("start the web app"));
+}
+
+#[test]
 fn retained_permission_hook_uses_restarted_server_route() {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;

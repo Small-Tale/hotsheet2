@@ -223,6 +223,21 @@ current ticket-flow aggregates at
 `/analytics/tickets`, and settled-plus-live usage totals at `/analytics/usage`.
 Historical cumulative-flow data is explicitly reported unavailable because current ticket
 files do not preserve status transitions.
+The CLI exposes the same live feed through the selected `-C` store's running server:
+
+```sh
+hotsheet ticket-flow
+hotsheet activity --ticket HS-7f3k9q --min-importance high --limit 20
+hotsheet notifications list --checkout web --recipient reviewer@example.com
+hotsheet notifications ack <notification-id>
+```
+
+All four print JSON and use the server's loopback secret. Activity accepts `--session`;
+notifications can filter by `--checkout`, `--store`, `--ticket`, and `--recipient`.
+An absent server fails with a start-server instruction. The ticket-flow summary covers
+the server's selected store; activity uses its persisted rolling window, and
+notifications use its bounded server-process feed. Acknowledgement uses the same id and
+authorization as the web client.
 
 Checkout-scoped code review is exposed at
 `GET /checkouts/{checkout}/tickets/{ticket}/code-review`. Discovery walks at most the

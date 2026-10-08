@@ -473,6 +473,24 @@ enum Cmd {
         #[command(subcommand)]
         cmd: CommandsCmd,
     },
+    /// Read the selected store's current ticket-flow summary from the local server.
+    TicketFlow,
+    /// Read the local server's recent activity timeline.
+    Activity {
+        #[arg(long)]
+        ticket: Option<String>,
+        #[arg(long)]
+        session: Option<String>,
+        #[arg(long, value_parser = ["low", "normal", "high"])]
+        min_importance: Option<String>,
+        #[arg(long)]
+        limit: Option<usize>,
+    },
+    /// Inspect and acknowledge the local server's notification feed.
+    Notifications {
+        #[command(subcommand)]
+        cmd: NotificationsCmd,
+    },
     /// Manage global provider API keys in the OS credential store (values never enter settings).
     Key {
         #[command(subcommand)]
@@ -924,6 +942,23 @@ enum CommandsCmd {
 }
 
 #[derive(Subcommand)]
+enum NotificationsCmd {
+    /// List notifications, optionally filtering by target or recipient.
+    List {
+        #[arg(long)]
+        checkout: Option<String>,
+        #[arg(long)]
+        store: Option<String>,
+        #[arg(long)]
+        ticket: Option<String>,
+        #[arg(long)]
+        recipient: Option<String>,
+    },
+    /// Acknowledge one notification by its stable id.
+    Ack { id: String },
+}
+
+#[derive(Subcommand)]
 enum AiSettingsCmd {
     /// Print the effective defaults: this project's, else the machine-wide fallback.
     Get {
@@ -1218,6 +1253,9 @@ fn main() -> Result<()> {
             | Cmd::Link { .. }
             | Cmd::Checkout { .. }
             | Cmd::Commands { .. }
+            | Cmd::TicketFlow
+            | Cmd::Activity { .. }
+            | Cmd::Notifications { .. }
             | Cmd::Launch { .. }
             | Cmd::HookDiagnose { .. }
             | Cmd::Serve { .. }
@@ -1600,6 +1638,14 @@ fn main() -> Result<()> {
         Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, &cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, &cwd, cmd),
         Cmd::Commands { cmd } => cmd_commands(&cli.path, cmd),
+        Cmd::TicketFlow => print_local_server_json(&cli.path, "GET", "analytics/tickets"),
+        Cmd::Activity {
+            ticket,
+            session,
+            min_importance,
+            limit,
+        } => cmd_activity(&cli.path, ticket, session, min_importance, limit),
+        Cmd::Notifications { cmd } => cmd_notifications(&cli.path, cmd),
         Cmd::Key { cmd } => cmd_key(cmd),
         Cmd::Checkout { cmd } => cmd_checkout(
             cmd,
@@ -5727,10 +5773,6 @@ fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result<()> {
 /// Command runs live in the server's checkout-scoped manager. Route the CLI through that
 /// manager so the web client and CLI share history, cancellation, and secret authorization.
 fn cmd_commands(store: &Path, cmd: CommandsCmd) -> Result<()> {
-    let server = hotsheet_cli::external_launch::discover_running_server(
-        store,
-        &hotsheet_plugins::hotsheet_home(),
-    )?;
     let (method, route) = match cmd {
         CommandsCmd::List { checkout } => (
             "GET",
@@ -5779,6 +5821,82 @@ fn cmd_commands(store: &Path, cmd: CommandsCmd) -> Result<()> {
             ),
         ),
     };
+    print_local_server_json(store, method, &route)
+}
+
+fn cmd_activity(
+    store: &Path,
+    ticket: Option<String>,
+    session: Option<String>,
+    min_importance: Option<String>,
+    limit: Option<usize>,
+) -> Result<()> {
+    let mut filters = Vec::new();
+    if let Some(value) = ticket {
+        filters.push(("ticket", value));
+    }
+    if let Some(value) = session {
+        filters.push(("session", value));
+    }
+    if let Some(value) = min_importance {
+        filters.push(("min_importance", value));
+    }
+    if let Some(value) = limit {
+        filters.push(("limit", value.to_string()));
+    }
+    print_local_server_json(store, "GET", &filtered_route("activity", &filters))
+}
+
+fn cmd_notifications(store: &Path, cmd: NotificationsCmd) -> Result<()> {
+    let (method, route) = match cmd {
+        NotificationsCmd::List {
+            checkout,
+            store,
+            ticket,
+            recipient,
+        } => {
+            let filters = [
+                ("checkout", checkout),
+                ("store", store),
+                ("ticket", ticket),
+                ("recipient", recipient),
+            ]
+            .into_iter()
+            .filter_map(|(key, value)| value.map(|value| (key, value)))
+            .collect::<Vec<_>>();
+            ("GET", filtered_route("notifications", &filters))
+        }
+        NotificationsCmd::Ack { id } => (
+            "POST",
+            format!("notifications/{}/ack", urlencoding_component(&id)),
+        ),
+    };
+    print_local_server_json(store, method, &route)
+}
+
+fn filtered_route(base: &str, filters: &[(&str, String)]) -> String {
+    if filters.is_empty() {
+        return base.to_owned();
+    }
+    let query = filters
+        .iter()
+        .map(|(key, value)| format!("{key}={}", urlencoding_component(value)))
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{base}?{query}")
+}
+
+fn print_local_server_json(store: &Path, method: &str, route: &str) -> Result<()> {
+    let body = local_server_json(store, method, route)?;
+    println!("{}", serde_json::to_string_pretty(&body)?);
+    Ok(())
+}
+
+fn local_server_json(store: &Path, method: &str, route: &str) -> Result<serde_json::Value> {
+    let server = hotsheet_cli::external_launch::discover_running_server(
+        store,
+        &hotsheet_plugins::hotsheet_home(),
+    )?;
     let endpoint = format!("{}/{}", server.url.trim_end_matches('/'), route);
     let request = ureq::request(method, &endpoint)
         .set("X-Hotsheet-Secret", &server.secret)
@@ -5791,13 +5909,11 @@ fn cmd_commands(store: &Path, cmd: CommandsCmd) -> Result<()> {
                 .ok()
                 .and_then(|body| body["error"].as_str().map(str::to_owned))
                 .unwrap_or_else(|| format!("server returned HTTP {status}"));
-            bail!("saved command request failed: {message}");
+            bail!("Hot Sheet server request failed: {message}");
         }
         Err(error) => return Err(error.into()),
     };
-    let body: serde_json::Value = serde_json::from_reader(response.into_reader())?;
-    println!("{}", serde_json::to_string_pretty(&body)?);
-    Ok(())
+    Ok(serde_json::from_reader(response.into_reader())?)
 }
 
 /// `hotsheet account …` (HS2-SM9PM8): the same account listing and sign-out as App
