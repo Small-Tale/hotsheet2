@@ -83,7 +83,7 @@ describe('terminal AI connection state (HS2-EV1XK3)', () => {
   });
 
   it('labels who is connected and how to connect an unconnected tool', () => {
-    expect(aiConnectionLabel('connected', 'claude')).toBe(
+    expect(aiConnectionLabel('connected', 'claude')).toContain(
       'Claude is connected to Hot Sheet: its permission prompts come to the app',
     );
     expect(aiConnectionLabel('connected', undefined, 'codex')).toContain('Codex is connected');
@@ -92,5 +92,10 @@ describe('terminal AI connection state (HS2-EV1XK3)', () => {
     expect(aiConnectionLabel('missing', undefined, 'claude')).toContain('hotsheet-cli setup --refresh');
     expect(aiConnectionLabel('missing', undefined, 'opencode')).toMatch(/^opencode is not connected/);
     expect(aiConnectionLabel('missing')).toMatch(/^This AI session is not connected/);
+    expect(aiConnectionLabel('missing', undefined, 'codex', { ...connection, source: 'permission_request' })).toContain(
+      'Last trusted hook report: PermissionRequest at 2026-10-05T08:00:00Z',
+    );
+    expect(aiConnectionLabel('missing')).toContain('MCP connection does not prove terminal hooks');
+    expect(aiConnectionLabel('missing')).toContain('hotsheet-cli hook-diagnose');
   });
 });

@@ -978,6 +978,10 @@ test('represents the production terminal dashboard and its shared context menu i
   await expect(dashboard).toHaveAttribute('data-fit', '3');
   await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(3);
   await expect(dashboard.locator('[data-ai-connection="connected"] [data-lucide="plug"]')).toBeVisible();
+  await expect(dashboard.locator('[data-ai-connection="connected"]')).toHaveAttribute(
+    'title',
+    /Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z.*MCP connectivity is separate/,
+  );
   await expect(dashboard.locator('[data-ai-connection="missing"] [data-lucide="unplug"]')).toBeVisible();
   await expect(dashboard.locator('[data-terminal-key="demo:halted"] .terminal-tile__halt')).toBeVisible();
   await expect(dashboard.locator('[data-terminal-key="demo:halted"] [data-ai-connection]')).toHaveCount(0);

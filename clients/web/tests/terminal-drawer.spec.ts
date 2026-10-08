@@ -71,10 +71,18 @@ for (const width of [1280, 390]) {
       tab = (id: string) => states.locator(`[data-tab-kind="terminal"][data-terminal-id="${id}"]`);
     await expect(tab('connected').locator('[data-ai-connection="connected"] [data-lucide="plug"]')).toBeVisible();
     await expect(tab('connected').locator('.terminal-drawer__busy-dot')).toBeVisible();
+    await expect(tab('connected').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
+      'title',
+      /Last trusted hook report: SessionStart at 2026-10-05T08:00:00Z.*MCP connectivity is separate/,
+    );
     await expect(tab('missing').locator('[data-ai-connection="missing"] [data-lucide="unplug"]')).toBeVisible();
     await expect(tab('missing').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
       'title',
       /Run \/hooks in Codex/,
+    );
+    await expect(tab('missing').locator('.terminal-drawer__ai-connection')).toHaveAttribute(
+      'title',
+      /Run hotsheet-cli hook-diagnose inside this terminal/,
     );
     await expect(tab('halted').locator('.terminal-drawer__halt [data-lucide="triangle-alert"]')).toBeVisible();
     // The status icons sit on the tab label's center line.

@@ -1484,6 +1484,7 @@ async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgott
     }
     let listed = body_json(send("GET", "/terminals", None).await).await;
     assert_eq!(listed[0]["ai_connection"]["agent"], "codex");
+    assert_eq!(listed[0]["last_hook_report"]["source"], "session_start");
     assert!(listed[0].get("halt").is_none());
     assert!(
         listed[0]["ai_connection"]["at"]
@@ -1535,6 +1536,10 @@ async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgott
             .get("ai_connection")
             .is_none()
     );
+    assert_eq!(
+        body_json(send("GET", "/terminals", None).await).await[0]["last_hook_report"]["agent"],
+        "claude"
+    );
     assert!(
         body_json(send("GET", "/terminals", None).await).await[0]
             .get("halt")
@@ -1572,6 +1577,54 @@ async fn terminal_ai_connection_is_reported_listed_announced_cleared_and_forgott
             .get("ai_connection")
             .is_none()
     );
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("last_hook_report")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn bridge_probe_requires_auth_and_never_marks_a_terminal_connected() {
+    let (_dir, state) = state();
+    let router = app(state);
+    let opened = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"probe"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    let unauthorized = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/permissions/bridge-probe")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    let response = router
+        .clone()
+        .oneshot(authed("GET", "/permissions/bridge-probe", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(body_json(response).await["bridge_reachable"], true);
+    let terminal = body_json(
+        router
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(terminal[0].get("ai_connection").is_none());
+    assert!(terminal[0].get("last_hook_report").is_none());
 }
 
 #[tokio::test]
@@ -11989,6 +12042,10 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
     )
     .await;
     assert_eq!(terminals[0]["ai_connection"]["agent"], "codex");
+    assert_eq!(
+        terminals[0]["last_hook_report"]["source"],
+        "permission_request"
+    );
     bridge
         .resolve(
             id,
@@ -12020,6 +12077,10 @@ async fn permissions_ask_blocks_then_returns_the_human_answer() {
     )
     .await;
     assert!(terminals[0].get("ai_connection").is_none());
+    assert_eq!(
+        terminals[0]["last_hook_report"]["source"],
+        "permission_request"
+    );
 }
 
 #[tokio::test]

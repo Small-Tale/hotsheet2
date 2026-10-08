@@ -6033,6 +6033,85 @@ async function settledAnimations(surface: Locator) {
     .toBe(true);
 }
 
+test('shows a real terminal hook report separately from MCP and bridge reachability (HS2-PTC0FD)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const server = await realTicketServer(),
+    cli =
+      process.env.HOTSHEET_TEST_CLI_BIN ??
+      fileURLToPath(
+        new URL(`../../../target/debug/hotsheet-cli${process.platform === 'win32' ? '.exe' : ''}`, import.meta.url),
+      ),
+    hookEnv = {
+      ...withoutGitRepositoryEnv(process.env),
+      HOTSHEET_HOME: server.home,
+      HOTSHEET_SERVER: server.url,
+      HOTSHEET_SECRET: server.secret,
+      HOTSHEET_TERMINAL_ID: 'codex-session',
+    },
+    hook = (event: string) => {
+      const result = spawnSync(cli, ['permission-hook', '--agent', 'codex'], {
+        input: JSON.stringify({ hook_event_name: event, session_id: 'session-1' }),
+        env: hookEnv,
+        encoding: 'utf8',
+      });
+      expect(result.status, result.stderr).toBe(0);
+    };
+  try {
+    await server.request('/terminals', 'POST', {
+      id: 'codex-session',
+      command: '/bin/sh',
+      args: ['-c', 'printf "\\033]7;file://localhost/work/demo\\007"; exec cat'],
+      cwd: server.root,
+    });
+    await expect
+      .poll(async () => (await server.request<Array<{ cwd?: string }>>('/terminals'))[0]?.cwd)
+      .toBe('/work/demo');
+    await mockProject(page);
+    for (const pattern of [
+      '**/__hotsheet/project-api/demo-checkout/terminals**',
+      '**/__hotsheet/project-api/demo-checkout/ws/poll*',
+    ])
+      await page.route(pattern, async (route) => {
+        const incoming = new URL(route.request().url()),
+          path = incoming.pathname.replace('/__hotsheet/project-api/demo-checkout', '');
+        const response = await route.fetch({
+          url: `${server.url}${path}${incoming.search}`,
+          headers: { ...route.request().headers(), 'X-Hotsheet-Secret': server.secret },
+        });
+        await route.fulfill({ response });
+      });
+    await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => void route.close());
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+    const tab = page.locator('[data-tab-kind="terminal"][data-terminal-id="codex-session"]');
+    await expect(tab).toBeVisible();
+    hook('SessionStart');
+    await expect(tab.locator('[data-ai-connection="connected"]')).toHaveAttribute(
+      'title',
+      /Last trusted hook report: SessionStart at .*MCP connectivity is separate/,
+    );
+    const diagnosis = spawnSync(cli, ['hook-diagnose', '--json'], { env: hookEnv, encoding: 'utf8' });
+    expect(diagnosis.status, diagnosis.stderr).toBe(0);
+    expect(JSON.parse(diagnosis.stdout)).toMatchObject({
+      mcp: 'not_tested',
+      permission_bridge: 'reachable',
+      terminal_hook: 'active',
+      last_hook_report: { source: 'session_start' },
+    });
+    hook('SessionEnd');
+    await expect(tab.locator('[data-ai-connection="connected"]')).toHaveCount(0);
+    expect(
+      (
+        await server.request<Array<{ ai_connection?: unknown; last_hook_report?: { source: string } }>>('/terminals')
+      )[0],
+    ).toMatchObject({ last_hook_report: { source: 'session_start' } });
+  } finally {
+    await server.stop();
+  }
+});
+
 test('marks a terminal whose AI session halted on an API error and clears it on the next prompt (HS2-HJ4D1H)', async ({
   page,
 }) => {

@@ -63,6 +63,7 @@ export interface TerminalDashboardSession {
   tool?: string;
   /** The session's own `SessionStart` report (HS2-EV1XK3). */
   ai_connection?: TerminalAiConnection;
+  last_hook_report?: TerminalAiConnection;
   /** Whether the terminal's AI session reaches Hot Sheet, derived by `deriveAiConnectionStates`. */
   aiConnection?: AiConnectionState;
   scrollback: string;
@@ -322,8 +323,18 @@ function TerminalCard({
                 class="terminal-tile__ai-connection"
                 data-ai-connection={session.aiConnection}
                 role="img"
-                aria-label={aiConnectionLabel(session.aiConnection, session.ai_connection?.agent, session.tool)}
-                title={aiConnectionLabel(session.aiConnection, session.ai_connection?.agent, session.tool)}
+                aria-label={aiConnectionLabel(
+                  session.aiConnection,
+                  session.ai_connection?.agent,
+                  session.tool,
+                  session.last_hook_report ?? session.ai_connection,
+                )}
+                title={aiConnectionLabel(
+                  session.aiConnection,
+                  session.ai_connection?.agent,
+                  session.tool,
+                  session.last_hook_report ?? session.ai_connection,
+                )}
               >
                 {session.aiConnection === 'connected' ? (
                   <LucideIcon size="s" icon={Plug} name="plug" color={uiColor('neutral-on-quiet')} />

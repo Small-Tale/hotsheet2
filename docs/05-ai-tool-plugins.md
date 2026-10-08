@@ -778,9 +778,17 @@ become model context.
 
 The hook also sends its session id. The server ignores a `SessionEnd` for an older session
 after a new `SessionStart` (for example, Codex `/clear`) has reported in the same terminal.
-The id remains internal to the server; terminal APIs expose only the connected state.
+The id remains internal to the server. Terminal APIs expose the active connection and the last
+trusted hook report's time and source (`session_start` or `permission_request`). The last report
+remains visible after `SessionEnd`, but is forgotten when the terminal exits or is killed and
+when the server restarts. An ended report does not imply the session remains connected.
 `/mcp` in Codex tests the MCP server connection, not whether the project lifecycle and
-permission hooks ran. Use Codex `/hooks` to inspect their trust and enabled state. A
+permission hooks ran. Run `hotsheet-cli hook-diagnose` inside the affected terminal to test the
+authenticated local permission bridge and read that terminal's active connection and last hook
+report. `--json` gives the same facts to scripts. This read-only probe never reports a hook,
+creates a connection, or tests MCP. Bridge reachability alone does not prove that project hooks
+are installed, enabled, or trusted. Use Codex `/hooks` to inspect their trust and enabled state.
+After server restart, a live session must report again before its connection can be shown. A
 successful interactive permission prompt reaching Hot Sheet also proves the bridge is live.
 
 A tool runs a project hook only once it is installed and, for Codex, trusted. A reported

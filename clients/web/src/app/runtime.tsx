@@ -3938,6 +3938,7 @@ export async function startHotSheetWebClient() {
                 (event) =>
                   event.kind === 'terminal_halted' ||
                   event.kind === 'terminal_ai_connection' ||
+                  event.kind === 'terminal_hook_report' ||
                   event.kind === 'permission_asked',
               )
             )

@@ -582,6 +582,11 @@ enum Cmd {
         #[arg(long)]
         agent: Option<String>,
     },
+    /// Diagnose the terminal hook route separately from MCP, without changing connection state.
+    HookDiagnose {
+        #[arg(long)]
+        json: bool,
+    },
     /// Launch an interactive AI tool in this terminal with permission requests routed to
     /// the running Hot Sheet server. The ticket store is resolved from checkout sources,
     /// a `.hotsheet2/store` link (with legacy `.hotsheet/store` fallback), or conservative sibling discovery.
@@ -1076,6 +1081,7 @@ fn main() -> Result<()> {
             | Cmd::Link { .. }
             | Cmd::Checkout { .. }
             | Cmd::Launch { .. }
+            | Cmd::HookDiagnose { .. }
     ) && !matches!(cli.command, Cmd::Serve { list: true, .. })
     {
         cli.path = hotsheet_cli::resolve_store_path(cli.path, &cwd);
@@ -1087,6 +1093,7 @@ fn main() -> Result<()> {
             | Cmd::Link { .. }
             | Cmd::Checkout { .. }
             | Cmd::Launch { .. }
+            | Cmd::HookDiagnose { .. }
             | Cmd::Serve { .. }
             | Cmd::Ls { .. }
             | Cmd::Show { .. }
@@ -1514,6 +1521,7 @@ fn main() -> Result<()> {
             team,
         } => cmd_metrics(&cli.path, roll_up, prune_before, team),
         Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
+        Cmd::HookDiagnose { json } => cmd_hook_diagnose(json),
         Cmd::Launch {
             tool,
             project,
@@ -3581,6 +3589,102 @@ fn hook_server_route() -> Option<(String, String)> {
                 std::env::var("HOTSHEET_SECRET").ok()?,
             ))
         })
+}
+
+/// Probe the same authenticated server route that permission hooks resolve, without
+/// posting a SessionStart or permission request. MCP availability is independent.
+fn cmd_hook_diagnose(json: bool) -> Result<()> {
+    let terminal_id = std::env::var("HOTSHEET_TERMINAL_ID")
+        .ok()
+        .filter(|id| !id.is_empty());
+    let mut report = serde_json::json!({
+        "mcp": "not_tested",
+        "permission_bridge": "unconfigured",
+        "terminal_id": terminal_id.clone(),
+        "terminal_hook": "unknown",
+        "last_hook_report": null,
+    });
+    if let Some((url, secret)) = hook_server_route() {
+        let endpoint = format!("{}/permissions/bridge-probe", url.trim_end_matches('/'));
+        let probe = hook_get_json(&endpoint, &secret);
+        match probe {
+            Ok(value)
+                if value
+                    .get("bridge_reachable")
+                    .and_then(serde_json::Value::as_bool)
+                    == Some(true) =>
+            {
+                report["permission_bridge"] = "reachable".into();
+                if let Some(id) = terminal_id.as_deref() {
+                    let terminals =
+                        hook_get_json(&format!("{}/terminals", url.trim_end_matches('/')), &secret);
+                    match terminals {
+                        Ok(terminals) => {
+                            if let Some(terminal) = terminals
+                                .as_array()
+                                .and_then(|items| items.iter().find(|item| item["id"] == id))
+                            {
+                                report["terminal_hook"] =
+                                    if terminal.get("ai_connection").is_some() {
+                                        "active"
+                                    } else {
+                                        "not_active"
+                                    }
+                                    .into();
+                                report["last_hook_report"] = terminal
+                                    .get("last_hook_report")
+                                    .cloned()
+                                    .unwrap_or(serde_json::Value::Null);
+                            } else {
+                                report["terminal_hook"] = "terminal_not_found".into();
+                            }
+                        }
+                        Err(_) => report["terminal_hook"] = "terminal_read_failed".into(),
+                    }
+                }
+            }
+            Ok(_) | Err(_) => report["permission_bridge"] = "unreachable".into(),
+        }
+    }
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("MCP: not tested (MCP connectivity does not prove terminal hooks are active).");
+        println!(
+            "Permission bridge: {}",
+            report["permission_bridge"].as_str().unwrap_or("unknown")
+        );
+        println!(
+            "Terminal hook: {}",
+            report["terminal_hook"].as_str().unwrap_or("unknown")
+        );
+        if !report["last_hook_report"].is_null() {
+            println!(
+                "Last trusted hook report: {} at {}",
+                report["last_hook_report"]["source"]
+                    .as_str()
+                    .unwrap_or("unknown"),
+                report["last_hook_report"]["at"]
+                    .as_str()
+                    .unwrap_or("unknown")
+            );
+        }
+        if report["terminal_hook"].as_str() != Some("active") {
+            println!(
+                "For Codex, run /hooks to review and trust Hot Sheet hooks, then restart the session. A successful bridge probe alone does not connect it."
+            );
+        }
+    }
+    Ok(())
+}
+
+fn hook_get_json(url: &str, secret: &str) -> Result<serde_json::Value> {
+    let body = ureq::get(url)
+        .set("X-Hotsheet-Secret", secret)
+        .timeout(std::time::Duration::from_secs(5))
+        .call()?
+        .into_string()?;
+    Ok(serde_json::from_str(&body)?)
 }
 
 /// Report a session lifecycle event against the hook's terminal: `POST` (halted) or `DELETE`

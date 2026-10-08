@@ -2491,7 +2491,7 @@ and completion or interruption leaves no stopped marker. Transient provider retr
 mark a chat halted. See [`13`](13-drive-transport-interface.md) for the wire contract.
 
 A terminal whose AI session runs with Hot Sheet's hooks active (HS2-EV1XK3; see
-[`05`](05-ai-tool-plugins.md)) carries `ai_connection {agent, at}` in `GET /terminals`. It is
+[`05`](05-ai-tool-plugins.md)) carries `ai_connection {agent, at, source}` in `GET /terminals`. It is
 set by `POST /terminals/{id}/ai-connection` from the session's `SessionStart` hook or by a
 successful interactive permission hook's authenticated `/permissions/ask` request. The latter
 updates the indicator while the answer is pending if `SessionStart` was missed (HS2-XYSXVT).
@@ -2499,6 +2499,12 @@ It is cleared by `DELETE` from `SessionEnd` or by killing the terminal. Each cha
 `terminal_ai_connection` event. The client refetches its terminals on that event and on a
 `permission_asked` event, so a visible prompt reconciles the indicator even if the separate
 connection event was missed (HS2-XYSXVT).
+`last_hook_report {agent, at, source}` records the latest trusted `SessionStart` or interactive
+`PermissionRequest` report for that terminal. It remains after `SessionEnd`, but disappears on
+terminal exit/kill or server restart. Each report emits `terminal_hook_report`, which also
+refreshes the client. The drawer and dashboard connection labels show its time and source,
+explain that MCP connectivity is separate, and point to the read-only
+`hotsheet-cli hook-diagnose` bridge test. An old report never marks a session connected.
 
 - **Connected:** the drawer tab and dashboard tile show a neutral Lucide `plug` icon ("Codex is connected to Hot
   Sheet: its permission prompts come to the app"). This applies to any terminal, including a

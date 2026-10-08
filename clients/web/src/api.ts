@@ -543,12 +543,15 @@ export interface TerminalInfo {
   /** An AI session in the terminal started with Hot Sheet's hooks active, so its permission
    * prompts come to Hot Sheet (HS2-EV1XK3); absent when none has reported in. */
   ai_connection?: TerminalAiConnection;
+  /** Last trusted hook report for this live terminal, retained after SessionEnd. */
+  last_hook_report?: TerminalAiConnection;
 }
 /** An AI session's `SessionStart` hook report (`POST /terminals/{id}/ai-connection`). */
 export interface TerminalAiConnection {
   agent?: string;
   /** RFC 3339 time the session reported in. */
   at: string;
+  source?: 'session_start' | 'permission_request';
 }
 /** Why a terminal's AI session halted, as its hook reported it (`POST /terminals/{id}/halt`). */
 export interface TerminalHalt {

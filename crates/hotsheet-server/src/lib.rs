@@ -182,6 +182,8 @@ pub struct AppState {
     terminal_halts: Arc<Mutex<std::collections::HashMap<String, TerminalHalt>>>,
     /// AI sessions whose Hot Sheet hooks reported in from a terminal, by terminal id (HS2-EV1XK3).
     terminal_ai_connections: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
+    /// Last trusted hook report for each live terminal, retained after SessionEnd for diagnosis.
+    terminal_ai_last_reports: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
     /// Machine-local checkout discovery. Checkout ids identify working directories and
     /// are intentionally separate from store ids and server authentication tokens.
     checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
@@ -374,6 +376,7 @@ impl AppState {
             terminal_server_url: Arc::new(Mutex::new(None)),
             terminal_halts: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_ai_connections: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
                 machine_home.join("checkouts.json"),
             ),
@@ -1920,6 +1923,7 @@ pub fn app(state: AppState) -> Router {
         // Raise a blocking permission request (the asking side — e.g. a Claude PreToolUse
         // hook), HS2-YMR9HE. Blocks until answered over the route-back, or times out.
         .route("/permissions/ask", post(ask_permission))
+        .route("/permissions/bridge-probe", get(probe_permission_bridge))
         // What the server is currently driving (HS2-TCV3BF).
         .route("/connections", get(list_connections))
         .route("/ai-tools", get(list_ai_tools))
@@ -7952,6 +7956,20 @@ impl Drop for PermissionAskGuard {
     }
 }
 
+/// A read-only authenticated probe for the exact route and secret a local hook would use.
+/// It never announces a session or changes an AI terminal connection state.
+async fn probe_permission_bridge(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if state.is_stopping() {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "server is stopping",
+        ));
+    }
+    Ok(Json(serde_json::json!({ "bridge_reachable": true })))
+}
+
 /// `POST /permissions/ask` `{connection, tool, action}` — raise a permission request and
 /// **block** until a human answers over the route-back (`POST /permissions/{id}`), up to a
 /// timeout then a safe `deny`. This is the *asking* side, for an external tool transport
@@ -7970,6 +7988,7 @@ async fn ask_permission(State(state): State<AppState>, Json(body): Json<AskBody>
             Json(TerminalAiConnectionReq {
                 agent: body.agent.clone(),
                 session_id: body.session_id.clone(),
+                source: TerminalHookSource::PermissionRequest,
             }),
         )
         .await;
@@ -8842,6 +8861,17 @@ struct TerminalInfo {
     /// prompts come to Hot Sheet (HS2-EV1XK3); absent when no session has reported in.
     #[serde(skip_serializing_if = "Option::is_none")]
     ai_connection: Option<TerminalAiConnection>,
+    /// Most recent trusted hook report, even if that session later ended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_hook_report: Option<TerminalAiConnection>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalHookSource {
+    #[default]
+    SessionStart,
+    PermissionRequest,
 }
 
 /// An AI session whose `SessionStart` or interactive permission hook reported in from a terminal
@@ -8854,6 +8884,8 @@ pub struct TerminalAiConnection {
     /// RFC 3339 time the session reported in.
     #[serde(default)]
     at: String,
+    #[serde(default)]
+    source: TerminalHookSource,
     /// Internal lifecycle identity; the terminal API need not expose Codex/Claude session ids.
     #[serde(skip)]
     session_id: Option<String>,
@@ -8908,6 +8940,7 @@ fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
         name: None,
         halt: None,
         ai_connection: None,
+        last_hook_report: None,
     }
 }
 
@@ -8926,6 +8959,7 @@ fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInfo {
         name: None,
         halt: None,
         ai_connection: None,
+        last_hook_report: None,
     }
 }
 
@@ -9854,10 +9888,18 @@ fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<Te
     let names = terminal_names::all(&Settings::new(state.store.root())).unwrap_or_default();
     let halts = state.terminal_halts.lock().unwrap().clone();
     let connections = state.terminal_ai_connections.lock().unwrap().clone();
+    let mut last_reports = state.terminal_ai_last_reports.lock().unwrap();
     for info in &mut infos {
+        if !info.alive {
+            last_reports.remove(&info.id);
+        }
         info.name = names.get(&info.id).cloned();
         info.halt = halts.get(&info.id).cloned();
-        info.ai_connection = connections.get(&info.id).cloned();
+        info.ai_connection = info
+            .alive
+            .then(|| connections.get(&info.id).cloned())
+            .flatten();
+        info.last_hook_report = last_reports.get(&info.id).cloned();
     }
     infos
 }
@@ -9962,6 +10004,8 @@ struct TerminalAiConnectionReq {
     agent: Option<String>,
     #[serde(default)]
     session_id: Option<String>,
+    #[serde(default)]
+    source: TerminalHookSource,
 }
 
 /// `POST /terminals/{id}/ai-connection` — an AI session in the terminal started with Hot Sheet's
@@ -9994,13 +10038,30 @@ async fn connect_terminal_ai(
             .format(&Rfc3339)
             .unwrap_or_default(),
         session_id: body.session_id.filter(|id| !id.is_empty()),
+        source: body.source,
     };
+    state
+        .terminal_ai_last_reports
+        .lock()
+        .unwrap()
+        .insert(id.clone(), connection.clone());
     let changed = state
         .terminal_ai_connections
         .lock()
         .unwrap()
         .insert(id.clone(), connection)
         .is_none_or(|previous| previous.agent != agent);
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: String::new(),
+        kind: "terminal_hook_report".into(),
+        id: id.clone(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
     if changed {
         emit_terminal_ai_connection(&state, &id, Some(agent.unwrap_or_default()));
     }
@@ -10246,6 +10307,7 @@ async fn kill_terminal(
                     emit_terminal_halted(&state, &id, None);
                 }
                 forget_terminal_ai_connection(&state, &id);
+                state.terminal_ai_last_reports.lock().unwrap().remove(&id);
                 Ok(StatusCode::NO_CONTENT)
             }
             other => Err(broker_err(other)),
@@ -10260,6 +10322,7 @@ async fn kill_terminal(
         emit_terminal_halted(&state, &id, None);
     }
     forget_terminal_ai_connection(&state, &id);
+    state.terminal_ai_last_reports.lock().unwrap().remove(&id);
     Ok(StatusCode::NO_CONTENT)
 }
 

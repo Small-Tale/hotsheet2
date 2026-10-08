@@ -73,15 +73,23 @@ export function deriveAiConnectionStates<S extends ConnectableSession, G extends
 }
 
 /** The tab label for a terminal's connection state: who is connected, or how to connect. */
-export function aiConnectionLabel(state: AiConnectionState, agent?: string, tool?: string): string {
+export function aiConnectionLabel(
+  state: AiConnectionState,
+  agent?: string,
+  tool?: string,
+  lastReport?: TerminalAiConnection,
+): string {
+  const report = lastReport
+    ? ` Last trusted hook report: ${lastReport.source === 'permission_request' ? 'PermissionRequest' : 'SessionStart'} at ${lastReport.at}.`
+    : ' No trusted hook report has reached this server.';
   if (state === 'connected')
-    return `${agentName(agent ?? tool) ?? 'The AI session'} is connected to Hot Sheet: its permission prompts come to the app`;
+    return `${agentName(agent ?? tool) ?? 'The AI session'} is connected to Hot Sheet: its permission prompts come to the app.${report} MCP connectivity is separate.`;
   const name = agentName(tool) ?? 'This AI session';
   const fix =
     tool === 'codex'
       ? 'Run /hooks in Codex to review and trust Hot Sheet’s hooks, then restart the session.'
       : 'Run hotsheet-cli setup --refresh for this project, then restart the session.';
-  return `${name} is not connected to Hot Sheet: its permission prompts stay in this terminal. ${fix}`;
+  return `${name} is not connected to Hot Sheet: its permission prompts stay in this terminal.${report} An MCP connection does not prove terminal hooks are active. Run hotsheet-cli hook-diagnose inside this terminal to test the local permission bridge. ${fix}`;
 }
 
 function agentName(agent?: string): string | undefined {

@@ -1083,6 +1083,11 @@ function demoContent(item: DemoDefinition) {
                   title: 'Connected',
                   tool: 'codex',
                   ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' },
+                  last_hook_report: {
+                    agent: 'codex',
+                    at: '2026-10-05T08:00:00Z',
+                    source: 'session_start',
+                  },
                   aiConnection: 'connected',
                 },
                 {
@@ -1187,6 +1192,11 @@ function demoContent(item: DemoDefinition) {
                   title: 'Development',
                   tool: 'codex',
                   ai_connection: { agent: 'codex', at: '2026-10-05T08:00:00Z' },
+                  last_hook_report: {
+                    agent: 'codex',
+                    at: '2026-10-05T08:00:00Z',
+                    source: 'session_start',
+                  },
                   aiConnection: 'connected',
                   alive: true,
                   busy: true,
