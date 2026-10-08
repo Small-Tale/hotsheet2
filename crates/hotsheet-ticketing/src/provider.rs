@@ -484,7 +484,9 @@ impl ProviderTicketSummary {
             if day_starts
                 .get(day_starts.len().saturating_sub(2))
                 .zip(day_starts.last())
-                .is_some_and(|(today, tomorrow)| completed >= today && completed < tomorrow)
+                .is_some_and(|(today, tomorrow)| {
+                    completed >= today.as_str() && completed < tomorrow.as_str()
+                })
             {
                 self.completed_today += 1;
             }
