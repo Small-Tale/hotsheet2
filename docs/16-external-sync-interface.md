@@ -111,6 +111,8 @@ errors. Providers own remote calls, opaque native page cursors, bounded page ret
 streaming count summaries, native mapping, concurrency tokens, rate-limit interpretation,
 and provider-specific durable metadata. The built-in compatibility fallback may materialize
 a provider query, but GitHub, GitLab, and Jira implement the bounded contract directly.
+The [write-behind proposal](25-write-behind-sync-plan.md) specifies a future durable
+pending-intent overlay for slow providers; current external mutations remain synchronous.
 
 ## 16.5 Default git provider
 
