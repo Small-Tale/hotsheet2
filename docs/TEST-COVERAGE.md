@@ -64,6 +64,12 @@ covered the separate picker before the menu change. HS2-0VXN1A adds a full-app
 pointer sweep over Started phase rows in that browser flow; it was run in WebKit
 at the recorded viewport and in Chromium to verify the safe-triangle fix.
 
+HS2-5FJH64 covers explicit batch backfill of older managed GitHub login labels in
+`crates/hotsheet-cli/tests/cli.rs`: plain account listing stays free of `/user`
+traffic, a successful lookup persists only the public login, a repeated run skips it,
+and expired or offline credentials fail without writing identity metadata. The
+`GitHubDeviceClient` transport tests cover the isolated `/user` response contract.
+
 HS2-TPF3EB moves non-atomic provider update progress from toasts to the app-level loading
 indicator. `clients/web/src/bulk-update-progress.test.ts` covers start, advance, repeat,
 overlap, and out-of-order completion; `clients/web/tests/providers.spec.ts` covers the real

@@ -549,6 +549,7 @@ hotsheet checkout source-color web github-main              # JSON: checkout_id,
 hotsheet checkout set-source-color web github-main '#3b82f6' # set this project's source accent
 hotsheet checkout set-source-color web github-main transparent # clear this project's accent
 hotsheet account list [--json]            # machine-wide sign-ins, their sources, and the projects using each
+hotsheet account backfill-logins [--limit 5] # resolve missing managed GitHub usernames in a bounded batch
 hotsheet account sign-out github-app-<id> # refused while a ticket source still uses it
 ```
 
@@ -562,6 +563,12 @@ unsupported value.
 `checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
 Project Settings → Ticket sources and App Settings → Accounts; like the other provider
 commands they read the `-C` store's `providers.json`.
+`account backfill-logins` is an explicit keychain and GitHub network action; plain listing
+does not look up usernames. It tries up to five missing managed GitHub logins by default
+(`--limit` accepts 1–10); `--after <credential-ref>` reaches later accounts even if earlier
+ones repeatedly fail. It saves each successful `/user` login in `keys.json` and reports
+expired or unreachable credentials without discarding other successes. Each refresh and
+login HTTP request has a 30-second transport timeout; a failed batch exits nonzero.
 Each checkout stores its own source icon colors in `checkouts.json`, keyed by connection id;
 linked projects can give a shared connection different colors. The checkout provider
 descriptors include the color, and `PATCH /checkouts/{reference}/sources/{connection_id}/color`

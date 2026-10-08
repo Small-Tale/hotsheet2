@@ -5883,6 +5883,149 @@ fn account_list_reports_the_host_of_unused_sign_ins() {
 }
 
 #[test]
+fn account_backfill_logins_persists_legacy_username_without_slowing_plain_listing() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path()).args(args);
+        cmd
+    };
+    run(&["init"]).assert().success();
+    std::fs::write(
+        home.path().join("keys.json"),
+        serde_json::json!({"github-app-01old": {
+            "provider":"github-app-01old", "env":"HOTSHEET_API_KEY_GITHUB_APP_01OLD", "site":origin
+        }})
+        .to_string(),
+    )
+    .unwrap();
+    let token = serde_json::json!({
+        "kind":"github_app", "client_id":"IvTest12345678", "web_base":origin,
+        "obtained_at": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        "token":{"access_token":"old-access", "expires_in":3600}
+    });
+    let list = run(&["account", "list", "--json"])
+        .env("HOTSHEET_API_KEY_GITHUB_APP_01OLD", token.to_string())
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let accounts: serde_json::Value = serde_json::from_slice(&list).unwrap();
+    assert!(accounts[0].get("identity").is_none());
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request = read_http_request(&mut stream);
+        assert!(request.starts_with("GET /api/v3/user "), "{request}");
+        assert!(request.contains("Bearer old-access"));
+        let body = r#"{"login":"older-user"}"#;
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+    });
+    run(&["account", "backfill-logins"])
+        .env("HOTSHEET_API_KEY_GITHUB_APP_01OLD", token.to_string())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github-app-01old: older-user"));
+    server.join().unwrap();
+    let keys = std::fs::read_to_string(home.path().join("keys.json")).unwrap();
+    assert!(keys.contains("older-user"), "{keys}");
+    assert!(!keys.contains("old-access"), "{keys}");
+    run(&["account", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("account: older-user"));
+    run(&["account", "backfill-logins"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "No managed GitHub logins need backfilling",
+        ));
+}
+
+#[test]
+fn account_backfill_logins_reports_expired_and_offline_credentials() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        let mut cmd = hs(dir.path());
+        cmd.env("HOTSHEET_HOME", home.path()).args(args);
+        cmd
+    };
+    run(&["init"]).assert().success();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    let valid_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let valid_origin = format!("http://{}", valid_listener.local_addr().unwrap());
+    std::fs::write(
+        home.path().join("keys.json"),
+        serde_json::json!({
+            "github-app-01expired": {"provider":"github-app-01expired", "env":"HOTSHEET_API_KEY_GITHUB_APP_01EXPIRED", "site":origin},
+            "github-app-01offline": {"provider":"github-app-01offline", "env":"HOTSHEET_API_KEY_GITHUB_APP_01OFFLINE", "site":origin},
+            "github-app-01valid": {"provider":"github-app-01valid", "env":"HOTSHEET_API_KEY_GITHUB_APP_01VALID", "site":valid_origin}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let expired = serde_json::json!({
+        "kind":"github_app", "client_id":"IvTest12345678", "web_base":origin,
+        "obtained_at":1, "token":{"access_token":"expired", "expires_in":1}
+    });
+    let offline = serde_json::json!({
+        "kind":"github_app", "client_id":"IvTest12345678", "web_base":origin,
+        "obtained_at": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        "token":{"access_token":"offline", "expires_in":3600}
+    });
+    let valid = serde_json::json!({
+        "kind":"github_app", "client_id":"IvTest12345678", "web_base":valid_origin,
+        "obtained_at": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        "token":{"access_token":"valid", "expires_in":3600}
+    });
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = valid_listener.accept().unwrap();
+        let request = read_http_request(&mut stream);
+        assert!(request.starts_with("GET /api/v3/user "), "{request}");
+        let body = r#"{"login":"valid-user"}"#;
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+    });
+    run(&[
+        "account",
+        "backfill-logins",
+        "--after",
+        "github-app-01expired",
+        "--limit",
+        "1",
+    ])
+    .env("HOTSHEET_API_KEY_GITHUB_APP_01OFFLINE", offline.to_string())
+    .assert()
+    .failure()
+    .stderr(predicate::str::contains("1 of 1 login backfills failed"));
+    run(&["account", "backfill-logins"])
+        .env("HOTSHEET_API_KEY_GITHUB_APP_01EXPIRED", expired.to_string())
+        .env("HOTSHEET_API_KEY_GITHUB_APP_01OFFLINE", offline.to_string())
+        .env("HOTSHEET_API_KEY_GITHUB_APP_01VALID", valid.to_string())
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("github-app-01valid: valid-user"))
+        .stderr(predicate::str::contains("github-app-01expired:"))
+        .stderr(predicate::str::contains("github-app-01offline:"))
+        .stderr(predicate::str::contains("2 of 3 login backfills failed"));
+    server.join().unwrap();
+    let keys = std::fs::read_to_string(home.path().join("keys.json")).unwrap();
+    assert!(keys.contains("valid-user"), "{keys}");
+    assert_eq!(keys.matches("identity").count(), 1, "{keys}");
+    run(&["account", "backfill-logins", "--limit", "0"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--limit must be between 1 and 10"));
+}
+
+#[test]
 fn project_owned_sources_and_accounts_have_headless_parity() {
     // HS2-SM9PM8: `checkout remove-source` and `account list|sign-out` run the same workflows
     // as Project Settings → Ticket sources and App Settings → Accounts.

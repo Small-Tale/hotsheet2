@@ -1060,6 +1060,16 @@ enum AccountCmd {
         #[arg(long)]
         json: bool,
     },
+    /// Resolve missing GitHub usernames for a bounded batch of older managed sign-ins.
+    /// This may read the OS keychain and contact GitHub; plain `account list` never does so.
+    BackfillLogins {
+        /// Maximum accounts to try in this run (1-10; default 5).
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+        /// Start after this credential reference to reach later accounts when earlier ones fail.
+        #[arg(long)]
+        after: Option<String>,
+    },
     /// Sign out: delete the account's credential. Refused while a ticket source uses it.
     SignOut { account: String },
 }
@@ -5743,6 +5753,67 @@ fn cmd_account(cmd: AccountCmd, path: &Path) -> Result<()> {
                         }
                     );
                 }
+            }
+        }
+        AccountCmd::BackfillLogins { limit, after } => {
+            if !(1..=10).contains(&limit) {
+                bail!("--limit must be between 1 and 10");
+            }
+            let credentials = hotsheet_extsync::credentials_with_sites(&keys)?;
+            let missing = accounts::list_accounts(&connections, &checkouts, &credentials)
+                .into_iter()
+                .filter(|account| {
+                    account.provider == "github" && account.managed && account.identity.is_none()
+                })
+                .filter(|account| {
+                    after
+                        .as_ref()
+                        .is_none_or(|after| account.id.as_str() > after.as_str())
+                })
+                .take(limit)
+                .collect::<Vec<_>>();
+            if missing.is_empty() {
+                println!("No managed GitHub logins need backfilling.");
+            }
+            let mut failed = 0;
+            for account in &missing {
+                let result = (|| -> Result<String> {
+                    let raw = keys.get(&account.id)?;
+                    let stored: serde_json::Value = serde_json::from_str(&raw)
+                        .context("managed GitHub credential is not a token bundle")?;
+                    if stored.get("kind").and_then(serde_json::Value::as_str) != Some("github_app")
+                    {
+                        bail!("credential is not a managed GitHub App sign-in");
+                    }
+                    let client_id = stored
+                        .get("client_id")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default();
+                    let web_base = stored
+                        .get("web_base")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("https://github.com");
+                    let token = hotsheet_extsync::access_token_from_raw(
+                        &raw,
+                        &keys,
+                        &account.id,
+                        OffsetDateTime::now_utc().unix_timestamp(),
+                    )?;
+                    let login = hotsheet_extsync::GitHubDeviceClient::live(client_id, web_base)
+                        .current_login(&token)?;
+                    keys.record_identity(&account.id, &login)?;
+                    Ok(login)
+                })();
+                match result {
+                    Ok(login) => println!("{}: {login}", account.id),
+                    Err(error) => {
+                        failed += 1;
+                        eprintln!("{}: {error}", account.id);
+                    }
+                }
+            }
+            if failed > 0 {
+                bail!("{failed} of {} login backfills failed", missing.len());
             }
         }
         AccountCmd::SignOut { account } => {
