@@ -25,7 +25,7 @@ const project = {
   apiPath: '/__hotsheet/project-api/demo-checkout',
 };
 
-test('opens a checkout and its exact ticket from a deep link', async ({ page }) => {
+test('opens a checkout and its exact ticket from a deep link @ci-smoke', async ({ page }) => {
   await mockProject(page);
   await page.route('**/__hotsheet/checkouts', (route) =>
     route.fulfill({ json: [{ id: project.id, alias: 'demo', root: project.root, stores: project.stores }] }),
@@ -13511,7 +13511,7 @@ test('merges concurrent edits to different words of the same title (HS2-R8TYCG)'
   await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toContainText('Fix the tokenizer crash');
 });
 
-test('does not report this clients own in-flight autosave as a merge conflict', async ({ page }) => {
+test('does not report this clients own in-flight autosave as a merge conflict @ci-smoke', async ({ page }) => {
   await mockProject(page);
   let liveFull = { ...full },
     liveRows = [row],
@@ -16861,7 +16861,7 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   expect(writes).toHaveLength(2);
 });
 
-test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ)', async ({ page }) => {
+test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-smoke', async ({ page }) => {
   await mockProject(page);
   let attempts = 0;
   await page.route('**/attachments/A1', (route) => {
@@ -22494,7 +22494,7 @@ test('live project visual review', async ({ page }) => {
   await page.screenshot({ path: '/private/tmp/hotsheet-real-app-narrow.png', fullPage: true });
 });
 
-test('anchors ticket context menus to the pointer while preserving scroller positions (HS2-H4MWDB, HS2-SWC9E4)', async ({
+test('anchors ticket context menus to the pointer while preserving scroller positions (HS2-H4MWDB, HS2-SWC9E4) @ci-smoke', async ({
   page,
 }) => {
   const base = {

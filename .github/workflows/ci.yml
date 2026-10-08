@@ -111,6 +111,11 @@ jobs:
           npm run test:unit
           npm run build
 
+      - name: Web Chromium smoke flows
+        working-directory: clients/web
+        timeout-minutes: 12
+        run: npm run test:ci:browser
+
       - name: Migrator tests + coverage (vitest + Rust-import conformance)
         working-directory: migrator
         # `test:coverage` runs the same suite under v8 coverage and fails under the

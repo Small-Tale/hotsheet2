@@ -376,8 +376,10 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   floor (`report --fail-under-lines`). A scheduled, creds-gated **`Live tier`**
   workflow (`live.yml`, nightly + manual dispatch) runs the `#[ignore]` live
   codex/claude turns (`HOTSHEET_CODEX_LIVE`/`HOTSHEET_CLAUDE_LIVE`) only on a runner
-  flagged `HOTSHEET_LIVE_RUNNER`, keeping the default tier fast. Playwright web E2E is
-  now part of the normal suite. **Pending (HS2-FPXSD0):** raise measured coverage
+  flagged `HOTSHEET_LIVE_RUNNER`, keeping the default tier fast. The normal `check` job
+  runs a bounded Chromium Playwright smoke group covering deep links, gallery save retry,
+  concurrent autosave, and ticket context menus (HS2-28MBS9). The full browser suite
+  remains a local gate for affected changes. **Pending (HS2-FPXSD0):** raise measured coverage
   floors, close remaining web coverage gaps, and add the macOS matrix leg for
   terminal/native-client surfaces.
 - The web gate installs Playwright Chromium and its Linux dependencies after `npm ci`
@@ -385,7 +387,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   six-minute attempts, so a stalled Linux package mirror fails clearly instead of holding
   the whole job indefinitely (HS2-47BAAC). The Vitest suite includes real-browser
   local-host and stable-dev tests, so browser setup is required before `test:unit` as well
-  as before the Playwright E2E suite.
+  as before the Playwright smoke group. `npm run test:ci:browser` starts its own local
+  Vite server, selects tests marked `@ci-smoke`, and uses two browser workers with a
+  12-minute CI timeout. Run `npm run test:e2e` for the full browser suite locally.
 - The `check` job also validates the feature double-coverage matrix. Its validator accepts
   formatter-padded Markdown cells, ignores table separators, and checks every feature row
   and evidence reference, including rejecting rows outside the matrix markers. Repository guidance
