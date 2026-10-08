@@ -492,6 +492,9 @@ A thin binary that wraps the same core for **direct-to-disk** operations, usable
 with **or without** a running server. AI tools can use the CLI _or_ the MCP; humans
 use it in a terminal.
 
+The [CLI/service parity audit](24-cli-service-parity-audit.md) maps current
+high-level workflows across the three interfaces and tracks identified gaps.
+
 > **Binary name (dev):** the compiled binary is currently **`hotsheet-cli`**, not
 > `hotsheet`, to avoid colliding on `PATH` with a separately installed Hot Sheet 1
 > `hotsheet` launcher on developer machines. The examples below use the conceptual
