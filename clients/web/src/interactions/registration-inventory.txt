@@ -301,6 +301,10 @@ notifications-and-links	delegate	document.body	'click'	'[data-action="cancel-tic
 notifications-and-links	delegateCapture	document.body	'wa-hide'	'[data-component="ticket-link-choice-dialog"]'
 search-and-composer	wireTicketSearchFields	document.body
 search-and-composer	wireTokenSearchFields	document.body
+search-and-composer	document.addEventListener	'pointerdown'
+search-and-composer	document.addEventListener	'pointerup'
+search-and-composer	document.addEventListener	'pointercancel'
+search-and-composer	delegate	document.body	'focusout'	workspaceSearchEditor.selector
 search-and-composer	delegate	document.body	'click'	'wa-select[name="workspace-sort"] wa-option'
 search-and-composer	delegate	document.body	'wa-select'	'[data-workspace-overflow]'
 search-and-composer	delegate	document.body	'click'	'[data-action="expand-ticket-composer"]'
