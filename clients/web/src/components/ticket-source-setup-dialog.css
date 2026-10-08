@@ -34,6 +34,17 @@ wa-dialog.ticket-source-setup-dialog {
   color: var(--wa-color-neutral-on-quiet);
   line-height: 1.5;
 }
+.ticket-source-setup__source-detail {
+  display: grid;
+  gap: var(--wa-space-2xs);
+  overflow-wrap: anywhere;
+}
+.ticket-source-setup__source-detail strong {
+  font-size: var(--wa-font-size-s);
+}
+.ticket-source-setup__source-detail code {
+  color: var(--wa-color-neutral-on-quiet);
+}
 .ticket-source-setup__options {
   display: grid;
   overflow: hidden;

@@ -411,12 +411,44 @@ describe('ticket source surfaces', () => {
     const gitEditor = String(
       TicketSourcesSettings({ sources: [{ ...sources[0], connectionId: 'git-local', provider: 'git' }] }),
     );
-    expect(gitEditor).toContain('Edit icon color for Alpha');
-    expect(gitEditor).toContain('name="project-source-color" value="#3b82f6" data-source-id="git-local" checked');
+    expect(gitEditor).toContain('data-source-provider="git"');
+    expect(gitEditor).toContain('data-item-id="git-local"');
+    expect(gitEditor).toContain('aria-label="Edit Alpha"');
+    expect(gitEditor).not.toContain('Edit icon color');
+    expect(gitEditor).not.toContain('name="project-source-color"');
     expect(repeated).toContain('data-provider="github"');
     expect(
       String(TicketSourcesSettings({ sources: [{ ...sources[0], color: 'transparent' }, sources[1]] })),
     ).not.toContain('Some ticket sources look alike');
+  });
+
+  it('opens the default git source in a view and color editor (HS2-XKEHAK)', () => {
+    const source = {
+      connectionId: 'git-local',
+      name: 'HS2 git tickets',
+      provider: 'git',
+      locator: '/work/demo.hs2',
+      default: true,
+      color: '#3b82f6',
+    };
+    const markup = String(
+      TicketSourceSetupDialog({
+        project: { root: '/work/demo', name: 'Demo', stores: ['/work/demo.hs2'] },
+        providerConnections: [],
+        editingProviderId: source.connectionId,
+        editingGitSource: source,
+        navigation: 'none',
+      }),
+    );
+    expect(markup).toContain('data-component="git-source-editor"');
+    expect(markup).toContain('Default ticket source for this project.');
+    expect(markup).toContain('<strong>Name</strong>');
+    expect(markup).toContain('<span>HS2 git tickets</span>');
+    expect(markup).toContain('<strong>Location</strong>');
+    expect(markup).toContain('<code>/work/demo.hs2</code>');
+    expect(markup).toContain('name="project-source-color" value="#3b82f6" data-source-id="git-local" checked');
+    expect(markup).toContain('>Done</wa-button>');
+    expect(markup).not.toContain('Remove from this project…');
   });
 
   it('lists machine-wide accounts with their sources and projects under App Settings → Accounts (HS2-SM9PM8)', () => {

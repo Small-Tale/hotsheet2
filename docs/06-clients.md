@@ -653,10 +653,12 @@ and identity-less legacy entries remain conservatively blocking.
   Ticket sources are never global (HS2-SM9PM8, see
   [16-external-sync-interface.md](16-external-sync-interface.md#project-owned-sources-machine-wide-accounts-hs2-sm9pm8)).
   **Project Settings → Ticket sources** shows only the sources this project owns, with its
-  own default (HS2-3SCH1K). Each external source row opens its connection editor for
-  details, this project's default, **Disable / Enable**, and a visual icon color grid
-  that previews the mark on subtly tinted tiles. Git has an inline appearance editor
-  with the same grid. Icon color belongs to the project and defaults to Transparent.
+  own default (HS2-3SCH1K). Every source row, including a default Git source, opens an
+  edit/view dialog. External source dialogs provide details, this project's default,
+  **Disable / Enable**, and a visual icon color grid that previews the mark on subtly
+  tinted tiles. The Git dialog shows its name and location for reference and offers the
+  same color grid. Moving or renaming a Git repository is tracked by HS2-8BG4W9.
+  Icon color belongs to the project and defaults to Transparent (HS2-XKEHAK).
   The trailing **Remove from this project** action opens the connection editor at an
   inline confirmation; a source shared with another project (attached
   headlessly) says "Also used by …". There is no list of other projects' connections.

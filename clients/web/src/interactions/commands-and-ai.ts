@@ -1117,15 +1117,17 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.editProviderConnection.selector, (_event, target) => {
       const current = project(),
-        connection = providerConnections.value.find((item) => item.id === data(target).itemId);
-      if (!current || !connection) return;
+        id = data(target).itemId,
+        connection = providerConnections.value.find((item) => item.id === id),
+        gitSource = (target as HTMLElement).closest('[data-source-provider="git"]');
+      if (!current || !id || (!connection && !gitSource)) return;
       ticketSourceSetupNavigation.value = 'none';
       ticketSourceSetupProject.value = current;
-      providerSetupKind.value = connection.provider as ExternalProviderKind;
-      providerEditingId.value = connection.id;
+      providerSetupKind.value = connection?.provider as ExternalProviderKind | undefined;
+      providerEditingId.value = id;
       providerRemovingId.value = undefined;
       providerSettingsError.value = '';
-      void loadEditingGitHubRepositories(connection, current);
+      if (connection) void loadEditingGitHubRepositories(connection, current);
     }),
   );
   lifetime.add(

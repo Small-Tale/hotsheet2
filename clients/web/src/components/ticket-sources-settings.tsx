@@ -3,17 +3,17 @@ import './ticket-sources-settings.css';
 import { uiColor } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListActionRow } from '@kerfjs/ui/list-action-row';
+import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
-import { Cable, Database, LogOut, Unlink } from 'lucide';
+import { Cable, ChevronRight, Database, LogOut, Unlink } from 'lucide';
 
 import type { ProviderAccount } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { resolveCommandColor } from './customization-palette';
 import { ProviderIcon, type ProviderIconKind } from './provider-icon';
 import { type ExternalProviderKind, providerName } from './provider-setup-form';
-import { TicketSourceColorPicker } from './ticket-source-color-picker';
 import { TicketSourceIcon } from './ticket-source-icon';
 
 /** One ticket source this project's checkout owns (HS2-3SCH1K, HS2-SM9PM8). */
@@ -137,46 +137,38 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                     sharedWith={source.sharedWith}
                   />
                 );
-                return source.provider === 'git' ? (
-                  <div class="ticket-provider-settings__store" data-source-id={source.connectionId}>
-                    <span class="ticket-provider-settings__store-icon">
-                      <TicketSourceIcon
-                        source={{ provider: source.provider, name: source.name, color: source.color }}
-                        size="compact"
-                      />
-                    </span>
-                    {copy}
-                    <details class="ticket-provider-settings__appearance">
-                      <summary aria-label={`Edit icon color for ${source.name}`}>Edit icon color</summary>
-                      <form>
-                        <TicketSourceColorPicker
-                          source={{ provider: source.provider, name: source.name, color: source.color }}
-                          sourceId={source.connectionId}
-                        />
-                      </form>
-                    </details>
-                  </div>
-                ) : (
-                  <div class="ticket-provider-settings__source-row">
-                    <ListActionRow
-                      action="edit-provider-connection"
-                      itemId={source.connectionId}
-                      multiline
-                      divider={index > 0 ? 'before' : 'none'}
-                      accessibleLabel={`Edit ${source.name}`}
-                      icon={
-                        <TicketSourceIcon
-                          source={{ provider: source.provider, name: source.name, color: source.color }}
-                          size="compact"
-                        />
-                      }
-                      label={copy}
-                      trailingAction="remove-project-source"
-                      trailingActionLabel={`Remove ${source.name} from this project`}
-                      trailingActionTitle="Remove from this project"
-                      trailingActionIcon={<LucideIcon icon={Unlink} name="unlink" />}
-                      trailingActionAttributes={{ 'data-source-id': source.connectionId }}
+                const row = {
+                  action: 'edit-provider-connection',
+                  itemId: source.connectionId,
+                  multiline: true as const,
+                  divider: index > 0 ? ('before' as const) : ('none' as const),
+                  accessibleLabel: `Edit ${source.name}`,
+                  icon: (
+                    <TicketSourceIcon
+                      source={{ provider: source.provider, name: source.name, color: source.color }}
+                      size="compact"
                     />
+                  ),
+                  label: copy,
+                };
+                return (
+                  <div
+                    class="ticket-provider-settings__source-row"
+                    data-source-id={source.connectionId}
+                    data-source-provider={source.provider}
+                  >
+                    {source.provider === 'git' ? (
+                      <ListItem {...row} trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />} />
+                    ) : (
+                      <ListActionRow
+                        {...row}
+                        trailingAction="remove-project-source"
+                        trailingActionLabel={`Remove ${source.name} from this project`}
+                        trailingActionTitle="Remove from this project"
+                        trailingActionIcon={<LucideIcon icon={Unlink} name="unlink" />}
+                        trailingActionAttributes={{ 'data-source-id': source.connectionId }}
+                      />
+                    )}
                   </div>
                 );
               })}

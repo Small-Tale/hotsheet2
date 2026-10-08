@@ -26,28 +26,6 @@
   max-width: remify(352px);
   margin-bottom: var(--wa-space-m);
 }
-/* A linked git store: the same row geometry as a connection row, without row actions. */
-.ticket-provider-settings__store {
-  display: flex;
-  flex-wrap: wrap;
-  min-height: remify(64px);
-  box-sizing: border-box;
-  align-items: center;
-  padding: var(--wa-space-s);
-  gap: var(--wa-space-s);
-}
-.ticket-provider-settings__store > .ticket-provider-settings__connection-copy {
-  flex: 1 1 remify(160px);
-}
-.ticket-provider-settings__store + .ticket-provider-settings__store {
-  border-top: 1px solid var(--wa-color-neutral-border-quiet);
-}
-.ticket-provider-settings__store-icon {
-  display: flex;
-  flex: none;
-  align-self: flex-start;
-  margin-block-start: remify(6.4px);
-}
 .ticket-provider-settings__source-row {
   display: flex;
   align-items: center;
@@ -64,25 +42,6 @@
 .ticket-provider-settings__source-row > :first-child {
   flex: 1 1 auto;
   min-width: 0;
-}
-.ticket-provider-settings__appearance {
-  flex: none;
-  margin-inline-start: auto;
-}
-.ticket-provider-settings__appearance[open] {
-  flex-basis: calc(100% - remify(28px));
-  margin-inline-start: remify(28px);
-}
-.ticket-provider-settings__appearance summary {
-  list-style: none;
-  color: var(--wa-color-brand-on-quiet);
-  cursor: pointer;
-}
-.ticket-provider-settings__appearance summary::-webkit-details-marker {
-  display: none;
-}
-.ticket-provider-settings__appearance form {
-  margin-top: var(--wa-space-s);
 }
 .ticket-provider-settings__link {
   padding: 0;

@@ -18,6 +18,8 @@ import {
   ProviderSetupBackButton,
   ProviderSetupForm,
 } from './provider-setup-form';
+import { TicketSourceColorPicker } from './ticket-source-color-picker';
+import type { ProjectTicketSource } from './ticket-sources-settings';
 
 /** The UX demo's preview-state picker choices (production callers pass no `previewScenario`). */
 const previewScenarioChoices: readonly SelectChoice[] = [
@@ -49,6 +51,7 @@ export interface TicketSourceSetupDialogProps {
   providerKind?: ExternalProviderKind;
   providerConnections: readonly ProviderConnection[];
   editingProviderId?: string;
+  editingGitSource?: ProjectTicketSource;
   githubAuth?: GithubAuthState;
   navigation: 'none' | 'push' | 'pop';
   createdGitTicketStore?: string;
@@ -78,6 +81,7 @@ export function TicketSourceSetupDialog({
   providerKind: kind,
   providerConnections,
   editingProviderId,
+  editingGitSource,
   githubAuth,
   navigation,
   createdGitTicketStore = '',
@@ -95,6 +99,7 @@ export function TicketSourceSetupDialog({
   previewScenario,
 }: TicketSourceSetupDialogProps) {
   const editing = providerConnections.find((item) => item.id === editingProviderId),
+    editingGit = editingGitSource?.connectionId === editingProviderId ? editingGitSource : undefined,
     // Other projects that own the edited source too (attached headlessly; HS2-SM9PM8).
     sharedWith = (editing?.projects ?? [])
       .filter((project) => project.id !== target?.id)
@@ -106,10 +111,12 @@ export function TicketSourceSetupDialog({
   const rootLabel = 'Set up ticket support',
     detailLabel = created
       ? 'Ticket repository ready'
-      : kind
-        ? `${editing ? 'Edit' : 'Connect'} ${providerName(kind)}`
-        : rootLabel,
-    active = created || kind ? 'b' : 'a',
+      : editingGit
+        ? `Edit ${editingGit.name}`
+        : kind
+          ? `${editing ? 'Edit' : 'Connect'} ${providerName(kind)}`
+          : rootLabel,
+    active = created || kind || editingGit ? 'b' : 'a',
     navigationStyle = navigation === 'none' ? 'none' : 'push',
     direction = navigation === 'pop' ? 'backward' : 'forward';
   const option = (
@@ -253,6 +260,30 @@ export function TicketSourceSetupDialog({
   );
   const detail = created ? (
     remote
+  ) : editingGit ? (
+    <div class="ticket-source-setup ticket-source-setup__screen" data-component="git-source-editor">
+      <p class="ticket-source-setup__intro">
+        {editingGit.default ? 'Default ticket source for this project.' : 'Ticket source for this project.'}
+      </p>
+      <div class="ticket-source-setup__source-detail">
+        <strong>Name</strong>
+        <span>{editingGit.name}</span>
+      </div>
+      <div class="ticket-source-setup__source-detail">
+        <strong>Location</strong>
+        <code>{editingGit.locator}</code>
+      </div>
+      <TicketSourceColorPicker
+        source={{ provider: 'git', name: editingGit.name, color: editingGit.color }}
+        sourceId={editingGit.connectionId}
+      />
+      <small>Color changes save when selected.</small>
+      {providerError && (
+        <p class="ticket-source-setup__error" role="alert">
+          {providerError}
+        </p>
+      )}
+    </div>
   ) : kind ? (
     <>
       <ProviderSetupForm
@@ -298,6 +329,10 @@ export function TicketSourceSetupDialog({
           {remoteBusy ? 'Connecting…' : 'Connect & push'}
         </wa-button>
       </>
+    ) : editingGit ? (
+      <wa-button appearance="accent" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
+        Done
+      </wa-button>
     ) : editing && removingProviderId === editing.id ? (
       // One wrapping group, so the morph replaces the edit actions instead of recycling the clicked
       // "Remove from this project…" button into "Keep" while that same click is still dispatching.

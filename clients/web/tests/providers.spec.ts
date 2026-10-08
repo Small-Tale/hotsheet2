@@ -2643,15 +2643,24 @@ test('changes a project source color and updates card and inspector badges (HS2-
   const ticketRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'git');
   await page.getByLabel('Settings view').click();
-  const appearance = page.locator('.ticket-provider-settings__store[data-source-id="git-local"] details');
-  await appearance.locator('summary').click();
+  const sourceRow = page.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]');
+  await expect(sourceRow).not.toContainText('Edit icon color');
+  await sourceRow.locator('[data-action="edit-provider-connection"]').click();
+  const appearance = page.locator('[data-ticket-source-setup-dialog] [data-component="git-source-editor"]');
+  await expect(appearance).toContainText('Default ticket source for this project.');
+  await expect(appearance).toContainText('Location');
   await expect(appearance.locator('[data-component="ticket-source-color-picker"]')).toBeVisible();
+  await page.screenshot({
+    path: '/private/tmp/hs2-xkehak-source-dialog.png',
+    animations: 'disabled',
+  });
   await expect(
     appearance.locator('.ticket-source-color-picker__preview [data-component="ticket-source-icon"]'),
   ).toHaveCount(9);
   await appearance.locator('input[name="project-source-color"][value="#3b82f6"]').check();
   await expect(page.locator('.app-toast')).toContainText('Ticket source color updated.');
   await expect(appearance.locator('input[name="project-source-color"][value="#3b82f6"]')).toBeChecked();
+  await page.locator('[data-ticket-source-setup-dialog]').getByRole('button', { name: 'Done' }).click();
   await page.getByLabel('List view').click();
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
   await ticketRow.click();
@@ -2660,9 +2669,10 @@ test('changes a project source color and updates card and inspector badges (HS2-
     'rgb(59, 130, 246)',
   );
   await page.getByLabel('Settings view').click();
-  if ((await appearance.getAttribute('open')) === null) await appearance.locator('summary').click();
+  await sourceRow.locator('[data-action="edit-provider-connection"]').click();
   await appearance.locator('input[name="project-source-color"][value="transparent"]').check();
   await expect(appearance.locator('input[name="project-source-color"][value="transparent"]')).toBeChecked();
+  await page.locator('[data-ticket-source-setup-dialog]').getByRole('button', { name: 'Done' }).click();
   await page.getByLabel('List view').click();
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).not.toHaveAttribute('style', /color/);
 });
@@ -2701,8 +2711,8 @@ test('aligns ticket source marks with their names in project settings (HS2-Q93H9
   await page.getByLabel('Settings view').click();
   const settings = page.locator('[data-component="ticket-sources-settings"]');
   for (const row of [
-    settings.locator('.ticket-provider-settings__store[data-source-id="git-local"]'),
-    settings.locator('.ticket-provider-settings__source-row').first(),
+    settings.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]'),
+    settings.locator('.ticket-provider-settings__source-row[data-source-provider="github"]').first(),
   ]) {
     const icon = await row.locator('[data-component="ticket-source-icon"]').first().boundingBox();
     const name = await row.locator('.ticket-provider-settings__connection-copy strong').first().boundingBox();
@@ -2978,7 +2988,6 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await providerForm.locator('input[name="connection-locator"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: '/private/tmp/hs2-y5588d-edit-repositories-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
-  await expect(providerForm).toContainText('Currently enabled.');
   await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
   const colorPicker = providerForm.locator('[data-component="ticket-source-color-picker"]');
   await expect(
@@ -2997,7 +3006,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname;
     if (request.method() === 'PATCH' && path.includes('/provider-connections/')) updates.push(request.postDataJSON());
-    if (request.method() === 'PUT' && path.endsWith('/sources/github-small-tale-hotsheet2/color'))
+    if (request.method() === 'PATCH' && path.endsWith('/sources/github-small-tale-hotsheet2/color'))
       colorUpdates.push(request.postDataJSON());
   });
   await setup.getByRole('button', { name: 'Save changes' }).click();
