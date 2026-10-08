@@ -4,10 +4,11 @@ use std::io::Cursor;
 
 use hotsheet_model::ImageCrop;
 use image::{
-    AnimationDecoder, DynamicImage, GenericImageView, ImageDecoder, ImageFormat, ImageReader,
-    RgbaImage,
+    AnimationDecoder, DynamicImage, ExtendedColorType, GenericImageView, ImageDecoder, ImageFormat,
+    ImageReader, RgbaImage,
     codecs::{
         gif::{GifDecoder, GifEncoder, Repeat},
+        ico::{IcoEncoder, IcoFrame},
         png::PngDecoder,
     },
 };
@@ -21,6 +22,7 @@ const MIN_SIDE: u32 = 8;
 const MAX_PIXELS: u64 = 40_000_000;
 const MAX_ANIMATION_PIXELS: u64 = 200_000_000;
 const MAX_FRAMES: u64 = 512;
+const MAX_ICO_IMAGES: usize = 64;
 
 #[derive(Debug, Error)]
 pub enum ImageCropError {
@@ -254,6 +256,103 @@ fn animated_avif(bytes: &[u8]) -> bool {
         .any(|brand| brand == b"avis" || brand == b"msf1")
 }
 
+struct IcoEntry<'a> {
+    directory: [u8; 16],
+    width: u32,
+    height: u32,
+    payload: &'a [u8],
+}
+
+fn ico_entries(bytes: &[u8]) -> Result<Vec<IcoEntry<'_>>, ImageCropError> {
+    if bytes.get(..4) != Some(&[0, 0, 1, 0]) {
+        return Err(ImageCropError::UnsupportedFormat);
+    }
+    let count = usize::from(u16::from_le_bytes(
+        bytes
+            .get(4..6)
+            .ok_or(ImageCropError::UnsupportedFormat)?
+            .try_into()
+            .unwrap(),
+    ));
+    if count == 0 || count > MAX_ICO_IMAGES {
+        return Err(ImageCropError::TooLarge);
+    }
+    let directory_end = 6 + count * 16;
+    if bytes.len() < directory_end {
+        return Err(ImageCropError::UnsupportedFormat);
+    }
+    let mut entries = Vec::with_capacity(count);
+    for index in 0..count {
+        let directory: [u8; 16] = bytes[6 + index * 16..6 + (index + 1) * 16]
+            .try_into()
+            .unwrap();
+        let width = if directory[0] == 0 {
+            256
+        } else {
+            u32::from(directory[0])
+        };
+        let height = if directory[1] == 0 {
+            256
+        } else {
+            u32::from(directory[1])
+        };
+        let size = u32::from_le_bytes(directory[8..12].try_into().unwrap()) as usize;
+        let offset = u32::from_le_bytes(directory[12..16].try_into().unwrap()) as usize;
+        let end = offset
+            .checked_add(size)
+            .ok_or(ImageCropError::UnsupportedFormat)?;
+        if size == 0 || offset < directory_end || end > bytes.len() {
+            return Err(ImageCropError::UnsupportedFormat);
+        }
+        entries.push(IcoEntry {
+            directory,
+            width,
+            height,
+            payload: &bytes[offset..end],
+        });
+    }
+    Ok(entries)
+}
+
+fn crop_ico(
+    original: &[u8],
+    crop: ImageCrop,
+    canvas: (u32, u32),
+) -> Result<Vec<u8>, ImageCropError> {
+    let entries = ico_entries(original)?;
+    let mut frames = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let mut single = Vec::with_capacity(22 + entry.payload.len());
+        single.extend_from_slice(&[0, 0, 1, 0, 1, 0]);
+        let mut directory = entry.directory;
+        directory[12..16].copy_from_slice(&22u32.to_le_bytes());
+        single.extend_from_slice(&directory);
+        single.extend_from_slice(entry.payload);
+        let image = image::load_from_memory_with_format(&single, ImageFormat::Ico)?.to_rgba8();
+        if image.dimensions() != (entry.width, entry.height) {
+            return Err(ImageCropError::UnsupportedFormat);
+        }
+        let scale = |start: u32, length: u32, entry_side: u32, canvas_side: u32| {
+            let left = u64::from(start) * u64::from(entry_side) / u64::from(canvas_side);
+            let right = (u64::from(start + length) * u64::from(entry_side))
+                .div_ceil(u64::from(canvas_side));
+            (left as u32, (right - left) as u32)
+        };
+        let (x, width) = scale(crop.x, crop.width, entry.width, canvas.0);
+        let (y, height) = scale(crop.y, crop.height, entry.height, canvas.1);
+        let pixels = image::imageops::crop_imm(&image, x, y, width, height).to_image();
+        frames.push(IcoFrame::as_png(
+            pixels.as_raw(),
+            width,
+            height,
+            ExtendedColorType::Rgba8,
+        )?);
+    }
+    let mut output = Vec::new();
+    IcoEncoder::new(&mut output).encode_images(&frames)?;
+    Ok(output)
+}
+
 fn animated_png(bytes: &[u8]) -> bool {
     if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         return false;
@@ -355,8 +454,8 @@ pub fn original_dimensions(filename: &str, bytes: &[u8]) -> Result<(u32, u32), I
     Ok(dimensions)
 }
 
-/// Decode every animated frame before persisting metadata, so a broken source cannot leave an unreadable crop.
-pub fn validate_animated_rendition(
+/// Validate format-specific renditions before persisting metadata, so a broken source cannot leave an unreadable crop.
+pub fn validate_rendition(
     filename: &str,
     bytes: &[u8],
     crop: ImageCrop,
@@ -365,7 +464,8 @@ pub fn validate_animated_rendition(
         return Ok(());
     }
     let format = supported_format(filename, bytes)?;
-    if format == ImageFormat::Gif
+    if format == ImageFormat::Ico
+        || format == ImageFormat::Gif
         || (format == ImageFormat::Png && animated_png(bytes))
         || (format == ImageFormat::WebP && animated_webp(bytes))
     {
@@ -610,6 +710,9 @@ pub fn cropped_rendition(
     if format == ImageFormat::WebP && animated_webp(original) {
         return crop_animated_webp(original, crop);
     }
+    if format == ImageFormat::Ico {
+        return crop_ico(original, crop, dimensions);
+    }
     let (image, format) = decode_original(filename, original)?;
     let mut output = Cursor::new(Vec::new());
     image
@@ -662,6 +765,71 @@ mod tests {
                 (20, 16)
             );
         }
+    }
+
+    #[test]
+    fn ico_crop_preserves_every_resolution_and_normalizes_alpha_depth() {
+        let small = RgbaImage::from_fn(20, 16, |x, y| image::Rgba([x as u8, y as u8, 10, 255]));
+        let large = RgbaImage::from_fn(40, 32, |x, y| image::Rgba([x as u8, y as u8, 20, 128]));
+        let frames = [
+            IcoFrame::as_png(small.as_raw(), 20, 16, ExtendedColorType::Rgba8).unwrap(),
+            IcoFrame::as_png(large.as_raw(), 40, 32, ExtendedColorType::Rgba8).unwrap(),
+        ];
+        let mut original = Vec::new();
+        IcoEncoder::new(&mut original)
+            .encode_images(&frames)
+            .unwrap();
+        assert_eq!(
+            original_dimensions("multi.ico", &original).unwrap(),
+            (40, 32)
+        );
+
+        let crop = ImageCrop {
+            x: 8,
+            y: 6,
+            width: 20,
+            height: 16,
+        };
+        let rendition = cropped_rendition("multi.ico", &original, crop).unwrap();
+        let entries = ico_entries(&rendition).unwrap();
+        assert_eq!(entries.len(), 2);
+        for (entry, dimensions, first_pixel) in [
+            (&entries[0], (10, 8), image::Rgba([4, 3, 10, 255])),
+            (&entries[1], (20, 16), image::Rgba([8, 6, 20, 128])),
+        ] {
+            assert_eq!((entry.width, entry.height), dimensions);
+            assert_eq!(
+                u16::from_le_bytes(entry.directory[6..8].try_into().unwrap()),
+                32
+            );
+            let decoded = image::load_from_memory_with_format(entry.payload, ImageFormat::Png)
+                .unwrap()
+                .to_rgba8();
+            assert_eq!(decoded.get_pixel(0, 0), &first_pixel);
+        }
+        assert_eq!(
+            original_dimensions("multi.ico", &rendition).unwrap(),
+            (20, 16)
+        );
+        assert_eq!(
+            cropped_rendition(
+                "multi.ico",
+                &original,
+                ImageCrop {
+                    x: 0,
+                    y: 0,
+                    width: 40,
+                    height: 32,
+                },
+            )
+            .unwrap(),
+            original
+        );
+
+        let mut malformed = original;
+        malformed[18..22].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(cropped_rendition("multi.ico", &malformed, crop).is_err());
+        assert!(validate_rendition("multi.ico", &malformed, crop).is_err());
     }
 
     #[test]
@@ -875,7 +1043,7 @@ mod tests {
         let mut invalid = original.clone();
         invalid[41..45].copy_from_slice(&3u32.to_be_bytes());
         assert!(
-            validate_animated_rendition(
+            validate_rendition(
                 "moving.png",
                 &invalid,
                 ImageCrop {

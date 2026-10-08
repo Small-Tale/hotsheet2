@@ -33,8 +33,9 @@ Restore Original makes every hidden annotation visible again without rounding dr
   and repeat count. SVG remains vector markup, including animation elements. Animated
   AVIF, video, and formats without a matching rendition encoder remain unavailable. Decoding
   failure leaves both metadata and bytes unchanged and returns a useful error.
-  ICO crops currently encode the selected image size; preserving a multi-size ICO set is
-  tracked by HS2-VHYEJ5. Animated AVIF sequence support is tracked by HS2-YCV2G9.
+  ICO crops retain each source resolution, scaling the crop rectangle to each entry and
+  encoding the result as 32-bit RGBA PNG within the ICO for reliable transparency.
+  Animated AVIF sequence support is tracked by HS2-YCV2G9.
 
 ## Readers and providers
 

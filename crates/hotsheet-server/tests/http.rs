@@ -6459,6 +6459,25 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
             .unwrap();
         bytes.into_inner()
     };
+    let mut ico = Vec::new();
+    image::codecs::ico::IcoEncoder::new(&mut ico)
+        .encode_images(&[
+            image::codecs::ico::IcoFrame::as_png(
+                &[20, 30, 40, 255].repeat(10 * 8),
+                10,
+                8,
+                image::ExtendedColorType::Rgba8,
+            )
+            .unwrap(),
+            image::codecs::ico::IcoFrame::as_png(
+                &[20, 30, 40, 255].repeat(20 * 16),
+                20,
+                16,
+                image::ExtendedColorType::Rgba8,
+            )
+            .unwrap(),
+        ])
+        .unwrap();
     let fixtures = [
         ("moving.gif", "image/gif", gif),
         ("moving.webp", "image/webp", webp),
@@ -6466,7 +6485,7 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
         ("vector.svg", "image/svg+xml", svg),
         ("still.avif", "image/avif", avif.into_inner()),
         ("still.bmp", "image/bmp", still_fixture(ImageFormat::Bmp)),
-        ("icon.ico", "image/x-icon", still_fixture(ImageFormat::Ico)),
+        ("icon.ico", "image/x-icon", ico),
     ];
     let (primary, state) = state();
     let checkout = tempfile::tempdir().unwrap();
@@ -6582,6 +6601,12 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
             );
         } else if filename.ends_with(".svg") {
             assert!(std::str::from_utf8(&bytes).unwrap().contains("<animate"));
+        } else if filename.ends_with(".ico") {
+            assert_eq!(u16::from_le_bytes(bytes[4..6].try_into().unwrap()), 2);
+            assert_eq!((bytes[6], bytes[7]), (5, 5));
+            assert_eq!((bytes[22], bytes[23]), (10, 8));
+            assert_eq!(u16::from_le_bytes(bytes[12..14].try_into().unwrap()), 32);
+            assert_eq!(u16::from_le_bytes(bytes[28..30].try_into().unwrap()), 32);
         }
         let original_response = app
             .clone()

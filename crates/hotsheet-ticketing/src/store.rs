@@ -1394,7 +1394,7 @@ impl FsStore {
                 let dimensions = crate::image_crop::original_dimensions(&metadata.filename, &bytes)?;
                 let normalized = crate::image_crop::normalize_crop(requested, dimensions)?;
                 if let Some(crop) = normalized {
-                    crate::image_crop::validate_animated_rendition(&metadata.filename, &bytes, crop)?;
+                    crate::image_crop::validate_rendition(&metadata.filename, &bytes, crop)?;
                 }
                 normalized
             } else {
