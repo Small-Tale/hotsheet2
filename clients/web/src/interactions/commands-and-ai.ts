@@ -12,6 +12,7 @@ import {
 } from '../api';
 import { type CommandDropTarget } from '../command-order';
 import { isConversationSurfaceLifecycleEvent } from '../components/ai-conversation';
+import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
 import { type ConversationExportDialogState } from '../components/conversation-export-dialog';
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
@@ -83,6 +84,7 @@ export interface CommandAndAiInteractionsDependencies {
   readonly selectConversationEffort: (effort: string) => void;
   readonly selectedTicket: Signal<FullTicket | null>;
   readonly canGiveFeedback: () => boolean;
+  readonly aiFeedbackDialog: Signal<AiFeedbackDialogState | undefined>;
   readonly updateSelected: (patch: Record<string, unknown>) => Promise<boolean>;
   readonly showToast: (message: string) => void;
   commandLongPressFired: boolean;
@@ -209,6 +211,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     selectConversationEffort,
     selectedTicket,
     canGiveFeedback,
+    aiFeedbackDialog,
     updateSelected,
     showToast,
     runCommand,
@@ -573,21 +576,46 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         });
         return;
       }
-      const detail = window
-        .prompt(
-          rating === 'helpful'
-            ? 'What should Hot Sheet keep doing? (optional)'
-            : 'What should Hot Sheet change or stop doing? (optional)',
-          previous?.ai_feedback?.explanation ?? '',
-        )
-        ?.trim();
-      if (detail === undefined) return;
+      aiFeedbackDialog.value = {
+        ticketId: ticket.id,
+        target: targetId,
+        rating: wireRating,
+        rater,
+        explanation: previous?.ai_feedback?.explanation ?? '',
+        revising: Boolean(previous),
+      };
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const dialog = document.querySelector<Control>(COMMANDS_AND_AI_TARGETS.aiFeedbackDialog.selector);
+          dialog?.show?.();
+          dialog?.querySelector<HTMLTextAreaElement>('[name="ai-feedback-explanation"]')?.focus();
+        }),
+      );
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.cancelAiFeedback.selector, () => {
+      aiFeedbackDialog.value = undefined;
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', COMMANDS_AND_AI_ACTIONS.submitAiFeedback.selector, (event, target) => {
+      event.preventDefault();
+      const state = aiFeedbackDialog.value;
+      if (!state || selectedTicket.value?.id !== state.ticketId) return;
+      const detail = target.querySelector<HTMLTextAreaElement>('[name="ai-feedback-explanation"]')?.value.trim() ?? '';
+      aiFeedbackDialog.value = undefined;
       void updateSelected({
-        ai_feedback: { target: targetId, rating: wireRating, explanation: detail || null },
-        actor: { role: 'human', id: rater },
+        ai_feedback: { target: state.target, rating: state.rating, explanation: detail || null },
+        actor: { role: 'human', id: state.rater },
       }).then((saved) => {
-        if (saved) showToast(previous ? 'AI feedback updated.' : 'AI feedback saved as a ticket note.');
+        if (saved) showToast(state.revising ? 'AI feedback updated.' : 'AI feedback saved as a ticket note.');
       });
+    }),
+  );
+  lifetime.add(
+    delegateCapture(document.body, 'wa-hide', COMMANDS_AND_AI_TARGETS.aiFeedbackDialog.selector, () => {
+      aiFeedbackDialog.value = undefined;
     }),
   );
   lifetime.add(

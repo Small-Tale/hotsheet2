@@ -15023,8 +15023,18 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(conversationHost.getByRole('button', { name: 'Save conversation' })).toBeDisabled();
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toHaveJSProperty('tagName', 'BUTTON');
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
-  page.once('dialog', (nativeDialog) => nativeDialog.accept('Keep the concise summaries.'));
   await conversationHost.getByRole('button', { name: 'Helpful — keep suggestions like this' }).last().click();
+  const feedbackDialog = page.locator('[data-component="ai-feedback-dialog"]');
+  await expect(feedbackDialog.getByRole('dialog')).toBeVisible();
+  await feedbackDialog.getByRole('dialog').screenshot({ path: '/private/tmp/hs2-js82bz-feedback-dialog.png' });
+  await feedbackDialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(feedbackDialog).toHaveCount(0);
+  expect(patches.some((patch) => Boolean(patch.ai_feedback))).toBe(false);
+  await conversationHost.getByRole('button', { name: 'Helpful — keep suggestions like this' }).last().click();
+  await feedbackDialog
+    .getByLabel('What should Hot Sheet keep doing?')
+    .fill('Keep the concise summaries.\n\n**Use examples.**');
+  await feedbackDialog.getByRole('button', { name: 'Save feedback' }).click();
   await expect
     .poll(() =>
       patches.some((patch) => {
@@ -15032,7 +15042,7 @@ test('opens a Codex chat without implicitly starting Drive through the productio
         return (
           feedback?.target === 'activity:activity-1' &&
           feedback.rating === 'helpful' &&
-          feedback.explanation === 'Keep the concise summaries.'
+          feedback.explanation === 'Keep the concise summaries.\n\n**Use examples.**'
         );
       }),
     )

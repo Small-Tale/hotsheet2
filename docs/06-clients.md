@@ -3226,7 +3226,9 @@ accessible name with the tool and their feedback controls (HS2-WV9TWE).
 Narration and distilled summaries explicitly say that they may contain
 errors. Thumbs feedback appears only when the composition has a selected ticket whose
 provider supports structured AI feedback. The optional explanation and consequence-oriented rating are
-stored on an ordinary ticket note. A repeated rating from the same browser and target
+stored on an ordinary ticket note. Choosing a thumb opens an app dialog with an optional
+multiline Markdown explanation; Cancel or dismiss leaves the rating unchanged (HS2-JS82BZ).
+A repeated rating from the same browser and target
 corrects that note; clicking the same thumb again offers withdrawal. The browser keeps
 a random rater id locally, and the note records it as human authorship without showing
 the opaque id in the card. The rating remains syncable and auditable. Git-backed

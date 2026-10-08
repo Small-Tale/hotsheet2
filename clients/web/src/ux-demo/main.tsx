@@ -44,6 +44,7 @@ import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from '
 
 import type { ProviderAccount } from '../api';
 import type { CommandDropTarget } from '../command-order';
+import { AiFeedbackDialog } from '../components/ai-feedback-dialog';
 import { AppEmptyState, AppMessageState, ProjectRestoreState } from '../components/app-empty-state';
 import { AppError } from '../components/app-error';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
@@ -849,6 +850,19 @@ function demoContent(item: DemoDefinition) {
               status: 'not_started',
             },
           ],
+        }}
+      />
+    );
+  if (item.id === 'ai-feedback-dialog')
+    return (
+      <AiFeedbackDialog
+        state={{
+          ticketId: 'HS2-DEMO01',
+          target: 'note:example',
+          rating: 'not_helpful',
+          rater: 'demo',
+          explanation: 'Please explain the failed step and suggest a smaller fix.',
+          revising: false,
         }}
       />
     );

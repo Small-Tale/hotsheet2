@@ -126,6 +126,7 @@ describe('UX demo catalog', () => {
       'note-card',
       'ai-conversation',
       'ai-content-label',
+      'ai-feedback-dialog',
       'ai-tool-settings',
       'manual-model-dialog',
       'halted-session-popup',

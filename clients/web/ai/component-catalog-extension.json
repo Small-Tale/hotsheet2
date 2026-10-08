@@ -1301,6 +1301,29 @@
       "documentation": "docs/ux-components.md"
     },
     {
+      "id": "ai-feedback-dialog",
+      "name": "AiFeedbackDialog",
+      "source": "src/components/ai-feedback-dialog.tsx",
+      "kind": "component",
+      "purpose": "App-owned multiline Markdown explanation for structured AI ratings.",
+      "useWhen": [
+        "Hot Sheet needs app-owned multiline Markdown explanation for structured AI ratings."
+      ],
+      "avoidWhen": [
+        "The interaction does not need Hot Sheet's domain-specific AiFeedbackDialog behavior."
+      ],
+      "publicClasses": [
+        "ai-feedback-dialog"
+      ],
+      "publicTokens": [],
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "docs/ux-components.md"
+    },
+    {
       "id": "ai-tool-settings",
       "name": "AiToolSettings",
       "source": "src/components/ai-tool-settings.tsx",

@@ -559,6 +559,13 @@ export const demoCatalog: DemoCategory[] = [
         true,
       ),
       demo(
+        'ai-feedback-dialog',
+        'AiFeedbackDialog',
+        'App-owned multiline Markdown explanation for structured AI ratings.',
+        'feature-floor',
+        true,
+      ),
+      demo(
         'ai-tool-settings',
         'AiToolSettings',
         'Machine-local default AI provider, model, and effort discovered from plugins.',

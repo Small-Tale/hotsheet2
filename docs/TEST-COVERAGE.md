@@ -80,6 +80,10 @@ claim, lease, close, assignment, attachment, and cross-store suites exercise the
 shared transaction boundary; CLI import tests check timestamp-preserving attachment
 repair without a second stale ticket write.
 
+HS2-JS82BZ covers the AI feedback modal in `ai-feedback-dialog.test.ts` and the real
+browser rating flow in `clients/web/tests/providers.spec.ts`: cancel creates no rating,
+then multiline Markdown is saved as the structured explanation.
+
 HS2-TPF3EB moves non-atomic provider update progress from toasts to the app-level loading
 indicator. `clients/web/src/bulk-update-progress.test.ts` covers start, advance, repeat,
 overlap, and out-of-order completion; `clients/web/tests/providers.spec.ts` covers the real

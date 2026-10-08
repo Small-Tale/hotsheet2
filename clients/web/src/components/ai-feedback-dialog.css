@@ -1,0 +1,38 @@
+.ai-feedback-dialog {
+  --width: min(remify(560px), calc(100vw - remify(32px)));
+}
+
+.ai-feedback-dialog form {
+  display: grid;
+  gap: var(--kui-space-m);
+}
+
+.ai-feedback-dialog__label {
+  color: var(--wa-color-text-normal);
+  font-size: var(--wa-font-size-s);
+}
+
+.ai-feedback-dialog__label span {
+  color: var(--wa-color-text-quiet);
+}
+
+.ai-feedback-dialog textarea {
+  width: 100%;
+  min-height: remify(144px);
+  box-sizing: border-box;
+  padding: var(--kui-space-s);
+  field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
+  resize: var(--hotsheet-textarea-resize, vertical);
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-m);
+  background: var(--wa-color-surface-default);
+  color: var(--wa-color-text-normal);
+  font: inherit;
+  font-size: max(var(--hs-touch-field-min-font-size), var(--wa-font-size-m));
+  line-height: 1.45;
+}
+
+.ai-feedback-dialog textarea:focus-visible {
+  outline: var(--wa-focus-ring);
+  outline-offset: 1px;
+}

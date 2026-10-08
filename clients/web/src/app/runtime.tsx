@@ -81,6 +81,7 @@ import {
 import { browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
 import type { LiveClaimNoticeProps } from '../components/active-claim';
+import { AiFeedbackDialog, type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { AppError } from '../components/app-error';
 import { AppLoadingIndicator } from '../components/app-loading-indicator';
@@ -404,6 +405,7 @@ export async function startHotSheetWebClient() {
     ticketRowsByProject = signal<Record<string, WireTicketRow[]>>({}),
     corruptTickets = signal<CorruptTicket[]>([]),
     selectedTicket = signal<FullTicket | null>(null);
+  const aiFeedbackDialog = signal<AiFeedbackDialogState | undefined>(undefined);
   const ticketCountsByProject = signal<Record<string, CheckoutTicketCounts>>({});
   const partialSourcesByProject = signal<Record<string, boolean>>({});
   // The server-authoritative 7-day completion trend and today's completion count, retained per project so a
@@ -5361,6 +5363,7 @@ export async function startHotSheetWebClient() {
           error={savedViewDeleteError.value}
         />
         <ManualModelDialog state={manualModelDialog.value} />
+        <AiFeedbackDialog state={aiFeedbackDialog.value} />
         {migration && (
           <Hs1MigrationDialog
             projectName={migration.name}
@@ -5644,7 +5647,7 @@ export async function startHotSheetWebClient() {
     closeSavedViewDelete, savedViewDeleteBusy, commandGroupExpanded, persistWorkspacePreferences, commandGroupsCollapsed, toggleSidebarDrive, driveOptionsOpen, driveOptionsAnchor, aiTools,
     aiSettingsLoading, refreshAiConfiguration, driveOverridesByProject, normalizedAiSelection, selectDriveModel, openManualModel, effectiveDriveSelection, openSidebarConversation,
     conversationOpen, openConversationExport, pickConversationMessage, copyConversationSelection, clearConversationSelection, conversationExportDialog, finishConversationExport, updateConversationExportDraft,
-    conversationConnectionId, conversationDrafts, sendConversationTurn, stopConversation, selectConversationProvider, selectConversationModel, selectConversationEffort, canAddNotes, canGiveFeedback: () => Boolean(noteCapabilities()?.ai_feedback),
+    conversationConnectionId, conversationDrafts, sendConversationTurn, stopConversation, selectConversationProvider, selectConversationModel, selectConversationEffort, canAddNotes, canGiveFeedback: () => Boolean(noteCapabilities()?.ai_feedback), aiFeedbackDialog,
     updateSelected, runCommand, commandDialogId, commandStopConfirmation, commandRuns, commandSettingsEditingId, commandIconSearch, addCommandSetting,
     manualModelDialog, deleteCommandSetting, addCommandGroup, deleteCommandGroup, selectCommandRow, commandSelection, commandSettingsDefinitions, selectCommandSetting,
     reorderCommandSettings, updateCommandSetting, updateCommandAiSelection, effectiveCommandAiSelection, showLoadingActivity, inheritGlobalShellHistory, terminalSettingsMessage, trashSettingsMessagesByProject,

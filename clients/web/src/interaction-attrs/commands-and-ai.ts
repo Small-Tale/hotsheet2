@@ -29,6 +29,8 @@ export const COMMANDS_AND_AI_ACTIONS = {
   selectConversationEffort: action('select-conversation-effort'),
   openConversationManualModel: action('open-conversation-manual-model'),
   rateAiContent: action('rate-ai-content'),
+  submitAiFeedback: action('submit-ai-feedback'),
+  cancelAiFeedback: action('cancel-ai-feedback'),
   runCommand: action('run-command'),
   dismissCommandDialog: action('dismiss-command-dialog'),
   confirmStopCommand: action('confirm-stop-command'),
@@ -93,4 +95,5 @@ export const COMMANDS_AND_AI_TARGETS = {
   conversationDraftField: attr('name', 'conversation-draft'),
   commandIconSearchField: attr('name', 'command-icon-search'),
   manualModelDialog: attr('data-component', 'manual-model-dialog'),
+  aiFeedbackDialog: attr('data-component', 'ai-feedback-dialog'),
 } as const;
