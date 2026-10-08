@@ -44,6 +44,19 @@ export function workspaceUpNextState(values: readonly boolean[]): WorkspaceUpNex
   return values.some(Boolean) ? (values.every(Boolean) ? 'all' : 'mixed') : 'none';
 }
 
+function workspaceUpNextDetails(state: WorkspaceUpNextState): string {
+  switch (state) {
+    case 'none':
+      return 'None';
+    case 'mixed':
+      return 'Some';
+    case 'all':
+      return 'All';
+    default:
+      return state satisfies never;
+  }
+}
+
 function WorkspaceUpNextIcon({ state }: { state: WorkspaceUpNextState }) {
   // Starred selections take the Up Next color; an unstarred one inherits the control's text color.
   const color = state === 'none' ? undefined : foregroundColorVar('--hs-ticket-state-up-next');
@@ -308,7 +321,7 @@ function WorkspaceOverflowControls({
           label: 'Toggle Up Next',
           disabled: ticketActionsDisabled || !selectedTicketsUpNextEligible,
           icon: <WorkspaceUpNextIcon state={selectedTicketsUpNext} />,
-          details: <>{selectedTicketsUpNext === 'mixed' ? 'Some' : selectedTicketsUpNext === 'all' ? 'All' : 'None'}</>,
+          details: <>{workspaceUpNextDetails(selectedTicketsUpNext)}</>,
           attributes: {
             'data-workspace-overflow-kind': 'utility',
             'data-workspace-overflow-action': 'toggle-selected-up-next',

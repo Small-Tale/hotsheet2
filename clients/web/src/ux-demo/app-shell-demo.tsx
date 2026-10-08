@@ -398,49 +398,72 @@ function shellTerminalOperationsPanel() {
 }
 
 export function AppShellDemo() {
+  const activeShellMode = shellMode.value;
   const ticket = collectionTickets.value.find((item) => item.selected) ?? collectionTickets.value[0];
   const banner = shellConnectionState.value ? (
     <ConnectionStateBanner state={shellConnectionState.value} detail="Showing the latest cached project state." />
   ) : undefined;
-  const globalMode = shellMode.value !== 'project';
+  const globalMode = activeShellMode !== 'project';
   const projectSettings = workspaceMode.value === 'settings';
-  const projectWorkspace = projectSettings ? (
-    <section class="workspace-settings-preview" aria-label="Project settings">
-      <h2 class="workspace-settings-preview__title">Project settings</h2>
-      <p class="workspace-settings-preview__description">
-        Configure ticket providers, project defaults, commands, and checkout behavior.
-      </p>
-    </section>
-  ) : workspaceMode.value === 'board' ? (
-    <TicketBoard columns={workspaceColumns()} label="Project board" />
-  ) : (
-    <TicketList tickets={filteredWorkspaceTickets()} label="All project tickets" />
-  );
-  const workspace =
-    shellMode.value === 'terminals' ? (
-      <section class="shell-mode-surface" aria-label="Workspace grid workspace">
-        <h2>Workspace grid</h2>
-        <p>Monitor and arrange terminals, AI chats, and future workspace tools across connected projects.</p>
-      </section>
-    ) : shellMode.value === 'stats' ? (
-      shellStatsProjectName.value ? (
-        <section class="shell-mode-surface" aria-label={`${shellStatsProjectName.value} project statistics`}>
-          <h2>{shellStatsProjectName.value} project statistics</h2>
-          <p>Detailed ticket-flow and usage charts are coming in a future Hot Sheet update.</p>
-        </section>
-      ) : (
-        <section class="shell-mode-surface" aria-label="Cross-project stats workspace">
-          <h2>Cross-project stats</h2>
-          <p>Compare ticket flow and activity across connected projects.</p>
-        </section>
-      )
-    ) : (
-      projectWorkspace
-    );
-  const projectName =
-    shellMode.value === 'terminals' ? 'Workspace grid' : shellMode.value === 'stats' ? 'Stats' : 'Hot Sheet 2';
-  const viewName =
-    shellMode.value === 'terminals' ? 'Workspace Grid' : shellMode.value === 'stats' ? 'Cross-project Stats' : 'Queue';
+  const projectWorkspace = (() => {
+    switch (workspaceMode.value) {
+      case 'settings':
+        return (
+          <section class="workspace-settings-preview" aria-label="Project settings">
+            <h2 class="workspace-settings-preview__title">Project settings</h2>
+            <p class="workspace-settings-preview__description">
+              Configure ticket providers, project defaults, commands, and checkout behavior.
+            </p>
+          </section>
+        );
+      case 'board':
+        return <TicketBoard columns={workspaceColumns()} label="Project board" />;
+      case 'notifications':
+      case 'list':
+        return <TicketList tickets={filteredWorkspaceTickets()} label="All project tickets" />;
+      default:
+        return workspaceMode.value satisfies never;
+    }
+  })();
+  const workspace = (() => {
+    switch (activeShellMode) {
+      case 'terminals':
+        return (
+          <section class="shell-mode-surface" aria-label="Workspace grid workspace">
+            <h2>Workspace grid</h2>
+            <p>Monitor and arrange terminals, AI chats, and future workspace tools across connected projects.</p>
+          </section>
+        );
+      case 'stats':
+        return shellStatsProjectName.value ? (
+          <section class="shell-mode-surface" aria-label={`${shellStatsProjectName.value} project statistics`}>
+            <h2>{shellStatsProjectName.value} project statistics</h2>
+            <p>Detailed ticket-flow and usage charts are coming in a future Hot Sheet update.</p>
+          </section>
+        ) : (
+          <section class="shell-mode-surface" aria-label="Cross-project stats workspace">
+            <h2>Cross-project stats</h2>
+            <p>Compare ticket flow and activity across connected projects.</p>
+          </section>
+        );
+      case 'project':
+        return projectWorkspace;
+      default:
+        return activeShellMode satisfies never;
+    }
+  })();
+  const { projectName, viewName } = (() => {
+    switch (activeShellMode) {
+      case 'terminals':
+        return { projectName: 'Workspace grid', viewName: 'Workspace Grid' };
+      case 'stats':
+        return { projectName: 'Stats', viewName: 'Cross-project Stats' };
+      case 'project':
+        return { projectName: 'Hot Sheet 2', viewName: 'Queue' };
+      default:
+        return activeShellMode satisfies never;
+    }
+  })();
   const toolbarTitle = globalMode ? projectName : projectSettings ? 'Project Settings' : viewName;
   return (
     <section class="app-shell-demo" aria-label="AppShell demo">

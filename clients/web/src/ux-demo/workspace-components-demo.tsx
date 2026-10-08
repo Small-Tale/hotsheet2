@@ -56,6 +56,19 @@ import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 import { TICKET_ROW_CLAIM_ETA } from './ticket-row-demo';
 
 export const workspaceMode = signal<WorkspaceViewMode>('list');
+function workspaceHeadingTitle(mode: WorkspaceViewMode): string {
+  switch (mode) {
+    case 'settings':
+      return 'Project Settings';
+    case 'notifications':
+      return 'Notifications';
+    case 'board':
+    case 'list':
+      return 'Queue';
+    default:
+      return mode satisfies never;
+  }
+}
 /** The ticket pushed onto the TerminalTicketRail demo's NavStack (HS2-FY06N4), if any. */
 export const terminalRailDemoTicket = signal<string | undefined>(undefined);
 export const workspaceSearchOpen = signal(false);
@@ -214,8 +227,37 @@ export function focusWorkspaceSearch(root: ParentNode): boolean {
 }
 
 export function TerminalTicketRailDemo() {
-  const mode =
-    workspaceMode.value === 'notifications' ? 'notifications' : workspaceMode.value === 'board' ? 'board' : 'list';
+  const mode = (() => {
+    switch (workspaceMode.value) {
+      case 'notifications':
+        return 'notifications';
+      case 'board':
+        return 'board';
+      case 'settings':
+      case 'list':
+        return 'list';
+      default:
+        return workspaceMode.value satisfies never;
+    }
+  })();
+  const content = (() => {
+    switch (mode) {
+      case 'notifications':
+        return <NotificationCenter title="Notifications" pending={[]} history={[]} inset="flush" />;
+      case 'board':
+        return (
+          <TicketBoard
+            columns={railDemoColumns(filteredWorkspaceTickets())}
+            label="Demo project board"
+            layout="paged"
+          />
+        );
+      case 'list':
+        return <TicketList tickets={filteredWorkspaceTickets().slice(0, 7)} label="Demo project tickets" />;
+      default:
+        return mode satisfies never;
+    }
+  })();
   return (
     <section class="terminal-ticket-rail-demo">
       <TerminalTicketRail
@@ -243,19 +285,7 @@ export function TerminalTicketRailDemo() {
             sortDirection={workspaceSortDirection.value}
           />
         }
-        content={
-          mode === 'notifications' ? (
-            <NotificationCenter title="Notifications" pending={[]} history={[]} inset="flush" />
-          ) : mode === 'board' ? (
-            <TicketBoard
-              columns={railDemoColumns(filteredWorkspaceTickets())}
-              label="Demo project board"
-              layout="paged"
-            />
-          ) : (
-            <TicketList tickets={filteredWorkspaceTickets().slice(0, 7)} label="Demo project tickets" />
-          )
-        }
+        content={content}
         // Selecting a ticket pushes its detail onto the rail's NavStack; Back pops it (HS2-FY06N4).
         detail={
           terminalRailDemoTicket.value
@@ -406,13 +436,7 @@ export function WorkspaceHeaderDemo() {
           dividerSides=""
           leading={
             <ToolbarText
-              text={
-                workspaceMode.value === 'settings'
-                  ? 'Project Settings'
-                  : workspaceMode.value === 'notifications'
-                    ? 'Notifications'
-                    : 'Queue'
-              }
+              text={workspaceHeadingTitle(workspaceMode.value)}
               id="workspace-demo-page-title"
               size="xlarge"
               headingLevel={1}

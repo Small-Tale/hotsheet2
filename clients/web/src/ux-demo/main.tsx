@@ -1520,43 +1520,46 @@ function DemoApp() {
               Close settings
             </wa-button>
           </header>
-          {selected.id === 'app-shell' ? (
-            <AppShellSettings />
-          ) : selected.id === 'tag-chip' ? (
-            <TagChipSettings />
-          ) : selected.id === 'status-badge' ? (
-            <StatusBadgeSettings />
-          ) : selected.id === 'confidence-badge' ? (
-            <ConfidenceBadgeSettings />
-          ) : selected.id === 'confidence-calibration' ? (
-            <ConfidenceCalibrationSettings />
-          ) : selected.id === 'ticket-row' ? (
-            <TicketRowSettings />
-          ) : selected.id === 'repository-status-popover' ? (
-            <RepositoryStatusPopoverSettings />
-          ) : selected.id === 'connection-details-dialog' ? (
-            <ConnectionDetailsDialogSettings />
-          ) : selected.id === 'content-transition' ? (
-            <ContentTransitionSettings />
-          ) : selected.id === 'permission-request' ? (
-            <PermissionRequestSettings />
-          ) : selected.id === 'ai-conversation' ? (
-            <AIConversationSettings />
-          ) : selected.id === 'quick-ticket-composer' ? (
-            <QuickTicketComposerSettings />
-          ) : selected.id === 'ticket-inspector' ? (
-            <TicketInspectorSettings />
-          ) : selected.id === 'markdown-editor' ? (
-            <MarkdownEditorSettings />
-          ) : selected.id === 'command-run-dialog' ? (
-            <CommandRunDialogSettings />
-          ) : selected.id === 'bulk-ticket-dialog' ? (
-            <BulkTicketDialogSettings />
-          ) : selected.id === 'settings-workspace' ? (
-            <SettingsWorkspaceSettings />
-          ) : (
-            <p>This demo has no adjustable settings.</p>
-          )}
+          {(() => {
+            switch (selected.id) {
+              case 'app-shell':
+                return <AppShellSettings />;
+              case 'tag-chip':
+                return <TagChipSettings />;
+              case 'status-badge':
+                return <StatusBadgeSettings />;
+              case 'confidence-badge':
+                return <ConfidenceBadgeSettings />;
+              case 'confidence-calibration':
+                return <ConfidenceCalibrationSettings />;
+              case 'ticket-row':
+                return <TicketRowSettings />;
+              case 'repository-status-popover':
+                return <RepositoryStatusPopoverSettings />;
+              case 'connection-details-dialog':
+                return <ConnectionDetailsDialogSettings />;
+              case 'content-transition':
+                return <ContentTransitionSettings />;
+              case 'permission-request':
+                return <PermissionRequestSettings />;
+              case 'ai-conversation':
+                return <AIConversationSettings />;
+              case 'quick-ticket-composer':
+                return <QuickTicketComposerSettings />;
+              case 'ticket-inspector':
+                return <TicketInspectorSettings />;
+              case 'markdown-editor':
+                return <MarkdownEditorSettings />;
+              case 'command-run-dialog':
+                return <CommandRunDialogSettings />;
+              case 'bulk-ticket-dialog':
+                return <BulkTicketDialogSettings />;
+              case 'settings-workspace':
+                return <SettingsWorkspaceSettings />;
+              default:
+                return <p>This demo has no adjustable settings.</p>;
+            }
+          })()}
         </aside>
       )}
       {contextMenu.value && (

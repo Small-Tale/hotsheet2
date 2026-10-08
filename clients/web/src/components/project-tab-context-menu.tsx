@@ -31,14 +31,30 @@ export function AppTabContextMenu({
     directional,
     { id: 'close-all', label: 'Close All Tabs', icon: Trash2, iconName: 'trash-2', danger: true },
   ];
-  const legacyId =
-      kind === 'project'
-        ? { 'data-project-id': id }
-        : kind === 'terminal'
-          ? { 'data-terminal-id': id }
-          : { 'data-chat-id': id },
-    label = kind === 'project' ? 'Project' : kind === 'terminal' ? 'Terminal' : 'AI chat';
-  const action = kind === 'project' ? 'project-tab-context-action' : 'terminal-tab-context-action';
+  const { legacyId, label, action } = (() => {
+    switch (kind) {
+      case 'project':
+        return {
+          legacyId: { 'data-project-id': id },
+          label: 'Project',
+          action: 'project-tab-context-action',
+        };
+      case 'terminal':
+        return {
+          legacyId: { 'data-terminal-id': id },
+          label: 'Terminal',
+          action: 'terminal-tab-context-action',
+        };
+      case 'ai-chat':
+        return {
+          legacyId: { 'data-chat-id': id },
+          label: 'AI chat',
+          action: 'terminal-tab-context-action',
+        };
+      default:
+        return kind satisfies never;
+    }
+  })();
   return (
     <div
       class="project-tab-context-menu app-tab-context-menu"

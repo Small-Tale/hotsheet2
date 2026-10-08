@@ -336,6 +336,21 @@ function shortSha(value: string): string {
   return value.slice(0, 7);
 }
 
+function commitRefKindLabel(kind: CommitRef['kind']): string {
+  switch (kind) {
+    case 'tag':
+      return 'Tag';
+    case 'remote':
+      return 'Remote branch';
+    case 'head':
+      return 'Current HEAD';
+    case 'branch':
+      return 'Branch';
+    default:
+      return kind satisfies never;
+  }
+}
+
 /** Git ref decorations (HEAD/branches/remotes/tags) for a commit, styled by kind (HS2-SFJ5TE). */
 function commitRefs(refs: readonly CommitRef[] | undefined) {
   if (!refs?.length) return undefined;
@@ -345,7 +360,7 @@ function commitRefs(refs: readonly CommitRef[] | undefined) {
         <span
           class="ticket-code-review__ref"
           data-ref-kind={ref.kind}
-          title={`${ref.kind === 'tag' ? 'Tag' : ref.kind === 'remote' ? 'Remote branch' : ref.kind === 'head' ? 'Current HEAD' : 'Branch'}: ${ref.label}`}
+          title={`${commitRefKindLabel(ref.kind)}: ${ref.label}`}
         >
           <LucideIcon
             size={11.2}

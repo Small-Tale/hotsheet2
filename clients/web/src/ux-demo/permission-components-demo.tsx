@@ -108,25 +108,43 @@ export function stopPermissionRequestDemoAutomation(root?: ParentNode): void {
 
 function demoItem(): PermissionItem {
   const request = permissionRequestSettings.request.value;
-  const operation =
-    request === 'command'
-      ? { tool: 'Bash', action: 'npm run test:unit\nnpm run lint' }
-      : request === 'edit'
-        ? {
-            tool: 'Edit',
-            action:
-              '~/Documents/hotsheet2/clients/web/src/components/notification-center.tsx\n\nAdd a shared pending and history presentation for permission requests.',
-          }
-        : request === 'read'
-          ? { tool: 'Read', action: '~/Documents/hotsheet2/CLAUDE.md' }
-          : { tool: 'ToolSearch', action: '' };
+  const operation = (() => {
+    switch (request) {
+      case 'command':
+        return { tool: 'Bash', action: 'npm run test:unit\nnpm run lint' };
+      case 'edit':
+        return {
+          tool: 'Edit',
+          action:
+            '~/Documents/hotsheet2/clients/web/src/components/notification-center.tsx\n\nAdd a shared pending and history presentation for permission requests.',
+        };
+      case 'read':
+        return { tool: 'Read', action: '~/Documents/hotsheet2/CLAUDE.md' };
+      case 'tool-without-details':
+        return { tool: 'ToolSearch', action: '' };
+      default:
+        return request satisfies never;
+    }
+  })();
   return { ...pending, ...operation, always_allow_supported: permissionRequestSettings.alwaysSupported.value };
 }
 
 function demoHistory(item: PermissionItem, variant: 'allowed' | 'denied' | 'external'): PermissionHistoryItem {
+  const decision = (() => {
+    switch (variant) {
+      case 'allowed':
+        return 'allow';
+      case 'denied':
+        return 'deny';
+      case 'external':
+        return 'external';
+      default:
+        return variant satisfies never;
+    }
+  })();
   return {
     ...item,
-    decision: variant === 'allowed' ? 'allow' : variant === 'denied' ? 'deny' : 'external',
+    decision,
     scope: variant === 'allowed' && item.always_allow_supported ? 'always' : 'once',
     resolvedAt: Date.now() - 12 * 60_000,
   };
