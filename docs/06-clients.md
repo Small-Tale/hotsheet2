@@ -3128,6 +3128,9 @@ unsupported, so they cannot create this state through Hot Sheet.
   as past-tense actions (`Started`, `Completed`, `Moved to backlog`, `Moved out of
 backlog`, `Re-enqueued`) while retaining the full durable note text and using the
   source state where it changes the action's meaning.
+  Started-phase changes appear as concise Timeline entries (`Analyzing`,
+  `Planning`, and so on). Their generated activity notes are omitted from the
+  Notes list, while other activity notes remain visible there.
   Rich native tool events and distilled background/subtask milestones remain tracked by
   HS2-SW655F and HS2-3GRNZW respectively.
 

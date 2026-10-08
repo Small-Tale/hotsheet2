@@ -8593,6 +8593,24 @@ async fn started_phase_round_trips_through_http_and_indexed_query() {
     assert_eq!(response.status(), StatusCode::OK);
     let updated = body_json(response).await;
     assert_eq!(updated["started_phase"], "final_testing");
+    assert!(
+        updated["notes"].as_array().unwrap().iter().any(|note| {
+            note["text"] == "Started phase changed from Unspecified to Final testing"
+        })
+    );
+    let note_count = updated["notes"].as_array().unwrap().len();
+    let repeated = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{slug}"),
+                Some(r#"{"started_phase":"final_testing"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(repeated["notes"].as_array().unwrap().len(), note_count);
     let response = app
         .clone()
         .oneshot(authed("GET", "/tickets", None))
@@ -9918,10 +9936,14 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
     )
     .await;
     assert_eq!(updated["status"], "started");
-    assert_eq!(updated["notes"].as_array().unwrap().len(), 2);
+    assert_eq!(updated["notes"].as_array().unwrap().len(), 3);
     assert_eq!(
         updated["notes"][0]["text"],
         "Status changed from Not Started to Started"
+    );
+    assert_eq!(
+        updated["notes"][1]["text"],
+        "Started phase changed from Unspecified to Analyzing"
     );
     let progress = updated["notes"]
         .as_array()
@@ -9986,7 +10008,7 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
             .unwrap(),
     )
     .await;
-    assert_eq!(deleted["notes"].as_array().unwrap().len(), 4);
+    assert_eq!(deleted["notes"].as_array().unwrap().len(), 5);
 
     let got = body_json(
         app.oneshot(authed("GET", &format!("/tickets/{id}"), None))
@@ -9994,17 +10016,21 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
             .unwrap(),
     )
     .await;
-    assert_eq!(got["notes"].as_array().unwrap().len(), 4);
+    assert_eq!(got["notes"].as_array().unwrap().len(), 5);
     assert_eq!(
         got["notes"][0]["text"],
         "Status changed from Not Started to Started"
     );
-    assert_eq!(got["notes"][1]["text"], "marked not working");
     assert_eq!(
-        got["notes"][2]["text"],
+        got["notes"][1]["text"],
+        "Started phase changed from Unspecified to Analyzing"
+    );
+    assert_eq!(got["notes"][2]["text"], "marked not working");
+    assert_eq!(
+        got["notes"][3]["text"],
         "Status changed from Started to Completed"
     );
-    assert_eq!(got["notes"][3]["text"], "completed again");
+    assert_eq!(got["notes"][4]["text"], "completed again");
 }
 
 #[tokio::test]

@@ -132,7 +132,9 @@ function LoadedTicketNotes({
   feedbackChoiceSelections = {},
   attachmentContext,
 }: TicketNotesProps) {
-  const visibleNotes = nestAiFeedback(notes);
+  const visibleNotes = nestAiFeedback(
+    notes.filter((note) => !(note.kind === 'activity' && note.body.startsWith('Started phase changed from '))),
+  );
   const latestExchangeNote = [...visibleNotes]
     .reverse()
     .find(

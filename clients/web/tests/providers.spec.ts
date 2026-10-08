@@ -1840,11 +1840,29 @@ async function mockProject(
         rows = rows.map((item) => (item.id === id ? { ...item, ...body, updated_at: '2026-08-30T02:00:00Z' } : item));
       if (id === '01') {
         const label = (value: string) =>
-            value
-              .split('_')
-              .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-              .join(' '),
-          statusNote =
+          value
+            .split('_')
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(' ');
+        const phaseLabel = (value: string | null) => {
+          switch (value) {
+            case 'initial_testing':
+              return 'Initial testing';
+            case 'final_testing':
+              return 'Final testing';
+            case null:
+              return 'Unspecified';
+            default:
+              return label(value);
+          }
+        };
+        const nextStatus = typeof body.status === 'string' ? body.status : selectedFull.status;
+        const previousPhase = (selectedFull as { started_phase?: string | null }).started_phase ?? null;
+        let nextPhase = previousPhase;
+        if (nextStatus !== 'started') nextPhase = null;
+        else if ('started_phase' in body) nextPhase = body.started_phase;
+        else if (selectedFull.status !== 'started') nextPhase = 'analyzing';
+        const statusNote =
             typeof body.status === 'string' && body.status !== selectedFull.status
               ? {
                   id: `N-status-${patches.length}`,
@@ -1852,6 +1870,17 @@ async function mockProject(
                   created_at: '2026-09-02T02:00:00Z',
                   edited_at: '2026-09-02T02:00:00Z',
                   text: `Status changed from ${label(selectedFull.status)} to ${label(body.status)}`,
+                }
+              : undefined,
+          phaseNote =
+            nextStatus === 'started' && nextPhase !== previousPhase
+              ? {
+                  id: `N-phase-${patches.length}`,
+                  kind: 'activity' as const,
+                  created_at: '2026-09-02T02:00:00Z',
+                  edited_at: '2026-09-02T02:00:00Z',
+                  summary: phaseLabel(nextPhase),
+                  text: `Started phase changed from ${phaseLabel(previousPhase)} to ${phaseLabel(nextPhase)}`,
                 }
               : undefined,
           appendedNote =
@@ -1868,9 +1897,15 @@ async function mockProject(
         selectedFull = {
           ...selectedFull,
           ...body,
+          started_phase: nextPhase,
           updated_at: '2026-08-30T02:00:00Z',
           feedback_needed: appendedNote ? false : (selectedFull as { feedback_needed?: boolean }).feedback_needed,
-          notes: [...selectedFull.notes, ...(statusNote ? [statusNote] : []), ...(appendedNote ? [appendedNote] : [])],
+          notes: [
+            ...selectedFull.notes,
+            ...(statusNote ? [statusNote] : []),
+            ...(phaseNote ? [phaseNote] : []),
+            ...(appendedNote ? [appendedNote] : []),
+          ],
         };
         if (patchResponseDelay) await new Promise((resolve) => setTimeout(resolve, patchResponseDelay));
         return route.fulfill({ json: { store: 'git-local', ...selectedFull } });
@@ -14283,6 +14318,11 @@ test('edits and clears the Started phase without changing lifecycle status', asy
   await expect.poll(() => patches.at(-1)?.started_phase).toBe('initial_testing');
   await expect(phase).toHaveAttribute('data-status', 'started');
   await expect(phase).toHaveText('Initial testing');
+  await expect(inspector.locator('[data-component="ticket-notes"]')).not.toContainText('Started phase changed');
+  await inspector.getByRole('tab', { name: 'Timeline' }).click();
+  await expect(inspector.locator('[data-component="ticket-timeline"]')).toContainText('Initial testing');
+  await inspector.screenshot({ path: '/private/tmp/hs2-6t2vjm-phase-timeline-wide.png' });
+  await inspector.getByRole('tab', { name: 'Info' }).click();
   await inspector
     .locator('.ticket-info-panel__metadata')
     .screenshot({ path: '/private/tmp/hs2-hhkjsc-phase-wide.png' });
@@ -14295,6 +14335,10 @@ test('edits and clears the Started phase without changing lifecycle status', asy
     .screenshot({ path: '/private/tmp/hs2-hhkjsc-column-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await inspector.getByRole('tab', { name: 'Timeline' }).click();
+  await expect(inspector.locator('[data-component="ticket-timeline"]')).toContainText('Initial testing');
+  await inspector.screenshot({ path: '/private/tmp/hs2-6t2vjm-phase-timeline-narrow.png' });
+  await inspector.getByRole('tab', { name: 'Info' }).click();
   await inspector
     .locator('.ticket-info-panel__metadata')
     .screenshot({ path: '/private/tmp/hs2-hhkjsc-phase-narrow.png' });

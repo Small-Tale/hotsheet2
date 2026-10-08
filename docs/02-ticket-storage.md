@@ -508,6 +508,9 @@ It records the current kind of work, while a live claim records who is working n
 New claims from Not Started begin at `analyzing`; existing Started tickets retain
 their phase across release, renewal, and exact reclaim. Leaving Started clears it.
 Legacy Started tickets may have no phase.
+Each actual phase change while Started appends a durable activity note, including
+the initial phase on claim. Repeating the same phase adds no note; leaving Started
+records the status transition and clears the current phase.
 
 After affected local checks pass and the integrated commit is pushed, a worker may
 record the commit and remote CI run, set `final_testing`, and release the claim.

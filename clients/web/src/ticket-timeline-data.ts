@@ -6,6 +6,7 @@ export interface TimestampedTimelineEntry extends TicketTimelineEntry {
 }
 
 const statusTransition = /^Status changed from (.+) to (.+)$/;
+const startedPhaseTransition = /^Started phase changed from (.+) to (.+)$/;
 
 function statusTransitionTitle(source: string, destination: string): string {
   if (destination === 'Not Started') return source === 'Backlog' ? 'Moved out of backlog' : 'Re-enqueued';
@@ -20,14 +21,16 @@ function statusTransitionTitle(source: string, destination: string): string {
 function noteEntry(note: Note, confidence?: number): TimestampedTimelineEntry {
   const [title] = note.text.split('\n');
   const transition = title.match(statusTransition);
+  const phaseTransition = title.match(startedPhaseTransition);
   const conciseStatus = transition ? statusTransitionTitle(transition[1], transition[2]) : undefined;
-  const headline = conciseStatus || timelineHeadline(note.summary?.trim() || title);
+  const concisePhase = phaseTransition?.[2] === 'Unspecified' ? 'Phase cleared' : phaseTransition?.[2];
+  const headline = conciseStatus || concisePhase || timelineHeadline(note.summary?.trim() || title);
   return {
     id: note.id,
     timestamp: note.created_at,
     time: note.created_at,
     title: confidence === undefined ? headline : `${headline} · ${confidence}% confidence`,
-    emphasized: note.kind === 'status' || Boolean(conciseStatus),
+    emphasized: note.kind === 'status' || Boolean(conciseStatus || phaseTransition),
   };
 }
 
@@ -90,6 +93,15 @@ function timelineHeadline(text: string): string {
 export function ticketTimelineEntries(ticket: FullTicket): TimestampedTimelineEntry[] {
   const verifiedAt = (ticket as FullTicket & { verified_at?: string }).verified_at;
   const confidence = completionConfidenceByNote(ticket.notes);
+  const noteOrder = new Map(ticket.notes.map((note, index) => [note.id, index]));
+  const noteById = new Map(ticket.notes.map((note) => [note.id, note]));
+  const tiePriority = (entry: TimestampedTimelineEntry) => {
+    const note = noteById.get(entry.id);
+    if (!note) return -1;
+    if (note.text.startsWith('Status changed from ')) return 0;
+    if (note.text.startsWith('Started phase changed from ')) return 1;
+    return 2;
+  };
   const entries: TimestampedTimelineEntry[] = ticket.notes
     .filter((note) => note.kind === 'activity' || note.kind === 'status')
     .map((note) => noteEntry(note, confidence.get(note.id)));
@@ -106,6 +118,10 @@ export function ticketTimelineEntries(ticket: FullTicket): TimestampedTimelineEn
   addLifecycle(`${ticket.id}-completed`, ticket.completed_at, 'Completed', true);
   addLifecycle(`${ticket.id}-verified`, verifiedAt, 'Verified', true);
   return entries.sort(
-    (left, right) => left.timestamp.localeCompare(right.timestamp) || left.id.localeCompare(right.id),
+    (left, right) =>
+      left.timestamp.localeCompare(right.timestamp) ||
+      tiePriority(left) - tiePriority(right) ||
+      (noteOrder.get(left.id) ?? -1) - (noteOrder.get(right.id) ?? -1) ||
+      left.id.localeCompare(right.id),
   );
 }

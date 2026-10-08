@@ -130,6 +130,25 @@ describe('ticketTimelineEntries', () => {
     ]);
   });
 
+  it('shows each Started phase transition without treating it as a reopen', () => {
+    const notes = [
+      note('start', 'activity', '2026-09-02T02:00:00Z', 'Status changed from Not Started to Started'),
+      note('analyzing', 'activity', '2026-09-02T02:00:00Z', 'Started phase changed from Unspecified to Analyzing'),
+      note('planning', 'activity', '2026-09-02T02:01:00Z', 'Started phase changed from Analyzing to Planning'),
+      note('clear', 'activity', '2026-09-02T02:02:00Z', 'Started phase changed from Planning to Unspecified'),
+    ];
+    const entries = ticketTimelineEntries(ticket({ status: 'started', completed_at: undefined, notes }));
+    expect(entries.map((entry) => entry.title)).toEqual([
+      'Ticket created',
+      'Started',
+      'Analyzing',
+      'Planning',
+      'Phase cleared',
+    ]);
+    expect(entries.slice(2).every((entry) => entry.emphasized)).toBe(true);
+    expect(completionConfidenceByNote(notes)).toEqual(new Map());
+  });
+
   it('renders every status destination as a past-tense action and uses the source when reopening', () => {
     const entries = ticketTimelineEntries(
       ticket({

@@ -653,6 +653,7 @@ pub fn update(
     let mut t = store.read_ticket(id)?;
     let before = t.clone();
     let previous_status = t.status;
+    let previous_phase = t.started_phase;
     if let Some(v) = patch.title {
         t.title = v;
     }
@@ -724,6 +725,10 @@ pub fn update(
         if t.status == Status::Started {
             t.started_phase = phase;
         }
+    }
+    if t.status == Status::Started && t.started_phase != previous_phase {
+        append_started_phase_transition(&mut t, previous_phase, &now);
+        stamp_last_note_actor(&mut t, patch.actor.as_ref());
     }
     // Also covers `--up-next` on an already-inactive ticket when no status is present in
     // this patch. Up Next is only meaningful for not_started/started.
@@ -826,6 +831,53 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
             "Status changed from {} to {}",
             status_label(from),
             status_label(to)
+        ),
+    });
+}
+
+fn started_phase_label(phase: Option<StartedPhase>) -> &'static str {
+    match phase {
+        Some(StartedPhase::Analyzing) => "Analyzing",
+        Some(StartedPhase::Planning) => "Planning",
+        Some(StartedPhase::Working) => "Working",
+        Some(StartedPhase::InitialTesting) => "Initial testing",
+        Some(StartedPhase::Integrating) => "Integrating",
+        Some(StartedPhase::FinalTesting) => "Final testing",
+        None => "Unspecified",
+    }
+}
+
+fn append_started_phase_transition(
+    ticket: &mut Ticket,
+    from: Option<StartedPhase>,
+    now: &Timestamp,
+) {
+    let to = ticket.started_phase;
+    let mut entropy = DefaultHasher::new();
+    ticket.id.hash(&mut entropy);
+    ticket.notes.len().hash(&mut entropy);
+    "started_phase".hash(&mut entropy);
+    started_phase_label(from).hash(&mut entropy);
+    started_phase_label(to).hash(&mut entropy);
+    now.as_str().hash(&mut entropy);
+    let timestamp_ms = now
+        .instant()
+        .map(|instant| instant.unix_timestamp_nanos().max(0) as u64 / 1_000_000)
+        .unwrap_or_default();
+    ticket.notes.push(Note {
+        id: Ulid::from_parts(timestamp_ms, entropy.finish() as u128),
+        kind: NoteKind::Activity,
+        created_at: now.clone(),
+        edited_at: now.clone(),
+        summary: Some(started_phase_label(to).to_string()),
+        confidence: None,
+        feedback_for: None,
+        human_edited: false,
+        actor: None,
+        text: format!(
+            "Started phase changed from {} to {}",
+            started_phase_label(from),
+            started_phase_label(to)
         ),
     });
 }
@@ -2044,6 +2096,7 @@ pub(crate) fn start_claimed_ticket(ticket: &mut Ticket, now: &Timestamp) {
     ticket.status = Status::Started;
     ticket.started_phase = Some(StartedPhase::Analyzing);
     append_status_transition(ticket, Status::NotStarted, Status::Started, now);
+    append_started_phase_transition(ticket, None, now);
 }
 
 fn prepare_claim(
@@ -2471,8 +2524,17 @@ mod tests {
         let restored = restore(&store, &ticket.id, ts("2026-07-04T00:00:00Z")).unwrap();
         assert_eq!(restored.status, Status::Started);
         assert_eq!(
-            restored.notes.last().map(|note| note.text.as_str()),
+            restored
+                .notes
+                .iter()
+                .rev()
+                .nth(1)
+                .map(|note| note.text.as_str()),
             Some("Status changed from Deleted to Started")
+        );
+        assert_eq!(
+            restored.notes.last().map(|note| note.text.as_str()),
+            Some("Started phase changed from Unspecified to Analyzing")
         );
         // Restoring is only meaningful from Trash, and a second restore is rejected.
         assert!(matches!(
@@ -3314,11 +3376,15 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(started.notes.len(), 1);
+        assert_eq!(started.notes.len(), 2);
         assert_eq!(started.notes[0].kind, NoteKind::Activity);
         assert_eq!(
             started.notes[0].text,
             "Status changed from Not Started to Started"
+        );
+        assert_eq!(
+            started.notes[1].text,
+            "Started phase changed from Unspecified to Analyzing"
         );
 
         let unchanged = update(
@@ -3333,7 +3399,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             unchanged.notes.len(),
-            1,
+            2,
             "same-state patches are not events"
         );
 
@@ -3345,11 +3411,90 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(closed.notes.len(), 2);
+        assert_eq!(closed.notes.len(), 3);
         assert_eq!(
-            closed.notes[1].text,
+            closed.notes[2].text,
             "Status changed from Started to Completed"
         );
+    }
+
+    #[test]
+    fn started_phase_changes_record_each_real_transition_once() {
+        let (_d, store) = store();
+        let id = Ulid::new();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let update_phase = |time, phase| {
+            update(
+                &store,
+                &id,
+                ts(time),
+                TicketPatch {
+                    started_phase: Some(phase),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        // A phase patch outside Started has no effect.
+        assert!(
+            update_phase("2026-08-19T00:01:00Z", Some(StartedPhase::Planning))
+                .notes
+                .is_empty()
+        );
+        let started = update(
+            &store,
+            &id,
+            ts("2026-08-19T00:02:00Z"),
+            TicketPatch {
+                status: Some(Status::Started),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(started.notes.len(), 2);
+        let planning = update_phase("2026-08-19T00:03:00Z", Some(StartedPhase::Planning));
+        assert_eq!(
+            planning.notes.last().unwrap().text,
+            "Started phase changed from Analyzing to Planning"
+        );
+        assert_eq!(
+            update_phase("2026-08-19T00:04:00Z", Some(StartedPhase::Planning))
+                .notes
+                .len(),
+            3
+        );
+        let cleared = update_phase("2026-08-19T00:05:00Z", None);
+        assert_eq!(
+            cleared.notes.last().unwrap().text,
+            "Started phase changed from Planning to Unspecified"
+        );
+        let working = update_phase("2026-08-19T00:06:00Z", Some(StartedPhase::Working));
+        assert_eq!(
+            working.notes.last().unwrap().text,
+            "Started phase changed from Unspecified to Working"
+        );
+        let completed = update(
+            &store,
+            &id,
+            ts("2026-08-19T00:07:00Z"),
+            TicketPatch {
+                status: Some(Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            completed.notes.last().unwrap().text,
+            "Status changed from Started to Completed"
+        );
+        assert_eq!(completed.started_phase, None);
     }
 
     #[test]

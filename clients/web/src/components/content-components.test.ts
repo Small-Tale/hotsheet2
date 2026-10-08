@@ -61,6 +61,25 @@ describe('content components', () => {
     expect(readOnly).toContain('data-component="list-inset-text"');
     expect(readOnly).not.toContain('data-action="add-ticket-note"');
   });
+  it('keeps generated Started phase entries in Timeline only', () => {
+    const markup = String(
+      TicketNotes({
+        notes: [
+          {
+            id: 'phase',
+            kind: 'activity',
+            author: 'System',
+            time: 'Now',
+            body: 'Started phase changed from Planning to Working',
+          },
+          { id: 'work', kind: 'activity', author: 'Codex', time: 'Now', body: 'Finished implementation' },
+        ],
+      }),
+    );
+    expect(markup).not.toContain('Started phase changed from Planning to Working');
+    expect(markup).toContain('Finished implementation');
+    expect(markup).toContain('1 note');
+  });
   it('places a focused new-note composer after existing notes', () => {
     const markup = String(
       TicketNotes({
