@@ -35,6 +35,7 @@ const GUARDED_STORE_SCHEMA_V3: &str = "hotsheet/v3-random-suffix-shards";
 const SHARD_ID_PREFIX_2: &str = "id-prefix-2";
 const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
 const FINDER_METADATA_FILE: &str = ".DS_Store";
+const NOTE_MUTATION_LOCK_FILE: &str = ".hotsheet-note-mutation.lock";
 
 fn ticket_write_schema(ticket: &Ticket) -> u32 {
     if ticket.schema >= hotsheet_model::CROP_SCHEMA_VERSION
@@ -366,20 +367,49 @@ impl FsStore {
     fn ensure_managed_gitignore(&self) -> Result<(), StoreError> {
         let path = self.root.join(".gitignore");
         let existing = fs::read_to_string(&path).unwrap_or_default();
-        if existing
-            .lines()
-            .any(|line| line.trim() == FINDER_METADATA_FILE)
-        {
-            return Ok(());
-        }
-        let mut content = existing;
-        if !content.is_empty() && !content.ends_with('\n') {
+        let mut content = existing.clone();
+        for managed in [FINDER_METADATA_FILE, NOTE_MUTATION_LOCK_FILE] {
+            if content.lines().any(|line| line.trim() == managed) {
+                continue;
+            }
+            if !content.is_empty() && !content.ends_with('\n') {
+                content.push('\n');
+            }
+            content.push_str(managed);
             content.push('\n');
         }
-        content.push_str(FINDER_METADATA_FILE);
-        content.push('\n');
-        fs::write(path, content)?;
+        if content != existing {
+            fs::write(path, content)?;
+        }
         Ok(())
+    }
+
+    /// Keep the entire note read–revise–write sequence together across processes.
+    /// The file remains at the store root for git-backed and standalone stores alike;
+    /// it is ignored by Git and never removed, so waiters cannot lock different inodes.
+    pub fn with_note_transaction<T>(
+        &self,
+        operation: impl FnOnce() -> Result<T, StoreError>,
+    ) -> Result<T, StoreError> {
+        self.ensure_managed_gitignore()?;
+        let path = self.root.join(NOTE_MUTATION_LOCK_FILE);
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .map_err(|source| StoreError::IoAt {
+                operation: "opening note mutation lock",
+                path: path.clone(),
+                source,
+            })?;
+        let _lock = FileLock::acquire(file).map_err(|source| StoreError::IoAt {
+            operation: "locking note mutation transaction",
+            path,
+            source,
+        })?;
+        operation()
     }
 
     /// Read the store metadata.
@@ -1809,6 +1839,119 @@ mod tests {
     }
 
     #[test]
+    fn note_transaction_serializes_ratings_across_processes() {
+        use hotsheet_model::{AiFeedback, AiFeedbackRating, AttachmentActorRole, NoteActor};
+        use std::process::Command;
+
+        const TEST_NAME: &str =
+            "store::tests::note_transaction_serializes_ratings_across_processes";
+        if let Ok(root) = std::env::var("HOTSHEET_NOTE_TEST_CHILD_ROOT") {
+            let store = FsStore::open(root).unwrap();
+            let id =
+                Ulid::from_string(&std::env::var("HOTSHEET_NOTE_TEST_TICKET").unwrap()).unwrap();
+            let actor = std::env::var("HOTSHEET_NOTE_TEST_ACTOR").unwrap();
+            fs::write(std::env::var("HOTSHEET_NOTE_TEST_READY").unwrap(), "ready").unwrap();
+            crate::ops::rate_ai_content(
+                &store,
+                &id,
+                Timestamp::new("2026-08-19T00:02:00Z"),
+                "conversation:shared",
+                Some(AiFeedbackRating::Helpful),
+                None,
+                Some(NoteActor {
+                    role: AttachmentActorRole::Human,
+                    id: Some(actor),
+                }),
+            )
+            .unwrap();
+            return;
+        }
+
+        let (dir, store) = temp_store();
+        let id = Ulid::new();
+        store.write_ticket(&sample(id)).unwrap();
+        let spawn = |actor: &str, ready: &Path| {
+            Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", TEST_NAME, "--nocapture"])
+                .env("HOTSHEET_NOTE_TEST_CHILD_ROOT", dir.path())
+                .env("HOTSHEET_NOTE_TEST_TICKET", id.to_string())
+                .env("HOTSHEET_NOTE_TEST_ACTOR", actor)
+                .env("HOTSHEET_NOTE_TEST_READY", ready)
+                .spawn()
+                .unwrap()
+        };
+        let ready = dir.path().join("child-ready");
+        let mut child = store
+            .with_note_transaction(|| {
+                let mut stale = store.read_ticket(&id)?;
+                let mut child = spawn("second", &ready);
+                for _ in 0..200 {
+                    if ready.exists() {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                assert!(ready.exists(), "child did not reach the rating call");
+                std::thread::sleep(Duration::from_millis(150));
+                assert!(
+                    child.try_wait().unwrap().is_none(),
+                    "child bypassed the transaction lock"
+                );
+                stale.notes.push(Note {
+                    id: Ulid::new(),
+                    kind: NoteKind::Regular,
+                    created_at: Timestamp::new("2026-08-19T00:01:00Z"),
+                    edited_at: Timestamp::new("2026-08-19T00:01:00Z"),
+                    summary: None,
+                    confidence: None,
+                    feedback_for: None,
+                    ai_feedback: Some(AiFeedback {
+                        target: "conversation:shared".into(),
+                        rating: Some(AiFeedbackRating::NotHelpful),
+                        explanation: None,
+                    }),
+                    human_edited: false,
+                    actor: Some(NoteActor {
+                        role: AttachmentActorRole::Human,
+                        id: Some("first".into()),
+                    }),
+                    text: "First rating".into(),
+                });
+                store.write_ticket_committing(&stale)?;
+                Ok(child)
+            })
+            .unwrap();
+        assert!(child.wait().unwrap().success());
+        let ticket = store.read_ticket(&id).unwrap();
+        assert_eq!(
+            ticket.notes.len(),
+            2,
+            "independent raters must both survive"
+        );
+
+        // Repeated concurrent writes by one rater revise the same source note.
+        let ready_a = dir.path().join("same-ready-a");
+        let ready_b = dir.path().join("same-ready-b");
+        let mut a = spawn("same", &ready_a);
+        let mut b = spawn("same", &ready_b);
+        assert!(a.wait().unwrap().success());
+        assert!(b.wait().unwrap().success());
+        let ticket = store.read_ticket(&id).unwrap();
+        assert_eq!(ticket.notes.len(), 3);
+        assert_eq!(
+            ticket
+                .notes
+                .iter()
+                .filter(
+                    |note| note.actor.as_ref().and_then(|actor| actor.id.as_deref())
+                        == Some("same")
+                )
+                .count(),
+            1,
+        );
+    }
+
+    #[test]
     fn crop_changes_keep_original_bytes_and_annotations_through_edit_and_restore() {
         use std::io::Cursor;
 
@@ -2606,6 +2749,8 @@ mod tests {
         let ignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert!(ignore.lines().any(|line| line == "worklist.md"));
         assert!(ignore.lines().any(|line| line == FINDER_METADATA_FILE));
+        assert!(ignore.lines().any(|line| line == NOTE_MUTATION_LOCK_FILE));
+        store.with_note_transaction(|| Ok(())).unwrap();
 
         git(dir.path(), &["init", "-q"]).unwrap();
         git(dir.path(), &["add", "-A"]).unwrap();
@@ -2640,6 +2785,7 @@ mod tests {
                 .lines()
                 .any(|path| path.ends_with(FINDER_METADATA_FILE))
         );
+        assert!(!tracked.lines().any(|path| path == NOTE_MUTATION_LOCK_FILE));
         assert!(attachment_dir.join(FINDER_METADATA_FILE).is_file());
     }
 

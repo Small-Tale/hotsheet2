@@ -650,97 +650,99 @@ pub fn update(
     now: Timestamp,
     patch: TicketPatch,
 ) -> Result<Ticket, StoreError> {
-    let mut t = store.read_ticket(id)?;
-    let before = t.clone();
-    let previous_status = t.status;
-    let previous_phase = t.started_phase;
-    if let Some(v) = patch.title {
-        t.title = v;
-    }
-    if let Some(v) = patch.details {
-        t.details = v;
-    }
-    if let Some(v) = patch.category {
-        t.category = v;
-    }
-    if let Some(v) = patch.priority {
-        t.priority = v;
-    }
-    if let Some(v) = patch.tags {
-        t.tags = v;
-    }
-    if let Some(v) = patch.up_next {
-        t.up_next = v;
-    }
-    if let Some(v) = patch.blocked_by {
-        t.blocked_by = v;
-    }
-    if let Some(v) = patch.blocked_reason {
-        t.blocked_reason = v.and_then(|reason| {
-            let normalized = reason.trim();
-            (!normalized.is_empty()).then(|| normalized.to_string())
-        });
-    }
-    if let Some(s) = patch.status {
-        t.status = s;
-        if s != Status::Started {
-            t.started_phase = None;
-        } else if previous_status != Status::Started && patch.started_phase.is_none() {
-            t.started_phase = Some(StartedPhase::Analyzing);
+    store.with_note_transaction(|| {
+        let mut t = store.read_ticket(id)?;
+        let before = t.clone();
+        let previous_status = t.status;
+        let previous_phase = t.started_phase;
+        if let Some(v) = patch.title {
+            t.title = v;
         }
-        if s.is_active() {
-            // An explicit active status begins (or repairs) the current work cycle.
-            // Clear terminal-only timestamps even when the ticket is already active so
-            // repeating `edit --status started|not_started` safely normalizes legacy
-            // tickets that were reopened before this invariant was enforced.
-            t.completed_at = None;
-            t.verified_at = None;
+        if let Some(v) = patch.details {
+            t.details = v;
         }
-        match s {
-            Status::Completed if t.completed_at.is_none() => t.completed_at = Some(now.clone()),
-            Status::Verified if t.verified_at.is_none() => t.verified_at = Some(now.clone()),
-            _ => {}
+        if let Some(v) = patch.category {
+            t.category = v;
         }
-        if s != previous_status {
-            append_status_transition(&mut t, previous_status, s, &now);
+        if let Some(v) = patch.priority {
+            t.priority = v;
+        }
+        if let Some(v) = patch.tags {
+            t.tags = v;
+        }
+        if let Some(v) = patch.up_next {
+            t.up_next = v;
+        }
+        if let Some(v) = patch.blocked_by {
+            t.blocked_by = v;
+        }
+        if let Some(v) = patch.blocked_reason {
+            t.blocked_reason = v.and_then(|reason| {
+                let normalized = reason.trim();
+                (!normalized.is_empty()).then(|| normalized.to_string())
+            });
+        }
+        if let Some(s) = patch.status {
+            t.status = s;
+            if s != Status::Started {
+                t.started_phase = None;
+            } else if previous_status != Status::Started && patch.started_phase.is_none() {
+                t.started_phase = Some(StartedPhase::Analyzing);
+            }
+            if s.is_active() {
+                // An explicit active status begins (or repairs) the current work cycle.
+                // Clear terminal-only timestamps even when the ticket is already active so
+                // repeating `edit --status started|not_started` safely normalizes legacy
+                // tickets that were reopened before this invariant was enforced.
+                t.completed_at = None;
+                t.verified_at = None;
+            }
+            match s {
+                Status::Completed if t.completed_at.is_none() => t.completed_at = Some(now.clone()),
+                Status::Verified if t.verified_at.is_none() => t.verified_at = Some(now.clone()),
+                _ => {}
+            }
+            if s != previous_status {
+                append_status_transition(&mut t, previous_status, s, &now);
+                stamp_last_note_actor(&mut t, patch.actor.as_ref());
+            }
+            // Leaving the active set (not_started/started) drops it off Up Next — applied after
+            // any up_next in this same patch, so a move out of active always wins (HS2-55610S).
+            if !s.is_active() {
+                t.up_next = false;
+                end_claim(&mut t, &now);
+            } else if t.close_reason.is_some() {
+                // Reopening — moving back to an active status — clears the close annotation
+                // (close_reason/closed_at/duplicate_of), per HS2-61.
+                t.close_reason = None;
+                t.closed_at = None;
+                t.duplicate_of = None;
+            }
+            if s.is_active() && !previous_status.is_active() {
+                end_claim(&mut t, &now);
+            }
+        }
+        if let Some(phase) = patch.started_phase {
+            if t.status == Status::Started {
+                t.started_phase = phase;
+            }
+        }
+        if t.status == Status::Started && t.started_phase != previous_phase {
+            append_started_phase_transition(&mut t, previous_phase, &now);
             stamp_last_note_actor(&mut t, patch.actor.as_ref());
         }
-        // Leaving the active set (not_started/started) drops it off Up Next — applied after
-        // any up_next in this same patch, so a move out of active always wins (HS2-55610S).
-        if !s.is_active() {
+        // Also covers `--up-next` on an already-inactive ticket when no status is present in
+        // this patch. Up Next is only meaningful for not_started/started.
+        if !t.status.is_active() {
             t.up_next = false;
             end_claim(&mut t, &now);
-        } else if t.close_reason.is_some() {
-            // Reopening — moving back to an active status — clears the close annotation
-            // (close_reason/closed_at/duplicate_of), per HS2-61.
-            t.close_reason = None;
-            t.closed_at = None;
-            t.duplicate_of = None;
         }
-        if s.is_active() && !previous_status.is_active() {
-            end_claim(&mut t, &now);
+        if has_substantive_change(&before, &t) {
+            t.updated_at = now;
         }
-    }
-    if let Some(phase) = patch.started_phase {
-        if t.status == Status::Started {
-            t.started_phase = phase;
-        }
-    }
-    if t.status == Status::Started && t.started_phase != previous_phase {
-        append_started_phase_transition(&mut t, previous_phase, &now);
-        stamp_last_note_actor(&mut t, patch.actor.as_ref());
-    }
-    // Also covers `--up-next` on an already-inactive ticket when no status is present in
-    // this patch. Up Next is only meaningful for not_started/started.
-    if !t.status.is_active() {
-        t.up_next = false;
-        end_claim(&mut t, &now);
-    }
-    if has_substantive_change(&before, &t) {
-        t.updated_at = now;
-    }
-    store.write_ticket_committing(&t)?;
-    Ok(t)
+        store.write_ticket_committing(&t)?;
+        Ok(t)
+    })
 }
 
 fn has_substantive_change(before: &Ticket, after: &Ticket) -> bool {
@@ -1166,41 +1168,43 @@ pub fn add_note_with_metadata(
     metadata: NoteMetadataInput,
     text: String,
 ) -> Result<Ticket, StoreError> {
-    let mut t = store.read_ticket(id)?;
-    let text = canonicalize_attachment_id_references(store, &t, &text);
-    let kind = if kind == NoteKind::Regular
-        && metadata.ai_feedback.is_none()
-        && !Note::text_is_ai_thumbs_feedback(&text)
-        && Note::text_requests_feedback(&text)
-    {
-        NoteKind::FeedbackNeeded
-    } else {
-        kind
-    };
-    t.notes.push(Note {
-        id: note_id,
-        kind,
-        created_at: now.clone(),
-        edited_at: now.clone(),
-        summary: metadata.summary.and_then(|value| {
-            let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
-            (!value.is_empty()).then_some(value)
-        }),
-        confidence: metadata.confidence,
-        feedback_for: metadata
-            .ai_feedback
-            .as_ref()
-            .and_then(|feedback| feedback.target.strip_prefix("note:"))
-            .and_then(|id| Ulid::from_string(id).ok())
-            .or_else(|| Note::feedback_parent_from_text(&text)),
-        ai_feedback: metadata.ai_feedback,
-        human_edited: metadata.human_edited,
-        actor: metadata.actor,
-        text,
-    });
-    t.updated_at = now;
-    store.write_ticket_committing(&t)?;
-    Ok(t)
+    store.with_note_transaction(|| {
+        let mut t = store.read_ticket(id)?;
+        let text = canonicalize_attachment_id_references(store, &t, &text);
+        let kind = if kind == NoteKind::Regular
+            && metadata.ai_feedback.is_none()
+            && !Note::text_is_ai_thumbs_feedback(&text)
+            && Note::text_requests_feedback(&text)
+        {
+            NoteKind::FeedbackNeeded
+        } else {
+            kind
+        };
+        t.notes.push(Note {
+            id: note_id,
+            kind,
+            created_at: now.clone(),
+            edited_at: now.clone(),
+            summary: metadata.summary.and_then(|value| {
+                let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
+                (!value.is_empty()).then_some(value)
+            }),
+            confidence: metadata.confidence,
+            feedback_for: metadata
+                .ai_feedback
+                .as_ref()
+                .and_then(|feedback| feedback.target.strip_prefix("note:"))
+                .and_then(|id| Ulid::from_string(id).ok())
+                .or_else(|| Note::feedback_parent_from_text(&text)),
+            ai_feedback: metadata.ai_feedback,
+            human_edited: metadata.human_edited,
+            actor: metadata.actor,
+            text,
+        });
+        t.updated_at = now;
+        store.write_ticket_committing(&t)?;
+        Ok(t)
+    })
 }
 
 /// Write one rating per rater and target. Repeated feedback revises the original
@@ -1237,68 +1241,72 @@ pub fn rate_ai_content(
             "AI feedback target must be a non-empty note, activity, or conversation id",
         )));
     }
-    let mut ticket = store.read_ticket(ticket_id)?;
-    let previous = ticket.notes.iter_mut().rev().find(|note| {
-        note.ai_feedback_value()
-            .is_some_and(|feedback| feedback.target == target)
-            && note.actor.as_ref() == actor.as_ref()
-    });
-    if previous.is_none() && rating.is_none() {
-        return Err(StoreError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "cannot withdraw a rating that does not exist",
-        )));
-    }
-    let detail = explanation
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty());
-    let feedback = hotsheet_model::AiFeedback {
-        target: target.to_owned(),
-        rating,
-        explanation: detail.clone(),
-    };
-    let label = match rating {
-        Some(hotsheet_model::AiFeedbackRating::Helpful) => "Helpful — keep suggestions like this.",
-        Some(hotsheet_model::AiFeedbackRating::NotHelpful) => {
-            "Not helpful — stop suggestions like this."
-        }
-        None => "Withdrawn.",
-    };
-    let text = [
-        format!("AI feedback for {target}: {label}"),
-        detail.unwrap_or_default(),
-    ]
-    .into_iter()
-    .filter(|line| !line.is_empty())
-    .collect::<Vec<_>>()
-    .join("\n\n");
-    if let Some(note) = previous {
-        note.ai_feedback = Some(feedback);
-        note.feedback_for = target
-            .strip_prefix("note:")
-            .and_then(|id| Ulid::from_string(id).ok());
-        note.text = text;
-        note.edited_at = now.clone();
-    } else {
-        ticket.notes.push(Note {
-            id: Ulid::new(),
-            kind: NoteKind::Regular,
-            created_at: now.clone(),
-            edited_at: now.clone(),
-            summary: None,
-            confidence: None,
-            feedback_for: target
-                .strip_prefix("note:")
-                .and_then(|id| Ulid::from_string(id).ok()),
-            ai_feedback: Some(feedback),
-            human_edited: false,
-            actor,
-            text,
+    store.with_note_transaction(|| {
+        let mut ticket = store.read_ticket(ticket_id)?;
+        let previous = ticket.notes.iter_mut().rev().find(|note| {
+            note.ai_feedback_value()
+                .is_some_and(|feedback| feedback.target == target)
+                && note.actor.as_ref() == actor.as_ref()
         });
-    }
-    ticket.updated_at = now;
-    store.write_ticket_committing(&ticket)?;
-    Ok(ticket)
+        if previous.is_none() && rating.is_none() {
+            return Err(StoreError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "cannot withdraw a rating that does not exist",
+            )));
+        }
+        let detail = explanation
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        let feedback = hotsheet_model::AiFeedback {
+            target: target.to_owned(),
+            rating,
+            explanation: detail.clone(),
+        };
+        let label = match rating {
+            Some(hotsheet_model::AiFeedbackRating::Helpful) => {
+                "Helpful — keep suggestions like this."
+            }
+            Some(hotsheet_model::AiFeedbackRating::NotHelpful) => {
+                "Not helpful — stop suggestions like this."
+            }
+            None => "Withdrawn.",
+        };
+        let text = [
+            format!("AI feedback for {target}: {label}"),
+            detail.unwrap_or_default(),
+        ]
+        .into_iter()
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+        if let Some(note) = previous {
+            note.ai_feedback = Some(feedback);
+            note.feedback_for = target
+                .strip_prefix("note:")
+                .and_then(|id| Ulid::from_string(id).ok());
+            note.text = text;
+            note.edited_at = now.clone();
+        } else {
+            ticket.notes.push(Note {
+                id: Ulid::new(),
+                kind: NoteKind::Regular,
+                created_at: now.clone(),
+                edited_at: now.clone(),
+                summary: None,
+                confidence: None,
+                feedback_for: target
+                    .strip_prefix("note:")
+                    .and_then(|id| Ulid::from_string(id).ok()),
+                ai_feedback: Some(feedback),
+                human_edited: false,
+                actor,
+                text,
+            });
+        }
+        ticket.updated_at = now;
+        store.write_ticket_committing(&ticket)?;
+        Ok(ticket)
+    })
 }
 
 /// The ticket's current completion confidence (HS2-DWTJ43), derived at read time and
@@ -1422,51 +1430,53 @@ pub fn edit_note_with_metadata(
     now: Timestamp,
     edit: NoteEditInput,
 ) -> Result<Ticket, StoreError> {
-    let mut ticket = store.read_ticket(ticket_id)?;
-    let text = edit
-        .text
-        .map(|text| canonicalize_attachment_id_references(store, &ticket, &text));
-    let note = ticket
-        .notes
-        .iter_mut()
-        .find(|note| &note.id == note_id)
-        .ok_or_else(|| {
-            StoreError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("note {note_id}"),
-            ))
-        })?;
-    if let Some(text) = text {
-        let legacy_distillation =
-            note.actor.is_none() && note.text.contains("hotsheet:activity-distillation:v1:");
-        if text != note.text
-            && edit
-                .actor
-                .as_ref()
-                .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Human)
-            && (note
-                .actor
-                .as_ref()
-                .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai)
-                || note.text.contains("hotsheet:activity-distillation:v1:"))
-        {
-            note.human_edited = true;
+    store.with_note_transaction(|| {
+        let mut ticket = store.read_ticket(ticket_id)?;
+        let text = edit
+            .text
+            .map(|text| canonicalize_attachment_id_references(store, &ticket, &text));
+        let note = ticket
+            .notes
+            .iter_mut()
+            .find(|note| &note.id == note_id)
+            .ok_or_else(|| {
+                StoreError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("note {note_id}"),
+                ))
+            })?;
+        if let Some(text) = text {
+            let legacy_distillation =
+                note.actor.is_none() && note.text.contains("hotsheet:activity-distillation:v1:");
+            if text != note.text
+                && edit
+                    .actor
+                    .as_ref()
+                    .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Human)
+                && (note
+                    .actor
+                    .as_ref()
+                    .is_some_and(|actor| actor.role == hotsheet_model::AttachmentActorRole::Ai)
+                    || note.text.contains("hotsheet:activity-distillation:v1:"))
+            {
+                note.human_edited = true;
+            }
+            if legacy_distillation && text != note.text {
+                note.actor = Some(hotsheet_model::NoteActor {
+                    role: hotsheet_model::AttachmentActorRole::Ai,
+                    id: Some("hotsheet".into()),
+                });
+            }
+            note.text = text;
         }
-        if legacy_distillation && text != note.text {
-            note.actor = Some(hotsheet_model::NoteActor {
-                role: hotsheet_model::AttachmentActorRole::Ai,
-                id: Some("hotsheet".into()),
-            });
+        if let Some(confidence) = edit.confidence {
+            note.confidence = confidence;
         }
-        note.text = text;
-    }
-    if let Some(confidence) = edit.confidence {
-        note.confidence = confidence;
-    }
-    note.edited_at = now.clone();
-    ticket.updated_at = now;
-    store.write_ticket_committing(&ticket)?;
-    Ok(ticket)
+        note.edited_at = now.clone();
+        ticket.updated_at = now;
+        store.write_ticket_committing(&ticket)?;
+        Ok(ticket)
+    })
 }
 
 /// Replace unambiguous bare attachment ULIDs in prose with the filename references that
@@ -1740,19 +1750,21 @@ pub fn delete_note(
     note_id: &Ulid,
     now: Timestamp,
 ) -> Result<Ticket, StoreError> {
-    let mut ticket = store.read_ticket(ticket_id)?;
-    if !ticket.notes.iter().any(|note| &note.id == note_id) {
-        return Err(StoreError::Io(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("note {note_id}"),
-        )));
-    }
-    ticket.notes.retain(|note| {
-        &note.id != note_id && note.ai_feedback_for_note().as_ref() != Some(note_id)
-    });
-    ticket.updated_at = now;
-    store.write_ticket_committing(&ticket)?;
-    Ok(ticket)
+    store.with_note_transaction(|| {
+        let mut ticket = store.read_ticket(ticket_id)?;
+        if !ticket.notes.iter().any(|note| &note.id == note_id) {
+            return Err(StoreError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("note {note_id}"),
+            )));
+        }
+        ticket.notes.retain(|note| {
+            &note.id != note_id && note.ai_feedback_for_note().as_ref() != Some(note_id)
+        });
+        ticket.updated_at = now;
+        store.write_ticket_committing(&ticket)?;
+        Ok(ticket)
+    })
 }
 
 /// Record a close outcome (`docs/02` §2.6a). Closing **settles the status**: a

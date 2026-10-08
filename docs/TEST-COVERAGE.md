@@ -70,6 +70,11 @@ traffic, a successful lookup persists only the public login, a repeated run skip
 and expired or offline credentials fail without writing identity metadata. The
 `GitHubDeviceClient` transport tests cover the isolated `/user` response contract.
 
+HS2-SVKB1V covers note mutation serialization in `crates/hotsheet-ticketing/src/store.rs`
+and `ops.rs`: a child process waits behind a held read–revise–write lock, then a
+different rater's feedback survives; concurrent same-rater writes keep one source
+note. Existing note CRUD and AI feedback tests exercise the serialized operations.
+
 HS2-TPF3EB moves non-atomic provider update progress from toasts to the app-level loading
 indicator. `clients/web/src/bulk-update-progress.test.ts` covers start, advance, repeat,
 overlap, and out-of-order completion; `clients/web/tests/providers.spec.ts` covers the real
