@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-6DHS8B covers cropped-rendition cache recency, byte and entry eviction,
+in-progress file preservation, concurrent publication, and oversized bypass in
+`crates/hotsheet-server/src/image_crop_cache.rs`, plus HTTP rendition/original
+delivery in `crates/hotsheet-server/tests/http.rs`.
+
 HS2-B9963V covers local grouping of close feedback paraphrases, target-scope separation,
 opposing behavior and negation, distinct-rater threshold, mixed-rating review text,
 and source references in `crates/hotsheet-cli/src/feedback_synthesis.rs`; the headless

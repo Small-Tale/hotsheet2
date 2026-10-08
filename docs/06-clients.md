@@ -1680,6 +1680,10 @@ and identity-less legacy entries remain conservatively blocking.
   together with one activity note. The explicit `/original` attachment route serves the raw
   bytes for editing. Animated, vector, video, and unsupported files do not offer Crop, nor
   do append-only provider attachments.
+  The server keeps derived image renditions in a disposable cache capped at 128 entries
+  and 256 MiB. Cache hits refresh recency; older completed renditions are evicted after
+  a new one is published, while the active response retains its bytes. Large renditions
+  are served without caching.
   New-ticket attachment evidence follows the same safety policy before a ticket exists:
   users can drop files on the collapsed New ticket launcher, an open project tab, or anywhere
   on the expanded composer. A project-tab drop selects that project and opens its new-ticket

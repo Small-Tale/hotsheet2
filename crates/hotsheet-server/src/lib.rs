@@ -14,6 +14,7 @@ mod custom_views;
 pub mod dist_work_loop;
 pub mod github_app_config;
 mod health_scan;
+mod image_crop_cache;
 pub mod lifecycle;
 pub mod media;
 pub mod multistore;
@@ -6374,20 +6375,13 @@ async fn git_attachment_response(
             digest.update(crop.y.to_be_bytes());
             digest.update(crop.width.to_be_bytes());
             digest.update(crop.height.to_be_bytes());
-            let cache_dir = cache_root.join("image-crops");
-            let cache_path = cache_dir.join(format!("{:x}", digest.finalize()));
-            if let Ok(cached) = std::fs::read(&cache_path) {
+            let key = format!("{:x}", digest.finalize());
+            if let Some(cached) = image_crop_cache::read(&cache_root, &key) {
                 return Ok(cached);
             }
             let result =
                 hotsheet_ticketing::image_crop::cropped_rendition(&filename_owned, &bytes, crop)?;
-            if std::fs::create_dir_all(&cache_dir).is_ok() {
-                let temporary = cache_dir.join(format!("{}.tmp", Ulid::new()));
-                if std::fs::write(&temporary, &result).is_ok() {
-                    let _ = std::fs::rename(&temporary, &cache_path);
-                }
-                let _ = std::fs::remove_file(temporary);
-            }
+            image_crop_cache::store(&cache_root, &key, &result);
             Ok::<_, hotsheet_ticketing::image_crop::ImageCropError>(result)
         })
         .await
