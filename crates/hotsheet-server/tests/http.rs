@@ -6343,7 +6343,7 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
             .oneshot(authed(
                 "PUT",
                 &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
-                Some(r#"{"annotations":[{"id":"region-1","x":1000,"y":2000,"width":3000,"height":2500,"start_ms":1000,"end_ms":2000,"text":"Review this frame"}]}"#),
+                Some(r#"{"annotations":[{"id":"region-1","x":1000,"y":2000,"width":3000,"height":2500,"start_ms":1000,"end_ms":2000,"text":"Review this frame"}],"actor":{"role":"ai","id":"annotation-test"}}"#),
             ))
             .await
             .unwrap(),
@@ -6356,6 +6356,7 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     );
     let annotation_note = annotated["notes"].as_array().unwrap().last().unwrap();
     assert_eq!(annotation_note["kind"], "activity");
+    assert_eq!(annotation_note["actor"]["id"], "annotation-test");
     assert_eq!(
         annotation_note["summary"],
         "Updated annotations for fixed.mov"
@@ -10275,7 +10276,7 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
 
 #[tokio::test]
 async fn attachment_upload_returns_and_persists_durable_metadata() {
-    let (_dir, state) = state();
+    let (dir, state) = state();
     let app = app(state);
     let created = body_json(
         app.clone()
@@ -10311,6 +10312,57 @@ async fn attachment_upload_returns_and_persists_durable_metadata() {
     )
     .await;
     assert_eq!(reread["attachments"], attached["attachments"]);
+    let attachment_id = attached["attachments"][0]["id"].as_str().unwrap();
+    let annotated = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("/tickets/{id}/attachments/{attachment_id}"),
+                Some(r#"{"annotations":[{"id":"region","x":1,"y":2,"width":3,"height":4}],"actor":{"role":"ai","id":"api-test"}}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        annotated["attachments"][0]["annotations"][0]["id"],
+        "region"
+    );
+    assert_eq!(
+        annotated["notes"].as_array().unwrap().last().unwrap()["actor"]["id"],
+        "api-test"
+    );
+    let repeated = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("/tickets/{id}/attachments/{attachment_id}"),
+                Some(r#"{"annotations":[{"id":"region","x":1,"y":2,"width":3,"height":4}]}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(repeated["notes"], annotated["notes"]);
+    let store = FsStore::open(dir.path()).unwrap();
+    let ticket_id = hotsheet_model::Ulid::from_string(id).unwrap();
+    let ticket_path = store.ticket_path(&ticket_id);
+    let before_mcp = std::fs::read(&ticket_path).unwrap();
+    let backend = hotsheet_mcp::CoreBackend::open(dir.path()).unwrap();
+    let mcp = hotsheet_mcp::handle_message(
+        &serde_json::json!({
+            "jsonrpc":"2.0", "id":1, "method":"tools/call",
+            "params":{"name":"hotsheet_annotate_attachment","arguments":{
+                "id":id, "attachment":"choppy.mov",
+                "annotations":[{"id":"region","x":1,"y":2,"width":3,"height":4}],
+                "actor_role":"ai", "actor_id":"api-test"
+            }}
+        }),
+        &backend,
+    )
+    .unwrap();
+    assert_eq!(mcp["result"]["isError"], false);
+    assert_eq!(std::fs::read(ticket_path).unwrap(), before_mcp);
 
     for query in [
         "has_attachment=true",

@@ -289,6 +289,9 @@ enum Cmd {
         id: String,
         #[arg(required = true)]
         files: Vec<PathBuf>,
+        /// Print attachment ids and filenames as JSON.
+        #[arg(long)]
+        json: bool,
         #[arg(long)]
         batch_id: Option<String>,
         #[arg(long)]
@@ -301,6 +304,17 @@ enum Cmd {
         actor_name: Option<String>,
         #[arg(long)]
         purpose: Option<String>,
+    },
+    /// Replace one attachment's media annotations from JSON (object or bare array).
+    Annotate {
+        id: String,
+        attachment: String,
+        #[arg(long, conflicts_with = "clear", required_unless_present = "clear")]
+        file: Option<PathBuf>,
+        #[arg(long, conflicts_with = "file")]
+        clear: bool,
+        #[arg(long)]
+        json: bool,
     },
     /// Correct the actor provenance of one or more existing attachments.
     AttachmentActor {
@@ -1340,6 +1354,7 @@ fn main() -> Result<()> {
         Cmd::Attach {
             id,
             files,
+            json,
             batch_id,
             batch_label,
             actor_role,
@@ -1350,12 +1365,28 @@ fn main() -> Result<()> {
             &cli.path,
             &id,
             &files,
+            json,
             batch_id,
             batch_label,
             actor_role,
             actor_id,
             actor_name,
             purpose,
+        ),
+        Cmd::Annotate {
+            id,
+            attachment,
+            file,
+            clear,
+            json,
+        } => cmd_annotate(
+            &cli.path,
+            &id,
+            &attachment,
+            file.as_deref(),
+            clear,
+            json,
+            actor.as_ref(),
         ),
         Cmd::AttachmentActor {
             id,
@@ -4423,6 +4454,7 @@ fn cmd_attach(
     path: &PathBuf,
     needle: &str,
     files: &[PathBuf],
+    json: bool,
     batch_id: Option<String>,
     batch_label: Option<String>,
     actor_role: Option<String>,
@@ -4454,6 +4486,7 @@ fn cmd_attach(
         display_name: actor_name,
         role,
     });
+    let mut attached = Vec::new();
     for file in files {
         let filename = file
             .file_name()
@@ -4480,10 +4513,74 @@ fn cmd_attach(
             .find(|attachment| attachment.id == attachment_id)
             .map(|attachment| attachment.filename.as_str())
             .unwrap_or(filename);
-        println!("Attached {}", ops::attachment_reference(None, filename));
+        if !json {
+            println!("Attached {}", ops::attachment_reference(None, filename));
+            println!(
+                "Durable attachment id: {attachment_id} ({})",
+                written.display()
+            );
+        }
+        attached.push(serde_json::json!({"id": attachment_id.to_string(), "filename": filename}));
+    }
+    if json {
+        println!("{}", serde_json::to_string(&attached)?);
+    }
+    Ok(())
+}
+
+fn cmd_annotate(
+    path: &PathBuf,
+    needle: &str,
+    attachment: &str,
+    file: Option<&Path>,
+    clear: bool,
+    json: bool,
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, needle)?;
+    let matches = ticket
+        .attachments
+        .iter()
+        .filter(|item| item.id.to_string() == attachment || item.filename == attachment)
+        .collect::<Vec<_>>();
+    let [target] = matches.as_slice() else {
+        bail!("attachment '{attachment}' must identify one attachment on {needle}");
+    };
+    let annotations: Vec<hotsheet_model::MediaAnnotation> = if clear {
+        Vec::new()
+    } else {
+        let file = file.context("--file is required unless --clear is set")?;
+        let input = if file == Path::new("-") {
+            let mut input = String::new();
+            std::io::stdin().read_to_string(&mut input)?;
+            input
+        } else {
+            std::fs::read_to_string(file)?
+        };
+        let value: serde_json::Value = serde_json::from_str(&input)?;
+        let value = value.get("annotations").cloned().unwrap_or(value);
+        serde_json::from_value(value)?
+    };
+    let updated = store.set_attachment_annotations_with_activity(
+        &ticket.id,
+        &target.id,
+        annotations,
+        hotsheet_ticketing::actor::note_actor(actor),
+        Ulid::new(),
+        now_ts(),
+    )?;
+    let result = updated
+        .attachments
+        .iter()
+        .find(|item| item.id == target.id)
+        .context("updated attachment missing")?;
+    if json {
+        println!("{}", serde_json::to_string(result)?);
+    } else {
         println!(
-            "Durable attachment id: {attachment_id} ({})",
-            written.display()
+            "Updated annotations for {} ({})",
+            result.filename, result.id
         );
     }
     Ok(())

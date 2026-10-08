@@ -4203,6 +4203,127 @@ fn attach_prints_a_note_reference_and_edit_repairs_a_bare_attachment_id() {
 }
 
 #[test]
+fn annotate_attachment_replaces_once_and_rejects_invalid_batches() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let git_output = |root: &Path, args: &[&str]| {
+        String::from_utf8(
+            hotsheet_ticketing::git::command_in(root)
+                .args(args)
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+    };
+    let proof = root.join("proof.png");
+    let annotations = root.join("annotations.json");
+    std::fs::write(&proof, b"proof").unwrap();
+    std::fs::write(
+        &annotations,
+        r#"[{"id":"region-1","x":0,"y":0,"width":100,"height":100}]"#,
+    )
+    .unwrap();
+    hs(root).args(["init"]).assert().success();
+    let slug = new_ticket(root, "Annotation parity");
+    let attached = hs(root)
+        .arg("attach")
+        .arg(&slug)
+        .arg(&proof)
+        .arg("--json")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let attached: serde_json::Value = serde_json::from_slice(&attached).unwrap();
+    let attachment_id = attached[0]["id"].as_str().unwrap();
+    assert_eq!(attached[0]["filename"], "proof.png");
+
+    let before = git_output(root, &["rev-parse", "HEAD"]);
+    let before_count: u64 = git_output(root, &["rev-list", "--count", "HEAD"])
+        .trim()
+        .parse()
+        .unwrap();
+    hs(root)
+        .args([
+            "--actor-role",
+            "ai",
+            "--actor-id",
+            "annotator",
+            "annotate",
+            &slug,
+            "proof.png",
+            "--file",
+        ])
+        .arg(&annotations)
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("region-1"));
+    let after = git_output(root, &["rev-parse", "HEAD"]);
+    assert_ne!(before, after);
+    let after_count: u64 = git_output(root, &["rev-list", "--count", "HEAD"])
+        .trim()
+        .parse()
+        .unwrap();
+    assert_eq!(after_count, before_count + 1);
+    let ticket =
+        hotsheet_ticketing::ops::resolve(&hotsheet_ticketing::FsStore::open(root).unwrap(), &slug)
+            .unwrap()
+            .unwrap();
+    assert_eq!(ticket.attachments[0].annotations.len(), 1);
+    assert_eq!(ticket.notes.len(), 1);
+    assert_eq!(
+        ticket.notes[0].actor.as_ref().unwrap().id.as_deref(),
+        Some("annotator")
+    );
+
+    hs(root)
+        .args(["annotate", &slug, attachment_id, "--file"])
+        .arg(&annotations)
+        .assert()
+        .success();
+    assert_eq!(after, git_output(root, &["rev-parse", "HEAD"]));
+    std::fs::write(
+        &annotations,
+        r#"{"annotations":[{"id":"invalid","x":9999,"y":0,"width":2,"height":1}]}"#,
+    )
+    .unwrap();
+    hs(root)
+        .args(["annotate", &slug, "proof.png", "--file"])
+        .arg(&annotations)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("bounded non-empty rectangles"));
+    assert_eq!(after, git_output(root, &["rev-parse", "HEAD"]));
+    hs(root)
+        .args(["annotate", &slug, attachment_id, "--clear"])
+        .assert()
+        .success();
+    let cleared =
+        hotsheet_ticketing::ops::resolve(&hotsheet_ticketing::FsStore::open(root).unwrap(), &slug)
+            .unwrap()
+            .unwrap();
+    assert!(cleared.attachments[0].annotations.is_empty());
+    assert_eq!(cleared.notes.len(), 2);
+    hs(root)
+        .args(["annotate", &slug, "proof.png", "--file", "-"])
+        .write_stdin(r#"{"annotations":[{"id":"stdin","x":2,"y":3,"width":4,"height":5}]}"#)
+        .assert()
+        .success();
+    assert_eq!(
+        hotsheet_ticketing::ops::resolve(&hotsheet_ticketing::FsStore::open(root).unwrap(), &slug)
+            .unwrap()
+            .unwrap()
+            .attachments[0]
+            .annotations[0]
+            .id,
+        "stdin"
+    );
+}
+
+#[test]
 fn attachment_actor_corrects_existing_provenance_without_losing_other_metadata() {
     let dir = tempfile::tempdir().unwrap();
     let source = tempfile::NamedTempFile::new().unwrap();

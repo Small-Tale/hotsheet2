@@ -236,6 +236,27 @@ pub struct MediaAnnotation {
     pub text: String,
 }
 
+/// Shared validation for a complete replacement batch of media annotations.
+pub fn validate_media_annotations(annotations: &[MediaAnnotation]) -> Result<(), &'static str> {
+    const ERROR: &str = "annotations require unique ids, bounded non-empty rectangles, and complete ordered time ranges";
+    let mut seen = std::collections::HashSet::new();
+    for annotation in annotations {
+        let valid_rectangle = annotation.width > 0
+            && annotation.height > 0
+            && annotation.x.saturating_add(annotation.width) <= 10_000
+            && annotation.y.saturating_add(annotation.height) <= 10_000;
+        let valid_time = match (annotation.start_ms, annotation.end_ms) {
+            (Some(start), Some(end)) => start <= end,
+            (None, None) => true,
+            _ => false,
+        };
+        if !seen.insert(&annotation.id) || !valid_rectangle || !valid_time {
+            return Err(ERROR);
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attachment {
     pub id: Ulid,
@@ -757,5 +778,57 @@ mod tests {
             "2026-08-20T00:01:00Z",
         ));
         assert!(!ticket.feedback_needed());
+    }
+
+    #[test]
+    fn media_annotation_validation_covers_batch_and_range_boundaries() {
+        let annotation = MediaAnnotation {
+            id: "one".into(),
+            x: 9_999,
+            y: 0,
+            width: 1,
+            height: 10_000,
+            start_ms: Some(5),
+            end_ms: Some(5),
+            text: String::new(),
+        };
+        assert!(validate_media_annotations(&[]).is_ok());
+        assert!(validate_media_annotations(std::slice::from_ref(&annotation)).is_ok());
+        let mut second = annotation.clone();
+        second.id = "two".into();
+        assert!(validate_media_annotations(&[annotation.clone(), second]).is_ok());
+        assert!(validate_media_annotations(&[annotation.clone(), annotation.clone()]).is_err());
+        for invalid in [
+            MediaAnnotation {
+                width: 0,
+                ..annotation.clone()
+            },
+            MediaAnnotation {
+                height: 0,
+                ..annotation.clone()
+            },
+            MediaAnnotation {
+                width: 2,
+                ..annotation.clone()
+            },
+            MediaAnnotation {
+                x: u32::MAX,
+                ..annotation.clone()
+            },
+            MediaAnnotation {
+                start_ms: None,
+                ..annotation.clone()
+            },
+            MediaAnnotation {
+                end_ms: None,
+                ..annotation.clone()
+            },
+            MediaAnnotation {
+                start_ms: Some(6),
+                ..annotation
+            },
+        ] {
+            assert!(validate_media_annotations(&[invalid]).is_err());
+        }
     }
 }

@@ -1614,6 +1614,10 @@ pub fn app(state: AppState) -> Router {
             "/tickets/{id}/attachments",
             post(add_ticket_attachment).layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BODY_BYTES)),
         )
+        .route(
+            "/tickets/{id}/attachments/{attachment_id}",
+            axum::routing::put(update_ticket_attachment_annotations),
+        )
         .route("/tickets/{id}/close", post(close_ticket))
         .route("/tickets/{id}/assign", post(assign_ticket))
         // Coordination: claim next or one exact ticket, release, renew a lease.
@@ -6644,6 +6648,33 @@ async fn rename_checkout_ticket_attachment(
 #[derive(Debug, Deserialize)]
 struct UpdateAttachmentAnnotationsBody {
     annotations: Vec<hotsheet_model::MediaAnnotation>,
+    #[serde(default)]
+    actor: Option<ActorReq>,
+}
+
+async fn update_ticket_attachment_annotations(
+    State(state): State<AppState>,
+    Path((id, attachment_id)): Path<(String, String)>,
+    Json(body): Json<UpdateAttachmentAnnotationsBody>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let ticket = ops::resolve(&state.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let attachment_id =
+        Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
+    let actor = parse_actor(body.actor.as_ref())?;
+    let updated = state.store.set_attachment_annotations_with_activity(
+        &ticket.id,
+        &attachment_id,
+        body.annotations,
+        hotsheet_ticketing::actor::note_actor(actor.as_ref()),
+        Ulid::new(),
+        now(),
+    )?;
+    state.changed_in(
+        &state.default_entry(),
+        "attachment_annotations_updated",
+        &updated,
+    );
+    Ok(Json(api_ticket(&state.default_entry(), &updated)?))
 }
 
 async fn update_checkout_ticket_attachment_annotations(
@@ -6655,30 +6686,14 @@ async fn update_checkout_ticket_attachment_annotations(
     let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
-    let mut seen = std::collections::HashSet::new();
-    for annotation in &body.annotations {
-        let valid_rectangle = annotation.width > 0
-            && annotation.height > 0
-            && annotation.x.saturating_add(annotation.width) <= 10_000
-            && annotation.y.saturating_add(annotation.height) <= 10_000;
-        let valid_time = match (annotation.start_ms, annotation.end_ms) {
-            (Some(start), Some(end)) => start <= end,
-            (None, None) => true,
-            _ => false,
-        };
-        if !seen.insert(annotation.id.clone()) || !valid_rectangle || !valid_time {
-            return Err(ApiError::new(
-                StatusCode::BAD_REQUEST,
-                "annotations require unique ids, bounded non-empty rectangles, and complete ordered time ranges",
-            ));
-        }
-    }
+    let actor = parse_actor(body.actor.as_ref())?;
     let updated = entry
         .store
         .set_attachment_annotations_with_activity(
             &ticket.id,
             &attachment_id,
             body.annotations,
+            hotsheet_ticketing::actor::note_actor(actor.as_ref()),
             Ulid::new(),
             now(),
         )
@@ -11828,6 +11843,7 @@ fn parse_actor(
 impl From<StoreError> for ApiError {
     fn from(e: StoreError) -> Self {
         let status = match &e {
+            StoreError::InvalidAnnotations(_) => StatusCode::BAD_REQUEST,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => StatusCode::NOT_FOUND,
             StoreError::NotAStore(_) => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

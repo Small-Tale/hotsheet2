@@ -155,6 +155,16 @@ fn base_tools_list() -> Value {
             "inputSchema": { "type": "object", "properties": { "id": str_prop("provider-native id, slug, or ULID"), "checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id") }, "required": ["id"] }
         },
         {
+            "name": "hotsheet_annotate_attachment",
+            "description": "Replace a git-backed attachment's media annotations. The attachment may be its ULID or unique filename; an empty array clears annotations. An unchanged batch is a no-op.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("ticket slug or ULID"),
+                "attachment": str_prop("attachment ULID or unique filename"),
+                "annotations": { "type": "array", "items": { "type": "object" } },
+                "checkout": str_prop("optional checkout id/alias/path")
+            }, "required": ["id", "attachment", "annotations"] }
+        },
+        {
             "name": "hotsheet_create",
             "description": "Create a ticket.",
             "inputSchema": { "type": "object", "properties": {
@@ -365,6 +375,7 @@ fn render_result(value: &Value) -> String {
 
 /// Tools that change state; each accepts `actor_role` / `actor_id` (HS2-RD4M29).
 const MUTATING_TOOLS: &[&str] = &[
+    "hotsheet_annotate_attachment",
     "hotsheet_create",
     "hotsheet_update",
     "hotsheet_close",
@@ -454,6 +465,46 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
 
 fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     match name {
+        "hotsheet_annotate_attachment" => {
+            if args.get("connection").is_some() {
+                return Err("media annotations require a git-backed ticket".into());
+            }
+            let id = arg_str(args, "id")?;
+            let attachment = arg_str(args, "attachment")?;
+            let annotations = args
+                .get("annotations")
+                .filter(|value| value.is_array())
+                .ok_or_else(|| "annotations must be an array".to_string())?;
+            let ticket_path = checkout_route(args, &format!("/tickets/{id}"));
+            let current = backend.get(&ticket_path, &[]).map_err(be_msg)?;
+            let ticket = current.get("ticket").unwrap_or(&current);
+            let matches = ticket
+                .get("attachments")
+                .and_then(Value::as_array)
+                .ok_or_else(|| "ticket has no attachment list".to_string())?
+                .iter()
+                .filter(|item| {
+                    item.get("id").and_then(Value::as_str) == Some(attachment.as_str())
+                        || item.get("filename").and_then(Value::as_str) == Some(attachment.as_str())
+                })
+                .collect::<Vec<_>>();
+            let [target] = matches.as_slice() else {
+                return Err(format!(
+                    "attachment '{attachment}' must identify one attachment on {id}"
+                ));
+            };
+            let attachment_id = target
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "attachment has no id".to_string())?;
+            backend
+                .send(
+                    "PUT",
+                    &checkout_route(args, &format!("/tickets/{id}/attachments/{attachment_id}")),
+                    &json!({ "annotations": annotations }),
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_providers" => backend.get("/providers", &[]).map_err(be_msg),
         "hotsheet_confidence_report" => {
             if args
@@ -1233,6 +1284,33 @@ mod core_backend {
                             .send("POST", "/tickets", body);
                     }
                     let tail = suffix.trim_start_matches('/');
+                    if method == "PUT"
+                        && let Some((id, attachment_id)) = tail.split_once("/attachments/")
+                    {
+                        let mut matched = Vec::new();
+                        for store in stores {
+                            if ops::resolve(&store, id).map_err(store_err)?.is_some() {
+                                matched.push(store);
+                            }
+                        }
+                        let store = match matched.as_slice() {
+                            [store] => store.clone(),
+                            [] => return Err(not_found(id)),
+                            _ => {
+                                return Err(BackendError {
+                                    status: Some(409),
+                                    message: format!(
+                                        "ticket {id} is ambiguous across checkout stores"
+                                    ),
+                                });
+                            }
+                        };
+                        return self.for_checkout(store, checkout).send(
+                            "PUT",
+                            &format!("/tickets/{id}/attachments/{attachment_id}"),
+                            body,
+                        );
+                    }
                     let (id, action) = tail
                         .strip_suffix("/close")
                         .map(|v| (v, "close"))
@@ -1267,6 +1345,34 @@ mod core_backend {
                 }
             }
             match method {
+                "PUT" if path.starts_with("/tickets/") && path.contains("/attachments/") => {
+                    let (id, attachment_id) = path
+                        .trim_start_matches("/tickets/")
+                        .split_once("/attachments/")
+                        .ok_or_else(|| bad_request("invalid annotation path"))?;
+                    let ticket = self.resolve(id)?;
+                    let attachment_id =
+                        Ulid::from_string(attachment_id).map_err(|_| not_found(attachment_id))?;
+                    let annotations = serde_json::from_value(
+                        body.get("annotations")
+                            .cloned()
+                            .ok_or_else(|| bad_request("annotations is required"))?,
+                    )
+                    .map_err(|error| bad_request(error.to_string()))?;
+                    let actor = body_actor(body)?;
+                    let updated = self
+                        .store
+                        .set_attachment_annotations_with_activity(
+                            &ticket.id,
+                            &attachment_id,
+                            annotations,
+                            hotsheet_ticketing::actor::note_actor(actor.as_ref()),
+                            (self.mint)(),
+                            (self.now)(),
+                        )
+                        .map_err(store_err)?;
+                    self.api(&updated)
+                }
                 "POST" if path == "/tickets" => {
                     let prefix = self.store.metadata().map_err(store_err)?.ticket_prefix;
                     let blocked_by =
@@ -2043,6 +2149,7 @@ mod core_backend {
 
     fn store_err(e: StoreError) -> BackendError {
         let status = match &e {
+            StoreError::InvalidAnnotations(_) => 400,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => 404,
             _ => 500,
         };
@@ -2918,6 +3025,70 @@ mod tests {
             return json!({ "error": text });
         }
         serde_json::from_str(text).unwrap_or_else(|_| json!({ "raw": text }))
+    }
+
+    #[test]
+    fn annotate_attachment_tool_uses_shared_store_and_attributed_activity() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let ticket = ops::create(
+            &store,
+            hotsheet_model::Ulid::new(),
+            "HS",
+            hotsheet_model::Timestamp::new("2026-10-08T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: "MCP annotations".into(),
+                category: "issue".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let attachment_id = hotsheet_model::Ulid::new();
+        store
+            .write_attachment_with_metadata(
+                &ticket.id,
+                attachment_id,
+                hotsheet_model::Timestamp::new("2026-10-08T00:01:00Z"),
+                "proof.png",
+                b"proof",
+                hotsheet_model::AttachmentMetadata::default(),
+            )
+            .unwrap();
+        let backend = CoreBackend::new(store.clone());
+        let args = json!({
+            "id": ticket.slug,
+            "attachment": "proof.png",
+            "annotations": [{"id":"a","x":10,"y":20,"width":30,"height":40}],
+            "actor_role": "ai",
+            "actor_id": "annotator"
+        });
+        let updated = call(&backend, "hotsheet_annotate_attachment", args.clone());
+        assert_eq!(updated["attachments"][0]["annotations"][0]["id"], "a");
+        let saved = store.read_ticket(&ticket.id).unwrap();
+        assert_eq!(saved.notes.len(), 1);
+        assert_eq!(
+            saved.notes[0].actor.as_ref().unwrap().id.as_deref(),
+            Some("annotator")
+        );
+        let unchanged = call(&backend, "hotsheet_annotate_attachment", args);
+        assert!(unchanged.get("error").is_none());
+        assert_eq!(store.read_ticket(&ticket.id).unwrap().notes.len(), 1);
+        let invalid = call(
+            &backend,
+            "hotsheet_annotate_attachment",
+            json!({
+                "id": ticket.slug,
+                "attachment": attachment_id.to_string(),
+                "annotations": [{"id":"bad","x":9999,"y":0,"width":2,"height":1}]
+            }),
+        );
+        assert!(
+            invalid["error"]
+                .as_str()
+                .unwrap()
+                .contains("bounded non-empty rectangles")
+        );
+        assert_eq!(store.read_ticket(&ticket.id).unwrap().notes.len(), 1);
     }
 
     #[test]

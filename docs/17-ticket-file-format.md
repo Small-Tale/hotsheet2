@@ -220,6 +220,11 @@ Each persisted annotation batch also appends an `activity` note whose summary id
 the attachment and whose Markdown body records added, updated, and removed rectangles.
 The annotation replacement and its activity note are one store commit, so readers never
 observe metadata without the corresponding history entry.
+The store validates every replacement batch for unique ids, non-empty rectangles fully within
+the normalized media bounds, and either no time range or a complete ordered pair. Invalid
+batches change nothing; identical batches create neither a commit nor a note. CLI, MCP, and
+server writes share this validation. The activity note records the supplied actor when one
+is available.
 
 ## 17.4 Rules the parser/serializer enforce
 

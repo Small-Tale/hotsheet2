@@ -278,10 +278,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/concurrent_start.rs # Real server subprocesses started at once on one store (HS2-585JCP): exactly one stays registered + holds the writer lock; the rest exit
       tests/terminal_broker.rs # Creation-kind HTTP/broker integration: shell/AI creation, OSC8 independence, reattach and server-restart preservation
       src/terminal_broker.rs #   server↔detached-broker integration (HS2-ERT00F/HS2-8GQNDQ): TerminalBroker::ensure (discover/spawn the default broker per home/project in a short private per-user /tmp namespace (pinning adopted legacy home socket namespaces across idle exits), using the dedicated sibling binary or the server's hidden self-host fallback), discover/kill_all for explicit cleanup, and per-request BrokerClient round trips; routes /terminals ops + live WS attach (bridged to a BrokerStream — broker_attach_loop in lib.rs) + the connect busy feed (polls the broker's Read) so terminals survive server stop/restart
-      tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
+      tests/http.rs          #   in-process HTTP E2E (tower::oneshot); attachment annotation PUT uses the shared store validator on default and checkout routes
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend
-                             #     (provider-aware providers/query/get/create/update/close/assign plus batch/exact-claim/claim-next/release/renew/copy/move):
+                             #     (provider-aware providers/query/get/create/update/close/assign plus annotation replacement/batch/exact-claim/claim-next/release/renew/copy/move):
                              #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
       src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
     hotsheet-tls/            # Tier-1 mTLS material (rcgen-only, no rustls; used by CLI + server) — docs/04 §4.6, HS2-VT3JMF

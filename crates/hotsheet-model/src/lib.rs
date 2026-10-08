@@ -21,6 +21,7 @@ pub use ticket::{
     AiFeedback, AiFeedbackRating, Attachment, AttachmentActor, AttachmentActorRole,
     AttachmentMetadata, AttachmentPurpose, ClaimEvent, ClaimEventKind, Confidence, ConfidenceError,
     ExternalLink, MediaAnnotation, Note, NoteActor, ReviewRequest, Ticket,
+    validate_media_annotations,
 };
 pub use timestamp::Timestamp;
 

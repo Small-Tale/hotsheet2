@@ -514,6 +514,9 @@ hotsheet confidence-report [--json]        # reported confidence vs. later reope
 hotsheet search "flicker"                 # FTS via the local index
 hotsheet show HS-7f3k9q
 hotsheet attach HS-7f3k9q ./proof.png       # stable id + RFC3339 created_at
+hotsheet attach HS-7f3k9q ./proof.png --json # [{"id":"...","filename":"proof.png"}]
+hotsheet annotate HS-7f3k9q proof.png --file annotations.json # replace media annotations
+hotsheet annotate HS-7f3k9q <attachment-id> --clear        # remove annotations
 hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 printf '%s' "$MARKDOWN" | hotsheet edit HS-7f3k9q --note-file - --note-kind feedback_needed
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
@@ -643,6 +646,14 @@ CLI uploads accept `--actor-role human|ai|system|unknown` plus optional `--actor
 `--actor-name`. Automated evidence must declare its actual role instead of relying on the
 legacy-safe `unknown` default. `hotsheet attachment-actor <ticket> <attachment-id>…`
 repairs provenance on existing attachments without changing their batch, label, or purpose.
+`hotsheet annotate` accepts a unique attachment filename or ULID and a JSON file (or `--file -`
+for stdin) containing either `{"annotations":[…]}` or the bare array. It prints the resulting
+attachment with `--json`. The shared store validator rejects duplicate ids, rectangles outside
+the normalized 0–10,000 range, and incomplete or reversed time ranges before writing. An
+unchanged replacement makes no commit or activity note. The server supports the same `PUT`
+body at `/tickets/{id}/attachments/{attachment_id}` and the checkout-scoped path; an optional
+`actor` attributes the activity note. MCP `hotsheet_annotate_attachment` accepts the same array,
+resolves an attachment by ULID or unique filename, and accepts `actor_role`/`actor_id`.
 `--blocked-by` (repeatable, on `new` and `edit`) takes a slug **or** ULID and is
 resolved to a ULID, rejecting unknown tickets and self-references; on `edit` a present
 `--blocked-by` **replaces** the set and `--clear-blocked-by` empties it. The same edge

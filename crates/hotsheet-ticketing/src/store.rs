@@ -91,6 +91,8 @@ impl StoreMetadata {
 /// An error reading or writing the store.
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
+    #[error("{0}")]
+    InvalidAnnotations(&'static str),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("{operation} {path}: {source}")]
@@ -1117,9 +1119,12 @@ impl FsStore {
         ticket_id: &Ulid,
         attachment_id: &Ulid,
         annotations: Vec<hotsheet_model::MediaAnnotation>,
+        actor: Option<hotsheet_model::NoteActor>,
         note_id: Ulid,
         now: Timestamp,
     ) -> Result<Ticket, StoreError> {
+        hotsheet_model::validate_media_annotations(&annotations)
+            .map_err(StoreError::InvalidAnnotations)?;
         let mut ticket = self.read_ticket(ticket_id)?;
         let attachment = ticket
             .attachments
@@ -1149,7 +1154,7 @@ impl FsStore {
             feedback_for: None,
             ai_feedback: None,
             human_edited: false,
-            actor: None,
+            actor,
             text,
         });
         ticket.updated_at = now;
