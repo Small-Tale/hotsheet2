@@ -2446,9 +2446,12 @@ component roots: AppLoadingIndicator, SettingsWorkspace, TicketRowContextMenu,
 TicketSourceSetupDialog, and TicketSourcesSettings (HS2-8ZM85Z). Their existing selectors
 remain for compatibility, and the named classes live in each component's own stylesheet.
 Beta.81 recognizes `ToolbarControlGroup` in Kerf's documented TabBar zones, retiring the two
-`KF-KJYK46` suppressions. The strict doctor gate still narrowly suppresses three `KUI-L201`
-reports where Hot Sheet toolbar wrapper props accept the group. `HS2-PC9DVB` tracks app
-wrapper slot modeling and removal of those remaining suppressions.
+`KF-KJYK46` suppressions. The app composition catalog now describes `MainShell.headerActions`
+and `TerminalTicketRail.controls` as Toolbar content slots, and `WorkspaceControls` as the
+fragment of groups it renders rather than a single group root (HS2-PC9DVB). The strict doctor
+gate retains one `KUI-L201` suppression for the UX demo's `Catalog.headerActions`: Kerf's
+Catalog forwards that prop to a Toolbar trailing zone but has no composition entry for the
+analyzer to recognize. `HS2-PC9DVB` remains open for that upstream contract and suppression.
 Kerf beta.77's `ToolbarControlGroup.tileTone` (HS2-RXXXPH, KF-VH4B52) now paints direct
 decorative heading icons in brand, success, or danger quiet tones. The command editor retains its
 app-owned custom-color icon span centered inside a borderless Kerf group; the generic heading root styling

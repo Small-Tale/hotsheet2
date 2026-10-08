@@ -9,6 +9,73 @@
   },
   "entries": [
     {
+      "key": "hotsheet-web:main-shell",
+      "package": "hotsheet-web",
+      "id": "main-shell",
+      "name": "MainShell",
+      "kind": "composition",
+      "purpose": "Viewport application shell with header actions forwarded to a Toolbar trailing zone.",
+      "publicExports": [{ "name": "MainShell" }],
+      "source": "src/components/main-shell.tsx",
+      "styleSources": [],
+      "parents": { "mode": "any", "entries": [] },
+      "contexts": ["application-ui"],
+      "zones": [
+        {
+          "id": "headerActions",
+          "jsx": { "prop": "headerActions" },
+          "accepts": ["KerfUiContent"],
+          "cardinality": { "min": 0, "max": "unbounded" },
+          "exclusiveWith": []
+        }
+      ],
+      "children": { "mode": "none", "concepts": [], "requiredConcepts": [] },
+      "state": [],
+      "wiring": { "required": false, "helpers": [], "obligations": [] },
+      "responsive": { "owner": "application", "behaviors": ["AppShell owns shell layout."] },
+      "layout": { "roles": ["structure"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } },
+      "accessibility": { "obligations": [] },
+      "boundaries": { "rootClass": null, "publicClasses": [], "publicTokens": [], "placeableClasses": [] },
+      "diagnostics": [],
+      "provenance": { "selection": "ai/component-catalog-extension.json", "composition": "docs/ux-components.md" }
+    },
+    {
+      "key": "hotsheet-web:terminal-ticket-rail",
+      "package": "hotsheet-web",
+      "id": "terminal-ticket-rail",
+      "name": "TerminalTicketRail",
+      "kind": "composition",
+      "purpose": "Ticket rail with controls forwarded to a Toolbar trailing zone.",
+      "publicExports": [{ "name": "TerminalTicketRail" }],
+      "source": "src/components/terminal-ticket-rail.tsx",
+      "styleSources": ["src/components/terminal-ticket-rail.css"],
+      "parents": { "mode": "any", "entries": [] },
+      "contexts": ["application-ui"],
+      "zones": [
+        {
+          "id": "controls",
+          "jsx": { "prop": "controls" },
+          "accepts": ["KerfUiContent"],
+          "cardinality": { "min": 0, "max": "unbounded" },
+          "exclusiveWith": []
+        }
+      ],
+      "children": { "mode": "none", "concepts": [], "requiredConcepts": [] },
+      "state": [],
+      "wiring": { "required": false, "helpers": [], "obligations": [] },
+      "responsive": { "owner": "application", "behaviors": ["The rail owns its toolbar layout."] },
+      "layout": { "roles": ["structure"], "geometry": { "margin": "parent", "border": "child", "padding": "child" } },
+      "accessibility": { "obligations": [] },
+      "boundaries": {
+        "rootClass": "terminal-ticket-rail",
+        "publicClasses": ["terminal-ticket-rail"],
+        "publicTokens": [],
+        "placeableClasses": ["terminal-ticket-rail"]
+      },
+      "diagnostics": [],
+      "provenance": { "selection": "ai/component-catalog-extension.json", "composition": "docs/ux-components.md" }
+    },
+    {
       "key": "hotsheet-web:add-project-action",
       "package": "hotsheet-web",
       "id": "add-project-action",
@@ -433,10 +500,10 @@
       ],
       "source": "src/components/workspace-controls.tsx",
       "styleSources": ["src/components/workspace-header.css"],
-      "rendersAs": ["@kerfjs/ui:toolbar-control-group"],
+      "rendersAs": [],
       "parents": {
-        "mode": "listed",
-        "entries": ["@kerfjs/ui:toolbar"]
+        "mode": "any",
+        "entries": []
       },
       "contexts": ["toolbar-zone"],
       "zones": [],

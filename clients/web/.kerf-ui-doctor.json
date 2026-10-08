@@ -30,22 +30,10 @@
   "failOn": "warning",
   "suppressions": [
     {
-      "id": "hs2-pc9dvb-main-shell-header-actions",
-      "rules": ["KUI-L201"],
-      "target": "src/app/runtime.tsx",
-      "rationale": "MainShell passes headerActions into Workbench.mainToolbar.trailing, a Toolbar zone; model the app wrapper slot before removing this suppression (HS2-PC9DVB)."
-    },
-    {
       "id": "hs2-pc9dvb-ux-demo-header-actions",
       "rules": ["KUI-L201"],
       "target": "src/ux-demo/main.tsx",
-      "rationale": "The UX demo passes this group to a Toolbar headerActions zone through its app wrapper; model that slot in HS2-PC9DVB."
-    },
-    {
-      "id": "hs2-pc9dvb-ux-demo-rail-controls",
-      "rules": ["KUI-L201"],
-      "target": "src/ux-demo/workspace-components-demo.tsx",
-      "rationale": "TerminalTicketRail renders controls in its Toolbar trailing zone; model that app wrapper slot in HS2-PC9DVB."
+      "rationale": "The UX demo passes this group to Kerf Catalog.headerActions, which forwards it to a Toolbar trailing zone. Catalog has no upstream composition entry for the analyzer to recognize (HS2-PC9DVB)."
     }
   ]
 }

@@ -435,8 +435,8 @@ describe('UX demo catalog', () => {
     }
   });
 
-  // Modules that exist only as zone content of a cataloged composition (declared in the composition extension).
-  const COMPOSITION_ONLY_MODULES = new Set(['workspace-controls', 'project-strip-actions']);
+  // App-only wrappers and zone content declared in the composition extension but absent from the demo catalog.
+  const COMPOSITION_ONLY_MODULES = new Set(['workspace-controls', 'project-strip-actions', 'main-shell']);
 
   it('keeps the app composition catalog aligned with the catalog extension, sources, and Kerf roots (HS2-N5G6JS)', () => {
     const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -487,6 +487,8 @@ describe('UX demo catalog', () => {
       ).entries.map((entry) => [entry.id, entry]),
     );
     expect(composition.entries.map((entry) => entry.id)).toEqual([
+      'main-shell',
+      'terminal-ticket-rail',
       'add-project-action',
       'empty-trash-action',
       'project-dashboard-modes',
@@ -496,6 +498,16 @@ describe('UX demo catalog', () => {
       'workspace-controls',
       'workspace-identity',
     ]);
+    for (const [id, prop] of [
+      ['main-shell', 'headerActions'],
+      ['terminal-ticket-rail', 'controls'],
+    ] as const) {
+      const entry = composition.entries.find((candidate) => candidate.id === id);
+      expect(entry?.zones).toEqual([expect.objectContaining({ id: prop, jsx: { prop }, accepts: ['KerfUiContent'] })]);
+    }
+    const workspaceControls = composition.entries.find((entry) => entry.id === 'workspace-controls');
+    expect(workspaceControls?.rendersAs).toEqual([]);
+    expect(workspaceControls?.parents).toEqual({ mode: 'any', entries: [] });
     for (const entry of composition.entries) {
       expect(entry.key).toBe(`hotsheet-web:${entry.id}`);
       expect(entry.package).toBe('hotsheet-web');
