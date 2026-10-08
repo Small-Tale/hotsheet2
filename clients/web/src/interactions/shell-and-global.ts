@@ -598,8 +598,8 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
       const state = (menu as typeof menu | undefined)?.value;
       if (state) revealContextPopupMenu(surface);
     });
-  // A ticket update can alter PopupMenu's content key while its menu signal remains unchanged.
-  // Kerf then replaces the DOM host; reanchor that new host without moving an unchanged one.
+  // A ticket update can replace PopupMenu's host or morph away its inline pointer anchor while
+  // its menu signal remains unchanged. Restore only a missing or changed anchor.
   if (typeof MutationObserver !== 'undefined') {
     const opened = new Map<string, ContextPopupMenuElement>();
     let active: string[] = [];
@@ -612,7 +612,12 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         .map(([id]) => id);
       observer.disconnect();
       if (active.length && !lifetime.signal.aborted) {
-        observer.observe(document.body, { childList: true, subtree: true });
+        observer.observe(document.body, {
+          childList: true,
+          attributes: true,
+          attributeFilter: ['style'],
+          subtree: true,
+        });
         reanchorReplacedContextPopupMenus(active, opened);
       } else opened.clear();
     });

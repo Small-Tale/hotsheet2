@@ -58,7 +58,9 @@ Right-clicking either a list or board TicketRow preserves an existing multi-sele
 (or selects the clicked ticket when necessary) and opens the shared icon-bearing ticket
 menu. Pointer-opened ticket menus retain the raw viewport pointer anchor and delegate
 all measured popup flipping and shifting to Web Awesome; the app does not pre-clamp
-against an estimated menu size that can vary with ticket state. Production handlers cover reader opening, category/status/priority changes, batch
+against an estimated menu size that can vary with ticket state. If a live ticket update
+replaces the popup or clears its inline anchor, the open menu restores its original
+pointer position. Production handlers cover reader opening, category/status/priority changes, batch
 Up Next, add/remove tag, duplication, archive, and confirmed soft deletion. A provider
 advertising atomic batch support receives one checkout-scoped request with every
 concurrency token validated before any write. Other update-capable providers degrade to

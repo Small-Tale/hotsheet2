@@ -66,8 +66,10 @@ export function openContextPopupMenu(menu: ContextPopupMenuElement): void {
   openPopupMenuAt(menu, x, y);
 }
 
-/** A live menu can be replaced when its entries change. Reopen only a new DOM host at the
- * wrapper's original pointer, and forget hosts after dismissal (HS2-S1EE53). */
+/** A live menu can lose its inline anchor during a morph, even when the DOM host survives.
+ * Restore that anchor (or open a replacement host) and forget hosts after dismissal. */
+const anchoredStyles = new WeakMap<ContextPopupMenuElement, string | null>();
+
 export function reanchorReplacedContextPopupMenus(
   activeSurfaces: readonly string[],
   opened: Map<string, ContextPopupMenuElement>,
@@ -76,9 +78,10 @@ export function reanchorReplacedContextPopupMenus(
   for (const surface of opened.keys()) if (!activeSurfaces.includes(surface)) opened.delete(surface);
   for (const surface of activeSurfaces) {
     const menu = root.querySelector<ContextPopupMenuElement>(`[data-context-menu="${surface}"]`);
-    if (menu && opened.get(surface) !== menu) {
+    if (menu && (opened.get(surface) !== menu || anchoredStyles.get(menu) !== menu.getAttribute('style'))) {
       opened.set(surface, menu);
       openContextPopupMenu(menu);
+      anchoredStyles.set(menu, menu.getAttribute('style'));
     }
   }
 }

@@ -10,14 +10,18 @@ import {
 describe('reanchorReplacedContextPopupMenus', () => {
   it('opens each new host at its original pointer once and resets after dismissal', () => {
     const makeMenu = () => {
-      const setProperty = vi.fn();
+      const properties = new Map<string, string>(),
+        setProperty = vi.fn((name: string, value: string) => properties.set(name, value));
       return {
         menu: {
           open: true,
           style: { setProperty },
+          getAttribute: () =>
+            properties.size ? [...properties].map(([name, value]) => `${name}:${value}`).join(';') : null,
           closest: () => ({ dataset: { contextAnchorX: '418', contextAnchorY: '267' } }),
         } as unknown as ContextPopupMenuElement,
         setProperty,
+        properties,
       };
     };
     const first = makeMenu(),
@@ -35,10 +39,15 @@ describe('reanchorReplacedContextPopupMenus', () => {
     reanchorReplacedContextPopupMenus(['ticket'], opened, root);
     expect(second.setProperty.mock.calls.map(([, value]) => value)).toEqual(['418px', '267px']);
 
+    second.properties.clear();
+    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
+    expect(second.setProperty).toHaveBeenCalledTimes(4);
+    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
+    expect(second.setProperty).toHaveBeenCalledTimes(4);
     reanchorReplacedContextPopupMenus([], opened, root);
     expect(opened.size).toBe(0);
     reanchorReplacedContextPopupMenus(['ticket'], opened, root);
-    expect(second.setProperty).toHaveBeenCalledTimes(4);
+    expect(second.setProperty).toHaveBeenCalledTimes(6);
   });
 });
 

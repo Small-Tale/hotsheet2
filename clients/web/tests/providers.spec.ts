@@ -21918,6 +21918,23 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   });
   expect(Math.abs(boardMenu.x - board.pointer.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(boardMenu.y - board.pointer.y)).toBeLessThanOrEqual(2);
+  // A render can remove only the inline context coordinates while retaining the host.
+  // The menu signal remains open, so the original pointer must be restored (HS2-S1EE53).
+  for (let render = 0; render < 3; render++) {
+    await menu.locator('wa-dropdown').evaluate((node) => {
+      node.removeAttribute('style');
+    });
+    await expect
+      .poll(async () => {
+        const rect = await menu
+          .locator('wa-dropdown')
+          .evaluate((node) =>
+            (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect().toJSON(),
+          );
+        return Math.max(Math.abs(rect.x - board.pointer.x), Math.abs(rect.y - board.pointer.y));
+      })
+      .toBeLessThanOrEqual(2);
+  }
   // A ticket-state morph can replace the PopupMenu and lose the inline anchor Kerf wrote when
   // it first opened. The replacement must reopen at the original pointer (HS2-S1EE53).
   await menu.locator('wa-dropdown').evaluate((node) => {
