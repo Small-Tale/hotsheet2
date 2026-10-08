@@ -393,6 +393,8 @@ describe('UX demo catalog', () => {
       'ticket-row-context-menu': 'Context menu for TicketRow (demoed via TicketList/TicketBoard).',
       'ticket-source-icon':
         'Source identity glyph composed into the cataloged TicketRow, TicketInspector, and TicketSourcesSettings demos.',
+      'ticket-source-color-picker':
+        'Project-local color grid rendered inside the cataloged TicketSourcesSettings and provider connection editor demos.',
       'ticket-tag-editor':
         'Tag-editing helpers composed into TicketInfoPanel (demoed); TagPicker is the standalone entry.',
       'workspace-composition-surfaces':
