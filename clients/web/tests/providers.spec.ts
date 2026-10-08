@@ -18098,6 +18098,59 @@ test('keeps managed workspace search open and focused through repeated controlle
   }
 });
 
+for (const width of [1280, 390]) {
+  test(`collapses whitespace-only workspace search after keyboard and pointer blur at ${width}px (HS2-Y4SHXY)`, async ({
+    page,
+  }, testInfo) => {
+    await mockProject(page);
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const trigger = page.getByRole('button', { name: 'Search tickets', exact: true }),
+      editor = page.getByRole('searchbox', { name: 'Search tickets' }),
+      field = page.locator('[data-token-search-id="workspace-search"]'),
+      group = page.locator('.ticket-search-field').filter({ has: field }),
+      outside = page.getByRole('button', { name: 'Add project', exact: true });
+
+    await trigger.click();
+    await editor.fill('   ');
+    await expect(group).toHaveAttribute('data-expanded', 'true');
+    await outside.focus();
+    await expect(group).toHaveAttribute('data-expanded', 'false');
+    await expect(outside).toBeFocused();
+    await page.screenshot({
+      path: testInfo.outputPath(`whitespace-search-page-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
+
+    await trigger.click();
+    await editor.fill(' real query ');
+    await outside.focus();
+    await expect(group).toHaveAttribute('data-expanded', 'true');
+
+    await editor.focus();
+    await editor.fill(' \t ');
+    await outside.evaluate((node) => {
+      node.addEventListener(
+        'click',
+        () => {
+          document.documentElement.setAttribute('data-search-outside-click', 'true');
+        },
+        { once: true },
+      );
+    });
+    await outside.click();
+    await expect(group).toHaveAttribute('data-expanded', 'false');
+    await expect(page.locator('html')).toHaveAttribute('data-search-outside-click', 'true');
+    await group.screenshot({
+      path: testInfo.outputPath(`whitespace-search-collapsed-${width}.png`),
+      animations: 'disabled',
+    });
+  });
+}
+
 test('searches indexed ticket details and notes without discarding the full project list', async ({ page }) => {
   const searchRequests: string[] = [];
   await mockProject(page);

@@ -928,7 +928,9 @@ gating (reported by the helper's `onEdit` callback), the suggestions/date/help p
 persisted `searchOpen` signal. The workspace field enables Kerf's managed collapsible mode
 and adopts that signal, so Kerf owns its canonical magnifier trigger, reveal/focus transfer,
 empty-field blur collapse, and Escape collapse while the app's responsive header continues
-to read the same state.
+to read the same state. Hot Sheet also treats whitespace-only input as empty on focus
+handoff: it clears those characters and collapses after an outside click or keyboard
+focus move, while a query containing non-whitespace text or a filter chip stays open.
 
 Every ticket-search surface composes the app-owned **`TicketSearchField`**
 (`clients/web/src/components/ticket-search-field.tsx`, HS2-N5G6JS): Kerf's grouped

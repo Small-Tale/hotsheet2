@@ -1,6 +1,7 @@
+import { readTokenSearchField } from '@kerfjs/ui/token-search-field';
 import type { TokenSearchModel } from '@kerfjs/ui/token-search-model';
 import { wireTokenSearchFields } from '@kerfjs/ui/wire-token-search-fields';
-import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { attr, delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type TicketRow as WireTicketRow } from '../api';
@@ -14,6 +15,7 @@ import {
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type InlineSearchToken } from '../inline-search';
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
+import { isWhitespaceOnlySearch } from '../search-collapse';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
@@ -172,6 +174,62 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
     },
   });
   lifetime.add(tokenSearchFields);
+  const workspaceSearchEditor = attr('data-token-search-editor', 'workspace-search');
+  // Kerf's empty-blur check counts whitespace as content. For the workspace's collapsible
+  // field, whitespace has no search meaning, so close it once focus really leaves. Defer a
+  // pointer blur until after click, just as Kerf does for a completely empty field.
+  let pointerDown = false;
+  let pendingWhitespaceBlur: (() => void) | undefined;
+  let pointerReleaseTimer: ReturnType<typeof setTimeout> | undefined;
+  const flushWhitespaceBlur = () => {
+    if (pointerReleaseTimer !== undefined) clearTimeout(pointerReleaseTimer);
+    pointerReleaseTimer = undefined;
+    pointerDown = false;
+    pendingWhitespaceBlur?.();
+    pendingWhitespaceBlur = undefined;
+  };
+  const onPointerDown = () => {
+    pointerDown = true;
+  };
+  const onPointerUp = () => {
+    pointerReleaseTimer = setTimeout(flushWhitespaceBlur, 0);
+  };
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.addEventListener('pointerup', onPointerUp, true);
+  document.addEventListener('pointercancel', flushWhitespaceBlur, true);
+  lifetime.add(() => {
+    document.removeEventListener('pointerdown', onPointerDown, true);
+    document.removeEventListener('pointerup', onPointerUp, true);
+    document.removeEventListener('pointercancel', flushWhitespaceBlur, true);
+    if (pointerReleaseTimer !== undefined) clearTimeout(pointerReleaseTimer);
+  });
+  lifetime.add(
+    delegate(document.body, 'focusout', workspaceSearchEditor.selector, (event, target) => {
+      const editor = target as HTMLElement;
+      const field = editor.closest<HTMLElement>('[data-component="token-search-field"]');
+      if (!field || field.dataset.collapsible !== 'true') return;
+      const value = readTokenSearchField(editor);
+      if (!isWhitespaceOnlySearch(value)) return;
+      const next = (event as FocusEvent).relatedTarget;
+      if (next instanceof Element && (field.contains(next) || next.closest('[data-token-search-keep-open]'))) return;
+      const collapse = () => {
+        const current = document.querySelector<HTMLElement>(workspaceSearchEditor.selector);
+        if (
+          !current ||
+          field.contains(document.activeElement) ||
+          document.activeElement?.closest('[data-token-search-keep-open]')
+        )
+          return;
+        const currentValue = readTokenSearchField(current);
+        if (isWhitespaceOnlySearch(currentValue)) {
+          workspaceSearchModel.replace({ query: '', tokens: [] });
+          searchOpen.value = false;
+        }
+      };
+      if (pointerDown) pendingWhitespaceBlur = collapse;
+      else queueMicrotask(collapse);
+    }),
+  );
   lifetime.add(
     delegate(document.body, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
       const next = nextWorkspaceSort(sort.value, sortDirection.value, (target as Control).value as WorkspaceSort);
