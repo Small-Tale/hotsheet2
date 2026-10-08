@@ -9835,7 +9835,7 @@ test('shows Jira outbox attention and lets a user retry then discard an edit (HS
       ],
     }),
   );
-  await page.route('**/providers/jira-1/outbox*', (route) => {
+  await page.route('**/providers/jira-1/outbox**', (route) => {
     const method = route.request().method();
     if (method === 'GET') return route.fulfill({ json: [operation()] });
     if (method === 'POST') state = 'queued';
@@ -9857,8 +9857,10 @@ test('shows Jira outbox attention and lets a user retry then discard an edit (HS
   await expect(sync).toContainText('Needs attention');
   await expect(sync).toContainText('Jira rejected the write');
   await sync.getByRole('button', { name: 'Retry' }).click();
+  await expect.poll(() => state).toBe('queued');
   await expect(sync).toContainText('Queued locally');
   await sync.getByRole('button', { name: 'Discard local edit' }).click();
+  await expect.poll(() => state).toBe('discarded');
   await expect(sync).toContainText('Local edit discarded');
 });
 
