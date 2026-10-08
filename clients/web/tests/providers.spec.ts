@@ -14247,8 +14247,10 @@ for (const width of [1280, 390]) {
     await page.getByText('Use real project tickets').click();
     const inspector = page.locator('#app-right-rail');
     const parent = inspector.locator('[data-component="note-card"][data-note-id="N1"]');
-    page.once('dialog', (dialog) => dialog.accept('Keep the short status summary.'));
+    const feedbackDialog = page.locator('[data-component="ai-feedback-dialog"]');
     await parent.getByRole('button', { name: 'Helpful — keep suggestions like this' }).click();
+    await feedbackDialog.getByLabel('What should Hot Sheet keep doing?').fill('Keep the short status summary.');
+    await feedbackDialog.getByRole('button', { name: 'Save feedback' }).click();
     await expect
       .poll(() =>
         patches.some((patch) => {
@@ -14273,8 +14275,9 @@ for (const width of [1280, 390]) {
     await expect(reloaded.locator('.note-card__ai-feedback')).toHaveAttribute('open', '');
     await expect(reloaded.getByText('Keep the short status summary.')).toBeVisible();
     await reloaded.screenshot({ path: `/private/tmp/hs2-9r3xy0-feedback-${width}.png` });
-    page.once('dialog', (dialog) => dialog.accept('Avoid the long summary.'));
     await reloaded.getByRole('button', { name: 'Not helpful — stop suggestions like this' }).click();
+    await feedbackDialog.getByLabel('What should Hot Sheet change or stop doing?').fill('Avoid the long summary.');
+    await feedbackDialog.getByRole('button', { name: 'Update feedback' }).click();
     await expect.poll(() => patches.filter((patch) => Boolean(patch.ai_feedback)).length).toBe(2);
     await expect(reloaded.locator('.note-card__ai-feedback [data-component="note-card"]')).toHaveCount(1);
     page.once('dialog', (dialog) => dialog.accept());
