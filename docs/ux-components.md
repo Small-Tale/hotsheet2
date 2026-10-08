@@ -1772,8 +1772,8 @@ right corner. Each tile has a 4:3 preview, terminal and project identity,
 busy/idle/exited state, and pending-attention treatment. An empty project is omitted from
 the global grid unless it is the only available project, in which case the screen explains
 how to create or open a terminal.
-The grid uses the workspace's default surface; each tile supplies its own frame and preview
-surface, without another lowered panel behind the group (HS2-TGRCRN).
+The grid leaves the Workbench main pane surface visible; each tile supplies its own frame and
+preview surface, without another panel behind the group (HS2-TGRCRN).
 
 Styling ownership (HS2-DR549A):
 

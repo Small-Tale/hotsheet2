@@ -4088,6 +4088,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await expect(page.locator('[data-component="terminal-dashboard"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const rail = page.locator('#app-right-rail'),
     projectSelect = page.locator('#app-right-rail wa-select[name="terminal-rail-project"]'),
     viewSelect = rail.locator('wa-select[name="terminal-rail-view"]'),
