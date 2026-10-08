@@ -272,6 +272,12 @@
     gap: remify(5.6px);
   }
 }
+/* At phone-sized inset rows, number, priority, and timestamp can occupy the first two lines. */
+@container (max-width: remify(260px)) {
+  .ticket-list-row--list .ticket-list-row__identity {
+    max-height: 3.9em;
+  }
+}
 .ticket-list-row.ticket-list-row--selected {
   border-color: var(--wa-color-brand-border-normal);
   background: var(--wa-color-brand-fill-quiet);

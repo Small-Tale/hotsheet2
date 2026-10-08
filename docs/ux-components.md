@@ -782,8 +782,9 @@ always retain native clipboard behavior.
   narrow column widths. A quiet inset outline previews pointer hover without changing
   the row background, while selection supplies the persistent blue outline. Its primary
   line treats the ticket number and title as one normal
-  inline formatting flow, with an explicit two-line limit in lists and three-line
-  limit in board columns. The comfortable list keeps the category in its dedicated
+  inline formatting flow, with an explicit two-line limit in lists, three lines for
+  inset list rows at 260 px or narrower so a long title remains scannable, and four lines
+  in board columns. The comfortable list keeps the category in its dedicated
   leading slot; compact board rows remove that empty left gutter and place a reduced
   category icon inline immediately before and vertically centered against the slug's
   first line. The remaining flow is ordered

@@ -2472,6 +2472,47 @@ test('clips a long worker ID inside the TicketRow while retaining its full acces
   expect(shortDimensions.content).toBeLessThanOrEqual(shortDimensions.width);
 });
 
+test('keeps a long GitHub issue title scannable in a 228px TicketRow (HS2-KWPCFP)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/ux-demo?component=ticket-row');
+  await page.locator('[data-action="toggle-settings"]').click();
+  const title = 'Improve search results when several filters change together';
+  await page
+    .getByRole('complementary', { name: 'TicketRow settings' })
+    .getByRole('textbox', { name: 'Title' })
+    .fill(title);
+  await page.getByRole('button', { name: 'Close settings' }).click();
+
+  const row = page.locator('[data-component="ticket-list-row"]');
+  const identity = row.locator('.ticket-list-row__identity');
+  const metrics = await identity.evaluate((node) => {
+    const strong = node.querySelector('strong')!;
+    const text = strong.firstChild!;
+    const clip = node.getBoundingClientRect();
+    const range = document.createRange();
+    let visibleTitleCharacters = 0;
+    for (let index = 0; index < text.textContent!.length; index += 1) {
+      range.setStart(text, index);
+      range.setEnd(text, index + 1);
+      if ([...range.getClientRects()].some((rect) => rect.top >= clip.top && rect.bottom <= clip.bottom + 1)) {
+        visibleTitleCharacters += 1;
+      }
+    }
+    const style = getComputedStyle(node);
+    return {
+      rowWidth: node.closest('.ticket-list-row')!.getBoundingClientRect().width,
+      visibleTitleCharacters,
+      lines: Number.parseFloat(style.maxHeight) / Number.parseFloat(style.lineHeight),
+    };
+  });
+  expect(metrics.rowWidth).toBeGreaterThanOrEqual(220);
+  expect(metrics.rowWidth).toBeLessThanOrEqual(235);
+  expect(metrics.lines).toBeCloseTo(3, 1);
+  expect(metrics.visibleTitleCharacters).toBeGreaterThanOrEqual(12);
+  await expect(row).toHaveAttribute('aria-label', `Small-Tale/hotsheet2#5: ${title}`);
+  await row.screenshot({ path: test.info().outputPath('github-issue-title-390.png') });
+});
+
 test('round-trips every TicketRow setting and selection action', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
   const row = page.locator('[data-component="ticket-list-row"]');

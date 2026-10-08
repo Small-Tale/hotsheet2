@@ -69,13 +69,13 @@ const project = (id: string, root: string) => ({
   stores: [`${root}.hs2`],
   apiPath: `/__hotsheet/project-api/${id}`,
 });
-const ticket = (slug: string, status: string) => ({
+const ticket = (slug: string, status: string, title = slug) => ({
   connection_id: 'git-local',
   native_id: slug,
   qualified_id: `git-local:${slug}`,
   id: slug,
   slug,
-  title: slug,
+  title,
   status,
   up_next: false,
   feedback_needed: false,
@@ -91,6 +91,7 @@ async function openDemoProject(
   withTerminal = false,
   ticketCount = 1,
   terminals: Array<{ id: string; alive: boolean; busy: boolean; cwd: string }> = DEFAULT_TERMINALS,
+  firstTicketTitle?: string,
 ) {
   await page.route('**/*', async (route) => {
     const request = route.request(),
@@ -117,7 +118,7 @@ async function openDemoProject(
       return route.fulfill({
         json: {
           store: 'git-local',
-          ...ticket('HS2-M1', 'started'),
+          ...ticket('HS2-M1', 'started', firstTicketTitle),
           category: 'bug',
           priority: 'default',
           details: '',
@@ -132,7 +133,9 @@ async function openDemoProject(
     if (path.endsWith('/tickets'))
       return route.fulfill({
         json: {
-          items: Array.from({ length: ticketCount }, (_, index) => ticket(`HS2-M${index + 1}`, 'started')),
+          items: Array.from({ length: ticketCount }, (_, index) =>
+            ticket(`HS2-M${index + 1}`, 'started', index === 0 ? firstTicketTitle : undefined),
+          ),
           counts: {
             total: ticketCount,
             queued: ticketCount,
@@ -174,6 +177,36 @@ async function openDemoProject(
   await page.getByRole('textbox', { name: /^Project folder/ }).fill('/work/demo');
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
 }
+
+test('keeps a long title readable at the real phone list width (HS2-KWPCFP)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const title = 'Improve search results when several filters change together';
+  await openDemoProject(page, false, 1, DEFAULT_TERMINALS, title);
+  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-M1"]');
+  await expect(row).toBeVisible();
+  const metrics = await row.locator('.ticket-list-row__identity').evaluate((node) => {
+    const strong = node.querySelector('strong')!;
+    const clip = node.getBoundingClientRect();
+    const range = document.createRange();
+    let visibleTitleCharacters = 0;
+    for (let index = 0; index < strong.textContent.length; index += 1) {
+      range.setStart(strong.firstChild!, index);
+      range.setEnd(strong.firstChild!, index + 1);
+      if ([...range.getClientRects()].some((rect) => rect.top >= clip.top && rect.bottom <= clip.bottom + 1)) {
+        visibleTitleCharacters += 1;
+      }
+    }
+    return {
+      width: node.closest('.ticket-list-row')!.getBoundingClientRect().width,
+      visibleTitleCharacters,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+    };
+  });
+  expect(metrics.width).toBeGreaterThan(300);
+  expect(metrics.visibleTitleCharacters).toBeGreaterThanOrEqual(12);
+  expect(metrics.overflow).toBeLessThanOrEqual(0);
+  await row.screenshot({ path: test.info().outputPath('phone-list-long-title-390.png') });
+});
 
 test('mobile floating controls stay inside the dynamic viewport and safe area (HS2-43N9ZB)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
