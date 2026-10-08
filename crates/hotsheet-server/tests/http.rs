@@ -2894,6 +2894,139 @@ async fn provider_not_working_atomically_reopens_with_note_and_evidence() {
 }
 
 #[tokio::test]
+async fn provider_not_working_json_keeps_evidence_atomic_and_rejects_stale_tokens() {
+    let (dir, state) = state();
+    let router = app(state);
+    let created = body_json(
+        router
+            .clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"completed"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap();
+    let completed = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{id}"),
+                Some(r#"{"status":"completed"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let token = completed["updated_at"].as_str().unwrap();
+    let connection = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await[0]["connection_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let route = format!("/providers/{connection}/tickets/{id}/not-working-json");
+    let invalid = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &route,
+            Some(
+                r#"{"note":"broken","evidence":[{"filename":"proof.txt","content_base64":"%%%"}]}"#,
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let stale = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &route,
+            Some(r#"{"note":"broken","expected_token":"stale"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    let body = serde_json::json!({
+        "note": "broken after restart",
+        "expected_token": token,
+        "evidence": [{"filename":"proof.txt","content_base64":"cHJvb2Y="}],
+    });
+    let reported = router
+        .clone()
+        .oneshot(authed("POST", &route, Some(&body.to_string())))
+        .await
+        .unwrap();
+    assert_eq!(reported.status(), StatusCode::OK);
+    let reported = body_json(reported).await;
+    assert_eq!(reported["status"], "not_started");
+    assert_eq!(reported["attachments"][0]["filename"], "proof.txt");
+    let note_id = reported["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| {
+            note["text"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("Not working:")
+        })
+        .unwrap()["id"]
+        .as_str()
+        .unwrap();
+    let attachment_id = reported["attachments"][0]["id"].as_str().unwrap();
+    assert_eq!(
+        std::fs::read(
+            dir.path()
+                .join("attachments")
+                .join(id)
+                .join(attachment_id)
+                .join("proof.txt")
+        )
+        .unwrap(),
+        b"proof"
+    );
+    let persisted = FsStore::open(dir.path())
+        .unwrap()
+        .read_ticket(&id.parse().unwrap())
+        .unwrap();
+    assert_eq!(persisted.attachments.len(), 1);
+    assert_eq!(
+        persisted
+            .notes
+            .iter()
+            .filter(|note| note.text.starts_with("Not working:"))
+            .count(),
+        1
+    );
+    let deleted = router
+        .oneshot(authed(
+            "DELETE",
+            &format!("/providers/{connection}/tickets/{id}/notes/{note_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::OK);
+    let deleted = body_json(deleted).await;
+    assert_eq!(deleted["status"], "not_started");
+    assert!(
+        !deleted["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note["id"] == note_id)
+    );
+    assert_eq!(deleted["attachments"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn tickets_require_the_secret() {
     let (_d, st) = state();
     let resp = app(st)

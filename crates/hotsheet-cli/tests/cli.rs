@@ -4228,6 +4228,130 @@ fn note_deletion_uses_git_and_provider_capabilities() {
         .stderr(predicate::str::contains("does not support note deletion"));
 }
 
+#[test]
+fn provider_lifecycle_assign_restore_and_atomic_not_working_report() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path();
+    hs(path).arg("init").assert().success();
+    let slug = new_ticket(path, "Provider lifecycle");
+    let store = hotsheet_ticketing::FsStore::open(path).unwrap();
+    let connection = hotsheet_ticketing::provider::git_connection_id(&store);
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    let id = ticket.id.to_string();
+    hs(path)
+        .args([
+            "provider-assign",
+            &connection,
+            &id,
+            "--to",
+            "dev@example.com",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("dev@example.com"));
+    hs(path)
+        .args(["provider-assign", &connection, &id, "--clear"])
+        .assert()
+        .success();
+    assert!(store.read_ticket(&ticket.id).unwrap().assignees.is_empty());
+    hs(path)
+        .args(["edit", &slug, "--status", "completed"])
+        .assert()
+        .success();
+    let token = store
+        .read_ticket(&ticket.id)
+        .unwrap()
+        .updated_at
+        .to_string();
+    let evidence = path.join("proof.txt");
+    std::fs::write(&evidence, b"proof bytes").unwrap();
+    hs(path)
+        .args([
+            "provider-report-not-working",
+            &connection,
+            &id,
+            "--note",
+            "fails after restart",
+            "--evidence",
+            evidence.to_str().unwrap(),
+            "--expected-token",
+            &token,
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("proof.txt"));
+    let reopened = store.read_ticket(&ticket.id).unwrap();
+    assert_eq!(reopened.status, hotsheet_model::Status::NotStarted);
+    assert_eq!(reopened.attachments.len(), 1);
+    assert!(
+        reopened
+            .notes
+            .iter()
+            .any(|note| note.text.contains("fails after restart"))
+    );
+    hs(path)
+        .args([
+            "provider-report-not-working",
+            &connection,
+            &id,
+            "--note",
+            "stale retry",
+            "--expected-token",
+            &token,
+        ])
+        .assert()
+        .failure();
+    assert_eq!(store.read_ticket(&ticket.id).unwrap().attachments.len(), 1);
+    hs(path)
+        .args(["edit", &slug, "--status", "deleted"])
+        .assert()
+        .success();
+    hs(path)
+        .args(["provider-restore", &connection, &id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(&slug));
+    assert_ne!(
+        store.read_ticket(&ticket.id).unwrap().status,
+        hotsheet_model::Status::Deleted
+    );
+
+    std::fs::write(
+        path.join("providers.json"),
+        r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/repo","settings":{"api_base":"http://127.0.0.1:9","credential":{"secret":"cli-provider-lifecycle-fixture"}}}]}"#,
+    )
+    .unwrap();
+    for args in [
+        vec!["provider-restore", "github-main", "42"],
+        vec![
+            "provider-report-not-working",
+            "github-main",
+            "42",
+            "--note",
+            "broken",
+        ],
+        vec![
+            "provider-assign",
+            "github-main",
+            "42",
+            "--review",
+            "dev@example.com:review",
+        ],
+    ] {
+        hs(path)
+            .env(
+                "HOTSHEET_API_KEY_CLI_PROVIDER_LIFECYCLE_FIXTURE",
+                "fixture-token",
+            )
+            .args(args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("does not support"));
+    }
+}
+
 /// HS2-DWTJ43: `--note-confidence` records a validated score on the appended note,
 /// the ticket's derived latest confidence follows the completion cycle, and invalid
 /// or misplaced values fail explicitly without writing anything.

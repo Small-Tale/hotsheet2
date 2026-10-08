@@ -1789,6 +1789,33 @@ mod tests {
     }
 
     #[test]
+    fn assignment_uses_native_issue_patch() {
+        let transport =
+            FakeTransport::with(vec![response(200, issue(42, "broken widget", "details"))]);
+        let github = provider(transport.clone());
+        let ticket = github
+            .assign(
+                "42",
+                Timestamp::new("2026-10-08T00:00:00Z"),
+                Some(vec!["octocat".into()]),
+                vec![],
+            )
+            .unwrap();
+        assert_eq!(ticket.assignees, vec!["octocat"]);
+        let requests = transport.requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].0, "PATCH");
+        assert_eq!(
+            requests[0].1,
+            "https://api.test/repos/acme/widgets/issues/42"
+        );
+        assert_eq!(
+            requests[0].3.as_ref().unwrap()["assignees"],
+            json!(["octocat"])
+        );
+    }
+
+    #[test]
     fn maps_native_issue_comments_labels_identity_and_authorization() {
         let transport = FakeTransport::with(vec![
             response(200, issue(42, "broken widget", "details")),

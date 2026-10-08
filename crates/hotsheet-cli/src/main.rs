@@ -282,6 +282,32 @@ enum Cmd {
         #[arg(long)]
         reason: String,
     },
+    /// Replace provider assignees and/or request reviews when supported.
+    ProviderAssign {
+        connection: String,
+        id: String,
+        #[arg(long = "to", conflicts_with = "clear")]
+        to: Vec<String>,
+        #[arg(long)]
+        clear: bool,
+        #[arg(long = "review")]
+        reviews: Vec<String>,
+    },
+    /// Restore a ticket in a git-backed provider's Trash.
+    ProviderRestore { connection: String, id: String },
+    /// Atomically reopen a Not Working ticket with a note and/or evidence files.
+    ProviderReportNotWorking {
+        connection: String,
+        id: String,
+        #[arg(long, conflicts_with = "note_file")]
+        note: Option<String>,
+        #[arg(long, conflicts_with = "note")]
+        note_file: Option<PathBuf>,
+        #[arg(long = "evidence")]
+        evidence: Vec<PathBuf>,
+        #[arg(long)]
+        expected_token: Option<String>,
+    },
     /// Print a ticket's file by slug or ULID.
     Show { id: String },
     /// Apply one update independently to several git-backed tickets.
@@ -1500,6 +1526,32 @@ fn main() -> Result<()> {
             id,
             reason,
         } => cmd_provider_close(&cli.path, &connection, &id, &reason),
+        Cmd::ProviderAssign {
+            connection,
+            id,
+            to,
+            clear,
+            reviews,
+        } => cmd_provider_assign(&cli.path, &connection, &id, to, clear, reviews),
+        Cmd::ProviderRestore { connection, id } => {
+            cmd_provider_restore(&cli.path, &connection, &id)
+        }
+        Cmd::ProviderReportNotWorking {
+            connection,
+            id,
+            note,
+            note_file,
+            evidence,
+            expected_token,
+        } => cmd_provider_report_not_working(
+            &cli.path,
+            &connection,
+            &id,
+            note,
+            note_file,
+            &evidence,
+            expected_token,
+        ),
         Cmd::Show { id } => cmd_show(&cli.path, &id),
         Cmd::Batch { ids, update } => cmd_batch(actor.as_ref(), &cli.path, &ids, update),
         Cmd::DeleteNote { id, note_id } => cmd_delete_note(&cli.path, &id, &note_id),
@@ -2977,6 +3029,118 @@ fn cmd_provider_edit(
 fn cmd_provider_close(path: &Path, connection: &str, id: &str, reason: &str) -> Result<()> {
     let reason = parse_close_reason(reason)?;
     let ticket = configured_provider(path, connection)?.close(id, now_ts(), reason, None)?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+fn cmd_provider_assign(
+    path: &Path,
+    connection: &str,
+    id: &str,
+    to: Vec<String>,
+    clear: bool,
+    review: Vec<String>,
+) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    let capabilities = provider.descriptor().capabilities;
+    if !capabilities.assignment {
+        bail!("provider connection '{connection}' does not support assignment");
+    }
+    if !review.is_empty() && !capabilities.review_requests {
+        bail!("provider connection '{connection}' does not support review requests");
+    }
+    if !clear && to.is_empty() && review.is_empty() {
+        bail!("provide --to, --clear, or --review");
+    }
+    let assignees = if clear {
+        Some(Vec::new())
+    } else if to.is_empty() {
+        None
+    } else {
+        Some(to)
+    };
+    let at = now_ts();
+    let reviews = review
+        .iter()
+        .map(|spec| {
+            let (who, kind) = spec
+                .split_once(':')
+                .with_context(|| format!("--review expects email:kind, got '{spec}'"))?;
+            Ok(ReviewRequest {
+                who: who.to_owned(),
+                kind: parse_review_kind(kind)?,
+                by: Ulid::new(),
+                at: at.clone(),
+                requested_by: None,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let ticket = provider.assign(id, at, assignees, reviews)?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+fn cmd_provider_restore(path: &Path, connection: &str, id: &str) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let git_id = git_connection_id(&store);
+    if connection != git_id {
+        let _ = configured_provider(path, connection)?;
+        bail!(
+            "provider connection '{connection}' does not support git-backed Hot Sheet Trash restore"
+        );
+    }
+    let ticket =
+        ops::resolve(&store, id)?.ok_or_else(|| anyhow::anyhow!("no ticket matching '{id}'"))?;
+    ops::restore(&store, &ticket.id, now_ts())?;
+    let restored = GitProvider::new(git_id, store).get(id)?;
+    println!("{}", serde_json::to_string_pretty(&restored)?);
+    Ok(())
+}
+
+fn cmd_provider_report_not_working(
+    path: &Path,
+    connection: &str,
+    id: &str,
+    note: Option<String>,
+    note_file: Option<PathBuf>,
+    files: &[PathBuf],
+    expected_token: Option<String>,
+) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    if !provider.descriptor().capabilities.not_working_report {
+        bail!("provider connection '{connection}' does not support an atomic Not Working report");
+    }
+    let note = read_note_input(note, note_file, false)?
+        .and_then(|text| (!text.trim().is_empty()).then(|| (Ulid::new(), text)));
+    if note.is_none() && files.is_empty() {
+        bail!("a Not Working report requires a note or at least one evidence attachment");
+    }
+    let at = now_ts();
+    let evidence = files
+        .iter()
+        .map(|file| {
+            let filename = file
+                .file_name()
+                .and_then(|name| name.to_str())
+                .with_context(|| format!("invalid evidence filename {}", file.display()))?;
+            Ok(hotsheet_ticketing::ProviderEvidence {
+                id: Ulid::new(),
+                filename: filename.to_owned(),
+                created_at: at.clone(),
+                bytes: std::fs::read(file)
+                    .with_context(|| format!("reading evidence {}", file.display()))?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let ticket = provider.report_not_working(
+        id,
+        at,
+        hotsheet_ticketing::NotWorkingReport {
+            expected_token,
+            note,
+            evidence,
+        },
+    )?;
     println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())
 }

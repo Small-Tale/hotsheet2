@@ -1883,6 +1883,11 @@ pub fn app(state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BODY_BYTES)),
         )
         .route(
+            "/providers/{connection_id}/tickets/{id}/not-working-json",
+            post(report_provider_ticket_not_working_json)
+                .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BODY_BYTES)),
+        )
+        .route(
             "/provider-connections",
             get(list_provider_connections).post(create_provider_connection),
         )
@@ -3945,6 +3950,81 @@ async fn report_provider_ticket_not_working(
             timestamp,
             NotWorkingReport {
                 expected_token,
+                note,
+                evidence,
+            },
+        )
+        .map(Json)
+        .map_err(provider_transfer_error)
+}
+
+#[derive(Deserialize)]
+struct NotWorkingJsonRequest {
+    note: Option<String>,
+    expected_token: Option<String>,
+    #[serde(default)]
+    evidence: Vec<NotWorkingJsonEvidence>,
+}
+
+#[derive(Deserialize)]
+struct NotWorkingJsonEvidence {
+    filename: String,
+    content_base64: String,
+}
+
+async fn report_provider_ticket_not_working_json(
+    State(state): State<AppState>,
+    Path((connection_id, id)): Path<(String, String)>,
+    Json(body): Json<NotWorkingJsonRequest>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    use base64::Engine;
+
+    let provider = provider_for(&state, &connection_id)?;
+    if !provider.descriptor().capabilities.not_working_report {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!(
+                "provider connection '{connection_id}' does not support an atomic Not Working report"
+            ),
+        ));
+    }
+    let timestamp = now();
+    let note = body
+        .note
+        .and_then(|text| (!text.trim().is_empty()).then(|| (Ulid::new(), text)));
+    let evidence = body
+        .evidence
+        .into_iter()
+        .map(|item| {
+            if item.filename.trim().is_empty() {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "evidence filename is required",
+                ));
+            }
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(item.content_base64)
+                .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid evidence base64"))?;
+            Ok(ProviderEvidence {
+                id: Ulid::new(),
+                filename: item.filename,
+                created_at: timestamp.clone(),
+                bytes,
+            })
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
+    if note.is_none() && evidence.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "a Not Working report requires a note or at least one evidence attachment",
+        ));
+    }
+    provider
+        .report_not_working(
+            &id,
+            timestamp,
+            NotWorkingReport {
+                expected_token: body.expected_token,
                 note,
                 evidence,
             },

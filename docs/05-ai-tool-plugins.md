@@ -877,6 +877,13 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > `hotsheet_restore` calls the same `ops::restore` lifecycle as the CLI and web client;
 > it accepts an optional checkout target, while explicit non-git provider connections
 > return a capability error because their deletion lifecycle is provider-owned (HS2-GTNZ2Q).
+> `hotsheet_assign` accepts a provider connection; the serverless backend can target its
+> git connection directly. `hotsheet_delete_note` takes a stable note id and obeys the
+> provider's `note_delete` capability. `hotsheet_report_not_working` requires a connection,
+> an explanation and/or `evidence` entries (`filename`, `content_base64`), and optionally
+> `expected_token`. Both backends perform the provider's atomic report operation; the
+> HTTP backend uses its JSON companion to the browser's multipart route. An unsupported
+> provider rejects the report before any note or evidence is written (HS2-CW56C9).
 
 AI tools reach tickets two ways, both over the one core:
 

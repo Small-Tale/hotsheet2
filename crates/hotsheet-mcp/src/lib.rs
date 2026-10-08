@@ -227,6 +227,30 @@ fn base_tools_list() -> Value {
             }, "required": ["id"] }
         },
         {
+            "name": "hotsheet_delete_note",
+            "description": "Delete one note by stable id when the selected ticket provider supports note deletion.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("ticket slug or provider-native id"),
+                "note_id": str_prop("stable note id"),
+                "checkout": str_prop("optional checkout id/alias/path"),
+                "connection": str_prop("optional ticket-provider connection id")
+            }, "required": ["id", "note_id"] }
+        },
+        {
+            "name": "hotsheet_report_not_working",
+            "description": "Atomically reopen a Not Working ticket with a note and/or base64 evidence, when supported; an expected token guards against stale edits.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("ticket slug or provider-native id"),
+                "note": str_prop("optional explanation"),
+                "expected_token": str_prop("optional opaque concurrency token from the current ticket"),
+                "evidence": { "type": "array", "items": { "type": "object", "properties": {
+                    "filename": str_prop("evidence filename"),
+                    "content_base64": str_prop("file bytes encoded as base64")
+                }, "required": ["filename", "content_base64"] } },
+                "connection": str_prop("required ticket-provider connection id, including a git connection")
+            }, "required": ["id", "connection"] }
+        },
+        {
             "name": "hotsheet_batch",
             "description": "Apply the same field update (status/priority/tags/up_next/category) to many tickets at once. Returns {updated:[slugs], errors:[{id,message}]} — one bad id never aborts the rest.",
             "inputSchema": { "type": "object", "properties": {
@@ -381,6 +405,8 @@ const MUTATING_TOOLS: &[&str] = &[
     "hotsheet_close",
     "hotsheet_restore",
     "hotsheet_assign",
+    "hotsheet_delete_note",
+    "hotsheet_report_not_working",
     "hotsheet_batch",
     "hotsheet_announce",
     "hotsheet_claim",
@@ -588,6 +614,28 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                 )
                 .map_err(be_msg)
         }
+        "hotsheet_delete_note" => {
+            let id = arg_str(args, "id")?;
+            let note_id = arg_str(args, "note_id")?;
+            backend
+                .send(
+                    "DELETE",
+                    &checkout_route(args, &format!("/tickets/{id}/notes/{note_id}")),
+                    &json!({}),
+                )
+                .map_err(be_msg)
+        }
+        "hotsheet_report_not_working" => {
+            let id = arg_str(args, "id")?;
+            let _connection = arg_str(args, "connection")?;
+            backend
+                .send(
+                    "POST",
+                    &checkout_route(args, &format!("/tickets/{id}/not-working-json")),
+                    &without_many(args, &["id", "checkout", "connection"]),
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_batch" => backend.send("POST", "/batch", args).map_err(be_msg),
         "hotsheet_announce" => backend.send("POST", "/announce", args).map_err(be_msg),
         "hotsheet_checkouts" => backend.get("/checkouts", &[]).map_err(be_msg),
@@ -785,11 +833,13 @@ fn tool_text(text: &str, is_error: bool) -> Value {
 
 mod core_backend {
     use super::{Backend, BackendError};
+    use base64::Engine;
     use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
-        ApiTicket, FsStore, GitProvider, NewTicket, OpError, ProviderRegistry, Settings, SortKey,
-        StoreError, StoreRegistry, TicketPatch, TicketProvider, TicketQuery, TicketRef, TicketRow,
-        auto_context, copy_between, move_between, ops,
+        ApiTicket, FsStore, GitProvider, NewTicket, NotWorkingReport, OpError, ProviderEvidence,
+        ProviderRegistry, Settings, SortKey, StoreError, StoreRegistry, TicketPatch,
+        TicketProvider, TicketQuery, TicketRef, TicketRow, auto_context, copy_between,
+        move_between, ops,
     };
     use serde_json::Value;
     use std::path::Path;
@@ -1245,19 +1295,23 @@ mod core_backend {
         }
 
         fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
-            if method == "POST"
-                && let Some((connection, id)) = provider_restore_id(path)
-            {
+            if let Some((connection, suffix)) = provider_ticket_suffix(path) {
                 let expected = hotsheet_ticketing::git_connection_id(&self.store);
                 if connection != expected {
                     return Err(BackendError {
                         status: Some(409),
-                        message: format!(
-                            "provider connection '{connection}' does not support git-backed Hot Sheet Trash restore"
-                        ),
+                        message: if suffix.ends_with("/restore") {
+                            format!(
+                                "provider connection '{connection}' does not support git-backed Hot Sheet Trash restore"
+                            )
+                        } else {
+                            format!(
+                                "provider connection '{connection}' is not available in the serverless MCP backend"
+                            )
+                        },
                     });
                 }
-                return self.send("POST", &format!("/tickets/{id}/restore"), body);
+                return self.send(method, &format!("/tickets/{suffix}"), body);
             }
             if let Some(rest) = path.strip_prefix("/checkouts/") {
                 if let Some((checkout, suffix)) = rest.split_once("/tickets") {
@@ -1311,6 +1365,33 @@ mod core_backend {
                             body,
                         );
                     }
+                    if method == "DELETE"
+                        && let Some((id, note_id)) = tail.split_once("/notes/")
+                    {
+                        let mut matched = Vec::new();
+                        for store in stores {
+                            if ops::resolve(&store, id).map_err(store_err)?.is_some() {
+                                matched.push(store);
+                            }
+                        }
+                        let store = match matched.as_slice() {
+                            [store] => store.clone(),
+                            [] => return Err(not_found(id)),
+                            _ => {
+                                return Err(BackendError {
+                                    status: Some(409),
+                                    message: format!(
+                                        "ticket {id} is ambiguous across checkout stores"
+                                    ),
+                                });
+                            }
+                        };
+                        return self.for_checkout(store, checkout).send(
+                            "DELETE",
+                            &format!("/tickets/{id}/notes/{note_id}"),
+                            body,
+                        );
+                    }
                     let (id, action) = tail
                         .strip_suffix("/close")
                         .map(|v| (v, "close"))
@@ -1345,6 +1426,68 @@ mod core_backend {
                 }
             }
             match method {
+                "DELETE" if note_ids(path).is_some() => {
+                    let (id, note_id) = note_ids(path).unwrap();
+                    let ticket = self.resolve(id)?;
+                    let note_id = Ulid::from_string(note_id).map_err(|_| not_found(note_id))?;
+                    let updated = ops::delete_note(&self.store, &ticket.id, &note_id, (self.now)())
+                        .map_err(store_err)?;
+                    self.api(&updated)
+                }
+                "POST" if not_working_id(path).is_some() => {
+                    let id = not_working_id(path).unwrap();
+                    let ticket = self.resolve(id)?;
+                    let timestamp = (self.now)();
+                    let note = str_field(body, "note")
+                        .and_then(|text| (!text.trim().is_empty()).then(|| ((self.mint)(), text)));
+                    let evidence = body
+                        .get("evidence")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .map(|item| {
+                            let filename = str_field(item, "filename")
+                                .filter(|value| !value.trim().is_empty())
+                                .ok_or_else(|| bad_request("evidence filename is required"))?;
+                            let encoded = str_field(item, "content_base64").ok_or_else(|| {
+                                bad_request("evidence content_base64 is required")
+                            })?;
+                            let bytes = base64::engine::general_purpose::STANDARD
+                                .decode(encoded)
+                                .map_err(|_| bad_request("invalid evidence base64"))?;
+                            Ok(ProviderEvidence {
+                                id: (self.mint)(),
+                                filename,
+                                created_at: timestamp.clone(),
+                                bytes,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, BackendError>>()?;
+                    if note.is_none() && evidence.is_empty() {
+                        return Err(bad_request(
+                            "a Not Working report requires a note or at least one evidence attachment",
+                        ));
+                    }
+                    let provider = GitProvider::new(
+                        hotsheet_ticketing::git_connection_id(&self.store),
+                        self.store.clone(),
+                    );
+                    let updated = provider
+                        .report_not_working(
+                            &ticket.id.to_string(),
+                            timestamp,
+                            NotWorkingReport {
+                                expected_token: str_field(body, "expected_token"),
+                                note,
+                                evidence,
+                            },
+                        )
+                        .map_err(|error| BackendError {
+                            status: Some(409),
+                            message: error.to_string(),
+                        })?;
+                    Ok(to_value(&updated))
+                }
                 "PUT" if path.starts_with("/tickets/") && path.contains("/attachments/") => {
                     let (id, attachment_id) = path
                         .trim_start_matches("/tickets/")
@@ -1838,11 +1981,22 @@ mod core_backend {
         path.strip_prefix("/tickets/")?.strip_suffix("/restore")
     }
 
-    fn provider_restore_id(path: &str) -> Option<(&str, &str)> {
+    fn provider_ticket_suffix(path: &str) -> Option<(&str, &str)> {
         let rest = path.strip_prefix("/providers/")?;
-        let (connection, ticket) = rest.split_once("/tickets/")?;
-        let id = ticket.strip_suffix("/restore")?;
-        (!connection.is_empty() && !id.is_empty()).then_some((connection, id))
+        let (connection, suffix) = rest.split_once("/tickets/")?;
+        (!connection.is_empty() && !suffix.is_empty()).then_some((connection, suffix))
+    }
+
+    fn note_ids(path: &str) -> Option<(&str, &str)> {
+        let rest = path.strip_prefix("/tickets/")?;
+        let (id, note_id) = rest.split_once("/notes/")?;
+        (!id.is_empty() && !note_id.is_empty()).then_some((id, note_id))
+    }
+
+    fn not_working_id(path: &str) -> Option<&str> {
+        path.strip_prefix("/tickets/")?
+            .strip_suffix("/not-working-json")
+            .filter(|id| !id.is_empty())
     }
 
     fn assign_id(path: &str) -> Option<&str> {
@@ -3237,12 +3391,82 @@ mod tests {
             "hotsheet_close",
             json!({"connection":"github-main","id":"42","reason":"completed"}),
         );
+        call(
+            &backend,
+            "hotsheet_delete_note",
+            json!({"connection":"github-main","id":"42","note_id":"comment-7"}),
+        );
+        call(
+            &backend,
+            "hotsheet_report_not_working",
+            json!({"connection":"github-main","id":"42","note":"broken","expected_token":"v1"}),
+        );
         let calls = backend.calls.borrow();
         assert!(calls[0].starts_with("GET /providers/github-main/tickets"));
         assert!(calls[1].starts_with("GET /providers/github-main/tickets/42"));
         assert!(calls[2].starts_with("POST /providers/github-main/tickets"));
         assert!(!calls[2].contains("connection"));
         assert!(calls[3].starts_with("POST /providers/github-main/tickets/42/close"));
+        assert!(calls[4].starts_with("DELETE /providers/github-main/tickets/42/notes/comment-7"));
+        assert!(calls[5].starts_with("POST /providers/github-main/tickets/42/not-working-json"));
+    }
+
+    #[test]
+    fn serverless_provider_lifecycle_deletes_note_and_reports_evidence_atomically() {
+        let (_dir, backend) = core();
+        let connection = call(&backend, "hotsheet_providers", json!({}))[0]["connection_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let created = call(&backend, "hotsheet_create", json!({"title":"Recheck"}));
+        let id = created["id"].as_str().unwrap();
+        let noted = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"note":"temporary note"}),
+        );
+        let note_id = noted["notes"].as_array().unwrap().last().unwrap()["id"]
+            .as_str()
+            .unwrap();
+        let deleted = call(
+            &backend,
+            "hotsheet_delete_note",
+            json!({"connection":connection,"id":id,"note_id":note_id}),
+        );
+        assert!(!deleted["notes"].to_string().contains("temporary note"));
+        let assigned = call(
+            &backend,
+            "hotsheet_assign",
+            json!({"connection":connection,"id":id,"assignees":["dev@example.com"]}),
+        );
+        assert_eq!(assigned["assignees"][0], "dev@example.com");
+        let completed = call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"status":"completed"}),
+        );
+        let token = completed["updated_at"].as_str().unwrap();
+        let reported = call(
+            &backend,
+            "hotsheet_report_not_working",
+            json!({
+                "connection":connection,
+                "id":id,
+                "note":"broken after restart",
+                "expected_token":token,
+                "evidence":[{"filename":"proof.txt","content_base64":"cHJvb2Y="}]
+            }),
+        );
+        assert_eq!(reported["status"], "not_started");
+        assert_eq!(reported["attachments"][0]["filename"], "proof.txt");
+        let stale = call(
+            &backend,
+            "hotsheet_report_not_working",
+            json!({"connection":connection,"id":id,"note":"stale","expected_token":token}),
+        );
+        assert!(stale["error"].as_str().unwrap().contains("changed"));
+        let persisted = call(&backend, "hotsheet_get", json!({"id":id}));
+        assert_eq!(persisted["attachments"].as_array().unwrap().len(), 1);
     }
 
     #[test]

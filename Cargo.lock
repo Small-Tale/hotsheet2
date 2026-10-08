@@ -844,6 +844,7 @@ name = "hotsheet-mcp"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64",
  "clap",
  "hotsheet-extsync",
  "hotsheet-model",
@@ -887,6 +888,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64",
  "clap",
  "futures-util",
  "hotsheet-aitools",

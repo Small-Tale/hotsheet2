@@ -555,6 +555,9 @@ hotsheet provider-get github-main 42
 hotsheet provider-new github-main "Bug title"
 hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
 hotsheet provider-delete-note github-main 42 <note-id> # requires note_delete capability
+hotsheet provider-assign github-main 42 --to octocat # replace assignees where supported
+hotsheet provider-restore <git-connection> <ticket-id> # git-backed Trash only
+hotsheet provider-report-not-working <git-connection> <ticket-id> --note-file report.md --evidence proof.png --expected-token <token>
 hotsheet provider-close github-main 42 --reason completed
 hotsheet provider-disable github-main           # temporary: no reads/writes, tickets hidden
 hotsheet provider-enable github-main
@@ -614,6 +617,14 @@ invalid id does not prevent valid tickets from updating. `delete-note` uses the 
 git-store deletion as the service, including removal of feedback tied to the deleted
 note. `provider-delete-note` checks the connection's `note_delete` capability and
 fails explicitly when unsupported. Neither deletion command changes other notes.
+`provider-assign` accepts repeated `--to` values, `--clear`, and repeated
+`--review email:kind` requests. It checks assignment and review capabilities before a
+provider write. `provider-restore` restores only a git-backed provider's Trash ticket;
+external trackers do not have Hot Sheet Trash. `provider-report-not-working` requires a
+note (`--note` or `--note-file`) or one or more `--evidence` files, checks the atomic
+report capability, reads all evidence before mutation, and accepts an optional opaque
+`--expected-token` to reject a stale report. These commands print the resulting native
+ticket as JSON.
 
 `--note` accepts one argument exactly as supplied by the caller. For multiline Markdown,
 use `--note-file <path>` or `--note-file -` (stdin) so real line breaks are preserved
