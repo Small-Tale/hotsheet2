@@ -53,6 +53,16 @@
   --hs-command-pink: #ec4899;
   --hs-command-teal: var(--hs-category-task);
   --hs-command-gray: var(--hs-category-issue);
+  /* Media annotations keep vivid strokes over either light or dark source pixels. */
+  --hs-annotation-blue: #5ca8ff;
+  --hs-annotation-red: #ff626b;
+  --hs-annotation-orange: #ff9c51;
+  --hs-annotation-green: #46d88b;
+  --hs-annotation-purple: #b493ff;
+  --hs-annotation-teal: #45d3cb;
+  --hs-annotation-yellow: #f2ce55;
+  --hs-annotation-neutral: #d4d9e3;
+  --hs-annotation-halo: #10151d;
   --hs-terminal-background: #000;
   --hs-terminal-foreground: #fff;
   /* Opaque floating controls remain legible over transparent and light content after Kerf

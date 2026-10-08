@@ -13,6 +13,11 @@ summaries, CLI/MCP/server write and read paths, AI worklist projections, and
 the web intent-colour helper. The gallery rendering ticket (`HS2-N1EH4W`)
 covers visual colours and Markdown display.
 
+HS2-N1EH4W covers SVG geometry for every persisted shape, screen-point arrow
+heads and strokes, intent colour families, ticket-wide number badges and media-edge
+clamping, timed visibility, accessible labels, and selected-note Markdown. A browser
+showcase checks image and video rendering, light and dark media, zoom, and screenshots.
+
 HS2-6FVRZS covers explicitly trusted custom Antigravity CLI directories with a
 real native fixture, an IDE launcher collision on `PATH`, invalid or relative
 trusted paths, and same-version cache invalidation when the trusted path changes.

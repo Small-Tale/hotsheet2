@@ -134,7 +134,15 @@ export function createGalleryController(dependencies: GalleryDependencies) {
   function gallerySurface() {
     const active = attachmentGalleryUrl.value,
       images = galleryImages(),
-      image = active ? images.find((item) => item.url === active || item.aliases?.includes(active)) : undefined;
+      image = active ? images.find((item) => item.url === active || item.aliases?.includes(active)) : undefined,
+      ticket = sourceTicket(),
+      attachmentIndex = ticket?.attachments.findIndex((item) => item.id === image?.attachmentId) ?? -1,
+      annotationNumberOffset =
+        ticket && attachmentIndex > 0
+          ? ticket.attachments
+              .slice(0, attachmentIndex)
+              .reduce((count, attachment) => count + (attachment.annotations?.length ?? 0), 0)
+          : 0;
     return (
       <GallerySurface
         gallery={
@@ -145,6 +153,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
                 geometry: attachmentGalleryGeometry.value,
                 selectedScale: attachmentGalleryScale.value,
                 annotations: attachmentGalleryAnnotations.value,
+                annotationNumberOffset,
                 markup: attachmentGalleryMarkup.value,
                 drawMode: attachmentGalleryDrawMode.value,
                 selectedAnnotation: attachmentGallerySelectedAnnotation.value,

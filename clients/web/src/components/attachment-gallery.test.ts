@@ -2,14 +2,18 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
+import type { MediaAnnotation } from '../api';
 import {
   AttachmentGallery,
   attachmentGalleryAnnotationTolerance,
   attachmentGalleryAnnotationVisible,
+  attachmentGalleryArrowHead,
+  attachmentGalleryBadgeStyle,
   attachmentGalleryDefaultRange,
   attachmentGalleryImageIndex,
   attachmentGalleryKeyboardAction,
   attachmentGallerySelectionUrl,
+  attachmentGalleryShapePath,
   attachmentGalleryShiftUrl,
   attachmentGallerySwipeDirection,
   attachmentGallerySwipeGesture,
@@ -215,6 +219,83 @@ describe('AttachmentGallery', () => {
     expect(markup).toContain('aria-label="Finish markup, 1 annotation"');
     expect(markup).toContain('attachment-gallery__annotation-count');
   });
+  it('draws every shape, colours primary intents, and keeps ticket-wide badges on the media', () => {
+    const base: MediaAnnotation = { id: 'mark', x: 1000, y: 2000, width: 3000, height: 4000, text: '' };
+    const rect = { ...base, id: 'rect', intents: ['comment', 'bug'] };
+    const strike = { ...base, id: 'strike', shape: { type: 'strike' as const } };
+    const freehand = {
+      ...base,
+      id: 'freehand',
+      shape: {
+        type: 'freehand' as const,
+        points: [
+          { x: 1000, y: 2000 },
+          { x: 4000, y: 2000 },
+          { x: 4000, y: 6000 },
+        ],
+      },
+    };
+    const arrow = {
+      ...base,
+      id: 'arrow',
+      shape: {
+        type: 'arrow' as const,
+        points: [
+          { x: 1000, y: 2000 },
+          { x: 4000, y: 6000 },
+        ],
+      },
+    };
+    const insertion = {
+      ...base,
+      id: 'insert',
+      shape: { type: 'insertion' as const, point: { x: 1000, y: 2000 } },
+      text: 'Add **detail**',
+    };
+    expect(attachmentGalleryShapePath(rect)).toBe('M 0,0 H 1000 V 1000 H 0 Z');
+    expect(attachmentGalleryShapePath(freehand)).toBe('M 0,0 L 1000,0 L 1000,1000 Z');
+    expect(attachmentGalleryShapePath({ ...freehand, shape: { ...freehand.shape, closed: false } })).not.toContain(
+      ' Z',
+    );
+    expect(attachmentGalleryShapePath(arrow)).toBe('M 0,0 L 1000,1000');
+    expect(attachmentGalleryShapePath(insertion)).toContain('M 5,4 H 23');
+    expect(attachmentGalleryBadgeStyle(arrow)).toContain('calc(10% - 20px)');
+    expect(attachmentGalleryBadgeStyle(insertion)).toContain('calc(20% - 20px)');
+    const markup = String(
+      AttachmentGallery({
+        images,
+        activeUrl: '/a.png',
+        markup: true,
+        selectedAnnotation: 'insert',
+        annotationNumberOffset: 2,
+        annotations: [rect, strike, freehand, arrow, insertion],
+      }),
+    );
+    for (const shape of ['rect', 'strike', 'freehand', 'arrow', 'insertion'])
+      expect(markup).toContain(`data-shape="${shape}"`);
+    for (const color of ['red', 'purple', 'blue', 'teal', 'green'])
+      expect(markup).toContain(`data-intent-color="${color}"`);
+    expect(markup).toContain('aria-label="Annotation 3, rect, comment, bug"');
+    expect(markup).toContain('aria-label="Annotation 7, insertion, insert: Add **detail**"');
+    expect(markup).toContain('aria-label="Annotation 7 note"');
+    expect(markup).toContain('<strong>detail</strong>');
+    expect(markup).toContain('class="attachment-gallery__annotation-arrow-head"');
+    expect(attachmentGalleryArrowHead(arrow, 800, 600)).toContain('M 1000,1000 L ');
+    expect(attachmentGalleryArrowHead(arrow, 800, 600)).not.toBe(attachmentGalleryArrowHead(arrow, 1600, 1200));
+    const wingDistance = (width: number, height: number) => {
+      const wing = attachmentGalleryArrowHead(arrow, width, height).match(/ L ([\d.-]+),([\d.-]+)/)!;
+      return Math.hypot(
+        ((1000 - Number(wing[1])) * arrow.width * width) / 10_000 / 1000,
+        ((1000 - Number(wing[2])) * arrow.height * height) / 10_000 / 1000,
+      );
+    };
+    expect(wingDistance(800, 600)).toBeCloseTo(wingDistance(1600, 1200), 5);
+    expect(markup).toContain('class="attachment-gallery__annotation-badge"');
+    expect(markup).toContain('>7</span>');
+    const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
+    expect(css).toContain('vector-effect: non-scaling-stroke');
+    expect(attachmentGalleryBadgeStyle(rect)).toContain('left:clamp');
+  });
   it('renders range handles only for the currently selected timed annotation', () => {
     const annotations = [
       { id: 'first', x: 100, y: 100, width: 1000, height: 1000, start_ms: 1000, end_ms: 2000, text: 'First' },
@@ -343,7 +424,7 @@ describe('AttachmentGallery', () => {
     );
     expect(markup).toContain('name="gallery-playhead"');
     expect(markup).toContain('data-gallery-range-handle="start"');
-    expect(markup).toContain('aria-label="Annotation 1"');
+    expect(markup).toContain('aria-label="Annotation 1, rect, comment"');
   });
   it('renders wireframe-like annotation ticks that seek to their times', () => {
     const markup = String(

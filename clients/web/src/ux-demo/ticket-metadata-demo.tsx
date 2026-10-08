@@ -1,6 +1,6 @@
 import { signal } from 'kerfjs';
 
-import type { StartedPhase } from '../api';
+import type { MediaAnnotation, StartedPhase } from '../api';
 import {
   type AttachmentLabelEditing,
   attachmentLabelEditingDraft,
@@ -141,6 +141,53 @@ export const galleryDemoMarkup = signal(false),
   galleryDemoVolumeOpen = signal(false);
 const imageAnnotations = [
   { id: 'demo-annotation', x: 900, y: 1100, width: 3000, height: 2400, text: 'Review this alignment' },
+];
+const shapeShowcaseAnnotations: MediaAnnotation[] = [
+  { id: 'comment', x: 900, y: 1000, width: 1800, height: 1700, text: 'General **comment**' },
+  { id: 'bug', x: 3300, y: 1000, width: 1800, height: 1700, text: 'Broken', intents: ['comment', 'bug'] },
+  {
+    id: 'change',
+    x: 5700,
+    y: 1000,
+    width: 2200,
+    height: 1700,
+    text: 'Change this',
+    shape: {
+      type: 'freehand',
+      points: [
+        { x: 5700, y: 1000 },
+        { x: 7900, y: 1200 },
+        { x: 7300, y: 2700 },
+      ],
+    },
+    intents: ['comment', 'change'],
+  },
+  {
+    id: 'insert',
+    x: 1900,
+    y: 5000,
+    width: 1,
+    height: 1,
+    text: 'Add **detail**',
+    shape: { type: 'insertion', point: { x: 1900, y: 5000 } },
+  },
+  { id: 'remove', x: 3300, y: 4600, width: 1800, height: 1700, text: 'Remove this', shape: { type: 'strike' } },
+  {
+    id: 'move',
+    x: 5800,
+    y: 4600,
+    width: 2500,
+    height: 1700,
+    text: 'Move here',
+    shape: {
+      type: 'arrow',
+      points: [
+        { x: 5800, y: 6300 },
+        { x: 8300, y: 4600 },
+      ],
+    },
+  },
+  { id: 'question', x: 900, y: 7600, width: 1800, height: 1500, text: 'Why?', intents: ['comment', 'question'] },
 ];
 export const galleryDemoVideoAnnotations = signal([
   {
@@ -305,17 +352,25 @@ export function TicketAttachmentsDemo() {
 export function AttachmentGalleryDemo() {
   const video = galleryDemoUrl.value === demoImages[2].url,
     animatedSvg = galleryDemoUrl.value === demoImages[1].url,
-    timed = video || animatedSvg;
+    timed = video || animatedSvg,
+    showcase = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('annotation-shapes'),
+    annotations = showcase
+      ? shapeShowcaseAnnotations.map((annotation) =>
+          timed ? { ...annotation, start_ms: 1000, end_ms: 3000 } : annotation,
+        )
+      : timed
+        ? galleryDemoVideoAnnotations.value
+        : imageAnnotations;
   return galleryDemoUrl.value ? (
     <AttachmentGallery
       images={demoImages}
       activeUrl={galleryDemoUrl.value}
       geometry={galleryDemoGeometry()}
       selectedScale={galleryDemoScale.value}
-      annotations={timed ? galleryDemoVideoAnnotations.value : imageAnnotations}
+      annotations={annotations}
       markup={galleryDemoMarkup.value}
       drawMode={galleryDemoDrawMode.value}
-      selectedAnnotation={galleryDemoSelectedAnnotation.value}
+      selectedAnnotation={showcase ? 'insert' : galleryDemoSelectedAnnotation.value}
       playheadMs={timed ? galleryDemoPlayhead.value : 0}
       durationMs={video ? 6000 : animatedSvg ? 4000 : 0}
       playing={galleryDemoPlaying.value}

@@ -16470,7 +16470,7 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.55);
   await page.mouse.up();
-  const annotation = gallery.getByRole('button', { name: /Annotation 1: Check the selected region/ });
+  const annotation = gallery.getByRole('button', { name: /Annotation 1, rect, comment: Check the selected region/ });
   await expect(annotation).toBeVisible();
   await expect.poll(() => writes.length).toBe(0);
   const before = await annotation.boundingBox(),
@@ -16480,7 +16480,7 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   expect(after!.width).toBeGreaterThan(before!.width);
   page.once('dialog', (dialog) => dialog.accept('Updated annotation'));
   await annotation.locator('.attachment-gallery__annotation-label').dblclick();
-  const updatedAnnotation = gallery.getByRole('button', { name: /Annotation 1: Updated annotation/ });
+  const updatedAnnotation = gallery.getByRole('button', { name: /Annotation 1, rect, comment: Updated annotation/ });
   await expect(updatedAnnotation).toBeVisible();
   await expect.poll(() => writes.length).toBe(0);
   await gallery.screenshot({ path: '/private/tmp/hs2-grgdze-annotation-batch-wide.png' });
@@ -16749,7 +16749,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   await expect(scrubber).toHaveValue(String(Math.max(0, coarsePlayhead - 1000)));
   await scrubber.fill('1500');
   await gallery.getByRole('button', { name: 'Annotate media, 2 annotations' }).click();
-  const first = gallery.getByRole('button', { name: 'Annotation 1: First range' }),
+  const first = gallery.getByRole('button', { name: 'Annotation 1, rect, comment: First range' }),
     second = gallery.locator('.attachment-gallery__annotation[data-annotation-id="second"]'),
     firstTimeline = gallery.locator('.attachment-gallery__timeline-annotation[data-annotation-id="first"]');
   expect(

@@ -1608,7 +1608,7 @@ and identity-less legacy entries remain conservatively blocking.
   rectangles can be drawn, selected, moved, resized from edges/corners, labeled, edited,
   and confirmation-deleted. Video and animated-SVG annotations can be points or inclusive
   time ranges. New timed rectangles span five percent of the media duration before and after
-  the playhead, clamped at either media boundary. Rectangles appear over the media only while
+  the playhead, clamped at either media boundary. Timed shapes appear over the media only while
   the playhead is inside their range or its review tolerance (the larger of one second or one
   percent of the media duration), while persistent
   white wireframe-style indicators spanning every point or range remain over the scrubber
@@ -1617,6 +1617,15 @@ and identity-less legacy entries remain conservatively blocking.
   be dragged with a real pointer or adjusted with the arrow keys, replacing ambiguous toolbar chevrons. Only the
   selected annotation exposes adjustable range brackets, and clicking empty image or video
   canvas space clears the rectangle selection and its resize/range handles.
+  Saved shapes remain visible when markup mode is off. The gallery draws rectangles,
+  strikes with an X, open or filled freehand paths, arrows with filled heads, and
+  insertion cursors with proofreading carets. Every stroke has a dark halo and uses
+  the primary intent colour; unknown intents use a neutral stroke. Fixed-size
+  number badges sit by each shape anchor, stay inside the media edge at every
+  zoom level, and count across attachments in the ticket. Each shape's accessible
+  label includes its number, shape, intents, and note. The selected note appears
+  as sanitized Markdown below the media. Shape-specific drawing and editing are
+  tracked separately in `HS2-C46J3X`; the existing rectangle controls remain.
   The gallery annotation action carries the current annotation-count badge, and media-grid
   cards with annotations carry a lower-right annotation marker so review work is visible
   before opening the media. The gallery action menu includes Remove so a user can verify

@@ -23,12 +23,14 @@ import {
   X,
 } from 'lucide';
 
+import { annotationDefaultIntent, annotationIntentColor } from '../annotation-intents';
 import type { MediaAnnotation } from '../api';
 import { isVideoAttachment } from '../attachment-references';
 import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
 } from '../interaction-attrs/attachments-and-gallery';
+import { MarkdownPreview } from './markdown-preview';
 
 export interface AttachmentGalleryImage {
   id: string;
@@ -260,6 +262,102 @@ export function releaseAttachmentGalleryVideo(video: AttachmentGalleryVideoResou
 }
 const annotationStyle = (annotation: MediaAnnotation) =>
   `left:${annotation.x / 100}%;top:${annotation.y / 100}%;width:${annotation.width / 100}%;height:${annotation.height / 100}%`;
+const annotationShapeType = (annotation: MediaAnnotation) => annotation.shape?.type ?? 'rect';
+const annotationPoint = (annotation: MediaAnnotation, point: { x: number; y: number }) =>
+  `${((point.x - annotation.x) * 1000) / annotation.width},${((point.y - annotation.y) * 1000) / annotation.height}`;
+
+/** Geometry stays in media coordinates; SVG keeps the stroke width in screen points. */
+export function attachmentGalleryShapePath(annotation: MediaAnnotation): string {
+  switch (annotation.shape?.type) {
+    case undefined:
+    case 'rect':
+    case 'strike':
+      return 'M 0,0 H 1000 V 1000 H 0 Z';
+    case 'freehand':
+      return `${annotation.shape.points.map((point, index) => `${index ? 'L' : 'M'} ${annotationPoint(annotation, point)}`).join(' ')}${annotation.shape.closed === false ? '' : ' Z'}`;
+    case 'arrow':
+      return annotation.shape.points
+        .map((point, index) => `${index ? 'L' : 'M'} ${annotationPoint(annotation, point)}`)
+        .join(' ');
+    case 'insertion':
+      return 'M 5,4 H 23 M 14,4 V 27 M 5,27 H 23 M 8,32 L 14,38 L 20,32';
+  }
+}
+
+/** A badge is placed by its shape anchor and clamped to the media, including edge marks. */
+export function attachmentGalleryBadgeStyle(annotation: MediaAnnotation): string {
+  const anchor =
+    annotation.shape?.type === 'arrow'
+      ? annotation.shape.points[0]
+      : annotation.shape?.type === 'insertion'
+        ? annotation.shape.point
+        : undefined;
+  const x = (anchor?.x ?? annotation.x) / 100;
+  const y = (anchor?.y ?? annotation.y) / 100;
+  return `left:clamp(0px,calc(${x}% - 20px),calc(100% - 22px));top:clamp(0px,calc(${y}% - 20px),calc(100% - 22px))`;
+}
+
+/** Arrowhead dimensions are converted from screen points back into local media geometry. */
+export function attachmentGalleryArrowHead(
+  annotation: MediaAnnotation,
+  mediaWidth: number,
+  mediaHeight: number,
+): string {
+  if (annotation.shape?.type !== 'arrow' || annotation.shape.points.length < 2) return '';
+  const points = annotation.shape.points,
+    tail = points[points.length - 2],
+    tip = points[points.length - 1],
+    dx = ((tip.x - tail.x) * mediaWidth) / 10000,
+    dy = ((tip.y - tail.y) * mediaHeight) / 10000,
+    length = Math.hypot(dx, dy);
+  if (!length) return '';
+  const ux = dx / length,
+    uy = dy / length,
+    tipX = ((tip.x - annotation.x) * 1000) / annotation.width,
+    tipY = ((tip.y - annotation.y) * 1000) / annotation.height,
+    localX = (pixels: number) => (pixels * 10000 * 1000) / (mediaWidth * annotation.width),
+    localY = (pixels: number) => (pixels * 10000 * 1000) / (mediaHeight * annotation.height),
+    wing = (side: number) => `${tipX + localX(-12 * ux + side * 5 * uy)},${tipY + localY(-12 * uy - side * 5 * ux)}`;
+  return `M ${tipX},${tipY} L ${wing(1)} L ${wing(-1)} Z`;
+}
+
+function AnnotationShape({
+  annotation,
+  mediaWidth,
+  mediaHeight,
+}: {
+  annotation: MediaAnnotation;
+  mediaWidth: number;
+  mediaHeight: number;
+}) {
+  const type = annotationShapeType(annotation),
+    arrowHead = attachmentGalleryArrowHead(annotation, mediaWidth, mediaHeight);
+  return (
+    <svg
+      class="attachment-gallery__annotation-shape"
+      viewBox={type === 'insertion' ? '0 0 28 40' : '0 0 1000 1000'}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <path class="attachment-gallery__annotation-halo" d={attachmentGalleryShapePath(annotation)} />
+      <path
+        class="attachment-gallery__annotation-ink"
+        d={attachmentGalleryShapePath(annotation)}
+        data-filled={String(
+          type === 'rect' ||
+            (type === 'freehand' && annotation.shape?.type === 'freehand' && annotation.shape.closed !== false),
+        )}
+      />
+      {arrowHead && <path class="attachment-gallery__annotation-arrow-head" d={arrowHead} />}
+      {type === 'strike' && (
+        <>
+          <path class="attachment-gallery__annotation-halo" d="M 0,0 L 1000,1000 M 1000,0 L 0,1000" />
+          <path class="attachment-gallery__annotation-ink" d="M 0,0 L 1000,1000 M 1000,0 L 0,1000" />
+        </>
+      )}
+    </svg>
+  );
+}
 const formatTime = (milliseconds: number) => {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
@@ -273,6 +371,7 @@ export function AttachmentGallery({
   geometry = { naturalWidth: 0, naturalHeight: 0, availableWidth: 0, availableHeight: 0 },
   selectedScale,
   annotations = [],
+  annotationNumberOffset = 0,
   markup = false,
   selectedAnnotation,
   drawMode = false,
@@ -290,6 +389,7 @@ export function AttachmentGallery({
   geometry?: AttachmentGalleryGeometry;
   selectedScale?: number;
   annotations?: readonly MediaAnnotation[];
+  annotationNumberOffset?: number;
   markup?: boolean;
   selectedAnnotation?: string;
   drawMode?: boolean;
@@ -312,6 +412,10 @@ export function AttachmentGallery({
   const selectedTimedAnnotation = markup
     ? annotations.find((annotation) => annotation.id === selectedAnnotation && annotation.start_ms !== undefined)
     : undefined;
+  const selectedAnnotationNote = annotations.find(
+    (annotation) =>
+      annotation.id === selectedAnnotation && attachmentGalleryAnnotationVisible(annotation, playheadMs, durationMs),
+  );
   const imageData = {
     'data-attachment-url': image.url,
     'data-attachment-name': image.name,
@@ -412,40 +516,77 @@ export function AttachmentGallery({
                 alt={image.name}
               />
             )}{' '}
-            {markup && (
-              <div class="attachment-gallery__annotations">
-                {annotations.map((annotation, annotationIndex) => (
-                  <button
-                    type="button"
-                    class="attachment-gallery__annotation"
-                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.attrs}
-                    data-annotation-id={annotation.id}
-                    data-annotation-start={annotation.start_ms}
-                    data-annotation-end={annotation.end_ms}
-                    data-selected={String(annotation.id === selectedAnnotation)}
-                    hidden={!attachmentGalleryAnnotationVisible(annotation, playheadMs, durationMs)}
-                    style={annotationStyle(annotation)}
-                    aria-label={`Annotation ${annotationIndex + 1}${annotation.text ? `: ${annotation.text}` : ''}`}
-                  >
-                    <span
-                      class="attachment-gallery__annotation-label"
-                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryAnnotation.attrs}
-                      data-annotation-id={annotation.id}
-                    >
-                      {annotation.text || String(annotationIndex + 1)}
-                    </span>
-                    {annotation.id === selectedAnnotation &&
-                      ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => (
-                        <i data-annotation-handle={handle} />
-                      ))}
-                  </button>
-                ))}
+            {annotations.length > 0 && (
+              <div class="attachment-gallery__annotations" data-markup={String(markup)}>
+                {annotations.map((annotation, annotationIndex) => {
+                  const number = annotationNumberOffset + annotationIndex + 1,
+                    shape = annotationShapeType(annotation),
+                    intents = annotation.intents?.length ? annotation.intents : [annotationDefaultIntent(annotation)],
+                    visible = attachmentGalleryAnnotationVisible(annotation, playheadMs, durationMs),
+                    color = annotationIntentColor(annotation);
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        disabled={!markup}
+                        class="attachment-gallery__annotation"
+                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.attrs}
+                        data-annotation-id={annotation.id}
+                        data-annotation-start={annotation.start_ms}
+                        data-annotation-end={annotation.end_ms}
+                        data-selected={String(annotation.id === selectedAnnotation)}
+                        data-shape={shape}
+                        data-intent-color={color}
+                        hidden={!visible}
+                        style={annotationStyle(annotation)}
+                        aria-label={`Annotation ${number}, ${shape}, ${intents.join(', ')}${annotation.text ? `: ${annotation.text}` : ''}`}
+                      >
+                        <AnnotationShape
+                          annotation={annotation}
+                          mediaWidth={geometry.naturalWidth * zoom.scale || geometry.availableWidth || 1000}
+                          mediaHeight={geometry.naturalHeight * zoom.scale || geometry.availableHeight || 1000}
+                        />
+                        <span
+                          class="attachment-gallery__annotation-label"
+                          {...ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryAnnotation.attrs}
+                          data-annotation-id={annotation.id}
+                          aria-hidden="true"
+                        >
+                          {annotation.text}
+                        </span>
+                        {annotation.id === selectedAnnotation &&
+                          (shape === 'rect' || shape === 'strike') &&
+                          ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => (
+                            <i data-annotation-handle={handle} />
+                          ))}
+                      </button>
+                      <span
+                        class="attachment-gallery__annotation-badge"
+                        data-intent-color={color}
+                        data-annotation-id={annotation.id}
+                        style={attachmentGalleryBadgeStyle(annotation)}
+                        hidden={!visible}
+                        aria-hidden="true"
+                      >
+                        {number}
+                      </span>
+                    </>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
       </div>
       <footer class="attachment-gallery__footer">
+        {selectedAnnotationNote?.text && (
+          <section
+            class="attachment-gallery__selected-note"
+            aria-label={`Annotation ${annotationNumberOffset + annotations.indexOf(selectedAnnotationNote) + 1} note`}
+          >
+            <MarkdownPreview source={selectedAnnotationNote.text} tone="inverse" size="small" density="compact" />
+          </section>
+        )}
         {timed && (
           <div class="attachment-gallery__timeline">
             <button
@@ -460,7 +601,7 @@ export function AttachmentGallery({
             <div class="attachment-gallery__timeline-track">
               {annotations
                 .filter((annotation) => annotation.start_ms !== undefined)
-                .map((annotation, annotationIndex) => {
+                .map((annotation) => {
                   const start = timelinePercent(annotation.start_ms, durationMs),
                     end = timelinePercent(annotation.end_ms ?? annotation.start_ms, durationMs),
                     hasRange = end > start;
@@ -474,7 +615,7 @@ export function AttachmentGallery({
                       data-selected={String(annotation.id === selectedAnnotation)}
                       data-has-range={String(hasRange)}
                       style={`--annotation-start:${start}%;--annotation-end:${end}%`}
-                      aria-label={`Annotation ${annotationIndex + 1} at ${formatTime(annotation.start_ms ?? 0)}${annotation.text ? `: ${annotation.text}` : ''}`}
+                      aria-label={`Annotation ${annotationNumberOffset + annotations.indexOf(annotation) + 1} at ${formatTime(annotation.start_ms ?? 0)}${annotation.text ? `: ${annotation.text}` : ''}`}
                     />
                   );
                 })}

@@ -5471,6 +5471,66 @@ test('deselects an image annotation when the media canvas is clicked away', asyn
   await expect(annotation.locator('[data-annotation-handle]')).toHaveCount(0);
 });
 
+test('renders every annotation shape and intent on image and timed video at fixed screen stroke widths', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=attachment-gallery&annotation-shapes');
+  const gallery = page.locator('[data-component="attachment-gallery"]'),
+    shapes = gallery.locator('.attachment-gallery__annotation'),
+    badges = gallery.locator('.attachment-gallery__annotation-badge'),
+    media = gallery.locator('.attachment-gallery__media-wrap');
+  await expect(shapes).toHaveCount(7);
+  await expect(badges).toHaveCount(7);
+  for (const [index, shape, color] of [
+    [0, 'rect', 'blue'],
+    [1, 'rect', 'red'],
+    [2, 'freehand', 'orange'],
+    [3, 'insertion', 'green'],
+    [4, 'strike', 'purple'],
+    [5, 'arrow', 'teal'],
+    [6, 'rect', 'yellow'],
+  ] as const) {
+    await expect(shapes.nth(index)).toHaveAttribute('data-shape', shape);
+    await expect(shapes.nth(index)).toHaveAttribute('data-intent-color', color);
+    await expect(badges.nth(index)).toHaveText(String(index + 1));
+    const mediaBox = (await media.boundingBox())!,
+      badgeBox = (await badges.nth(index).boundingBox())!;
+    expect(badgeBox.x).toBeGreaterThanOrEqual(mediaBox.x - 1);
+    expect(badgeBox.y).toBeGreaterThanOrEqual(mediaBox.y - 1);
+    expect(badgeBox.x + badgeBox.width).toBeLessThanOrEqual(mediaBox.x + mediaBox.width + 1);
+    expect(badgeBox.y + badgeBox.height).toBeLessThanOrEqual(mediaBox.y + mediaBox.height + 1);
+  }
+  const stroke = shapes.nth(5).locator('.attachment-gallery__annotation-ink');
+  await expect(stroke).toHaveCSS('vector-effect', 'non-scaling-stroke');
+  const strokeWidth = await stroke.evaluate((node) => getComputedStyle(node).strokeWidth);
+  await gallery.getByRole('button', { name: 'Annotate media, 7 annotations' }).click();
+  await expect(gallery.getByRole('region', { name: 'Annotation 4 note' })).toContainText('Add detail');
+  await gallery.screenshot({ path: '/private/tmp/hs2-n1eh4w-all-shapes-light.png', animations: 'disabled' });
+  await page.addStyleTag({ content: '.attachment-gallery__media-wrap > img { filter: brightness(.15); }' });
+  await gallery.screenshot({ path: '/private/tmp/hs2-n1eh4w-all-shapes-dark.png', animations: 'disabled' });
+  await gallery.getByRole('button', { name: 'Zoom in' }).click();
+  await expect(stroke).toHaveCSS('stroke-width', strokeWidth);
+  await gallery.screenshot({ path: '/private/tmp/hs2-n1eh4w-shapes-zoomed.png', animations: 'disabled' });
+  await gallery.getByRole('button', { name: 'Zoom out' }).click();
+  await gallery.getByRole('button', { name: 'Next image' }).click();
+  await gallery.getByRole('button', { name: 'Next image' }).click();
+  await expect(gallery).toHaveAccessibleName(/Video 3 of 3/);
+  await expect(shapes).toHaveCount(7);
+  await expect(shapes.nth(5)).toHaveAttribute('data-shape', 'arrow');
+  await page.addStyleTag({ content: '.attachment-gallery__video { background: #171b24; }' });
+  await gallery.screenshot({ path: '/private/tmp/hs2-n1eh4w-all-shapes-video.png', animations: 'disabled' });
+  await gallery.getByRole('slider', { name: 'Video position' }).fill('4500');
+  await expect(shapes.first()).toBeHidden();
+  await expect(badges.first()).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gallery.locator('[data-action="previous-gallery-image"]').click();
+  await gallery.locator('[data-action="previous-gallery-image"]').click();
+  await expect(gallery).toHaveAccessibleName(/Image 1 of 3/);
+  await expect(badges).toHaveCount(7);
+  await gallery.screenshot({ path: '/private/tmp/hs2-n1eh4w-all-shapes-phone.png', animations: 'disabled' });
+});
+
 test('previews and manipulates custom video and annotation timeline controls', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
