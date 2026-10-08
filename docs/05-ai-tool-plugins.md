@@ -1082,6 +1082,15 @@ The read-only path and file-format check precedes even `agy --version`, so an ID
 launcher, script, or symlink leaves the bundled catalog in use (HS2-V8VPW1). A
 custom install directory keeps that fallback until it has a reliable identity
 signal (HS2-6FVRZS). The exact model-id input remains available for other models.
+The provenance review (HS2-3VHPFR, 2026-10-08) found no documented offline check
+strong enough to prove an installed `agy` is the agent CLI across supported platforms.
+Google's current [Unix installer](https://antigravity.google/cli/install.sh) and
+[Windows installer](https://antigravity.google/cli/install.ps1) verify an HTTPS release archive checksum
+during installation but publish no signed manifest or durable local receipt, and the CLI
+can self-update. A displayed macOS signing Team ID alone identifies a developer, not this
+CLI; the inspected local binary did not pass strict signature verification. Discovery
+therefore keeps the native default-install guard and offline manifest fallback instead of
+trusting a mutable release checksum or an unverified signing field.
 OpenCode applies a selected model through ACP `session/set_config_option`; Antigravity passes
 the selected model and effort through its declared `--model`/`--effort` spawn flags.
 Bundled provider manifests also describe offline fallback catalogs. The Claude manifest
