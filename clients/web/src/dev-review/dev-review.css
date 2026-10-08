@@ -31,6 +31,13 @@
   pointer-events: auto;
   backdrop-filter: blur(12px);
 }
+@media (min-width: 700px) {
+  .hs-dev-review--geometry-active .hs-dev-review__toolbar {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
 .hs-dev-review button,
 .hs-dev-review__toolbar button {
   height: 22px;
@@ -76,9 +83,27 @@
   cursor: wait;
 }
 .hs-dev-review__feedback[aria-pressed='true'],
-.hs-dev-review__css-live-edit[aria-pressed='true'] {
+.hs-dev-review__css-live-edit[aria-pressed='true'],
+.hs-dev-review__geometry-toggle[aria-pressed='true'] {
   color: var(--wa-color-neutral-on-loud);
   background: var(--wa-color-brand-fill-loud);
+}
+.hs-dev-review__geometry {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: visible;
+  pointer-events: none;
+}
+.hs-dev-review__geometry [data-kind='bounds'] {
+  fill: transparent;
+  stroke: #00b9cf;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.hs-dev-review__geometry [data-kind='margin'] {
+  fill: rgb(255 163 47 / 28%);
 }
 .hs-dev-review__utilities {
   position: relative;

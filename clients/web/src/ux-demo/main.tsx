@@ -162,7 +162,7 @@ import {
   resetBulkTicketDialogDemo,
   setBulkTicketDialogScenario,
 } from './bulk-ticket-dialog-demo';
-import { demoCatalog, type DemoDefinition, findDemo, kerfCatalogSections } from './catalog';
+import { demoCatalog, type DemoDefinition, demoKind, findDemo, kerfCatalogSections } from './catalog';
 import { applyAfterCatalogPopupsClose } from './catalog-update';
 import {
   CommandRunDialogDemo,
@@ -1458,7 +1458,12 @@ function DemoApp() {
         collapsed={catalogCollapsed.value}
         theme={catalogTheme.value}
         content={
-          <section class="demo-catalog-examples" data-catalog-example-stack aria-label={`${selected.name} examples`}>
+          <section
+            class="demo-catalog-examples"
+            data-catalog-example-stack
+            data-catalog-geometry-skip={demoKind(selected.id) === 'composition' ? '' : undefined}
+            aria-label={`${selected.name} examples`}
+          >
             {demoContent(selected)}
           </section>
         }

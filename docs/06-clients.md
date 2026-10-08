@@ -440,8 +440,13 @@ and identity-less legacy entries remain conservatively blocking.
   dialog offers a checked diagnostic-log attachment so a manually reported transient
   failure carries the same context. Its adjacent utilities disclosure also offers CSS Live
   Edit: two complete in-memory CSSOM snapshots bracket DevTools styling changes and are
-  attached to a directly created implementation ticket (HS2-X36S5N). Automatic
-  render-storm reporting remains suppressed while
+  attached to a directly created implementation ticket (HS2-X36S5N).
+  On the UX catalog, the same disclosure offers **Inspect geometry** (HS2-WWRMFY): a
+  development-only, layout-neutral overlay outlines rendered component border boxes in
+  cyan and positive margin areas in amber. It updates on catalog changes, scroll, and
+  resize, and excludes composition entries whose children own their separate geometry.
+  The pressed Geometry button turns it off; feedback capture and CSS Live Edit turn it
+  off automatically. Automatic render-storm reporting remains suppressed while
   remembered projects are restoring, a foreground operation owns the app's loading
   state, the ticket collection is appending a scheduled progressive chunk, or a
   multi-step UI transition is still within five seconds of its initiating pointer or

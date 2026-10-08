@@ -14,6 +14,7 @@ import html2canvas from 'html2canvas';
 import { raw } from 'kerfjs';
 
 import { normalizeCaptureColors } from './capture-colors';
+import { installCatalogGeometryInspection } from './catalog-geometry';
 import { captureCssSnapshot, CSS_LIVE_EDIT_TICKET_NOTES, cssSnapshotAttachment } from './css-live-edit';
 import { createFrameBatcher } from './frame-batcher';
 import {
@@ -113,6 +114,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   let cssLiveEditBefore: string | undefined;
   let cssLiveEditSubmitting = false;
   let cssLiveEditMessage = '';
+  let geometryInspection: { destroy(): void } | undefined;
   let hintTimer: number | undefined;
   let hintVisible = false;
   let modifierHeld = false;
@@ -240,13 +242,21 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   const render = () => {
     geometryBatch.cancel();
     dirtySelectionIds.clear();
+    root.classList.toggle('hs-dev-review--geometry-active', Boolean(geometryInspection));
     if (cssLiveEditBefore !== undefined) {
       toolbar.innerHTML = `<button class="hs-dev-review__css-live-edit" type="button" aria-pressed="true" title="Cancel CSS Live Edit"${cssLiveEditSubmitting ? ' disabled' : ''}>CSS Live Edit</button><button data-action="new-css-ticket" type="button"${cssLiveEditSubmitting ? ' disabled' : ''}>${cssLiveEditSubmitting ? 'Creating…' : 'New Ticket'}</button>`;
     } else if (enabled) {
       toolbar.innerHTML =
         '<button class="hs-dev-review__feedback" type="button" aria-pressed="true">Feedback</button><button data-action="new-ticket" type="button">New Ticket</button>';
     } else {
-      toolbar.innerHTML = `<button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button><button class="hs-dev-review__utilities" type="button" aria-label="Additional review utilities" aria-haspopup="menu" aria-expanded="${utilitiesOpen}"></button>${utilitiesOpen ? '<div class="hs-dev-review__utilities-menu" role="menu"><button type="button" role="menuitem" data-action="css-live-edit">CSS Live Edit</button></div>' : ''}`;
+      const geometryButton = geometryInspection
+        ? '<button class="hs-dev-review__geometry-toggle" type="button" aria-pressed="true" title="Cyan: component bounds · Amber: positive margins · Click to hide">Geometry</button>'
+        : '';
+      const geometryMenuItem =
+        !geometryInspection && doc.querySelector('[data-catalog-example-stack]')
+          ? '<button type="button" role="menuitem" data-action="geometry-inspection">Inspect geometry</button>'
+          : '';
+      toolbar.innerHTML = `<button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button>${geometryButton}<button class="hs-dev-review__utilities" type="button" aria-label="Additional review utilities" aria-haspopup="menu" aria-expanded="${utilitiesOpen}"></button>${utilitiesOpen ? `<div class="hs-dev-review__utilities-menu" role="menu"><button type="button" role="menuitem" data-action="css-live-edit">CSS Live Edit</button>${geometryMenuItem}</div>` : ''}`;
     }
     root.querySelectorAll('.hs-dev-review__hint,.hs-dev-review__rect').forEach((node) => {
       node.remove();
@@ -534,6 +544,8 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   };
 
   const startCssLiveEdit = () => {
+    geometryInspection?.destroy();
+    geometryInspection = undefined;
     utilitiesOpen = false;
     cssLiveEditBefore = captureCssSnapshot(doc);
     cssLiveEditMessage = '';
@@ -584,6 +596,19 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       startCssLiveEdit();
       return;
     }
+    if (target.closest('[data-action="geometry-inspection"]')) {
+      geometryInspection?.destroy();
+      geometryInspection = installCatalogGeometryInspection(doc, root);
+      utilitiesOpen = false;
+      render();
+      return;
+    }
+    if (target.closest('.hs-dev-review__geometry-toggle')) {
+      geometryInspection?.destroy();
+      geometryInspection = undefined;
+      render();
+      return;
+    }
     if (target.closest('.hs-dev-review__css-live-edit')) {
       leaveCssLiveEdit();
       return;
@@ -597,6 +622,8 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
         if (selections.length > 0 && !view.confirm('Discard the captured feedback regions?')) return;
         leaveFeedback();
       } else {
+        geometryInspection?.destroy();
+        geometryInspection = undefined;
         utilitiesOpen = false;
         enabled = true;
         hintVisible = true;
@@ -720,6 +747,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       if (toolbarFrame !== undefined) view.cancelAnimationFrame(toolbarFrame);
       dialogObserver.disconnect();
       geometryBatch.cancel();
+      geometryInspection?.destroy();
       setModifiers(false);
       toolbar.removeEventListener('click', onRootClick);
       doc.removeEventListener('wa-show', promoteToolbarAfterDialog, true);

@@ -1731,6 +1731,46 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await expect(tool.getByRole('button', { name: 'New Ticket' })).toHaveCount(0);
 });
 
+test('inspects catalog component bounds and margins while skipping compositions', async ({ page }) => {
+  await page.goto('/ux-demo?component=tag-chip&dev-review=1');
+  const review = page.locator('.hs-dev-review'),
+    toolbar = review.locator('.hs-dev-review__toolbar');
+  await toolbar.getByRole('button', { name: 'Additional review utilities' }).click();
+  await toolbar.getByRole('menuitem', { name: 'Inspect geometry' }).click();
+  const overlay = review.locator('.hs-dev-review__geometry');
+  await expect(overlay.locator('[data-kind="bounds"]')).not.toHaveCount(0);
+  await toolbar.getByRole('button', { name: 'Additional review utilities' }).click();
+  await expect(toolbar.getByRole('menuitem', { name: 'Inspect geometry' })).toHaveCount(0);
+  await toolbar.getByRole('button', { name: 'Additional review utilities' }).click();
+  await page
+    .locator('[data-catalog-example-stack] [data-component]')
+    .first()
+    .evaluate((element) => {
+      (element as HTMLElement).style.margin = '12px';
+    });
+  await expect(overlay.locator('[data-kind="margin"]')).not.toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-wwrmfy-geometry-wide.png', fullPage: true });
+  await page
+    .getByRole('navigation', { name: 'UX components components' })
+    .locator('[data-item-id="app-shell"]')
+    .click();
+  await expect(page.locator('[data-catalog-example-stack]')).toHaveAttribute('data-catalog-geometry-skip', '');
+  await expect(overlay.locator('[data-kind="bounds"]')).toHaveCount(0);
+  await page.getByRole('navigation', { name: 'UX components components' }).locator('[data-item-id="tag-chip"]').click();
+  await expect(overlay.locator('[data-kind="bounds"]')).not.toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(overlay).toHaveAttribute('viewBox', '0 0 390 844');
+  await page.screenshot({ path: '/private/tmp/hs2-wwrmfy-geometry-narrow.png', fullPage: true });
+  await toolbar.getByRole('button', { name: 'Geometry' }).click();
+  await expect(overlay).toHaveCount(0);
+  await toolbar.getByRole('button', { name: 'Additional review utilities' }).click();
+  await toolbar.getByRole('menuitem', { name: 'Inspect geometry' }).click();
+  await toolbar.getByRole('button', { name: 'Feedback' }).click();
+  await expect(overlay).toHaveCount(0);
+  await page.locator('[data-action="toggle-dev-review"]').click();
+  await expect(review).toHaveCount(0);
+});
+
 test('captures before and after CSSOM snapshots through CSS Live Edit', async ({ page }) => {
   let submitted: Record<string, unknown> | undefined;
   await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
