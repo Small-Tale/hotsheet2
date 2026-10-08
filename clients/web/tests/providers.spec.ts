@@ -17593,7 +17593,7 @@ test('paginates the merged Completed column through completed then verified when
   await page.screenshot({ path: '/private/tmp/claude/hs2-f2n4zn-merged-completed-paginated.png', fullPage: true });
 });
 
-test('measures real local Git board performance for a 100-ticket verification and refill (HS2-NY9MC5)', async ({
+test('measures real local Git board performance for a 100-ticket verification and refill (HS2-NY9MC5, HS2-GAJHRC)', async ({
   page,
 }, testInfo) => {
   test.skip(process.env.HOTSHEET_REAL_WORLD_PERFORMANCE !== '1', 'Run npm run test:real-world-performance.');
@@ -17640,17 +17640,43 @@ test('measures real local Git board performance for a 100-ticket verification an
     await menu.locator('wa-dropdown-item:not([slot="submenu"])', { hasText: 'Change status' }).hover();
     await page.evaluate(() => {
       const scope = window as typeof window & {
-        boardPerf?: { start: number; verifiedMs?: number; refillMs?: number; sawCompletedDrop?: boolean };
+        boardPerf?: {
+          start: number;
+          firstVerifiedMs?: number;
+          verifiedMs?: number;
+          refillMs?: number;
+          optimisticUpdateMs?: number;
+          optimisticPaintMs?: number;
+          sawCompletedDrop?: boolean;
+        };
       };
-      scope.boardPerf = { start: performance.now() };
+      scope.boardPerf = { start: Number.NaN };
+      document
+        .querySelector<HTMLElement>('[data-context-field="status"][data-context-value="verified"]')
+        ?.addEventListener(
+          'click',
+          () => {
+            scope.boardPerf!.start = performance.now();
+          },
+          { capture: true, once: true },
+        );
+      document.addEventListener('hotsheet:interaction-timing', ((event: CustomEvent) => {
+        if (event.detail.name !== 'bulk-ticket-change') return;
+        scope.boardPerf!.optimisticUpdateMs = event.detail.update_ms;
+        scope.boardPerf!.optimisticPaintMs = event.detail.paint_ms;
+      }) as EventListener);
       const watch = () => {
         const current = scope.boardPerf!;
+        if (Number.isNaN(current.start)) {
+          requestAnimationFrame(watch);
+          return;
+        }
         const completedRows = document.querySelectorAll('[data-column-id="completed"] [data-ticket-slug]').length;
+        const verifiedRows = document.querySelectorAll('[data-column-id="verified"] [data-ticket-slug]').length;
         if (completedRows < 100) current.sawCompletedDrop = true;
-        if (
-          current.verifiedMs === undefined &&
-          document.querySelectorAll('[data-column-id="verified"] [data-ticket-slug]').length === 100
-        )
+        if (current.firstVerifiedMs === undefined && verifiedRows > 0)
+          current.firstVerifiedMs = performance.now() - current.start;
+        if (current.verifiedMs === undefined && verifiedRows === 100)
           current.verifiedMs = performance.now() - current.start;
         if (current.refillMs === undefined && completedRows === 100 && current.sawCompletedDrop)
           current.refillMs = performance.now() - current.start;
@@ -17662,9 +17688,21 @@ test('measures real local Git board performance for a 100-ticket verification an
     await expect(rows(verified)).toHaveCount(100, { timeout: 180_000 });
     await expect(rows(completed)).toHaveCount(100, { timeout: 180_000 });
     const measurement = await page.evaluate(
-      () => (window as typeof window & { boardPerf?: { verifiedMs?: number; refillMs?: number } }).boardPerf,
+      () =>
+        (
+          window as typeof window & {
+            boardPerf?: {
+              firstVerifiedMs?: number;
+              verifiedMs?: number;
+              refillMs?: number;
+              optimisticUpdateMs?: number;
+              optimisticPaintMs?: number;
+            };
+          }
+        ).boardPerf,
     );
     expect(measurement?.verifiedMs).toBeGreaterThan(0);
+    expect(measurement!.verifiedMs!).toBeLessThanOrEqual(100);
     expect(measurement?.refillMs).toBeGreaterThan(0);
     const [persistedVerified, persistedCompleted] = await Promise.all([
       server.request<{ items: TicketRow[] }>(
@@ -17698,6 +17736,9 @@ test('measures real local Git board performance for a 100-ticket verification an
       fixture: { source: 'disposable committed local Git store', completed: 200, selected: 100, remote: false },
       browser: testInfo.project.name || 'chromium',
       verifiedVisibleMs: Math.round(measurement!.verifiedMs!),
+      firstVerifiedVisibleMs: Math.round(measurement!.firstVerifiedMs!),
+      optimisticUpdateMs: Math.round(measurement!.optimisticUpdateMs!),
+      optimisticPaintMs: Math.round(measurement!.optimisticPaintMs!),
       completedRefillVisibleMs: Math.round(measurement!.refillMs!),
       refillAfterVerifiedMs: Math.round(measurement!.refillMs! - measurement!.verifiedMs!),
     };

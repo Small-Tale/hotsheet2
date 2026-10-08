@@ -19,8 +19,18 @@ export class BulkTicketMutationSequencer {
   private readonly tails = new Map<string, Promise<void>>();
 
   enqueue<T>(projectId: string, task: () => Promise<T>): Promise<T> {
-    const prior = this.tails.get(projectId) ?? Promise.resolve();
-    const result = prior.then(task, task);
+    const prior = this.tails.get(projectId);
+    // An idle queue can publish its optimistic state in the initiating event. Deferring it
+    // to a promise turn creates a separate render for context-menu dismissal first.
+    let result: Promise<T>;
+    if (prior) result = prior.then(task, task);
+    else {
+      try {
+        result = task();
+      } catch (error) {
+        result = Promise.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
     const tail = result.then(
       () => undefined,
       () => undefined,

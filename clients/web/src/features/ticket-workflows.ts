@@ -211,6 +211,7 @@ export interface TicketWorkflowDependencies {
   visibleTickets: () => WireTicketRow[];
   projectTabTicketRows: (projectId: string) => WireTicketRow[];
   projectTicketCounts: (projectId: string) => CheckoutTicketCounts;
+  suppressBulkTicketMotion: (count: number) => void;
   beginBulkBoardRefill: (
     projectId: string,
     before: readonly WireTicketRow[],
@@ -333,6 +334,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     visibleTickets,
     projectTabTicketRows,
     projectTicketCounts,
+    suppressBulkTicketMotion,
     beginBulkBoardRefill,
     finishBulkBoardRefill,
     publishOptimisticTicketRows,
@@ -911,21 +913,26 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         ? ticketCountsByProject.value[current.id]
         : undefined,
       selectedBefore = project()?.id === current.id ? selectedTicket.value : null;
+    const operationsBySlug = new Map(operations.map((operation) => [operation.slug, operation]));
     const optimistic = projectTabTicketRows(current.id).map((ticket) => {
-        const operation = operations.find((item) => item.slug === ticket.slug);
+        const operation = operationsBySlug.get(ticket.slug);
         return operation ? projectTicketPatch(ticket, operation.patch) : ticket;
       }),
+      optimisticBySlug = new Map(optimistic.map((ticket) => [ticket.slug, ticket])),
       optimisticChanges = before.map((ticket) => ({
         before: ticket,
-        after: optimistic.find((item) => item.slug === ticket.slug) ?? ticket,
+        after: optimisticBySlug.get(ticket.slug) ?? ticket,
       })),
       optimisticCounts = beforeCounts && projectBulkTicketCounts(beforeCounts, optimisticChanges);
-    setProjectTicketRows(current.id, optimistic, optimisticCounts);
-    beginBulkBoardRefill(current.id, before, optimistic, optimisticCounts);
-    if (project()?.id === current.id && selectedTicket.value) {
-      const operation = operations.find((item) => item.slug === selectedTicket.value?.slug);
-      if (operation) selectedTicket.value = projectTicketPatch(selectedTicket.value, operation.patch);
-    }
+    suppressBulkTicketMotion(operations.length);
+    batch(() => {
+      setProjectTicketRows(current.id, optimistic, optimisticCounts);
+      beginBulkBoardRefill(current.id, before, optimistic, optimisticCounts);
+      if (project()?.id === current.id && selectedTicket.value) {
+        const operation = operationsBySlug.get(selectedTicket.value.slug);
+        if (operation) selectedTicket.value = projectTicketPatch(selectedTicket.value, operation.patch);
+      }
+    });
     finishTiming();
     let updateProgress: BulkUpdateHandle | undefined;
     try {
@@ -984,14 +991,17 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           beforeCounts,
           before.map((ticket) => ({ before: ticket, after: next.find((item) => item.slug === ticket.slug) ?? ticket })),
         );
-      setProjectTicketRows(current.id, next, actualCounts);
-      if (project()?.id === current.id) {
-        const selectedUpdate = selectedTicket.value && updated.find((item) => item.id === selectedTicket.value?.id);
-        if (selectedUpdate) selectedTicket.value = selectedUpdate;
-        else if (selectedBefore && failures.some((item) => item.slug === selectedBefore.slug))
-          selectedTicket.value = selectedBefore;
-        pruneSelectionForCurrentView();
-      }
+      suppressBulkTicketMotion(operations.length);
+      batch(() => {
+        setProjectTicketRows(current.id, next, actualCounts);
+        if (project()?.id === current.id) {
+          const selectedUpdate = selectedTicket.value && updated.find((item) => item.id === selectedTicket.value?.id);
+          if (selectedUpdate) selectedTicket.value = selectedUpdate;
+          else if (selectedBefore && failures.some((item) => item.slug === selectedBefore.slug))
+            selectedTicket.value = selectedBefore;
+          pruneSelectionForCurrentView();
+        }
+      });
       const failure = failures.length
         ? `Updated ${updated.length} of ${operations.length} tickets. ${failures.length} failed; ${failures[0].slug}: ${failures[0].message}`
         : '';
@@ -999,13 +1009,16 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       else if (project()?.id === current.id) error.value = '';
       return { complete: failures.length === 0, succeeded };
     } catch (reason) {
-      setProjectTicketRows(
-        current.id,
-        projectTabTicketRows(current.id).map((ticket) => before.find((item) => item.slug === ticket.slug) ?? ticket),
-        beforeCounts,
-      );
-      if (project()?.id === current.id && selectedBefore && slugs.has(selectedBefore.slug))
-        selectedTicket.value = selectedBefore;
+      suppressBulkTicketMotion(operations.length);
+      batch(() => {
+        setProjectTicketRows(
+          current.id,
+          projectTabTicketRows(current.id).map((ticket) => before.find((item) => item.slug === ticket.slug) ?? ticket),
+          beforeCounts,
+        );
+        if (project()?.id === current.id && selectedBefore && slugs.has(selectedBefore.slug))
+          selectedTicket.value = selectedBefore;
+      });
       reportBulkFailure(current, reason instanceof Error ? reason.message : String(reason));
       return { complete: false, succeeded: new Set<string>() };
     } finally {
@@ -1036,9 +1049,8 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     state.bulkTicketSlugs = [];
     if (!requestedProject) return Promise.resolve(false);
     return bulkTicketMutationSequencer.enqueue(requestedProject.id, async () => {
-      const selected = projectTabTicketRows(requestedProject.id).filter((ticket) =>
-        requestedSlugs.includes(ticket.slug),
-      );
+      const requestedSet = new Set(requestedSlugs);
+      const selected = projectTabTicketRows(requestedProject.id).filter((ticket) => requestedSet.has(ticket.slug));
       if (!canBulkUpdate(selected, capabilitiesFor)) {
         reportBulkFailure(requestedProject, 'One or more selected ticket providers do not support ticket updates.');
         return false;
@@ -1048,8 +1060,10 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         return patch ? [{ slug: ticket.slug, id: ticket.id, patch }] : [];
       });
       if (operations.length === 0) return true;
+      const result = await applyBulkOperations(requestedProject, operations);
+      const selectedBySlug = new Map(selected.map((ticket) => [ticket.slug, ticket]));
       const inverse = operations.map((operation) => {
-          const ticket = selected.find((item) => item.slug === operation.slug)!;
+          const ticket = selectedBySlug.get(operation.slug)!;
           const keys = new Set(Object.keys(operation.patch));
           if ('status' in operation.patch) keys.add('up_next');
           return {
@@ -1058,7 +1072,6 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             patch: Object.fromEntries([...keys].map((key) => [key, ticket[key as keyof typeof ticket]])),
           };
         }),
-        result = await applyBulkOperations(requestedProject, operations),
         succeededOperations = operations.filter((operation) => result.succeeded.has(operation.slug)),
         succeededInverse = inverse.filter((operation) => result.succeeded.has(operation.slug));
       if (succeededOperations.length)

@@ -1,4 +1,4 @@
-import { delegate, delegateCapture, type Signal } from 'kerfjs';
+import { batch, delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type FullTicket, type TicketCloseReason, type TicketRow as WireTicketRow } from '../api';
@@ -254,8 +254,8 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
         value = data(target).contextValue;
       if (!menu || !field || !value) return;
       const slugs = selectedTicketSlugs.value.length ? [...selectedTicketSlugs.value] : [menu.ticketSlug];
-      ticketContextMenu.value = undefined;
-      requestAnimationFrame(() => {
+      batch(() => {
+        ticketContextMenu.value = undefined;
         void executeBulkTicketAction({ kind: 'field', field, value }, slugs);
       });
     }),

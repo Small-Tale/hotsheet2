@@ -104,6 +104,7 @@ describe('bulk ticket operations', () => {
       token = 'after-verified';
       events.push('verified:committed');
     });
+    expect(events).toEqual(['verified:before-verified']);
     const archived = sequencer.enqueue('demo', async () => {
       events.push(`archive:${token}`);
     });

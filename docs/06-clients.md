@@ -498,7 +498,11 @@ and identity-less legacy entries remain conservatively blocking.
   search responsive when it replaces a fully rendered large queue (HS2-E76C4K). Likewise a bulk
   arrival — more than a dozen rows filling a collection at once, as when a project or view loads into
   an empty list — renders directly instead of ghost-fading each row, whose per-row clone and forced
-  layout read blocked the main thread for seconds (HS2-8Y2XST).
+  layout read blocked the main thread for seconds (HS2-8Y2XST). Bulk edits of more than a dozen
+  tickets also render directly, including optimistic updates and server reconciliation, so moving
+  a large selection does not measure and animate every card (HS2-GAJHRC). The first bulk action
+  starts in the click event and publishes its optimistic rows with menu dismissal in one render;
+  later actions for the same project still wait for the prior result.
   Reduced-motion users get the final layout immediately.
 
 - **Field-aware live editing.** A ticket refresh merges fields that the user is not
