@@ -50,6 +50,12 @@ fn retained_permission_hook_uses_restarted_server_route() {
                 Err(error) => panic!("accept failed: {error}"),
             }
         };
+        // The listening socket is nonblocking; an accepted stream may also be
+        // nonblocking, so a parallel test run can accept before the request arrives.
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
         reader.read_line(&mut line).unwrap();
