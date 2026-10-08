@@ -471,7 +471,7 @@ controls; the workspace-grid rail places its groups directly (HS2-EZ1N7Z, HS2-NZ
 actions, overflow menu) set Kerf's `visibility="yield-to-expanded-sibling"`: on a compact
 (480px or less) toolbar they leave the row while the search is expanded and return when it
 closes, so the field takes the row. The rail's view switcher fills its own row through Kerf's
-`sizing="fill"`. The header asks `TicketSearchField` for `layout="grow"` and the rail for
+`sizing="fill"`. The header asks `TicketSearchField` for `layout="inline"` and the rail for
 `layout="row"`, so no stylesheet reads the field's rendered state or styles it from outside
 (HS2-8FS5BJ, HS2-DAMHD1). Both wrappers are declared to Kerf's composition rule (`rendersAs`) in
 `clients/web/ai/component-composition-extension.json`. The mode selector composes Kerf
@@ -960,7 +960,9 @@ apart or be forgotten on a new surface. Its rendered group carries the root clas
 never styles the field from its own stylesheet (HS2-8FS5BJ). Each policy is a set of Kerf
 `ToolbarControlGroup` props (HS2-DAMHD1):
 
-- `layout="inline"` (default) keeps Kerf's own collapsed and expanded widths.
+- `layout="inline"` (default) keeps Kerf's own collapsed and expanded widths and hides the
+  collapsed search icon at toolbar widths of 224px or less through Kerf's
+  `visibility="hide-collapsed-tiny"`. An expanded field remains visible.
 - `layout="grow"` is the generic toolbar policy (`sizing="grow"`, `HS2-AEK8GK`). The open field
   grows into the free room on its row from Kerf's 19rem basis, which stays its floor in the
   header's content-sized trailing zone (`KF-K4VBTS`, Kerf 5.0.0-beta.70). That keeps the view,

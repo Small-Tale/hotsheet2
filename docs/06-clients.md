@@ -983,6 +983,9 @@ and identity-less legacy entries remain conservatively blocking.
   switch) reloads each column back to its loaded length in one commit, in pages of at most 500, so an
   external change does not reset a column's pagination. Warm project tabs keep their column cursors with
   their rows. Mobile uses the same per-column loading in its paged board layout (HS2-ZYJMDP).
+  Cached rows remain visible while a board's column pages rehydrate after a view or project switch;
+  a same-query view switch still fetches when those page cursors are missing. This preserves
+  first-frame project content and each column's remembered scroll position.
   A bulk status change preserves projected checkout totals while its request is pending. Moving the
   visible Completed page reveals the cached next page in the same optimistic render, without waiting
   for the local Git batch to commit (HS2-KA1VJS). Offscreen board cards defer their layout and paint,
@@ -1071,7 +1074,8 @@ and identity-less legacy entries remain conservatively blocking.
   repeating per-column placeholders. While the initial ticket collection is unresolved,
   the same list/board content area instead shows a centered animated **Loading tickets**
   state beneath the retained column headings; it never flashes premature empty-project
-  copy or duplicates the corner activity indicator.
+  copy or duplicates the corner activity indicator. Switching to board during that first
+  request preserves the project loading state until the winning request settles.
 
   Reusable web-client presentation primitives come from the published `@kerfjs/ui`
   package through explicit subpath imports. Hot Sheet owns only domain compositions and

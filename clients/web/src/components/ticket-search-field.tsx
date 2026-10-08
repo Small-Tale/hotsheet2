@@ -66,7 +66,7 @@ export interface TicketSearchFieldProps {
   /**
    * How the toolbar group sizes itself in its Toolbar zone (HS2-8FS5BJ), each a Kerf
    * ToolbarControlGroup policy (HS2-DAMHD1). `inline` (default) keeps Kerf's own collapsed and
-   * expanded widths. `grow` is the generic toolbar policy (`sizing="grow"`): the expanded field grows
+   * expanded widths and hides its collapsed icon in tiny toolbars. `grow` is the generic toolbar policy (`sizing="grow"`): the expanded field grows
    * into its row's free room from Kerf's 19rem basis floor and takes the whole row on a compact
    * toolbar, and its collapsed icon leaves the tiniest toolbars (`visibility="hide-collapsed-tiny"`).
    * `row` is the narrow-rail policy (`sizing="fill"`, `placement="end"`): the collapsed icon
@@ -376,6 +376,7 @@ export function TicketSearchField({
       single
       content="search"
       focusRing="halo"
+      visibility="hide-collapsed-tiny"
     >
       {content}
     </ToolbarControlGroup>

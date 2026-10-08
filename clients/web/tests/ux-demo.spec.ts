@@ -3581,42 +3581,17 @@ test('omits status sorting from column view and restores it in list view', async
   await page.screenshot({ path: '/private/tmp/hs2-nydfqf-column-sort-options.png', fullPage: true });
 });
 
-test('keeps the opened grow search on the wide header row through Kerf sizing="grow" (HS2-AEK8GK)', async ({
-  page,
-}) => {
-  // Kerf's grow basis holds as the trailing zone's floor since KF-K4VBTS, so the opened search stays
-  // beside the view, sort, and utility groups instead of wrapping (toolbar 60px, not 112px).
+test('keeps the opened inline search on the wide header row (HS2-NZK4KA)', async ({ page }) => {
   for (const width of [1440, 1100]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto('/ux-demo?component=workspace-header&dev-review=false');
     const header = page.locator('.workspace-header'),
       search = header.locator('.ticket-search-field');
-    const geometry = () =>
-      header.evaluate((node) => {
-        const toolbar = (node.closest('.kui-toolbar') ?? node.querySelector('.kui-toolbar'))!,
-          box = (selector: string) => node.querySelector(selector)!.getBoundingClientRect();
-        return {
-          toolbarHeight: Math.round(toolbar.getBoundingClientRect().height),
-          searchTop: Math.round(box('.ticket-search-field').top),
-          searchWidth: Math.round(box('.ticket-search-field').width),
-          sortTop: Math.round(box('.workspace-header__sort-group').top),
-          viewTop: Math.round(box('.view-mode-switcher').top),
-          utilityTop: Math.round(box('.workspace-header__utility-group').top),
-          utilityRight: Math.round(box('.workspace-header__utility-group').right),
-          searchLeft: Math.round(box('.ticket-search-field').left),
-        };
-      });
-    await expect(search).toHaveAttribute('data-sizing', 'grow');
-    expect((await geometry()).toolbarHeight).toBe(60);
+    await expect(search).toHaveAttribute('data-sizing', 'content');
     await header.getByRole('button', { name: 'Search tickets' }).click();
     await expect(search).toHaveAttribute('data-expanded', 'true');
-    await expect.poll(async () => (await geometry()).searchWidth).toBeGreaterThanOrEqual(304);
-    const open = await geometry();
-    expect(open.toolbarHeight).toBe(60);
-    expect(open.searchTop).toBe(open.sortTop);
-    expect(open.viewTop).toBe(open.sortTop);
-    expect(open.utilityTop).toBe(open.sortTop);
-    expect(open.searchLeft).toBeGreaterThanOrEqual(open.utilityRight);
+    await expect(header.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
+    expect(Math.round(await header.evaluate((node) => node.getBoundingClientRect().height))).toBe(60);
   }
 });
 
@@ -4099,8 +4074,6 @@ test('centers search controls on the first line while the query wraps', async ({
   await header.getByRole('button', { name: 'Search tickets' }).click();
   const search = header.getByRole('searchbox', { name: 'Search tickets' }),
     group = header.locator('.ticket-search-field');
-  // The expanded field's floor is 19rem (304px) so the header's groups keep one row (HS2-4ZA33S).
-  await expect.poll(() => group.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(304);
   const geometry = async () =>
     group.evaluate((node) => {
       const box = (selector: string) => {
@@ -5656,7 +5629,9 @@ test('previews and manipulates custom video and annotation timeline controls', a
   await page.mouse.move(track.x + track.width * 0.75, track.y + track.height / 2);
   await page.mouse.up();
   await expect(gallery.getByRole('button', { name: 'Annotation range end at 0:04' })).toBeVisible();
-  await expect(gallery.getByText('Transition is abrupt')).toBeVisible();
+  await expect(
+    gallery.getByRole('region', { name: 'Annotation 1 note' }).getByText('Transition is abrupt'),
+  ).toBeVisible();
   await gallery.screenshot({ path: '/private/tmp/hs2-hz0trg-video-annotations-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await volumeButton.click();

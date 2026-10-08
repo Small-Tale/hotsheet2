@@ -1191,7 +1191,11 @@ export async function startHotSheetWebClient() {
     projectSessionRestoreRun = 0;
   const ticketCollectionRefreshTask = createTrailingTask<TicketView>(250, (view) => {
     const query = ticketViewQuery(view);
-    if (JSON.stringify(query) === JSON.stringify(ticketPageQuery.value)) {
+    const boardPagesMissing =
+      viewMode.value === 'board' &&
+      isPerColumnBoardView(view, workspaceSearchActive()) &&
+      Object.keys(boardColumnPages.value).length === 0;
+    if (JSON.stringify(query) === JSON.stringify(ticketPageQuery.value) && !boardPagesMissing) {
       ticketCollectionGeneration += 1;
       ticketCollectionState.value = undefined;
       return;
@@ -2023,7 +2027,7 @@ export async function startHotSheetWebClient() {
     if (mode === 'settings' || mode === 'notifications') searchOpen.value = false;
     viewMode.value = mode;
     persistWorkspacePreferences();
-    if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });
+    if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: loading.value });
   }
   function selectTerminalRailProject(next: string) {
     if (next === selectedProjectId.value || !projects.value.some((item) => item.id === next)) return;
@@ -4550,12 +4554,15 @@ export async function startHotSheetWebClient() {
     const waitingForBoardPages =
         viewMode.value === 'board' &&
         isPerColumnBoardView(selectedView.value, workspaceSearchActive()) &&
-        Object.keys(boardColumnPages.value).length === 0,
+        Object.keys(boardColumnPages.value).length === 0 &&
+        tickets.value.length === 0,
       shown = waitingForBoardPages ? [] : visibleTickets(),
       current = project(),
-      emptyState: TicketEmptyStateProps | undefined = waitingForBoardPages
-        ? { kind: error.value ? 'view-error' : 'view-loading', viewLabel: ticketViewTitle(selectedView.value) }
-        : workspaceEmptyState(),
+      emptyState: TicketEmptyStateProps | undefined = loading.value
+        ? { kind: 'loading' }
+        : waitingForBoardPages
+          ? { kind: error.value ? 'view-error' : 'view-loading', viewLabel: ticketViewTitle(selectedView.value) }
+          : workspaceEmptyState(),
       collectionLoading = emptyState?.kind === 'view-loading',
       hasMore = Boolean(ticketNextCursor.value) && !collectionLoading,
       more = hasMore ? <TicketPageMore loading={ticketPageLoading.value} /> : undefined;

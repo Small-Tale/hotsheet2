@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 
 const execute = promisify(execFile);
+const fixtureCleanup = { recursive: true, force: true, maxRetries: 5, retryDelay: 50 } as const;
 
 export interface RealTicketFixtureContext {
   store: string;
@@ -49,7 +50,7 @@ export async function realTicketServer(
     await execute(cli, ['init', '--standalone', '--at', store, '--prefix', 'HS2'], { cwd: root, env });
     await options.seed?.({ store, root, env });
   } catch (error) {
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, fixtureCleanup);
     throw error;
   }
   // `--exit-on-stdin-eof` + a held stdin pipe: if this runner dies without reaching `stop()`
@@ -74,7 +75,7 @@ export async function realTicketServer(
         clearTimeout(forced);
       }
     }
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, fixtureCleanup);
   };
   try {
     const url = await new Promise<string>((resolveReady, reject) => {

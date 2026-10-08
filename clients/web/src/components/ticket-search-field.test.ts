@@ -195,6 +195,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     const kerf = (layout: 'inline' | 'grow' | 'row', expanded: boolean) =>
       attrs(render(layout, expanded), 'data-sizing', 'data-visibility', 'data-placement', 'data-expanded-overflow');
     expect(kerf('inline', true)).toEqual(kerf('inline', false));
+    expect(kerf('inline', false)).toEqual(expect.objectContaining({ 'data-visibility': 'hide-collapsed-tiny' }));
     expect(kerf('grow', false)).toEqual(
       expect.objectContaining({ 'data-sizing': 'grow', 'data-visibility': 'hide-collapsed-tiny' }),
     );

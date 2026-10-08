@@ -94,12 +94,14 @@ export function resetTicketRowDemo(root?: ParentNode): void {
     });
 }
 
+export const TICKET_ROW_DEMO_SLUG = 'Small-Tale/hotsheet2#5';
+
 export function TicketRowDemo() {
   return (
     <section class="component-stage component-stage--row" aria-label="TicketRow demo">
       <div class="component-stage__canvas component-stage__canvas--row" role="listbox" aria-label="Example ticket list">
         {TicketRow({
-          slug: 'Small-Tale/hotsheet2#5',
+          slug: TICKET_ROW_DEMO_SLUG,
           title: ticketRowSettings.title.value,
           status: ticketRowSettings.status.value,
           startedPhase: ticketRowSettings.startedPhase.value || undefined,

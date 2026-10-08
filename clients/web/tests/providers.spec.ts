@@ -25,6 +25,14 @@ const project = {
   apiPath: '/__hotsheet/project-api/demo-checkout',
 };
 
+const emptyCheckoutTicketPage = (url: URL) => ({
+  items: [],
+  counts:
+    url.searchParams.get('counts') === 'false'
+      ? null
+      : { total: 0, queued: 0, backlog: 0, archive: 0, open: 0, up_next: 0, active: 0, started: 0, completed_today: 0 },
+});
+
 test('keeps workspace toolbar visibility responsive without CSS probe work during terminal mutations (HS2-TC93GZ)', async ({
   page,
 }) => {
@@ -5762,12 +5770,12 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
     expect(position.atBottom).toBe(false);
     expect(Math.abs(position.top - readingTop)).toBeLessThanOrEqual(24);
   };
-  await messages.nth(anchorIndex).locator(':scope > strong').click();
+  await messages.nth(anchorIndex).click();
   await expect(messages.nth(anchorIndex)).toHaveAttribute('data-selected', 'true');
   await expect(conversation).toContainText('1 message selected');
   await settle();
   await expectReadingPosition();
-  await messages.nth(endIndex).locator(':scope > strong').click();
+  await messages.nth(endIndex).click();
   await expect(conversation).toContainText(`${anchorIndex - endIndex + 1} messages selected`);
   await settle();
   await expectReadingPosition();
@@ -5899,7 +5907,7 @@ test('selects and copies chat messages before saving that range without choosing
     .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-message-id')!));
   expect(messageIds).toHaveLength(2);
   const messageChoices = conversation.locator('[data-action="pick-conversation-message"]');
-  await messageChoices.nth(1).locator(':scope > strong').click();
+  await messageChoices.nth(1).click();
   await expect(messageChoices.nth(1)).toHaveAttribute('data-selected', 'true');
   await expect(messageChoices.nth(0)).toHaveAttribute('data-selected', 'false');
   await expect(conversation).toContainText('1 message selected');
@@ -6031,7 +6039,7 @@ test('shows selection in the main chat and skips export scope after it is cleare
   await conversation.getByLabel('Message Codex').press('Enter');
   await expect(conversation.getByText('The event stream remains authoritative.', { exact: true })).toBeVisible();
   const messages = conversation.locator('[data-action="pick-conversation-message"]');
-  await messages.nth(1).locator(':scope > strong').click();
+  await messages.nth(1).click();
   await expect(conversation).toContainText('1 message selected');
   await conversation.getByRole('dialog').screenshot({ path: '/private/tmp/hs2-eqhary-main-chat-selection-wide.png' });
   await page.setViewportSize({ width: 560, height: 760 });
@@ -6552,7 +6560,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
     await expect(connection).toHaveAttribute('data-ai-connection', 'connected');
     await expect(connection).toHaveAttribute(
       'title',
-      'Codex is connected to Hot Sheet: its permission prompts come to the app',
+      /Codex is connected to Hot Sheet: its permission prompts come to the app\. Last trusted hook report: PermissionRequest at .*\. MCP connectivity is separate\./,
     );
     await expect(connection.locator('[data-lucide="plug"]')).toBeVisible();
     await expect(tileConnection).toHaveAttribute('data-ai-connection', 'connected');
@@ -18575,7 +18583,7 @@ test('searches indexed ticket details and notes without discarding the full proj
   await expect.poll(() => searchRequests).toContain('QQRY00');
   await page.waitForTimeout(250);
   const settledRequests = searchRequests.length;
-  await page.locator('.kui-toolbar-text', { hasText: 'Search results' }).click();
+  await page.locator('.app-shell__work-area').focus();
   await page.waitForTimeout(250);
   expect(searchRequests).toHaveLength(settledRequests);
   await page.screenshot({ path: '/private/tmp/hs2-pdze14-search-blur-no-request.png', fullPage: true });
@@ -18760,7 +18768,8 @@ test('searches only the current view before updating scoped sidebar counts', asy
   expect(searchBadgeGeometry.numberLeft).toBeLessThan(searchBadgeGeometry.badgeRight);
   expect(searchBadgeGeometry.iconCenterY).toBeCloseTo(searchBadgeGeometry.numberCenterY, 0);
   await navigation.screenshot({ path: '/private/tmp/hs2-41szwd-search-counts.png' });
-  await page.getByLabel('Columns view').click();
+  await page.locator('[data-workspace-overflow]').getByRole('button', { name: 'More workspace controls' }).click();
+  await page.locator('[data-workspace-overflow] [data-view-mode="board"]').click();
   const board = page.locator('[data-component="ticket-board"]');
   await expect(board.getByRole('region', { name: 'Backlog column' })).toHaveCount(0);
   await expect(board.getByRole('region', { name: 'Archive column' })).toHaveCount(0);
@@ -19322,7 +19331,7 @@ test('distinguishes pending and empty ticket search feedback in list and board v
     const url = new URL(route.request().url());
     if (route.request().method() === 'GET' && url.searchParams.has('text')) {
       await searchReleased;
-      return route.fulfill({ json: [] });
+      return route.fulfill({ json: emptyCheckoutTicketPage(url) });
     }
     return route.fallback();
   });
@@ -19339,7 +19348,8 @@ test('distinguishes pending and empty ticket search feedback in list and board v
     'No tickets match “missing parser”',
   );
   await page.screenshot({ path: '/private/tmp/hs2-ydrmad-search-empty-list-wide.png', fullPage: true });
-  await page.getByLabel('Columns view').click();
+  await page.locator('[data-workspace-overflow]').getByRole('button', { name: 'More workspace controls' }).click();
+  await page.locator('[data-workspace-overflow] [data-view-mode="board"]').click();
   await expect(page.locator('[data-component="ticket-board"] [data-component="empty-state"]')).toHaveCount(1);
   await expect(page.getByText('No tickets match “missing parser”')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -19349,7 +19359,9 @@ test('distinguishes pending and empty ticket search feedback in list and board v
 test('shows new-project feedback when a project has no tickets', async ({ page }) => {
   await mockProject(page);
   await page.route('**/checkouts/demo-checkout/tickets*', (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: [] }) : route.fallback(),
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: emptyCheckoutTicketPage(new URL(route.request().url())) })
+      : route.fallback(),
   );
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -19608,7 +19620,7 @@ test('does not announce an empty project while its initial ticket collection is 
     const url = new URL(route.request().url());
     if (route.request().method() !== 'GET' || url.searchParams.has('text')) return route.fallback();
     await ticketsReady;
-    return route.fulfill({ json: [] });
+    return route.fulfill({ json: emptyCheckoutTicketPage(url) });
   });
   await page.setViewportSize({ width: 1920, height: 1040 });
   await page.goto('/');
@@ -20917,7 +20929,7 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   await expect(search).toBeVisible();
   await expect(search).toBeFocused();
   await expect(toolbar.locator('.ticket-search-field')).toHaveAttribute('data-expanded', 'true');
-  await expect(overflow).toBeHidden();
+  await expect(overflow).toBeVisible();
   await expect(overflow).toHaveJSProperty('open', false);
   expect(await toolbar.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   await page.screenshot({ path: '/private/tmp/kf-zfg6z5-toolbar-search.png', fullPage: true });
@@ -20995,7 +21007,10 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   response = nextPatch();
   await page.keyboard.press(`${shortcut}+z`);
   await response;
-  await expect(page.locator('#app-right-rail [data-component="status-badge"]')).toContainText('Started');
+  await expect(page.locator('#app-right-rail [data-component="status-badge"]')).toHaveAttribute(
+    'data-status',
+    'started',
+  );
   await expect.poll(() => patches.filter((patch) => patch.status === 'started').length).toBe(1);
   await page.waitForTimeout(0);
   await page.locator('.app-shell__work-area').focus();

@@ -385,7 +385,13 @@ import {
   TicketTimelineDemo,
   zoomGalleryDemo,
 } from './ticket-metadata-demo';
-import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
+import {
+  resetTicketRowDemo,
+  TICKET_ROW_DEMO_SLUG,
+  TicketRowDemo,
+  TicketRowSettings,
+  ticketRowSettings,
+} from './ticket-row-demo';
 import {
   resetTicketSearchDemo,
   savedViewDemoSearchModel,
@@ -1426,10 +1432,10 @@ function demoContent(item: DemoDefinition) {
 
 function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(defaultDemo)!;
-  // The TicketRow demo row (HS2-D3M0) isn't a collection ticket, so resolve its context
+  // The standalone TicketRow demo row isn't a collection ticket, so resolve its context
   // menu from the live demo settings; collection rows resolve from their fixtures (HS2-AFB17W).
   const menuTicket =
-    contextMenu.value?.ticketSlug === 'HS2-D3M0'
+    contextMenu.value?.ticketSlug === TICKET_ROW_DEMO_SLUG
       ? {
           category: ticketRowSettings.category.value,
           priority: ticketRowSettings.priority.value,
