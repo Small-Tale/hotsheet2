@@ -14,6 +14,9 @@ process.once('exit', () => {
 
 export default defineConfig({
   testDir: 'tests',
+  // Kerf doctor scans this package while browser tests run. Keep Playwright's rotated output
+  // under a generated directory that Kerf, ESLint, stable-dev, and Git all exclude (HS2-ZJJ4K6).
+  outputDir: 'target/playwright-test-results',
   // One shared Vite dev server serves every worker; scale parallelism to the machine's existing load
   // and give whole flows and assertions headroom for a busy CPU (HS2-MHPHZB). `--workers` or
   // HOTSHEET_PLAYWRIGHT_WORKERS still overrides the count.

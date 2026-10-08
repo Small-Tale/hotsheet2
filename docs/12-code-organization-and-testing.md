@@ -520,6 +520,13 @@ or `HOTSHEET_PLAYWRIGHT_WORKERS` overrides the count. Tests get 60 s and asserti
 busy machine slows a run down instead of failing it. Tests still must wait for events or
 state, never for fixed delays.
 
+Playwright rotates its managed screenshots, traces, and failure evidence under
+`clients/web/target/playwright-test-results`. Kerf UI doctor excludes this generated
+directory, so lint and browser tests can run together without a directory-scan race
+(HS2-ZJJ4K6). New screenshots should use `testInfo.outputPath(...)` to remain portable
+and attach to the test result; migration of older absolute capture paths is tracked by
+HS2-SRGAH3.
+
 When a browser test asserts an intermediate state that only exists while a request is
 outstanding, the route fixture must hold that response behind an explicit gate (a promise the test
 resolves after asserting). Examples are a pending spinner, an optimistic projection, an in-flight
