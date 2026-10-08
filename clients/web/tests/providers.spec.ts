@@ -718,6 +718,7 @@ async function mockProject(
   stoppedTerminal = false,
   cropEnabled = false,
   attachmentRevision = false,
+  linkedSource = false,
 ) {
   let rows: TicketRow[] = [
     { ...row, feedback_needed: Boolean(primaryFeedbackNeeded) },
@@ -864,10 +865,21 @@ async function mockProject(
     name: string | null;
     default: boolean;
     settings: Record<string, unknown>;
-  }> = [];
+  }> = linkedSource
+    ? [
+        {
+          id: 'github-source',
+          provider: 'github',
+          locator: 'small-tale/demo',
+          name: 'GitHub source',
+          default: false,
+          settings: {},
+        },
+      ]
+    : [];
   // Like the server's checkout registry, the project links connections and keeps its own default
   // source; `/providers` lists only linked sources (HS2-3SCH1K).
-  let linkedConnectionIds: string[] = [],
+  let linkedConnectionIds: string[] = linkedSource ? ['github-source'] : [],
     checkoutDefaultSource: string | undefined;
   const sourceColors: Record<string, string> = {};
   // Machine-wide sign-ins no source uses yet (HS2-SM9PM8): an abandoned earlier sign-in whose site
@@ -2682,7 +2694,7 @@ test('centers the compact source mark with the type icon and ticket number in co
 });
 
 test('aligns ticket source marks with their names in project settings (HS2-Q93H9A) @ci-smoke', async ({ page }) => {
-  await mockProject(page);
+  await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, true);
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
