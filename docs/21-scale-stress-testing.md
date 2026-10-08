@@ -102,3 +102,36 @@ are exploratory because local CPU and disk load vary; compare runs on the same
 machine and build profile rather than treating one number as a fixed CI budget.
 The suite is opt-in so ordinary browser CI does not pay for the 200-ticket fixture
 and 100-ticket Git mutation.
+
+## WebKit session memory
+
+On macOS, run the opt-in WebKit process profile from `clients/web` after building the
+debug CLI and server binaries:
+
+```sh
+zsh -ic 'HOTSHEET_WEBKIT_MEMORY_PROFILE=1 HOTSHEET_WEBKIT_MEMORY_CYCLES=18 HOTSHEET_WEBKIT_MEMORY_IDLE=1 npx playwright test tests/webkit-memory.spec.ts --workers=1'
+```
+
+The scenario opens a disposable 120-ticket Git checkout through the real Rust server,
+streams 200 lines through a real PTY, then repeatedly edits a ticket title and switches
+through List, Columns, Notifications, Settings, and the terminal workspace grid. It
+samples the newly launched WebKit WebContent process's RSS with `ps` at a consistent
+grid state. The test also checks that terminal glyphs paint, the DOM row counts stay
+bounded, the final edit reaches the store, and no page error occurs. Its
+`webkit-memory-profile.json` attachment records each sample. Run it without other
+Playwright WebKit sessions so a newly spawned process can be attributed to this test.
+`HOTSHEET_WEBKIT_MEMORY_BLOCKS=2` repeats the edit/navigation block and idle period
+in the same tab to distinguish warm-up from continuing retention.
+
+In one HS2-2G23X9 sample, WebContent rose from 344 MiB to 722 MiB RSS during 18
+cycles over 148 seconds, stayed at 722 MiB after 30 idle seconds, and fell to 462
+MiB after 60 idle seconds. In a separate two-block sample, it rose from 313 MiB to
+651 MiB during the first 12 cycles, stayed near 651 MiB through the first idle
+minute, peaked at 735 MiB during the second 12 cycles, and ended at 554 MiB after
+the second idle minute. The DOM held about 5,349 nodes, including 24 terminal rows
+and 120 ticket rows, throughout the active cycles. These results show considerable
+RSS fluctuation and delayed reclamation, but do not identify a retained-object path.
+RSS includes WebKit allocator and shared pages and is not the same as JavaScript
+heap or the process's physical footprint. Neither sample reproduced a tab reset or
+identified the user's existing Safari tab. A real Safari session with its tab
+process identified is still needed if the reset continues.

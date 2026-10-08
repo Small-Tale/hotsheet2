@@ -132,6 +132,18 @@ and error/retry flows remain usable. Repeat after reload and over HTTPS. Automat
 coverage checks the real insecure-origin capability boundary; device suspension remains a
 manual check.
 
+### Safari long-session memory (HS2-2G23X9)
+
+In desktop Safari, identify the WebContent process for a Hot Sheet tab before sampling
+it; the process name alone is insufficient when several tabs are open. Keep a
+representative project open with active terminals and edit tickets over an hour or
+until a tab reset occurs. Record the sequence, elapsed time, per-tab process RSS or
+physical footprint at regular intervals, an idle interval, and any Safari memory
+warning or reset. Repeat after a reload with the same project. The opt-in Playwright
+WebKit profile in `docs/21-scale-stress-testing.md` exercises a disposable real
+server and PTY, but cannot attribute an existing Safari tab or reproduce its
+background and extension behavior.
+
 ### Real-device mTLS enrollment
 
 1. Enroll a second physical device against an off-loopback server.
