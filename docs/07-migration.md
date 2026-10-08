@@ -331,6 +331,15 @@ may not have open at once):
    after repair no longer offers the action. Malformed registry files report a repair
    error without changing either file.
 
+   A deleted `.hotsheet/` can reappear without the HS1 app window if an MCP client still
+   launches the legacy `channel.js` with that checkout as its working directory or
+   `--data-dir`. Its `channel-port`, `channel-ports.d/`, and `mcp.log` are runtime evidence.
+   Remove the checkout's stale `hotsheet-channel-*` entry from `.mcp.json`; for a Codex
+   user-level `hotsheet-channel` entry that other projects may need, disable it in this
+   trusted checkout's `.codex/config.toml` with `[mcp_servers.hotsheet-channel]` and
+   `enabled = false`. Stop existing channel processes before removing the remaining
+   runtime directory. Keep the separate HS2 `hotsheet-mcp` entry and `.hotsheet2/` data.
+
 ### Background ownership and progress protocol
 
 `POST /__hotsheet/projects/migration-jobs` accepts canonical project, source, destination,
