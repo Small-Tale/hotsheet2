@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -110,9 +110,19 @@ describe('child-process git environment isolation (HS2-T1H6NP)', () => {
       identity = ['-c', 'user.name=Hot Sheet Test', '-c', 'user.email=test@example.invalid'];
     await execFileAsync('git', ['init', '-q', sentinel]);
     await execFileAsync('git', ['init', '-q', store]);
+    // The fixture's own commit must not leave detached Git maintenance running
+    // across the baseline snapshot; that would resemble an inherited-env leak.
+    await execFileAsync('git', ['-C', sentinel, 'config', 'maintenance.auto', 'false']);
+    await execFileAsync('git', ['-C', sentinel, 'config', 'gc.auto', '0']);
     writeFileSync(join(sentinel, 'tracked.txt'), 'sentinel\n');
     await execFileAsync('git', ['-C', sentinel, 'add', 'tracked.txt']);
     await execFileAsync('git', ['-C', sentinel, ...identity, 'commit', '-q', '-m', 'sentinel']);
+    const maintenanceLock = join(sentinel, '.git', 'objects', 'maintenance.lock');
+    const deadline = Date.now() + 5_000;
+    while (existsSync(maintenanceLock)) {
+      expect(Date.now(), 'fixture Git maintenance did not settle').toBeLessThan(deadline);
+      await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+    }
     const snapshot = (dir: string): Record<string, string> => {
       const files: Record<string, string> = {};
       const walk = (path: string) => {
@@ -139,12 +149,19 @@ describe('child-process git environment isolation (HS2-T1H6NP)', () => {
     await runGitCommand('git', ['-C', store, 'remote', 'add', 'origin', remote]);
     await runCommand('git', ['-C', store, 'push', '-q', 'origin', 'HEAD:refs/heads/main']);
     // The sentinel repository (config, index, refs, objects) is byte-for-byte unchanged.
-    expect(snapshot(sentinel)).toEqual(before);
+    // Report changed paths without dumping Git object bytes into CI logs.
+    const after = snapshot(sentinel);
+    const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+      .sort()
+      .filter((path) => before[path] !== after[path]);
+    expect(changed).toEqual([]);
     // Each command acted on the repository it named instead.
     expect(await backupGit(store, ['log', '--format=%s'])).toBe('store');
     expect((await execFileAsync('git', ['--git-dir', remote, 'log', '--format=%s', 'main'])).stdout.trim()).toBe(
       'store',
     );
     expect(readFileSync(join(remote, 'config'), 'utf8')).toContain('bare = true');
+    writeFileSync(join(sentinel, 'tracked.txt'), 'changed\n');
+    expect(snapshot(sentinel)).not.toEqual(before);
   });
 });
