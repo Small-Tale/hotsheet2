@@ -1,5 +1,12 @@
 # Feature Coverage Matrix
 
+HS2-XCHANA covers popup anchor recovery after inline style loss or host replacement in
+`clients/web/src/context-menu-position.test.ts`, and the open inspector status menu's
+anchor, Started submenu, and dismissal in Chromium and WebKit via
+`clients/web/tests/providers.spec.ts`. The shared context-menu observer also covers
+ticket, project tab, terminal, attachment, saved view, drive options, and terminal
+visibility surfaces.
+
 HS2-3BKWTY covers media annotation shapes in `hotsheet-model` validation and
 canonical v2/v3 round-trip tests, `hotsheet-ticketing` activity and wire tests,
 and real CLI, MCP, and server annotation flows. The CLI test also verifies that

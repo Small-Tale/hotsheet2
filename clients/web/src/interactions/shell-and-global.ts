@@ -13,6 +13,7 @@ import { type AppTabKind } from '../components/project-tab-context-menu';
 import { type RepositoryFileMenu } from '../components/repository-status-popover';
 import { type TerminalEditMenuState } from '../components/terminal-clipboard-dialogs';
 import { eventTargetsContextMenu } from '../components/ticket-row-context-menu';
+import { type SavedViewContextMenuState } from '../components/view-navigation';
 import { type WorkspaceViewMode } from '../components/workspace-header';
 import {
   type ContextPopupMenuElement,
@@ -102,6 +103,8 @@ export interface ShellAndGlobalInteractionsDependencies {
   /** Long-press terminal edit menu (HS2-KKP8YJ). */
   readonly terminalEditMenu: Signal<TerminalEditMenuState | undefined>;
   readonly terminalVisibilityContextMenu: Signal<{ id: string; x: number; y: number } | undefined>;
+  readonly savedViewMenu: Signal<SavedViewContextMenuState | undefined>;
+  readonly driveOptionsOpen: Signal<boolean>;
   readonly repositoryFileMenu: Signal<RepositoryFileMenu | undefined>;
   readonly attachmentMenu: Signal<AttachmentMenu | undefined>;
   commandLongPressFired: boolean;
@@ -164,6 +167,8 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     terminalContextMenu,
     terminalEditMenu,
     terminalVisibilityContextMenu,
+    savedViewMenu,
+    driveOptionsOpen,
     repositoryFileMenu,
     attachmentMenu,
     openCommandHistory,
@@ -591,6 +596,9 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     ['terminal', terminalContextMenu],
     ['terminal-edit', terminalEditMenu],
     ['attachment', attachmentMenu],
+    ['terminal-visibility-group', terminalVisibilityContextMenu],
+    ['saved-view', savedViewMenu],
+    ['drive-options', driveOptionsOpen],
   ] as const;
   for (const [surface, menu] of contextMenus)
     effect(() => {
@@ -615,7 +623,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         observer.observe(document.body, {
           childList: true,
           attributes: true,
-          attributeFilter: ['style'],
+          attributeFilter: ['style', 'data-context-anchor-x', 'data-context-anchor-y'],
           subtree: true,
         });
         reanchorReplacedContextPopupMenus(active, opened);

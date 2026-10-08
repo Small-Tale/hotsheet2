@@ -77,6 +77,9 @@ another status moves the ticket to Started. External providers omit the phase su
 Every phase row responds to pointer hover and click in WebKit as well as Chromium. The
 status menu disables pointer hit testing on Web Awesome's submenu safe triangle, which
 otherwise overlays rows in WebKit (HS2-0VXN1A).
+Pointer-positioned context menus and the inspector/reader status popup retain their opening
+anchor through view morphs, including a replaced popup host or cleared inline position.
+Dismissal ends the status popup's anchor tracking so later renders do not reopen it.
 In the inspector and reader, Add tag is a distinct button that opens its own anchored,
 viewport-contained popover with a labeled autocomplete field. Enter or comma can add
 repeated tags, Escape restores focus to the trigger, and read-only providers omit the

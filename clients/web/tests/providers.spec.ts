@@ -14635,6 +14635,34 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-readonly.png');
 });
 
+test('keeps an open inspector status popup at its trigger after its anchor is morphed away', async ({ page }) => {
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByText('Use real project tickets').click();
+  const status = page.locator('#app-right-rail .ticket-status-menu'),
+    trigger = status.locator('[data-action="open-inspector-status-menu"]'),
+    menu = status.locator('[data-inspector-status-menu]');
+  await trigger.click();
+  await expect(menu).toHaveJSProperty('open', true);
+  const anchor = await menu.getAttribute('style');
+  expect(anchor).toContain('px');
+  await menu.evaluate((element) => {
+    element.removeAttribute('style');
+  });
+  await expect.poll(() => menu.getAttribute('style')).toEqual(anchor);
+  await status.locator('[data-ticket-status="started"]').hover();
+  await expect(status.locator('[data-started-phase="planning"]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveJSProperty('open', false);
+  await menu.evaluate((element) => {
+    element.removeAttribute('style');
+  });
+  await page.waitForTimeout(50);
+  await expect(menu).toHaveJSProperty('open', false);
+});
+
 test('edits and clears the Started phase without changing lifecycle status', async ({ page }) => {
   await page.setViewportSize({ width: 1240, height: 1062 });
   await mockProject(page);

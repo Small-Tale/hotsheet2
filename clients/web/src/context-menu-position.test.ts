@@ -1,27 +1,87 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   type ContextPopupMenuElement,
+  maintainContextPopupMenuAnchor,
   reanchorReplacedContextPopupMenus,
   viewportSafeContextMenuPosition,
   viewportSafePointerPosition,
 } from './context-menu-position';
 
+afterEach(() => vi.unstubAllGlobals());
+
+describe('maintainContextPopupMenuAnchor', () => {
+  it('restores lost anchors and replacement hosts but never reopens a dismissed menu', () => {
+    let changed = () => {};
+    const disconnect = vi.fn();
+    class FakeMutationObserver {
+      constructor(callback: () => void) {
+        changed = callback;
+      }
+      observe() {}
+      disconnect() {
+        disconnect();
+      }
+    }
+    const listeners = new Map<string, (event: Event) => void>();
+    vi.stubGlobal('MutationObserver', FakeMutationObserver);
+    vi.stubGlobal('document', {
+      body: {},
+      addEventListener: (name: string, handler: (event: Event) => void) => listeners.set(name, handler),
+      removeEventListener: (name: string) => listeners.delete(name),
+    });
+    const makeMenu = () => {
+      const properties = new Map<string, string>();
+      return {
+        open: false,
+        isConnected: true,
+        style: {
+          getPropertyValue: (name: string) => properties.get(name) ?? '',
+          setProperty: (name: string, value: string) => properties.set(name, value),
+        },
+        getAttribute: () => [...properties].map(([name, value]) => `${name}:${value}`).join(';') || null,
+        properties,
+      };
+    };
+    const first = makeMenu(),
+      second = makeMenu();
+    let current = first;
+    const root = { querySelector: () => current } as unknown as ParentNode;
+    const stop = maintainContextPopupMenuAnchor('[data-inspector-status-menu]', { x: 418, y: 267 }, () => true, root);
+    expect(first.open).toBe(true);
+    expect(first.getAttribute()).toContain('418px');
+    first.properties.clear();
+    changed();
+    expect(first.getAttribute()).toContain('267px');
+    current = second;
+    changed();
+    expect(second.open).toBe(true);
+    second.open = false;
+    changed();
+    expect(second.open).toBe(false);
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(listeners.has('wa-hide')).toBe(false);
+    stop();
+  });
+});
+
 describe('reanchorReplacedContextPopupMenus', () => {
   it('opens each new host at its original pointer once and resets after dismissal', () => {
     const makeMenu = () => {
       const properties = new Map<string, string>(),
-        setProperty = vi.fn((name: string, value: string) => properties.set(name, value));
+        setProperty = vi.fn((name: string, value: string) => properties.set(name, value)),
+        anchor = { contextAnchorX: '418', contextAnchorY: '267' };
       return {
         menu: {
           open: true,
           style: { setProperty },
           getAttribute: () =>
             properties.size ? [...properties].map(([name, value]) => `${name}:${value}`).join(';') : null,
-          closest: () => ({ dataset: { contextAnchorX: '418', contextAnchorY: '267' } }),
+          closest: () => ({ dataset: anchor }),
         } as unknown as ContextPopupMenuElement,
         setProperty,
         properties,
+        anchor,
       };
     };
     const first = makeMenu(),
@@ -34,6 +94,10 @@ describe('reanchorReplacedContextPopupMenus', () => {
     expect(first.setProperty).toHaveBeenCalledTimes(2);
     reanchorReplacedContextPopupMenus(['ticket'], opened, root);
     expect(first.setProperty).toHaveBeenCalledTimes(2);
+    first.anchor.contextAnchorX = '512';
+    reanchorReplacedContextPopupMenus(['ticket'], opened, root);
+    expect(first.setProperty.mock.calls.at(-2)?.[1]).toBe('512px');
+    expect(first.setProperty).toHaveBeenCalledTimes(4);
 
     current = second.menu;
     reanchorReplacedContextPopupMenus(['ticket'], opened, root);

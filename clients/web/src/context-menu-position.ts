@@ -66,9 +66,55 @@ export function openContextPopupMenu(menu: ContextPopupMenuElement): void {
   openPopupMenuAt(menu, x, y);
 }
 
+/** Keep a context popup opened from a persistent trigger at its click anchor while
+ * the view morphs. Unlike signal-owned context menus, the trigger and menu remain
+ * mounted after dismissal, so the hide event ends this observation. */
+export function maintainContextPopupMenuAnchor(
+  selector: string,
+  position: ContextMenuPosition,
+  isCurrent: () => boolean,
+  root: ParentNode = document,
+): () => void {
+  let current: ContextPopupMenuElement | null = null;
+  let active = true;
+  let anchoredStyle: string | null = null;
+  const stop = () => {
+    if (!active) return;
+    active = false;
+    observer.disconnect();
+    document.removeEventListener('wa-hide', onHide, true);
+  };
+  const onHide = (event: Event) => {
+    if (event.target === current && current?.isConnected) stop();
+  };
+  const reanchor = () => {
+    if (!isCurrent()) {
+      stop();
+      return;
+    }
+    const menu = root.querySelector<ContextPopupMenuElement>(selector);
+    if (!menu) return;
+    if (menu === current && !menu.open) {
+      stop();
+      return;
+    }
+    if (menu !== current || menu.getAttribute('style') !== anchoredStyle) {
+      current = menu;
+      openPopupMenuAt(menu, position.x, position.y);
+      anchoredStyle = menu.getAttribute('style');
+    }
+  };
+  const observer = new MutationObserver(reanchor);
+  observer.observe(document.body, { childList: true, attributes: true, attributeFilter: ['style'], subtree: true });
+  document.addEventListener('wa-hide', onHide, true);
+  reanchor();
+  return stop;
+}
+
 /** A live menu can lose its inline anchor during a morph, even when the DOM host survives.
  * Restore that anchor (or open a replacement host) and forget hosts after dismissal. */
 const anchoredStyles = new WeakMap<ContextPopupMenuElement, string | null>();
+const anchoredPositions = new WeakMap<ContextPopupMenuElement, string>();
 
 export function reanchorReplacedContextPopupMenus(
   activeSurfaces: readonly string[],
@@ -78,10 +124,18 @@ export function reanchorReplacedContextPopupMenus(
   for (const surface of opened.keys()) if (!activeSurfaces.includes(surface)) opened.delete(surface);
   for (const surface of activeSurfaces) {
     const menu = root.querySelector<ContextPopupMenuElement>(`[data-context-menu="${surface}"]`);
-    if (menu && (opened.get(surface) !== menu || anchoredStyles.get(menu) !== menu.getAttribute('style'))) {
+    if (!menu) continue;
+    const wrapper = menu.closest<HTMLElement>('[data-context-anchor-x]');
+    const position = `${wrapper?.dataset.contextAnchorX ?? 0},${wrapper?.dataset.contextAnchorY ?? 0}`;
+    if (
+      opened.get(surface) !== menu ||
+      anchoredStyles.get(menu) !== menu.getAttribute('style') ||
+      anchoredPositions.get(menu) !== position
+    ) {
       opened.set(surface, menu);
       openContextPopupMenu(menu);
       anchoredStyles.set(menu, menu.getAttribute('style'));
+      anchoredPositions.set(menu, position);
     }
   }
 }

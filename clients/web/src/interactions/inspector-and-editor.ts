@@ -1,4 +1,3 @@
-import { openPopupMenuAt, type PopupMenuElement } from '@kerfjs/ui/popup-menu';
 import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
@@ -11,6 +10,7 @@ import { type TicketReaderDialogElement } from '../components/ticket-reader';
 import { statusMenuAnchorY } from '../components/ticket-status-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { type WorkspaceViewMode } from '../components/workspace-header';
+import { maintainContextPopupMenuAnchor } from '../context-menu-position';
 import { copyText } from '../copy-text';
 import { type DebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
@@ -201,6 +201,8 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
     codeReviewMessage,
     codeReview,
   } = dependencies;
+  let stopStatusMenuAnchor: (() => void) | undefined;
+  lifetime.add(() => stopStatusMenuAnchor?.());
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.toggleInspectorUpNext.selector, () => {
       if (selectedTicket.value) void updateSelectedTracked({ up_next: !selectedTicket.value.up_next });
@@ -245,12 +247,17 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       'click',
       INSPECTOR_AND_EDITOR_ACTIONS.openInspectorStatusMenu.selector,
       (_event, target) => {
-        const menu = target
-          .closest('.ticket-status-menu')
-          ?.querySelector<PopupMenuElement>('[data-inspector-status-menu]');
-        if (!menu) return;
+        const root = target.closest('#app-right-rail, [data-component="ticket-reader"]');
+        if (!root?.querySelector('[data-inspector-status-menu]')) return;
         const rect = target.getBoundingClientRect();
-        openPopupMenuAt(menu, rect.left, statusMenuAnchorY(rect.bottom, window.innerWidth, window.innerHeight));
+        const ticketId = selectedTicket.peek()?.id;
+        stopStatusMenuAnchor?.();
+        stopStatusMenuAnchor = maintainContextPopupMenuAnchor(
+          '[data-inspector-status-menu]',
+          { x: rect.left, y: statusMenuAnchorY(rect.bottom, window.innerWidth, window.innerHeight) },
+          () => root.isConnected && selectedTicket.peek()?.id === ticketId,
+          root,
+        );
       },
     ),
   );
