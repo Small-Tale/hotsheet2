@@ -2673,7 +2673,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
     row.locator('.ticket-list-row__identity').boundingBox(),
     row
       .locator('.ticket-list-row__identity strong')
-      .evaluate((node) => [...node.getClientRects()].map((rect) => ({ x: rect.x, width: rect.width }))),
+      .evaluate((node) =>
+        [...node.getClientRects()].map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })),
+      ),
   ]);
   expect(rowBox).not.toBeNull();
   expect(timeBox).not.toBeNull();
@@ -2692,7 +2694,12 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
       .evaluateAll((elements) => elements.map((element) => element.className || element.tagName.toLowerCase())),
   ).toEqual(['ticket-list-row__updated', 'ticket-list-row__slug', 'ticket-list-row__priority', 'strong']);
   expect(titleLineBoxes.length).toBeGreaterThan(1);
-  expect(titleLineBoxes.at(-1)!.x + titleLineBoxes.at(-1)!.width).toBeGreaterThan(timeBox!.x);
+  for (const line of titleLineBoxes) {
+    expect(line.x + line.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
+    if (line.y < timeBox!.y + timeBox!.height && line.y + line.height > timeBox!.y) {
+      expect(line.x + line.width).toBeLessThanOrEqual(timeBox!.x);
+    }
+  }
   await expect(row.locator('[data-component="tag-chip"]')).toHaveCount(4);
   for (const chip of await row.locator('[data-component="tag-chip"]').all()) await expect(chip).toBeVisible();
 });
