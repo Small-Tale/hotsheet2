@@ -1080,8 +1080,13 @@ only when the first `agy` on `PATH` is a regular native executable at the
 `~/.local/bin/agy` on macOS/Linux or the user-local `agy/bin/agy.exe` on Windows.
 The read-only path and file-format check precedes even `agy --version`, so an IDE
 launcher, script, or symlink leaves the bundled catalog in use (HS2-V8VPW1). A
-custom install directory keeps that fallback until it has a reliable identity
-signal (HS2-6FVRZS). The exact model-id input remains available for other models.
+custom native CLI install can be trusted explicitly by setting
+`HOTSHEET_ANTIGRAVITY_CLI_DIR` to the absolute directory containing `agy` (or
+`agy.exe` on Windows). Discovery then probes that file directly, even if an IDE
+launcher appears first on `PATH`. The trusted file must still be a regular,
+executable native binary; an invalid path or script leaves the bundled catalog
+in use. Changing or removing the trusted directory invalidates the live model
+cache (HS2-6FVRZS). The exact model-id input remains available for other models.
 The provenance review (HS2-3VHPFR, 2026-10-08) found no documented offline check
 strong enough to prove an installed `agy` is the agent CLI across supported platforms.
 Google's current [Unix installer](https://antigravity.google/cli/install.sh) and
@@ -1089,8 +1094,9 @@ Google's current [Unix installer](https://antigravity.google/cli/install.sh) and
 during installation but publish no signed manifest or durable local receipt, and the CLI
 can self-update. A displayed macOS signing Team ID alone identifies a developer, not this
 CLI; the inspected local binary did not pass strict signature verification. Discovery
-therefore keeps the native default-install guard and offline manifest fallback instead of
-trusting a mutable release checksum or an unverified signing field.
+therefore keeps the native default-install guard and offline manifest fallback
+unless the user explicitly trusts a custom install directory, without trusting
+a mutable release checksum or an unverified signing field.
 OpenCode applies a selected model through ACP `session/set_config_option`; Antigravity passes
 the selected model and effort through its declared `--model`/`--effort` spawn flags.
 Bundled provider manifests also describe offline fallback catalogs. The Claude manifest

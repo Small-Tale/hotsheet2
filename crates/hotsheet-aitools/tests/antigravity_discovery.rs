@@ -54,9 +54,11 @@ fn main() {
     // cannot interfere with parallel unit tests.
     let previous_path = std::env::var_os("PATH");
     let previous_home = std::env::var_os("HOME");
+    let previous_trusted_dir = std::env::var_os("HOTSHEET_ANTIGRAVITY_CLI_DIR");
     unsafe {
         std::env::set_var("PATH", &bin);
         std::env::set_var("HOME", &home);
+        std::env::remove_var("HOTSHEET_ANTIGRAVITY_CLI_DIR");
         std::env::set_var("AGY_FIXTURE_MARKER", &marker);
     }
     let mut cache = hotsheet_aitools::ModelCatalogCache::default();
@@ -133,6 +135,41 @@ fn main() {
     );
     assert!(!fs::read_to_string(&marker).unwrap().contains("ide"));
 
+    // The user may explicitly trust a custom installer directory. Discovery uses
+    // that exact native binary even when an IDE launcher wins the PATH lookup.
+    let custom = temp.path().join("custom/bin");
+    fs::create_dir_all(&custom).unwrap();
+    fs::copy(&native, custom.join("agy")).unwrap();
+    fs::set_permissions(custom.join("agy"), fs::Permissions::from_mode(0o755)).unwrap();
+    unsafe {
+        std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", &custom);
+        std::env::set_var("AGY_FIXTURE_VERSION", "3");
+    }
+    assert_eq!(discover(&mut cache, false).models[0].id, "gemini-new-high");
+    assert!(!fs::read_to_string(&marker).unwrap().contains("ide"));
+
+    let other_custom = temp.path().join("other/bin");
+    fs::create_dir_all(&other_custom).unwrap();
+    fs::copy(&native, other_custom.join("agy")).unwrap();
+    fs::set_permissions(other_custom.join("agy"), fs::Permissions::from_mode(0o755)).unwrap();
+    unsafe {
+        std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", &other_custom);
+        std::env::set_var("AGY_FIXTURE_MODE", "live");
+    }
+    assert_eq!(
+        discover(&mut cache, false).models[0].id,
+        "gemini-live-high",
+        "changing the trusted path invalidates a same-version catalog"
+    );
+    unsafe { std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", "relative/bin") };
+    assert_eq!(discover(&mut cache, false).models.len(), 7);
+    fs::write(other_custom.join("agy"), &ide).unwrap();
+    unsafe { std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", &other_custom) };
+    assert_eq!(discover(&mut cache, false).models.len(), 7);
+    assert!(!fs::read_to_string(&marker).unwrap().contains("ide"));
+    unsafe { std::env::remove_var("HOTSHEET_ANTIGRAVITY_CLI_DIR") };
+    assert_eq!(discover(&mut cache, false).models.len(), 7);
+
     if let Some(path) = previous_path {
         unsafe { std::env::set_var("PATH", path) };
     } else {
@@ -142,6 +179,9 @@ fn main() {
         unsafe { std::env::set_var("HOME", home) };
     } else {
         unsafe { std::env::remove_var("HOME") };
+    }
+    if let Some(dir) = previous_trusted_dir {
+        unsafe { std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", dir) };
     }
     for name in [
         "AGY_FIXTURE_MARKER",

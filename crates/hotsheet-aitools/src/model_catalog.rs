@@ -104,13 +104,24 @@ impl RuntimeModelCatalogSource for CommandModelCatalog {
     fn version(&self) -> Result<String, String> {
         // A rejected launcher gets its own cache key. A previously accepted CLI must not
         // keep showing its live catalog after PATH changes to an IDE launcher.
-        if self.identity_policy.is_some() && self.safe_program().is_err() {
-            return Ok("unidentified-catalog-executable".into());
-        }
+        let identity = if self.identity_policy.is_some() {
+            let Ok(path) = self.safe_program() else {
+                return Ok("unidentified-catalog-executable".into());
+            };
+            let metadata = std::fs::metadata(&path).map_err(|error| error.to_string())?;
+            format!(
+                "{}:{}:{:?}:",
+                path.display(),
+                metadata.len(),
+                metadata.modified().ok()
+            )
+        } else {
+            String::new()
+        };
         let args = vec!["--version".to_string()];
         let value = self.output(&args, None)?.trim().to_string();
         (!value.is_empty())
-            .then_some(value)
+            .then(|| format!("{identity}{value}"))
             .ok_or_else(|| format!("'{} --version' returned no version", self.program))
     }
 
@@ -126,18 +137,13 @@ impl RuntimeModelCatalogSource for CommandModelCatalog {
     }
 }
 
-/// The documented installer places a native executable at this path. Inspect the first
-/// PATH match without running it: an IDE script or application symlink is never probed.
+/// The documented installer places a native executable at the default path. A custom
+/// directory is trusted only when explicitly set, and still requires a native binary.
+/// Otherwise inspect the first PATH match without running it: an IDE script or
+/// application symlink is never probed.
 fn native_default_install(program: &str) -> Result<PathBuf, String> {
     #[cfg(not(windows))]
     let home = std::env::var_os("HOME").ok_or("HOME is unavailable")?;
-    #[cfg(windows)]
-    let expected = std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .ok_or("LOCALAPPDATA is unavailable")?
-        .join("agy/bin/agy.exe");
-    #[cfg(not(windows))]
-    let expected = PathBuf::from(home).join(".local/bin/agy");
     #[cfg(windows)]
     let executable_name = if program.to_ascii_lowercase().ends_with(".exe") {
         program.to_string()
@@ -146,7 +152,24 @@ fn native_default_install(program: &str) -> Result<PathBuf, String> {
     };
     #[cfg(not(windows))]
     let executable_name = program.to_string();
-    let first = if Path::new(program).components().count() > 1 {
+    let custom_dir = std::env::var_os("HOTSHEET_ANTIGRAVITY_CLI_DIR").map(PathBuf::from);
+    if custom_dir.as_ref().is_some_and(|dir| !dir.is_absolute()) {
+        return Err("trusted Antigravity CLI directory must be absolute".into());
+    }
+    #[cfg(windows)]
+    let default = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .ok_or("LOCALAPPDATA is unavailable")?
+        .join("agy/bin/agy.exe");
+    #[cfg(not(windows))]
+    let default = PathBuf::from(home).join(".local/bin/agy");
+    let trusted_custom = custom_dir.is_some();
+    let expected = custom_dir
+        .map(|dir| dir.join(&executable_name))
+        .unwrap_or(default);
+    let first = if trusted_custom {
+        expected.clone()
+    } else if Path::new(program).components().count() > 1 {
         PathBuf::from(program)
     } else {
         std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
