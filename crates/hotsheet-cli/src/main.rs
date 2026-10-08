@@ -2793,6 +2793,7 @@ fn cmd_provider_attach(path: &Path, connection: &str, id: &str, files: &[PathBuf
                     purpose: None,
                     annotations: vec![],
                     crop: None,
+                    revision: None,
                 },
                 bytes,
             )?,
