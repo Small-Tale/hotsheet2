@@ -521,6 +521,8 @@ hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 printf '%s' "$MARKDOWN" | hotsheet edit HS-7f3k9q --note-file - --note-kind feedback_needed
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
 hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
+hotsheet batch HS-7f3k9q HS-abc123 --priority high --note-file update.md # one update, per-ticket results
+hotsheet delete-note HS-7f3k9q <note-ulid>                                # remove a git ticket note
 hotsheet claim-next --worker worker-1                       # self-select + claim + start
 hotsheet claim HS-7f3k9q --worker orchestrator-1 --label Codex # exact claim + start
 hotsheet renew HS-7f3k9q --worker orchestrator-1             # extend active lease
@@ -537,6 +539,7 @@ hotsheet provider-ls github-main
 hotsheet provider-get github-main 42
 hotsheet provider-new github-main "Bug title"
 hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
+hotsheet provider-delete-note github-main 42 <note-id> # requires note_delete capability
 hotsheet provider-close github-main 42 --reason completed
 hotsheet provider-disable github-main           # temporary: no reads/writes, tickets hidden
 hotsheet provider-enable github-main
@@ -573,6 +576,14 @@ those flags keeps the repository, and `--no-attachments` removes it (HS2-HSA64D,
 [16](16-external-sync-interface.md)). `provider-attach <connection> <id> <files…>` uploads
 files to a provider-native ticket and fails explicitly when the connection reports no
 attachment support.
+
+`batch <ids…>` accepts the same field and note options as `edit`, reads a `--note-file`
+once, and applies the update to each id independently. It prints JSON with `updated`
+slugs and `errors` containing the requested id and message, like `POST /batch`; an
+invalid id does not prevent valid tickets from updating. `delete-note` uses the same
+git-store deletion as the service, including removal of feedback tied to the deleted
+note. `provider-delete-note` checks the connection's `note_delete` capability and
+fails explicitly when unsupported. Neither deletion command changes other notes.
 
 `--note` accepts one argument exactly as supplied by the caller. For multiline Markdown,
 use `--note-file <path>` or `--note-file -` (stdin) so real line breaks are preserved

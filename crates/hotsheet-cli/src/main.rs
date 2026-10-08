@@ -284,6 +284,22 @@ enum Cmd {
     },
     /// Print a ticket's file by slug or ULID.
     Show { id: String },
+    /// Apply one update independently to several git-backed tickets.
+    Batch {
+        /// Ticket slugs or ULIDs; failures are reported per ticket.
+        #[arg(required = true)]
+        ids: Vec<String>,
+        #[command(flatten)]
+        update: BatchEditArgs,
+    },
+    /// Delete one note from a git-backed ticket.
+    DeleteNote { id: String, note_id: String },
+    /// Delete a provider-native note when that connection supports note deletion.
+    ProviderDeleteNote {
+        connection: String,
+        id: String,
+        note_id: String,
+    },
     /// Attach one or more files as a single durable batch.
     Attach {
         id: String,
@@ -919,6 +935,54 @@ enum AiSettingsCmd {
     },
 }
 
+#[derive(Args)]
+struct BatchEditArgs {
+    #[arg(long)]
+    title: Option<String>,
+    #[arg(long)]
+    details: Option<String>,
+    #[arg(long)]
+    category: Option<String>,
+    #[arg(long)]
+    priority: Option<String>,
+    #[arg(long)]
+    status: Option<String>,
+    #[arg(long, conflicts_with = "clear_started_phase")]
+    started_phase: Option<String>,
+    #[arg(long)]
+    clear_started_phase: bool,
+    #[arg(long = "tag")]
+    tags: Vec<String>,
+    #[arg(long = "blocked-by", conflicts_with = "clear_blocked_by")]
+    blocked_by: Vec<String>,
+    #[arg(long)]
+    clear_blocked_by: bool,
+    #[arg(long, conflicts_with = "clear_blocked_reason")]
+    blocked_reason: Option<String>,
+    #[arg(long)]
+    clear_blocked_reason: bool,
+    #[arg(long, conflicts_with = "no_up_next")]
+    up_next: bool,
+    #[arg(long)]
+    no_up_next: bool,
+    #[arg(long)]
+    note: Option<String>,
+    #[arg(long, value_name = "PATH", conflicts_with = "note")]
+    note_file: Option<PathBuf>,
+    #[arg(long, requires = "note")]
+    allow_literal_backslash_n: bool,
+    #[arg(long, conflicts_with = "note_kind")]
+    edit_note: Option<String>,
+    #[arg(long)]
+    note_kind: Option<String>,
+    #[arg(long, conflicts_with = "edit_note")]
+    note_summary: Option<String>,
+    #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
+    note_confidence: Option<Confidence>,
+    #[arg(long, requires = "edit_note", conflicts_with = "note_confidence")]
+    clear_note_confidence: bool,
+}
+
 #[derive(Subcommand)]
 enum CheckoutCmd {
     /// Register or update a checkout. Repeating --store records all ticket stores it uses.
@@ -1351,6 +1415,13 @@ fn main() -> Result<()> {
             reason,
         } => cmd_provider_close(&cli.path, &connection, &id, &reason),
         Cmd::Show { id } => cmd_show(&cli.path, &id),
+        Cmd::Batch { ids, update } => cmd_batch(actor.as_ref(), &cli.path, &ids, update),
+        Cmd::DeleteNote { id, note_id } => cmd_delete_note(&cli.path, &id, &note_id),
+        Cmd::ProviderDeleteNote {
+            connection,
+            id,
+            note_id,
+        } => cmd_provider_delete_note(&cli.path, &connection, &id, &note_id),
         Cmd::Attach {
             id,
             files,
@@ -1459,6 +1530,7 @@ fn main() -> Result<()> {
                 note_summary,
                 note_confidence,
                 edit_note,
+                false,
             )
         }
         Cmd::Close {
@@ -4674,6 +4746,7 @@ fn cmd_edit(
     note_summary: Option<String>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
+    quiet: bool,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
@@ -4779,7 +4852,94 @@ fn cmd_edit(
     for warning in warnings {
         eprintln!("warning: {warning}");
     }
-    println!("Updated {}", updated.slug);
+    if !quiet {
+        println!("Updated {}", updated.slug);
+    }
+    Ok(())
+}
+
+fn cmd_batch(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    path: &PathBuf,
+    ids: &[String],
+    update: BatchEditArgs,
+) -> Result<()> {
+    let note = read_note_input(
+        update.note,
+        update.note_file,
+        update.allow_literal_backslash_n,
+    )?;
+    let note_confidence = confidence_change(update.note_confidence, update.clear_note_confidence);
+    validate_note_modifiers(
+        &note,
+        update.note_kind.as_ref(),
+        update.note_summary.as_ref(),
+        note_confidence,
+        update.edit_note.as_ref(),
+    )?;
+    let note_kind = parse_note_kind(update.note_kind.as_deref().unwrap_or("regular"))?;
+    let mut updated = Vec::new();
+    let mut errors = Vec::new();
+    for id in ids {
+        match cmd_edit(
+            actor,
+            path,
+            id,
+            update.title.clone(),
+            update.details.clone(),
+            update.category.clone(),
+            update.priority.clone(),
+            update.status.clone(),
+            update.started_phase.clone(),
+            update.clear_started_phase,
+            update.tags.clone(),
+            update.blocked_by.clone(),
+            update.clear_blocked_by,
+            update.blocked_reason.clone(),
+            update.clear_blocked_reason,
+            update.up_next,
+            update.no_up_next,
+            note.clone(),
+            note_kind,
+            update.note_summary.clone(),
+            note_confidence,
+            update.edit_note.clone(),
+            true,
+        ) {
+            Ok(()) => updated.push(resolve(&FsStore::open(path)?, id)?.slug),
+            Err(error) => errors.push(serde_json::json!({
+                "id": id,
+                "message": error.to_string(),
+            })),
+        }
+    }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "updated": updated,
+            "errors": errors,
+        }))?
+    );
+    Ok(())
+}
+
+fn cmd_delete_note(path: &Path, id: &str, note_id: &str) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, id)?;
+    let note_id =
+        Ulid::from_string(note_id).map_err(|_| anyhow::anyhow!("invalid note ULID '{note_id}'"))?;
+    ops::delete_note(&store, &ticket.id, &note_id, now_ts())?;
+    println!("Deleted note {note_id} from {}", ticket.slug);
+    Ok(())
+}
+
+fn cmd_provider_delete_note(path: &Path, connection: &str, id: &str, note_id: &str) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    if !provider.supports_note_delete() {
+        bail!("provider connection '{connection}' does not support note deletion");
+    }
+    let ticket = provider.delete_note(id, note_id, now_ts())?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())
 }
 

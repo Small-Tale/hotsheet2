@@ -3681,6 +3681,173 @@ fn edit_can_append_and_edit_an_activity_note() {
     );
 }
 
+#[test]
+fn batch_reports_partial_results_and_preserves_actor_note_metadata() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let first = new_ticket(p, "First");
+    let second = new_ticket(p, "Second");
+    let note_file = p.join("batch-note.md");
+    std::fs::write(&note_file, "## Result\nBatch updated.\n").unwrap();
+    let output = hs(p)
+        .args(["--actor-role", "ai", "--actor-id", "batch-worker", "batch"])
+        .args([&first, "missing-ticket", &second])
+        .args(["--status", "started", "--note-file"])
+        .arg(&note_file)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let result: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(result["updated"], serde_json::json!([first, second]));
+    assert_eq!(result["errors"][0]["id"], "missing-ticket");
+    assert_eq!(result["errors"].as_array().unwrap().len(), 1);
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    for slug in [&first, &second] {
+        let ticket = hotsheet_ticketing::ops::resolve(&store, slug)
+            .unwrap()
+            .unwrap();
+        assert_eq!(ticket.status, hotsheet_model::Status::Started);
+        let note = ticket
+            .notes
+            .iter()
+            .find(|note| note.text.contains("Batch updated."))
+            .unwrap();
+        assert_eq!(
+            note.actor.as_ref().unwrap().id.as_deref(),
+            Some("batch-worker")
+        );
+    }
+    // Repeated and reversed updates still apply independently to each requested id.
+    hs(p)
+        .args(["batch", &second, &first, "--status", "not_started"])
+        .assert()
+        .success();
+    for slug in [&first, &second] {
+        assert_eq!(
+            hotsheet_ticketing::ops::resolve(&store, slug)
+                .unwrap()
+                .unwrap()
+                .status,
+            hotsheet_model::Status::NotStarted
+        );
+    }
+    let completion = hs(p)
+        .args(["--actor-role", "ai", "--actor-id", "batch-worker", "batch"])
+        .args([&first, &second])
+        .args([
+            "--status",
+            "completed",
+            "--note",
+            "Completed together",
+            "--note-confidence",
+            "82",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let completion: serde_json::Value = serde_json::from_slice(&completion).unwrap();
+    assert!(completion["errors"].as_array().unwrap().is_empty());
+    for slug in [&first, &second] {
+        let ticket = hotsheet_ticketing::ops::resolve(&store, slug)
+            .unwrap()
+            .unwrap();
+        assert_eq!(ticket.status, hotsheet_model::Status::Completed);
+        assert_eq!(
+            ticket
+                .notes
+                .iter()
+                .find(|note| note.text == "Completed together")
+                .unwrap()
+                .confidence
+                .map(hotsheet_model::Confidence::get),
+            Some(82)
+        );
+    }
+}
+
+#[test]
+fn note_deletion_uses_git_and_provider_capabilities() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let slug = new_ticket(p, "Notes");
+    hs(p)
+        .args(["edit", &slug, "--note", "keep"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["edit", &slug, "--note", "remove"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["edit", &slug, "--note", "tail"])
+        .assert()
+        .success();
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    let note_id = ticket.notes[1].id.to_string();
+    hs(p)
+        .args(["delete-note", &slug, &note_id])
+        .assert()
+        .success();
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        ticket
+            .notes
+            .iter()
+            .map(|note| note.text.as_str())
+            .collect::<Vec<_>>(),
+        ["keep", "tail"]
+    );
+    hs(p)
+        .args(["delete-note", &slug, &note_id])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("note"));
+    let git_connection = hotsheet_ticketing::provider::git_connection_id(&store);
+    let kept_note = ticket.notes[0].id.to_string();
+    hs(p)
+        .args([
+            "provider-delete-note",
+            &git_connection,
+            &ticket.id.to_string(),
+            &kept_note,
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        hotsheet_ticketing::ops::resolve(&store, &slug)
+            .unwrap()
+            .unwrap()
+            .notes
+            .iter()
+            .map(|note| note.text.as_str())
+            .collect::<Vec<_>>(),
+        ["tail"]
+    );
+
+    std::fs::write(
+        p.join("providers.json"),
+        r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/repo","settings":{"api_base":"http://127.0.0.1:9","credential":{"secret":"cli-note-delete-fixture"}}}]}"#,
+    )
+    .unwrap();
+    hs(p)
+        .env("HOTSHEET_API_KEY_CLI_NOTE_DELETE_FIXTURE", "fixture-token")
+        .args(["provider-delete-note", "github-main", "42", "remote-note"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("does not support note deletion"));
+}
+
 /// HS2-DWTJ43: `--note-confidence` records a validated score on the appended note,
 /// the ticket's derived latest confidence follows the completion cycle, and invalid
 /// or misplaced values fail explicitly without writing anything.
