@@ -1,7 +1,7 @@
 import type { Signal } from 'kerfjs';
 import { batch, signal } from 'kerfjs';
 
-import type { Api, FullTicket, MediaAnnotation } from '../api';
+import type { Api, Attachment, FullTicket, MediaAnnotation } from '../api';
 import {
   type AttachmentReferenceContext,
   attachmentReferences,
@@ -20,6 +20,7 @@ import {
 import type { AttachmentContextMenuSurface } from '../components/reader-overlay-surfaces';
 import { GallerySurface } from '../components/reader-overlay-surfaces';
 import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
+import { croppableImageHeader, projectGalleryAnnotations, restoreGalleryAnnotations } from '../gallery-crop';
 import type { AttachmentMenu, GallerySource, Project } from '../interactions/types';
 
 export interface GalleryDependencies {
@@ -34,6 +35,7 @@ export interface GalleryDependencies {
    * append-only provider has no annotations or generated video posters (HS2-HSA64D).
    */
   attachmentsEditable?: (ticket: FullTicket) => boolean;
+  attachmentsCroppable?: (ticket: FullTicket) => boolean;
 }
 
 export function createGalleryController(dependencies: GalleryDependencies) {
@@ -45,6 +47,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     showToast,
     error,
     attachmentsEditable = () => true,
+    attachmentsCroppable = attachmentsEditable,
   } = dependencies;
   const attachmentGalleryUrl = signal<string | undefined>(undefined),
     gallerySource = signal<GallerySource | undefined>(undefined);
@@ -59,6 +62,12 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     }),
     attachmentGalleryScale = signal<number | undefined>(undefined);
   const attachmentGalleryMarkup = signal(false),
+    attachmentGalleryCropMode = signal(false),
+    attachmentGalleryCrop = signal<Attachment['crop']>(undefined),
+    attachmentGalleryCropAvailable = signal(false),
+    attachmentGalleryPreviewUrl = signal<string | undefined>(undefined),
+    attachmentGalleryOriginalSize = signal({ width: 0, height: 0 }),
+    attachmentGalleryRevision = signal(0),
     attachmentGalleryDrawMode = signal(false),
     attachmentGalleryTool = signal<GalleryAnnotationTool>('select'),
     attachmentGalleryAnnotations = signal<MediaAnnotation[]>([]),
@@ -89,7 +98,16 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     | undefined;
   let attachmentSwipeGesture: AttachmentGallerySwipeGesture | undefined;
   let attachmentAnnotationSession:
-    | { projectId: string; ticketId: string; qualifiedId: string; attachmentId: string; before: MediaAnnotation[] }
+    | {
+        projectId: string;
+        ticketId: string;
+        qualifiedId: string;
+        attachmentId: string;
+        before: MediaAnnotation[];
+        original: MediaAnnotation[];
+        crop?: Attachment['crop'];
+        originalSize: { width: number; height: number };
+      }
     | undefined;
   let attachmentAnnotationSave = Promise.resolve();
 
@@ -142,6 +160,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     const active = attachmentGalleryUrl.value,
       images = galleryImages(),
       image = active ? images.find((item) => item.url === active || item.aliases?.includes(active)) : undefined,
+      displayUrl = image?.url ?? active ?? '',
       ticket = sourceTicket(),
       attachmentIndex = ticket?.attachments.findIndex((item) => item.id === image?.attachmentId) ?? -1,
       annotationNumberOffset =
@@ -160,6 +179,23 @@ export function createGalleryController(dependencies: GalleryDependencies) {
                 geometry: attachmentGalleryGeometry.value,
                 selectedScale: attachmentGalleryScale.value,
                 annotations: attachmentGalleryAnnotations.value,
+                imageUrl:
+                  attachmentGalleryCropMode.value && image?.attachmentId
+                    ? api().checkoutAttachmentOriginalUrl(sourceProject()!.id, ticket!.qualified_id, image.attachmentId)
+                    : (attachmentGalleryPreviewUrl.value ??
+                      `${displayUrl}${image?.attachmentId && attachmentGalleryRevision.value > 0 ? `${displayUrl.includes('?') ? '&' : '?'}revision=${attachmentGalleryRevision.value}` : ''}`),
+                cropMode: attachmentGalleryCropMode.value,
+                crop: attachmentGalleryCrop.value,
+                cropEnabled: Boolean(
+                  image?.attachmentId &&
+                  /\.(png|jpe?g|webp)$/i.test(image.name) &&
+                  attachmentGalleryCropAvailable.value &&
+                  ticket &&
+                  attachmentsCroppable(ticket) &&
+                  !gallerySource.value?.readOnly,
+                ),
+                originalWidth: attachmentGalleryOriginalSize.value.width,
+                originalHeight: attachmentGalleryOriginalSize.value.height,
                 annotationNumberOffset,
                 markup: attachmentGalleryMarkup.value,
                 drawMode: attachmentGalleryDrawMode.value,
@@ -171,7 +207,10 @@ export function createGalleryController(dependencies: GalleryDependencies) {
                 volume: attachmentGalleryVolume.value,
                 muted: attachmentGalleryMuted.value,
                 volumeOpen: attachmentGalleryVolumeOpen.value,
-                annotationEnabled: Boolean(image?.attachmentId) && annotationsWritable(),
+                annotationEnabled:
+                  Boolean(image?.attachmentId) &&
+                  annotationsWritable() &&
+                  (!activeGalleryAttachment()?.crop || attachmentGalleryOriginalSize.value.width > 0),
               }
             : undefined
         }
@@ -253,6 +292,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
   /** Show `url` (or close without one). A `source` opens it for that ticket; shifting keeps the current one. */
   function resetAttachmentGallery(url?: string, source?: GallerySource) {
     finishGalleryAnnotationSession();
+    if (attachmentGalleryPreviewUrl.value?.startsWith('blob:')) URL.revokeObjectURL(attachmentGalleryPreviewUrl.value);
     if (!url) gallerySource.value = undefined;
     else if (source) gallerySource.value = source;
     stopGallerySvgClock();
@@ -267,6 +307,11 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       attachmentGalleryGeometry.value = { naturalWidth: 0, naturalHeight: 0, availableWidth: 0, availableHeight: 0 };
       attachmentMenu.value = undefined;
       attachmentGalleryMarkup.value = false;
+      attachmentGalleryCropMode.value = false;
+      attachmentGalleryCrop.value = attachment?.crop;
+      attachmentGalleryCropAvailable.value = Boolean(attachment?.crop);
+      attachmentGalleryPreviewUrl.value = undefined;
+      attachmentGalleryOriginalSize.value = { width: 0, height: 0 };
       attachmentGalleryDrawMode.value = false;
       attachmentGalleryTool.value = 'select';
       attachmentGallerySelectedAnnotation.value = undefined;
@@ -276,13 +321,71 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       attachmentGalleryVolume.value = 1;
       attachmentGalleryMuted.value = false;
       attachmentGalleryVolumeOpen.value = false;
-      attachmentGalleryAnnotations.value = attachment?.annotations?.map((item) => ({ ...item })) ?? [];
+      attachmentGalleryAnnotations.value = attachment?.crop
+        ? []
+        : (attachment?.annotations?.map((item) => ({ ...item })) ?? []);
     });
     attachmentGalleryLivePlayhead = 0;
     attachmentGalleryLiveVolume = 1;
     attachmentAnnotationGesture = undefined;
     attachmentRangeGesture = undefined;
     attachmentSwipeGesture = undefined;
+    if (attachment && image && !attachment.crop && /\.(png|jpe?g|webp)$/i.test(image.name)) {
+      const requested = url,
+        originalUrl = api().checkoutAttachmentOriginalUrl(
+          sourceProject()!.id,
+          sourceTicket()!.qualified_id,
+          attachment.id,
+        );
+      void (async () => {
+        try {
+          const response = await fetch(originalUrl, { headers: { Range: 'bytes=0-65535' } });
+          if (!response.ok) return;
+          const reader = response.body?.getReader();
+          if (!reader) return;
+          const chunks: Uint8Array[] = [];
+          let length = 0;
+          while (length < 65536) {
+            const part = await reader.read();
+            if (part.done) break;
+            chunks.push(part.value);
+            length += part.value.length;
+          }
+          await reader.cancel();
+          const bytes = new Uint8Array(Math.min(length, 65536));
+          let offset = 0;
+          for (const chunk of chunks) {
+            bytes.set(chunk.subarray(0, bytes.length - offset), offset);
+            offset += Math.min(chunk.length, bytes.length - offset);
+          }
+          if (attachmentGalleryUrl.value === requested)
+            attachmentGalleryCropAvailable.value = croppableImageHeader(image.name, bytes);
+        } catch {
+          /* The original remains viewable even if a crop format check cannot complete. */
+        }
+      })();
+    }
+    if (attachment?.crop && image && sourceProject()) {
+      const original = new Image(),
+        requested = url,
+        originalUrl = api().checkoutAttachmentOriginalUrl(
+          sourceProject()!.id,
+          sourceTicket()!.qualified_id,
+          attachment.id,
+        );
+      original.onload = () => {
+        if (attachmentGalleryUrl.value !== requested) return;
+        attachmentGalleryOriginalSize.value = { width: original.naturalWidth, height: original.naturalHeight };
+        if (!attachmentGalleryCropMode.value)
+          attachmentGalleryAnnotations.value = projectGalleryAnnotations(
+            attachment.annotations ?? [],
+            attachment.crop,
+            original.naturalWidth,
+            original.naturalHeight,
+          );
+      };
+      original.src = originalUrl;
+    }
     if (image?.name.toLowerCase().endsWith('.svg')) void detectAnimatedGallerySvg(url!);
   }
 
@@ -370,7 +473,101 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       qualifiedId: ticket.qualified_id,
       attachmentId: attachment.id,
       before: attachmentGalleryAnnotations.value.map((item) => ({ ...item })),
+      original: structuredClone(attachment.annotations ?? []),
+      crop: attachment.crop,
+      originalSize: attachmentGalleryOriginalSize.value,
     };
+  }
+
+  async function beginGalleryCrop() {
+    if (!attachmentGalleryMarkup.value || attachmentGalleryCropMode.value) return;
+    const attachment = activeGalleryAttachment(),
+      current = sourceProject(),
+      ticket = sourceTicket();
+    if (!attachment || !current || !ticket) return;
+    const size = attachmentGalleryOriginalSize.value;
+    const enter = (width: number, height: number) => {
+      if (!attachmentGalleryMarkup.value) return;
+      const canonical = restoreGalleryAnnotations(
+        attachmentAnnotationSession?.original ?? attachment.annotations ?? [],
+        attachmentGalleryAnnotations.value,
+        attachmentGalleryCrop.value,
+        width,
+        height,
+      );
+      if (attachmentAnnotationSession) {
+        attachmentAnnotationSession.original = canonical;
+        attachmentAnnotationSession.originalSize = { width, height };
+      }
+      attachmentGalleryOriginalSize.value = { width, height };
+      attachmentGalleryAnnotations.value = canonical;
+      attachmentGalleryCropMode.value = true;
+      attachmentGallerySelectedAnnotation.value = undefined;
+      attachmentGalleryTool.value = 'select';
+      attachmentGalleryDrawMode.value = false;
+      attachmentGalleryScale.value = undefined;
+    };
+    if (size.width && size.height) enter(size.width, size.height);
+    else {
+      const original = new Image();
+      original.src = api().checkoutAttachmentOriginalUrl(current.id, ticket.qualified_id, attachment.id);
+      try {
+        await original.decode();
+        enter(original.naturalWidth, original.naturalHeight);
+      } catch {
+        error.value = 'Could not load the original image for cropping.';
+      }
+    }
+  }
+
+  async function restoreGalleryCrop() {
+    if (!attachmentGalleryCropMode.value) await beginGalleryCrop();
+    if (!attachmentGalleryCropMode.value) return;
+    attachmentGalleryCrop.value = undefined;
+  }
+
+  async function finishGalleryCrop() {
+    if (!attachmentGalleryCropMode.value) return;
+    const attachment = activeGalleryAttachment(),
+      current = sourceProject(),
+      ticket = sourceTicket();
+    if (!attachment || !current || !ticket) return;
+    const crop = attachmentGalleryCrop.value,
+      size = attachmentGalleryOriginalSize.value,
+      originalUrl = api().checkoutAttachmentOriginalUrl(current.id, ticket.qualified_id, attachment.id),
+      oldPreview = attachmentGalleryPreviewUrl.value;
+    if (crop) {
+      const original = new Image();
+      original.src = originalUrl;
+      try {
+        await original.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = crop.width;
+        canvas.height = crop.height;
+        canvas
+          .getContext('2d')
+          ?.drawImage(original, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+        const blob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob(resolve, 'image/png');
+        });
+        if (!blob) throw new Error('Could not preview the crop.');
+        attachmentGalleryPreviewUrl.value = URL.createObjectURL(blob);
+      } catch (reason) {
+        error.value = reason instanceof Error ? reason.message : String(reason);
+        return;
+      }
+    } else attachmentGalleryPreviewUrl.value = originalUrl;
+    if (oldPreview?.startsWith('blob:')) URL.revokeObjectURL(oldPreview);
+    attachmentGalleryAnnotations.value = projectGalleryAnnotations(
+      attachmentAnnotationSession?.original ?? attachmentGalleryAnnotations.value,
+      crop,
+      size.width,
+      size.height,
+    );
+    attachmentGalleryCropMode.value = false;
+    attachmentGalleryScale.value = undefined;
+    attachmentGallerySelectedAnnotation.value = undefined;
+    requestAnimationFrame(syncAttachmentGalleryMeasurement);
   }
 
   function finishGalleryAnnotationSession() {
@@ -378,15 +575,39 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     if (!session) return;
     attachmentAnnotationSession = undefined;
     const annotations = attachmentGalleryAnnotations.value.map((item) => ({ ...item }));
-    if (JSON.stringify(session.before) === JSON.stringify(annotations)) return;
+    const crop = attachmentGalleryCrop.value,
+      cropChanged = JSON.stringify(session.crop) !== JSON.stringify(crop),
+      changed = JSON.stringify(session.before) !== JSON.stringify(annotations) || cropChanged;
+    if (!changed) {
+      if (attachmentGalleryCropMode.value && attachmentGalleryUrl.value)
+        resetAttachmentGallery(attachmentGalleryUrl.value);
+      return;
+    }
+    const canonical = attachmentGalleryCropMode.value
+      ? annotations
+      : restoreGalleryAnnotations(
+          session.original,
+          annotations,
+          crop,
+          session.originalSize.width,
+          session.originalSize.height,
+        );
     attachmentAnnotationSave = attachmentAnnotationSave.then(async () => {
       try {
-        const result = await api().updateCheckoutAttachmentAnnotations(
-          session.projectId,
-          session.qualifiedId,
-          session.attachmentId,
-          annotations,
-        );
+        const result = cropChanged
+          ? await api().updateCheckoutAttachmentMarkup(
+              session.projectId,
+              session.qualifiedId,
+              session.attachmentId,
+              canonical,
+              crop,
+            )
+          : await api().updateCheckoutAttachmentAnnotations(
+              session.projectId,
+              session.qualifiedId,
+              session.attachmentId,
+              canonical,
+            );
         const source = gallerySource.value;
         if (source?.ticket.id === session.ticketId && source.project.id === session.projectId) {
           gallerySource.value = { ...source, ticket: result.ticket };
@@ -394,7 +615,10 @@ export function createGalleryController(dependencies: GalleryDependencies) {
         }
         if (selectedTicket.value?.id === session.ticketId && project()?.id === session.projectId)
           selectedTicket.value = result.ticket;
-        showToast('Annotations saved.');
+        attachmentGalleryRevision.value++;
+        if (attachmentGalleryUrl.value && activeGalleryAttachment()?.id === session.attachmentId)
+          resetAttachmentGallery(attachmentGalleryUrl.value);
+        showToast(cropChanged ? 'Image crop saved.' : 'Annotations saved.');
       } catch (reason) {
         error.value = reason instanceof Error ? reason.message : String(reason);
       }
@@ -417,6 +641,14 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     attachmentGalleryGeometry,
     attachmentGalleryScale,
     attachmentGalleryMarkup,
+    attachmentGalleryCropMode,
+    attachmentGalleryCrop,
+    attachmentGalleryCropAvailable,
+    attachmentGalleryPreviewUrl,
+    attachmentGalleryOriginalSize,
+    beginGalleryCrop,
+    restoreGalleryCrop,
+    finishGalleryCrop,
     attachmentGalleryDrawMode,
     attachmentGalleryTool,
     attachmentGalleryAnnotations,

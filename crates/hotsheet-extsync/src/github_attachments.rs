@@ -288,6 +288,7 @@ pub fn api_attachment(id: String, marker: AttachmentMarker, created_at: String) 
         actor: marker.actor,
         purpose: marker.purpose,
         annotations: vec![],
+        crop: None,
     }
 }
 

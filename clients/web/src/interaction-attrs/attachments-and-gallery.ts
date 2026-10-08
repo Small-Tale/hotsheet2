@@ -19,6 +19,8 @@ export const ATTACHMENTS_AND_GALLERY_ACTIONS = {
   openReferencedAttachment: action('open-referenced-attachment'),
   attachmentMenuAction: action('attachment-menu-action'),
   toggleGalleryMarkup: action('toggle-gallery-markup'),
+  toggleGalleryCrop: action('toggle-gallery-crop'),
+  restoreGalleryCrop: action('restore-gallery-crop'),
   toggleGalleryDraw: action('toggle-gallery-draw'),
   selectGalleryTool: action('select-gallery-tool'),
   editGalleryNote: action('edit-gallery-note'),
@@ -44,5 +46,6 @@ export const ATTACHMENTS_AND_GALLERY_TARGETS = {
   galleryImage: attr('data-gallery-image', 'true'),
   galleryMedia: attr('data-gallery-media', 'true'),
   galleryAnnotationSurface: attr('data-gallery-annotation-surface', 'true'),
+  galleryCropSurface: attr('data-gallery-crop-surface', 'true'),
   attachmentGallery: attr('data-component', 'attachment-gallery'),
 } as const;

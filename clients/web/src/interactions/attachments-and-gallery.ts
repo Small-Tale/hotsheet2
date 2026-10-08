@@ -38,6 +38,7 @@ import {
   resizeGalleryAnnotation,
   translateGalleryAnnotation,
 } from '../gallery-annotation-editor';
+import { galleryCropFromDrag } from '../gallery-crop';
 import {
   ATTACHMENTS_AND_GALLERY_ACTIONS,
   ATTACHMENTS_AND_GALLERY_TARGETS,
@@ -84,6 +85,12 @@ export interface AttachmentAndGalleryInteractionsDependencies {
   readonly attachmentGalleryDuration: Signal<number>;
   readonly error: Signal<string>;
   readonly attachmentGalleryMarkup: Signal<boolean>;
+  readonly attachmentGalleryCropMode: Signal<boolean>;
+  readonly attachmentGalleryCrop: Signal<FullTicket['attachments'][number]['crop']>;
+  readonly attachmentGalleryOriginalSize: Signal<{ width: number; height: number }>;
+  readonly beginGalleryCrop: () => Promise<void>;
+  readonly restoreGalleryCrop: () => Promise<void>;
+  readonly finishGalleryCrop: () => Promise<void>;
   readonly finishGalleryAnnotationSession: () => void;
   readonly beginGalleryAnnotationSession: () => void;
   readonly attachmentGalleryDrawMode: Signal<boolean>;
@@ -150,6 +157,12 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     attachmentGalleryDuration,
     error,
     attachmentGalleryMarkup,
+    attachmentGalleryCropMode,
+    attachmentGalleryCrop,
+    attachmentGalleryOriginalSize,
+    beginGalleryCrop,
+    restoreGalleryCrop,
+    finishGalleryCrop,
     finishGalleryAnnotationSession,
     beginGalleryAnnotationSession,
     attachmentGalleryDrawMode,
@@ -691,14 +704,25 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
     ),
   );
   const snapshotAnnotations = () => structuredClone(attachmentGalleryAnnotations.value),
-    undoAnnotations: MediaAnnotation[][] = [],
-    redoAnnotations: MediaAnnotation[][] = [];
+    snapshotMarkup = () => ({
+      annotations: snapshotAnnotations(),
+      crop: attachmentGalleryCrop.value,
+      cropMode: attachmentGalleryCropMode.value,
+    }),
+    undoAnnotations: ReturnType<typeof snapshotMarkup>[] = [],
+    redoAnnotations: ReturnType<typeof snapshotMarkup>[] = [];
   let editGroup: string | undefined;
   function recordAnnotationChange(before: MediaAnnotation[], group?: string) {
     if (JSON.stringify(before) === JSON.stringify(attachmentGalleryAnnotations.value)) return;
-    if (!group || editGroup !== group) undoAnnotations.push(before);
+    if (!group || editGroup !== group) undoAnnotations.push({ ...snapshotMarkup(), annotations: before });
     redoAnnotations.length = 0;
     editGroup = group;
+  }
+  function recordCropChange(before: FullTicket['attachments'][number]['crop']) {
+    if (JSON.stringify(before) === JSON.stringify(attachmentGalleryCrop.value)) return;
+    undoAnnotations.push({ ...snapshotMarkup(), crop: before, cropMode: true });
+    redoAnnotations.length = 0;
+    editGroup = undefined;
   }
   function setGalleryTool(tool: GalleryAnnotationTool) {
     attachmentGalleryTool.value = tool;
@@ -725,6 +749,84 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       setGalleryTool('select');
       attachmentGallerySelectedAnnotation.value = undefined;
     }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryCrop.selector, () => {
+      if (attachmentGalleryCropMode.value) void finishGalleryCrop();
+      else void beginGalleryCrop();
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.restoreGalleryCrop.selector, () => {
+      const before = attachmentGalleryCrop.value;
+      void restoreGalleryCrop().then(() => {
+        recordCropChange(before);
+      });
+    }),
+  );
+  let cropGesture:
+    | {
+        pointerId: number;
+        start: { x: number; y: number };
+        before: FullTicket['attachments'][number]['crop'];
+        surface: DOMRect;
+      }
+    | undefined;
+  lifetime.add(
+    delegateCapture(
+      document.body,
+      'pointerdown',
+      ATTACHMENTS_AND_GALLERY_TARGETS.galleryCropSurface.selector,
+      (event, target) => {
+        if (!attachmentGalleryMarkup.value || !attachmentGalleryCropMode.value) return;
+        const pointer = event as PointerEvent,
+          surface = target.getBoundingClientRect();
+        if (!surface.width || !surface.height) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        const start = annotationPoint(pointer, surface);
+        cropGesture = { pointerId: pointer.pointerId, start, before: attachmentGalleryCrop.value, surface };
+      },
+    ),
+  );
+  document.addEventListener(
+    'pointermove',
+    (event) => {
+      if (!cropGesture || event.pointerId !== cropGesture.pointerId) return;
+      event.preventDefault();
+      const { width, height } = attachmentGalleryOriginalSize.value;
+      attachmentGalleryCrop.value = galleryCropFromDrag(
+        cropGesture.start,
+        annotationPoint(event, cropGesture.surface),
+        width,
+        height,
+      );
+    },
+    { signal: lifetime.signal },
+  );
+  document.addEventListener(
+    'pointerup',
+    (event) => {
+      if (!cropGesture || event.pointerId !== cropGesture.pointerId) return;
+      event.preventDefault();
+      const { width, height } = attachmentGalleryOriginalSize.value;
+      attachmentGalleryCrop.value =
+        galleryCropFromDrag(cropGesture.start, annotationPoint(event, cropGesture.surface), width, height) ??
+        cropGesture.before;
+      recordCropChange(cropGesture.before);
+      cropGesture = undefined;
+    },
+    { signal: lifetime.signal },
+  );
+  document.addEventListener(
+    'pointercancel',
+    (event) => {
+      if (!cropGesture || event.pointerId !== cropGesture.pointerId) return;
+      attachmentGalleryCrop.value = cropGesture.before;
+      cropGesture = undefined;
+    },
+    { signal: lifetime.signal },
   );
   lifetime.add(
     delegate(document.body, 'click', ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryDraw.selector, () => {
@@ -1178,9 +1280,18 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
           destination = event.shiftKey ? undoAnnotations : redoAnnotations,
           previous = source.pop();
         if (previous) {
-          destination.push(snapshotAnnotations());
-          attachmentGalleryAnnotations.value = previous;
-          if (selectedId && !previous.some((item) => item.id === selectedId))
+          const previewFromCrop = attachmentGalleryCropMode.value && !previous.cropMode;
+          destination.push(snapshotMarkup());
+          attachmentGalleryCrop.value = previous.crop;
+          if (previewFromCrop)
+            void finishGalleryCrop().then(() => {
+              if (!attachmentGalleryCropMode.value) attachmentGalleryAnnotations.value = previous.annotations;
+            });
+          else {
+            attachmentGalleryAnnotations.value = previous.annotations;
+            attachmentGalleryCropMode.value = previous.cropMode;
+          }
+          if (selectedId && !previous.annotations.some((item) => item.id === selectedId))
             attachmentGallerySelectedAnnotation.value = undefined;
           editGroup = undefined;
         }

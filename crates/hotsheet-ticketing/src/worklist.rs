@@ -78,6 +78,16 @@ pub fn render_with_auto_context(tickets: &[Ticket], entries: &[AutoContextEntry]
 fn entry(ticket: &Ticket, entries: &[AutoContextEntry]) -> String {
     let mut out = line(ticket);
     for attachment in &ticket.attachments {
+        if let Some(crop) = attachment.crop {
+            out.push_str(&format!(
+                "  > Image crop {}: {} × {} px at ({}, {}) of original; annotations use original coordinates\n",
+                escape_inline_markdown(&attachment.filename),
+                crop.width,
+                crop.height,
+                crop.x,
+                crop.y,
+            ));
+        }
         for annotation in &attachment.annotations {
             let intents = if annotation.intents.is_empty() {
                 annotation.default_intent().to_string()
@@ -449,8 +459,15 @@ mod tests {
                     intents: vec!["move".into(), "bug".into(), "future_focus".into()],
                 },
             ],
+            crop: Some(hotsheet_model::ImageCrop {
+                x: 12,
+                y: 8,
+                width: 128,
+                height: 96,
+            }),
         });
         let md = render(&[ticket]);
+        assert!(md.contains("Image crop proof\\.png: 128 × 96 px at (12, 8) of original"));
         assert!(md.contains("Media annotation proof\\.png #remove: strike · remove"));
         assert!(
             md.contains("Media annotation proof\\.png #move: arrow · move, bug, future\\_focus")

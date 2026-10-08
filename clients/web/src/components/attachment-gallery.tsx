@@ -10,6 +10,7 @@ import type { SafeHtml } from 'kerfjs';
 import {
   ChevronLeft,
   ChevronRight,
+  Crop,
   Eraser,
   Minus,
   MoreHorizontal,
@@ -17,6 +18,7 @@ import {
   Pencil,
   Play,
   Plus,
+  RotateCcw,
   Scan,
   Volume2,
   VolumeX,
@@ -24,7 +26,7 @@ import {
 } from 'lucide';
 
 import { annotationDefaultIntent, annotationIntentColor } from '../annotation-intents';
-import type { MediaAnnotation } from '../api';
+import type { Attachment, MediaAnnotation } from '../api';
 import { isVideoAttachment } from '../attachment-references';
 import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
 import {
@@ -372,6 +374,12 @@ export function AttachmentGallery({
   geometry = { naturalWidth: 0, naturalHeight: 0, availableWidth: 0, availableHeight: 0 },
   selectedScale,
   annotations = [],
+  imageUrl,
+  cropMode = false,
+  crop,
+  cropEnabled = false,
+  originalWidth = 0,
+  originalHeight = 0,
   annotationNumberOffset = 0,
   markup = false,
   selectedAnnotation,
@@ -391,6 +399,12 @@ export function AttachmentGallery({
   geometry?: AttachmentGalleryGeometry;
   selectedScale?: number;
   annotations?: readonly MediaAnnotation[];
+  imageUrl?: string;
+  cropMode?: boolean;
+  crop?: Attachment['crop'];
+  cropEnabled?: boolean;
+  originalWidth?: number;
+  originalHeight?: number;
   annotationNumberOffset?: number;
   markup?: boolean;
   selectedAnnotation?: string;
@@ -499,7 +513,8 @@ export function AttachmentGallery({
           <div
             class="attachment-gallery__media-wrap"
             {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryAnnotationSurface.attrs}
-            data-draw-mode={String(drawMode)}
+            data-draw-mode={String(drawMode || cropMode)}
+            {...(cropMode ? ATTACHMENTS_AND_GALLERY_TARGETS.galleryCropSurface.attrs : {})}
             style={
               validDimension(geometry.naturalWidth) && validDimension(geometry.naturalHeight)
                 ? `width:${geometry.naturalWidth * zoom.scale}px;height:${geometry.naturalHeight * zoom.scale}px`
@@ -521,11 +536,18 @@ export function AttachmentGallery({
                 {...imageData}
                 {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryMedia.attrs}
                 {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryImage.attrs}
-                src={image.url}
+                src={imageUrl ?? image.url}
                 alt={image.name}
               />
             )}{' '}
-            {annotations.length > 0 && (
+            {cropMode && crop && originalWidth > 0 && originalHeight > 0 && (
+              <div
+                class="attachment-gallery__crop-selection"
+                style={`left:${(crop.x / originalWidth) * 100}%;top:${(crop.y / originalHeight) * 100}%;width:${(crop.width / originalWidth) * 100}%;height:${(crop.height / originalHeight) * 100}%`}
+                aria-label="Crop selection"
+              />
+            )}
+            {!cropMode && annotations.length > 0 && (
               <div class="attachment-gallery__annotations" data-markup={String(markup)}>
                 {annotations.map((annotation, annotationIndex) => {
                   const number = annotationNumberOffset + annotationIndex + 1,
@@ -773,8 +795,42 @@ export function AttachmentGallery({
             )}
           </div>
         )}
-        <div class="attachment-gallery__footer-actions" data-markup={String(markup)}>
-          {markup && (
+        <div
+          class="attachment-gallery__footer-actions"
+          data-markup={String(markup)}
+          data-has-crop={String(markup && cropEnabled && !video)}
+          data-crop-mode={String(cropMode)}
+        >
+          {markup && cropEnabled && !video && (
+            <span class="attachment-gallery__crop-actions">
+              <button
+                type="button"
+                {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryCrop.attrs}
+                aria-label={cropMode ? 'Finish crop' : 'Crop image'}
+                aria-pressed={String(cropMode)}
+                title={cropMode ? 'Finish crop' : 'Crop image'}
+                class={cropMode ? 'attachment-gallery__pressed' : undefined}
+              >
+                <LucideIcon icon={Crop} name="crop" />
+                {cropMode ? 'Finish crop' : 'Crop'}
+              </button>
+              {crop && (
+                <button
+                  type="button"
+                  {...ATTACHMENTS_AND_GALLERY_ACTIONS.restoreGalleryCrop.attrs}
+                  aria-label="Restore full image"
+                  title="Restore full image"
+                >
+                  <LucideIcon icon={RotateCcw} name="rotate-ccw" />
+                  Restore original
+                </button>
+              )}
+              {cropMode && (
+                <span class="attachment-gallery__crop-hint">Drag on the image to choose the visible area.</span>
+              )}
+            </span>
+          )}
+          {markup && !cropMode && (
             <span class="attachment-gallery__markup-position">
               <FloatingToolbar label="Media markup" position="bottom" inset={px(0)}>
                 <ToolbarControlGroup label="Media markup">

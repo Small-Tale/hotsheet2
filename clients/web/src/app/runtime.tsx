@@ -799,6 +799,8 @@ export async function startHotSheetWebClient() {
     showToast,
     error,
     attachmentsEditable: (ticket) => attachmentsEditableFor(ticket.connection_id),
+    attachmentsCroppable: (ticket) =>
+      (providerCapabilities.value[ticket.connection_id] as Capabilities | undefined)?.attachment_crop === true,
   });
   const {
     attachmentGalleryUrl,
@@ -808,6 +810,12 @@ export async function startHotSheetWebClient() {
     attachmentGalleryDrawMode,
     attachmentGalleryTool,
     attachmentGalleryAnnotations,
+    attachmentGalleryCropMode,
+    attachmentGalleryCrop,
+    attachmentGalleryOriginalSize,
+    beginGalleryCrop,
+    restoreGalleryCrop,
+    finishGalleryCrop,
     attachmentGallerySelectedAnnotation,
     attachmentGalleryPlayhead,
     attachmentGalleryDuration,
@@ -5636,6 +5644,7 @@ export async function startHotSheetWebClient() {
     composerAttachmentMessage, composerAttachmentError, submitNewTicket, history, addAttachments, api, attachmentMessage, attachmentLabelEditing, refreshProject,
     galleryImages, resetAttachmentGallery, gallerySourceFor, shiftGallery, attachmentGalleryGeometry, attachmentGalleryScale, attachmentGalleryUrl, attachmentMenu, syncAttachmentGalleryMeasurement,
     activeAttachmentGalleryVideo, attachmentGalleryDuration, attachmentGalleryMarkup, finishGalleryAnnotationSession, beginGalleryAnnotationSession, attachmentGalleryDrawMode, attachmentGalleryTool, attachmentGallerySelectedAnnotation, attachmentGalleryAnnotations,
+    attachmentGalleryCropMode, attachmentGalleryCrop, attachmentGalleryOriginalSize, beginGalleryCrop, restoreGalleryCrop, finishGalleryCrop,
     updateGalleryPlaybackPresentation, attachmentGalleryPlayhead, attachmentGalleryPlaying, gallerySvgClock, stopGallerySvgClock, attachmentGalleryVolumeOpen, attachmentGalleryMuted, attachmentGalleryVolume,
     canUseAttachments, canEditAttachments, updateSelectedTracked, readerOpen, readerDetailsDraft, detailsDraft, titleDraft, readerBlockedReasonDraft, blockedReasonDraft,
     readerNoteDraft, noteDraft, fieldConflictResolution, fieldConflict, canUpdateSelected, canEditStartedPhaseSelected, titleEditingSurface, activeTicketSurface, titleAutosave,

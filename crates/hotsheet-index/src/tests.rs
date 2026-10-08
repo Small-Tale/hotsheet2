@@ -775,6 +775,7 @@ fn fts_matches_attachment_filenames() {
         batch_label: None,
         actor: None,
         purpose: None,
+        crop: None,
         annotations: vec![hotsheet_model::MediaAnnotation {
             id: "region-1".into(),
             x: 10,

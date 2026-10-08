@@ -400,6 +400,15 @@ pub fn validate_media_annotations(annotations: &[MediaAnnotation]) -> Result<(),
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageCrop {
+    /// Integer pixels in the immutable original image, with a top-left origin.
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attachment {
     pub id: Ulid,
@@ -417,6 +426,9 @@ pub struct Attachment {
     pub purpose: Option<AttachmentPurpose>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<MediaAnnotation>,
+    /// One non-destructive rectangle relative to the immutable original image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<ImageCrop>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

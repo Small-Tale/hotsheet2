@@ -415,7 +415,7 @@ describe('interaction group teardown (HS2-NZT3MT)', () => {
     expect(registrations.every((registration) => registration.attached)).toBe(true);
     // The gallery's native document listeners all carry the group's lifetime signal.
     const signals = add.mock.calls.map(([, , options]) => (options as AddEventListenerOptions).signal);
-    expect(signals.length).toBe(10);
+    expect(signals.length).toBe(13);
     expect(signals.every((item) => item && !item.aborted)).toBe(true);
 
     // Before teardown the delegated project-dialog dismissal reaches its handler.

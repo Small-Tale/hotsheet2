@@ -63,7 +63,7 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | `transferred_from`                                                                       | qualified ticket ref                                                                                                                         | no             | shared | Source connection + native id (`connection:native-id`) for that transfer                                                                                                                                   |
 | `legacy_number`                                                                          | string (e.g. `HS-1234`)                                                                                                                      | no             | shared | The HS1 ticket number this ticket was imported from, retained so legacy references resolve/search against the new ticket (HS2-4H2ZR1). Provenance metadata, not an HS2 identity; only the importer sets it |
 | **Schema**                                                                               |                                                                                                                                              |                |        |                                                                                                                                                                                                            |
-| `schema`                                                                                 | guarded string (`hotsheet/v2-bounded-notes`)                                                                                                 | yes            | shared | Current on-disk writer/version guard; normalized to model/API schema integer 2 after parse. Legacy numeric `1` remains read-compatible.                                                                    |
+| `schema`                                                                                 | guarded string (`hotsheet/v2-bounded-notes` through `hotsheet/v5-attachment-crop`)                                                           | yes            | shared | On-disk writer/version guard; normalized to model/API schema integer 2–5 after parse. Legacy numeric `1` remains read-compatible.                                                                          |
 
 **Not in the file (Local / Derived):**
 
@@ -251,6 +251,16 @@ and either no time range or a complete ordered pair. Invalid
 batches change nothing; identical batches create neither a commit nor a note. CLI, MCP, and
 server writes share this validation. The activity note records the supplied actor when one
 is available.
+
+An image attachment may also have `crop: {x, y, width, height}` in pixels of the
+browser-oriented original. The rectangle must be at least 8 by 8 and fully inside a
+decodable still PNG, JPEG, or WebP image; a full-image crop is stored as absence. The
+original payload and all annotation coordinates remain unchanged. Normal attachment
+reads derive the cropped rendition, while an explicit `original` route returns the
+stored payload. A crop and annotation edit made together form one store commit and one
+activity note. Tickets that have ever held crop metadata use the sticky
+`schema: hotsheet/v5-attachment-crop` guard so older binaries cannot erase it. See
+[the crop design](attachment-crop-design.md) for reader and provider behavior.
 
 ## 17.4 Rules the parser/serializer enforce
 

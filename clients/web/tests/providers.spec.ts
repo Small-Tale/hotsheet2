@@ -695,6 +695,7 @@ async function mockProject(
   hs1Migration = false,
   atomicBatch = true,
   stoppedTerminal = false,
+  cropEnabled = false,
 ) {
   let rows: TicketRow[] = [
     { ...row, feedback_needed: Boolean(primaryFeedbackNeeded) },
@@ -710,7 +711,7 @@ async function mockProject(
     searchSlugRow,
     searchDetailsRow,
   ];
-  let selectedFull =
+  let selectedFull = (
     primaryFeedbackNeeded === 'details'
       ? {
           ...full,
@@ -737,7 +738,21 @@ async function mockProject(
               },
             ],
           }
-        : { ...full, feedback_needed: false };
+        : { ...full, feedback_needed: false }
+  ) as typeof full & { attachments: FullTicket['attachments'] };
+  if (cropEnabled)
+    selectedFull = {
+      ...selectedFull,
+      attachments: [
+        {
+          ...selectedFull.attachments[0],
+          annotations: [
+            { id: 'inside', x: 3000, y: 3000, width: 1000, height: 1000, text: 'inside crop' },
+            { id: 'outside', x: 8500, y: 7000, width: 1000, height: 1000, text: 'outside crop' },
+          ],
+        },
+      ],
+    };
   const evidenceByTicket = new Map<string, Array<{ id: string; filename: string; created_at: string }>>();
   const patches: Record<string, unknown>[] = [];
   let commandDefinitions = [{ id: 'check', title: 'Run checks', program: '/usr/bin/true', args: [], group: 'Quality' }];
@@ -1118,6 +1133,7 @@ async function mockProject(
         note_edit: canUpdate,
         note_delete: canUpdate,
         attachments: true,
+        attachment_crop: cropEnabled,
         assignment: true,
         review_requests: true,
         dependencies: true,
@@ -1781,10 +1797,32 @@ async function mockProject(
     }
     if (path.includes('/attachments/') && request.method() === 'POST' && path.endsWith('/action'))
       return route.fulfill({ json: { path: '/work/demo.hs2/attachments/proof.png' } });
+    if (path.includes('/tickets/01/attachments/') && path.endsWith('/markup') && request.method() === 'PUT') {
+      const { annotations, crop } = request.postDataJSON() as {
+        annotations: MediaAnnotation[];
+        crop: FullTicket['attachments'][number]['crop'];
+      };
+      selectedFull = {
+        ...selectedFull,
+        attachments: selectedFull.attachments.map((item) =>
+          item.id === 'A1' ? { ...item, annotations, crop: crop ?? undefined } : item,
+        ),
+      };
+      return route.fulfill({ json: { store: 'git-local', ...selectedFull } });
+    }
     if (path.includes('/attachments/') && request.method() === 'GET') {
+      if (cropEnabled && path.includes('/A1'))
+        return route.fulfill({
+          body: readFileSync(new URL('../public/favicon-32.png', import.meta.url)),
+          headers: { 'content-type': 'image/png', 'x-hotsheet-filename': 'proof.png' },
+        });
       const label = path.includes('/A2') ? 'second.svg' : 'proof.png';
+      const crop = !path.endsWith('/original') && cropEnabled ? selectedFull.attachments[0].crop : undefined,
+        viewport = crop ? `viewBox="${crop.x} ${crop.y} ${crop.width} ${crop.height}"` : '',
+        width = crop?.width ?? 320,
+        height = crop?.height ?? 180;
       return route.fulfill({
-        body: `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#ddd"/><text x="30" y="95">${label}</text></svg>`,
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ${viewport}><rect width="320" height="180" fill="#ddd"/><text x="30" y="95">${label}</text></svg>`,
         headers: { 'content-type': 'image/svg+xml', 'x-hotsheet-filename': label },
       });
     }
@@ -16432,6 +16470,62 @@ test('renders canonical attachment references for filenames containing backticks
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(reference).toBeVisible();
   await inspector.screenshot({ path: '/private/tmp/hs2-h2ptvz-backtick-reference-narrow.png' });
+});
+
+test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY)', async ({ page }) => {
+  const writes: Array<{ crop?: FullTicket['attachments'][number]['crop']; annotations: MediaAnnotation[] }> = [];
+  await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, true);
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/attachments/A1/markup'))
+      writes.push(
+        request.postDataJSON() as { crop?: FullTicket['attachments'][number]['crop']; annotations: MediaAnnotation[] },
+      );
+  });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(2);
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  await gallery.getByRole('button', { name: 'Crop image' }).click();
+  await expect(gallery.locator('img[data-gallery-media="true"]')).toHaveAttribute('src', /\/original$/);
+  const surface = gallery.locator('[data-gallery-crop-surface="true"]'),
+    box = (await surface.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.1, box.y + box.height * 0.1);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.7, { steps: 4 });
+  await page.mouse.up();
+  await expect(gallery.getByLabel('Crop selection')).toBeVisible();
+  await gallery.locator('[data-gallery-zoom-stage="true"]').focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(gallery.getByLabel('Crop selection')).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(gallery.getByLabel('Crop selection')).toBeVisible();
+  await gallery.screenshot({ path: '/private/tmp/hs2-vfbyzy-crop-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gallery.screenshot({ path: '/private/tmp/hs2-vfbyzy-crop-phone.png', animations: 'disabled' });
+  await gallery.getByRole('button', { name: 'Finish crop' }).click();
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
+  expect(writes).toHaveLength(0);
+  await gallery.screenshot({ path: '/private/tmp/hs2-vfbyzy-crop-preview-phone.png', animations: 'disabled' });
+  await gallery.getByRole('button', { name: 'Finish markup' }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].annotations.map((item) => item.id)).toEqual(['inside', 'outside']);
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  await gallery.getByRole('button', { name: 'Restore full image' }).click();
+  await expect(gallery.locator('img[data-gallery-media="true"]')).toHaveAttribute('src', /\/original$/);
+  await gallery.getByRole('button', { name: 'Finish crop' }).click();
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(2);
+  await expect(page.locator('.app-toast')).toBeHidden();
+  await gallery.screenshot({ path: '/private/tmp/hs2-vfbyzy-crop-restored-phone.png', animations: 'disabled' });
+  await gallery.getByRole('button', { name: 'Finish markup' }).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1].crop).toBeNull();
+  await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(2);
 });
 
 test('draws, edits, resizes, and deletes durable image annotations in the full-screen gallery', async ({ page }) => {

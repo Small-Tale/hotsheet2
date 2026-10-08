@@ -1408,6 +1408,7 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         // Append-only evidence through the configured assets repository (HS2-HSA64D).
         attachments,
         attachment_edit: false,
+        attachment_crop: false,
         assignment: true,
         review_requests: false,
         dependencies: false,
@@ -3183,6 +3184,7 @@ mod tests {
                 role: hotsheet_model::AttachmentActorRole::Human,
             }),
             purpose: Some(hotsheet_model::AttachmentPurpose::ProblemEvidence),
+            crop: None,
             annotations: vec![],
         }
     }

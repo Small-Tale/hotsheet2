@@ -20,8 +20,8 @@ pub use ids::{Ulid, derive_slug};
 pub use ticket::{
     AiFeedback, AiFeedbackRating, AnnotationPoint, AnnotationShape, Attachment, AttachmentActor,
     AttachmentActorRole, AttachmentMetadata, AttachmentPurpose, ClaimEvent, ClaimEventKind,
-    Confidence, ConfidenceError, ExternalLink, MediaAnnotation, Note, NoteActor, ReviewRequest,
-    Ticket, validate_media_annotations,
+    Confidence, ConfidenceError, ExternalLink, ImageCrop, MediaAnnotation, Note, NoteActor,
+    ReviewRequest, Ticket, validate_media_annotations,
 };
 pub use timestamp::Timestamp;
 
@@ -31,3 +31,5 @@ pub const SCHEMA_VERSION: u32 = 2;
 pub const SHAPE_SCHEMA_VERSION: u32 = 3;
 /// Ticket guard required once an attachment contains explicit annotation intents.
 pub const INTENT_SCHEMA_VERSION: u32 = 4;
+/// Attachment crop metadata requires a stale-writer guard.
+pub const CROP_SCHEMA_VERSION: u32 = 5;

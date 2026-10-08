@@ -816,6 +816,7 @@ fn capabilities() -> ProviderCapabilities {
         note_delete: false,
         attachments: false,
         attachment_edit: false,
+        attachment_crop: false,
         assignment: false,
         review_requests: false,
         dependencies: false,

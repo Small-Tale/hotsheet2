@@ -1652,6 +1652,17 @@ and identity-less legacy entries remain conservatively blocking.
   atomically adds one activity note that links the attachment and lists each added, updated,
   or removed annotation with normalized percentage bounds, optional time range, and caption;
   an unchanged session performs no write and adds no note.
+  For a still PNG, JPEG, or WebP attachment on a provider advertising `attachment_crop`,
+  markup also offers Crop. Dragging a rectangle on the untouched original previews a crop
+  measured in original image pixels. The original bytes stay stored, and one replaceable crop
+  rectangle makes normal previews, Markdown images, downloads, and AI image fetches show the
+  derived rendition. The gallery shows the original while changing a crop; Restore Original
+  clears it. Annotations retain original normalized coordinates. The gallery projects them
+  into the cropped view, clips marks at its edge, hides fully excluded marks, and restores
+  them exactly when the crop is cleared. Saving markup persists crop and annotation changes
+  together with one activity note. The explicit `/original` attachment route serves the raw
+  bytes for editing. Animated, vector, video, and unsupported files do not offer Crop, nor
+  do append-only provider attachments.
   New-ticket attachment evidence follows the same safety policy before a ticket exists:
   users can drop files on the collapsed New ticket launcher, an open project tab, or anywhere
   on the expanded composer. A project-tab drop selects that project and opens its new-ticket

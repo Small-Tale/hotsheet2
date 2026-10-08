@@ -6093,6 +6093,182 @@ async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
 }
 
 #[tokio::test]
+async fn image_crop_serves_rendition_and_preserves_original_through_restore() {
+    let (primary, state) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let app = app(state
+        .with_cache_dir(cache.path())
+        .with_checkout_registry(registry.path().join("checkouts.json")));
+    let registration = serde_json::json!({
+        "root": checkout.path(), "alias": "crop", "stores": [primary.path()]
+    });
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts",
+                Some(&registration.to_string())
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/crop/tickets",
+                Some(r#"{"title":"Crop proof"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["qualified_id"].as_str().unwrap();
+    let original = include_bytes!("../../../clients/web/public/favicon-32.png");
+    let uploaded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/checkouts/crop/tickets/{id}/attachments"))
+                .header("x-hotsheet-secret", SECRET)
+                .header("x-hotsheet-filename", "proof.png")
+                .body(Body::from(original.as_slice()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(uploaded.status(), StatusCode::CREATED);
+    let attached = body_json(uploaded).await;
+    let attachment_id = attached["attachments"][0]["id"].as_str().unwrap();
+    let url = format!("/checkouts/crop/tickets/{id}/attachments/{attachment_id}");
+    let markup = format!("{url}/markup");
+    let changed = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PUT",
+                &markup,
+                Some(r#"{"crop":{"x":4,"y":5,"width":16,"height":16},"annotations":[]}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(changed["attachments"][0]["crop"]["x"], 4);
+    let cropped = app
+        .clone()
+        .oneshot(authed("GET", &url, None))
+        .await
+        .unwrap();
+    assert_eq!(cropped.status(), StatusCode::OK);
+    assert_eq!(cropped.headers()[header::CONTENT_TYPE], "image/png");
+    let cropped_bytes = cropped.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(
+        std::fs::read_dir(cache.path().join("image-crops"))
+            .unwrap()
+            .count(),
+        1
+    );
+    assert_ne!(cropped_bytes.as_ref(), original);
+    assert_eq!(
+        u32::from_be_bytes(cropped_bytes[16..20].try_into().unwrap()),
+        16
+    );
+    assert_eq!(
+        u32::from_be_bytes(cropped_bytes[20..24].try_into().unwrap()),
+        16
+    );
+    let by_name = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/crop/tickets/{id}/attachments/by-name/proof.png"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        by_name.into_body().collect().await.unwrap().to_bytes(),
+        cropped_bytes
+    );
+    let ranged = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(&url)
+                .header("x-hotsheet-secret", SECRET)
+                .header("range", "bytes=0-7")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ranged.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        ranged
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .as_ref(),
+        &cropped_bytes[..8]
+    );
+    let unchanged = app
+        .clone()
+        .oneshot(authed("GET", &format!("{url}/original"), None))
+        .await
+        .unwrap();
+    assert_eq!(
+        unchanged
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .as_ref(),
+        original
+    );
+    let invalid = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &markup,
+            Some(r#"{"crop":{"x":30,"y":30,"width":16,"height":16},"annotations":[]}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let restored = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PUT",
+                &markup,
+                Some(r#"{"crop":null,"annotations":[]}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(restored["attachments"][0]["crop"].is_null());
+    let full = app.oneshot(authed("GET", &url, None)).await.unwrap();
+    assert_eq!(
+        full.into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .as_ref(),
+        original
+    );
+}
+
+#[tokio::test]
 async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     let (primary, st) = state();
     let extra = tempfile::tempdir().unwrap();

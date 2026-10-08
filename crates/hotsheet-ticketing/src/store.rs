@@ -19,6 +19,7 @@ use hotsheet_model::{
     Attachment, Note, NoteKind, ParseError, SCHEMA_VERSION, Ticket, Timestamp, Ulid, parse_file,
     to_file_string,
 };
+use image::GenericImageView;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 
@@ -36,7 +37,14 @@ const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
 const FINDER_METADATA_FILE: &str = ".DS_Store";
 
 fn ticket_write_schema(ticket: &Ticket) -> u32 {
-    if ticket.schema >= hotsheet_model::INTENT_SCHEMA_VERSION
+    if ticket.schema >= hotsheet_model::CROP_SCHEMA_VERSION
+        || ticket
+            .attachments
+            .iter()
+            .any(|attachment| attachment.crop.is_some())
+    {
+        hotsheet_model::CROP_SCHEMA_VERSION
+    } else if ticket.schema >= hotsheet_model::INTENT_SCHEMA_VERSION
         || ticket.attachments.iter().any(|attachment| {
             attachment
                 .annotations
@@ -57,6 +65,18 @@ fn ticket_write_schema(ticket: &Ticket) -> u32 {
     } else {
         SCHEMA_VERSION
     }
+}
+
+/// One gallery markup session. Crop coordinates are pixels of the immutable original;
+/// annotations remain normalized to that original.
+pub struct AttachmentMarkup {
+    pub annotations: Vec<hotsheet_model::MediaAnnotation>,
+    pub crop: Option<hotsheet_model::ImageCrop>,
+}
+
+struct MarkupChange {
+    annotations: Vec<hotsheet_model::MediaAnnotation>,
+    crop_change: Option<Option<hotsheet_model::ImageCrop>>,
 }
 
 /// Store metadata (`hotsheet-store.json`, `docs/02` §2.3). camelCase on disk.
@@ -117,6 +137,8 @@ impl StoreMetadata {
 pub enum StoreError {
     #[error("{0}")]
     InvalidAnnotations(&'static str),
+    #[error(transparent)]
+    ImageCrop(#[from] crate::image_crop::ImageCropError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("{operation} {path}: {source}")]
@@ -872,6 +894,7 @@ impl FsStore {
                 actor: metadata.actor,
                 purpose: metadata.purpose,
                 annotations: Vec::new(),
+                crop: None,
             });
             ticket.attachments.sort_by(|a, b| {
                 a.created_at
@@ -1057,6 +1080,25 @@ impl FsStore {
             .attachments
             .get_mut(attachment_index)
             .expect("attachment index came from this collection");
+        if attachment.crop.is_some() {
+            let extension = |name: &str| match name
+                .rsplit('.')
+                .next()
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "jpg" | "jpeg" => "jpeg",
+                "png" => "png",
+                "webp" => "webp",
+                _ => "unsupported",
+            };
+            if extension(&attachment.filename) != extension(&name) {
+                return Err(StoreError::ImageCrop(
+                    crate::image_crop::ImageCropError::UnsupportedFormat,
+                ));
+            }
+        }
         let dir = self
             .attachment_dir(ticket_id)
             .join(attachment_id.to_string());
@@ -1147,9 +1189,74 @@ impl FsStore {
         note_id: Ulid,
         now: Timestamp,
     ) -> Result<Ticket, StoreError> {
+        self.set_attachment_markup_with_activity_inner(
+            ticket_id,
+            attachment_id,
+            MarkupChange {
+                annotations,
+                crop_change: None,
+            },
+            actor,
+            note_id,
+            now,
+        )
+    }
+
+    /// Persist one crop and annotation session in a single ticket commit and activity note.
+    /// The original image bytes and original-space annotation coordinates are never rewritten.
+    pub fn set_attachment_markup_with_activity(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: &Ulid,
+        markup: AttachmentMarkup,
+        actor: Option<hotsheet_model::NoteActor>,
+        note_id: Ulid,
+        now: Timestamp,
+    ) -> Result<Ticket, StoreError> {
+        self.set_attachment_markup_with_activity_inner(
+            ticket_id,
+            attachment_id,
+            MarkupChange {
+                annotations: markup.annotations,
+                crop_change: Some(markup.crop),
+            },
+            actor,
+            note_id,
+            now,
+        )
+    }
+
+    fn set_attachment_markup_with_activity_inner(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: &Ulid,
+        markup: MarkupChange,
+        actor: Option<hotsheet_model::NoteActor>,
+        note_id: Ulid,
+        now: Timestamp,
+    ) -> Result<Ticket, StoreError> {
+        let MarkupChange {
+            annotations,
+            crop_change,
+        } = markup;
         hotsheet_model::validate_media_annotations(&annotations)
             .map_err(StoreError::InvalidAnnotations)?;
         let mut ticket = self.read_ticket(ticket_id)?;
+        let next_crop = if let Some(requested) = crop_change {
+            if let Some(requested) = requested {
+                let (metadata, bytes) = self.read_attachment(ticket_id, attachment_id)?;
+                let (image, _) = crate::image_crop::decode_original(&metadata.filename, &bytes)?;
+                crate::image_crop::normalize_crop(requested, image.dimensions())?
+            } else {
+                None
+            }
+        } else {
+            ticket
+                .attachments
+                .iter()
+                .find(|item| &item.id == attachment_id)
+                .and_then(|item| item.crop)
+        };
         let attachment = ticket
             .attachments
             .iter_mut()
@@ -1160,14 +1267,43 @@ impl FsStore {
                     format!("attachment {attachment_id}"),
                 ))
             })?;
-        let Some((summary, text)) = crate::annotation_activity::annotation_change_activity(
+        let annotation_activity = crate::annotation_activity::annotation_change_activity(
             &attachment.filename,
             &attachment.annotations,
             &annotations,
-        ) else {
+        );
+        let crop_changed = attachment.crop != next_crop;
+        if annotation_activity.is_none() && !crop_changed {
             return Ok(ticket);
+        }
+        let (summary, text) = if crop_changed {
+            let crop_text = if let Some(crop) = next_crop {
+                format!(
+                    "Cropped [attachment:{}](attachment:{}) to {} × {} px at ({}, {}) of the original.",
+                    attachment.filename,
+                    attachment.filename,
+                    crop.width,
+                    crop.height,
+                    crop.x,
+                    crop.y
+                )
+            } else {
+                format!(
+                    "Restored the original [attachment:{}](attachment:{}).",
+                    attachment.filename, attachment.filename
+                )
+            };
+            let text = if let Some((_, annotation_text)) = annotation_activity {
+                format!("{crop_text}\n\n{annotation_text}")
+            } else {
+                crop_text
+            };
+            (format!("Updated crop for {}", attachment.filename), text)
+        } else {
+            annotation_activity.expect("annotation activity exists when crop did not change")
         };
         attachment.annotations = annotations;
+        attachment.crop = next_crop;
         ticket.notes.push(Note {
             id: note_id,
             kind: NoteKind::Activity,
@@ -1214,6 +1350,7 @@ impl FsStore {
                     actor: None,
                     purpose: None,
                     annotations: Vec::new(),
+                    crop: None,
                 });
             }
         }
@@ -1582,7 +1719,7 @@ fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hotsheet_model::derive_slug;
+    use hotsheet_model::{ImageCrop, MediaAnnotation, derive_slug};
 
     #[cfg(unix)]
     struct HostSaturation {
@@ -1669,6 +1806,117 @@ mod tests {
             "2026-08-19T00:00:00Z",
             "2026-08-19T00:00:00Z",
         )
+    }
+
+    #[test]
+    fn crop_changes_keep_original_bytes_and_annotations_through_edit_and_restore() {
+        use std::io::Cursor;
+
+        let (_dir, store) = temp_store();
+        let ticket_id = Ulid::new();
+        let attachment_id = Ulid::new();
+        store.write_ticket(&sample(ticket_id)).unwrap();
+        let image = image::RgbImage::from_fn(20, 16, |x, y| image::Rgb([x as u8, y as u8, 42]));
+        let mut output = Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(image)
+            .write_to(&mut output, image::ImageFormat::Png)
+            .unwrap();
+        let original = output.into_inner();
+        store
+            .write_attachment(
+                &ticket_id,
+                attachment_id,
+                Timestamp::new("2026-08-19T00:01:00Z"),
+                "evidence.png",
+                &original,
+            )
+            .unwrap();
+        let annotation = MediaAnnotation {
+            id: "mark-1".into(),
+            x: 2_000,
+            y: 3_000,
+            width: 4_000,
+            height: 2_000,
+            start_ms: None,
+            end_ms: None,
+            text: "Edge".into(),
+            shape: None,
+            intents: Vec::new(),
+        };
+        let first = ImageCrop {
+            x: 2,
+            y: 2,
+            width: 12,
+            height: 10,
+        };
+        let second = ImageCrop {
+            x: 5,
+            y: 3,
+            width: 10,
+            height: 8,
+        };
+        let apply = |crop, annotations, minute| {
+            store
+                .set_attachment_markup_with_activity(
+                    &ticket_id,
+                    &attachment_id,
+                    AttachmentMarkup { annotations, crop },
+                    None,
+                    Ulid::new(),
+                    Timestamp::new(format!("2026-08-19T00:{minute:02}:00Z")),
+                )
+                .unwrap()
+        };
+        let first_ticket = apply(Some(first), vec![annotation.clone()], 2);
+        assert_eq!(first_ticket.attachments[0].crop, Some(first));
+        assert_eq!(first_ticket.notes.len(), 1);
+        let repeated = apply(Some(first), vec![annotation.clone()], 3);
+        assert_eq!(repeated.notes.len(), 1);
+        let mut edited = annotation.clone();
+        edited.text = "Updated edge".into();
+        let edited_ticket = store
+            .set_attachment_annotations_with_activity(
+                &ticket_id,
+                &attachment_id,
+                vec![edited.clone()],
+                None,
+                Ulid::new(),
+                Timestamp::new("2026-08-19T00:04:00Z"),
+            )
+            .unwrap();
+        assert_eq!(edited_ticket.attachments[0].crop, Some(first));
+        let next = apply(Some(second), vec![edited.clone()], 5);
+        assert_eq!(next.attachments[0].crop, Some(second));
+        assert_eq!(next.attachments[0].annotations, vec![edited.clone()]);
+        let invalid = store.set_attachment_markup_with_activity(
+            &ticket_id,
+            &attachment_id,
+            AttachmentMarkup {
+                annotations: vec![edited.clone()],
+                crop: Some(ImageCrop {
+                    x: 15,
+                    y: 0,
+                    width: 8,
+                    height: 8,
+                }),
+            },
+            None,
+            Ulid::new(),
+            Timestamp::new("2026-08-19T00:06:00Z"),
+        );
+        assert!(matches!(invalid, Err(StoreError::ImageCrop(_))));
+        assert_eq!(
+            store.read_ticket(&ticket_id).unwrap().attachments[0].crop,
+            Some(second)
+        );
+        let restored = apply(None, vec![edited.clone()], 7);
+        assert_eq!(restored.attachments[0].crop, None);
+        assert_eq!(restored.attachments[0].annotations, vec![edited]);
+        assert_eq!(restored.notes.len(), 4);
+        assert_eq!(
+            store.read_attachment(&ticket_id, &attachment_id).unwrap().1,
+            original
+        );
     }
 
     /// HS2-P2178F: a ticket rewrite is atomic for concurrent readers. `fs::write`
@@ -2336,6 +2584,7 @@ mod tests {
             actor: None,
             purpose: None,
             annotations: Vec::new(),
+            crop: None,
         });
         store.write_ticket(&ticket).unwrap();
         let attachment_dir = store.attachment_dir(&ticket.id);

@@ -30,6 +30,7 @@ export type Capabilities = Record<
   query_fields: string[];
   /** Existing attachments can be renamed, deleted, regrouped, and annotated (HS2-HSA64D). Older servers omit it. */
   attachment_edit?: boolean;
+  attachment_crop?: boolean;
   /** Structured, revisable ratings and the provider feedback query. */
   ai_feedback?: boolean;
 };
@@ -204,6 +205,8 @@ export interface Attachment extends AttachmentMetadata {
   filename: string;
   created_at: string;
   annotations?: MediaAnnotation[];
+  /** Integer pixels in the immutable original image. */
+  crop?: { x: number; y: number; width: number; height: number };
 }
 export interface Ticket {
   qualified_id: string;
@@ -1067,6 +1070,19 @@ export class Api {
       this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length),
       { method: 'PUT', body: JSON.stringify({ annotations }) },
     ).then((ticket) => ({ store: ticket.store, ticket }));
+  updateCheckoutAttachmentMarkup = (
+    checkout: string,
+    id: string,
+    attachmentId: string,
+    annotations: MediaAnnotation[],
+    crop: Attachment['crop'],
+  ) =>
+    this.request<FullTicket & { store: string }>(
+      `${this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length)}/markup`,
+      { method: 'PUT', body: JSON.stringify({ annotations, crop: crop ?? null }) },
+    ).then((ticket) => ({ store: ticket.store, ticket }));
+  checkoutAttachmentOriginalUrl = (checkout: string, id: string, attachmentId: string) =>
+    `${this.checkoutAttachmentUrl(checkout, id, attachmentId)}/original`;
   repositoryStatus = (checkout: string) =>
     this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/status`);
   initializeRepository = (checkout: string) =>

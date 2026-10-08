@@ -1809,6 +1809,14 @@ pub fn app(state: AppState) -> Router {
                 .delete(delete_checkout_ticket_attachment),
         )
         .route(
+            "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/markup",
+            axum::routing::put(update_checkout_ticket_attachment_markup),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/original",
+            get(get_checkout_ticket_attachment_original),
+        )
+        .route(
             "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/thumbnail",
             get(get_checkout_ticket_attachment_thumbnail)
                 .put(put_checkout_ticket_attachment_thumbnail)
@@ -3478,6 +3486,12 @@ async fn copy_provider_attachment(
         .into_iter()
         .find(|item| item.id == req.source.attachment_id)
         .ok_or_else(|| ApiError::not_found(&req.source.attachment_id))?;
+    if metadata.crop.is_some() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "cropped attachments cannot be transferred until the destination preserves the crop",
+        ));
+    }
     let bytes = source
         .attachment_bytes(&req.source.native_id, &req.source.attachment_id)
         .map_err(provider_transfer_error)?;
@@ -3495,6 +3509,7 @@ async fn copy_provider_attachment(
                 actor: None,
                 purpose: None,
                 annotations: metadata.annotations,
+                crop: None,
             },
             bytes,
         )
@@ -6181,6 +6196,7 @@ async fn add_checkout_ticket_attachment(
                     actor: metadata.actor,
                     purpose: metadata.purpose,
                     annotations: vec![],
+                    crop: None,
                 },
                 body.to_vec(),
             )
@@ -6298,19 +6314,96 @@ async fn get_checkout_ticket_attachment(
         .find(|attachment| attachment.id == attachment_id)
         .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
     let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
-    media::attachment_file_response(
+    git_attachment_response(
+        state.cache_dir(),
         &attachment.filename,
         &path,
+        attachment.crop,
         headers.get("range").and_then(|value| value.to_str().ok()),
     )
     .await
-    .map_err(|error| {
-        if matches!(&error, media::MediaError::Io(error) if error.kind() == std::io::ErrorKind::NotFound) {
-            ApiError::not_found(&attachment_id.to_string())
-        } else {
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-        }
-    })
+}
+
+async fn get_checkout_ticket_attachment_original(
+    State(state): State<AppState>,
+    Path((reference, id, attachment_id)): Path<(String, String, String)>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
+    let attachment_id =
+        Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
+    let attachment = ticket
+        .attachments
+        .iter()
+        .find(|attachment| attachment.id == attachment_id)
+        .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    git_attachment_response(
+        state.cache_dir(),
+        &attachment.filename,
+        &path,
+        None,
+        headers.get("range").and_then(|value| value.to_str().ok()),
+    )
+    .await
+}
+
+async fn git_attachment_response(
+    cache_root: &std::path::Path,
+    filename: &str,
+    path: &std::path::Path,
+    crop: Option<hotsheet_model::ImageCrop>,
+    range: Option<&str>,
+) -> Result<Response, ApiError> {
+    if let Some(crop) = crop {
+        let bytes = tokio::fs::read(path).await.map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                ApiError::not_found(filename)
+            } else {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            }
+        })?;
+        let filename_owned = filename.to_string();
+        let cache_root = cache_root.to_path_buf();
+        let rendition = tokio::task::spawn_blocking(move || {
+            use sha2::{Digest, Sha256};
+            let mut digest = Sha256::new();
+            digest.update(&bytes);
+            digest.update(filename_owned.as_bytes());
+            digest.update(crop.x.to_be_bytes());
+            digest.update(crop.y.to_be_bytes());
+            digest.update(crop.width.to_be_bytes());
+            digest.update(crop.height.to_be_bytes());
+            let cache_dir = cache_root.join("image-crops");
+            let cache_path = cache_dir.join(format!("{:x}", digest.finalize()));
+            if let Ok(cached) = std::fs::read(&cache_path) {
+                return Ok(cached);
+            }
+            let result =
+                hotsheet_ticketing::image_crop::cropped_rendition(&filename_owned, &bytes, crop)?;
+            if std::fs::create_dir_all(&cache_dir).is_ok() {
+                let temporary = cache_dir.join(format!("{}.tmp", Ulid::new()));
+                if std::fs::write(&temporary, &result).is_ok() {
+                    let _ = std::fs::rename(&temporary, &cache_path);
+                }
+                let _ = std::fs::remove_file(temporary);
+            }
+            Ok::<_, hotsheet_ticketing::image_crop::ImageCropError>(result)
+        })
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?;
+        return Ok(media::attachment_response(filename, rendition, range));
+    }
+    media::attachment_file_response(filename, path, range)
+        .await
+        .map_err(|error| {
+            if matches!(&error, media::MediaError::Io(error) if error.kind() == std::io::ErrorKind::NotFound) {
+                ApiError::not_found(filename)
+            } else {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            }
+        })
 }
 
 async fn get_checkout_ticket_attachment_by_name(
@@ -6335,19 +6428,14 @@ async fn get_checkout_ticket_attachment_by_name(
         .find(|attachment| attachment.id == attachment_id)
         .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
     let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
-    media::attachment_file_response(
+    git_attachment_response(
+        state.cache_dir(),
         &attachment.filename,
         &path,
+        attachment.crop,
         headers.get("range").and_then(|value| value.to_str().ok()),
     )
     .await
-    .map_err(|error| {
-        if matches!(&error, media::MediaError::Io(error) if error.kind() == std::io::ErrorKind::NotFound) {
-            ApiError::not_found(&attachment_id.to_string())
-        } else {
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-        }
-    })
 }
 
 async fn get_checkout_ticket_attachment_thumbnail(
@@ -6650,6 +6738,42 @@ struct UpdateAttachmentAnnotationsBody {
     annotations: Vec<hotsheet_model::MediaAnnotation>,
     #[serde(default)]
     actor: Option<ActorReq>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateAttachmentMarkupBody {
+    annotations: Vec<hotsheet_model::MediaAnnotation>,
+    crop: Option<hotsheet_model::ImageCrop>,
+    #[serde(default)]
+    actor: Option<ActorReq>,
+}
+
+async fn update_checkout_ticket_attachment_markup(
+    State(state): State<AppState>,
+    Path((reference, id, attachment_id)): Path<(String, String, String)>,
+    Json(body): Json<UpdateAttachmentMarkupBody>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
+    let attachment_id = Ulid::from_string(&attachment_id)
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid attachment ULID"))?;
+    let actor = parse_actor(body.actor.as_ref())?;
+    let updated = entry.store.set_attachment_markup_with_activity(
+        &ticket.id,
+        &attachment_id,
+        hotsheet_ticketing::store::AttachmentMarkup {
+            annotations: body.annotations,
+            crop: body.crop,
+        },
+        hotsheet_ticketing::actor::note_actor(actor.as_ref()),
+        Ulid::new(),
+        now(),
+    )?;
+    state.changed_in(&entry, "attachment_markup_updated", &updated);
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: api_ticket_with_settings(&entry, &updated, &settings)?,
+    }))
 }
 
 async fn update_ticket_attachment_annotations(
@@ -11843,7 +11967,7 @@ fn parse_actor(
 impl From<StoreError> for ApiError {
     fn from(e: StoreError) -> Self {
         let status = match &e {
-            StoreError::InvalidAnnotations(_) => StatusCode::BAD_REQUEST,
+            StoreError::InvalidAnnotations(_) | StoreError::ImageCrop(_) => StatusCode::BAD_REQUEST,
             error if error.is_io_kind(std::io::ErrorKind::NotFound) => StatusCode::NOT_FOUND,
             StoreError::NotAStore(_) => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

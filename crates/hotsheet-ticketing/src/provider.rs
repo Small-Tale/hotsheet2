@@ -271,6 +271,9 @@ pub struct ProviderCapabilities {
     /// repository) reports `attachments` without this.
     #[serde(default)]
     pub attachment_edit: bool,
+    /// Existing image attachments support reversible crop metadata and renditions.
+    #[serde(default)]
+    pub attachment_crop: bool,
     pub assignment: bool,
     pub review_requests: bool,
     pub dependencies: bool,
@@ -323,6 +326,7 @@ impl ProviderCapabilities {
             note_delete: true,
             attachments: true,
             attachment_edit: true,
+            attachment_crop: true,
             assignment: true,
             review_requests: true,
             dependencies: true,
@@ -1534,6 +1538,7 @@ impl TicketProvider for GitProvider {
                 }),
                 purpose: Some(hotsheet_model::AttachmentPurpose::ProblemEvidence),
                 annotations: Vec::new(),
+                crop: None,
             });
         }
         ticket.attachments.sort_by(|a, b| {
@@ -1897,6 +1902,15 @@ pub fn copy_between(
     let ticket = source_provider.get(&source.native_id)?;
     let capabilities = destination.descriptor().capabilities;
     let attachments = ticket.attachments.clone();
+    if attachments
+        .iter()
+        .any(|attachment| attachment.crop.is_some())
+    {
+        return Err(TransferError::UnsupportedField {
+            connection_id: destination_connection.into(),
+            field: "attachment crop",
+        });
+    }
     if !ticket.blocked_by.is_empty() {
         return Err(TransferError::DependenciesNeedMapping);
     }
@@ -2981,6 +2995,7 @@ mod tests {
     #[test]
     fn transfer_rejects_attachments_before_creating_the_destination_ticket() {
         let (_source_dir, source) = git_provider();
+        let source_store = source.store.clone();
         let destination_dir = tempfile::tempdir().unwrap();
         let destination_store =
             FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
@@ -3017,6 +3032,7 @@ mod tests {
                     batch_label: None,
                     actor: None,
                     purpose: None,
+                    crop: None,
                     annotations: vec![],
                 },
                 b"evidence".to_vec(),
@@ -3040,6 +3056,33 @@ mod tests {
             error,
             TransferError::UnsupportedField {
                 field: "attachments",
+                ..
+            }
+        ));
+        assert!(destination_store.list_tickets().unwrap().is_empty());
+        let mut cropped = source_store.read_ticket(&source_id).unwrap();
+        cropped.attachments[0].crop = Some(hotsheet_model::ImageCrop {
+            x: 1,
+            y: 1,
+            width: 8,
+            height: 8,
+        });
+        source_store.write_ticket(&cropped).unwrap();
+        let crop_error = copy_between(
+            &registry,
+            TicketRef {
+                connection_id: "local".into(),
+                native_id: source_id.to_string(),
+            },
+            "destination",
+            "crop-op",
+            Timestamp::new("2026-08-26T03:03:00Z"),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            crop_error,
+            TransferError::UnsupportedField {
+                field: "attachment crop",
                 ..
             }
         ));

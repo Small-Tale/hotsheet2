@@ -21,6 +21,7 @@ pub mod distclaim;
 pub mod distwork;
 pub mod git;
 pub mod identity;
+pub mod image_crop;
 pub mod merge;
 pub mod metrics;
 pub mod ops;

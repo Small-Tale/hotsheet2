@@ -632,6 +632,7 @@ mod tests {
             actor: None,
             purpose: None,
             annotations: Vec::new(),
+            crop: None,
         }];
         let mut theirs = base.clone();
         theirs.updated_at = ts("2026-08-19T03:00:00Z");
@@ -645,6 +646,7 @@ mod tests {
                 actor: None,
                 purpose: None,
                 annotations: Vec::new(),
+                crop: None,
             },
             Attachment {
                 id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
@@ -655,6 +657,7 @@ mod tests {
                 actor: None,
                 purpose: None,
                 annotations: Vec::new(),
+                crop: None,
             },
         ];
         let merged = merge_tickets(&base, &ours, &theirs).ticket;

@@ -27,6 +27,27 @@ describe('AttachmentGallery', () => {
     { id: 'a', name: 'a.png', url: '/a.png' },
     { id: 'b', name: 'b.svg', url: '/b.svg' },
   ];
+  it('shows an original image and crop rectangle only in crop mode', () => {
+    const markup = String(
+      AttachmentGallery({
+        images,
+        activeUrl: '/a.png',
+        markup: true,
+        cropEnabled: true,
+        cropMode: true,
+        imageUrl: '/a.png/original',
+        crop: { x: 100, y: 50, width: 200, height: 100 },
+        originalWidth: 1000,
+        originalHeight: 500,
+      }),
+    );
+    expect(markup).toContain('src="/a.png/original"');
+    expect(markup).toContain('aria-label="Crop selection"');
+    expect(markup).toContain('left:10%;top:10%;width:20%;height:20%');
+    expect(markup).toContain('aria-label="Finish crop"');
+    expect(markup).toContain('aria-label="Restore full image"');
+    expect(markup).not.toContain('aria-label="Add rectangle"');
+  });
   it('scopes the invariant inverse palette to gallery chrome without recoloring source media (HS2-1CACB4)', () => {
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.attachment-gallery \{[^}]*color-scheme: only light;/);
@@ -89,7 +110,7 @@ describe('AttachmentGallery', () => {
     // The footer is an app-owned balanced grid; each cell hosts its own Kerf Toolbar around one control
     // group, so no Kerf root carries an app class (KUI-L022).
     expect(markup).toContain(
-      '<div class="attachment-gallery__footer-actions" data-markup="false"><div class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end"',
+      '<div class="attachment-gallery__footer-actions" data-markup="false" data-has-crop="false" data-crop-mode="false"><div class="kui-floating-toolbar" data-component="floating-toolbar" data-position="bottom-end"',
     );
     expect(markup).toContain('<div class="attachment-gallery__toolbar"><header class="kui-toolbar"');
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);

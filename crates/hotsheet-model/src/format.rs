@@ -20,6 +20,7 @@ use crate::timestamp::Timestamp;
 const GUARDED_SCHEMA_V2: &str = "hotsheet/v2-bounded-notes";
 const GUARDED_SCHEMA_V3: &str = "hotsheet/v3-annotation-shapes";
 const GUARDED_SCHEMA_V4: &str = "hotsheet/v4-annotation-intents";
+const GUARDED_SCHEMA_V5: &str = "hotsheet/v5-attachment-crop";
 
 /// Frontmatter keys the current schema defines. Anything else parsed from a file's
 /// frontmatter is retained in [`Ticket::extra`]. Kept in sync with `Ticket`'s fields
@@ -228,7 +229,13 @@ fn frontmatter_to_string(t: &Ticket) -> String {
             .iter()
             .any(|annotation| annotation.shape.is_some())
     });
-    let schema = if intents {
+    let crops = t
+        .attachments
+        .iter()
+        .any(|attachment| attachment.crop.is_some());
+    let schema = if crops {
+        t.schema.max(crate::CROP_SCHEMA_VERSION)
+    } else if intents {
         t.schema.max(crate::INTENT_SCHEMA_VERSION)
     } else if shapes {
         t.schema.max(crate::SHAPE_SCHEMA_VERSION)
@@ -250,6 +257,11 @@ fn frontmatter_to_string(t: &Ticket) -> String {
             Value::String("schema".into()),
             Value::String(GUARDED_SCHEMA_V4.into()),
         );
+    } else if schema == crate::CROP_SCHEMA_VERSION {
+        mapping.insert(
+            Value::String("schema".into()),
+            Value::String(GUARDED_SCHEMA_V5.into()),
+        );
     }
     serde_yaml::to_string(&Value::Mapping(mapping)).expect("a YAML mapping always serializes")
 }
@@ -264,6 +276,7 @@ fn normalize_schema_marker(mapping: &mut Mapping) -> Result<(), ParseError> {
             GUARDED_SCHEMA_V2 => crate::SCHEMA_VERSION,
             GUARDED_SCHEMA_V3 => crate::SHAPE_SCHEMA_VERSION,
             GUARDED_SCHEMA_V4 => crate::INTENT_SCHEMA_VERSION,
+            GUARDED_SCHEMA_V5 => crate::CROP_SCHEMA_VERSION,
             _ => return Err(ParseError::UnsupportedSchema(marker.clone())),
         };
         mapping.insert(key, Value::Number(schema.into()));
@@ -881,6 +894,7 @@ mod tests {
                 role: crate::ticket::AttachmentActorRole::System,
             }),
             purpose: Some(crate::ticket::AttachmentPurpose::CorrectnessEvidence),
+            crop: None,
             annotations: vec![crate::ticket::MediaAnnotation {
                 id: "region-1".into(),
                 x: 1000,
@@ -956,6 +970,7 @@ mod tests {
                 batch_label: None,
                 actor: None,
                 purpose: None,
+                crop: None,
                 annotations: vec![MediaAnnotation {
                     id: "mark".into(),
                     x,
@@ -991,6 +1006,7 @@ mod tests {
             batch_label: None,
             actor: None,
             purpose: None,
+            crop: None,
             annotations: vec![MediaAnnotation {
                 id: "intent".into(),
                 x: 100,
@@ -1011,6 +1027,36 @@ mod tests {
         assert_eq!(to_file_string(&decoded), encoded);
         ticket.schema = crate::SCHEMA_VERSION;
         assert!(to_file_string(&ticket).contains("schema: hotsheet/v4-annotation-intents"));
+    }
+
+    #[test]
+    fn crop_metadata_uses_v5_guard_and_round_trips_without_moving_annotations() {
+        use crate::ticket::{Attachment, ImageCrop};
+        let mut ticket = sample();
+        ticket.attachments.push(Attachment {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC4"),
+            filename: "proof.png".into(),
+            created_at: "2026-08-20T06:00:00Z".into(),
+            batch_id: None,
+            batch_label: None,
+            actor: None,
+            purpose: None,
+            annotations: Vec::new(),
+            crop: Some(ImageCrop {
+                x: 2,
+                y: 3,
+                width: 16,
+                height: 12,
+            }),
+        });
+        let encoded = to_file_string(&ticket);
+        assert!(encoded.contains("schema: hotsheet/v5-attachment-crop"));
+        let decoded = parse_file(&encoded).unwrap();
+        assert_eq!(decoded.attachments[0].crop, ticket.attachments[0].crop);
+        assert_eq!(to_file_string(&decoded), encoded);
+        ticket.attachments[0].crop = None;
+        ticket.schema = crate::CROP_SCHEMA_VERSION;
+        assert!(to_file_string(&ticket).contains("schema: hotsheet/v5-attachment-crop"));
     }
 
     #[test]
