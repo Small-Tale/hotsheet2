@@ -8,6 +8,7 @@ import {
   moveGalleryArrowVertex,
   pickGalleryAnnotation,
   resizeGalleryAnnotation,
+  smoothGalleryFreehand,
   translateGalleryAnnotation,
 } from './gallery-annotation-editor';
 
@@ -41,6 +42,31 @@ describe('gallery annotation geometry', () => {
       false,
     );
     expect(galleryGestureLargeEnough('insertion', [point(100, 100)], 0.01, 0.01)).toBe(true);
+  });
+
+  it('resamples jitter, caps smoothing, and retains exact endpoints and the widest point', () => {
+    const raw = [point(100, 100), point(110, 104), point(120, 98), point(150, 104), point(200, 97), point(250, 100)],
+      smoothed = smoothGalleryFreehand(raw, { width: 1000, height: 1000 });
+    expect(smoothed.length).toBeLessThan(raw.length);
+    expect(smoothed[0]).toEqual(raw[0]);
+    expect(smoothed.at(-1)).toEqual(raw.at(-1));
+    expect(smoothed.length).toBeGreaterThanOrEqual(3);
+    for (const sample of smoothed) {
+      const displacement = Math.min(...raw.map((original) => Math.hypot(sample.x - original.x, sample.y - original.y)));
+      expect(displacement).toBeLessThanOrEqual(15); // 1.5 screen points at 1000 px
+    }
+  });
+
+  it('protects sharp turns and yields the same screen path at different zooms', () => {
+    const pixels = [point(10, 10), point(20, 10), point(30, 10), point(30, 20), point(30, 30)],
+      normalize = (width: number) =>
+        pixels.map((sample) => point((sample.x * 10_000) / width, (sample.y * 10_000) / width)),
+      normal = smoothGalleryFreehand(normalize(1000), { width: 1000, height: 1000 }),
+      zoomed = smoothGalleryFreehand(normalize(2000), { width: 2000, height: 2000 });
+    expect(normal).toContainEqual(point(300, 100));
+    expect(normal.map((sample) => point(sample.x / 10, sample.y / 10))).toEqual(
+      zoomed.map((sample) => point(sample.x / 5, sample.y / 5)),
+    );
   });
 
   it('moves and resizes point shapes without drifting their required bounding box', () => {

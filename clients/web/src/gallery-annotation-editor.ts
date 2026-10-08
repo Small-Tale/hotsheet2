@@ -19,17 +19,109 @@ export function annotationBounds(points: readonly AnnotationPoint[]) {
   return { x: left, y: top, width: Math.max(1, Math.max(...xs) - left), height: Math.max(1, Math.max(...ys) - top) };
 }
 
+/** Clean a pointer stroke in rendered screen points before storing normalized geometry. */
+export function smoothGalleryFreehand(
+  samples: readonly AnnotationPoint[],
+  screen: { width: number; height: number },
+): AnnotationPoint[] {
+  if (samples.length < 3 || screen.width <= 0 || screen.height <= 0) return [...samples];
+  const pixel = (sample: AnnotationPoint) => ({
+      x: (sample.x * screen.width) / extent,
+      y: (sample.y * screen.height) / extent,
+    }),
+    distance = (a: AnnotationPoint, b: AnnotationPoint) => Math.hypot(a.x - b.x, a.y - b.y),
+    raw = samples.map(pixel),
+    resampled = [raw[0]];
+  for (const sample of raw.slice(1, -1)) {
+    const last = resampled.at(-1)!;
+    if (distance(last, sample) < 3) {
+      if (resampled.length > 1)
+        resampled[resampled.length - 1] = { x: (last.x + sample.x) / 2, y: (last.y + sample.y) / 2 };
+    } else resampled.push(sample);
+  }
+  if (resampled.length > 1 && distance(resampled.at(-1)!, raw.at(-1)!) < 3) resampled.pop();
+  resampled.push(raw.at(-1)!);
+  if (resampled.length < 3)
+    return resampled.map((sample) => point((sample.x * extent) / screen.width, (sample.y * extent) / screen.height));
+
+  const corners = new Set<number>();
+  for (let index = 1; index < resampled.length - 1; index++) {
+    const before = resampled[Math.max(0, index - 2)],
+      current = resampled[index],
+      after = resampled[Math.min(resampled.length - 1, index + 2)],
+      incoming = { x: current.x - before.x, y: current.y - before.y },
+      outgoing = { x: after.x - current.x, y: after.y - current.y },
+      length = Math.hypot(incoming.x, incoming.y) * Math.hypot(outgoing.x, outgoing.y),
+      cosine = length ? (incoming.x * outgoing.x + incoming.y * outgoing.y) / length : 1;
+    if (cosine < Math.cos((55 * Math.PI) / 180)) corners.add(index);
+  }
+  let smoothed = resampled;
+  for (let pass = 0; pass < 2; pass++) {
+    smoothed = smoothed.map((sample, index) => {
+      if (index === 0 || index === smoothed.length - 1 || corners.has(index)) return sample;
+      const prior = smoothed[index - 1],
+        next = smoothed[index + 1],
+        average = { x: (prior.x + 2 * sample.x + next.x) / 4, y: (prior.y + 2 * sample.y + next.y) / 4 },
+        origin = resampled[index],
+        displacement = distance(average, origin),
+        ratio = displacement > 1.5 ? 1.5 / displacement : 1;
+      return { x: origin.x + (average.x - origin.x) * ratio, y: origin.y + (average.y - origin.y) * ratio };
+    });
+  }
+  const segmentDistance = (target: AnnotationPoint, start: AnnotationPoint, end: AnnotationPoint) => {
+      const dx = end.x - start.x,
+        dy = end.y - start.y,
+        length = dx * dx + dy * dy,
+        ratio = length ? Math.max(0, Math.min(1, ((target.x - start.x) * dx + (target.y - start.y) * dy) / length)) : 0;
+      return Math.hypot(target.x - start.x - ratio * dx, target.y - start.y - ratio * dy);
+    },
+    keep = new Set([0, smoothed.length - 1, ...corners]);
+  let widest = 1,
+    widestDistance = -1;
+  for (let index = 1; index < smoothed.length - 1; index++) {
+    const deviation = segmentDistance(smoothed[index], smoothed[0], smoothed.at(-1)!);
+    if (deviation > widestDistance) {
+      widest = index;
+      widestDistance = deviation;
+    }
+  }
+  keep.add(widest);
+  const simplify = (start: number, end: number) => {
+    let farthest = -1,
+      deviation = 0;
+    for (let index = start + 1; index < end; index++) {
+      const candidate = segmentDistance(smoothed[index], smoothed[start], smoothed[end]);
+      if (candidate > deviation) {
+        farthest = index;
+        deviation = candidate;
+      }
+    }
+    if (farthest < 0 || deviation <= 0.75) return;
+    keep.add(farthest);
+    simplify(start, farthest);
+    simplify(farthest, end);
+  };
+  const protectedIndices = [...keep].sort((a, b) => a - b);
+  for (let index = 1; index < protectedIndices.length; index++)
+    simplify(protectedIndices[index - 1], protectedIndices[index]);
+  return [...keep]
+    .sort((a, b) => a - b)
+    .map((index) => point((smoothed[index].x * extent) / screen.width, (smoothed[index].y * extent) / screen.height));
+}
+
 export function drawGalleryAnnotation(
   base: MediaAnnotation,
   tool: Exclude<GalleryAnnotationTool, 'select'>,
   start: AnnotationPoint,
   current: AnnotationPoint,
   samples: readonly AnnotationPoint[] = [],
+  screen?: { width: number; height: number },
 ): MediaAnnotation {
   if (tool === 'insertion')
     return { ...base, ...annotationBounds([start]), shape: { type: 'insertion', point: start } };
   if (tool === 'freehand') {
-    const points = [start, ...samples, current].map((sample) => point(sample.x, sample.y));
+    const raw = [start, ...samples, current].map((sample) => point(sample.x, sample.y)),
+      points = screen ? smoothGalleryFreehand(raw, screen) : raw;
     return { ...base, ...annotationBounds(points), shape: { type: 'freehand', points, closed: true } };
   }
   if (tool === 'arrow') {

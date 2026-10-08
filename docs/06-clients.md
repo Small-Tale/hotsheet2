@@ -1636,6 +1636,10 @@ and identity-less legacy entries remain conservatively blocking.
   Full-screen markup mode offers Select (V), Rectangle (R), Freehand (F), Arrow (A),
   Insertion (I), and Strike (S). Rectangles and strikes use drag boxes; freehand records
   a path with a closed-outline toggle; arrows run from tail to head; insertion marks a click.
+  Freehand samples are merged within three rendered screen points, lightly averaged twice
+  without moving any point more than 1.5 points, and simplified within 0.75 points of a
+  straight segment. Turns over 55 degrees and the exact endpoints stay fixed; the live
+  preview is the path saved for both images and videos at every zoom (HS2-SXJYZJ).
   A click or tiny drag does not create a box, freehand path, or arrow. Each completed drawing returns to Select
   with the new annotation selected. Select moves bodies within the media, scales box and
   freehand outlines from edge/corner handles, and moves individual arrow vertices.

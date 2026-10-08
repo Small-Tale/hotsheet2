@@ -16895,7 +16895,9 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
   expect(attempts).toBe(2);
 });
 
-test('draws all annotation tools and keeps keyboard edits in one markup batch (HS2-C46J3X)', async ({ page }) => {
+test('draws all annotation tools and keeps keyboard edits in one markup batch (HS2-C46J3X) @ci-smoke', async ({
+  page,
+}) => {
   const writes: Array<{ annotations: MediaAnnotation[] }> = [];
   await mockProject(page);
   page.on('request', (request) => {
@@ -16959,7 +16961,10 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
     'red',
   );
   await page.setViewportSize({ width: 390, height: 844 });
-  await gallery.screenshot({ path: '/private/tmp/hs2-c46j3x-note-intents-phone.png', animations: 'disabled' });
+  await gallery.screenshot({
+    path: test.info().outputPath('hs2-c46j3x-note-intents-phone.png'),
+    animations: 'disabled',
+  });
   await page.setViewportSize({ width: 1280, height: 720 });
   await gallery.getByRole('button', { name: 'bug', exact: true }).focus();
   await page.keyboard.press('Tab');
@@ -16978,6 +16983,9 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
   await drag('freehand', [0.65, 0.7], [0.82, 0.85]);
   await expect(gallery.locator('.attachment-gallery__annotation[data-shape="freehand"]')).toBeVisible();
   await gallery.getByRole('checkbox', { name: 'Closed outline' }).uncheck();
+  const imageFreehandPath = await gallery
+    .locator('.attachment-gallery__annotation[data-shape="freehand"] .attachment-gallery__annotation-ink')
+    .getAttribute('d');
   await gallery.getByRole('button', { name: 'insertion tool' }).click();
   const box = (await surface.boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.8, box.y + box.height * 0.18);
@@ -17006,9 +17014,13 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
   await page.keyboard.press('Meta+z'); // duplicate
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(5);
   await expect.poll(() => writes.length).toBe(0);
-  await gallery.screenshot({ path: '/private/tmp/hs2-c46j3x-all-tools-image.png', animations: 'disabled' });
+  await gallery.screenshot({ path: test.info().outputPath('hs2-c46j3x-all-tools-image.png'), animations: 'disabled' });
   await gallery.getByRole('button', { name: 'Finish markup' }).click();
   await expect.poll(() => writes.length).toBe(1);
+  await expect(page.locator('.app-toast')).toContainText('Annotations saved.');
+  await expect(
+    gallery.locator('.attachment-gallery__annotation[data-shape="freehand"] .attachment-gallery__annotation-ink'),
+  ).toHaveAttribute('d', imageFreehandPath!);
   expect(writes[0].annotations.map((annotation) => annotation.shape?.type)).toEqual([
     'strike',
     'arrow',
@@ -17037,7 +17049,9 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
   }
 });
 
-test('scrubs video without swiping and persists timed-annotation interaction boundaries', async ({ page }) => {
+test('scrubs video without swiping and persists timed-annotation interaction boundaries @ci-smoke', async ({
+  page,
+}) => {
   test.setTimeout(60_000);
   await mockProject(page);
   const reportedVideoPath = process.env.HOTSHEET_MEDIA_TEST_VIDEO,
@@ -17237,7 +17251,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
     const nextPlayhead = Number(await scrubber.inputValue());
     expect(Math.abs((await nextDecoded) * 1000 - nextPlayhead)).toBeLessThan(180);
     expect(Buffer.compare(heldFrameA, await video.screenshot())).not.toBe(0);
-    await gallery.screenshot({ path: '/private/tmp/hs2-ewztq9-native-held-scrub-wide.png' });
+    await gallery.screenshot({ path: test.info().outputPath('hs2-ewztq9-native-held-scrub-wide.png') });
   }
   await page.mouse.move(scrubberBox.x + scrubberBox.width * 0.5, scrubberBox.y + scrubberBox.height / 2, { steps: 8 });
   await page.mouse.up();
@@ -17332,10 +17346,10 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   created = gallery.locator('.attachment-gallery__annotation').filter({ hasText: 'Real pointer annotation' });
   await expect(created).toBeVisible();
   await expect(gallery.locator('[data-gallery-range-handle]')).toHaveCount(2);
-  await gallery.screenshot({ path: '/private/tmp/hs2-ewztq9-ppjape-regression-wide.png' });
+  await gallery.screenshot({ path: test.info().outputPath('hs2-ewztq9-ppjape-regression-wide.png') });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(created).toBeVisible();
-  await gallery.screenshot({ path: '/private/tmp/hs2-ewztq9-ppjape-regression-narrow.png' });
+  await gallery.screenshot({ path: test.info().outputPath('hs2-ewztq9-ppjape-regression-narrow.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   const arrowPlayhead = Number(await scrubber.inputValue());
   await gallery.getByRole('button', { name: 'arrow tool' }).click();
@@ -17350,10 +17364,22 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   await expect(videoArrow).toBeVisible();
   expect(Number(await videoArrow.getAttribute('data-annotation-start'))).toBeLessThanOrEqual(arrowPlayhead);
   expect(Number(await videoArrow.getAttribute('data-annotation-end'))).toBeGreaterThanOrEqual(arrowPlayhead);
-  await gallery.screenshot({ path: '/private/tmp/hs2-c46j3x-video-arrow.png', animations: 'disabled' });
-  await gallery.getByRole('button', { name: 'Finish markup, 4 annotations' }).click();
+  await gallery.screenshot({ path: test.info().outputPath('hs2-c46j3x-video-arrow.png'), animations: 'disabled' });
+  await gallery.getByRole('button', { name: 'freehand tool' }).click();
+  await page.mouse.move(videoSurface.x + videoSurface.width * 0.55, videoSurface.y + videoSurface.height * 0.72);
+  await page.mouse.down();
+  await page.mouse.move(videoSurface.x + videoSurface.width * 0.8, videoSurface.y + videoSurface.height * 0.82, {
+    steps: 10,
+  });
+  await page.mouse.up();
+  const videoFreehand = gallery.locator('.attachment-gallery__annotation[data-shape="freehand"]');
+  await expect(videoFreehand).toBeVisible();
+  const videoFreehandPath = await videoFreehand.locator('.attachment-gallery__annotation-ink').getAttribute('d');
+  await gallery.getByRole('button', { name: 'Finish markup, 5 annotations' }).click();
   await expect.poll(() => annotationWrites.length).toBe(2);
-  expect(annotationWrites[1].annotations.at(-1)?.shape?.type).toBe('arrow');
+  await expect(page.locator('.app-toast')).toContainText('Annotations saved.');
+  expect(annotationWrites[1].annotations.at(-1)?.shape?.type).toBe('freehand');
+  await expect(videoFreehand.locator('.attachment-gallery__annotation-ink')).toHaveAttribute('d', videoFreehandPath!);
   const swipeStage = gallery.getByLabel(/Video canvas/),
     stageBox = (await swipeStage.boundingBox())!;
   await page.mouse.move(stageBox.x + stageBox.width * 0.75, stageBox.y + stageBox.height * 0.15);
@@ -22692,7 +22718,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
       return col.scrollTop;
     }, board.colId),
   ).toBe(board.before);
-  await page.screenshot({ path: '/private/tmp/hs2-swc9e4-scrolled-context-menu.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('hs2-swc9e4-scrolled-context-menu.png'), fullPage: true });
   await page.keyboard.press('Escape');
   const edgePointer = { x: 600, y: 812 };
   await page.evaluate((pointer) => {
@@ -22718,7 +22744,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
     Math.min(Math.abs(edgeMenu.top - edgePointer.y), Math.abs(edgeMenu.bottom - edgePointer.y)),
     JSON.stringify({ edgeMenu, edgePointer }),
   ).toBeLessThanOrEqual(2);
-  await page.screenshot({ path: '/private/tmp/hs2-swc9e4-bottom-edge-context-menu.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('hs2-swc9e4-bottom-edge-context-menu.png'), fullPage: true });
 });
 
 test('remembers scroll per project, mode and view through delayed loading and shrinking contents (HS2-PDYXYJ)', async ({

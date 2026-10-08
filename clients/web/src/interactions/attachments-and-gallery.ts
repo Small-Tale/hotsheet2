@@ -1119,15 +1119,8 @@ export function wireAttachmentAndGalleryInteractions(dependencies: AttachmentAnd
       if (gesture.kind === 'draw') {
         const point = annotationPoint(event, gesture.surface);
         if (gesture.tool === 'select') return;
-        if (
-          gesture.tool === 'freehand' &&
-          Math.hypot(
-            point.x - (gesture.samples.at(-1)?.x ?? base.x),
-            point.y - (gesture.samples.at(-1)?.y ?? base.y),
-          ) >= Math.min((3 * 10_000) / gesture.surface.width, (3 * 10_000) / gesture.surface.height)
-        )
-          gesture.samples.push(point);
-        next = drawGalleryAnnotation(base, gesture.tool, gesture.startPoint, point, gesture.samples);
+        next = drawGalleryAnnotation(base, gesture.tool, gesture.startPoint, point, gesture.samples, gesture.surface);
+        if (gesture.tool === 'freehand') gesture.samples.push(point);
       } else if (gesture.kind === 'move') {
         next = translateGalleryAnnotation(base, dx, dy);
       } else {
