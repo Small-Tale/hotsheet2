@@ -275,7 +275,6 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
       if (action === 'set-view-mode') {
         const mode = item.dataset.viewMode as WorkspaceViewMode;
         resetProgressiveTicketRendering();
-        if (mode === 'settings' || mode === 'notifications') searchOpen.value = false;
         viewMode.value = mode;
         persistWorkspacePreferences();
         if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: false });

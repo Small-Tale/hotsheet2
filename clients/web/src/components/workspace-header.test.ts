@@ -140,6 +140,7 @@ describe('WorkspaceHeader', () => {
     );
     expect(markup).not.toContain('<input type="checkbox"');
     expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="false")/);
+    expect(enabled).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="true")/);
     expect(markup).not.toContain('workspace-header__search-tokens');
     expect(enabled).toContain('aria-label="Search syntax help"');
     expect(markup).not.toContain('aria-label="Date and time helper"');

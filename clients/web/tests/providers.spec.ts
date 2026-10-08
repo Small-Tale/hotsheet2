@@ -5797,7 +5797,7 @@ test('keeps production workspace search and More on one row through a phone resi
   await expect(page.locator('[data-workspace-overflow-action="toggle-selected-up-next"]')).toBeVisible();
 });
 
-test('collapses nonempty search on disabled workspace views and restores its query on return (HS2-6ZK9KF)', async ({
+test('hides nonempty search on disabled views and restores its open editor on return (HS2-6ZK9KF, HS2-3WQ9A1)', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1728, height: 971 });
@@ -5817,7 +5817,12 @@ test('collapses nonempty search on disabled workspace views and restores its que
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
   await page.screenshot({ path: '/private/tmp/hs2-6zk9kf-notifications.png', animations: 'disabled' });
   await modes.getByRole('button', { name: 'List view' }).click();
+  await expect(search).toHaveAttribute('data-expanded', 'true');
+  await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Started');
+  await toolbar.screenshot({ path: '/private/tmp/hs2-3wq9a1-search-restored.png', animations: 'disabled' });
+  await toolbar.getByRole('searchbox', { name: 'Search tickets' }).fill('Ready');
+  await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Ready');
   await modes.getByRole('button', { name: 'Settings view' }).click();
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   await expect(search).toHaveAttribute('data-expanded', 'false');
@@ -5827,6 +5832,9 @@ test('collapses nonempty search on disabled workspace views and restores its que
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   await expect(search).toHaveAttribute('data-expanded', 'false');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
+  await modes.getByRole('button', { name: 'List view' }).click();
+  await expect(search).toHaveAttribute('data-expanded', 'true');
+  await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Ready');
 });
 
 test('keeps a scrolled-back transcript in place while selecting a message range', async ({ page }) => {

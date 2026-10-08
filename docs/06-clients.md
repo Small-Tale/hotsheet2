@@ -1048,6 +1048,8 @@ and identity-less legacy entries remain conservatively blocking.
   collapsing row cannot shift the project tabs or tickets out from under the pointer and swallow
   the click (HS2-YVBGW3); Kerf's TokenSearchField owns that deferral since 5.0.0-beta.64
   (KF-64W0RN, HS2-Z4VB11).
+  Notifications and Settings hide and disable search while active, then restore an open,
+  populated editor on returning to a ticket view; its query remains available for editing.
   Select All followed by Backspace or Delete clears ordinary text and filter chips
   without collapsing the focused editor, including repeated empty/refill sequences
   on narrow screens. Focus may still leave normally: a deliberate keyboard handoff

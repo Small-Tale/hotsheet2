@@ -2038,7 +2038,6 @@ export async function startHotSheetWebClient() {
   function switchWorkspaceView(mode: WorkspaceViewMode) {
     setShellMode('project');
     resetProgressiveTicketRendering();
-    if (mode === 'settings' || mode === 'notifications') searchOpen.value = false;
     viewMode.value = mode;
     persistWorkspacePreferences();
     if (mode === 'list' || mode === 'board') void refreshProject({ showLoading: loading.value });
@@ -2384,7 +2383,7 @@ export async function startHotSheetWebClient() {
       const composerOpenedByUser = composerExpanded.value;
       selectedView.value =
         stored.selectedView === 'errors' && !corruptTickets.value.length ? 'all' : stored.selectedView;
-      searchOpen.value = stored.searchOpen && (viewMode.value === 'list' || viewMode.value === 'board');
+      searchOpen.value = stored.searchOpen;
       replaceTicketSearch(workspaceSearchModel, stored.searchQuery);
       searchMatchKeys.value = undefined;
       inspectorTab.value = stored.inspectorTab;
