@@ -1031,6 +1031,17 @@ enum CheckoutCmd {
         connection_id: String,
         new_connection_id: String,
     },
+    /// Inspect a linked source's project-local color as JSON.
+    SourceColor {
+        reference: String,
+        connection_id: String,
+    },
+    /// Set a linked source's project-local color; use transparent to clear it.
+    SetSourceColor {
+        reference: String,
+        connection_id: String,
+        color: String,
+    },
     /// Select the source used by unqualified creates, or clear it with --clear.
     SetDefault {
         reference: String,
@@ -5926,6 +5937,18 @@ fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                 &new_connection_id,
             )?)?
         ),
+        CheckoutCmd::SourceColor {
+            reference,
+            connection_id,
+        } => print_checkout_source_color(&registry.resolve(&reference)?, &connection_id)?,
+        CheckoutCmd::SetSourceColor {
+            reference,
+            connection_id,
+            color,
+        } => print_checkout_source_color(
+            &registry.set_source_color(&reference, &connection_id, &color)?,
+            &connection_id,
+        )?,
         CheckoutCmd::SetDefault {
             reference,
             connection_id,
@@ -5942,6 +5965,32 @@ fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
             );
         }
     }
+    Ok(())
+}
+
+fn print_checkout_source_color(
+    checkout: &hotsheet_ticketing::checkouts::Checkout,
+    connection_id: &str,
+) -> Result<()> {
+    if checkout.source(connection_id).is_none() {
+        bail!(
+            "ticket source '{connection_id}' is not linked to checkout {}",
+            checkout.id
+        );
+    }
+    let color = checkout
+        .source_colors
+        .get(connection_id)
+        .map(String::as_str)
+        .unwrap_or("transparent");
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "checkout_id": checkout.id,
+            "connection_id": connection_id,
+            "color": color,
+        }))?
+    );
     Ok(())
 }
 

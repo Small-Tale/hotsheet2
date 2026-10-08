@@ -2007,6 +2007,108 @@ fn checkout_clear_default_survives_fresh_cli_processes_and_reregistration() {
 }
 
 #[test]
+fn checkout_source_color_is_project_local_and_has_stable_json() {
+    let home = tempfile::tempdir().unwrap();
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    let first_root = first.path().to_str().unwrap();
+    let second_root = second.path().to_str().unwrap();
+    let run = |args: &[&str]| -> serde_json::Value {
+        let output = Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", home.path())
+            .args(args)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        serde_json::from_slice(&output).unwrap()
+    };
+    let first_id = run(&["checkout", "register", first_root])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let second_id = run(&["checkout", "register", second_root])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for root in [first_root, second_root] {
+        run(&[
+            "checkout",
+            "add-source",
+            root,
+            "github-main",
+            "github",
+            "acme/issues",
+        ]);
+    }
+    let inspect = |root| run(&["checkout", "source-color", root, "github-main"]);
+    assert_eq!(
+        inspect(first_root),
+        serde_json::json!({
+            "checkout_id": first_id,
+            "connection_id": "github-main",
+            "color": "transparent"
+        })
+    );
+    let first_color = run(&[
+        "checkout",
+        "set-source-color",
+        first_root,
+        "github-main",
+        "#3b82f6",
+    ]);
+    assert_eq!(first_color["color"], "#3b82f6");
+    assert_eq!(inspect(first_root), first_color);
+    assert_eq!(inspect(second_root)["color"], "transparent");
+    let second_color = run(&[
+        "checkout",
+        "set-source-color",
+        second_root,
+        "github-main",
+        "#ef4444",
+    ]);
+    assert_eq!(second_color["checkout_id"], second_id);
+    assert_eq!(second_color["color"], "#ef4444");
+    assert_eq!(inspect(first_root)["color"], "#3b82f6");
+
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "checkout",
+            "set-source-color",
+            first_root,
+            "github-main",
+            "red",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unsupported ticket source color"));
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .args(["checkout", "source-color", first_root, "missing"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("is not linked"));
+    assert_eq!(inspect(first_root)["color"], "#3b82f6");
+    assert_eq!(
+        run(&[
+            "checkout",
+            "set-source-color",
+            first_root,
+            "github-main",
+            "transparent",
+        ])["color"],
+        "transparent"
+    );
+    assert_eq!(inspect(first_root)["color"], "transparent");
+    assert_eq!(inspect(second_root)["color"], "#ef4444");
+}
+
+#[test]
 fn setup_refresh_preserves_a_project_github_source() {
     let home = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();
