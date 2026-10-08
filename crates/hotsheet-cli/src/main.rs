@@ -22,6 +22,8 @@ use hotsheet_ticketing::{
 };
 use time::{Duration, OffsetDateTime};
 
+mod feedback_synthesis;
+
 #[derive(Parser)]
 #[command(name = "hotsheet", version, about = "Hot Sheet 2 CLI")]
 struct Cli {
@@ -204,6 +206,11 @@ enum Cmd {
     ProviderLs { connection: String },
     /// Get one provider-native ticket.
     ProviderGet { connection: String, id: String },
+    /// Prepare a private AI feedback draft or mark one human-reviewed; never publishes guidance.
+    FeedbackSynthesis {
+        #[command(subcommand)]
+        command: FeedbackSynthesisCmd,
+    },
     /// Permanently remove an external provider connection and every local reference to it:
     /// checkout links and defaults, its `providers.json` entry, and a credential Hot Sheet
     /// minted for it (user-managed keys are kept). Safe to repeat.
@@ -755,6 +762,20 @@ enum Cmd {
 }
 
 #[derive(Subcommand)]
+enum FeedbackSynthesisCmd {
+    /// Read only the explicitly selected connections and prepare a private local draft.
+    Prepare {
+        #[arg(long = "connection", required = true)]
+        connections: Vec<String>,
+    },
+    /// Advance the review ledger after a human has edited or rejected the draft.
+    Accept {
+        #[arg(long)]
+        reviewed: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum CertCmd {
     /// Create the per-project CA + server cert (refuses if one already exists). Pass `--host`
     /// once per IP/DNS the server will be reached at off-loopback; `localhost` + `127.0.0.1`
@@ -1214,6 +1235,27 @@ fn main() -> Result<()> {
         } => cmd_provider_attach(&cli.path, &connection, &id, &files),
         Cmd::ProviderLs { connection } => cmd_provider_ls(&cli.path, &connection),
         Cmd::ProviderGet { connection, id } => cmd_provider_get(&cli.path, &connection, &id),
+        Cmd::FeedbackSynthesis { command } => match command {
+            FeedbackSynthesisCmd::Prepare { connections } => {
+                cmd_feedback_synthesis_prepare(&cli.path, &connections)
+            }
+            FeedbackSynthesisCmd::Accept { reviewed } => {
+                if !reviewed {
+                    bail!("review the draft, then pass --reviewed to accept its source cursor");
+                }
+                if actor.as_ref().map(|actor| actor.role)
+                    != Some(hotsheet_model::AttachmentActorRole::Human)
+                {
+                    bail!("accepting AI feedback synthesis requires --actor-role human");
+                }
+                let dir = feedback_synthesis::state_dir(FsStore::open(&cli.path)?.root())?;
+                let cursor = feedback_synthesis::accept_review(&dir)?;
+                println!(
+                    "Marked feedback reviewed through {cursor}. Repository guidance was not published."
+                );
+                Ok(())
+            }
+        },
         Cmd::ProviderDisable { connection } => {
             cmd_provider_set_disabled(&cli.path, &connection, true)
         }
@@ -2505,6 +2547,64 @@ fn cmd_provider_ls(path: &Path, connection: &str) -> Result<()> {
 fn cmd_provider_get(path: &Path, connection: &str, id: &str) -> Result<()> {
     let ticket = configured_provider(path, connection)?.get(id)?;
     println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+fn cmd_feedback_synthesis_prepare(path: &Path, connections: &[String]) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let git_id = git_connection_id(&store);
+    let configs = ProviderConfigRegistry::new(store.root().join("providers.json")).load()?;
+    let mut selected = connections.to_vec();
+    selected.sort();
+    selected.dedup();
+    let mut rows = Vec::new();
+    let mut errors = Vec::new();
+    for connection in &selected {
+        let result = (|| -> Result<Vec<hotsheet_ticketing::AiFeedbackRecord>> {
+            if connection != &git_id {
+                let config = configs
+                    .iter()
+                    .find(|item| item.id == *connection)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("provider connection '{connection}' was not found")
+                    })?;
+                if config.disabled {
+                    bail!("provider connection '{connection}' is disabled");
+                }
+                if !hotsheet_extsync::descriptor(config)?
+                    .capabilities
+                    .ai_feedback
+                {
+                    bail!(
+                        "provider connection '{connection}' does not support AI feedback retrieval"
+                    );
+                }
+            }
+            Ok(configured_provider(store.root(), connection)?.ai_feedback_records()?)
+        })();
+        match result {
+            Ok(mut records) => rows.append(&mut records),
+            Err(error) => errors.push((connection.clone(), error.to_string())),
+        }
+    }
+    if errors.len() == selected.len() {
+        for (connection, error) in &errors {
+            eprintln!("{connection}: {error}");
+        }
+        bail!("no selected provider could supply AI feedback");
+    }
+    let dir = feedback_synthesis::state_dir(store.root())?;
+    match feedback_synthesis::prepare(&dir, &selected, rows, &errors)? {
+        Some(draft) => println!("Review draft: {}", draft.display()),
+        None if errors.is_empty() => println!("No new AI feedback for the selected providers."),
+        None => println!(
+            "No new readable AI feedback; {} provider(s) unavailable.",
+            errors.len()
+        ),
+    }
+    for (connection, error) in errors {
+        eprintln!("{connection}: {error}");
+    }
     Ok(())
 }
 

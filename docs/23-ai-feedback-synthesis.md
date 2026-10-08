@@ -30,8 +30,8 @@ other ticket fields. Repeated writes by the same rater and target update one not
 **Owner and trigger.** The repository maintainer owns the accepted guidance. Once a
 month, or on demand after a notable cluster of feedback, a human starts a local
 synthesis run. If no new relevant notes exist, it reports that and makes no edit.
-This is a review cadence, not a background network job. A later headless command can
-prepare the draft (HS2-SX1F4J); it cannot approve or publish it.
+This is a review cadence, not a background network job. The headless command below
+prepares a private draft; it does not publish it.
 
 **Source scope.** Read feedback notes from the ticket-provider connections explicitly
 included by the maintainer for this project, including completed tickets. Include the
@@ -78,11 +78,40 @@ unreviewed draft as binding. More specific ticket requirements and current user
 instructions still govern the task. The guide should stay short and be revised or
 removed when later evidence contradicts it.
 
+## Headless review workflow (HS2-SX1F4J)
+
+Run `hotsheet-cli feedback-synthesis prepare --connection <connection-id>` from a
+linked project, repeating `--connection` for each provider explicitly in scope.
+The command reads the current provider feedback ledger, reports unreadable or
+unsupported connections on stderr, and prints either `No new AI feedback` or the
+path to a private Markdown draft. The draft is under
+`$HOTSHEET_HOME/feedback-synthesis/<project-hash>/draft.md` (default
+`~/.hotsheet2`), outside the ticket store and project repository. No source text is
+sent to an AI provider. The same unchanged source set returns the existing draft,
+preserving human edits.
+If every selected provider is unavailable, preparation fails explicitly.
+
+The command identifies current records by provider, ticket, and note ID. It notices
+corrections, withdrawals, and removed source notes by comparing each current record
+with the local reviewed ledger. It redacts obvious credentials, email addresses, URLs, and personal
+paths in candidate text. It conservatively groups only matching redacted
+explanations from at least two distinct rater IDs; one-off, legacy, withdrawn, and
+unexplained records remain in the triage section. A human can consolidate related
+phrases and must check all text for remaining private information. The draft lists
+up to five candidate themes and source references; it never changes instructions.
+
+After editing or rejecting the draft, a human runs
+`hotsheet-cli feedback-synthesis accept --reviewed --actor-role human`. This advances
+the local reviewed ledger and cursor; it does not commit or publish guidance. The
+maintainer separately edits the relevant repository document and reviews that
+change. A new source set cannot overwrite a pending draft: accept or archive the
+existing local review first. Rerunning after acceptance skips unchanged records.
+
 ## Follow-up delivery
 
 - **HS2-2G2336:** structured, revisable ratings and feedback query (delivered).
-- **HS2-SX1F4J:** build the local draft, deduplication, redaction, cursor, and human
-  review flow, with tests. It depends on the structured source contract.
+- **HS2-SX1F4J:** local draft, deduplication, redaction, cursor, and human review
+  flow (delivered).
 
-Until HS2-SX1F4J ships, a maintainer can query feedback, inspect uncertain legacy
-records, and write a reviewed summary using the rules above.
+The draft remains a proposal until a maintainer accepts specific guidance in a
+normal reviewed repository change.
