@@ -239,5 +239,5 @@
 .ticket-inspector__source-identity {
   display: inline-flex;
   align-items: center;
-  gap: var(--kui-space-xs);
+  gap: remify(4px);
 }

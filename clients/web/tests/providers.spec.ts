@@ -2669,6 +2669,27 @@ test('aligns ticket source marks with their names in project settings (HS2-Q93H9
   }
 });
 
+test('keeps the inspector source mark unclipped and close to the ticket number (HS2-Y3X3QE) @ci-smoke', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
+  const toolbar = page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]');
+  const icon = await toolbar.locator('.ticket-inspector__source-identity .ticket-source-icon').boundingBox();
+  const number = await toolbar.locator('.ticket-inspector__slug').boundingBox();
+  const bounds = await toolbar.boundingBox();
+  expect(icon && number && bounds).toBeTruthy();
+  expect(icon!.x).toBeGreaterThanOrEqual(bounds!.x);
+  expect(icon!.x + icon!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
+  expect(icon!.y).toBeGreaterThanOrEqual(bounds!.y);
+  expect(icon!.y + icon!.height).toBeLessThanOrEqual(bounds!.y + bounds!.height);
+  expect(number!.x - (icon!.x + icon!.width)).toBeGreaterThanOrEqual(0);
+  expect(number!.x - (icon!.x + icon!.width)).toBeLessThanOrEqual(6);
+});
+
 test('uses one provider dialog for onboarding, repeated connection creation, and editing', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page, true, false, 0, 0, 0, true);
