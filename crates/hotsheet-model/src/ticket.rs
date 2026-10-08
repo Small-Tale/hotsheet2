@@ -472,6 +472,35 @@ pub struct AttachmentMetadata {
     pub purpose: Option<AttachmentPurpose>,
 }
 
+impl AttachmentMetadata {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.batch_label.is_some() && self.batch_id.is_none() {
+            return Err("attachment batch_label requires batch_id".into());
+        }
+        for (label, value) in [
+            ("batch_id", self.batch_id.as_deref()),
+            ("batch_label", self.batch_label.as_deref()),
+            (
+                "actor.identity",
+                self.actor
+                    .as_ref()
+                    .and_then(|actor| actor.identity.as_deref()),
+            ),
+            (
+                "actor.display_name",
+                self.actor
+                    .as_ref()
+                    .and_then(|actor| actor.display_name.as_deref()),
+            ),
+        ] {
+            if value.is_some_and(|value| value.trim().is_empty() || value.len() > 200) {
+                return Err(format!("attachment {label} must contain 1–200 bytes"));
+            }
+        }
+        Ok(())
+    }
+}
+
 /// A request for a specific person's involvement (`docs/10` §10.2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewRequest {

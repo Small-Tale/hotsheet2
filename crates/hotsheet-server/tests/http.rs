@@ -6635,6 +6635,18 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         "ui-stability-diagnostics"
     );
     assert_eq!(regrouped["attachments"][0]["actor"]["role"], "system");
+    let regrouped_again = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/combo/tickets/{slug}/attachments"),
+                Some(&format!(r#"{{"attachment_ids":["{video_attachment_id}"],"batch_id":"fix-2","batch_label":"Automated diagnostics","actor":{{"identity":"ui-stability-diagnostics","role":"system"}},"purpose":"correctness_evidence"}}"#)),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(regrouped_again["updated_at"], regrouped["updated_at"]);
     let renamed = body_json(
         app.clone()
             .oneshot(authed(
@@ -6647,6 +6659,18 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     )
     .await;
     assert_eq!(renamed["attachments"][0]["filename"], "fixed.mov");
+    let renamed_again = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+                Some(r#"{"filename":"fixed.mov"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(renamed_again["updated_at"], renamed["updated_at"]);
     let annotated = body_json(
         app.clone()
             .oneshot(authed(

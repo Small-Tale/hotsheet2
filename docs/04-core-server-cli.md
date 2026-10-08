@@ -698,6 +698,16 @@ CLI uploads accept `--actor-role human|ai|system|unknown` plus optional `--actor
 `--actor-name`. Automated evidence must declare its actual role instead of relying on the
 legacy-safe `unknown` default. `hotsheet attachment-actor <ticket> <attachment-id>…`
 repairs provenance on existing attachments without changing their batch, label, or purpose.
+For git-backed tickets, `hotsheet attachment-rename <ticket> <attachment-ulid> <filename>`
+renames a file while retaining its stable id, and `hotsheet attachment-delete <ticket>
+<attachment-ulid>` removes the record and payload. `hotsheet attachment-metadata <ticket>
+--attachment <attachment-ulid> [--attachment <attachment-ulid>…] --file <json-path|->`
+replaces batch, actor, and purpose metadata for the selected ids as one operation; the JSON
+uses `batch_id`, `batch_label`, `actor`, and `purpose` fields. A label requires an id.
+Renaming to the current sanitized filename or applying the current metadata is a no-op,
+including the git commit and `updated_at`. A missing id fails explicitly. The CLI commands
+operate on the local git store; external providers expose attachment changes according to
+their capabilities through the provider API.
 `hotsheet annotate` accepts a unique attachment filename or ULID and a JSON file (or `--file -`
 for stdin) containing either `{"annotations":[…]}` or the bare array. It prints the resulting
 attachment with `--json`. The shared store validator rejects duplicate ids, rectangles outside

@@ -347,6 +347,23 @@ enum Cmd {
         #[arg(long)]
         purpose: Option<String>,
     },
+    /// Rename a git-backed attachment by stable ULID.
+    AttachmentRename {
+        id: String,
+        attachment: String,
+        filename: String,
+    },
+    /// Delete a git-backed attachment and its payload by stable ULID.
+    AttachmentDelete { id: String, attachment: String },
+    /// Replace batch, actor, and purpose metadata for one or more attachment ULIDs.
+    AttachmentMetadata {
+        id: String,
+        #[arg(long = "attachment", required = true)]
+        attachments: Vec<String>,
+        /// JSON metadata object (`{}` clears optional fields); `-` reads stdin.
+        #[arg(long)]
+        file: PathBuf,
+    },
     /// Replace one attachment's media annotations from JSON (object or bare array).
     Annotate {
         id: String,
@@ -1582,6 +1599,19 @@ fn main() -> Result<()> {
             actor_name,
             purpose,
         ),
+        Cmd::AttachmentRename {
+            id,
+            attachment,
+            filename,
+        } => cmd_attachment_rename(&cli.path, &id, &attachment, &filename),
+        Cmd::AttachmentDelete { id, attachment } => {
+            cmd_attachment_delete(&cli.path, &id, &attachment)
+        }
+        Cmd::AttachmentMetadata {
+            id,
+            attachments,
+            file,
+        } => cmd_attachment_metadata(&cli.path, &id, &attachments, &file),
         Cmd::Annotate {
             id,
             attachment,
@@ -4857,6 +4887,63 @@ fn cmd_attach(
     if json {
         println!("{}", serde_json::to_string(&attached)?);
     }
+    Ok(())
+}
+
+fn cmd_attachment_rename(path: &Path, id: &str, attachment: &str, filename: &str) -> Result<()> {
+    if filename.trim().is_empty() {
+        bail!("filename is required");
+    }
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, id)?;
+    let attachment_id = Ulid::from_string(attachment)
+        .with_context(|| format!("invalid attachment ULID '{attachment}'"))?;
+    let updated = store.rename_attachment(&ticket.id, &attachment_id, now_ts(), filename)?;
+    println!("{}", serde_json::to_string_pretty(&updated)?);
+    Ok(())
+}
+
+fn cmd_attachment_delete(path: &Path, id: &str, attachment: &str) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, id)?;
+    let attachment_id = Ulid::from_string(attachment)
+        .with_context(|| format!("invalid attachment ULID '{attachment}'"))?;
+    let updated = store.remove_attachment(&ticket.id, &attachment_id, now_ts())?;
+    println!("{}", serde_json::to_string_pretty(&updated)?);
+    Ok(())
+}
+
+fn cmd_attachment_metadata(
+    path: &Path,
+    id: &str,
+    attachments: &[String],
+    file: &Path,
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, id)?;
+    let mut content = String::new();
+    if file == Path::new("-") {
+        std::io::stdin().read_to_string(&mut content)?;
+    } else {
+        content = std::fs::read_to_string(file)
+            .with_context(|| format!("reading attachment metadata {}", file.display()))?;
+    }
+    let metadata: hotsheet_model::AttachmentMetadata = serde_json::from_str(&content)?;
+    metadata.validate().map_err(anyhow::Error::msg)?;
+    let mut seen = HashSet::new();
+    let ids = attachments
+        .iter()
+        .map(|raw| {
+            let id = Ulid::from_string(raw)
+                .with_context(|| format!("invalid attachment ULID '{raw}'"))?;
+            if !seen.insert(id) {
+                bail!("attachment ids must be unique");
+            }
+            Ok(id)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let updated = store.set_attachment_metadata(&ticket.id, &ids, metadata, now_ts())?;
+    println!("{}", serde_json::to_string_pretty(&updated)?);
     Ok(())
 }
 

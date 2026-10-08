@@ -884,6 +884,12 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > `expected_token`. Both backends perform the provider's atomic report operation; the
 > HTTP backend uses its JSON companion to the browser's multipart route. An unsupported
 > provider rejects the report before any note or evidence is written (HS2-CW56C9).
+> `hotsheet_rename_attachment`, `hotsheet_delete_attachment`, and
+> `hotsheet_set_attachment_metadata` target a registered checkout's git-backed ticket and
+> stable attachment ULID. Metadata replacement accepts a selected id array and one metadata
+> object. The serverless and HTTP backends use the same checkout routes; external sources
+> cannot use these git store operations. Repeating a rename or metadata replacement with unchanged
+> values does not advance `updated_at` or create a git commit (HS2-31NJFQ).
 
 AI tools reach tickets two ways, both over the one core:
 

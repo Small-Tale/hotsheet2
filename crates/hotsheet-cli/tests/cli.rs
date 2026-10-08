@@ -5155,6 +5155,117 @@ fn attachment_actor_corrects_existing_provenance_without_losing_other_metadata()
 }
 
 #[test]
+fn attachment_lifecycle_commands_persist_and_skip_unchanged_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let proof = root.join("proof.png");
+    std::fs::write(&proof, b"proof").unwrap();
+    hs(root).arg("init").assert().success();
+    let slug = new_ticket(root, "Attachment lifecycle");
+    let attached = hs(root)
+        .args(["attach", &slug])
+        .arg(&proof)
+        .arg("--json")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let attached: serde_json::Value = serde_json::from_slice(&attached).unwrap();
+    let attachment_id = attached[0]["id"].as_str().unwrap();
+    let head = || {
+        String::from_utf8(
+            hotsheet_ticketing::git::command_in(root)
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+    };
+    let metadata = r#"{"batch_id":"run-1","batch_label":"Evidence","actor":{"role":"ai","identity":"worker"},"purpose":"correctness_evidence"}"#;
+    hs(root)
+        .args([
+            "attachment-metadata",
+            &slug,
+            "--attachment",
+            attachment_id,
+            "--file",
+            "-",
+        ])
+        .write_stdin(metadata)
+        .assert()
+        .success();
+    let metadata_head = head();
+    hs(root)
+        .args([
+            "attachment-metadata",
+            &slug,
+            "--attachment",
+            attachment_id,
+            "--file",
+            "-",
+        ])
+        .write_stdin(metadata)
+        .assert()
+        .success();
+    assert_eq!(head(), metadata_head);
+    hs(root)
+        .args([
+            "attachment-metadata",
+            &slug,
+            "--attachment",
+            attachment_id,
+            "--file",
+            "-",
+        ])
+        .write_stdin(r#"{"batch_label":"missing id"}"#)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("batch_label requires batch_id"));
+    assert_eq!(head(), metadata_head);
+
+    hs(root)
+        .args(["attachment-rename", &slug, attachment_id, "renamed.png"])
+        .assert()
+        .success();
+    let renamed_head = head();
+    hs(root)
+        .args(["attachment-rename", &slug, attachment_id, "renamed.png"])
+        .assert()
+        .success();
+    assert_eq!(head(), renamed_head);
+    let store = hotsheet_ticketing::FsStore::open(root).unwrap();
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ticket.attachments[0].filename, "renamed.png");
+    assert_eq!(ticket.attachments[0].batch_id.as_deref(), Some("run-1"));
+    assert_eq!(
+        store
+            .read_attachment(&ticket.id, &ticket.attachments[0].id)
+            .unwrap()
+            .1,
+        b"proof"
+    );
+    hs(root)
+        .args(["attachment-delete", &slug, attachment_id])
+        .assert()
+        .success();
+    assert!(
+        hotsheet_ticketing::ops::resolve(&store, &slug)
+            .unwrap()
+            .unwrap()
+            .attachments
+            .is_empty()
+    );
+    hs(root)
+        .args(["attachment-delete", &slug, attachment_id])
+        .assert()
+        .failure();
+}
+
+#[test]
 fn settings_shared_and_local_scopes() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

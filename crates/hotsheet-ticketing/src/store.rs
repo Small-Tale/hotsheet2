@@ -1040,6 +1040,7 @@ impl FsStore {
     ) -> Result<Ticket, StoreError> {
         self.with_ticket_transaction(|| {
             let mut ticket = self.read_ticket(ticket_id)?;
+            let mut changed = false;
             for id in attachment_ids {
                 let attachment = ticket
                     .attachments
@@ -1051,10 +1052,20 @@ impl FsStore {
                             format!("attachment {id}"),
                         ))
                     })?;
-                attachment.batch_id.clone_from(&metadata.batch_id);
-                attachment.batch_label.clone_from(&metadata.batch_label);
-                attachment.actor.clone_from(&metadata.actor);
-                attachment.purpose = metadata.purpose;
+                if attachment.batch_id != metadata.batch_id
+                    || attachment.batch_label != metadata.batch_label
+                    || attachment.actor != metadata.actor
+                    || attachment.purpose != metadata.purpose
+                {
+                    attachment.batch_id.clone_from(&metadata.batch_id);
+                    attachment.batch_label.clone_from(&metadata.batch_label);
+                    attachment.actor.clone_from(&metadata.actor);
+                    attachment.purpose = metadata.purpose;
+                    changed = true;
+                }
+            }
+            if !changed {
+                return Ok(ticket);
             }
             ticket.updated_at = now;
             self.write_ticket_committing(&ticket)?;
@@ -1200,6 +1211,9 @@ impl FsStore {
                     .filter(|item| &item.id != attachment_id)
                     .map(|item| item.filename.as_str()),
             );
+            if ticket.attachments[attachment_index].filename == name {
+                return Ok(ticket);
+            }
             let attachment = ticket
                 .attachments
                 .get_mut(attachment_index)

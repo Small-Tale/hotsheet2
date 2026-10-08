@@ -6769,7 +6769,9 @@ async fn update_checkout_ticket_attachment_metadata(
         entry
             .store
             .set_attachment_metadata(&ticket.id, &attachment_ids, body.metadata, now())?;
-    state.changed_in(&entry, "attachment_metadata_updated", &updated);
+    if updated.attachments != ticket.attachments {
+        state.changed_in(&entry, "attachment_metadata_updated", &updated);
+    }
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
         ticket: api_ticket_with_settings(&entry, &updated, &settings)?,
@@ -6800,7 +6802,9 @@ async fn rename_checkout_ticket_attachment(
         entry
             .store
             .rename_attachment(&ticket.id, &attachment_id, now(), &body.filename)?;
-    state.changed_in(&entry, "attachment_renamed", &updated);
+    if updated.attachments != ticket.attachments {
+        state.changed_in(&entry, "attachment_renamed", &updated);
+    }
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
         ticket: api_ticket_with_settings(&entry, &updated, &settings)?,
@@ -7844,40 +7848,9 @@ fn attachment_metadata(
 fn validate_attachment_metadata(
     metadata: &hotsheet_model::AttachmentMetadata,
 ) -> Result<(), ApiError> {
-    if metadata.batch_label.is_some() && metadata.batch_id.is_none() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "attachment batch_label requires batch_id",
-        ));
-    }
-    for (label, value, limit) in [
-        ("batch_id", metadata.batch_id.as_deref(), 200usize),
-        ("batch_label", metadata.batch_label.as_deref(), 200usize),
-        (
-            "actor.identity",
-            metadata
-                .actor
-                .as_ref()
-                .and_then(|actor| actor.identity.as_deref()),
-            200usize,
-        ),
-        (
-            "actor.display_name",
-            metadata
-                .actor
-                .as_ref()
-                .and_then(|actor| actor.display_name.as_deref()),
-            200usize,
-        ),
-    ] {
-        if value.is_some_and(|value| value.trim().is_empty() || value.len() > limit) {
-            return Err(ApiError::new(
-                StatusCode::BAD_REQUEST,
-                format!("attachment {label} must contain 1–{limit} bytes"),
-            ));
-        }
-    }
-    Ok(())
+    metadata
+        .validate()
+        .map_err(|message| ApiError::new(StatusCode::BAD_REQUEST, message))
 }
 
 fn decode_attachment_header(raw: &str, field: &str) -> Result<String, ApiError> {

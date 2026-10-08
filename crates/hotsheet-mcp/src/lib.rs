@@ -165,6 +165,35 @@ fn base_tools_list() -> Value {
             }, "required": ["id", "attachment", "annotations"] }
         },
         {
+            "name": "hotsheet_rename_attachment",
+            "description": "Rename one git-backed attachment by stable ULID. Repeating the same name is a no-op.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id/alias/path"),
+                "id": str_prop("ticket slug or ULID"),
+                "attachment": str_prop("stable attachment ULID"),
+                "filename": str_prop("new filename")
+            }, "required": ["checkout", "id", "attachment", "filename"] }
+        },
+        {
+            "name": "hotsheet_delete_attachment",
+            "description": "Delete one git-backed attachment and its payload by stable ULID.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id/alias/path"),
+                "id": str_prop("ticket slug or ULID"),
+                "attachment": str_prop("stable attachment ULID")
+            }, "required": ["checkout", "id", "attachment"] }
+        },
+        {
+            "name": "hotsheet_set_attachment_metadata",
+            "description": "Replace batch, actor, and purpose metadata for one or more git-backed attachment ULIDs; unchanged values are a no-op.",
+            "inputSchema": { "type": "object", "properties": {
+                "checkout": str_prop("registered checkout id/alias/path"),
+                "id": str_prop("ticket slug or ULID"),
+                "attachments": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+                "metadata": { "type": "object", "description": "complete replacement: batch_id, batch_label, actor, purpose; {} clears all" }
+            }, "required": ["checkout", "id", "attachments", "metadata"] }
+        },
+        {
             "name": "hotsheet_create",
             "description": "Create a ticket.",
             "inputSchema": { "type": "object", "properties": {
@@ -400,6 +429,9 @@ fn render_result(value: &Value) -> String {
 /// Tools that change state; each accepts `actor_role` / `actor_id` (HS2-RD4M29).
 const MUTATING_TOOLS: &[&str] = &[
     "hotsheet_annotate_attachment",
+    "hotsheet_rename_attachment",
+    "hotsheet_delete_attachment",
+    "hotsheet_set_attachment_metadata",
     "hotsheet_create",
     "hotsheet_update",
     "hotsheet_close",
@@ -530,6 +562,59 @@ fn dispatch_tool(name: &str, args: &Value, backend: &dyn Backend) -> Result<Valu
                     &json!({ "annotations": annotations }),
                 )
                 .map_err(be_msg)
+        }
+        "hotsheet_rename_attachment" => {
+            let _checkout = arg_str(args, "checkout")?;
+            let id = arg_str(args, "id")?;
+            let attachment = arg_str(args, "attachment")?;
+            let filename = arg_str(args, "filename")?;
+            let value = backend
+                .send(
+                    "PATCH",
+                    &checkout_route(args, &format!("/tickets/{id}/attachments/{attachment}")),
+                    &json!({"filename":filename}),
+                )
+                .map_err(be_msg)?;
+            Ok(value.get("ticket").cloned().unwrap_or(value))
+        }
+        "hotsheet_delete_attachment" => {
+            let _checkout = arg_str(args, "checkout")?;
+            let id = arg_str(args, "id")?;
+            let attachment = arg_str(args, "attachment")?;
+            let value = backend
+                .send(
+                    "DELETE",
+                    &checkout_route(args, &format!("/tickets/{id}/attachments/{attachment}")),
+                    &json!({}),
+                )
+                .map_err(be_msg)?;
+            Ok(value.get("ticket").cloned().unwrap_or(value))
+        }
+        "hotsheet_set_attachment_metadata" => {
+            let _checkout = arg_str(args, "checkout")?;
+            let id = arg_str(args, "id")?;
+            let ids = args
+                .get("attachments")
+                .and_then(Value::as_array)
+                .filter(|ids| !ids.is_empty())
+                .ok_or_else(|| "attachments must be a nonempty array".to_string())?;
+            if ids.iter().any(|id| id.as_str().is_none()) {
+                return Err("attachment ids must be strings".into());
+            }
+            let metadata = args
+                .get("metadata")
+                .and_then(Value::as_object)
+                .ok_or_else(|| "metadata must be an object".to_string())?;
+            let mut body = metadata.clone();
+            body.insert("attachment_ids".into(), Value::Array(ids.clone()));
+            let value = backend
+                .send(
+                    "PATCH",
+                    &checkout_route(args, &format!("/tickets/{id}/attachments")),
+                    &Value::Object(body),
+                )
+                .map_err(be_msg)?;
+            Ok(value.get("ticket").cloned().unwrap_or(value))
         }
         "hotsheet_providers" => backend.get("/providers", &[]).map_err(be_msg),
         "hotsheet_confidence_report" => {
@@ -1338,6 +1423,26 @@ mod core_backend {
                             .send("POST", "/tickets", body);
                     }
                     let tail = suffix.trim_start_matches('/');
+                    if method == "PATCH"
+                        && let Some(id) = tail.strip_suffix("/attachments")
+                    {
+                        let (store, native_id) = checkout_attachment_store(stores, id)?;
+                        return self.for_checkout(store, checkout).send(
+                            "PATCH",
+                            &format!("/tickets/{native_id}/attachments"),
+                            body,
+                        );
+                    }
+                    if matches!(method, "PATCH" | "DELETE")
+                        && let Some((id, attachment_id)) = tail.split_once("/attachments/")
+                    {
+                        let (store, native_id) = checkout_attachment_store(stores, id)?;
+                        return self.for_checkout(store, checkout).send(
+                            method,
+                            &format!("/tickets/{native_id}/attachments/{attachment_id}"),
+                            body,
+                        );
+                    }
                     if method == "PUT"
                         && let Some((id, attachment_id)) = tail.split_once("/attachments/")
                     {
@@ -1426,6 +1531,64 @@ mod core_backend {
                 }
             }
             match method {
+                "PATCH" if attachment_metadata_id(path).is_some() => {
+                    let id = attachment_metadata_id(path).unwrap();
+                    let ticket = self.resolve(id)?;
+                    let raw_ids = body
+                        .get("attachment_ids")
+                        .and_then(Value::as_array)
+                        .filter(|ids| !ids.is_empty())
+                        .ok_or_else(|| bad_request("attachment_ids must not be empty"))?;
+                    let mut seen = std::collections::HashSet::new();
+                    let ids = raw_ids
+                        .iter()
+                        .map(|value| {
+                            let raw = value
+                                .as_str()
+                                .ok_or_else(|| bad_request("invalid attachment ULID"))?;
+                            let id = Ulid::from_string(raw)
+                                .map_err(|_| bad_request("invalid attachment ULID"))?;
+                            if !seen.insert(id) {
+                                return Err(bad_request("attachment_ids must be unique"));
+                            }
+                            Ok(id)
+                        })
+                        .collect::<Result<Vec<_>, BackendError>>()?;
+                    let metadata: hotsheet_model::AttachmentMetadata =
+                        serde_json::from_value(body.clone())
+                            .map_err(|error| bad_request(error.to_string()))?;
+                    metadata.validate().map_err(bad_request)?;
+                    let updated = self
+                        .store
+                        .set_attachment_metadata(&ticket.id, &ids, metadata, (self.now)())
+                        .map_err(store_err)?;
+                    self.api(&updated)
+                }
+                "PATCH" if attachment_item_ids(path).is_some() => {
+                    let (id, attachment_id) = attachment_item_ids(path).unwrap();
+                    let ticket = self.resolve(id)?;
+                    let attachment_id = Ulid::from_string(attachment_id)
+                        .map_err(|_| bad_request("invalid attachment ULID"))?;
+                    let filename = str_field(body, "filename")
+                        .filter(|name| !name.trim().is_empty())
+                        .ok_or_else(|| bad_request("filename is required"))?;
+                    let updated = self
+                        .store
+                        .rename_attachment(&ticket.id, &attachment_id, (self.now)(), &filename)
+                        .map_err(store_err)?;
+                    self.api(&updated)
+                }
+                "DELETE" if attachment_item_ids(path).is_some() => {
+                    let (id, attachment_id) = attachment_item_ids(path).unwrap();
+                    let ticket = self.resolve(id)?;
+                    let attachment_id = Ulid::from_string(attachment_id)
+                        .map_err(|_| bad_request("invalid attachment ULID"))?;
+                    let updated = self
+                        .store
+                        .remove_attachment(&ticket.id, &attachment_id, (self.now)())
+                        .map_err(store_err)?;
+                    self.api(&updated)
+                }
                 "DELETE" if note_ids(path).is_some() => {
                     let (id, note_id) = note_ids(path).unwrap();
                     let ticket = self.resolve(id)?;
@@ -1991,6 +2154,57 @@ mod core_backend {
         let rest = path.strip_prefix("/tickets/")?;
         let (id, note_id) = rest.split_once("/notes/")?;
         (!id.is_empty() && !note_id.is_empty()).then_some((id, note_id))
+    }
+
+    fn attachment_metadata_id(path: &str) -> Option<&str> {
+        path.strip_prefix("/tickets/")?
+            .strip_suffix("/attachments")
+            .filter(|id| !id.is_empty())
+    }
+
+    fn checkout_attachment_store(
+        stores: Vec<FsStore>,
+        id: &str,
+    ) -> Result<(FsStore, String), BackendError> {
+        let (connection, native_id) = match id.split_once(':') {
+            Some((connection, native_id)) => (Some(connection), native_id),
+            None => (None, id),
+        };
+        let mut matched = Vec::new();
+        for store in stores {
+            if connection.is_some_and(|connection| {
+                connection != hotsheet_ticketing::git_connection_id(&store)
+            }) {
+                continue;
+            }
+            if ops::resolve(&store, native_id)
+                .map_err(store_err)?
+                .is_some()
+            {
+                matched.push(store);
+            }
+        }
+        match matched.as_slice() {
+            [store] => Ok((store.clone(), native_id.to_string())),
+            [] if connection.is_some() => Err(BackendError {
+                status: Some(409),
+                message: format!(
+                    "provider connection '{}' does not support git-backed attachment editing in the serverless MCP backend",
+                    connection.unwrap()
+                ),
+            }),
+            [] => Err(not_found(id)),
+            _ => Err(BackendError {
+                status: Some(409),
+                message: format!("ticket {id} is ambiguous across checkout stores"),
+            }),
+        }
+    }
+
+    fn attachment_item_ids(path: &str) -> Option<(&str, &str)> {
+        let rest = path.strip_prefix("/tickets/")?;
+        let (id, attachment_id) = rest.split_once("/attachments/")?;
+        (!id.is_empty() && !attachment_id.is_empty()).then_some((id, attachment_id))
     }
 
     fn not_working_id(path: &str) -> Option<&str> {
@@ -3278,6 +3492,131 @@ mod tests {
                 .contains("valid shape geometry and bounding boxes")
         );
         assert_eq!(store.read_ticket(&ticket.id).unwrap().notes.len(), 3);
+    }
+
+    #[test]
+    fn attachment_lifecycle_tools_use_checkout_and_persist_to_git_store() {
+        let root = tempfile::tempdir().unwrap();
+        let store_root = root.path().join("tickets.hs2");
+        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let checkout_root = root.path().join("project");
+        std::fs::create_dir(&checkout_root).unwrap();
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        registry
+            .register(&checkout_root, Some("project"), None, vec![store_root])
+            .unwrap();
+        let ticket = ops::create(
+            &store,
+            Ulid::new(),
+            "HS",
+            Timestamp::new("2026-10-08T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: "Attachment lifecycle".into(),
+                category: "issue".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let attachment_id = Ulid::new();
+        store
+            .write_attachment_with_metadata(
+                &ticket.id,
+                attachment_id,
+                Timestamp::new("2026-10-08T00:01:00Z"),
+                "proof.png",
+                b"proof",
+                hotsheet_model::AttachmentMetadata::default(),
+            )
+            .unwrap();
+        let backend = CoreBackend::new(store.clone()).with_checkout_registry(registry);
+        let base = json!({"checkout":"project","id":ticket.slug});
+        let mut metadata = base.clone();
+        metadata["attachments"] = json!([attachment_id.to_string()]);
+        metadata["metadata"] =
+            json!({"batch_id":"run-1","batch_label":"Evidence","purpose":"correctness_evidence"});
+        let grouped = call(
+            &backend,
+            "hotsheet_set_attachment_metadata",
+            metadata.clone(),
+        );
+        assert_eq!(grouped["attachments"][0]["batch_id"], "run-1");
+        let unchanged = call(&backend, "hotsheet_set_attachment_metadata", metadata);
+        assert_eq!(unchanged["updated_at"], grouped["updated_at"]);
+        let mut invalid = base.clone();
+        invalid["attachments"] = json!([attachment_id.to_string()]);
+        invalid["metadata"] = json!({"batch_label":"missing id"});
+        assert!(
+            call(&backend, "hotsheet_set_attachment_metadata", invalid)["error"]
+                .as_str()
+                .unwrap()
+                .contains("batch_label requires batch_id")
+        );
+        let mut rename = base.clone();
+        rename["attachment"] = json!(attachment_id.to_string());
+        rename["filename"] = json!("renamed.png");
+        let renamed = call(&backend, "hotsheet_rename_attachment", rename.clone());
+        assert_eq!(renamed["attachments"][0]["filename"], "renamed.png");
+        let unchanged = call(&backend, "hotsheet_rename_attachment", rename.clone());
+        assert_eq!(unchanged["updated_at"], renamed["updated_at"]);
+        assert_eq!(
+            store.read_attachment(&ticket.id, &attachment_id).unwrap().1,
+            b"proof"
+        );
+        let mut delete = base;
+        delete["attachment"] = json!(attachment_id.to_string());
+        let deleted = call(&backend, "hotsheet_delete_attachment", delete.clone());
+        assert!(deleted["attachments"].as_array().unwrap().is_empty());
+        assert!(call(&backend, "hotsheet_delete_attachment", delete)["error"].is_string());
+        let unsupported = call(
+            &backend,
+            "hotsheet_rename_attachment",
+            json!({"checkout":"project","id":"external:42","attachment":attachment_id.to_string(),"filename":"x.png"}),
+        );
+        assert!(
+            unsupported["error"]
+                .as_str()
+                .unwrap()
+                .contains("does not support git-backed attachment editing")
+        );
+    }
+
+    #[test]
+    fn attachment_lifecycle_tools_forward_checkout_routes() {
+        let backend = FakeBackend::default();
+        let id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        call(
+            &backend,
+            "hotsheet_rename_attachment",
+            json!({
+                "checkout":"project","id":"HS-1","attachment":id,"filename":"renamed.png"
+            }),
+        );
+        call(
+            &backend,
+            "hotsheet_set_attachment_metadata",
+            json!({
+                "checkout":"project","id":"HS-1","attachments":[id],
+                "metadata":{"batch_id":"run-1","purpose":"correctness_evidence"}
+            }),
+        );
+        call(
+            &backend,
+            "hotsheet_delete_attachment",
+            json!({
+                "checkout":"project","id":"HS-1","attachment":id
+            }),
+        );
+        let calls = backend.calls.borrow();
+        assert!(calls[0].starts_with(&format!(
+            "PATCH /checkouts/project/tickets/HS-1/attachments/{id} "
+        )));
+        assert!(calls[1].starts_with("PATCH /checkouts/project/tickets/HS-1/attachments "));
+        assert!(calls[1].contains("\"attachment_ids\""));
+        assert!(calls[2].starts_with(&format!(
+            "DELETE /checkouts/project/tickets/HS-1/attachments/{id} "
+        )));
     }
 
     #[test]
