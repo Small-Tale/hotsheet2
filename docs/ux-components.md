@@ -961,18 +961,22 @@ never styles the field from its own stylesheet (HS2-8FS5BJ). Each policy is a se
 `ToolbarControlGroup` props (HS2-DAMHD1):
 
 - `layout="inline"` (default) keeps Kerf's own collapsed and expanded widths.
-- `layout="grow"` is the workspace header policy (`sizing="grow"`, `HS2-AEK8GK`). The open field
+- `layout="grow"` is the generic toolbar policy (`sizing="grow"`, `HS2-AEK8GK`). The open field
   grows into the free room on its row from Kerf's 19rem basis, which stays its floor in the
   header's content-sized trailing zone (`KF-K4VBTS`, Kerf 5.0.0-beta.70). That keeps the view,
   sort, and utility groups beside it, so a wide header stays one 60px row with the search open.
   It takes the whole row on a compact toolbar, and its collapsed icon leaves toolbars of 224px or
   less (`visibility="hide-collapsed-tiny"`).
+- The workspace header uses `layout="inline"` (`HS2-NZK4KA`), allowing the expanded field
+  to shrink beside More at compact widths. The toolbar stays on one row; the title, view,
+  sort, and selection groups yield below 1024px, and More exposes the same Up Next action.
 - `layout="row"` is the narrow-rail policy (`sizing="fill"`, `placement="end"`). The collapsed
   icon sits at its stacked row's trailing edge, and the open field fills a row of its own,
   entering from the row above with Kerf's reduced-motion-aware motion.
 
-No layout styles the group from `ticket-search-field.css`; the former app grow-floor rule and its
-`--grow`/`--open` root modifiers were removed with `HS2-AEK8GK`. Every layout sets Kerf
+No layout adjusts the Kerf group from `ticket-search-field.css`; the former generic app
+grow-floor rule and its `--grow`/`--open` root modifiers were removed with `HS2-AEK8GK`.
+Every layout sets Kerf
 `expandedOverflow="visible"` (HS2-PV2AG1, KF-M8SV15), so the expanded search lets the app-owned
 date and syntax-help surfaces extend below its group while the collapsed animation stays clipped.
 The app styles the surfaces themselves, narrowing their floating width to 19rem below a 480px

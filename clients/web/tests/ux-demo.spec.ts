@@ -3620,6 +3620,51 @@ test('keeps the opened grow search on the wide header row through Kerf sizing="g
   }
 });
 
+test('keeps expanded workspace search inline with More at narrow widths (HS2-NZK4KA)', async ({ page }) => {
+  for (const width of [1280, 760, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+    const header = page.locator('.workspace-header');
+    await header.getByRole('button', { name: 'Search tickets' }).click();
+    const search = header.getByRole('searchbox', { name: 'Search tickets' });
+    await expect(search).toBeVisible();
+    const geometry = await header.evaluate((node) => {
+      const toolbar = node.getBoundingClientRect(),
+        field = node.querySelector('.ticket-search-field')!.getBoundingClientRect();
+      return {
+        height: toolbar.height,
+        fieldTop: field.top,
+        toolbarTop: toolbar.top,
+        fieldRight: field.right,
+        toolbarRight: toolbar.right,
+      };
+    });
+    expect(geometry.height).toBeLessThan(80);
+    expect(geometry.fieldTop - geometry.toolbarTop).toBeLessThan(20);
+    expect(geometry.fieldRight).toBeLessThanOrEqual(geometry.toolbarRight + 1);
+    await expect
+      .poll(() =>
+        header.evaluate((node) => {
+          const group = node.querySelector('.ticket-search-field')!.getBoundingClientRect(),
+            field = node.querySelector('.ticket-search-field .kui-token-search')!.getBoundingClientRect();
+          return Math.abs(group.width - field.width);
+        }),
+      )
+      .toBeLessThanOrEqual(4);
+    await page.screenshot({ path: `/private/tmp/hs2-nzk4ka-search-${width}.png`, fullPage: true });
+    if (width === 390) {
+      await expect(header.locator('.workspace-header__identity')).toBeHidden();
+      await expect(header.locator('.view-mode-switcher')).toBeHidden();
+      await expect(header.locator('.workspace-header__sort-group')).toBeHidden();
+      await expect(header.locator('.workspace-header__utility-group')).toBeHidden();
+      await header.getByRole('button', { name: 'More workspace controls' }).click();
+      await expect(header.locator('[data-workspace-overflow]')).toHaveJSProperty('open', true);
+      await expect(page.locator('[data-workspace-overflow-action="toggle-selected-up-next"]')).toBeVisible();
+      await page.screenshot({ path: '/private/tmp/hs2-nzk4ka-search-more-390.png', fullPage: true });
+    }
+  }
+});
+
 test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/ux-demo?component=workspace-header&dev-review=false');

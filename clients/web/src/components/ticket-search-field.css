@@ -1,8 +1,6 @@
 /* TicketSearchField: Kerf's grouped TokenSearchField owns the border, padding, and focus ring.
    This module owns only the Hot Sheet helper surfaces (tag suggestions, date helper, syntax
-   help) that hang below the field and the field's token colors (HS2-N5G6JS, HS2-8FS5BJ). Every
-   part of the `layout` policy is a Kerf ToolbarControlGroup `sizing`/`visibility`/`placement` prop
-   (HS2-DAMHD1, HS2-AEK8GK). */
+   help) that hang below the field, plus token colors (HS2-N5G6JS, HS2-8FS5BJ). */
 /* Both presentations' quieter chips: the token color is set on the app-owned `className` hook
    Kerf's TokenSearchField renders on its root in the grouped and the form-field presentation alike
    (HS2-8FS5BJ, HS2-RXHZVR). Kerf resolves its token defaults at their use sites, so the bare hook

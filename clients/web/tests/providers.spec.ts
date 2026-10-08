@@ -5626,6 +5626,51 @@ test('restores phone shell and drawer geometry after a live desktop resize (HS2-
   await page.screenshot({ path: '/private/tmp/hs2-y2xafw-fresh-maximized-phone.png', fullPage: true });
 });
 
+test('keeps production workspace search and More on one row through a phone resize (HS2-NZK4KA)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const header = page.locator('.kui-toolbar[aria-label="Workspace toolbar"]');
+  await header.getByRole('button', { name: 'Search tickets' }).click();
+  await expect(header.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
+  await expect.poll(() => header.evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(80);
+  await page.screenshot({ path: '/private/tmp/hs2-nzk4ka-production-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
+  await expect
+    .poll(() =>
+      page.locator('.kui-workbench__main').evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return Math.abs(box.left) <= 1 && Math.abs(box.width - 390) <= 1;
+      }),
+    )
+    .toBe(true);
+  await expect.poll(() => header.evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(80);
+  await expect(header.locator('.workspace-header__identity')).toBeHidden();
+  await expect(header.locator('.view-mode-switcher')).toBeHidden();
+  await expect(header.locator('.workspace-header__sort-group')).toBeHidden();
+  await expect(header.locator('.workspace-header__utility-group')).toBeHidden();
+  await expect(header.getByRole('button', { name: 'More workspace controls' })).toBeVisible();
+  await expect
+    .poll(() =>
+      header.evaluate((node) => {
+        const search = node.querySelector('.ticket-search-field')?.getBoundingClientRect();
+        const more = node.querySelector('[data-workspace-overflow]')?.getBoundingClientRect();
+        return Boolean(
+          search && more && search.left >= 0 && search.right <= 390 && more.left >= 0 && more.right <= 390,
+        );
+      }),
+    )
+    .toBe(true);
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: '/private/tmp/hs2-nzk4ka-production-phone.png' });
+  await header.getByRole('button', { name: 'More workspace controls' }).click();
+  await expect(header.locator('[data-workspace-overflow]')).toHaveJSProperty('open', true);
+  await expect(page.locator('[data-workspace-overflow-action="toggle-selected-up-next"]')).toBeVisible();
+});
+
 test('keeps a scrolled-back transcript in place while selecting a message range', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

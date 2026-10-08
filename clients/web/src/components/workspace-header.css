@@ -52,5 +52,15 @@ wa-button.workspace-header__text-action::part(base) {
 .workspace-header__sort-group {
   --kui-select-selected-color: var(--kui-toolbar-control-color);
 }
+/* Keep search and More in one app-owned flex slot so Kerf may shrink the inline search
+   without either group taking a separate toolbar line. */
+.workspace-header__search-actions {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--kui-toolbar-gap, 0.5rem);
+  flex: 1 1 auto;
+}
 /* Kerf's typed width thresholds and wireToolbarVisibility control Toolbar items. The rail keeps
    its groups on wrapped rows and never renders the narrow header's overflow menu (HS2-BBG8ZC). */

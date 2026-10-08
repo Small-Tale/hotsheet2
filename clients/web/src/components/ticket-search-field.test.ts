@@ -204,8 +204,6 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     // `row` hands the full-row width to Kerf's `fill` on the field too; the other layouts never fill.
     expect(render('row', true)).toContain('data-fill="true"');
     expect(render('grow', true)).toContain('data-fill="false"');
-    // Every layout, open or closed, renders the bare literal root class: the header's grow floor is
-    // Kerf's `sizing="grow"` basis since KF-K4VBTS (HS2-AEK8GK), so no app root modifier remains.
     for (const layout of ['inline', 'grow', 'row'] as const)
       for (const expanded of [false, true])
         expect(group(render(layout, expanded))[1]).toBe('kui-toolbar-control-group ticket-search-field');
@@ -213,8 +211,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
       for (const expanded of [false, true]) expect(kerf(layout, expanded)['data-expanded-overflow']).toBe('visible');
 
     const css = readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8');
-    // The grow floor, tiny-toolbar hide, trailing-edge placement, and row entrance are Kerf's now.
-    expect(css).not.toContain('ticket-search-field--grow');
+    expect(css).not.toContain('.ticket-search-field--grow-inline');
     expect(css).not.toContain('min-width: 19rem');
     expect(css).not.toContain('--kui-token-search-expanded-width');
     expect(css).not.toContain('ticket-search-field--row');

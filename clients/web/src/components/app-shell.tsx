@@ -42,6 +42,8 @@ export interface AppShellProps {
   sidebar?: SidebarPanelParts;
   header: SafeHtml;
   headerActions?: SafeHtml;
+  /** Expanded workspace search uses the whole available toolbar row. */
+  workspaceSearchOpen?: boolean;
   /** The current ticket view's primary action, rendered in the project strip's far-edge zone (HS2-PNCDAE). */
   projectTabAction?: TicketViewActionSpec;
   pageHeader?: SafeHtml;
@@ -100,6 +102,7 @@ export function AppShell({
   sidebar,
   header,
   headerActions,
+  workspaceSearchOpen = false,
   projectTabAction,
   pageHeader,
   mobileView,
@@ -204,6 +207,7 @@ export function AppShell({
       data-presentation={presentation}
       data-mode={mode}
       data-mobile={String(mobile)}
+      data-workspace-search-open={String(workspaceSearchOpen)}
       data-sidebar-visible={String(sidebarVisible)}
       data-terminal-focus-mode={String(terminalFocusMode)}
       data-terminal-drawer-transitioning={String(terminalDrawerTransitioning)}
@@ -235,9 +239,8 @@ export function AppShell({
         mainToolbar={{
           label: 'Workspace toolbar',
           dividerSides: '',
-          // An expanded search takes a full second row below the identity once the toolbar is narrow
-          // (Kerf beta.60 trailing priority); wide toolbars reserve a bounded trailing track for it.
-          responsive: 'trailing-priority',
+          // Search stays in this row; width-aware controls yield space to it.
+          responsive: workspaceSearchOpen ? 'none' : 'trailing-priority',
           responsiveAt: 'narrow',
           safeAreaEdges: mobile ? ['block-start', 'inline-start', 'inline-end'] : undefined,
           // The collapsed left rail's toggle leads this zone and the collapsed right rail's toggle

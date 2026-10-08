@@ -33,9 +33,8 @@ export function WorkspaceHeader({
     <Toolbar
       className="workspace-header"
       dividerSides=""
-      responsive="stack"
-      responsiveAt="compact"
-      leading={<WorkspaceIdentity projectName={projectName} />}
+      responsive="none"
+      leading={<WorkspaceIdentity projectName={projectName} searchOpen={searchOpen} />}
       trailing={
         controlsVisible ? (
           <WorkspaceControls

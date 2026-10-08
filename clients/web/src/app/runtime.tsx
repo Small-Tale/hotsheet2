@@ -5081,6 +5081,7 @@ export async function startHotSheetWebClient() {
       <MainShell
         tabs={tabs}
         mode="project"
+        workspaceSearchOpen={searchOpen.value}
         mobile={viewportMobile.value}
         sidebar={sidebarSurfacePanel(sidebarSurfaceProps())}
         sidebarVisible={!sidebarCollapsed.value}
@@ -5089,7 +5090,12 @@ export async function startHotSheetWebClient() {
           viewportMobile.value ? (
             <></>
           ) : (
-            <WorkspaceIdentity projectName={workspaceTitle} id="workspace-page-title" headingLevel={1} />
+            <WorkspaceIdentity
+              projectName={workspaceTitle}
+              id="workspace-page-title"
+              headingLevel={1}
+              searchOpen={searchOpen.value}
+            />
           )
         }
         headerActions={

@@ -1028,6 +1028,10 @@ and identity-less legacy entries remain conservatively blocking.
   When composed inside a toolbar control group, the group retains its border, padding,
   and focus ring in both collapsed and expanded states. The ordinary workspace header
   and workspace-grid ticket rail share that package-owned treatment (HS2-TNSD4K).
+  In the workspace header, expanded search stays on the main toolbar row. Below the width
+  needed for the full controls, the title, view switcher, sort, and selection star yield;
+  search stays beside a persistent More menu. More includes the same capability-checked
+  Up Next toggle and keeps the empty search open while the menu is used (HS2-NZK4KA).
   Explicit lifecycle expressions and filter chips narrow the
   selected collection. Boolean expressions that cannot be represented as one provider query
   walk every compact cursor page for that collection, retain only client-side matches, and

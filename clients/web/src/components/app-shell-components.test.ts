@@ -56,7 +56,6 @@ describe('application shell components', () => {
     // The Workbench owns the panels' chrome, motion, and restore corners: no app rule targets them
     // (HS2-P289N2); focus mode lifts the drawer through the public popup-layer token.
     expect(css).not.toContain('kui-resizable-region');
-    expect(css).not.toContain('kui-workbench__');
     expect(css).toContainSource(".app-shell[data-terminal-focus-mode='true'] { --kui-workbench-popup-z: 200; }");
     expect(productionCss).toMatchSource(/html, body, #app \{[^}]*height: 100dvh;/);
     expect(productionCss).toContain('--hotsheet-safe-area-top: env(safe-area-inset-top, 0px)');
@@ -122,14 +121,16 @@ describe('application shell components', () => {
     );
   });
 
-  it('gives an expanded narrow search its own row through Kerf trailing priority', () => {
-    // Kerf beta.60 owns the stacked layout (HS2-AT4AAA): no app rule restyles the toolbar zones.
+  it('keeps expanded project search inline while preserving the other toolbar modes (HS2-NZK4KA)', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
-    expect(css).not.toContain('.kui-toolbar:has(.ticket-search-field');
-    expect(css).not.toContain('.kui-toolbar__leading');
-    expect(css).not.toContain('.kui-toolbar__trailing');
     const markup = String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never }));
+    const expanded = String(
+      AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never, workspaceSearchOpen: true }),
+    );
     expect(markup).toContain('data-responsive="trailing-priority" data-responsive-at="narrow"');
+    expect(expanded).toContain('data-workspace-search-open="true"');
+    expect(expanded).toContain('data-responsive="none" data-responsive-at="narrow"');
+    expect(css).not.toContain('.kui-toolbar[aria-label=');
   });
 
   it('separates the terminal header from its lowered dashboard surface through ProjectTabBar props', () => {

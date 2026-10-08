@@ -92,7 +92,7 @@ describe('WorkspaceHeader', () => {
     );
     expect(markup).not.toContain('All Tickets');
     expect(markup).toContain('data-component="toolbar-text"');
-    expect(markup).toContain('data-hide-below="224px"');
+    expect(markup).toContain('data-hide-below="1024px"');
     expect(markup).toContain('<span class="kui-toolbar-text__text">Hot Sheet 2');
     expect(markup).toContain('aria-label="View mode"');
     expect(markup).toContain(
@@ -128,9 +128,7 @@ describe('WorkspaceHeader', () => {
       'class="kui-select__custom-selected"><span class="kui-select__custom-selected-content"><svg data-lucide="arrow-down-wide-narrow"',
     );
     expect(markup).not.toContain('<input type="checkbox"');
-    expect(markup).toMatch(
-      /class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-sizing="grow")(?=[^>]*data-expanded="true")/,
-    );
+    expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="true")/);
     expect(markup).toContain('data-collapsible="true" data-expanded="true"');
     expect(markup).not.toContain('workspace-header__search-tokens');
     expect(markup).toContain('aria-label="Search syntax help"');
@@ -176,19 +174,17 @@ describe('WorkspaceHeader', () => {
     // No wrapper element: the search field sizes itself inside whichever Toolbar zone holds it (HS2-EZ1N7Z).
     expect(headerCss).not.toContain('workspace-header__actions');
     expect(headerCss).not.toContain('.kui-toolbar-control-group');
-    // The header chooses the search field's `layout="grow"` policy; the sizing lives in
-    // TicketSearchField's own stylesheet, never this one (HS2-8FS5BJ).
+    // The header uses Kerf's inline search sizing without restyling its group (HS2-NZK4KA).
     expect(headerCss).not.toContain('ticket-search-field');
-    expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-sizing="grow"/);
+    expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-content="search"/);
     // Token colors and the helper popovers belong to TicketSearchField, not the header (HS2-N5G6JS).
     expect(headerCss).not.toContain('.kui-token-search {');
     expect(headerCss).not.toContain('search-suggestions');
     expect(headerCss).not.toContain('search-help');
     expect(headerCss).not.toContain('.workspace-header__overflow-group {');
-    // While its search is open the overflow menu yields too, through Kerf's group visibility; no
-    // sibling combinator reads the field (HS2-DAMHD1).
+    // More stays beside expanded search and retains the Up Next action (HS2-NZK4KA).
     expect(String(WorkspaceControls({ mode: 'list', searchOpen: true }))).toMatch(
-      /class="kui-toolbar-control-group workspace-header__overflow-group"[^>]*data-visibility="yield-to-expanded-sibling"/,
+      /class="kui-toolbar-control-group workspace-header__overflow-group"[^>]*data-show-below="1024px"/,
     );
     // The header module owns the Empty Trash text action that the page header places (HS2-T35VN7).
     const emptyTrash = String(EmptyTrashAction());
@@ -285,9 +281,7 @@ describe('WorkspaceHeader', () => {
         searchHelpOpen: true,
       }),
     );
-    expect(markup).toMatch(
-      /class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-sizing="grow")(?=[^>]*data-expanded="false")/,
-    );
+    expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="false")/);
     expect(markup).toContain('data-component="token-search-field" data-token-search-id="workspace-search"');
     expect(markup).toContain('data-collapsible="true" data-expanded="false"');
     expect(markup).toContain(
@@ -452,23 +446,17 @@ describe('WorkspaceHeader', () => {
     expect(railMarkup).not.toContain('workspace-header__overflow-group');
     expect(railMarkup).not.toContain('data-hide-below');
     expect(markup).not.toContain('--rail');
-    // The rail sizes its search as its own row (Kerf `sizing="fill"`, `placement="end"`); the header grows
-    // its search on the header's row (HS2-DAMHD1).
+    // The rail fills its own row; the header keeps Kerf's shrinkable inline search (HS2-NZK4KA).
     expect(railMarkup).toMatch(
       /class="kui-toolbar-control-group ticket-search-field"[^>]*data-sizing="fill"[^>]*data-placement="end"/,
     );
-    expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-sizing="grow"/);
+    expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-content="search"/);
     // The rail's view switcher fills its own row through Kerf's `sizing="fill"`.
     expect(railMarkup).toMatch(/view-mode-switcher view-mode-switcher--rail"[^>]*data-sizing="fill"/);
     // Transition matrix for the yield state: closed -> open -> closed again, toolbar and rail. The
     // header's groups always opt into Kerf's yield, which acts only while a sibling is expanded, so
     // the search's own expanded state is the single source of truth.
-    const groups = [
-      'view-mode-switcher',
-      'workspace-header__sort-group',
-      'workspace-header__utility-group',
-      'workspace-header__overflow-group',
-    ];
+    const groups = ['view-mode-switcher', 'workspace-header__sort-group', 'workspace-header__utility-group'];
     const yieldsIn = (html: string, group: string) =>
       new RegExp(`class="kui-toolbar-control-group ${group}"[^>]*data-visibility="yield-to-expanded-sibling"`).test(
         html,
@@ -479,12 +467,10 @@ describe('WorkspaceHeader', () => {
       expect(yieldsIn(closedMarkup, group)).toBe(true);
       expect(yieldsIn(openMarkup, group)).toBe(true);
     }
-    expect(closedMarkup).toMatch(
-      /class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-sizing="grow")(?=[^>]*data-expanded="false")/,
-    );
-    expect(openMarkup).toMatch(
-      /class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-sizing="grow")(?=[^>]*data-expanded="true")/,
-    );
+    expect(yieldsIn(closedMarkup, 'workspace-header__overflow-group')).toBe(false);
+    expect(yieldsIn(openMarkup, 'workspace-header__overflow-group')).toBe(false);
+    expect(closedMarkup).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="false")/);
+    expect(openMarkup).toMatch(/class="kui-toolbar-control-group ticket-search-field"(?=[^>]*data-expanded="true")/);
     expect(String(WorkspaceControls({ mode: 'list', searchOpen: false }))).toBe(closedMarkup);
     // The rail never yields; it wraps its groups onto rows instead (HS2-K9KWJJ).
     const railOpen = String(WorkspaceControls({ mode: 'list', presentation: 'rail', searchOpen: true }));
@@ -498,7 +484,6 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('--yield');
     expect(headerCss).not.toContain('view-mode-switcher--rail');
     expect(headerCss).not.toContain('ticket-search-field');
-    expect(headerCss).not.toContain(':has(');
     expect(headerCss).not.toContain('.workspace-header__identity {');
   });
 });

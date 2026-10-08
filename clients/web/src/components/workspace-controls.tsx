@@ -39,6 +39,7 @@ export type WorkspaceControlsPresentation = 'toolbar' | 'rail';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
 export type WorkspaceSortDirection = 'ascending' | 'descending';
 export type WorkspaceUpNextState = 'none' | 'mixed' | 'all';
+export const WORKSPACE_SEARCH_INLINE_BREAKPOINT = 1024;
 
 export function workspaceUpNextState(values: readonly boolean[]): WorkspaceUpNextState {
   return values.some(Boolean) ? (values.every(Boolean) ? 'all' : 'mixed') : 'none';
@@ -105,15 +106,17 @@ export function WorkspaceIdentity({
   projectName,
   id,
   headingLevel,
+  searchOpen = false,
 }: {
   projectName: string;
   id?: string;
   headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
+  searchOpen?: boolean;
 }) {
   return (
     <ToolbarText
       className="workspace-header__identity"
-      hideBelow={px(224)}
+      hideBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 224)}
       text={projectName}
       id={id}
       size="large"
@@ -315,7 +318,7 @@ function WorkspaceOverflowControls({
       icon={<LucideIcon icon={MoreHorizontal} name="ellipsis" />}
       caret={false}
       placement="bottom-end"
-      rootAttributes={{ 'data-workspace-overflow': 'true' }}
+      rootAttributes={{ 'data-workspace-overflow': 'true', 'data-token-search-keep-open': 'true' }}
       items={[
         {
           label: 'Toggle Up Next',
@@ -378,14 +381,13 @@ function WorkspaceOverflowControls({
     />
   );
   return (
-    // The open search takes the compact row the menu would otherwise appear in (HS2-DAMHD1).
+    // Keep the narrow toolbar's actions reachable while search is expanded (HS2-NZK4KA).
     <ToolbarControlGroup
       className="workspace-header__overflow-group"
       single
       appearance="borderless"
       nestedDropdown
-      visibility="yield-to-expanded-sibling"
-      showBelow={px(480)}
+      showBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 480)}
     >
       {menu}
     </ToolbarControlGroup>
@@ -482,10 +484,36 @@ export function WorkspaceControls({
         </button>
       </>
     );
-  // On a compact header toolbar the open search takes the whole row: the header's other trailing
-  // groups opt into Kerf's `visibility="yield-to-expanded-sibling"` and return when it closes
-  // (HS2-0SARDD, HS2-DAMHD1). The rail never yields; it wraps its groups onto rows instead, and its
-  // view switcher fills its own row (`sizing="fill"`).
+  // The compact toolbar gives search and More one app-owned flex slot; the other groups yield
+  // below the width needed to show them together. The rail keeps its own wrapped rows.
+  const searchField = (
+    <TicketSearchField
+      id="workspace-search"
+      label="Search tickets"
+      model={searchModel}
+      disabled={projectActionsDisabled}
+      autofocus
+      collapsible
+      expanded={searchOpen}
+      helpOpen={searchHelpOpen}
+      layout={rail ? 'row' : 'inline'}
+    />
+  );
+  const overflowControls = (
+    <WorkspaceOverflowControls
+      mode={mode}
+      projectActionsDisabled={projectActionsDisabled}
+      ticketActionsDisabled={ticketActionsDisabled}
+      searchOpen={searchOpen}
+      sort={sort}
+      sortDirection={sortDirection}
+      visibleSortOptions={visibleSortOptions}
+      notificationCount={notificationCount}
+      selectedTicketsUpNext={selectedTicketsUpNext}
+      selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
+      presentation={presentation}
+    />
+  );
   return (
     <>
       {rail ? (
@@ -497,7 +525,7 @@ export function WorkspaceControls({
           className="view-mode-switcher"
           shape="pill"
           visibility="yield-to-expanded-sibling"
-          hideBelow={px(176)}
+          hideBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 176)}
         >
           {viewSwitcher}
         </ToolbarControlGroup>
@@ -517,7 +545,7 @@ export function WorkspaceControls({
           shape="pill"
           focusRing="outline"
           visibility="yield-to-expanded-sibling"
-          hideBelow={px(416)}
+          hideBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 416)}
         >
           {sortSelect}
         </ToolbarControlGroup>
@@ -538,35 +566,19 @@ export function WorkspaceControls({
           selectedChrome="outline"
           selectedTone="pop"
           visibility="yield-to-expanded-sibling"
-          hideBelow={px(480)}
+          hideBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 480)}
         >
           {utilityButtons}
         </ToolbarControlGroup>
       )}
-      <TicketSearchField
-        id="workspace-search"
-        label="Search tickets"
-        model={searchModel}
-        disabled={projectActionsDisabled}
-        autofocus
-        collapsible
-        expanded={searchOpen}
-        helpOpen={searchHelpOpen}
-        layout={rail ? 'row' : 'grow'}
-      />
-      <WorkspaceOverflowControls
-        mode={mode}
-        projectActionsDisabled={projectActionsDisabled}
-        ticketActionsDisabled={ticketActionsDisabled}
-        searchOpen={searchOpen}
-        sort={sort}
-        sortDirection={sortDirection}
-        visibleSortOptions={visibleSortOptions}
-        notificationCount={notificationCount}
-        selectedTicketsUpNext={selectedTicketsUpNext}
-        selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}
-        presentation={presentation}
-      />
+      {rail ? (
+        searchField
+      ) : (
+        <div class="workspace-header__search-actions" data-search-open={String(searchOpen)}>
+          {searchField}
+          {overflowControls}
+        </div>
+      )}
     </>
   );
 }
