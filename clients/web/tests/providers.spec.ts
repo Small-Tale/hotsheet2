@@ -9762,11 +9762,10 @@ test('contains and centers inspector tabs while showing labels only when they fi
       for (const gutter of geometry.gutter) expect(gutter).toBeCloseTo(8, 1);
       expect(geometry.padding).toBe('0px');
       expect(geometry.overflow).toBeLessThanOrEqual(1);
-      expect(
-        await tabs
-          .locator('[data-inspector-tab][data-selected="true"]')
-          .evaluate((tab) => getComputedStyle(tab).borderRadius),
-      ).toBe(geometry.trackRadius);
+      const selectedRadius = await tabs
+        .locator('[data-inspector-tab][data-selected="true"]')
+        .evaluate((tab) => Number.parseFloat(getComputedStyle(tab).borderRadius));
+      expect(selectedRadius).toBeCloseTo(Number.parseFloat(geometry.trackRadius) - 2, 1);
       const widths = geometry.tabBoxes.map((tab) => tab.width);
       expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1);
       for (const tab of geometry.tabBoxes) {

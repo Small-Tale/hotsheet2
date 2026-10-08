@@ -188,26 +188,29 @@ test('preserves a selected catalog component through a real reload (HS2-9TZ9AF)'
   await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
 });
 
-test('keeps the beta.82 catalog filter visible, searchable, and focused after clearing (HS2-458BS5)', async ({
-  page,
-}) => {
+test('keeps the catalog filter and placeholder across rerenders (HS2-458BS5, HS2-WATFM5)', async ({ page }) => {
   await page.goto('/ux-demo?dev-review=false');
   const sidebar = page.locator('[data-catalog-sidebar]');
   const filter = page.locator('[data-catalog-filter]');
+  const filterField = filter.locator('xpath=..');
   await expect(sidebar).toBeVisible();
   await expect(filter).toBeVisible();
+  await expect(filterField).toHaveAttribute('data-placeholder-visible', 'true');
   await sidebar.locator('[data-item-id="value-table"]').scrollIntoViewIfNeeded();
   await expect(filter).toBeInViewport();
 
   await filter.fill('TiCkEtRoW');
+  await expect(filterField).toHaveAttribute('data-placeholder-visible', 'false');
   await expect(sidebar.locator('[data-item-id="ticket-row"]')).toBeVisible();
   await expect(sidebar.locator('[data-item-id="app-shell"]')).toBeHidden();
   await sidebar.locator('[data-item-id="ticket-row"]').click();
   await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
   await expect(filter).toHaveText('TiCkEtRoW');
+  await expect(filterField).toHaveAttribute('data-placeholder-visible', 'false');
 
   await page.getByRole('button', { name: 'Clear filter' }).click();
   await expect(filter).toHaveText('');
+  await expect(filterField).toHaveAttribute('data-placeholder-visible', 'true');
   await expect(filter).toBeFocused();
   await expect(sidebar.locator('[data-item-id="app-shell"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Clear filter' })).toHaveCount(0);

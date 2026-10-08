@@ -200,8 +200,11 @@
   padding: 0 var(--kui-space-xs) var(--kui-space-xs);
 }
 .ticket-inspector__tabs {
-  /* Kerf's icon-only tabs otherwise keep their pill shape inside the rectangular inspector track. */
-  --kui-layout-pill-radius: var(--kui-radius-s);
+  /* Match icon-only tab corners to beta.87's rounded inspector track, inset by its border and padding. */
+  --kui-layout-pill-radius: calc(
+    var(--kui-tab-bar-strip-radius, var(--kui-layout-rounded-radius)) - var(--kui-tab-bar-strip-padding, 1px) -
+      var(--kui-tab-bar-strip-border-width, 1px)
+  );
 }
 .ticket-inspector__tab-count {
   display: inline-grid;

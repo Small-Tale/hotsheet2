@@ -2429,6 +2429,11 @@ documented Pane `--kui-pane-scrollbar-gutter` token in Kerf's public component c
 generated guidance, and composition metadata, so doctor and ESLint accept it. Hot Sheet
 does not currently set this token; its existing Pane, toolbar, and Catalog flows remain
 covered by the upgrade gates.
+HS2-WATFM5 advances the web client and compatibility spike to 5.0.0-beta.87. This release
+rounds inspector TabBar strips and tabs, fixes the Catalog filter placeholder after
+rerenders, and clarifies translucent sunken theme guidance. Hot Sheet matches its
+icon-only inspector tabs to the inset rounded track and verifies inspector tabs and
+Catalog filtering against the updated packages.
 
 Beta.80's component-style doctor checks recognize explicit classes matching five application
 component roots: AppLoadingIndicator, SettingsWorkspace, TicketRowContextMenu,
