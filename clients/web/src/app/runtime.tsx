@@ -4549,21 +4549,30 @@ export async function startHotSheetWebClient() {
       collectionLoading = emptyState?.kind === 'view-loading',
       hasMore = Boolean(ticketNextCursor.value) && !collectionLoading,
       more = hasMore ? <TicketPageMore loading={ticketPageLoading.value} /> : undefined;
-    if (viewMode.value === 'notifications') {
-      const history = projectPermissionHistory(),
-        cutoff = Date.now() - 24 * 60 * 60 * 1000,
-        view = notificationView.value;
-      return {
-        kind: 'notifications',
-        notifications: {
-          title: notificationViewTitle(view),
-          pending: view === 'pending' ? projectPendingPermissions() : [],
-          history:
-            view === 'day' ? history.filter((item) => item.resolvedAt >= cutoff) : view === 'week' ? history : [],
-        },
-      };
+    switch (viewMode.value) {
+      case 'notifications': {
+        const history = projectPermissionHistory(),
+          cutoff = Date.now() - 24 * 60 * 60 * 1000,
+          view = notificationView.value;
+        return {
+          kind: 'notifications',
+          notifications: {
+            title: notificationViewTitle(view),
+            pending: view === 'pending' ? projectPendingPermissions() : [],
+            history:
+              view === 'day' ? history.filter((item) => item.resolvedAt >= cutoff) : view === 'week' ? history : [],
+          },
+        };
+      }
+      case 'settings':
+        if (current) return { kind: 'settings', content: settingsWorkspace(current) };
+        break;
+      case 'board':
+      case 'list':
+        break;
+      default:
+        return viewMode.value satisfies never;
     }
-    if (viewMode.value === 'settings' && current) return { kind: 'settings', content: settingsWorkspace(current) };
     if (selectedView.value === 'errors')
       return {
         kind: 'errors',
@@ -4635,7 +4644,19 @@ export async function startHotSheetWebClient() {
   }
   function terminalRailSurfaceProps(): TerminalRailSurfaceProps {
     const current = project(),
-      mode = viewMode.value === 'notifications' ? 'notifications' : viewMode.value === 'board' ? 'board' : 'list',
+      mode = (() => {
+        switch (viewMode.value) {
+          case 'notifications':
+            return 'notifications';
+          case 'board':
+            return 'board';
+          case 'settings':
+          case 'list':
+            return 'list';
+          default:
+            return viewMode.value satisfies never;
+        }
+      })(),
       railView = selectedView.value === 'errors' ? 'all' : selectedView.value,
       selection = selectedRows(),
       canCreate = canCreateTicketInView(railView),
@@ -4650,22 +4671,28 @@ export async function startHotSheetWebClient() {
       history = current ? permissionHistory().filter((item) => item.projectId === current.id) : [];
     // The rail's columns view pages one snapped column at a time, like the phone board (HS2-656Q43);
     // it shows every filtered ticket, so columns carry no continuation.
-    const content =
-      mode === 'notifications' ? (
-        <NotificationCenter title="Notifications" pending={pending} history={history} inset="flush" />
-      ) : mode === 'board' ? (
-        <TicketBoard
-          columns={ticketBoardGroups(shown, railView, hideVerifiedColumn()).map((group) => ({
-            ...group,
-            totalCount: group.tickets.length,
-            tickets: group.tickets.map(row),
-          }))}
-          label="Project board"
-          layout="paged"
-        />
-      ) : (
-        <TicketList tickets={shown.map(row)} label="Project tickets" />
-      );
+    const content = (() => {
+      switch (mode) {
+        case 'notifications':
+          return <NotificationCenter title="Notifications" pending={pending} history={history} inset="flush" />;
+        case 'board':
+          return (
+            <TicketBoard
+              columns={ticketBoardGroups(shown, railView, hideVerifiedColumn()).map((group) => ({
+                ...group,
+                totalCount: group.tickets.length,
+                tickets: group.tickets.map(row),
+              }))}
+              label="Project board"
+              layout="paged"
+            />
+          );
+        case 'list':
+          return <TicketList tickets={shown.map(row)} label="Project tickets" />;
+        default:
+          return mode satisfies never;
+      }
+    })();
     // The pushed ticket detail is the rail NavStack's second view once its ticket is loaded
     // (HS2-FY06N4); its key follows the ticket so a different ticket is a new push.
     const ready =
@@ -4980,16 +5007,22 @@ export async function startHotSheetWebClient() {
           label: view.name,
         })),
       });
-    const workspaceTitle =
-      viewMode.value === 'notifications'
-        ? notificationViewTitle(notificationView.value)
-        : viewMode.value === 'settings'
-          ? settingsCategoryTitle(settingsCategory())
-          : customTicketViewKey(selectedView.value)
-            ? ticketViewTitle(selectedView.value)
-            : searchQuery.value.trim() || searchTokens.value.length
-              ? 'Search results'
-              : ticketViewTitle(selectedView.value);
+    const workspaceTitle = (() => {
+      switch (viewMode.value) {
+        case 'notifications':
+          return notificationViewTitle(notificationView.value);
+        case 'settings':
+          return settingsCategoryTitle(settingsCategory());
+        case 'board':
+        case 'list':
+          if (customTicketViewKey(selectedView.value)) return ticketViewTitle(selectedView.value);
+          return searchQuery.value.trim() || searchTokens.value.length
+            ? 'Search results'
+            : ticketViewTitle(selectedView.value);
+        default:
+          return viewMode.value satisfies never;
+      }
+    })();
     const headingAction = !['settings', 'notifications'].includes(viewMode.value)
       ? ticketViewActionSpec(selectedView.value, canCreate)
       : undefined;
@@ -5014,6 +5047,27 @@ export async function startHotSheetWebClient() {
           : undefined,
       pageHeader = viewportMobile.value && !mobileView ? secondaryPageHeader : undefined;
     const drawerViewAllowed = !['settings', 'notifications'].includes(viewMode.value);
+    const inspectorContent = (() => {
+      switch (viewMode.value) {
+        case 'notifications':
+          return notificationInspectorSurfacePanel();
+        case 'settings':
+          return inspectorPlaceholderPanel({ selectionCount: 0 });
+        case 'board':
+        case 'list':
+          if (corruptKey)
+            return corruptInspectorPanel({
+              ticket: corruptTicket,
+              recovery: corruptRecovery.value[corruptKey],
+              selectionCount: selectedTicketSlugs.value.length,
+            });
+          if (inspectorProps) return inspectorPanel(inspectorProps);
+          if (selectedTransitioning) return inspectorSkeletonPanel({ slug: selectedSlug });
+          return inspectorPlaceholderPanel({ selectionCount: selectedTicketSlugs.value.length });
+        default:
+          return viewMode.value satisfies never;
+      }
+    })();
     return (
       <MainShell
         tabs={tabs}
@@ -5115,23 +5169,7 @@ export async function startHotSheetWebClient() {
         }
         sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
         workAreaFocusRing={!magnifiedTerminalKey.value}
-        inspector={
-          viewMode.value === 'notifications'
-            ? notificationInspectorSurfacePanel()
-            : viewMode.value === 'settings'
-              ? inspectorPlaceholderPanel({ selectionCount: 0 })
-              : corruptKey
-                ? corruptInspectorPanel({
-                    ticket: corruptTicket,
-                    recovery: corruptRecovery.value[corruptKey],
-                    selectionCount: selectedTicketSlugs.value.length,
-                  })
-                : inspectorProps
-                  ? inspectorPanel(inspectorProps)
-                  : selectedTransitioning
-                    ? inspectorSkeletonPanel({ slug: selectedSlug })
-                    : inspectorPlaceholderPanel({ selectionCount: selectedTicketSlugs.value.length })
-        }
+        inspector={inspectorContent}
         inspectorVisible={!inspectorCollapsed.value}
         inspectorSize={inspectorSize.value}
         overlay={
