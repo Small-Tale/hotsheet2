@@ -74,6 +74,11 @@ HS2-SVKB1V covers note mutation serialization in `crates/hotsheet-ticketing/src/
 and `ops.rs`: a child process waits behind a held read–revise–write lock, then a
 different rater's feedback survives; concurrent same-rater writes keep one source
 note. Existing note CRUD and AI feedback tests exercise the serialized operations.
+HS2-RN7WS6 adds a second cross-process interleaving: an exact claim waits while a
+note transaction commits, then preserves both the claim and independent note. The
+claim, lease, close, assignment, attachment, and cross-store suites exercise the
+shared transaction boundary; CLI import tests check timestamp-preserving attachment
+repair without a second stale ticket write.
 
 HS2-TPF3EB moves non-atomic provider update progress from toasts to the app-level loading
 indicator. `clients/web/src/bulk-update-progress.test.ts` covers start, advance, repeat,

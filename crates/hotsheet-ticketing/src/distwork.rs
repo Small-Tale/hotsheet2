@@ -134,23 +134,27 @@ fn record_local_claim(
     expires: &Timestamp,
     now: &Timestamp,
 ) -> Result<(), DistError> {
-    let mut t = store.read_ticket(id).map_err(store_err)?;
-    t.claimed_by = Some(worker.to_string());
-    t.claim_lease_expires_at = Some(expires.clone());
-    t.claim_eta_at = None;
-    t.claim_count += 1;
-    ops::append_claim_event(
-        &mut t,
-        hotsheet_model::ClaimEventKind::Claim,
-        worker,
-        now,
-        Some(expires.clone()),
-        None,
-    );
-    t.updated_at = now.clone();
-    ops::start_claimed_ticket(&mut t, now);
-    store.write_ticket_committing(&t).map_err(store_err)?;
-    Ok(())
+    store
+        .with_ticket_transaction(|| {
+            let mut t = store.read_ticket(id)?;
+            t.claimed_by = Some(worker.to_string());
+            t.claim_lease_expires_at = Some(expires.clone());
+            t.claim_eta_at = None;
+            t.claim_count += 1;
+            ops::append_claim_event(
+                &mut t,
+                hotsheet_model::ClaimEventKind::Claim,
+                worker,
+                now,
+                Some(expires.clone()),
+                None,
+            );
+            t.updated_at = now.clone();
+            ops::start_claimed_ticket(&mut t, now);
+            store.write_ticket_committing(&t)?;
+            Ok(())
+        })
+        .map_err(store_err)
 }
 
 #[cfg(test)]

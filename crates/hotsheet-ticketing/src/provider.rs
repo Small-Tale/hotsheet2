@@ -1311,7 +1311,7 @@ impl TicketProvider for GitProvider {
                 message: "transfer operation id is already associated with another source".into(),
             });
         }
-        let mut ticket = ops::create(
+        let ticket = ops::create(
             &self.store,
             ctx.generated_id,
             &prefix,
@@ -1328,11 +1328,20 @@ impl TicketProvider for GitProvider {
             },
         )?;
         if let Some(transfer) = draft.transfer {
-            ticket.transfer_operation_id = Some(transfer.operation_id);
-            ticket.transferred_from = Some(transfer.source.qualified());
-            self.store.write_ticket_committing(&ticket)?;
+            self.store.with_ticket_transaction(|| {
+                let mut current = self.store.read_ticket(&ticket.id)?;
+                current.transfer_operation_id = Some(transfer.operation_id);
+                current.transferred_from = Some(transfer.source.qualified());
+                self.store.write_ticket_committing(&current)?;
+                Ok::<_, ProviderError>(ApiTicket::from_provider(
+                    &current,
+                    &self.connection_id,
+                    None,
+                ))
+            })
+        } else {
+            Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None))
         }
-        Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None))
     }
 
     fn update(
@@ -1477,80 +1486,82 @@ impl TicketProvider for GitProvider {
         now: Timestamp,
         report: NotWorkingReport,
     ) -> Result<ApiTicket, ProviderError> {
-        if !self.capabilities().not_working_report {
-            return Err(ProviderError::Unsupported {
-                connection_id: self.connection_id.clone(),
-                capability: "not_working_report",
+        self.store.with_ticket_transaction(|| {
+            if !self.capabilities().not_working_report {
+                return Err(ProviderError::Unsupported {
+                    connection_id: self.connection_id.clone(),
+                    capability: "not_working_report",
+                });
+            }
+            let mut ticket = self.ticket(native_id)?;
+            if report
+                .expected_token
+                .as_deref()
+                .is_some_and(|token| token != ticket.updated_at.as_str())
+            {
+                return Err(ProviderError::Conflict {
+                    ticket: native_id.into(),
+                    message: "ticket changed since it was read".into(),
+                });
+            }
+            if report.evidence.iter().any(|item| {
+                ticket
+                    .attachments
+                    .iter()
+                    .any(|current| current.id == item.id)
+            }) {
+                return Err(ProviderError::Conflict {
+                    ticket: native_id.into(),
+                    message: "evidence attachment id already exists".into(),
+                });
+            }
+            let reporter = crate::current_user_name(self.store.root());
+            let evidence_batch = format!("batch-{}", hotsheet_model::Ulid::new());
+            ops::prepare_not_working(
+                &mut ticket,
+                now,
+                report.note,
+                !report.evidence.is_empty(),
+                reporter.as_deref(),
+            )?;
+            let evidence = report
+                .evidence
+                .into_iter()
+                .map(|item| crate::store::AtomicAttachment {
+                    id: item.id,
+                    filename: item.filename,
+                    created_at: item.created_at,
+                    bytes: item.bytes,
+                })
+                .collect::<Vec<_>>();
+            for item in &evidence {
+                ticket.attachments.push(hotsheet_model::Attachment {
+                    id: item.id,
+                    filename: item.sanitized_filename(),
+                    created_at: item.created_at.clone(),
+                    batch_id: Some(evidence_batch.clone()),
+                    batch_label: None,
+                    actor: Some(hotsheet_model::AttachmentActor {
+                        identity: None,
+                        display_name: reporter.clone(),
+                        role: hotsheet_model::AttachmentActorRole::Human,
+                    }),
+                    purpose: Some(hotsheet_model::AttachmentPurpose::ProblemEvidence),
+                    annotations: Vec::new(),
+                    crop: None,
+                });
+            }
+            ticket.attachments.sort_by(|a, b| {
+                a.created_at
+                    .chronological_cmp(&b.created_at)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then(a.id.cmp(&b.id))
             });
-        }
-        let mut ticket = self.ticket(native_id)?;
-        if report
-            .expected_token
-            .as_deref()
-            .is_some_and(|token| token != ticket.updated_at.as_str())
-        {
-            return Err(ProviderError::Conflict {
-                ticket: native_id.into(),
-                message: "ticket changed since it was read".into(),
-            });
-        }
-        if report.evidence.iter().any(|item| {
-            ticket
-                .attachments
-                .iter()
-                .any(|current| current.id == item.id)
-        }) {
-            return Err(ProviderError::Conflict {
-                ticket: native_id.into(),
-                message: "evidence attachment id already exists".into(),
-            });
-        }
-        let reporter = crate::current_user_name(self.store.root());
-        let evidence_batch = format!("batch-{}", hotsheet_model::Ulid::new());
-        ops::prepare_not_working(
-            &mut ticket,
-            now,
-            report.note,
-            !report.evidence.is_empty(),
-            reporter.as_deref(),
-        )?;
-        let evidence = report
-            .evidence
-            .into_iter()
-            .map(|item| crate::store::AtomicAttachment {
-                id: item.id,
-                filename: item.filename,
-                created_at: item.created_at,
-                bytes: item.bytes,
-            })
-            .collect::<Vec<_>>();
-        for item in &evidence {
-            ticket.attachments.push(hotsheet_model::Attachment {
-                id: item.id,
-                filename: item.sanitized_filename(),
-                created_at: item.created_at.clone(),
-                batch_id: Some(evidence_batch.clone()),
-                batch_label: None,
-                actor: Some(hotsheet_model::AttachmentActor {
-                    identity: None,
-                    display_name: reporter.clone(),
-                    role: hotsheet_model::AttachmentActorRole::Human,
-                }),
-                purpose: Some(hotsheet_model::AttachmentPurpose::ProblemEvidence),
-                annotations: Vec::new(),
-                crop: None,
-            });
-        }
-        ticket.attachments.sort_by(|a, b| {
-            a.created_at
-                .chronological_cmp(&b.created_at)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then(a.id.cmp(&b.id))
-        });
-        ticket = self
-            .store
-            .write_ticket_with_attachments_atomic(&ticket, &evidence)?;
-        Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None))
+            ticket = self
+                .store
+                .write_ticket_with_attachments_atomic(&ticket, &evidence)?;
+            Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None))
+        })
     }
 
     fn edit_note(

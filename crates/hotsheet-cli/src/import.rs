@@ -790,7 +790,7 @@ pub(crate) fn restore_missing_attachment(
             AttachmentMetadata::default(),
         )
     };
-    let (mut updated, _) = store.write_attachment_with_metadata(
+    store.write_import_attachment_with_metadata(
         id,
         attachment_id,
         created_at,
@@ -798,8 +798,6 @@ pub(crate) fn restore_missing_attachment(
         &bytes,
         metadata,
     )?;
-    updated.updated_at = ticket.updated_at;
-    store.write_ticket(&updated)?;
     store
         .read_attachment(id, &attachment_id)
         .with_context(|| format!("verifying imported attachment {attachment_id} for {id}"))?;

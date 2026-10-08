@@ -650,7 +650,7 @@ pub fn update(
     now: Timestamp,
     patch: TicketPatch,
 ) -> Result<Ticket, StoreError> {
-    store.with_note_transaction(|| {
+    store.with_ticket_transaction(|| {
         let mut t = store.read_ticket(id)?;
         let before = t.clone();
         let previous_status = t.status;
@@ -1168,7 +1168,7 @@ pub fn add_note_with_metadata(
     metadata: NoteMetadataInput,
     text: String,
 ) -> Result<Ticket, StoreError> {
-    store.with_note_transaction(|| {
+    store.with_ticket_transaction(|| {
         let mut t = store.read_ticket(id)?;
         let text = canonicalize_attachment_id_references(store, &t, &text);
         let kind = if kind == NoteKind::Regular
@@ -1241,7 +1241,7 @@ pub fn rate_ai_content(
             "AI feedback target must be a non-empty note, activity, or conversation id",
         )));
     }
-    store.with_note_transaction(|| {
+    store.with_ticket_transaction(|| {
         let mut ticket = store.read_ticket(ticket_id)?;
         let previous = ticket.notes.iter_mut().rev().find(|note| {
             note.ai_feedback_value()
@@ -1430,7 +1430,7 @@ pub fn edit_note_with_metadata(
     now: Timestamp,
     edit: NoteEditInput,
 ) -> Result<Ticket, StoreError> {
-    store.with_note_transaction(|| {
+    store.with_ticket_transaction(|| {
         let mut ticket = store.read_ticket(ticket_id)?;
         let text = edit
             .text
@@ -1750,7 +1750,7 @@ pub fn delete_note(
     note_id: &Ulid,
     now: Timestamp,
 ) -> Result<Ticket, StoreError> {
-    store.with_note_transaction(|| {
+    store.with_ticket_transaction(|| {
         let mut ticket = store.read_ticket(ticket_id)?;
         if !ticket.notes.iter().any(|note| &note.id == note_id) {
             return Err(StoreError::Io(std::io::Error::new(
@@ -1793,32 +1793,34 @@ pub fn close_as(
     duplicate_of: Option<String>,
     actor: Option<&hotsheet_model::NoteActor>,
 ) -> Result<Ticket, OpError> {
-    if reason == CloseReason::Duplicate && duplicate_of.is_none() {
-        return Err(OpError::DuplicateNeedsTarget);
-    }
-    let mut t = store.read_ticket(id)?;
-    t.close_reason = Some(reason);
-    t.closed_at = Some(now.clone());
-    t.duplicate_of = duplicate_of;
-    // A close_reason can't sit on an active status — settle it to `completed` (a ticket
-    // already in another terminal status keeps it). This is the write-side half of the
-    // invariant `update` enforces from the other direction (HS2-3XHT9P).
-    if t.status.is_active() {
-        let previous_status = t.status;
-        t.status = Status::Completed;
-        t.started_phase = None;
-        if t.completed_at.is_none() {
-            t.completed_at = Some(now.clone());
+    store.with_ticket_transaction(|| {
+        if reason == CloseReason::Duplicate && duplicate_of.is_none() {
+            return Err(OpError::DuplicateNeedsTarget);
         }
-        append_status_transition(&mut t, previous_status, Status::Completed, &now);
-        stamp_last_note_actor(&mut t, actor);
-    }
-    // A closed ticket is no longer Up Next, whatever its status field (HS2-55610S).
-    t.up_next = false;
-    end_claim(&mut t, &now);
-    t.updated_at = now;
-    store.write_ticket_committing(&t)?;
-    Ok(t)
+        let mut t = store.read_ticket(id)?;
+        t.close_reason = Some(reason);
+        t.closed_at = Some(now.clone());
+        t.duplicate_of = duplicate_of;
+        // A close_reason can't sit on an active status — settle it to `completed` (a ticket
+        // already in another terminal status keeps it). This is the write-side half of the
+        // invariant `update` enforces from the other direction (HS2-3XHT9P).
+        if t.status.is_active() {
+            let previous_status = t.status;
+            t.status = Status::Completed;
+            t.started_phase = None;
+            if t.completed_at.is_none() {
+                t.completed_at = Some(now.clone());
+            }
+            append_status_transition(&mut t, previous_status, Status::Completed, &now);
+            stamp_last_note_actor(&mut t, actor);
+        }
+        // A closed ticket is no longer Up Next, whatever its status field (HS2-55610S).
+        t.up_next = false;
+        end_claim(&mut t, &now);
+        t.updated_at = now;
+        store.write_ticket_committing(&t)?;
+        Ok(t)
+    })
 }
 
 // ---- cross-store copy / move (docs/02 §2.13, HS2-60) -----------------------------
@@ -1834,35 +1836,37 @@ pub fn copy_ticket(
     new_id: Ulid,
     now: Timestamp,
 ) -> Result<Ticket, OpError> {
-    let orig = src.read_ticket(id)?;
-    let dest_prefix = dest.metadata()?.ticket_prefix;
+    src.with_store_pair_transaction(dest, || {
+        let orig = src.read_ticket(id)?;
+        let dest_prefix = dest.metadata()?.ticket_prefix;
 
-    let mut t = orig.clone();
-    t.id = new_id;
-    t.slug = derive_slug(&new_id, &dest_prefix);
-    t.copied_from = Some(*id);
-    t.created_at = now.clone();
-    t.updated_at = now;
-    // A fresh copy starts clean: no claim, no close/move annotation, off Up Next.
-    t.status = Status::NotStarted;
-    t.started_phase = None;
-    t.up_next = false;
-    t.claimed_by = None;
-    t.claim_lease_expires_at = None;
-    t.worker_label = None;
-    t.claim_count = 0;
-    t.claim_history.clear();
-    t.completed_at = None;
-    t.verified_at = None;
-    t.closed_at = None;
-    t.close_reason = None;
-    t.duplicate_of = None;
-    t.moved_to_store = None;
-    t.moved_at = None;
+        let mut t = orig.clone();
+        t.id = new_id;
+        t.slug = derive_slug(&new_id, &dest_prefix);
+        t.copied_from = Some(*id);
+        t.created_at = now.clone();
+        t.updated_at = now;
+        // A fresh copy starts clean: no claim, no close/move annotation, off Up Next.
+        t.status = Status::NotStarted;
+        t.started_phase = None;
+        t.up_next = false;
+        t.claimed_by = None;
+        t.claim_lease_expires_at = None;
+        t.worker_label = None;
+        t.claim_count = 0;
+        t.claim_history.clear();
+        t.completed_at = None;
+        t.verified_at = None;
+        t.closed_at = None;
+        t.close_reason = None;
+        t.duplicate_of = None;
+        t.moved_to_store = None;
+        t.moved_at = None;
 
-    dest.write_ticket_committing(&t)?;
-    copy_attachments(src, dest, id, &new_id)?;
-    Ok(t)
+        dest.write_ticket_committing(&t)?;
+        copy_attachments(src, dest, id, &new_id)?;
+        Ok(t)
+    })
 }
 
 /// The result of a [`move_ticket`]: the live ticket now in the destination, and the
@@ -1885,38 +1889,40 @@ pub fn move_ticket(
     dest_id: &str,
     now: Timestamp,
 ) -> Result<MoveOutcome, OpError> {
-    let orig = src.read_ticket(id)?;
-    let dest_prefix = dest.metadata()?.ticket_prefix;
+    src.with_store_pair_transaction(dest, || {
+        let orig = src.read_ticket(id)?;
+        let dest_prefix = dest.metadata()?.ticket_prefix;
 
-    // Destination: same ULID, destination slug; it's the live instance.
-    let mut moved = orig.clone();
-    moved.slug = derive_slug(id, &dest_prefix);
-    moved.updated_at = now.clone();
-    moved.moved_to_store = None;
-    moved.moved_at = None;
-    dest.write_ticket_committing(&moved)?;
-    copy_attachments(src, dest, id, id)?;
+        // Destination: same ULID, destination slug; it's the live instance.
+        let mut moved = orig.clone();
+        moved.slug = derive_slug(id, &dest_prefix);
+        moved.updated_at = now.clone();
+        moved.moved_to_store = None;
+        moved.moved_at = None;
+        dest.write_ticket_committing(&moved)?;
+        copy_attachments(src, dest, id, id)?;
 
-    // Source: a tombstone/redirect the UI hides (status = moved).
-    let mut tombstone = orig;
-    let previous_status = tombstone.status;
-    tombstone.status = Status::Moved;
-    tombstone.started_phase = None;
-    if previous_status != Status::Moved {
-        append_status_transition(&mut tombstone, previous_status, Status::Moved, &now);
-    }
-    tombstone.moved_to_store = Some(dest_id.to_string());
-    tombstone.moved_at = Some(now.clone());
-    tombstone.updated_at = now;
-    tombstone.up_next = false;
-    tombstone.claimed_by = None;
-    tombstone.claim_lease_expires_at = None;
-    src.write_ticket_committing(&tombstone)?;
-    // The attachments now live in the destination; drop the source working-tree copy
-    // (git history still retains them — that's the retention caveat).
-    let _ = std::fs::remove_dir_all(src.attachment_dir(id));
+        // Source: a tombstone/redirect the UI hides (status = moved).
+        let mut tombstone = orig;
+        let previous_status = tombstone.status;
+        tombstone.status = Status::Moved;
+        tombstone.started_phase = None;
+        if previous_status != Status::Moved {
+            append_status_transition(&mut tombstone, previous_status, Status::Moved, &now);
+        }
+        tombstone.moved_to_store = Some(dest_id.to_string());
+        tombstone.moved_at = Some(now.clone());
+        tombstone.updated_at = now;
+        tombstone.up_next = false;
+        tombstone.claimed_by = None;
+        tombstone.claim_lease_expires_at = None;
+        src.write_ticket_committing(&tombstone)?;
+        // The attachments now live in the destination; drop the source working-tree copy
+        // (git history still retains them — that's the retention caveat).
+        let _ = std::fs::remove_dir_all(src.attachment_dir(id));
 
-    Ok(MoveOutcome { moved, tombstone })
+        Ok(MoveOutcome { moved, tombstone })
+    })
 }
 
 /// Copy a ticket's attachment files from one store to another (best-effort: no attachments
@@ -1969,28 +1975,30 @@ pub fn assign(
     set_assignees: Option<Vec<String>>,
     mut add_reviews: Vec<ReviewRequest>,
 ) -> Result<Ticket, StoreError> {
-    let mut t = store.read_ticket(id)?;
-    if let Some(assignees) = set_assignees {
-        let mut seen = HashSet::new();
-        t.assignees = assignees
-            .into_iter()
-            .filter(|e| seen.insert(e.clone()))
-            .collect();
-    }
-    let requester = crate::current_user_email(store.root());
-    for r in &mut add_reviews {
-        if r.requested_by.is_none() {
-            r.requested_by.clone_from(&requester);
+    store.with_ticket_transaction(|| {
+        let mut t = store.read_ticket(id)?;
+        if let Some(assignees) = set_assignees {
+            let mut seen = HashSet::new();
+            t.assignees = assignees
+                .into_iter()
+                .filter(|e| seen.insert(e.clone()))
+                .collect();
         }
-    }
-    for r in add_reviews {
-        if !t.review_requests.iter().any(|x| x.by == r.by) {
-            t.review_requests.push(r);
+        let requester = crate::current_user_email(store.root());
+        for r in &mut add_reviews {
+            if r.requested_by.is_none() {
+                r.requested_by.clone_from(&requester);
+            }
         }
-    }
-    t.updated_at = now;
-    store.write_ticket_committing(&t)?;
-    Ok(t)
+        for r in add_reviews {
+            if !t.review_requests.iter().any(|x| x.by == r.by) {
+                t.review_requests.push(r);
+            }
+        }
+        t.updated_at = now;
+        store.write_ticket_committing(&t)?;
+        Ok(t)
+    })
 }
 
 // ---- claim / lease ---------------------------------------------------------------
@@ -2121,51 +2129,53 @@ pub fn claim_next_with_eta(
     label: Option<String>,
     eta: Option<Timestamp>,
 ) -> Result<Option<Ticket>, StoreError> {
-    let tickets = store.list_tickets()?;
-    let done: HashSet<Ulid> = tickets
-        .iter()
-        .filter(|t| is_done(t))
-        .map(|t| t.id)
-        .collect();
+    store.with_ticket_transaction(|| {
+        let tickets = store.list_tickets()?;
+        let done: HashSet<Ulid> = tickets
+            .iter()
+            .filter(|t| is_done(t))
+            .map(|t| t.id)
+            .collect();
 
-    let mut candidates: Vec<Ticket> = tickets
-        .into_iter()
-        .filter(|t| {
-            is_open(t)
-                && !is_blocked(t, &done)
-                && claim_available(t, now)
-                && t.started_phase != Some(StartedPhase::FinalTesting)
-        })
-        .collect();
-    candidates.sort_by(|a, b| {
-        b.up_next
-            .cmp(&a.up_next)
-            .then(priority_rank(a.priority).cmp(&priority_rank(b.priority)))
-            .then(a.id.cmp(&b.id))
-    });
+        let mut candidates: Vec<Ticket> = tickets
+            .into_iter()
+            .filter(|t| {
+                is_open(t)
+                    && !is_blocked(t, &done)
+                    && claim_available(t, now)
+                    && t.started_phase != Some(StartedPhase::FinalTesting)
+            })
+            .collect();
+        candidates.sort_by(|a, b| {
+            b.up_next
+                .cmp(&a.up_next)
+                .then(priority_rank(a.priority).cmp(&priority_rank(b.priority)))
+                .then(a.id.cmp(&b.id))
+        });
 
-    let Some(mut t) = candidates.into_iter().next() else {
-        return Ok(None);
-    };
-    t.claimed_by = Some(worker.to_string());
-    t.claim_lease_expires_at = Some(lease_expires);
-    t.claim_eta_at = eta;
-    t.worker_label = label;
-    t.claim_count += 1;
-    let lease_expires_at = t.claim_lease_expires_at.clone();
-    let worker_label = t.worker_label.clone();
-    append_claim_event(
-        &mut t,
-        ClaimEventKind::Claim,
-        worker,
-        now,
-        lease_expires_at,
-        worker_label,
-    );
-    t.updated_at = now.clone();
-    start_claimed_ticket(&mut t, now);
-    store.write_ticket_committing(&t)?;
-    Ok(Some(t))
+        let Some(mut t) = candidates.into_iter().next() else {
+            return Ok(None);
+        };
+        t.claimed_by = Some(worker.to_string());
+        t.claim_lease_expires_at = Some(lease_expires);
+        t.claim_eta_at = eta;
+        t.worker_label = label;
+        t.claim_count += 1;
+        let lease_expires_at = t.claim_lease_expires_at.clone();
+        let worker_label = t.worker_label.clone();
+        append_claim_event(
+            &mut t,
+            ClaimEventKind::Claim,
+            worker,
+            now,
+            lease_expires_at,
+            worker_label,
+        );
+        t.updated_at = now.clone();
+        start_claimed_ticket(&mut t, now);
+        store.write_ticket_committing(&t)?;
+        Ok(Some(t))
+    })
 }
 
 /// Claim one exact open, unblocked ticket. A retry by the live holder is idempotent:
@@ -2193,10 +2203,12 @@ pub fn claim_with_eta(
     label: Option<String>,
     eta: Option<Timestamp>,
 ) -> Result<Ticket, OpError> {
-    let mut t = prepare_claim(store, id, now, lease_expires, worker, label, eta)?;
-    start_claimed_ticket(&mut t, now);
-    store.write_ticket_committing(&t)?;
-    Ok(t)
+    store.with_ticket_transaction(|| {
+        let mut t = prepare_claim(store, id, now, lease_expires, worker, label, eta)?;
+        start_claimed_ticket(&mut t, now);
+        store.write_ticket_committing(&t)?;
+        Ok(t)
+    })
 }
 
 /// Claim one exact ticket and transition a Not Started ticket to Started in the
@@ -2324,22 +2336,24 @@ pub fn release(
     worker: &str,
     force: bool,
 ) -> Result<Ticket, OpError> {
-    let mut t = store.read_ticket(id)?;
-    match &t.claimed_by {
-        None => return Ok(t), // already released — idempotent
-        Some(holder) if holder != worker && !force => {
-            return Err(OpError::WrongWorker {
-                slug: t.slug.clone(),
-                holder: holder.clone(),
-                worker: worker.to_string(),
-            });
+    store.with_ticket_transaction(|| {
+        let mut t = store.read_ticket(id)?;
+        match &t.claimed_by {
+            None => return Ok(t), // already released — idempotent
+            Some(holder) if holder != worker && !force => {
+                return Err(OpError::WrongWorker {
+                    slug: t.slug.clone(),
+                    holder: holder.clone(),
+                    worker: worker.to_string(),
+                });
+            }
+            _ => {}
         }
-        _ => {}
-    }
-    end_claim(&mut t, &now);
-    t.updated_at = now;
-    store.write_ticket_committing(&t)?;
-    Ok(t)
+        end_claim(&mut t, &now);
+        t.updated_at = now;
+        store.write_ticket_committing(&t)?;
+        Ok(t)
+    })
 }
 
 /// Release every claim `worker` holds in `store`, returning the released tickets. This is the
@@ -2387,34 +2401,36 @@ pub fn renew_with_eta(
     worker: &str,
     eta: Option<Timestamp>,
 ) -> Result<Ticket, OpError> {
-    let mut t = store.read_ticket(id)?;
-    match &t.claimed_by {
-        Some(holder) if holder == worker => {}
-        Some(holder) => {
-            return Err(OpError::WrongWorker {
-                slug: t.slug.clone(),
-                holder: holder.clone(),
-                worker: worker.to_string(),
-            });
+    store.with_ticket_transaction(|| {
+        let mut t = store.read_ticket(id)?;
+        match &t.claimed_by {
+            Some(holder) if holder == worker => {}
+            Some(holder) => {
+                return Err(OpError::WrongWorker {
+                    slug: t.slug.clone(),
+                    holder: holder.clone(),
+                    worker: worker.to_string(),
+                });
+            }
+            None => return Err(OpError::NotClaimed(t.slug.clone())),
         }
-        None => return Err(OpError::NotClaimed(t.slug.clone())),
-    }
-    t.claim_lease_expires_at = Some(lease_expires.clone());
-    if let Some(eta) = eta {
-        t.claim_eta_at = Some(eta);
-    }
-    let label = t.worker_label.clone();
-    append_claim_event(
-        &mut t,
-        ClaimEventKind::Renew,
-        worker,
-        &now,
-        Some(lease_expires),
-        label,
-    );
-    t.updated_at = now;
-    store.write_ticket_committing(&t)?;
-    Ok(t)
+        t.claim_lease_expires_at = Some(lease_expires.clone());
+        if let Some(eta) = eta {
+            t.claim_eta_at = Some(eta);
+        }
+        let label = t.worker_label.clone();
+        append_claim_event(
+            &mut t,
+            ClaimEventKind::Renew,
+            worker,
+            &now,
+            Some(lease_expires),
+            label,
+        );
+        t.updated_at = now;
+        store.write_ticket_committing(&t)?;
+        Ok(t)
+    })
 }
 
 #[cfg(test)]

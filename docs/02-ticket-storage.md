@@ -167,12 +167,13 @@ Writers never create a transiently corrupt file in the first place: a ticket rew
 staged as a hidden non-`.md` sibling and renamed over the ticket, so a concurrent reader
 (another CLI process, the server's watcher or reconcile) sees the old or the new
 complete file, never an empty or partial one (HS2-P2178F).
-Note add/edit/delete, AI feedback ratings, and general ticket edits also hold a
-store-root advisory lock across read, revision, file replacement, and autocommit
-(HS2-SVKB1V). This serializes independent same-ticket note writers across CLI and
-server processes, including different raters on one feedback target. The persistent
-`.hotsheet-note-mutation.lock` file is Git-ignored; a crashed writer releases the OS
-lock, and the next writer reads the current ticket after acquiring it.
+Ticket read–revise–write operations hold a store-root advisory lock across read,
+revision, file replacement, and autocommit (HS2-SVKB1V, HS2-RN7WS6). This includes
+notes and AI ratings, general edits, claims, close actions, assignments, and
+attachment metadata and activity. Cross-store copy and move lock both stores in
+path order. The persistent `.hotsheet-note-mutation.lock` file retains its original
+name for compatibility and is Git-ignored; a crashed writer releases the OS lock,
+and the next writer reads the current ticket after acquiring it.
 
 A single unparseable ticket file must never make a whole project un-openable. Store
 enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns every

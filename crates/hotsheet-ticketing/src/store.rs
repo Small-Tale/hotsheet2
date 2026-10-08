@@ -37,6 +37,11 @@ const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
 const FINDER_METADATA_FILE: &str = ".DS_Store";
 const NOTE_MUTATION_LOCK_FILE: &str = ".hotsheet-note-mutation.lock";
 
+struct AttachmentWriteOptions {
+    metadata: hotsheet_model::AttachmentMetadata,
+    preserve_updated_at: bool,
+}
+
 fn ticket_write_schema(ticket: &Ticket) -> u32 {
     if ticket.schema >= hotsheet_model::CROP_SCHEMA_VERSION
         || ticket
@@ -384,14 +389,14 @@ impl FsStore {
         Ok(())
     }
 
-    /// Keep the entire note read–revise–write sequence together across processes.
+    /// Keep a ticket read–revise–write sequence together across processes.
     /// The file remains at the store root for git-backed and standalone stores alike;
     /// it is ignored by Git and never removed, so waiters cannot lock different inodes.
-    pub fn with_note_transaction<T>(
+    pub fn with_ticket_transaction<T, E: From<StoreError>>(
         &self,
-        operation: impl FnOnce() -> Result<T, StoreError>,
-    ) -> Result<T, StoreError> {
-        self.ensure_managed_gitignore()?;
+        operation: impl FnOnce() -> Result<T, E>,
+    ) -> Result<T, E> {
+        self.ensure_managed_gitignore().map_err(E::from)?;
         let path = self.root.join(NOTE_MUTATION_LOCK_FILE);
         let file = fs::OpenOptions::new()
             .read(true)
@@ -403,13 +408,42 @@ impl FsStore {
                 operation: "opening note mutation lock",
                 path: path.clone(),
                 source,
-            })?;
-        let _lock = FileLock::acquire(file).map_err(|source| StoreError::IoAt {
-            operation: "locking note mutation transaction",
-            path,
-            source,
-        })?;
+            })
+            .map_err(E::from)?;
+        let _lock = FileLock::acquire(file)
+            .map_err(|source| StoreError::IoAt {
+                operation: "locking note mutation transaction",
+                path,
+                source,
+            })
+            .map_err(E::from)?;
         operation()
+    }
+
+    /// Hold two stores in a stable order for copy and move operations. A store
+    /// paired with itself takes one lock, avoiding a self-deadlock.
+    pub fn with_store_pair_transaction<T, E: From<StoreError>>(
+        &self,
+        other: &FsStore,
+        operation: impl FnOnce() -> Result<T, E>,
+    ) -> Result<T, E> {
+        let first = self
+            .root
+            .canonicalize()
+            .unwrap_or_else(|_| self.root.clone());
+        let second = other
+            .root
+            .canonicalize()
+            .unwrap_or_else(|_| other.root.clone());
+        match first.cmp(&second) {
+            std::cmp::Ordering::Less => {
+                self.with_ticket_transaction(|| other.with_ticket_transaction(operation))
+            }
+            std::cmp::Ordering::Greater => {
+                other.with_ticket_transaction(|| self.with_ticket_transaction(operation))
+            }
+            std::cmp::Ordering::Equal => self.with_ticket_transaction(operation),
+        }
     }
 
     /// Read the store metadata.
@@ -877,65 +911,122 @@ impl FsStore {
         bytes: &[u8],
         metadata: hotsheet_model::AttachmentMetadata,
     ) -> Result<(Ticket, PathBuf), StoreError> {
-        let mut ticket = self.read_ticket(ticket_id)?;
-        let name = unique_attachment_filename(
+        self.write_attachment_with_metadata_inner(
+            ticket_id,
+            attachment_id,
+            created_at,
             filename,
-            ticket
+            bytes,
+            AttachmentWriteOptions {
+                metadata,
+                preserve_updated_at: false,
+            },
+        )
+    }
+
+    /// Import an attachment without changing the ticket's prior update time.
+    /// The prior time is read under the same lock as the attachment write.
+    pub fn write_import_attachment_with_metadata(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: Ulid,
+        created_at: Timestamp,
+        filename: &str,
+        bytes: &[u8],
+        metadata: hotsheet_model::AttachmentMetadata,
+    ) -> Result<(Ticket, PathBuf), StoreError> {
+        self.write_attachment_with_metadata_inner(
+            ticket_id,
+            attachment_id,
+            created_at,
+            filename,
+            bytes,
+            AttachmentWriteOptions {
+                metadata,
+                preserve_updated_at: true,
+            },
+        )
+    }
+
+    fn write_attachment_with_metadata_inner(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: Ulid,
+        created_at: Timestamp,
+        filename: &str,
+        bytes: &[u8],
+        options: AttachmentWriteOptions,
+    ) -> Result<(Ticket, PathBuf), StoreError> {
+        let AttachmentWriteOptions {
+            metadata,
+            preserve_updated_at,
+        } = options;
+        self.with_ticket_transaction(|| {
+            let mut ticket = self.read_ticket(ticket_id)?;
+            let previous_updated_at = ticket.updated_at.clone();
+            let name = unique_attachment_filename(
+                filename,
+                ticket
+                    .attachments
+                    .iter()
+                    .filter(|item| item.id != attachment_id)
+                    .map(|item| item.filename.as_str()),
+            );
+            if let Some(existing) = ticket
                 .attachments
                 .iter()
-                .filter(|item| item.id != attachment_id)
-                .map(|item| item.filename.as_str()),
-        );
-        if let Some(existing) = ticket
-            .attachments
-            .iter()
-            .find(|item| item.id == attachment_id)
-        {
-            if existing.filename != name
-                || existing.created_at != created_at
-                || existing.batch_id != metadata.batch_id
-                || existing.batch_label != metadata.batch_label
-                || existing.actor != metadata.actor
-                || existing.purpose != metadata.purpose
+                .find(|item| item.id == attachment_id)
             {
-                return Err(StoreError::Io(std::io::Error::new(
-                    std::io::ErrorKind::AlreadyExists,
-                    format!("attachment id {attachment_id} has different metadata"),
-                )));
+                if existing.filename != name
+                    || existing.created_at != created_at
+                    || existing.batch_id != metadata.batch_id
+                    || existing.batch_label != metadata.batch_label
+                    || existing.actor != metadata.actor
+                    || existing.purpose != metadata.purpose
+                {
+                    return Err(StoreError::Io(std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        format!("attachment id {attachment_id} has different metadata"),
+                    )));
+                }
             }
-        }
-        let dir = self
-            .attachment_dir(ticket_id)
-            .join(attachment_id.to_string());
-        fs::create_dir_all(&dir)?;
-        let path = dir.join(&name);
-        fs::write(&path, bytes)?;
-        if !ticket
-            .attachments
-            .iter()
-            .any(|item| item.id == attachment_id)
-        {
-            ticket.attachments.push(Attachment {
-                id: attachment_id,
-                filename: name,
-                created_at: created_at.clone(),
-                batch_id: metadata.batch_id,
-                batch_label: metadata.batch_label,
-                actor: metadata.actor,
-                purpose: metadata.purpose,
-                annotations: Vec::new(),
-                crop: None,
-            });
-            ticket.attachments.sort_by(|a, b| {
-                a.created_at
-                    .chronological_cmp(&b.created_at)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then(a.id.cmp(&b.id))
-            });
-        }
-        ticket.updated_at = created_at;
-        self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
-        Ok((ticket, path))
+            let dir = self
+                .attachment_dir(ticket_id)
+                .join(attachment_id.to_string());
+            fs::create_dir_all(&dir)?;
+            let path = dir.join(&name);
+            fs::write(&path, bytes)?;
+            if !ticket
+                .attachments
+                .iter()
+                .any(|item| item.id == attachment_id)
+            {
+                ticket.attachments.push(Attachment {
+                    id: attachment_id,
+                    filename: name,
+                    created_at: created_at.clone(),
+                    batch_id: metadata.batch_id,
+                    batch_label: metadata.batch_label,
+                    actor: metadata.actor,
+                    purpose: metadata.purpose,
+                    annotations: Vec::new(),
+                    crop: None,
+                });
+                ticket.attachments.sort_by(|a, b| {
+                    a.created_at
+                        .chronological_cmp(&b.created_at)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then(a.id.cmp(&b.id))
+                });
+            }
+            ticket.updated_at = if preserve_updated_at {
+                previous_updated_at
+            } else {
+                created_at
+            };
+            self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
+            Ok((ticket, path))
+        })
     }
 
     /// Apply one durable grouping/provenance value set to a selected attachment subset.
@@ -947,26 +1038,28 @@ impl FsStore {
         metadata: hotsheet_model::AttachmentMetadata,
         now: Timestamp,
     ) -> Result<Ticket, StoreError> {
-        let mut ticket = self.read_ticket(ticket_id)?;
-        for id in attachment_ids {
-            let attachment = ticket
-                .attachments
-                .iter_mut()
-                .find(|attachment| &attachment.id == id)
-                .ok_or_else(|| {
-                    StoreError::Io(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        format!("attachment {id}"),
-                    ))
-                })?;
-            attachment.batch_id.clone_from(&metadata.batch_id);
-            attachment.batch_label.clone_from(&metadata.batch_label);
-            attachment.actor.clone_from(&metadata.actor);
-            attachment.purpose = metadata.purpose;
-        }
-        ticket.updated_at = now;
-        self.write_ticket_committing(&ticket)?;
-        Ok(ticket)
+        self.with_ticket_transaction(|| {
+            let mut ticket = self.read_ticket(ticket_id)?;
+            for id in attachment_ids {
+                let attachment = ticket
+                    .attachments
+                    .iter_mut()
+                    .find(|attachment| &attachment.id == id)
+                    .ok_or_else(|| {
+                        StoreError::Io(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!("attachment {id}"),
+                        ))
+                    })?;
+                attachment.batch_id.clone_from(&metadata.batch_id);
+                attachment.batch_label.clone_from(&metadata.batch_label);
+                attachment.actor.clone_from(&metadata.actor);
+                attachment.purpose = metadata.purpose;
+            }
+            ticket.updated_at = now;
+            self.write_ticket_committing(&ticket)?;
+            Ok(ticket)
+        })
     }
 
     /// Publish evidence payloads and their ticket metadata as one observable mutation.
@@ -1087,63 +1180,65 @@ impl FsStore {
         now: Timestamp,
         filename: &str,
     ) -> Result<Ticket, StoreError> {
-        let mut ticket = self.read_ticket(ticket_id)?;
-        let attachment_index = ticket
-            .attachments
-            .iter()
-            .position(|item| &item.id == attachment_id)
-            .ok_or_else(|| {
-                StoreError::Io(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("attachment {attachment_id}"),
-                ))
-            })?;
-        let name = unique_attachment_filename(
-            filename,
-            ticket
+        self.with_ticket_transaction(|| {
+            let mut ticket = self.read_ticket(ticket_id)?;
+            let attachment_index = ticket
                 .attachments
                 .iter()
-                .filter(|item| &item.id != attachment_id)
-                .map(|item| item.filename.as_str()),
-        );
-        let attachment = ticket
-            .attachments
-            .get_mut(attachment_index)
-            .expect("attachment index came from this collection");
-        if attachment.crop.is_some() {
-            let extension = |name: &str| match name
-                .rsplit('.')
-                .next()
-                .unwrap_or_default()
-                .to_ascii_lowercase()
-                .as_str()
-            {
-                "jpg" | "jpeg" => "jpeg",
-                "png" => "png",
-                "webp" => "webp",
-                _ => "unsupported",
-            };
-            if extension(&attachment.filename) != extension(&name) {
-                return Err(StoreError::ImageCrop(
-                    crate::image_crop::ImageCropError::UnsupportedFormat,
-                ));
+                .position(|item| &item.id == attachment_id)
+                .ok_or_else(|| {
+                    StoreError::Io(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("attachment {attachment_id}"),
+                    ))
+                })?;
+            let name = unique_attachment_filename(
+                filename,
+                ticket
+                    .attachments
+                    .iter()
+                    .filter(|item| &item.id != attachment_id)
+                    .map(|item| item.filename.as_str()),
+            );
+            let attachment = ticket
+                .attachments
+                .get_mut(attachment_index)
+                .expect("attachment index came from this collection");
+            if attachment.crop.is_some() {
+                let extension = |name: &str| match name
+                    .rsplit('.')
+                    .next()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase()
+                    .as_str()
+                {
+                    "jpg" | "jpeg" => "jpeg",
+                    "png" => "png",
+                    "webp" => "webp",
+                    _ => "unsupported",
+                };
+                if extension(&attachment.filename) != extension(&name) {
+                    return Err(StoreError::ImageCrop(
+                        crate::image_crop::ImageCropError::UnsupportedFormat,
+                    ));
+                }
             }
-        }
-        let dir = self
-            .attachment_dir(ticket_id)
-            .join(attachment_id.to_string());
-        fs::create_dir_all(&dir)?;
-        let nested_source = dir.join(&attachment.filename);
-        let source = if nested_source.is_file() {
-            nested_source
-        } else {
-            self.attachment_dir(ticket_id).join(&attachment.filename)
-        };
-        fs::rename(source, dir.join(&name))?;
-        attachment.filename = name;
-        ticket.updated_at = now;
-        self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
-        Ok(ticket)
+            let dir = self
+                .attachment_dir(ticket_id)
+                .join(attachment_id.to_string());
+            fs::create_dir_all(&dir)?;
+            let nested_source = dir.join(&attachment.filename);
+            let source = if nested_source.is_file() {
+                nested_source
+            } else {
+                self.attachment_dir(ticket_id).join(&attachment.filename)
+            };
+            fs::rename(source, dir.join(&name))?;
+            attachment.filename = name;
+            ticket.updated_at = now;
+            self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
+            Ok(ticket)
+        })
     }
 
     /// Read an attachment payload using its durable ticket-scoped identity.
@@ -1180,32 +1275,34 @@ impl FsStore {
         attachment_id: &Ulid,
         now: Timestamp,
     ) -> Result<Ticket, StoreError> {
-        let mut ticket = self.read_ticket(ticket_id)?;
-        let index = ticket
-            .attachments
-            .iter()
-            .position(|item| &item.id == attachment_id)
-            .ok_or_else(|| {
-                StoreError::Io(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("attachment {attachment_id}"),
-                ))
-            })?;
-        let attachment = ticket.attachments.remove(index);
-        let nested = self
-            .attachment_dir(ticket_id)
-            .join(attachment_id.to_string());
-        if nested.exists() {
-            fs::remove_dir_all(nested)?;
-        } else {
-            let legacy = self.attachment_dir(ticket_id).join(attachment.filename);
-            if legacy.exists() {
-                fs::remove_file(legacy)?;
+        self.with_ticket_transaction(|| {
+            let mut ticket = self.read_ticket(ticket_id)?;
+            let index = ticket
+                .attachments
+                .iter()
+                .position(|item| &item.id == attachment_id)
+                .ok_or_else(|| {
+                    StoreError::Io(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("attachment {attachment_id}"),
+                    ))
+                })?;
+            let attachment = ticket.attachments.remove(index);
+            let nested = self
+                .attachment_dir(ticket_id)
+                .join(attachment_id.to_string());
+            if nested.exists() {
+                fs::remove_dir_all(nested)?;
+            } else {
+                let legacy = self.attachment_dir(ticket_id).join(attachment.filename);
+                if legacy.exists() {
+                    fs::remove_file(legacy)?;
+                }
             }
-        }
-        ticket.updated_at = now;
-        self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
-        Ok(ticket)
+            ticket.updated_at = now;
+            self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
+            Ok(ticket)
+        })
     }
 
     /// Replace an attachment's annotations and append one activity note in the same commit.
@@ -1265,6 +1362,7 @@ impl FsStore {
         note_id: Ulid,
         now: Timestamp,
     ) -> Result<Ticket, StoreError> {
+        self.with_ticket_transaction(|| {
         let MarkupChange {
             annotations,
             crop_change,
@@ -1351,6 +1449,7 @@ impl FsStore {
         ticket.schema = ticket_write_schema(&ticket);
         self.write_ticket_committing(&ticket)?;
         Ok(ticket)
+        })
     }
 
     fn add_legacy_attachment_metadata(&self, ticket: &mut Ticket) -> Result<(), StoreError> {
@@ -1882,7 +1981,7 @@ mod tests {
         };
         let ready = dir.path().join("child-ready");
         let mut child = store
-            .with_note_transaction(|| {
+            .with_ticket_transaction(|| {
                 let mut stale = store.read_ticket(&id)?;
                 let mut child = spawn("second", &ready);
                 for _ in 0..200 {
@@ -1918,7 +2017,7 @@ mod tests {
                     text: "First rating".into(),
                 });
                 store.write_ticket_committing(&stale)?;
-                Ok(child)
+                Ok::<_, StoreError>(child)
             })
             .unwrap();
         assert!(child.wait().unwrap().success());
@@ -1948,6 +2047,84 @@ mod tests {
                 )
                 .count(),
             1,
+        );
+    }
+
+    #[test]
+    fn claim_waits_for_note_transaction_across_processes() {
+        use std::process::Command;
+
+        const TEST_NAME: &str = "store::tests::claim_waits_for_note_transaction_across_processes";
+        if let Ok(root) = std::env::var("HOTSHEET_CLAIM_TEST_CHILD_ROOT") {
+            let store = FsStore::open(root).unwrap();
+            let id =
+                Ulid::from_string(&std::env::var("HOTSHEET_CLAIM_TEST_TICKET").unwrap()).unwrap();
+            fs::write(std::env::var("HOTSHEET_CLAIM_TEST_READY").unwrap(), "ready").unwrap();
+            crate::ops::claim(
+                &store,
+                &id,
+                &Timestamp::new("2026-08-19T00:02:00Z"),
+                Timestamp::new("2026-08-19T00:32:00Z"),
+                "worker",
+                None,
+            )
+            .unwrap();
+            return;
+        }
+
+        let (dir, store) = temp_store();
+        let id = Ulid::new();
+        store.write_ticket(&sample(id)).unwrap();
+        let ready = dir.path().join("claim-ready");
+        let mut child = store
+            .with_ticket_transaction(|| {
+                let mut stale = store.read_ticket(&id)?;
+                let mut child = Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", TEST_NAME, "--nocapture"])
+                    .env("HOTSHEET_CLAIM_TEST_CHILD_ROOT", dir.path())
+                    .env("HOTSHEET_CLAIM_TEST_TICKET", id.to_string())
+                    .env("HOTSHEET_CLAIM_TEST_READY", &ready)
+                    .spawn()
+                    .unwrap();
+                for _ in 0..200 {
+                    if ready.exists() {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                assert!(ready.exists(), "child did not reach the claim call");
+                std::thread::sleep(Duration::from_millis(150));
+                assert!(
+                    child.try_wait().unwrap().is_none(),
+                    "claim bypassed the lock"
+                );
+                stale.notes.push(Note {
+                    id: Ulid::new(),
+                    kind: NoteKind::Regular,
+                    created_at: Timestamp::new("2026-08-19T00:01:00Z"),
+                    edited_at: Timestamp::new("2026-08-19T00:01:00Z"),
+                    summary: None,
+                    confidence: None,
+                    feedback_for: None,
+                    ai_feedback: None,
+                    human_edited: false,
+                    actor: None,
+                    text: "Independent note".into(),
+                });
+                store.write_ticket_committing(&stale)?;
+                Ok::<_, StoreError>(child)
+            })
+            .unwrap();
+        assert!(child.wait().unwrap().success());
+        let ticket = store.read_ticket(&id).unwrap();
+        assert_eq!(ticket.claimed_by.as_deref(), Some("worker"));
+        assert_eq!(
+            ticket
+                .notes
+                .iter()
+                .filter(|note| note.text == "Independent note")
+                .count(),
+            1
         );
     }
 
@@ -2750,7 +2927,9 @@ mod tests {
         assert!(ignore.lines().any(|line| line == "worklist.md"));
         assert!(ignore.lines().any(|line| line == FINDER_METADATA_FILE));
         assert!(ignore.lines().any(|line| line == NOTE_MUTATION_LOCK_FILE));
-        store.with_note_transaction(|| Ok(())).unwrap();
+        store
+            .with_ticket_transaction(|| Ok::<(), StoreError>(()))
+            .unwrap();
 
         git(dir.path(), &["init", "-q"]).unwrap();
         git(dir.path(), &["add", "-A"]).unwrap();
