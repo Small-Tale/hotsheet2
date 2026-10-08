@@ -17216,6 +17216,10 @@ async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_ba
         repository: "acme/assets".into(),
         branch: "main".into(),
         sha: Some("blobsha".into()),
+        rendition_sha: None,
+        rendition_path: None,
+        crop: None,
+        annotations: vec![],
         batch_id: None,
         batch_label: None,
         actor: None,
@@ -17385,6 +17389,238 @@ async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_ba
     );
     assert_eq!(denied_transport.requests.lock().unwrap().len(), 1);
     assert!(transport.responses.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn github_checkout_markup_round_trips_revision_and_original_bytes() {
+    let (_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let attachment_id = "01K6SERVERATTACHMENT00000A";
+    let marker = hotsheet_extsync::github_attachments::AttachmentMarker {
+        filename: "proof.png".into(),
+        path: format!("hotsheet-attachments/{attachment_id}-proof.png"),
+        repository: "acme/assets".into(),
+        branch: "main".into(),
+        sha: Some("original-blob".into()),
+        rendition_sha: None,
+        rendition_path: None,
+        crop: None,
+        annotations: vec![],
+        batch_id: None,
+        batch_label: None,
+        actor: None,
+        purpose: None,
+    };
+    let annotation: hotsheet_model::MediaAnnotation = serde_json::from_value(serde_json::json!({
+        "id":"review", "x":1000, "y":2000, "width":3000, "height":2000, "text":"Check this"
+    }))
+    .unwrap();
+    let comment = |marker: &hotsheet_extsync::github_attachments::AttachmentMarker| {
+        serde_json::json!([{
+            "id":9,
+            "body":hotsheet_extsync::github_attachments::compose_comment(attachment_id, "https://x/y", marker),
+            "created_at":"2026-10-01T00:00:05Z"
+        }])
+    };
+    let before = comment(&marker);
+    let mut changed_marker = marker.clone();
+    changed_marker.annotations = vec![annotation.clone()];
+    let after = comment(&changed_marker);
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, github_issue(42, "with evidence")),
+                github_response(200, before.clone()),
+                github_response(200, before.clone()),
+                github_response(200, before),
+                github_response(200, serde_json::json!({"id":9})),
+                github_response(200, github_issue(42, "with evidence")),
+                github_response(200, after.clone()),
+                github_response(200, github_issue(42, "with evidence")),
+                github_response(200, after.clone()),
+                github_response(200, after.clone()),
+                github_response(200, serde_json::json!({"content":"b3JpZ2luYWw="})),
+                github_response(200, after),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-assets", "acme/repo", "fixture-token").with_attachments(
+            hotsheet_extsync::GitHubAttachmentRepository::new("acme/assets", None, None).unwrap(),
+        ),
+        transport.clone(),
+    );
+    let app = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(provider)));
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(
+                &serde_json::json!({
+                    "root":checkout.path(), "alias":"external-crop",
+                    "sources":[{"connection_id":"github-assets","provider":"github","locator":"acme/repo"}],
+                    "default_source":"github-assets"
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    let ticket_path = "/checkouts/external-crop/tickets/github-assets:42";
+    let full = body_json(
+        app.clone()
+            .oneshot(authed("GET", ticket_path, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let revision = full["attachments"][0]["revision"].as_str().unwrap();
+    let attachment_path = format!("{ticket_path}/attachments/{attachment_id}");
+    let edit =
+        serde_json::json!({"annotations":[annotation],"crop":null,"expected_revision":revision});
+    let updated = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("{attachment_path}/markup"),
+            Some(&edit.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    let updated = body_json(updated).await;
+    assert_eq!(
+        updated["attachments"][0]["annotations"][0]["text"],
+        "Check this"
+    );
+    assert_ne!(updated["attachments"][0]["revision"], revision);
+    let original = app
+        .clone()
+        .oneshot(authed("GET", &format!("{attachment_path}/original"), None))
+        .await
+        .unwrap();
+    assert_eq!(original.status(), StatusCode::OK);
+    assert_eq!(
+        &original.into_body().collect().await.unwrap().to_bytes()[..],
+        b"original"
+    );
+    let stale_edit = serde_json::json!({"annotations":[],"crop":null,"expected_revision":revision});
+    let stale = app
+        .oneshot(authed(
+            "PUT",
+            &format!("{attachment_path}/markup"),
+            Some(&stale_edit.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    assert!(
+        transport
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|body| body["body"].is_string())
+    );
+}
+
+#[tokio::test]
+async fn github_checkout_serves_cropped_rendition_and_immutable_original() {
+    let (_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let attachment_id = "01K6SERVERATTACHMENT00000A";
+    let marker = hotsheet_extsync::github_attachments::AttachmentMarker {
+        filename: "proof.png".into(),
+        path: format!("hotsheet-attachments/{attachment_id}-proof.png"),
+        repository: "acme/assets".into(),
+        branch: "main".into(),
+        sha: Some("original-blob".into()),
+        rendition_sha: Some("cropped-blob".into()),
+        rendition_path: Some(format!("hotsheet-attachments/{attachment_id}-crop.png")),
+        crop: Some(hotsheet_model::ImageCrop {
+            x: 2,
+            y: 2,
+            width: 12,
+            height: 10,
+        }),
+        annotations: vec![],
+        batch_id: None,
+        batch_label: None,
+        actor: None,
+        purpose: None,
+    };
+    let comments = serde_json::json!([{
+        "id":9,
+        "body":hotsheet_extsync::github_attachments::compose_comment(attachment_id,"https://x/crop.png",&marker),
+        "created_at":"2026-10-01T00:00:05Z"
+    }]);
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, github_issue(42, "cropped")),
+                github_response(200, comments.clone()),
+                github_response(200, comments.clone()),
+                github_response(200, serde_json::json!({"content":"Y3JvcHBlZA=="})),
+                github_response(200, github_issue(42, "cropped")),
+                github_response(200, comments.clone()),
+                github_response(200, comments),
+                github_response(200, serde_json::json!({"content":"b3JpZ2luYWw="})),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-assets", "acme/repo", "fixture-token").with_attachments(
+            hotsheet_extsync::GitHubAttachmentRepository::new("acme/assets", None, None).unwrap(),
+        ),
+        transport,
+    );
+    let app = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(provider)));
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(
+                &serde_json::json!({
+                    "root":checkout.path(), "alias":"external-crop",
+                    "sources":[{"connection_id":"github-assets","provider":"github","locator":"acme/repo"}],
+                    "default_source":"github-assets"
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    let path =
+        format!("/checkouts/external-crop/tickets/github-assets:42/attachments/{attachment_id}");
+    let visible = app
+        .clone()
+        .oneshot(authed("GET", &path, None))
+        .await
+        .unwrap();
+    assert_eq!(visible.status(), StatusCode::OK);
+    assert_eq!(
+        &visible.into_body().collect().await.unwrap().to_bytes()[..],
+        b"cropped"
+    );
+    let original = app
+        .oneshot(authed("GET", &format!("{path}/original"), None))
+        .await
+        .unwrap();
+    assert_eq!(original.status(), StatusCode::OK);
+    assert_eq!(
+        &original.into_body().collect().await.unwrap().to_bytes()[..],
+        b"original"
+    );
 }
 
 #[tokio::test]

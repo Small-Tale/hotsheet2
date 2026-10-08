@@ -324,10 +324,20 @@ requirement and names the assets repository.
 - **Reading:** `attachment_bytes` reads the blob (`git/blobs/{sha}`) through the
   authenticated API, so the checkout attachment route serves private assets repositories
   to the browser without exposing a token or a short-lived signed URL.
-- **Editing:** the new `attachment_edit` capability is `false`. Renaming, deleting,
-  re-labelling, annotating, video posters, and local file actions stay git-only and are
-  refused by name (`provider connection '…' (github) does not support this operation`).
-  Deleting the committed file is left to the assets repository's owner.
+- **Crop and markup (HS2-KGC823):** with an assets repository, `attachment_crop` is
+  true for supported still images. The provider preserves the original blob SHA,
+  commits a content-addressed cropped rendition, and updates the marked comment to
+  link to that rendition. The marker stores crop and original-space annotations;
+  normal reads return the rendition, while `/original` returns the original bytes.
+  Clearing the crop relinks the original without deleting it. The attachment's
+  `revision` is a hash of the marker comment body; markup writes require that revision
+  and reject a changed comment. Retrying after an upload-only failure reuses the
+  rendition. Because GitHub comment PATCH has no conditional revision, the final
+  read/check does not fully exclude concurrent writers (HS2-X09EJ1).
+- **Other edits:** `attachment_edit` remains `false`. Renaming, deleting,
+  re-labelling, video posters, and local file actions stay git-only and are refused
+  by name (`provider connection '…' (github) does not support this operation`).
+  Deleting committed files is left to the assets repository's owner.
 - **Transfers:** copying or moving a ticket with attachments checks the destination's
   `attachments` capability before creating anything, so a destination without attachment
   support refuses the transfer up front instead of leaving a partial copy.
@@ -428,7 +438,7 @@ they need live credentials:
 | ------------------------------------------------------- | ---------------- | ------------------------------------------------------- | ------ | ---- |
 | `attachments` (add and read)                            | yes, store files | only with `attachment_repo`; assets repo + link comment | no     | no   |
 | `attachment_edit` (rename, delete, labels, annotations) | yes              | no                                                      | no     | no   |
-| `attachment_crop` (reversible still-image crop)         | yes              | no                                                      | no     | no   |
+| `attachment_crop` (reversible still-image crop)         | yes              | with `attachment_repo`                                  | no     | no   |
 
 In the web dialog a new GitHub connection starts from sign-in (HS2-1JT25R): its other settings
 stay hidden and **Connect** stays disabled until GitHub authorizes. **Sign in with GitHub**

@@ -1742,8 +1742,11 @@ and identity-less legacy entries remain conservatively blocking.
   `attachment_edit: false`, such as GitHub with an assets repository) keeps **Add** and the
   drop zone, while existing attachments are read-only: each name is a link that opens the file
   through the server's attachment route in a new tab, media still opens in the gallery, and the
-  row menu, right-click menu, dragging between groups, batch relabelling and purpose, gallery
-  annotations, and generated video posters are not offered (HS2-HSA64D). Editing a GitHub
+  row menu, right-click menu, dragging between groups, batch relabelling and purpose, and
+  generated video posters are not offered (HS2-HSA64D). A GitHub assets source advertises
+  `attachment_crop` separately: its gallery can crop supported still images and save
+  original-space annotations, using a comment revision to surface stale edits. The original
+  remains available for re-crop and restore (HS2-KGC823). Editing a GitHub
   connection in the dialog keeps its headlessly configured assets-repository settings.
 
   The inspector includes a Code Review segment for ticket-associated code history. It

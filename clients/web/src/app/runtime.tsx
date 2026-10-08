@@ -808,7 +808,9 @@ export async function startHotSheetWebClient() {
     attachmentContext,
     showToast,
     error,
-    attachmentsEditable: (ticket) => attachmentsEditableFor(ticket.connection_id),
+    attachmentsEditable: (ticket) =>
+      attachmentsEditableFor(ticket.connection_id) ||
+      (providerCapabilities.value[ticket.connection_id] as Capabilities | undefined)?.attachment_crop === true,
     attachmentsCroppable: (ticket) =>
       (providerCapabilities.value[ticket.connection_id] as Capabilities | undefined)?.attachment_crop === true,
   });

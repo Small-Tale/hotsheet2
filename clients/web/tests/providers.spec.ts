@@ -717,6 +717,7 @@ async function mockProject(
   atomicBatch = true,
   stoppedTerminal = false,
   cropEnabled = false,
+  attachmentRevision = false,
 ) {
   let rows: TicketRow[] = [
     { ...row, feedback_needed: Boolean(primaryFeedbackNeeded) },
@@ -767,6 +768,7 @@ async function mockProject(
       attachments: [
         {
           ...selectedFull.attachments[0],
+          ...(attachmentRevision ? { revision: 'github-comment-v1' } : {}),
           annotations: [
             { id: 'inside', x: 3000, y: 3000, width: 1000, height: 1000, text: 'inside crop' },
             { id: 'outside', x: 8500, y: 7000, width: 1000, height: 1000, text: 'outside crop' },
@@ -1819,14 +1821,28 @@ async function mockProject(
     if (path.includes('/attachments/') && request.method() === 'POST' && path.endsWith('/action'))
       return route.fulfill({ json: { path: '/work/demo.hs2/attachments/proof.png' } });
     if (path.includes('/tickets/01/attachments/') && path.endsWith('/markup') && request.method() === 'PUT') {
-      const { annotations, crop } = request.postDataJSON() as {
+      const { annotations, crop, expected_revision } = request.postDataJSON() as {
         annotations: MediaAnnotation[];
         crop: FullTicket['attachments'][number]['crop'];
+        expected_revision?: string;
       };
+      if (attachmentRevision && expected_revision !== selectedFull.attachments[0].revision)
+        return route.fulfill({ status: 409, json: { error: 'attachment changed' } });
       selectedFull = {
         ...selectedFull,
         attachments: selectedFull.attachments.map((item) =>
-          item.id === 'A1' ? { ...item, annotations, crop: crop ?? undefined } : item,
+          item.id === 'A1'
+            ? {
+                ...item,
+                annotations,
+                crop: crop ?? undefined,
+                ...(attachmentRevision
+                  ? {
+                      revision: `github-comment-v${Number((item as FullTicket['attachments'][number]).revision?.split('v').at(-1) ?? 1) + 1}`,
+                    }
+                  : {}),
+              }
+            : item,
         ),
       };
       return route.fulfill({ json: { store: 'git-local', ...selectedFull } });
@@ -16876,13 +16892,23 @@ test('renders canonical attachment references for filenames containing backticks
   await inspector.screenshot({ path: '/private/tmp/hs2-h2ptvz-backtick-reference-narrow.png' });
 });
 
-test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY)', async ({ page }) => {
-  const writes: Array<{ crop?: FullTicket['attachments'][number]['crop']; annotations: MediaAnnotation[] }> = [];
-  await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, true);
+test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY, HS2-KGC823) @ci-smoke', async ({
+  page,
+}) => {
+  const writes: Array<{
+    crop?: FullTicket['attachments'][number]['crop'];
+    annotations: MediaAnnotation[];
+    expected_revision?: string;
+  }> = [];
+  await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, true, true);
   page.on('request', (request) => {
     if (request.method() === 'PUT' && new URL(request.url()).pathname.endsWith('/attachments/A1/markup'))
       writes.push(
-        request.postDataJSON() as { crop?: FullTicket['attachments'][number]['crop']; annotations: MediaAnnotation[] },
+        request.postDataJSON() as {
+          crop?: FullTicket['attachments'][number]['crop'];
+          annotations: MediaAnnotation[];
+          expected_revision?: string;
+        },
       );
   });
   await page.goto('/?dev-review=false');
@@ -16908,16 +16934,20 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
   await expect(gallery.getByLabel('Crop selection')).toHaveCount(0);
   await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect(gallery.getByLabel('Crop selection')).toBeVisible();
-  await gallery.screenshot({ path: '/private/tmp/hs2-vfbyzy-crop-wide.png', animations: 'disabled' });
+  await gallery.screenshot({ path: test.info().outputPath('hs2-vfbyzy-crop-wide.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await gallery.screenshot({ path: '/private/tmp/hs2-vfbyzy-crop-phone.png', animations: 'disabled' });
+  await gallery.screenshot({ path: test.info().outputPath('hs2-vfbyzy-crop-phone.png'), animations: 'disabled' });
   await gallery.getByRole('button', { name: 'Finish crop' }).click();
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
   expect(writes).toHaveLength(0);
-  await gallery.screenshot({ path: '/private/tmp/hs2-vfbyzy-crop-preview-phone.png', animations: 'disabled' });
+  await gallery.screenshot({
+    path: test.info().outputPath('hs2-vfbyzy-crop-preview-phone.png'),
+    animations: 'disabled',
+  });
   await gallery.getByRole('button', { name: 'Finish markup' }).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0].annotations.map((item) => item.id)).toEqual(['inside', 'outside']);
+  expect(writes[0].expected_revision).toBe('github-comment-v1');
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
   await gallery.getByRole('button', { name: 'Restore full image' }).click();
@@ -16925,10 +16955,14 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
   await gallery.getByRole('button', { name: 'Finish crop' }).click();
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(2);
   await expect(page.locator('.app-toast')).toBeHidden();
-  await gallery.screenshot({ path: '/private/tmp/hs2-vfbyzy-crop-restored-phone.png', animations: 'disabled' });
+  await gallery.screenshot({
+    path: test.info().outputPath('hs2-vfbyzy-crop-restored-phone.png'),
+    animations: 'disabled',
+  });
   await gallery.getByRole('button', { name: 'Finish markup' }).click();
   await expect.poll(() => writes.length).toBe(2);
   expect(writes[1].crop).toBeNull();
+  expect(writes[1].expected_revision).toBe('github-comment-v2');
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(2);
 });
 

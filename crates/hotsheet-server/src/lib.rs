@@ -3625,6 +3625,7 @@ async fn copy_provider_attachment(
                 purpose: None,
                 annotations: metadata.annotations,
                 crop: None,
+                revision: None,
             },
             bytes,
         )
@@ -6423,6 +6424,7 @@ async fn add_checkout_ticket_attachment(
                     purpose: metadata.purpose,
                     annotations: vec![],
                     crop: None,
+                    revision: None,
                 },
                 body.to_vec(),
             )
@@ -6495,6 +6497,7 @@ fn provider_attachment_response(
     id: &str,
     matches: impl Fn(&ApiAttachment) -> bool,
     range: Option<&str>,
+    original: bool,
 ) -> Result<Option<Response>, ApiError> {
     let (source, native_id) = checkout_ticket_owner(state, reference, id)?;
     if source.provider == "git" {
@@ -6507,9 +6510,12 @@ fn provider_attachment_response(
         .iter()
         .find(|attachment| matches(attachment))
         .ok_or_else(|| ApiError::not_found(id))?;
-    let bytes = provider
-        .attachment_bytes(&native_id, &attachment.id)
-        .map_err(provider_transfer_error)?;
+    let bytes = if original {
+        provider.attachment_original_bytes(&native_id, &attachment.id)
+    } else {
+        provider.attachment_bytes(&native_id, &attachment.id)
+    }
+    .map_err(provider_transfer_error)?;
     Ok(Some(media::attachment_response(
         &attachment.filename,
         bytes,
@@ -6528,6 +6534,7 @@ async fn get_checkout_ticket_attachment(
         &id,
         |attachment| attachment.id == attachment_id,
         headers.get("range").and_then(|value| value.to_str().ok()),
+        false,
     )? {
         return Ok(response);
     }
@@ -6555,6 +6562,16 @@ async fn get_checkout_ticket_attachment_original(
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    if let Some(response) = provider_attachment_response(
+        &state,
+        &reference,
+        &id,
+        |attachment| attachment.id == attachment_id,
+        headers.get("range").and_then(|value| value.to_str().ok()),
+        true,
+    )? {
+        return Ok(response);
+    }
     let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
@@ -6636,6 +6653,7 @@ async fn get_checkout_ticket_attachment_by_name(
         &id,
         |attachment| attachment.filename == filename,
         headers.get("range").and_then(|value| value.to_str().ok()),
+        false,
     )? {
         return Ok(response);
     }
@@ -6968,6 +6986,8 @@ struct UpdateAttachmentMarkupBody {
     annotations: Vec<hotsheet_model::MediaAnnotation>,
     crop: Option<hotsheet_model::ImageCrop>,
     #[serde(default)]
+    expected_revision: Option<String>,
+    #[serde(default)]
     actor: Option<ActorReq>,
 }
 
@@ -6977,6 +6997,36 @@ async fn update_checkout_ticket_attachment_markup(
     Json(body): Json<UpdateAttachmentMarkupBody>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
     let (_, settings) = checkout_settings(&state, &reference)?;
+    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
+    if source.provider != "git" {
+        let provider = provider_for(&state, &source.connection_id)?;
+        let updated = provider
+            .set_attachment_markup(
+                &native_id,
+                &attachment_id,
+                body.expected_revision.as_deref(),
+                hotsheet_ticketing::store::AttachmentMarkup {
+                    annotations: body.annotations,
+                    crop: body.crop,
+                },
+            )
+            .map_err(provider_transfer_error)?;
+        state.emit(ChangeEvent {
+            cursor: None,
+            store: source.connection_id.clone(),
+            kind: "attachment_markup_updated".into(),
+            id: native_id.clone(),
+            slug: updated.slug.clone(),
+            message: None,
+            activity: None,
+            assignment: None,
+            turn: None,
+        });
+        return Ok(Json(ResolvedTicket {
+            store: source.connection_id,
+            ticket: contextualize_api_ticket(updated, &settings)?,
+        }));
+    }
     let (entry, ticket) = checkout_git_ticket(&state, &reference, &id)?;
     let attachment_id = Ulid::from_string(&attachment_id)
         .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid attachment ULID"))?;

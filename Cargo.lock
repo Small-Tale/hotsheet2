@@ -815,6 +815,7 @@ dependencies = [
  "base64",
  "hotsheet-model",
  "hotsheet-ticketing",
+ "image",
  "serde",
  "serde_json",
  "sha2",

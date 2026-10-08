@@ -1076,6 +1076,25 @@ pub trait TicketProvider: Send + Sync {
             capability: "attachments",
         })
     }
+    fn attachment_original_bytes(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+    ) -> Result<Vec<u8>, ProviderError> {
+        self.attachment_bytes(native_id, attachment_id)
+    }
+    fn set_attachment_markup(
+        &self,
+        _native_id: &str,
+        _attachment_id: &str,
+        _expected_revision: Option<&str>,
+        _markup: crate::store::AttachmentMarkup,
+    ) -> Result<ApiTicket, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "attachment_crop",
+        })
+    }
     fn add_attachment(
         &self,
         _native_id: &str,
@@ -3071,6 +3090,7 @@ mod tests {
                     purpose: None,
                     crop: None,
                     annotations: vec![],
+                    revision: None,
                 },
                 b"evidence".to_vec(),
             )

@@ -106,6 +106,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
         before: MediaAnnotation[];
         original: MediaAnnotation[];
         crop?: Attachment['crop'];
+        revision?: string;
         originalSize: { width: number; height: number };
       }
     | undefined;
@@ -485,6 +486,7 @@ export function createGalleryController(dependencies: GalleryDependencies) {
       before: attachmentGalleryAnnotations.value.map((item) => ({ ...item })),
       original: structuredClone(attachment.annotations ?? []),
       crop: attachment.crop,
+      revision: attachment.revision,
       originalSize: attachmentGalleryOriginalSize.value,
     };
     attachmentGallerySaveState.value = 'idle';
@@ -611,20 +613,22 @@ export function createGalleryController(dependencies: GalleryDependencies) {
     void (async () => {
       let result;
       try {
-        result = cropChanged
-          ? await api().updateCheckoutAttachmentMarkup(
-              session.projectId,
-              session.qualifiedId,
-              session.attachmentId,
-              canonical,
-              crop,
-            )
-          : await api().updateCheckoutAttachmentAnnotations(
-              session.projectId,
-              session.qualifiedId,
-              session.attachmentId,
-              canonical,
-            );
+        result =
+          cropChanged || session.revision
+            ? await api().updateCheckoutAttachmentMarkup(
+                session.projectId,
+                session.qualifiedId,
+                session.attachmentId,
+                canonical,
+                crop,
+                session.revision,
+              )
+            : await api().updateCheckoutAttachmentAnnotations(
+                session.projectId,
+                session.qualifiedId,
+                session.attachmentId,
+                canonical,
+              );
       } catch (reason) {
         error.value = reason instanceof Error ? reason.message : String(reason);
         attachmentGallerySaveState.value = 'failed';

@@ -45,11 +45,15 @@ upload. Cross-provider transfer must reject a cropped source until the destinati
 preserve the rendition and restore semantics; silently uploading the original would be
 misleading.
 
-Provider capability discovery adds a crop capability. Git-backed tickets advertise it;
-GitHub assets do not, because that provider currently supports append-only evidence
-and cannot atomically replace an existing asset plus its metadata. The gallery explains
-why Crop is unavailable there. Provider-native crop/export is separate work; no local
-crop is presented as synchronized when the provider cannot preserve it.
+Provider capability discovery adds a crop capability. Git-backed tickets and GitHub
+connections with an assets repository advertise it. For GitHub (HS2-KGC823), the
+original blob stays immutable while a content-addressed rendition is uploaded to
+the assets repository and the marked issue comment points to it. Crop and original-space
+annotations live in the comment marker; `/original` reads the original blob. A comment
+body revision rejects stale gallery saves, and a retry reuses an orphaned rendition.
+GitHub comment PATCH lacks an atomic revision precondition, so strict concurrent-edit
+exclusion remains in HS2-X09EJ1. Sources without compatible crop storage keep the
+action unavailable.
 
 ## Geometry and verification
 

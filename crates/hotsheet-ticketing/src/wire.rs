@@ -142,6 +142,8 @@ pub struct ApiAttachment {
     pub annotations: Vec<hotsheet_model::MediaAnnotation>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub crop: Option<hotsheet_model::ImageCrop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
 }
 
 impl From<&Ticket> for ApiTicket {
@@ -232,6 +234,7 @@ impl ApiTicket {
                     purpose: attachment.purpose,
                     annotations: attachment.annotations.clone(),
                     crop: attachment.crop,
+                    revision: None,
                 })
                 .collect(),
             warnings: Vec::new(),

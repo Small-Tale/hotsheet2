@@ -209,6 +209,8 @@ export interface Attachment extends AttachmentMetadata {
   annotations?: MediaAnnotation[];
   /** Integer pixels in the immutable original image. */
   crop?: { x: number; y: number; width: number; height: number };
+  /** Provider marker revision for optimistic attachment markup updates. */
+  revision?: string;
 }
 export interface Ticket {
   qualified_id: string;
@@ -1127,10 +1129,11 @@ export class Api {
     attachmentId: string,
     annotations: MediaAnnotation[],
     crop: Attachment['crop'],
+    expectedRevision?: string,
   ) =>
     this.request<FullTicket & { store: string }>(
       `${this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length)}/markup`,
-      { method: 'PUT', body: JSON.stringify({ annotations, crop: crop ?? null }) },
+      { method: 'PUT', body: JSON.stringify({ annotations, crop: crop ?? null, expected_revision: expectedRevision }) },
     ).then((ticket) => ({ store: ticket.store, ticket }));
   checkoutAttachmentOriginalUrl = (checkout: string, id: string, attachmentId: string) =>
     `${this.checkoutAttachmentUrl(checkout, id, attachmentId)}/original`;

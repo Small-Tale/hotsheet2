@@ -15,6 +15,7 @@ use hotsheet_ticketing::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc2822;
 
@@ -460,6 +461,7 @@ impl GitHubProvider {
                         id,
                         marker,
                         comment.created_at,
+                        attachment_comment_revision(&comment.body),
                     ));
                     return None;
                 }
@@ -1152,6 +1154,10 @@ impl TicketProvider for GitHubProvider {
             repository: assets.repository,
             branch: assets.branch,
             sha: Some(file.sha),
+            rendition_sha: None,
+            rendition_path: None,
+            crop: None,
+            annotations: vec![],
             batch_id: attachment.batch_id,
             batch_label: attachment.batch_label,
             actor: attachment.actor,
@@ -1174,50 +1180,31 @@ impl TicketProvider for GitHubProvider {
         attachment_id: &str,
     ) -> Result<Vec<u8>, ProviderError> {
         validate_number(native_id)?;
-        let marker = self
-            .comments(native_id)?
-            .into_iter()
-            .find_map(|comment| {
-                github_attachments::parse_comment(&comment.body)
-                    .filter(|(id, _)| id == attachment_id)
-                    .map(|(_, marker)| marker)
-            })
-            .ok_or_else(|| ProviderError::NotFound {
-                connection_id: self.config.connection_id.clone(),
-                native_id: attachment_id.into(),
-            })?;
-        let encoded = match &marker.sha {
-            Some(sha) => {
-                let blob: GitHubBlob = self.json(self.request(
-                    "GET",
-                    &self.repository_endpoint(&marker.repository, &format!("git/blobs/{sha}")),
-                    None,
-                )?)?;
-                blob.content
-            }
-            None => {
-                let file: GitHubContentFile = self.json(self.request(
-                    "GET",
-                    &self.repository_endpoint(
-                        &marker.repository,
-                        &format!(
-                            "contents/{}?ref={}",
-                            github_attachments::encode_path(&marker.path),
-                            github_attachments::encode_path(&marker.branch)
-                        ),
-                    ),
-                    None,
-                )?)?;
-                file.content.unwrap_or_default()
-            }
-        };
-        let compact: String = encoded.chars().filter(|c| !c.is_whitespace()).collect();
-        BASE64
-            .decode(compact)
-            .map_err(|error| ProviderError::Conflict {
-                ticket: format!("{}:{native_id}", self.config.connection_id),
-                message: format!("invalid attachment content from GitHub: {error}"),
-            })
+        let (_, marker) = self.attachment_marker_comment(native_id, attachment_id)?;
+        self.asset_bytes(
+            &marker,
+            marker.rendition_sha.as_deref().or(marker.sha.as_deref()),
+        )
+    }
+
+    fn attachment_original_bytes(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+    ) -> Result<Vec<u8>, ProviderError> {
+        validate_number(native_id)?;
+        let (_, marker) = self.attachment_marker_comment(native_id, attachment_id)?;
+        self.asset_bytes(&marker, marker.sha.as_deref())
+    }
+
+    fn set_attachment_markup(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+        expected_revision: Option<&str>,
+        markup: hotsheet_ticketing::store::AttachmentMarkup,
+    ) -> Result<ApiTicket, ProviderError> {
+        self.update_attachment_markup(native_id, attachment_id, expected_revision, markup)
     }
 
     fn close(
@@ -1299,6 +1286,167 @@ impl TicketProvider for GitHubProvider {
 }
 
 impl GitHubProvider {
+    fn attachment_marker_comment(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+    ) -> Result<(GitHubComment, AttachmentMarker), ProviderError> {
+        self.comments(native_id)?
+            .into_iter()
+            .find_map(|comment| {
+                github_attachments::parse_comment(&comment.body)
+                    .filter(|(id, _)| id == attachment_id)
+                    .map(|(_, marker)| (comment, marker))
+            })
+            .ok_or_else(|| ProviderError::NotFound {
+                connection_id: self.config.connection_id.clone(),
+                native_id: attachment_id.into(),
+            })
+    }
+
+    fn asset_bytes(
+        &self,
+        marker: &AttachmentMarker,
+        sha: Option<&str>,
+    ) -> Result<Vec<u8>, ProviderError> {
+        let encoded = match sha {
+            Some(sha) => {
+                let blob: GitHubBlob = self.json(self.request(
+                    "GET",
+                    &self.repository_endpoint(&marker.repository, &format!("git/blobs/{sha}")),
+                    None,
+                )?)?;
+                blob.content
+            }
+            None => {
+                let file: GitHubContentFile = self.json(self.request(
+                    "GET",
+                    &self.repository_endpoint(
+                        &marker.repository,
+                        &format!(
+                            "contents/{}?ref={}",
+                            github_attachments::encode_path(&marker.path),
+                            github_attachments::encode_path(&marker.branch)
+                        ),
+                    ),
+                    None,
+                )?)?;
+                file.content.unwrap_or_default()
+            }
+        };
+        let compact: String = encoded.chars().filter(|c| !c.is_whitespace()).collect();
+        BASE64
+            .decode(compact)
+            .map_err(|error| ProviderError::Conflict {
+                ticket: self.config.connection_id.clone(),
+                message: format!("invalid attachment content from GitHub: {error}"),
+            })
+    }
+
+    fn update_attachment_markup(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+        expected_revision: Option<&str>,
+        markup: hotsheet_ticketing::store::AttachmentMarkup,
+    ) -> Result<ApiTicket, ProviderError> {
+        validate_number(native_id)?;
+        let Some(assets) = self.config.attachments.as_ref() else {
+            return self.unsupported("attachment_crop");
+        };
+        hotsheet_model::validate_media_annotations(&markup.annotations).map_err(|error| {
+            ProviderError::Conflict {
+                ticket: format!("{}:{native_id}", self.config.connection_id),
+                message: error.to_string(),
+            }
+        })?;
+        let (comment, mut marker) = self.attachment_marker_comment(native_id, attachment_id)?;
+        if marker.repository != assets.repository || marker.branch != assets.branch {
+            return Err(ProviderError::Conflict {
+                ticket: format!("{}:{native_id}", self.config.connection_id),
+                message: "attachment asset repository changed; reconnect the original repository before editing markup".into(),
+            });
+        }
+        let current_revision = attachment_comment_revision(&comment.body);
+        if expected_revision != Some(current_revision.as_str()) {
+            if marker.crop == markup.crop && marker.annotations == markup.annotations {
+                return self.get(native_id);
+            }
+            return Err(ProviderError::Conflict {
+                ticket: format!("{}:{native_id}", self.config.connection_id),
+                message: "attachment changed since this gallery session opened".into(),
+            });
+        }
+        if marker.crop == markup.crop && marker.annotations == markup.annotations {
+            return self.get(native_id);
+        }
+        if marker.crop != markup.crop
+            || (markup.crop.is_some()
+                && (marker.rendition_sha.is_none() || marker.rendition_path.is_none()))
+        {
+            if let Some(crop) = markup.crop {
+                let original = self.asset_bytes(&marker, marker.sha.as_deref())?;
+                let (decoded, _) =
+                    hotsheet_ticketing::image_crop::decode_original(&marker.filename, &original)
+                        .map_err(|error| ProviderError::Conflict {
+                            ticket: format!("{}:{native_id}", self.config.connection_id),
+                            message: error.to_string(),
+                        })?;
+                let normalized = hotsheet_ticketing::image_crop::normalize_crop(
+                    crop,
+                    (decoded.width(), decoded.height()),
+                )
+                .map_err(|error| ProviderError::Conflict {
+                    ticket: format!("{}:{native_id}", self.config.connection_id),
+                    message: error.to_string(),
+                })?;
+                marker.crop = normalized;
+                if let Some(crop) = normalized {
+                    let rendition = hotsheet_ticketing::image_crop::cropped_rendition(
+                        &marker.filename,
+                        &original,
+                        crop,
+                    )
+                    .map_err(|error| ProviderError::Conflict {
+                        ticket: format!("{}:{native_id}", self.config.connection_id),
+                        message: error.to_string(),
+                    })?;
+                    let hash = format!("{:x}", Sha256::digest(&rendition));
+                    let extension = marker.filename.rsplit('.').next().unwrap_or("png");
+                    let filename = format!("crop-{}.{}", &hash[..20], extension);
+                    let path = assets.file_path(attachment_id, &filename);
+                    let file =
+                        self.upload_asset(assets, &path, &filename, native_id, &rendition)?;
+                    marker.rendition_sha = Some(file.sha);
+                    marker.rendition_path = Some(file.path);
+                }
+            } else {
+                marker.crop = None;
+            }
+        }
+        if marker.crop.is_none() {
+            marker.rendition_sha = None;
+            marker.rendition_path = None;
+        }
+        marker.annotations = markup.annotations;
+        let (latest, _) = self.attachment_marker_comment(native_id, attachment_id)?;
+        if attachment_comment_revision(&latest.body) != current_revision {
+            return Err(ProviderError::Conflict {
+                ticket: format!("{}:{native_id}", self.config.connection_id),
+                message: "attachment changed during crop upload".into(),
+            });
+        }
+        let path = marker.rendition_path.as_deref().unwrap_or(&marker.path);
+        let url = assets.link_url(&self.config.api_base, path, None);
+        let body = github_attachments::compose_comment(attachment_id, &url, &marker);
+        self.request(
+            "PATCH",
+            &self.endpoint(&format!("issues/comments/{}", comment.id)),
+            Some(&json!({ "body": body })),
+        )?;
+        self.get(native_id)
+    }
+
     /// Commit one attachment file to the assets repository. A path that already exists
     /// (a retry after the upload succeeded but the link comment failed) is reused.
     fn upload_asset(
@@ -1441,6 +1589,10 @@ struct GitHubComment {
     updated_at: Option<String>,
 }
 
+fn attachment_comment_revision(body: &str) -> String {
+    format!("{:x}", Sha256::digest(body.as_bytes()))
+}
+
 fn github_capabilities(attachments: bool) -> ProviderCapabilities {
     ProviderCapabilities {
         create: true,
@@ -1449,10 +1601,10 @@ fn github_capabilities(attachments: bool) -> ProviderCapabilities {
         notes: true,
         note_edit: false,
         note_delete: false,
-        // Append-only evidence through the configured assets repository (HS2-HSA64D).
+        // The original asset stays immutable while markup updates the marked comment.
         attachments,
         attachment_edit: false,
-        attachment_crop: false,
+        attachment_crop: attachments,
         assignment: true,
         review_requests: false,
         dependencies: false,
@@ -3309,6 +3461,7 @@ mod tests {
             purpose: Some(hotsheet_model::AttachmentPurpose::ProblemEvidence),
             crop: None,
             annotations: vec![],
+            revision: None,
         }
     }
 
@@ -3329,6 +3482,10 @@ mod tests {
             repository: "acme/assets".into(),
             branch: "main".into(),
             sha: Some("blobsha1".into()),
+            rendition_sha: None,
+            rendition_path: None,
+            crop: None,
+            annotations: vec![],
             batch_id: Some("batch-1".into()),
             batch_label: Some("Repro".into()),
             actor: None,
@@ -3339,6 +3496,207 @@ mod tests {
             "body": github_attachments::compose_comment(attachment_id, "https://x/y", &marker),
             "created_at": "2026-10-01T00:00:05Z",
         })
+    }
+
+    struct CropTransport {
+        state: Mutex<CropState>,
+    }
+
+    struct CropState {
+        comment: String,
+        blobs: HashMap<String, Vec<u8>>,
+        files: HashMap<String, String>,
+        fail_patch_once: bool,
+        uploads: usize,
+    }
+
+    impl CropTransport {
+        fn new(original: Vec<u8>) -> Arc<Self> {
+            let comment = uploaded_comment(9, ATTACHMENT_ID, "proof.png")["body"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            Arc::new(Self {
+                state: Mutex::new(CropState {
+                    comment,
+                    blobs: HashMap::from([("blobsha1".into(), original)]),
+                    files: HashMap::new(),
+                    fail_patch_once: false,
+                    uploads: 0,
+                }),
+            })
+        }
+    }
+
+    impl GitHubTransport for CropTransport {
+        fn request(
+            &self,
+            method: &str,
+            url: &str,
+            _: &[(&str, String)],
+            body: Option<&Value>,
+        ) -> Result<HttpResponse, String> {
+            let mut state = self.state.lock().unwrap();
+            let result = if method == "GET" && url.ends_with("/issues/42") {
+                issue(42, "broken widget", "details")
+            } else if method == "GET" && url.contains("/issues/42/comments?") {
+                json!([{"id":9,"body":state.comment,"created_at":"2026-10-01T00:00:05Z"}])
+            } else if method == "GET" && url.contains("/git/blobs/") {
+                let sha = url.rsplit('/').next().unwrap();
+                json!({"content":BASE64.encode(state.blobs.get(sha).ok_or("missing blob")?)})
+            } else if method == "PUT" && url.contains("/contents/") {
+                let path = url.split("/contents/").nth(1).unwrap().to_owned();
+                if state.files.contains_key(&path) {
+                    return Ok(response(422, json!({"message":"file exists"})));
+                }
+                let bytes = BASE64
+                    .decode(body.unwrap()["content"].as_str().unwrap())
+                    .unwrap();
+                let sha = format!("{:x}", Sha256::digest(&bytes));
+                state.blobs.insert(sha.clone(), bytes);
+                state.files.insert(path.clone(), sha.clone());
+                state.uploads += 1;
+                json!({"content":{"path":path,"sha":sha}})
+            } else if method == "GET" && url.contains("/contents/") {
+                let path = url
+                    .split("/contents/")
+                    .nth(1)
+                    .unwrap()
+                    .split('?')
+                    .next()
+                    .unwrap();
+                json!({"path":path,"sha":state.files.get(path).ok_or("missing file")?})
+            } else if method == "PATCH" && url.ends_with("/issues/comments/9") {
+                if state.fail_patch_once {
+                    state.fail_patch_once = false;
+                    return Err("comment update interrupted".into());
+                }
+                state.comment = body.unwrap()["body"].as_str().unwrap().into();
+                json!({"id":9})
+            } else {
+                return Err(format!("unexpected request {method} {url}"));
+            };
+            Ok(response(200, result))
+        }
+    }
+
+    fn crop_fixture() -> Vec<u8> {
+        use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
+        let image = RgbImage::from_fn(24, 20, |x, y| Rgb([x as u8, y as u8, 42]));
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        DynamicImage::ImageRgb8(image)
+            .write_to(&mut bytes, ImageFormat::Png)
+            .unwrap();
+        bytes.into_inner()
+    }
+
+    #[test]
+    fn github_crop_preserves_original_retries_orphan_upload_and_restores_after_refresh() {
+        let original = crop_fixture();
+        let transport = CropTransport::new(original.clone());
+        let provider = assets_provider(transport.clone());
+        let first = provider.get("42").unwrap();
+        let revision = first.attachments[0].revision.as_deref().unwrap().to_owned();
+        let crop = hotsheet_model::ImageCrop {
+            x: 3,
+            y: 2,
+            width: 12,
+            height: 10,
+        };
+        let markup = || hotsheet_ticketing::store::AttachmentMarkup {
+            annotations: vec![],
+            crop: Some(crop),
+        };
+        transport.state.lock().unwrap().fail_patch_once = true;
+        assert!(
+            provider
+                .set_attachment_markup("42", ATTACHMENT_ID, Some(&revision), markup())
+                .is_err()
+        );
+        assert_eq!(transport.state.lock().unwrap().uploads, 1);
+        let cropped = provider
+            .set_attachment_markup("42", ATTACHMENT_ID, Some(&revision), markup())
+            .unwrap();
+        assert_eq!(transport.state.lock().unwrap().uploads, 1);
+        assert_eq!(cropped.attachments[0].crop, Some(crop));
+        let cropped_comment = transport.state.lock().unwrap().comment.clone();
+        let (_, cropped_marker) = github_attachments::parse_comment(&cropped_comment).unwrap();
+        assert_eq!(cropped_marker.sha.as_deref(), Some("blobsha1"));
+        assert!(cropped_marker.rendition_sha.is_some());
+        assert!(cropped_comment.contains(cropped_marker.rendition_path.as_deref().unwrap()));
+        assert_eq!(
+            provider
+                .attachment_original_bytes("42", ATTACHMENT_ID)
+                .unwrap(),
+            original
+        );
+        let rendition = provider.attachment_bytes("42", ATTACHMENT_ID).unwrap();
+        assert_eq!(image::load_from_memory(&rendition).unwrap().width(), 12);
+        let annotation = hotsheet_model::MediaAnnotation {
+            id: "review".into(),
+            x: 1_000,
+            y: 2_000,
+            width: 3_000,
+            height: 2_000,
+            start_ms: None,
+            end_ms: None,
+            text: "Look here".into(),
+            shape: None,
+            intents: vec![],
+        };
+        let annotated = provider
+            .set_attachment_markup(
+                "42",
+                ATTACHMENT_ID,
+                cropped.attachments[0].revision.as_deref(),
+                hotsheet_ticketing::store::AttachmentMarkup {
+                    annotations: vec![annotation.clone()],
+                    crop: Some(crop),
+                },
+            )
+            .unwrap();
+        assert_eq!(transport.state.lock().unwrap().uploads, 1);
+        assert_eq!(
+            annotated.attachments[0].annotations,
+            vec![annotation.clone()]
+        );
+        assert_eq!(
+            provider.attachment_bytes("42", ATTACHMENT_ID).unwrap(),
+            rendition
+        );
+        let stale = provider.set_attachment_markup(
+            "42",
+            ATTACHMENT_ID,
+            Some(&revision),
+            hotsheet_ticketing::store::AttachmentMarkup {
+                annotations: vec![],
+                crop: Some(hotsheet_model::ImageCrop {
+                    x: 1,
+                    y: 1,
+                    width: 10,
+                    height: 10,
+                }),
+            },
+        );
+        assert!(matches!(stale, Err(ProviderError::Conflict { .. })));
+        let current_revision = annotated.attachments[0].revision.as_deref();
+        let restored = provider
+            .set_attachment_markup(
+                "42",
+                ATTACHMENT_ID,
+                current_revision,
+                hotsheet_ticketing::store::AttachmentMarkup {
+                    annotations: vec![annotation.clone()],
+                    crop: None,
+                },
+            )
+            .unwrap();
+        assert!(restored.attachments[0].crop.is_none());
+        assert_eq!(restored.attachments[0].annotations, vec![annotation]);
+        assert_eq!(
+            provider.attachment_bytes("42", ATTACHMENT_ID).unwrap(),
+            original
+        );
     }
 
     #[test]

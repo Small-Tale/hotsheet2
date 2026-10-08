@@ -17,7 +17,7 @@
 //! `attachment_folder` (default `hotsheet-attachments`), and `attachment_branch` (default
 //! `main`). Attachments are reported as supported only when `attachment_repo` is set.
 
-use hotsheet_model::{AttachmentActor, AttachmentPurpose};
+use hotsheet_model::{AttachmentActor, AttachmentPurpose, ImageCrop, MediaAnnotation};
 use hotsheet_ticketing::wire::ApiAttachment;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -221,6 +221,15 @@ pub struct AttachmentMarker {
     /// Git blob sha of the uploaded file, used to read it back through the API.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha: Option<String>,
+    /// A derived, content-addressed visible asset. `sha` always names the original.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition_sha: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<ImageCrop>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<MediaAnnotation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub batch_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -278,7 +287,12 @@ pub fn parse_comment(body: &str) -> Option<(String, AttachmentMarker)> {
 }
 
 /// Project a parsed marker comment as a normalized attachment.
-pub fn api_attachment(id: String, marker: AttachmentMarker, created_at: String) -> ApiAttachment {
+pub fn api_attachment(
+    id: String,
+    marker: AttachmentMarker,
+    created_at: String,
+    revision: String,
+) -> ApiAttachment {
     ApiAttachment {
         id,
         filename: marker.filename,
@@ -287,8 +301,9 @@ pub fn api_attachment(id: String, marker: AttachmentMarker, created_at: String) 
         batch_label: marker.batch_label,
         actor: marker.actor,
         purpose: marker.purpose,
-        annotations: vec![],
-        crop: None,
+        annotations: marker.annotations,
+        crop: marker.crop,
+        revision: Some(revision),
     }
 }
 
@@ -396,6 +411,10 @@ mod tests {
             repository: "acme/assets".into(),
             branch: "main".into(),
             sha: Some("abc".into()),
+            rendition_sha: None,
+            rendition_path: None,
+            crop: None,
+            annotations: vec![],
             batch_id: Some("b1".into()),
             batch_label: Some("before --> after".into()),
             actor: None,
