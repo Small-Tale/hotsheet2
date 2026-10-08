@@ -2605,7 +2605,9 @@ test('opens the native folder chooser directly from Add project and only onboard
   expect(openedRoots).toEqual(['.', '/work/other', '/work/other']);
 });
 
-test('changes a project source color and updates card and inspector badges (HS2-068Q55) @ci-smoke', async ({ page }) => {
+test('changes a project source color and updates card and inspector badges (HS2-068Q55) @ci-smoke', async ({
+  page,
+}) => {
   await mockProject(page);
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -2629,6 +2631,24 @@ test('changes a project source color and updates card and inspector badges (HS2-
   await expect(color).toHaveValue('transparent');
   await page.getByLabel('List view').click();
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).not.toHaveAttribute('style', /color/);
+});
+
+test('centers the compact source mark with the type icon and ticket number in columns (HS2-XTF923) @ci-smoke', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Columns view').click();
+  const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  const type = await row.locator('.ticket-list-row__category-icon').boundingBox();
+  const source = await row.locator('.ticket-list-row__source .ticket-source-icon').boundingBox();
+  const number = await row.locator('.ticket-list-row__slug').boundingBox();
+  expect(type && source && number).toBeTruthy();
+  const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
+  expect(Math.abs(middle(source!) - middle(type!))).toBeLessThanOrEqual(3);
+  expect(Math.abs(middle(source!) - middle(number!))).toBeLessThanOrEqual(3);
 });
 
 test('uses one provider dialog for onboarding, repeated connection creation, and editing', async ({ page }) => {

@@ -661,7 +661,8 @@ and identity-less legacy entries remain conservatively blocking.
   A warning banner appears when two sources from the same provider share an icon color.
   Ticket cards show the source mark directly after the type icon; Git and GitHub use
   their filled data-source logo exports, with the selected color on the mark itself
-  and the lowered surface color for Transparent. The inspector
+  and the lowered surface color for Transparent. Column cards vertically center the
+  compact source mark with the type icon and ticket number. The inspector
   toolbar shows it beside the ticket number, including in the terminal rail.
   When adding a provider source, **Use as this project's default ticket source** starts
   checked only if the project has no default source. The user can change that choice before

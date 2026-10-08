@@ -70,9 +70,11 @@
   grid-template-columns: auto minmax(0, 1fr);
 }
 .ticket-list-row__source {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   margin-right: remify(5.6px);
-  vertical-align: -0.125em;
+  vertical-align: middle;
+  line-height: 0;
 }
 .ticket-list-row__content {
   display: grid;
