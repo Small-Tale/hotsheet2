@@ -388,6 +388,12 @@ server, and every loser exits. Then **stop** (`hotsheet-server
 guard on **graceful shutdown**: SIGTERM/Ctrl-C), and if a live server already serves
 the store it **prints how to attach and exits** instead of duplicating. E2E-verified.
 
+The web host has a separate discovery record, `${HOTSHEET_HOME:-~/.hotsheet2}/client.json`,
+containing its local `url`, `pid`, and start identity. It points to the browser client, while
+the per-store instance records above point to the machine API server. External local tools
+can combine that client URL with the ticket deep-link route in [06-clients.md](06-clients.md)
+(HS2-RVSPQ9).
+
 **Shutdown is bounded (HS2-W1KJR4).** The first SIGTERM/Ctrl-C (or an accepted quiescent
 restart) enters a _stopping_ state. The listener stops accepting on both the plaintext
 and mTLS tiers, and long waits end at once:

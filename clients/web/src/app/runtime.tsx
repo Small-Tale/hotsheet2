@@ -38,6 +38,7 @@ import {
   type AiToolDefaults,
   Api,
   type Capabilities,
+  type Checkout,
   type CheckoutTicketCounts,
   type CheckoutTicketQuery,
   type CommandDefinition,
@@ -327,6 +328,7 @@ import { BulkTicketMutationSequencer, canBulkUpdate } from '../ticket-bulk-opera
 import { loadLastTicketCategory } from '../ticket-category-preference';
 import { type DuplicateTarget } from '../ticket-close';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
+import { parseTicketDeepLink, type TicketDeepLink, ticketDeepLinkRoot } from '../ticket-deep-link';
 import { loadTicketEditorSizes } from '../ticket-editor-size';
 import {
   reconcileActiveDraft,
@@ -5858,6 +5860,35 @@ export async function startHotSheetWebClient() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushOnHide();
   });
+  async function openStartupTicketDeepLink(link: TicketDeepLink) {
+    try {
+      let target = projects.value.find((item) => item.id === link.store || item.root === link.store);
+      if (!target) {
+        const response = await fetch('/__hotsheet/checkouts');
+        if (!response.ok) throw new Error('Could not find registered Hot Sheet projects.');
+        const root = ticketDeepLinkRoot(link.store, (await response.json()) as Checkout[]);
+        if (!root) throw new Error(`No registered project matches ${link.store}.`);
+        target = projects.value.find((item) => item.root === root);
+        if (!target) {
+          if (!(await openProject(root, undefined, true, false))) throw new Error(`Could not open project ${root}.`);
+          target = projects.value.find((item) => item.root === root);
+        }
+      }
+      if (!target) throw new Error(`Could not open project ${link.store}.`);
+      if (selectedProjectId.value !== target.id) await activateOpenedProject(target);
+      setShellMode('project');
+      const ticket = (await new Api(target.apiPath).checkoutTicket(target.id, link.ticket)).ticket;
+      selectedTicketSlugs.value = [ticket.slug];
+      presentTicket(ticket);
+      scheduleProjectSessionPersistence();
+      presentTicketReaderDialog('workspace-reader', undefined, () => {
+        readerOpen.value = true;
+      });
+    } catch (reason) {
+      showToast(`Could not open ticket link: ${reason instanceof Error ? reason.message : String(reason)}`);
+    }
+  }
+  const startupTicketDeepLink = parseTicketDeepLink(window.location.search);
   const rememberedActiveRoot = activeProjectRoot(localStorage);
   void (async () => {
     try {
@@ -5884,6 +5915,7 @@ export async function startHotSheetWebClient() {
           syncProjectChangeStreams();
         },
       });
+      if (startupTicketDeepLink) await openStartupTicketDeepLink(startupTicketDeepLink);
       startPermissionUpdates();
       syncProjectChangeStreams();
     } finally {

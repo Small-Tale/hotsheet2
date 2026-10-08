@@ -5,6 +5,7 @@ import { defineConfig, type Plugin, type UserConfig } from 'vite';
 
 import remifyCss from './scripts/remify-css.mjs';
 import { scanBrowserDependencies } from './src/browser-dependency-scan';
+import { localClientUrl, publishClientUrl } from './src/client-discovery';
 import { devServerRouteExclude } from './src/dev-server-routes';
 import { installProjectWebSocketBridge } from './src/terminal-ws-bridge';
 
@@ -80,11 +81,33 @@ export function stableDevClientStripPlugin(environment: NodeJS.ProcessEnv = proc
   };
 }
 
+export function clientDiscoveryPlugin(): Plugin {
+  return {
+    name: 'hotsheet-client-discovery',
+    configureServer(server) {
+      const listener = server.httpServer;
+      listener?.once('listening', () => {
+        const address = listener.address();
+        if (!address || typeof address === 'string') return;
+        void publishClientUrl(localClientUrl(address.address, address.port))
+          .then((dispose) => {
+            if (!listener.listening) void dispose();
+            else listener.once('close', () => void dispose());
+          })
+          .catch((error: unknown) => {
+            server.config.logger.warn(`Could not publish Hot Sheet client discovery: ${String(error)}`);
+          });
+      });
+    },
+  };
+}
+
 export default defineConfig(({ command, isSsrBuild }) => ({
   ...viteDependencyIsolation(),
   plugins:
     command === 'serve'
       ? [
+          clientDiscoveryPlugin(),
           { name: 'hotsheet-project-websocket-bridge', configureServer: installProjectWebSocketBridge },
           devServer({
             entry: 'src/dev-server.ts',

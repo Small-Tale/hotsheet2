@@ -17,6 +17,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type MiddlewareHandler } from 'hono';
 
 import { spawnSync } from './child-process';
+import { localClientUrl, publishClientUrl } from './client-discovery';
 import { createDevApp } from './dev-server';
 import { developmentRepositoryRoot } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
@@ -139,7 +140,20 @@ export function startLocalHost({
   return new Promise((resolveListen, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => {
-      resolveListen(server);
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        reject(new Error('Hot Sheet client listener has no network address.'));
+        return;
+      }
+      void publishClientUrl(localClientUrl(address.address, address.port))
+        .then((dispose) => {
+          server.once('close', () => void dispose());
+          resolveListen(server);
+        })
+        .catch((error: unknown) => {
+          server.close();
+          reject(error instanceof Error ? error : new Error(String(error)));
+        });
     });
   });
 }

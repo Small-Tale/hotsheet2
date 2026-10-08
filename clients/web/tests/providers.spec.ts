@@ -25,6 +25,19 @@ const project = {
   apiPath: '/__hotsheet/project-api/demo-checkout',
 };
 
+test('opens a checkout and its exact ticket from a deep link', async ({ page }) => {
+  await mockProject(page);
+  await page.route('**/__hotsheet/checkouts', (route) =>
+    route.fulfill({ json: [{ id: project.id, alias: 'demo', root: project.root, stores: project.stores }] }),
+  );
+  await page.goto('/?store=demo-checkout&ticket=HS2-DEMO01&dev-review=false');
+  const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
+  await expect(reader).toBeVisible();
+  await expect(reader).toContainText('Use real project tickets');
+  await expect(reader).toContainText('The real ticket body');
+  await expect(page.getByRole('tab', { name: /^demo/ })).toHaveAttribute('aria-selected', 'true');
+});
+
 const emptyCheckoutTicketPage = (url: URL) => ({
   items: [],
   counts:
@@ -1723,7 +1736,7 @@ async function mockProject(
         },
       });
     }
-    if (path.endsWith('/tickets/01') && request.method() === 'GET') {
+    if ((path.endsWith('/tickets/01') || path.endsWith('/tickets/HS2-DEMO01')) && request.method() === 'GET') {
       if (ticketLoadDelay) await new Promise((resolve) => setTimeout(resolve, ticketLoadDelay));
       return route.fulfill({ json: { store: 'git-local', ...selectedFull } });
     }
