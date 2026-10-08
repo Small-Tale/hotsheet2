@@ -92,6 +92,12 @@
   overflow: hidden;
   line-height: 1.3;
 }
+.ticket-list-row__identifier {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  vertical-align: middle;
+}
 .ticket-list-row--column .ticket-list-row__identity {
   max-height: 5.2em;
 }

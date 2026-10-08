@@ -188,13 +188,19 @@ export function TicketRow(raw: TicketRowProps) {
             <div class="ticket-list-row__first-line">
               <div class="ticket-list-row__identity">
                 <span class="ticket-list-row__updated">{props.updatedLabel}</span>
-                {props.presentation === 'column' && category}
-                {props.presentation === 'column' && props.source && (
-                  <span class="ticket-list-row__source">
-                    <TicketSourceIcon source={props.source} size="compact" />
+                {props.presentation === 'column' ? (
+                  <span class="ticket-list-row__identifier">
+                    {category}
+                    {props.source && (
+                      <span class="ticket-list-row__source">
+                        <TicketSourceIcon source={props.source} size="compact" />
+                      </span>
+                    )}
+                    <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
                   </span>
+                ) : (
+                  <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
                 )}
-                <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
                 <span
                   class="ticket-list-row__priority"
                   style={`color: ${priority.color}`}
