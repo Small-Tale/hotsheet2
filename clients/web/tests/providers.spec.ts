@@ -5562,6 +5562,70 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   await conversation.screenshot({ path: '/private/tmp/hs2-1rvp5m-chat-composer-narrow-after.png' });
 });
 
+test('restores phone shell and drawer geometry after a live desktop resize (HS2-Y2XAFW)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const shell = page.locator('[data-component="app-shell"]'),
+    drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat').click();
+  await expect(drawer.locator('[data-component="ai-conversation"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Search tickets' }).click();
+  await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
+  await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect(shell.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect.poll(() => shell.evaluate((node) => Math.round(node.getBoundingClientRect().width))).toBe(390);
+  await expect
+    .poll(() =>
+      drawer.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= 391;
+      }),
+    )
+    .toBe(true);
+  await expect
+    .poll(() =>
+      shell
+        .locator('#app-left-rail .kui-workbench__panel-content')
+        .evaluate((node) => node.getBoundingClientRect().right),
+    )
+    .toBeLessThanOrEqual(0);
+  await expect
+    .poll(() =>
+      shell
+        .locator('#app-right-rail .kui-workbench__panel-content')
+        .evaluate((node) => node.getBoundingClientRect().left),
+    )
+    .toBeGreaterThanOrEqual(390);
+  await page.screenshot({ path: '/private/tmp/hs2-y2xafw-live-phone.png', fullPage: true });
+  await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dispatchEvent('dblclick');
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
+  await expect
+    .poll(() =>
+      drawer.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return box.left >= 0 && box.right <= 391 && box.top >= 0 && box.bottom <= 845;
+      }),
+    )
+    .toBe(true);
+  await page.screenshot({ path: '/private/tmp/hs2-y2xafw-maximized-phone.png', fullPage: true });
+  await page.reload();
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
+  await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect(shell.locator('#app-right-rail')).toHaveAttribute('data-collapsed', 'true');
+  await expect(drawer).toBeVisible();
+  await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dispatchEvent('dblclick');
+  await expect(drawer).toHaveAttribute('data-maximized', 'true');
+  await page.screenshot({ path: '/private/tmp/hs2-y2xafw-fresh-maximized-phone.png', fullPage: true });
+});
+
 test('keeps a scrolled-back transcript in place while selecting a message range', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
