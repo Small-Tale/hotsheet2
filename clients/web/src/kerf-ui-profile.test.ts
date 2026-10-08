@@ -21,7 +21,7 @@ describe('Kerf application UI profile', () => {
       readFileSync(new URL('../.kerf-ui-profile.json', import.meta.url), 'utf8'),
     ) as KerfProfile;
     expect(profile.scope).toBe('workspace');
-    expect(profile.exceptions).toHaveLength(74);
+    expect(profile.exceptions).toHaveLength(70);
     for (const exception of profile.exceptions.slice(0, 21)) {
       expect(exception.id).toMatch(/^web-awesome-/);
       expect(exception.rules).toEqual(['KUI-L011']);
@@ -47,20 +47,34 @@ describe('Kerf application UI profile', () => {
     const reviewed = profile.exceptions.slice(22);
     expect(reviewed.length).toBeGreaterThan(0);
     const ids = new Set<string>(),
-      targets = new Set<string>();
+      targets = new Set<string>(),
+      stale: string[] = [];
     for (const exception of reviewed) {
       expect(exception.id).toMatch(/^(?:intentional-nested-inset|state-modifier-classes)-[a-z0-9-]+$/);
       expect(exception.rules).toEqual([exception.id.startsWith('intentional-') ? 'KUI-L004' : 'KUI-L008']);
       expect(exception.target).toMatch(/^src\/(?:components|ux-demo)\/[a-z0-9-]+\.tsx$/);
       expect(existsSync(new URL(`../${exception.target}`, import.meta.url)), exception.target).toBe(true);
       expect(exception.rationale).toMatch(/^Reviewed HS2-[0-9A-Z]{6}: /);
-      if (exception.rules[0] === 'KUI-L004') expect(exception.rationale).toMatch(/design: [a-z][a-z0-9-]*__[a-z0-9-]+/);
-      else expect(exception.rationale).toMatch(/Expressions: class(?:Name)?=\{/);
+      const source = readFileSync(new URL(`../${exception.target}`, import.meta.url), 'utf8');
+      if (exception.rules[0] === 'KUI-L004') {
+        expect(exception.rationale).toMatch(/design: [a-z][a-z0-9-]*__[a-z0-9-]+/);
+        const classes = [...exception.rationale.matchAll(/\b[a-z][a-z0-9-]*__[a-z0-9-]+(?:--[a-z0-9-]+)?\b/g)].map(
+          ([name]) => name,
+        );
+        for (const name of classes) if (!source.includes(name)) stale.push(`${exception.id}: ${name}`);
+      } else {
+        expect(exception.rationale).toMatch(/Expressions: class(?:Name)?=\{/);
+        const sourceWithoutWhitespace = source.replace(/\s+/g, '');
+        for (const expression of exception.rationale.split('Expressions: ')[1].split(' | '))
+          if (!sourceWithoutWhitespace.includes(expression.replace(/\s+/g, '')))
+            stale.push(`${exception.id}: ${expression}`);
+      }
       expect(ids.has(exception.id), exception.id).toBe(false);
       ids.add(exception.id);
       targets.add(`${exception.rules[0]} ${exception.target}`);
     }
     expect(targets.size).toBe(reviewed.length);
+    expect(stale).toEqual([]);
   });
 
   it('runs every static doctor stage while keeping browser execution opt-in', () => {

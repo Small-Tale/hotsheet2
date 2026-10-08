@@ -218,12 +218,6 @@
       "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: not-working-dialog__note."
     },
     {
-      "id": "intentional-nested-inset-notification-center",
-      "rules": ["KUI-L004"],
-      "target": "src/components/notification-center.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: notification-center__empty."
-    },
-    {
       "id": "intentional-nested-inset-pending-attachment-picker",
       "rules": ["KUI-L004"],
       "target": "src/components/pending-attachment-picker.tsx",
@@ -270,12 +264,6 @@
       "rules": ["KUI-L004"],
       "target": "src/components/terminal-dashboard.tsx",
       "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: terminal-dashboard__content, terminal-dashboard__context-menu, terminal-dashboard__magnified, terminal-dashboard__project, terminal-tile__close, terminal-tile__text-size, workspace-chat-tile__preview-surface."
-    },
-    {
-      "id": "intentional-nested-inset-terminal-operations-sidebar",
-      "rules": ["KUI-L004"],
-      "target": "src/components/terminal-operations-sidebar.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: terminal-operations-sidebar__group-heading."
     },
     {
       "id": "intentional-nested-inset-terminal-visibility-dialog",
@@ -356,16 +344,10 @@
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`ai-conversation__message ai-conversation__message--${message.role}`}"
     },
     {
-      "id": "state-modifier-classes-attachment-context-menu",
-      "rules": ["KUI-L008"],
-      "target": "src/components/attachment-context-menu.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={className}"
-    },
-    {
       "id": "state-modifier-classes-attachment-gallery",
       "rules": ["KUI-L008"],
       "target": "src/components/attachment-gallery.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={className}"
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={className || undefined}"
     },
     {
       "id": "state-modifier-classes-connection-state-banner",
@@ -377,7 +359,7 @@
       "id": "state-modifier-classes-corrupt-ticket-row",
       "rules": ["KUI-L008"],
       "target": "src/components/corrupt-ticket-row.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`corrupt-ticket-inspector__recovery${recovery.failed ? ' corrupt-ticket-inspector__recovery--failed' : ''}`} | class={`corrupt-ticket-row__recovery${recovery.failed ? ' corrupt-ticket-row__recovery--failed' : ''}`} | class={`ticket-list-row ticket-list-row--list corrupt-ticket-row${selected ? ' ticket-list-row--selected' : ''}`}"
+      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`corrupt-ticket-inspector__recovery${recovery.failed ? ' corrupt-ticket-inspector__recovery--failed' : ''}`} | class={`corrupt-ticket-row__recovery${recovery.failed ? ' corrupt-ticket-row__recovery--failed' : ''}`}"
     },
     {
       "id": "state-modifier-classes-markdown-editor",
@@ -444,12 +426,6 @@
       "rules": ["KUI-L008"],
       "target": "src/components/ticket-row.tsx",
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`ticket-list-row ticket-list-row--${props.presentation}${props.selected ? ' ticket-list-row--selected' : ''}`} | class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`} | class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`}"
-    },
-    {
-      "id": "state-modifier-classes-view-navigation",
-      "rules": ["KUI-L008"],
-      "target": "src/components/view-navigation.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={item.id === 'errors' ? 'menu-item--errors' : ''}"
     },
     {
       "id": "state-modifier-classes-main",
