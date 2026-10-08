@@ -57,3 +57,8 @@ a shape field and remains when shapes are later removed. A v2 reader rejects tha
 string before deserializing or rewriting the
 ticket, so it cannot discard the geometry. Rectangle-only files continue to use
 `hotsheet/v2-bounded-notes` without a store-wide activation.
+
+Tickets with explicit media annotation intents use the sticky
+`hotsheet/v4-annotation-intents` marker. An older v3 shape-aware binary rejects
+the ticket before it can discard the intent list. Empty intents remain the
+shape default and do not trigger this guard on a previously v2/v3 ticket.

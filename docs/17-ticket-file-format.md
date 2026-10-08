@@ -228,6 +228,19 @@ use `schema: hotsheet/v3-annotation-shapes`. Older binaries that know only the v
 guard reject these tickets with `upgrade_required` before they can rewrite and lose
 shape data. A ticket keeps the v3 guard after its last shape is removed; tickets
 that have never held a shape retain the v2 marker and unchanged file format.
+
+The optional ordered `intents` list accepts `comment` (blue), `bug` (red),
+`change` (orange), `insert` (green), `remove` (purple), `move` (teal), and
+`question` (yellow). Empty or omitted means the shape default: rectangle and
+freehand → `comment`, strike → `remove`, insertion → `insert`, arrow → `move`.
+The primary intent is the first listed intent different from the default, or
+the default when none exists. Unknown nonempty strings are preserved unchanged
+and have no assigned colour. Duplicate or blank entries are rejected. The
+`text` field remains the Markdown note. Tickets with explicit intents use the
+sticky `schema: hotsheet/v4-annotation-intents` guard, so v3 writers cannot
+silently discard the list. CLI, server, and MCP annotation writes use the same
+validation and activity notes list explicit intents.
+
 Each persisted annotation batch also appends an `activity` note whose summary identifies
 the attachment and whose Markdown body records added, updated, and removed shapes.
 The annotation replacement and its activity note are one store commit, so readers never

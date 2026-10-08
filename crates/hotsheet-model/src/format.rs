@@ -19,6 +19,7 @@ use crate::timestamp::Timestamp;
 
 const GUARDED_SCHEMA_V2: &str = "hotsheet/v2-bounded-notes";
 const GUARDED_SCHEMA_V3: &str = "hotsheet/v3-annotation-shapes";
+const GUARDED_SCHEMA_V4: &str = "hotsheet/v4-annotation-intents";
 
 /// Frontmatter keys the current schema defines. Anything else parsed from a file's
 /// frontmatter is retained in [`Ticket::extra`]. Kept in sync with `Ticket`'s fields
@@ -215,12 +216,21 @@ fn frontmatter_to_string(t: &Ticket) -> String {
     for (k, v) in &t.extra {
         mapping.insert(Value::String(k.clone()), v.clone());
     }
-    let schema = if t.attachments.iter().any(|attachment| {
+    let intents = t.attachments.iter().any(|attachment| {
+        attachment
+            .annotations
+            .iter()
+            .any(|annotation| !annotation.intents.is_empty())
+    });
+    let shapes = t.attachments.iter().any(|attachment| {
         attachment
             .annotations
             .iter()
             .any(|annotation| annotation.shape.is_some())
-    }) {
+    });
+    let schema = if intents {
+        t.schema.max(crate::INTENT_SCHEMA_VERSION)
+    } else if shapes {
         t.schema.max(crate::SHAPE_SCHEMA_VERSION)
     } else {
         t.schema
@@ -235,6 +245,11 @@ fn frontmatter_to_string(t: &Ticket) -> String {
             Value::String("schema".into()),
             Value::String(GUARDED_SCHEMA_V3.into()),
         );
+    } else if schema == crate::INTENT_SCHEMA_VERSION {
+        mapping.insert(
+            Value::String("schema".into()),
+            Value::String(GUARDED_SCHEMA_V4.into()),
+        );
     }
     serde_yaml::to_string(&Value::Mapping(mapping)).expect("a YAML mapping always serializes")
 }
@@ -248,6 +263,7 @@ fn normalize_schema_marker(mapping: &mut Mapping) -> Result<(), ParseError> {
         let schema = match marker.as_str() {
             GUARDED_SCHEMA_V2 => crate::SCHEMA_VERSION,
             GUARDED_SCHEMA_V3 => crate::SHAPE_SCHEMA_VERSION,
+            GUARDED_SCHEMA_V4 => crate::INTENT_SCHEMA_VERSION,
             _ => return Err(ParseError::UnsupportedSchema(marker.clone())),
         };
         mapping.insert(key, Value::Number(schema.into()));
@@ -875,6 +891,7 @@ mod tests {
                 end_ms: Some(2000),
                 text: "Review **this**".into(),
                 shape: None,
+                intents: Vec::new(),
             }],
         }];
 
@@ -949,6 +966,7 @@ mod tests {
                     end_ms: None,
                     text: String::new(),
                     shape: Some(shape),
+                    intents: Vec::new(),
                 }],
             });
             let encoded = to_file_string(&ticket);
@@ -958,6 +976,41 @@ mod tests {
             assert_eq!(to_file_string(&decoded), encoded);
         }
         assert_eq!(to_file_string(&sample()), legacy);
+    }
+
+    #[test]
+    fn annotation_intents_round_trip_under_v4_guard_and_preserve_unknown_values() {
+        use crate::ticket::{Attachment, MediaAnnotation};
+        let mut ticket = sample();
+        ticket.schema = crate::INTENT_SCHEMA_VERSION;
+        ticket.attachments.push(Attachment {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC4"),
+            filename: "proof.png".into(),
+            created_at: "2026-08-20T06:00:00Z".into(),
+            batch_id: None,
+            batch_label: None,
+            actor: None,
+            purpose: None,
+            annotations: vec![MediaAnnotation {
+                id: "intent".into(),
+                x: 100,
+                y: 200,
+                width: 300,
+                height: 400,
+                start_ms: None,
+                end_ms: None,
+                text: "Needs review".into(),
+                shape: None,
+                intents: vec!["comment".into(), "future_focus".into(), "bug".into()],
+            }],
+        });
+        let encoded = to_file_string(&ticket);
+        assert!(encoded.contains("schema: hotsheet/v4-annotation-intents"));
+        let decoded = parse_file(&encoded).unwrap();
+        assert_eq!(decoded, ticket);
+        assert_eq!(to_file_string(&decoded), encoded);
+        ticket.schema = crate::SCHEMA_VERSION;
+        assert!(to_file_string(&ticket).contains("schema: hotsheet/v4-annotation-intents"));
     }
 
     #[test]

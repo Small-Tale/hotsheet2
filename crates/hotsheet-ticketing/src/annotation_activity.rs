@@ -61,6 +61,14 @@ fn caption(annotation: &MediaAnnotation) -> String {
     }
 }
 
+fn intents(annotation: &MediaAnnotation) -> String {
+    if annotation.intents.is_empty() {
+        String::new()
+    } else {
+        format!(" [intents: {}]", annotation.intents.join(", "))
+    }
+}
+
 /// Describe one persisted annotation batch as a user-readable Markdown activity.
 ///
 /// Returns `None` when the annotation collections are identical. Added and updated
@@ -82,13 +90,15 @@ pub fn annotation_change_activity(
             .find(|candidate| candidate.id == annotation.id)
         {
             None => lines.push(format!(
-                "- Added `{}`{}",
+                "- Added `{}`{}{}",
                 location(annotation),
+                intents(annotation),
                 caption(annotation)
             )),
             Some(previous) if previous != annotation => lines.push(format!(
-                "- Updated `{}`{}",
+                "- Updated `{}`{}{}",
                 location(annotation),
+                intents(annotation),
                 caption(annotation)
             )),
             Some(_) => {}
@@ -97,16 +107,27 @@ pub fn annotation_change_activity(
     for annotation in before {
         if !after.iter().any(|candidate| candidate.id == annotation.id) {
             lines.push(format!(
-                "- Removed `{}`{}",
+                "- Removed `{}`{}{}",
                 location(annotation),
+                intents(annotation),
                 caption(annotation)
             ));
         }
     }
-    Some((
-        format!("Updated annotations for {filename}"),
-        lines.join("\n"),
-    ))
+    let mut listed = Vec::new();
+    for annotation in after.iter().chain(before) {
+        for intent in &annotation.intents {
+            if !listed.contains(intent) {
+                listed.push(intent.clone());
+            }
+        }
+    }
+    let summary = if listed.is_empty() {
+        format!("Updated annotations for {filename}")
+    } else {
+        format!("Updated annotations for {filename} ({})", listed.join(", "))
+    };
+    Some((summary, lines.join("\n")))
 }
 
 #[cfg(test)]
@@ -124,6 +145,7 @@ mod tests {
             end_ms: None,
             text: text.into(),
             shape: None,
+            intents: Vec::new(),
         }
     }
 
@@ -200,5 +222,28 @@ mod tests {
         let (_, body) = annotation_change_activity("proof.png", &[], &[strike, insertion]).unwrap();
         assert!(body.contains("strike (x 12.1%, y 54.0%"));
         assert!(body.contains("insertion at 100.0%,100.0%"));
+    }
+
+    #[test]
+    fn activity_summary_and_lines_list_explicit_intents_in_order() {
+        let mut first = annotation("first", "Needs work");
+        first.intents = vec!["comment".into(), "bug".into(), "future_focus".into()];
+        let mut second = annotation("second", "Question");
+        second.intents = vec!["question".into(), "bug".into()];
+        let (summary, body) =
+            annotation_change_activity("proof.png", &[], &[first.clone(), second.clone()]).unwrap();
+        assert_eq!(
+            summary,
+            "Updated annotations for proof.png (comment, bug, future_focus, question)"
+        );
+        assert!(body.contains("[intents: comment, bug, future_focus] — Needs work"));
+        assert!(body.contains("[intents: question, bug] — Question"));
+        let (summary, body) =
+            annotation_change_activity("proof.png", &[first, second.clone()], &[second]).unwrap();
+        assert!(
+            summary.contains("future_focus"),
+            "removed intents remain in the summary"
+        );
+        assert!(body.contains("Removed"));
     }
 }

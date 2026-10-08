@@ -575,6 +575,7 @@ mod tests {
                 end_ms: None,
                 text: "Keep annotation".into(),
                 shape: None,
+                intents: Vec::new(),
             });
         f.store.write_ticket(&ticket).unwrap();
         std::fs::remove_file(

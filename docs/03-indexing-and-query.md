@@ -430,6 +430,10 @@ even when projecting stale legacy data; other open tickets are deliberately omit
 file remains a focused executable queue. Concise status/note/follow-up instructions are
 embedded so these files remain useful to an AI tool without the skill or API. See
 [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.9.
+When an Up Next ticket has media annotations, indented worklist lines identify the
+attachment, annotation id, shape, and explicit intents (or the shape's default).
+The full Markdown note remains in the ticket; worklist lines escape user-supplied
+filenames and intent strings as inert text.
 
 ## 3.7 Alternatives considered
 

@@ -3092,6 +3092,22 @@ mod tests {
             read["attachments"][0]["annotations"][0]["shape"]["points"][1]["x"],
             6000
         );
+        let intended = call(
+            &backend,
+            "hotsheet_annotate_attachment",
+            json!({
+                "id": ticket.slug,
+                "attachment": attachment_id.to_string(),
+                "annotations": [{"id":"intent","x":10,"y":20,"width":30,"height":40,
+                    "intents":["comment","bug","future_focus"]}]
+            }),
+        );
+        assert_eq!(intended["schema"], hotsheet_model::INTENT_SCHEMA_VERSION);
+        let read = call(&backend, "hotsheet_get", json!({ "id": ticket.slug }));
+        assert_eq!(
+            read["attachments"][0]["annotations"][0]["intents"][2],
+            "future_focus"
+        );
         let invalid = call(
             &backend,
             "hotsheet_annotate_attachment",
@@ -3107,7 +3123,7 @@ mod tests {
                 .unwrap()
                 .contains("valid shape geometry and bounding boxes")
         );
-        assert_eq!(store.read_ticket(&ticket.id).unwrap().notes.len(), 2);
+        assert_eq!(store.read_ticket(&ticket.id).unwrap().notes.len(), 3);
     }
 
     #[test]

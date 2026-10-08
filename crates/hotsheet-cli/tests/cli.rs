@@ -4378,6 +4378,48 @@ fn annotate_attachment_replaces_once_and_rejects_invalid_batches() {
             .unwrap()
             .unwrap();
     assert_eq!(cleared.schema, hotsheet_model::SHAPE_SCHEMA_VERSION);
+    hs(root)
+        .args(["annotate", &slug, attachment_id, "--file", "-"])
+        .write_stdin(r#"[{"id":"intent","x":1000,"y":2000,"width":3000,"height":1000,"text":"Needs work","intents":["comment","bug","future_focus"]}]"#)
+        .assert()
+        .success();
+    let intended =
+        hotsheet_ticketing::ops::resolve(&hotsheet_ticketing::FsStore::open(root).unwrap(), &slug)
+            .unwrap()
+            .unwrap();
+    assert_eq!(intended.schema, hotsheet_model::INTENT_SCHEMA_VERSION);
+    assert_eq!(
+        intended.attachments[0].annotations[0].intents,
+        ["comment", "bug", "future_focus"]
+    );
+    assert!(
+        intended
+            .notes
+            .last()
+            .unwrap()
+            .summary
+            .as_ref()
+            .unwrap()
+            .contains("comment, bug, future_focus")
+    );
+    let before_invalid = git_output(root, &["rev-parse", "HEAD"]);
+    hs(root)
+        .args(["annotate", &slug, attachment_id, "--file", "-"])
+        .write_stdin(
+            r#"[{"id":"invalid","x":1,"y":2,"width":3,"height":4,"intents":["bug","bug"]}]"#,
+        )
+        .assert()
+        .failure();
+    assert_eq!(before_invalid, git_output(root, &["rev-parse", "HEAD"]));
+    hs(root)
+        .args(["annotate", &slug, attachment_id, "--clear"])
+        .assert()
+        .success();
+    let cleared =
+        hotsheet_ticketing::ops::resolve(&hotsheet_ticketing::FsStore::open(root).unwrap(), &slug)
+            .unwrap()
+            .unwrap();
+    assert_eq!(cleared.schema, hotsheet_model::INTENT_SCHEMA_VERSION);
 }
 
 #[test]

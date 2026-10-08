@@ -77,6 +77,22 @@ pub fn render_with_auto_context(tickets: &[Ticket], entries: &[AutoContextEntry]
 
 fn entry(ticket: &Ticket, entries: &[AutoContextEntry]) -> String {
     let mut out = line(ticket);
+    for attachment in &ticket.attachments {
+        for annotation in &attachment.annotations {
+            let intents = if annotation.intents.is_empty() {
+                annotation.default_intent().to_string()
+            } else {
+                annotation.intents.join(", ")
+            };
+            out.push_str(&format!(
+                "  > Media annotation {} #{}: {} · {}\n",
+                escape_inline_markdown(&attachment.filename),
+                escape_inline_markdown(&annotation.id),
+                annotation.shape_type(),
+                escape_inline_markdown(&intents),
+            ));
+        }
+    }
     for context in auto_context::resolve(ticket, entries) {
         for line in context.text.lines() {
             out.push_str("  > ");
@@ -304,7 +320,9 @@ fn local_git_exclude(checkout: &Path) -> Option<PathBuf> {
 mod tests {
     use super::*;
     use crate::ops::{NewTicket, TicketPatch, create, update};
-    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_model::{
+        AnnotationPoint, AnnotationShape, Attachment, MediaAnnotation, Timestamp, Ulid,
+    };
 
     fn ts(s: &str) -> Timestamp {
         Timestamp::new(format!("2026-08-22T00:00:0{s}Z"))
@@ -379,6 +397,68 @@ mod tests {
         assert!(!md.contains("low open"));
         assert!(!md.contains("stale backlog flag"));
         assert!(!md.contains("## Open"));
+    }
+
+    #[test]
+    fn queued_annotation_shape_and_intents_are_visible_to_ai_worklist_readers() {
+        let mut ticket = Ticket::new(
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5AAA").unwrap(),
+            "HS-QUEUE",
+            "Review capture",
+            "task",
+            ts("0"),
+            ts("0"),
+        );
+        ticket.up_next = true;
+        ticket.attachments.push(Attachment {
+            id: Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5AAB").unwrap(),
+            filename: "proof.png".into(),
+            created_at: ts("0"),
+            batch_id: None,
+            batch_label: None,
+            actor: None,
+            purpose: None,
+            annotations: vec![
+                MediaAnnotation {
+                    id: "remove".into(),
+                    x: 100,
+                    y: 200,
+                    width: 300,
+                    height: 400,
+                    start_ms: None,
+                    end_ms: None,
+                    text: "Remove this".into(),
+                    shape: Some(AnnotationShape::Strike),
+                    intents: Vec::new(),
+                },
+                MediaAnnotation {
+                    id: "move".into(),
+                    x: 100,
+                    y: 200,
+                    width: 300,
+                    height: 1,
+                    start_ms: None,
+                    end_ms: None,
+                    text: "Move here".into(),
+                    shape: Some(AnnotationShape::Arrow {
+                        points: vec![
+                            AnnotationPoint { x: 100, y: 200 },
+                            AnnotationPoint { x: 400, y: 200 },
+                        ],
+                    }),
+                    intents: vec!["move".into(), "bug".into(), "future_focus".into()],
+                },
+            ],
+        });
+        let md = render(&[ticket]);
+        assert!(md.contains("Media annotation proof\\.png #remove: strike · remove"));
+        assert!(
+            md.contains("Media annotation proof\\.png #move: arrow · move, bug, future\\_focus")
+        );
+        assert!(
+            !md.contains("Remove this"),
+            "the worklist keeps note text in the full ticket"
+        );
     }
 
     #[test]

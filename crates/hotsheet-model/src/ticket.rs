@@ -238,6 +238,55 @@ pub struct MediaAnnotation {
     /// guarded ticket schema v3 so older writers cannot silently discard it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shape: Option<AnnotationShape>,
+    /// Reviewer intent in priority order. An empty list inherits the shape default.
+    /// Unknown values remain strings so future intent kinds survive a round trip.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub intents: Vec<String>,
+}
+
+impl MediaAnnotation {
+    pub fn shape_type(&self) -> &'static str {
+        match &self.shape {
+            None | Some(AnnotationShape::Rect) => "rect",
+            Some(AnnotationShape::Strike) => "strike",
+            Some(AnnotationShape::Freehand { .. }) => "freehand",
+            Some(AnnotationShape::Arrow { .. }) => "arrow",
+            Some(AnnotationShape::Insertion { .. }) => "insertion",
+        }
+    }
+
+    pub fn default_intent(&self) -> &'static str {
+        match &self.shape {
+            Some(AnnotationShape::Strike) => "remove",
+            Some(AnnotationShape::Insertion { .. }) => "insert",
+            Some(AnnotationShape::Arrow { .. }) => "move",
+            _ => "comment",
+        }
+    }
+
+    /// First explicitly added non-default intent, or the shape's default.
+    pub fn primary_intent(&self) -> &str {
+        let default = self.default_intent();
+        self.intents
+            .iter()
+            .find(|intent| intent.as_str() != default)
+            .map(String::as_str)
+            .unwrap_or(default)
+    }
+
+    /// Named colour family for known intents. Future unknown intents have no assigned colour.
+    pub fn primary_intent_color(&self) -> Option<&'static str> {
+        match self.primary_intent() {
+            "comment" => Some("blue"),
+            "bug" => Some("red"),
+            "change" => Some("orange"),
+            "insert" => Some("green"),
+            "remove" => Some("purple"),
+            "move" => Some("teal"),
+            "question" => Some("yellow"),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -287,7 +336,7 @@ fn point_box(points: &[AnnotationPoint]) -> Option<(u32, u32, u32, u32)> {
 
 /// Shared validation for a complete replacement batch of media annotations.
 pub fn validate_media_annotations(annotations: &[MediaAnnotation]) -> Result<(), &'static str> {
-    const ERROR: &str = "annotations require unique ids, valid shape geometry and bounding boxes, and complete ordered time ranges";
+    const ERROR: &str = "annotations require unique ids, valid shape geometry and bounding boxes, nonempty unique intents, and complete ordered time ranges";
     let mut seen = std::collections::HashSet::new();
     for annotation in annotations {
         let valid_rectangle = annotation.width > 0
@@ -334,7 +383,17 @@ pub fn validate_media_annotations(annotations: &[MediaAnnotation]) -> Result<(),
                 }),
             _ => false,
         };
-        if !seen.insert(&annotation.id) || !valid_rectangle || !valid_time || !valid_shape {
+        let mut intents = std::collections::HashSet::new();
+        let valid_intents = annotation
+            .intents
+            .iter()
+            .all(|intent| !intent.trim().is_empty() && intents.insert(intent));
+        if !seen.insert(&annotation.id)
+            || !valid_rectangle
+            || !valid_time
+            || !valid_shape
+            || !valid_intents
+        {
             return Err(ERROR);
         }
     }
@@ -876,6 +935,7 @@ mod tests {
             end_ms: Some(5),
             text: String::new(),
             shape: None,
+            intents: Vec::new(),
         };
         assert!(validate_media_annotations(&[]).is_ok());
         assert!(validate_media_annotations(std::slice::from_ref(&annotation)).is_ok());
@@ -930,6 +990,7 @@ mod tests {
             end_ms: None,
             text: String::new(),
             shape: None,
+            intents: Vec::new(),
         };
         let valid = [
             MediaAnnotation {
@@ -1015,6 +1076,88 @@ mod tests {
                 validate_media_annotations(std::slice::from_ref(&annotation)).is_err(),
                 "{annotation:?}"
             );
+        }
+    }
+
+    #[test]
+    fn annotation_intents_default_by_shape_preserve_unknown_values_and_choose_color() {
+        let base = MediaAnnotation {
+            id: "intent".into(),
+            x: 100,
+            y: 200,
+            width: 300,
+            height: 400,
+            start_ms: None,
+            end_ms: None,
+            text: String::new(),
+            shape: None,
+            intents: Vec::new(),
+        };
+        assert_eq!(base.default_intent(), "comment");
+        assert_eq!(base.primary_intent(), "comment");
+        assert_eq!(base.primary_intent_color(), Some("blue"));
+        for (shape, expected) in [
+            (AnnotationShape::Strike, "remove"),
+            (AnnotationShape::Arrow { points: Vec::new() }, "move"),
+            (
+                AnnotationShape::Insertion {
+                    point: AnnotationPoint { x: 100, y: 200 },
+                },
+                "insert",
+            ),
+            (
+                AnnotationShape::Freehand {
+                    points: Vec::new(),
+                    closed: true,
+                },
+                "comment",
+            ),
+        ] {
+            let annotation = MediaAnnotation {
+                shape: Some(shape),
+                ..base.clone()
+            };
+            assert_eq!(annotation.default_intent(), expected);
+            assert_eq!(annotation.primary_intent(), expected);
+        }
+        let colors = [
+            ("comment", "blue"),
+            ("bug", "red"),
+            ("change", "orange"),
+            ("insert", "green"),
+            ("remove", "purple"),
+            ("move", "teal"),
+            ("question", "yellow"),
+        ];
+        for (intent, color) in colors {
+            let annotation = MediaAnnotation {
+                intents: vec!["comment".into(), intent.into()],
+                ..base.clone()
+            };
+            assert_eq!(annotation.primary_intent_color(), Some(color));
+        }
+        let unknown = MediaAnnotation {
+            intents: vec!["comment".into(), "future_focus".into()],
+            ..base.clone()
+        };
+        assert_eq!(unknown.primary_intent(), "future_focus");
+        assert_eq!(unknown.primary_intent_color(), None);
+        let encoded = serde_json::to_string(&unknown).unwrap();
+        assert_eq!(
+            serde_json::from_str::<MediaAnnotation>(&encoded).unwrap(),
+            unknown
+        );
+        assert!(validate_media_annotations(&[unknown]).is_ok());
+        for intents in [
+            vec!["".into()],
+            vec![" ".into()],
+            vec!["bug".into(), "bug".into()],
+        ] {
+            let invalid = MediaAnnotation {
+                intents,
+                ..base.clone()
+            };
+            assert!(validate_media_annotations(&[invalid]).is_err());
         }
     }
 }

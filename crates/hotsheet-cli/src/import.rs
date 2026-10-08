@@ -1073,6 +1073,7 @@ mod tests {
                 end_ms: None,
                 text: "Keep this".to_string(),
                 shape: None,
+                intents: Vec::new(),
             });
         store.write_ticket(&ticket).unwrap();
         std::fs::remove_file(staging.path().join("first.png")).unwrap();

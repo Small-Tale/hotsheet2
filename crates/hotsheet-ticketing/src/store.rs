@@ -36,7 +36,16 @@ const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
 const FINDER_METADATA_FILE: &str = ".DS_Store";
 
 fn ticket_write_schema(ticket: &Ticket) -> u32 {
-    if ticket.schema >= hotsheet_model::SHAPE_SCHEMA_VERSION
+    if ticket.schema >= hotsheet_model::INTENT_SCHEMA_VERSION
+        || ticket.attachments.iter().any(|attachment| {
+            attachment
+                .annotations
+                .iter()
+                .any(|annotation| !annotation.intents.is_empty())
+        })
+    {
+        hotsheet_model::INTENT_SCHEMA_VERSION
+    } else if ticket.schema >= hotsheet_model::SHAPE_SCHEMA_VERSION
         || ticket.attachments.iter().any(|attachment| {
             attachment
                 .annotations

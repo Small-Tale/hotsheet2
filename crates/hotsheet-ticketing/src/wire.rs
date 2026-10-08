@@ -667,6 +667,7 @@ mod tests {
                 end_ms: None,
                 text: "Inspect this edge".into(),
                 shape: None,
+                intents: Vec::new(),
             }],
         });
         ticket.attachments[0].annotations.push(MediaAnnotation {
@@ -684,6 +685,7 @@ mod tests {
                     hotsheet_model::AnnotationPoint { x: 400, y: 200 },
                 ],
             }),
+            intents: Vec::new(),
         });
 
         let api = ApiTicket::from(&ticket);

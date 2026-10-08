@@ -6441,6 +6441,28 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         Some(r#"{"annotations":[{"id":"bad-arrow","x":1000,"y":2000,"width":5000,"height":1,"shape":{"type":"arrow","points":[{"x":1000,"y":2000}]}}]}"#),
     )).await.unwrap();
     assert_eq!(invalid_points.status(), StatusCode::BAD_REQUEST);
+    let intended = body_json(app.clone().oneshot(authed(
+        "PUT",
+        &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+        Some(r#"{"annotations":[{"id":"intent","x":1000,"y":2000,"width":3000,"height":1000,"intents":["comment","bug","future_focus"]}]}"#),
+    )).await.unwrap()).await;
+    assert_eq!(intended["schema"], hotsheet_model::INTENT_SCHEMA_VERSION);
+    assert_eq!(
+        intended["attachments"][0]["annotations"][0]["intents"],
+        serde_json::json!(["comment", "bug", "future_focus"])
+    );
+    assert!(
+        intended["notes"].as_array().unwrap().last().unwrap()["summary"]
+            .as_str()
+            .unwrap()
+            .contains("comment, bug, future_focus")
+    );
+    let invalid_intents = app.clone().oneshot(authed(
+        "PUT",
+        &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+        Some(r#"{"annotations":[{"id":"invalid","x":1,"y":2,"width":3,"height":4,"intents":["bug","bug"]}]}"#),
+    )).await.unwrap();
+    assert_eq!(invalid_intents.status(), StatusCode::BAD_REQUEST);
     let video_removed = body_json(
         app.clone()
             .oneshot(authed(

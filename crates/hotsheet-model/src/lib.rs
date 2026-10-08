@@ -29,3 +29,5 @@ pub use timestamp::Timestamp;
 pub const SCHEMA_VERSION: u32 = 2;
 /// Ticket guard required whenever an attachment contains shape geometry.
 pub const SHAPE_SCHEMA_VERSION: u32 = 3;
+/// Ticket guard required once an attachment contains explicit annotation intents.
+pub const INTENT_SCHEMA_VERSION: u32 = 4;

@@ -139,6 +139,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/copy-text.ts         # Click-time text copy with an in-gesture selection fallback when Safari refuses the Clipboard API (HS2-1A2BQR)
     src/inline-search-caret.ts # App-owned workspace/saved-view token-edit caret restoration before the next input task, with coalescing and focus-handoff protection (HS2-PR5TNA)
     src/ticket-display-number.ts # Source-aware local ticket number display; canonical slug remains the routing/copy identity (HS2-04C25A)
+    src/annotation-intents.ts # Shape-derived default/primary intent and named colour family for media annotations (HS2-GNQPT4)
     src/search-collapse.ts # Whitespace-only search collapse predicate used on workspace focus handoff (HS2-Y4SHXY)
     src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations

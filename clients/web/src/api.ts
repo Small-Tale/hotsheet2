@@ -184,6 +184,7 @@ export interface MediaAnnotation {
     | { type: 'freehand'; points: { x: number; y: number }[]; closed?: boolean }
     | { type: 'arrow'; points: { x: number; y: number }[] }
     | { type: 'insertion'; point: { x: number; y: number } };
+  intents?: string[];
 }
 export type AttachmentActorRole = 'human' | 'ai' | 'system' | 'unknown';
 export type AttachmentPurpose = 'problem_evidence' | 'correctness_evidence' | 'reference' | 'other';

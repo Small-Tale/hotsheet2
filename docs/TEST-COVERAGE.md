@@ -7,6 +7,12 @@ the v3 ticket guard remains after shapes are cleared; invalid point geometry is
 rejected by both model and server tests. Gallery rendering and editing have
 separate tickets (`HS2-N1EH4W`, `HS2-C46J3X`).
 
+HS2-GNQPT4 covers intent defaults and colours for every shape, unknown-value
+round trips under the v4 ticket guard, invalid intent lists, activity-note
+summaries, CLI/MCP/server write and read paths, AI worklist projections, and
+the web intent-colour helper. The gallery rendering ticket (`HS2-N1EH4W`)
+covers visual colours and Markdown display.
+
 HS2-NX6JQJ covers partial checkout reads beyond the initial collection: the web API
 retains unpaged partial/truncated headers and page-walk source errors; refresh unit tests
 preserve healthy rows and source diagnostics through empty-then-refill recovery. Browser
