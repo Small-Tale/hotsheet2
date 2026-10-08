@@ -7,6 +7,7 @@ import type { ClaimEtaPresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
 import { SEARCH_AND_COMPOSER_ACTIONS } from '../interaction-attrs/search-and-composer';
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
+import { ticketDisplayNumber } from '../ticket-display-number';
 import { ActiveClaimIndicator, ClaimEta } from './active-claim';
 import {
   categoryAbbreviation,
@@ -191,7 +192,7 @@ export function TicketRow(raw: TicketRowProps) {
                     <TicketSourceIcon source={props.source} size="compact" />
                   </span>
                 )}
-                <span class="ticket-list-row__slug">{props.slug}</span>
+                <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>
                 <span
                   class="ticket-list-row__priority"
                   style={`color: ${priority.color}`}

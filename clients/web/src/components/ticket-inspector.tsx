@@ -27,6 +27,7 @@ import type { AttachmentReferenceContext } from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import { INSPECTOR_AND_EDITOR_ACTIONS } from '../interaction-attrs/inspector-and-editor';
 import { ticketCloseReasonLabel } from '../ticket-close';
+import { ticketDisplayNumber } from '../ticket-display-number';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
 import { LiveClaimNotice, type LiveClaimNoticeProps } from './active-claim';
 import { ConfidenceBadge } from './confidence-badge';
@@ -265,7 +266,7 @@ export function ticketInspectorPanel({
       aria-label={`Copy ticket number ${slug}`}
       title="Copy ticket number"
     >
-      <ToolbarText text={slug} size="small" />
+      <ToolbarText text={ticketDisplayNumber(slug, source?.provider)} size="small" />
     </button>
   );
   // The Workbench owns the panel's Pane root, so the ticket identity, review state, and attachment drop

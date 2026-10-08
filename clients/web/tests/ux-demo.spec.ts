@@ -2243,6 +2243,25 @@ test('shows a released final-testing ticket in the list row at wide and phone wi
   await page.screenshot({ path: testInfo.outputPath('final-testing-row-phone.png') });
 });
 
+test('shows a GitHub issue number without its repository prefix in the ticket row (HS2-04C25A)', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 560, height: 760 });
+  await page.goto('/ux-demo?component=ticket-row');
+  await page.locator('[data-action="toggle-settings"]').click();
+  await page.getByRole('textbox', { name: 'Title' }).fill('i deleted a github issue-based ticket that was verified');
+  await page.getByRole('button', { name: 'Close settings' }).click();
+  const row = page.locator('[data-component="ticket-list-row"]');
+  await expect(row).toHaveAttribute('data-ticket-slug', 'Small-Tale/hotsheet2#5');
+  await expect(row.locator('.ticket-list-row__slug')).toHaveText('#5');
+  await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
+  await row.screenshot({ path: testInfo.outputPath('github-issue-number-560.png'), animations: 'disabled' });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(row.locator('.ticket-list-row__slug')).toHaveText('#5');
+  await row.screenshot({ path: testInfo.outputPath('github-issue-number-390.png'), animations: 'disabled' });
+});
+
 test('demonstrates the production Not Working dialog and pending evidence picker', async ({ page }) => {
   await page.goto('/ux-demo?component=not-working-dialog');
   await page.getByRole('button', { name: 'Open Not Working dialog' }).click();

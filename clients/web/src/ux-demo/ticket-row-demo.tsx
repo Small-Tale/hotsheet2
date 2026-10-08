@@ -99,7 +99,7 @@ export function TicketRowDemo() {
     <section class="component-stage component-stage--row" aria-label="TicketRow demo">
       <div class="component-stage__canvas component-stage__canvas--row" role="listbox" aria-label="Example ticket list">
         {TicketRow({
-          slug: 'HS2-D3M0',
+          slug: 'Small-Tale/hotsheet2#5',
           title: ticketRowSettings.title.value,
           status: ticketRowSettings.status.value,
           startedPhase: ticketRowSettings.startedPhase.value || undefined,

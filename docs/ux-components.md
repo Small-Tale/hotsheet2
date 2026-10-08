@@ -781,7 +781,7 @@ always retain native clipboard behavior.
   square-cornered, flat, separator-led row that reads as one continuous list; the same component becomes a rounded, borderless card at
   narrow column widths. A quiet inset outline previews pointer hover without changing
   the row background, while selection supplies the persistent blue outline. Its primary
-  line treats qualified slug and title as one normal
+  line treats the ticket number and title as one normal
   inline formatting flow, with an explicit two-line limit in lists and three-line
   limit in board columns. The comfortable list keeps the category in its dedicated
   leading slot; compact board rows remove that empty left gutter and place a reduced
@@ -789,7 +789,11 @@ always retain native clipboard behavior.
   first line. The remaining flow is ordered
   slug → priority → title so bounded priority remains visible before an arbitrarily
   long title (the slug is a stable-width inline block). Updated time is the first item in that identity flow and
-  floats right, allowing later lines of a long title to use the space beneath it. A quieter, vertically
+  floats right, allowing later lines of a long title to use the space beneath it.
+  GitHub Issues show only `#number` in this local context; their source mark supplies the
+  provider context, while row identity and accessibility retain the canonical `owner/repo#number` slug.
+  A non-GitHub source keeps its full ticket number.
+  A quieter, vertically
   centered secondary flow holds the persistent independently operable outline/filled
   Up Next star, status, short owner name, and all tags; it wraps without hiding or
   collapsing metadata at narrow widths. A completed or verified ticket with a derived
@@ -1150,10 +1154,12 @@ and the row's time-left label or `Soon`); the demo's
 The copyable ticket number sits in the header toolbar's **leading** slot for both the sidebar
 inspector (HS2-9MCJ2B) and the reader dialog (HS2-FZ5HB2); it centers only for the terminal
 ticket rail, whose absolutely positioned back button occupies the leading edge. `slugPlacement`
-overrides this per composition (the rail passes `center`). Clicking it copies through the
-shared `copyText` helper (`clients/web/src/copy-text.ts`, also used by the repository-file
-and attachment Copy actions): when Safari refuses the Clipboard API inside the click, the
-helper copies through a temporary selection in the same gesture and restores focus and
+overrides this per composition (the rail passes `center`). GitHub Issues display
+`#number` in this toolbar while the button's copy target remains the canonical
+`owner/repo#number` identity. Clicking it uses the shared `copyText` helper
+(`clients/web/src/copy-text.ts`, also used by the repository-file and attachment Copy
+actions). When Safari refuses the Clipboard API inside the click, the helper copies
+through a temporary selection in the same gesture and restores focus and
 selection, so a copy never fails intermittently (HS2-1A2BQR). The section strip uses Kerf
 `TabBar`/`AppTab` with automatic keyboard activation and one selected, roving-focus tab.
 The inspector owns one 8px outer inset and removes the TabBar toolbar padding; its auto

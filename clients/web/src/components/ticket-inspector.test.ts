@@ -27,6 +27,18 @@ describe('TicketInspector', () => {
     expect(markup).toContain('background-color: #ef4444');
     expect(markup.indexOf('data-provider="gitlab"')).toBeLessThan(markup.indexOf('Copy ticket number HS2-TEST'));
   });
+  it('shortens a GitHub issue in the toolbar without changing its copy target', () => {
+    const markup = String(
+      TicketInspector({
+        ...base,
+        slug: 'Small-Tale/hotsheet2#5',
+        source: { provider: 'github', name: 'GitHub Issues' },
+      }),
+    );
+    expect(markup).toContain('class="kui-toolbar-text__text">#5</span>');
+    expect(markup).toContain('data-ticket-slug="Small-Tale/hotsheet2#5"');
+    expect(markup).toContain('aria-label="Copy ticket number Small-Tale/hotsheet2#5"');
+  });
   it('allows the sidebar title to wrap without a line cap', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');

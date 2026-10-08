@@ -10545,7 +10545,7 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
 
 test('uploads staged files to a GitHub source with an assets repository and shows them read-only (HS2-HSA64D)', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
   const capabilities = (attachments: boolean, attachment_edit: boolean) => ({
@@ -10671,6 +10671,11 @@ test('uploads staged files to a GitHub source with an assets repository and show
   await form.screenshot({ path: '/private/tmp/hs2-hsa64d-composer-github-wide.png' });
   await create.click();
   await expect(dialog).toBeHidden();
+  const githubRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="acme/widgets#7"]');
+  await expect(githubRow.locator('.ticket-list-row__slug')).toHaveText('#7');
+  const githubNumber = page.getByRole('button', { name: 'Copy ticket number acme/widgets#7' });
+  await expect(githubNumber.locator('[data-component="toolbar-text"]')).toHaveText('#7');
+  await githubRow.screenshot({ path: testInfo.outputPath('github-issue-row-wide.png'), animations: 'disabled' });
   await expect.poll(() => uploads.map((item) => item.filename)).toEqual(['trace.log', 'clip.mp4']);
   expect(uploads.every((item) => item.path.endsWith('/tickets/github-acme:7/attachments'))).toBe(true);
   expect(new Set(attached.map((item) => item.batch_id)).size).toBe(1);
@@ -10709,6 +10714,9 @@ test('uploads staged files to a GitHub source with an assets repository and show
   });
   await expect(panel.getByRole('link', { name: 'trace.log' })).toBeInViewport();
   await rail.screenshot({ path: '/private/tmp/hs2-hsa64d-inspector-readonly-narrow.png' });
+  await page.getByRole('button', { name: 'Hide ticket inspector' }).click();
+  await expect(githubRow).toBeVisible();
+  await githubRow.screenshot({ path: testInfo.outputPath('github-issue-row-narrow.png'), animations: 'disabled' });
 });
 
 test('keeps the plain source label and default routing for a single writable source (HS2-NZMJBJ)', async ({ page }) => {

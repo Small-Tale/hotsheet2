@@ -30,6 +30,26 @@ describe('TicketRow', () => {
       expect(markup.indexOf('task category')).toBeLessThan(markup.indexOf('data-provider="github"'));
     }
   });
+  it('shows a compact GitHub issue number while retaining its canonical row identity', () => {
+    const ticket: TicketRowProps = {
+      slug: 'Small-Tale/hotsheet2#5',
+      title: 'Ticket number',
+      status: 'not_started',
+      priority: 'default',
+      category: 'issue',
+      tags: [],
+      source: { provider: 'github', name: 'GitHub Issues' },
+    };
+    for (const presentation of ['list', 'column'] as const) {
+      const markup = String(TicketRow({ ...ticket, presentation }));
+      expect(markup).toContain('class="ticket-list-row__slug">#5</span>');
+      expect(markup).toContain('data-ticket-slug="Small-Tale/hotsheet2#5"');
+      expect(markup).toContain('aria-label="Small-Tale/hotsheet2#5: Ticket number"');
+    }
+    expect(String(TicketRow({ ...ticket, source: { provider: 'gitlab', name: 'GitLab Issues' } }))).toContain(
+      'class="ticket-list-row__slug">Small-Tale/hotsheet2#5</span>',
+    );
+  });
   it('normalizes fallbacks, tags, and boolean defaults', () => {
     expect(
       normalizeTicketRowProps({
