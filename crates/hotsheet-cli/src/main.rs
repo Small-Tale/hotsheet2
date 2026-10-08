@@ -468,6 +468,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: SettingsCmd,
     },
+    /// Inspect and run saved commands in a registered checkout through the local server.
+    Commands {
+        #[command(subcommand)]
+        cmd: CommandsCmd,
+    },
     /// Manage global provider API keys in the OS credential store (values never enter settings).
     Key {
         #[command(subcommand)]
@@ -898,6 +903,27 @@ enum SettingsCmd {
 }
 
 #[derive(Subcommand)]
+enum CommandsCmd {
+    /// List saved command definitions for a checkout.
+    List { checkout: String },
+    /// List saved command groups, including empty groups.
+    Groups { checkout: String },
+    /// Start a saved command and print its run record.
+    Run { checkout: String, id: String },
+    /// List recent runs for this checkout.
+    History { checkout: String },
+    /// Get a run, optionally returning only output after a sequence number.
+    Get {
+        checkout: String,
+        id: String,
+        #[arg(long, default_value_t = 0)]
+        after: u64,
+    },
+    /// Cancel an active run in this checkout.
+    Cancel { checkout: String, id: String },
+}
+
+#[derive(Subcommand)]
 enum AiSettingsCmd {
     /// Print the effective defaults: this project's, else the machine-wide fallback.
     Get {
@@ -1191,6 +1217,7 @@ fn main() -> Result<()> {
             | Cmd::Bootstrap { .. }
             | Cmd::Link { .. }
             | Cmd::Checkout { .. }
+            | Cmd::Commands { .. }
             | Cmd::Launch { .. }
             | Cmd::HookDiagnose { .. }
             | Cmd::Serve { .. }
@@ -1572,6 +1599,7 @@ fn main() -> Result<()> {
         Cmd::AiTools { json } => cmd_ai_tools(json),
         Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, &cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, &cwd, cmd),
+        Cmd::Commands { cmd } => cmd_commands(&cli.path, cmd),
         Cmd::Key { cmd } => cmd_key(cmd),
         Cmd::Checkout { cmd } => cmd_checkout(
             cmd,
@@ -5693,6 +5721,82 @@ fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+/// Command runs live in the server's checkout-scoped manager. Route the CLI through that
+/// manager so the web client and CLI share history, cancellation, and secret authorization.
+fn cmd_commands(store: &Path, cmd: CommandsCmd) -> Result<()> {
+    let server = hotsheet_cli::external_launch::discover_running_server(
+        store,
+        &hotsheet_plugins::hotsheet_home(),
+    )?;
+    let (method, route) = match cmd {
+        CommandsCmd::List { checkout } => (
+            "GET",
+            format!("checkouts/{}/commands", urlencoding_component(&checkout)),
+        ),
+        CommandsCmd::Groups { checkout } => (
+            "GET",
+            format!(
+                "checkouts/{}/command-groups",
+                urlencoding_component(&checkout)
+            ),
+        ),
+        CommandsCmd::Run { checkout, id } => (
+            "POST",
+            format!(
+                "checkouts/{}/commands/{}/run",
+                urlencoding_component(&checkout),
+                urlencoding_component(&id)
+            ),
+        ),
+        CommandsCmd::History { checkout } => (
+            "GET",
+            format!(
+                "checkouts/{}/command-runs",
+                urlencoding_component(&checkout)
+            ),
+        ),
+        CommandsCmd::Get {
+            checkout,
+            id,
+            after,
+        } => (
+            "GET",
+            format!(
+                "checkouts/{}/command-runs/{}?after={after}",
+                urlencoding_component(&checkout),
+                urlencoding_component(&id)
+            ),
+        ),
+        CommandsCmd::Cancel { checkout, id } => (
+            "POST",
+            format!(
+                "checkouts/{}/command-runs/{}/cancel",
+                urlencoding_component(&checkout),
+                urlencoding_component(&id)
+            ),
+        ),
+    };
+    let endpoint = format!("{}/{}", server.url.trim_end_matches('/'), route);
+    let request = ureq::request(method, &endpoint)
+        .set("X-Hotsheet-Secret", &server.secret)
+        .timeout(std::time::Duration::from_secs(10));
+    let response = match request.call() {
+        Ok(response) => response,
+        Err(ureq::Error::Status(status, response)) => {
+            let body = response.into_string().unwrap_or_default();
+            let message = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|body| body["error"].as_str().map(str::to_owned))
+                .unwrap_or_else(|| format!("server returned HTTP {status}"));
+            bail!("saved command request failed: {message}");
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let body: serde_json::Value = serde_json::from_reader(response.into_reader())?;
+    println!("{}", serde_json::to_string_pretty(&body)?);
     Ok(())
 }
 

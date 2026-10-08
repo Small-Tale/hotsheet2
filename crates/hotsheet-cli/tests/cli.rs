@@ -8,6 +8,137 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 #[test]
+fn saved_commands_cli_uses_checkout_scoped_authenticated_server_routes() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("tickets");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", listener.local_addr().unwrap()),
+            "secret": "command-test-secret",
+            "store_path": store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let requests = [
+        (
+            "GET",
+            "/checkouts/project%20one/commands",
+            200,
+            r#"[{"id":"build"}]"#,
+        ),
+        (
+            "GET",
+            "/checkouts/project%20one/command-groups",
+            200,
+            r#"["Checks"]"#,
+        ),
+        (
+            "POST",
+            "/checkouts/project%20one/commands/build/run",
+            202,
+            r#"{"id":"run-1","state":"running"}"#,
+        ),
+        (
+            "GET",
+            "/checkouts/project%20one/command-runs",
+            200,
+            r#"[{"id":"run-1","state":"completed"}]"#,
+        ),
+        (
+            "GET",
+            "/checkouts/project%20one/command-runs/run-1?after=2",
+            200,
+            r#"{"id":"run-1","output":[{"seq":3,"text":"done"}]}"#,
+        ),
+        (
+            "POST",
+            "/checkouts/project%20one/command-runs/run-1/cancel",
+            200,
+            r#"{"id":"run-1","state":"cancelled"}"#,
+        ),
+        (
+            "POST",
+            "/checkouts/project%20one/commands/missing/run",
+            400,
+            r#"{"error":"unknown configured command"}"#,
+        ),
+    ];
+    let server = std::thread::spawn(move || {
+        for (method, path, status, body) in requests {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert_eq!(line.trim_end(), format!("{method} {path} HTTP/1.1"));
+            let mut secret = None;
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("x-hotsheet-secret:") {
+                    secret = Some(value.trim().to_string());
+                }
+            }
+            assert_eq!(secret.as_deref(), Some("command-test-secret"));
+            write!(
+                reader.get_mut(),
+                "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+    });
+    let cli = |args: &[&str]| {
+        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        command
+            .env("HOTSHEET_HOME", &home)
+            .args(["-C", store.to_str().unwrap(), "commands"])
+            .args(args);
+        command.output().unwrap()
+    };
+    for (args, expected) in [
+        (vec!["list", "project one"], "build"),
+        (vec!["groups", "project one"], "Checks"),
+        (vec!["run", "project one", "build"], "running"),
+        (vec!["history", "project one"], "completed"),
+        (vec!["get", "project one", "run-1", "--after", "2"], "done"),
+        (vec!["cancel", "project one", "run-1"], "cancelled"),
+    ] {
+        let output = cli(&args);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains(expected));
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("command-test-secret"));
+    }
+    let failed = cli(&["run", "project one", "missing"]);
+    assert!(!failed.status.success());
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("unknown configured command"));
+    assert!(!String::from_utf8_lossy(&failed.stderr).contains("command-test-secret"));
+    server.join().unwrap();
+}
+
+#[test]
 fn retained_permission_hook_uses_restarted_server_route() {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;

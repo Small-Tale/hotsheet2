@@ -990,6 +990,24 @@ the checkout-scoped command runner uses the code-project root; HS1 migration set
 code-project root so imported shell and AI command buttons retain their working-directory
 semantics without embedding a shell-formatted `cd` string. Definitions, run history,
 lookup, and cancellation are isolated by checkout on a shared server.
+The CLI exposes that same live runner without opening the web client. Start a server for
+the selected `-C` ticket store, then use a registered checkout id, alias, or path:
+
+```sh
+hotsheet commands list web
+hotsheet commands groups web
+hotsheet commands run web build
+hotsheet commands history web
+hotsheet commands get web <run-id> --after 0
+hotsheet commands cancel web <run-id>
+```
+
+Each command prints JSON. `run` returns a run id immediately; `get` can poll its state and
+output with a sequence cursor, while `history` lists recent runs. The CLI discovers the
+local server for `-C`, sends its machine-local secret only in the request header, and uses
+the checkout-scoped routes. An absent server, unknown checkout or command, and a run from
+another checkout fail explicitly. Run history is the server's bounded in-memory history
+and ends with that server process.
 
 The sibling machine-local `command_groups` key is an ordered list of group names the
 command settings editor keeps even while no command is in them (HS2-EZ5KMC), so an empty
