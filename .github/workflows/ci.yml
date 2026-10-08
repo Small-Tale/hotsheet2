@@ -55,6 +55,9 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup show
 
+      - name: Activate the MSVC compiler for native AVIF libraries
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Cache cargo + target
         uses: actions/cache@v4
         with:
@@ -82,6 +85,8 @@ jobs:
           "PKG_CONFIG_PATH=$pkgconfig" >> $env:GITHUB_ENV
 
       - name: Compile and exercise the native credential adapter
+        env:
+          CC: cl
         run: cargo test -p hotsheet-ticketing windows_credential_manager_round_trip
 
   check:
