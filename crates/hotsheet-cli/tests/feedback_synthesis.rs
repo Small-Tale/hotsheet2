@@ -25,10 +25,36 @@ fn headless_feedback_review_is_private_opt_in_and_idempotent() {
         Timestamp::new("2026-10-02T00:00:00Z"),
         "activity:run-1",
         Some(AiFeedbackRating::NotHelpful),
-        Some("Explain the reason for contact: Jane Doe using client_secret=shh-123456".into()),
+        Some("Keep status popup anchored beside trigger".into()),
         Some(NoteActor {
             role: AttachmentActorRole::Human,
             id: Some("reviewer-1".into()),
+        }),
+    )
+    .unwrap();
+    ops::rate_ai_content(
+        &store,
+        &id,
+        Timestamp::new("2026-10-03T00:00:00Z"),
+        "activity:run-1",
+        Some(AiFeedbackRating::NotHelpful),
+        Some("Status menu should stay anchored next to badge".into()),
+        Some(NoteActor {
+            role: AttachmentActorRole::Human,
+            id: Some("reviewer-2".into()),
+        }),
+    )
+    .unwrap();
+    ops::rate_ai_content(
+        &store,
+        &id,
+        Timestamp::new("2026-10-04T00:00:00Z"),
+        "activity:run-1",
+        Some(AiFeedbackRating::Helpful),
+        Some("Explain the reason for contact: Jane Doe using client_secret=shh-123456".into()),
+        Some(NoteActor {
+            role: AttachmentActorRole::Human,
+            id: Some("reviewer-3".into()),
         }),
     )
     .unwrap();
@@ -71,6 +97,8 @@ fn headless_feedback_review_is_private_opt_in_and_idempotent() {
     }
     let draft = std::fs::read_to_string(path).unwrap();
     assert!(draft.contains("Explain the reason") || draft.contains("explain the reason"));
+    assert!(draft.contains("Related formulations:"));
+    assert!(draft.contains("2 distinct notes (0 helpful, 2 not helpful)"));
     assert!(!draft.contains("Jane Doe"));
     assert!(!draft.contains("shh-123456"));
     assert!(draft.contains("below the independent-example threshold"));

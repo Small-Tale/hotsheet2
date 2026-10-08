@@ -165,6 +165,113 @@ fn reference(row: &AiFeedbackRecord) -> String {
     format!("{}/{}#{}", row.connection_id, row.slug, row.note_id)
 }
 
+fn semantic_terms(phrase: &str) -> BTreeSet<String> {
+    let normalized = phrase
+        .to_ascii_lowercase()
+        .replace("don't", "not")
+        .replace("doesn't", "not")
+        .replace("shouldn't", "not");
+    normalized
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|word| {
+            !word.is_empty()
+                && !matches!(
+                    *word,
+                    "a" | "an"
+                        | "and"
+                        | "are"
+                        | "at"
+                        | "be"
+                        | "by"
+                        | "for"
+                        | "from"
+                        | "i"
+                        | "in"
+                        | "is"
+                        | "it"
+                        | "my"
+                        | "of"
+                        | "on"
+                        | "or"
+                        | "our"
+                        | "please"
+                        | "redacted"
+                        | "should"
+                        | "that"
+                        | "the"
+                        | "this"
+                        | "to"
+                        | "we"
+                        | "when"
+                        | "with"
+                )
+        })
+        .map(|word| {
+            match word {
+                "popup" | "popover" | "dropdown" => "menu",
+                "stay" | "stays" | "keep" | "keeps" | "remain" | "remains" | "preserve" => "retain",
+                "anchor" | "anchored" | "position" | "positioned" => "anchor",
+                "badge" | "button" => "trigger",
+                "beside" | "next" | "adjacent" => "near",
+                "jump" | "jumps" | "move" | "moves" | "shift" | "shifts" => "move",
+                "reload" | "rerender" | "morph" => "refresh",
+                "reply" | "answer" => "response",
+                "fails" | "failed" | "broken" | "error" => "failure",
+                "lag" | "delay" => "slow",
+                "never" | "without" => "not",
+                _ => word,
+            }
+            .to_owned()
+        })
+        .collect()
+}
+
+fn related_phrases(left: &str, right: &str) -> bool {
+    if left.eq_ignore_ascii_case(right) {
+        return true;
+    }
+    let left = semantic_terms(left);
+    let right = semantic_terms(right);
+    if left.contains("not") != right.contains("not") {
+        return false;
+    }
+    let shared = left.intersection(&right).count();
+    shared >= 3 && shared * 4 >= left.union(&right).count() * 3
+}
+
+struct Theme<'a> {
+    phrase: String,
+    variants: Vec<String>,
+    scope: String,
+    evidence: Vec<&'a AiFeedbackRecord>,
+}
+
+fn group_themes<'a>(
+    groups: BTreeMap<(String, String), Vec<&'a AiFeedbackRecord>>,
+) -> Vec<Theme<'a>> {
+    let mut themes: Vec<Theme<'a>> = Vec::new();
+    for ((scope, phrase), evidence) in groups {
+        if let Some(theme) = themes.iter_mut().find(|theme| {
+            theme.scope == scope
+                && theme
+                    .variants
+                    .iter()
+                    .all(|variant| related_phrases(variant, &phrase))
+        }) {
+            theme.variants.push(phrase);
+            theme.evidence.extend(evidence);
+        } else {
+            themes.push(Theme {
+                phrase: phrase.clone(),
+                variants: vec![phrase],
+                scope,
+                evidence,
+            });
+        }
+    }
+    themes
+}
+
 fn render_draft(
     rows: &[AiFeedbackRecord],
     providers: &[String],
@@ -197,7 +304,7 @@ fn render_draft(
         out.push('\n');
     }
 
-    let mut groups: BTreeMap<String, Vec<&AiFeedbackRecord>> = BTreeMap::new();
+    let mut groups: BTreeMap<(String, String), Vec<&AiFeedbackRecord>> = BTreeMap::new();
     let mut uncertain = Vec::new();
     for row in rows {
         let Some(rating) = row.rating else {
@@ -223,23 +330,28 @@ fn render_draft(
             continue;
         }
         groups
-            .entry(phrase.to_ascii_lowercase())
+            .entry((
+                row.target.split(':').next().unwrap_or("unknown").to_owned(),
+                phrase.to_ascii_lowercase(),
+            ))
             .or_default()
             .push(row);
     }
 
     let mut recurring = Vec::new();
-    for (phrase, evidence) in groups {
+    for theme in group_themes(groups) {
+        let evidence = &theme.evidence;
         let independent = evidence
             .iter()
             .filter_map(|row| row.rater.as_ref()?.id.as_deref())
             .collect::<BTreeSet<_>>();
         if independent.len() >= 2 {
-            recurring.push((phrase, evidence));
+            recurring.push(theme);
         } else {
             uncertain.push(format!(
-                    "- Candidate `{phrase}` with {} source(s), below the independent-example threshold: {}.",
-                    evidence.len(),
+                "- Candidate `{}` with {} source(s), below the independent-example threshold: {}.",
+                theme.phrase,
+                evidence.len(),
                 evidence
                     .iter()
                     .map(|row| reference(row))
@@ -248,26 +360,46 @@ fn render_draft(
             ));
         }
     }
-    recurring.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then(a.0.cmp(&b.0)));
+    recurring.sort_by(|a, b| {
+        b.evidence
+            .len()
+            .cmp(&a.evidence.len())
+            .then(a.phrase.cmp(&b.phrase))
+    });
     out.push_str("## Candidate themes\n\n");
     if recurring.is_empty() {
         out.push_str("No recurring theme meets the two-independent-rater threshold.\n\n");
     }
-    for (phrase, evidence) in recurring.iter().take(5) {
+    for theme in recurring.iter().take(5) {
+        let evidence = &theme.evidence;
         let positive = evidence
             .iter()
             .filter(|r| r.rating == Some(AiFeedbackRating::Helpful))
             .count();
         let negative = evidence.len() - positive;
-        let scopes = evidence
-            .iter()
-            .map(|row| row.target.split(':').next().unwrap_or("unknown"))
-            .collect::<BTreeSet<_>>();
-        out.push_str(&format!("### {}\n\n", phrase));
-        out.push_str(&format!(
-            "Proposed action: consider `{phrase}`. Scope: {} feedback in the selected providers. Human review and editing required.\n\n",
-            scopes.into_iter().collect::<Vec<_>>().join(", ")
-        ));
+        out.push_str(&format!("### {}\n\n", theme.phrase));
+        if positive > 0 && negative > 0 {
+            out.push_str(&format!(
+                "Proposed action: investigate conflicting ratings before adopting guidance. Scope: {} feedback in the selected providers. Human review and editing required.\n\n",
+                theme.scope
+            ));
+        } else {
+            out.push_str(&format!(
+                "Proposed action: consider `{}`. Scope: {} feedback in the selected providers. Human review and editing required.\n\n",
+                theme.phrase, theme.scope
+            ));
+        }
+        if theme.variants.len() > 1 {
+            out.push_str(&format!(
+                "Related formulations: {}.\n\n",
+                theme
+                    .variants
+                    .iter()
+                    .map(|variant| format!("`{variant}`"))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
+        }
         out.push_str(&format!(
             "Evidence: {} distinct notes ({} helpful, {} not helpful).\n\n",
             evidence.len(),
@@ -287,10 +419,11 @@ fn render_draft(
         );
         out.push_str(".\n\n");
     }
-    for (_, evidence) in recurring.iter().skip(5) {
+    for theme in recurring.iter().skip(5) {
         uncertain.push(format!(
             "- Additional recurring candidate for review: {}.",
-            evidence
+            theme
+                .evidence
                 .iter()
                 .map(|row| reference(row))
                 .collect::<Vec<_>>()
@@ -495,7 +628,7 @@ mod tests {
         .unwrap();
         let text = fs::read_to_string(&draft).unwrap();
         assert!(text.contains("give shorter answers"));
-        assert!(text.contains("Proposed action: consider `give shorter answers`"));
+        assert!(text.contains("Proposed action: investigate conflicting ratings"));
         assert!(text.contains("Scope: activity feedback"));
         assert!(text.contains("Conflicting ratings"));
         assert!(text.contains("2 distinct notes (1 helpful, 1 not helpful)"));
@@ -555,6 +688,59 @@ mod tests {
                 .unwrap()
                 .contains("Removed source")
         );
+    }
+
+    #[test]
+    fn paraphrased_feedback_groups_locally_without_merging_distinct_behaviors_or_scopes() {
+        assert!(related_phrases(
+            "Keep status popup anchored beside trigger",
+            "Status menu should stay anchored next to badge"
+        ));
+        assert!(!related_phrases(
+            "Keep status popup anchored beside trigger",
+            "Keep status menu open beside trigger"
+        ));
+        assert!(!related_phrases(
+            "Keep status popup anchored beside trigger",
+            "Do not keep status popup anchored beside trigger"
+        ));
+        let first = row(
+            "a",
+            "rater-1",
+            Some(AiFeedbackRating::NotHelpful),
+            Some("Keep status popup anchored beside trigger"),
+        );
+        let second = row(
+            "b",
+            "rater-2",
+            Some(AiFeedbackRating::NotHelpful),
+            Some("Status menu should stay anchored next to badge"),
+        );
+        let unrelated = row(
+            "c",
+            "rater-3",
+            Some(AiFeedbackRating::Helpful),
+            Some("Keep status menu open beside trigger"),
+        );
+        let mut other_scope = row(
+            "d",
+            "rater-4",
+            Some(AiFeedbackRating::Helpful),
+            Some("Status menu should stay anchored next to badge"),
+        );
+        other_scope.target = "note:another".into();
+        let draft = render_draft(
+            &[first, second, unrelated, other_scope],
+            &["local".into()],
+            &[],
+            &[],
+            "cursor",
+        );
+        assert!(draft.contains("Related formulations:"));
+        assert!(draft.contains("2 distinct notes (0 helpful, 2 not helpful)"));
+        assert!(draft.contains("below the independent-example threshold"));
+        assert!(draft.contains("local/HS-ONE#c"));
+        assert!(draft.contains("local/HS-ONE#d"));
     }
 
     #[test]

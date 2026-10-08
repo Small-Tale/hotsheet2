@@ -1,5 +1,10 @@
 # Feature Coverage Matrix
 
+HS2-B9963V covers local grouping of close feedback paraphrases, target-scope separation,
+opposing behavior and negation, distinct-rater threshold, mixed-rating review text,
+and source references in `crates/hotsheet-cli/src/feedback_synthesis.rs`; the headless
+CLI draft and review flow remains covered by `crates/hotsheet-cli/tests/feedback_synthesis.rs`.
+
 HS2-ZDEJDR covers labeled names, structured identifiers, cloud and service secrets,
 JWTs, and retained behavioral context in `crates/hotsheet-cli/src/feedback_synthesis.rs`
 unit tests, plus a private draft created through the CLI in

@@ -98,8 +98,11 @@ personal paths, labeled personal names, phone numbers, network addresses, UUIDs,
 SSN-shaped IDs, labeled payment cards, JWTs, and cloud or service key formats in candidate text.
 Unlabeled capitalized UI terms stay visible for behavioral context; pattern matching
 cannot identify every private value, so human privacy review is mandatory. It
-conservatively groups only matching redacted
-explanations from at least two distinct rater IDs; one-off, legacy, withdrawn, and
+conservatively groups matching redacted explanations and close paraphrases within the
+same feedback target type, using local word normalization and pairwise overlap. A theme
+still needs at least two distinct rater IDs. Mixed positive and negative ratings are
+marked for investigation before any guidance is adopted; unrelated or weakly matched,
+one-off, legacy, withdrawn, and
 unexplained records remain in the triage section. A human can consolidate related
 phrases and must check all text for remaining private information. The draft lists
 up to five candidate themes and source references; it never changes instructions.
