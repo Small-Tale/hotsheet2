@@ -10,16 +10,21 @@ import type { SafeHtml } from 'kerfjs';
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Crop,
   Eraser,
   Minus,
   MoreHorizontal,
+  MousePointer2,
+  MoveUpRight,
   Pause,
   Pencil,
+  PencilLine,
   Play,
   Plus,
   RotateCcw,
-  Scan,
+  Square,
+  SquareX,
   Volume2,
   VolumeX,
   X,
@@ -34,6 +39,14 @@ import {
   ATTACHMENTS_AND_GALLERY_TARGETS,
 } from '../interaction-attrs/attachments-and-gallery';
 import { MarkdownPreview } from './markdown-preview';
+
+const annotationToolIcons = {
+  select: { icon: MousePointer2, name: 'mouse-pointer-2' },
+  freehand: { icon: PencilLine, name: 'pencil-line' },
+  arrow: { icon: MoveUpRight, name: 'move-up-right' },
+  insertion: { icon: ChevronUp, name: 'chevron-up' },
+  strike: { icon: SquareX, name: 'square-x' },
+} as const;
 
 export interface AttachmentGalleryImage {
   id: string;
@@ -829,57 +842,67 @@ export function AttachmentGallery({
           data-crop-mode={String(cropMode)}
         >
           {markup && cropEnabled && !video && (
-            <span class="attachment-gallery__crop-actions">
-              <button
-                type="button"
-                {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryCrop.attrs}
-                aria-label={cropMode ? 'Finish crop' : 'Crop image'}
-                aria-pressed={String(cropMode)}
-                title={cropMode ? 'Finish crop' : 'Crop image'}
-                class={cropMode ? 'attachment-gallery__pressed' : undefined}
+            <FloatingToolbar label="Media crop" position="bottom-start" inset={px(0)}>
+              <ToolbarControlGroup
+                label="Media crop"
+                content="mixed"
+                single={false}
+                selectedChrome="filled"
+                selectedTone="brand"
               >
-                <LucideIcon icon={Crop} name="crop" />
-                {cropMode ? 'Finish crop' : 'Crop'}
-              </button>
-              {crop && (
                 <button
                   type="button"
-                  {...ATTACHMENTS_AND_GALLERY_ACTIONS.restoreGalleryCrop.attrs}
-                  aria-label="Restore full image"
-                  title="Restore full image"
+                  {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryCrop.attrs}
+                  aria-label={cropMode ? 'Finish crop' : 'Crop image'}
+                  aria-pressed={String(cropMode)}
+                  title={cropMode ? 'Finish crop' : 'Crop image'}
                 >
-                  <LucideIcon icon={RotateCcw} name="rotate-ccw" />
-                  Restore original
+                  <LucideIcon icon={Crop} name="crop" />
+                  {cropMode ? 'Finish crop' : 'Crop'}
                 </button>
-              )}
+                {crop && (
+                  <button
+                    type="button"
+                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.restoreGalleryCrop.attrs}
+                    aria-label="Restore full image"
+                    title="Restore full image"
+                  >
+                    <LucideIcon icon={RotateCcw} name="rotate-ccw" />
+                    Restore original
+                  </button>
+                )}
+              </ToolbarControlGroup>
               {cropMode && (
                 <span class="attachment-gallery__crop-hint">Drag on the image to choose the visible area.</span>
               )}
-            </span>
+            </FloatingToolbar>
           )}
           {markup && !cropMode && (
             <span class="attachment-gallery__markup-position">
               <FloatingToolbar label="Media markup" position="bottom" inset={px(0)}>
                 <ToolbarControlGroup label="Media markup">
-                  <GalleryButton
-                    action="toggle-gallery-draw"
-                    label="Add rectangle"
-                    icon={Scan}
-                    className={tool === 'rect' ? 'attachment-gallery__pressed' : ''}
-                  />
-                  {(['select', 'freehand', 'arrow', 'insertion', 'strike'] as const).map((choice) => (
-                    <button
-                      type="button"
-                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryTool.attrs}
-                      data-tool={choice}
-                      aria-label={`${choice} tool`}
-                      aria-pressed={String(tool === choice)}
-                      title={`${choice} tool`}
-                      class={tool === choice ? 'attachment-gallery__pressed' : undefined}
-                    >
-                      {({ select: 'V', freehand: 'F', arrow: 'A', insertion: 'I', strike: 'S' } as const)[choice]}
-                    </button>
-                  ))}
+                  {(['select', 'rect', 'freehand', 'arrow', 'insertion', 'strike'] as const).map((choice) =>
+                    choice === 'rect' ? (
+                      <GalleryButton
+                        action="toggle-gallery-draw"
+                        label="Add rectangle"
+                        icon={Square}
+                        className={tool === 'rect' ? 'attachment-gallery__pressed' : ''}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryTool.attrs}
+                        data-tool={choice}
+                        aria-label={`${choice} tool`}
+                        aria-pressed={String(tool === choice)}
+                        title={`${choice} tool`}
+                        class={tool === choice ? 'attachment-gallery__pressed' : undefined}
+                      >
+                        <LucideIcon icon={annotationToolIcons[choice].icon} name={annotationToolIcons[choice].name} />
+                      </button>
+                    ),
+                  )}
                   <GalleryButton
                     action="delete-gallery-annotation"
                     label="Erase selected annotation"

@@ -17547,7 +17547,19 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
   const gallery = page.getByRole('dialog', { name: /Image 1 of 1: proof.png/ });
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(2);
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
-  await gallery.getByRole('button', { name: 'Crop image' }).click();
+  const cropToolbar = gallery.getByRole('toolbar', { name: 'Media crop' });
+  const cropButton = cropToolbar.getByRole('button', { name: 'Crop image' });
+  await expect(cropButton).toBeVisible();
+  const cropHeight = await cropButton.evaluate((node) => node.getBoundingClientRect().height);
+  const zoomHeight = await gallery
+    .getByRole('button', { name: 'Zoom in' })
+    .evaluate((node) => node.getBoundingClientRect().height);
+  expect(Math.abs(cropHeight - zoomHeight)).toBeLessThan(2);
+  await cropToolbar.screenshot({ path: 'target/visual-captures/hs2-w619yz-crop-wide.png', animations: 'disabled' });
+  await cropButton.focus();
+  await expect(cropButton).toBeFocused();
+  await cropButton.click();
+  await expect(cropToolbar.getByRole('button', { name: 'Finish crop' })).toHaveAttribute('aria-pressed', 'true');
   await expect(gallery.locator('img[data-gallery-media="true"]')).toHaveAttribute('src', /\/original$/);
   const surface = gallery.locator('[data-gallery-crop-surface="true"]'),
     box = (await surface.boundingBox())!;
@@ -17563,6 +17575,7 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
   await expect(gallery.getByLabel('Crop selection')).toBeVisible();
   await gallery.screenshot({ path: test.info().outputPath('hs2-vfbyzy-crop-wide.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
+  await cropToolbar.screenshot({ path: 'target/visual-captures/hs2-w619yz-crop-phone.png', animations: 'disabled' });
   await gallery.screenshot({ path: test.info().outputPath('hs2-vfbyzy-crop-phone.png'), animations: 'disabled' });
   await gallery.getByRole('button', { name: 'Finish crop' }).click();
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(1);
@@ -17807,6 +17820,38 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
     stage = gallery.locator('[data-gallery-zoom-stage="true"]'),
     surface = gallery.locator('[data-gallery-annotation-surface="true"]');
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  const markupToolbar = gallery.getByRole('toolbar', { name: 'Media markup' });
+  for (const [tool, icon] of Object.entries({
+    select: 'mouse-pointer-2',
+    freehand: 'pencil-line',
+    arrow: 'move-up-right',
+    insertion: 'chevron-up',
+    strike: 'square-x',
+  })) {
+    await expect(
+      markupToolbar.getByRole('button', { name: `${tool} tool` }).locator(`[data-lucide="${icon}"]`),
+    ).toBeVisible();
+  }
+  await markupToolbar.screenshot({
+    path: 'target/visual-captures/hs2-f4xjmw-toolbar-wide.png',
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [tool, icon] of Object.entries({
+    select: 'mouse-pointer-2',
+    freehand: 'pencil-line',
+    arrow: 'move-up-right',
+    insertion: 'chevron-up',
+    strike: 'square-x',
+  }))
+    await expect(
+      markupToolbar.getByRole('button', { name: `${tool} tool` }).locator(`[data-lucide="${icon}"]`),
+    ).toBeVisible();
+  await markupToolbar.screenshot({
+    path: 'target/visual-captures/hs2-f4xjmw-toolbar-phone.png',
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
   const arrowTool = gallery.getByRole('button', { name: 'arrow tool' }),
     tinySurface = (await surface.boundingBox())!;
   await arrowTool.click();

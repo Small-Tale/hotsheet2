@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import type { MediaAnnotation } from '../api';
+import type { GalleryAnnotationTool } from '../gallery-annotation-editor';
 import {
   AttachmentGallery,
   attachmentGalleryAnnotationTolerance,
@@ -47,6 +48,34 @@ describe('AttachmentGallery', () => {
     expect(markup).toContain('aria-label="Finish crop"');
     expect(markup).toContain('aria-label="Restore full image"');
     expect(markup).not.toContain('aria-label="Add rectangle"');
+    expect(markup).toContain(
+      'data-position="bottom-start" data-placement="floating" role="toolbar" aria-label="Media crop"',
+    );
+    expect(markup).toMatch(/data-component="toolbar-control-group"[^>]*aria-label="Media crop"/);
+    expect(markup).toMatch(/data-selected-chrome="filled"[^>]*data-selected-tone="brand"/);
+    expect(markup).toMatch(/aria-label="Finish crop"[^>]*aria-pressed="true"/);
+    expect(markup).toContain('data-lucide="crop"');
+    expect(markup).toContain('data-lucide="rotate-ccw"');
+  });
+  it('uses named Lucide tools while preserving each selected markup action', () => {
+    const tools = {
+      select: 'mouse-pointer-2',
+      freehand: 'pencil-line',
+      arrow: 'move-up-right',
+      insertion: 'chevron-up',
+      strike: 'square-x',
+    } as const;
+    for (const [tool, icon] of Object.entries(tools)) {
+      const markup = String(
+        AttachmentGallery({ images, activeUrl: '/a.png', markup: true, tool: tool as GalleryAnnotationTool }),
+      );
+      expect(markup).toMatch(new RegExp(`data-tool="${tool}"[^>]*aria-label="${tool} tool"[^>]*aria-pressed="true"`));
+      expect(markup).toContain(`data-lucide="${icon}"`);
+      expect(markup).not.toMatch(new RegExp(`data-tool="${tool}"[^>]*>[VFAIS]<`));
+    }
+    const markup = String(AttachmentGallery({ images, activeUrl: '/a.png', markup: true }));
+    expect(markup).toContain('data-lucide="add-rectangle"');
+    expect(markup.indexOf('data-tool="select"')).toBeLessThan(markup.indexOf('aria-label="Add rectangle"'));
   });
   it('offers retry and discard controls after a failed markup save', () => {
     const failed = String(AttachmentGallery({ images, activeUrl: '/a.png', markup: true, saveState: 'failed' }));

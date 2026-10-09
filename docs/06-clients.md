@@ -1664,8 +1664,9 @@ and identity-less legacy entries remain conservatively blocking.
   requires a 48px horizontal-dominant movement; controls, scrubbers, vertical motion, and
   cancelled gestures cannot change the selected attachment. Native video-slider drags
   therefore update the playhead and `currentTime` without resetting the media or annotations.
-  Full-screen markup mode offers Select (V), Rectangle (R), Freehand (F), Arrow (A),
-  Insertion (I), and Strike (S). Rectangles and strikes use drag boxes; freehand records
+  Full-screen markup mode offers Select, Rectangle, Freehand, Arrow, Insertion, and Strike
+  as named Lucide icon buttons in its floating toolbar, with the selected tool visibly pressed.
+  Rectangles and strikes use drag boxes; freehand records
   a path with a closed-outline toggle; arrows run from tail to head; insertion marks a click.
   Freehand samples are merged within three rendered screen points, lightly averaged twice
   without moving any point more than 1.5 points, and simplified within 0.75 points of a
@@ -1729,8 +1730,10 @@ and identity-less legacy entries remain conservatively blocking.
   Discard restores the persisted attachment state. A successful retry resumes the requested
   navigation or closes the gallery (HS2-VXCSMZ).
   For a supported PNG, JPEG, WebP, GIF, AVIF, BMP, ICO, or SVG attachment on a provider advertising `attachment_crop`,
-  markup also offers Crop. Dragging a rectangle on the untouched original previews a crop
-  measured in original image pixels. The original bytes stay stored, and one replaceable crop
+  markup also offers Crop in a regular floating ToolbarControlGroup; Restore Original appears
+  beside it when a crop exists, and the active Crop button shows its pressed state. Dragging
+  a rectangle on the untouched original previews a crop measured in original image pixels.
+  The original bytes stay stored, and one replaceable crop
   rectangle makes normal previews, Markdown images, downloads, and AI image fetches show the
   derived rendition. The gallery shows the original while changing a crop; Restore Original
   clears it. Annotations retain original normalized coordinates. The gallery projects them
