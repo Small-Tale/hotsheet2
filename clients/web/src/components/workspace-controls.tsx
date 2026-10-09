@@ -513,11 +513,7 @@ export function WorkspaceControls({
   return (
     <>
       {rail ? (
-        <ToolbarControlGroup
-          className="view-mode-switcher view-mode-switcher--rail"
-          shape="rounded"
-          sizing={visibleSearchOpen ? 'content' : 'fill'}
-        >
+        <ToolbarControlGroup className="view-mode-switcher view-mode-switcher--rail" shape="rounded" sizing="fill">
           {viewSwitcher}
         </ToolbarControlGroup>
       ) : (
@@ -571,7 +567,11 @@ export function WorkspaceControls({
           {utilityButtons}
         </ToolbarControlGroup>
       )}
-      <div class="workspace-header__search-actions" data-search-open={String(visibleSearchOpen)}>
+      <div
+        class="workspace-header__search-actions"
+        data-presentation={presentation}
+        data-search-open={String(visibleSearchOpen)}
+      >
         {searchField}
         {overflowControls}
       </div>

@@ -1078,10 +1078,11 @@ and identity-less legacy entries remain conservatively blocking.
   The measured widths live on the stable app root as CSS variables, so Kerf can morph the
   search slot without resetting its width or triggering a style-observer render loop.
   Each keypress leaves the visible field still (HS2-3WQ9A1, HS2-7DHRH4).
-  In the workspace grid's ticket rail, expanded search also stays on one controls row;
-  view, sort, and selection actions move into More only when the rail is too narrow to fit them
-  beside a usable search field (HS2-HH1F6P). Closed rail controls fill their toolbar row
-  from the left inset at both narrow and wide widths (HS2-JJ6ZE1).
+  In the workspace grid's ticket rail, the view tabs keep their full-width first row while
+  the second row holds sort, selection actions, and search. The closed search trigger sits
+  at the right edge. When expanded, search takes the remaining second-row width; selection
+  actions and then sort move into More only as space runs out. The view tabs remain visible
+  at narrow and wide rail widths (HS2-HH1F6P, HS2-JJ6ZE1).
   A disabled collapsible search renders closed even with a nonempty query. Switching to
   Notifications or Settings collapses the workspace search without clearing its query;
   returning to a ticket view restores that active query (HS2-6ZK9KF).

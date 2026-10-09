@@ -4435,6 +4435,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
       sortTop: sort.top,
       searchTop: search.top,
       searchLeft: search.left,
+      searchRight: search.right,
       utilityTop: utility.top,
       utilityRight: utility.right,
       projectWidth: project.width,
@@ -4449,6 +4450,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   expect(railGeometry.searchTop).toBeCloseTo(railGeometry.sortTop, 0);
   expect(railGeometry.utilityTop).toBeCloseTo(railGeometry.sortTop, 0);
   expect(railGeometry.searchLeft).toBeGreaterThanOrEqual(railGeometry.utilityRight);
+  expect(railGeometry.railRight - railGeometry.searchRight).toBeLessThan(40);
   expect(railGeometry.modeRadius).not.toBe('9999px');
   expect(railGeometry.hideRight).toBeGreaterThan(railGeometry.railRight - 24);
   expect(railGeometry.modeWidth).toBeGreaterThan(railGeometry.railWidth * 0.8);
@@ -4474,6 +4476,15 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
     searchInput = rail.getByRole('searchbox', { name: 'Search tickets' });
   await expect(expandedSearch).toHaveAttribute('data-expanded', 'true');
   await expect.poll(() => expandedSearch.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(80);
+  await expect
+    .poll(() =>
+      rail.evaluate(
+        (node) =>
+          node.querySelector('.view-mode-switcher')!.getBoundingClientRect().bottom <
+          node.querySelector('.workspace-header__search-actions')!.getBoundingClientRect().top,
+      ),
+    )
+    .toBe(true);
   await expect(expandedSearch).toHaveCSS('border-width', '1px');
   await expect(expandedSearch).toHaveCSS('border-style', 'solid');
   await expect(expandedSearch).not.toHaveCSS('box-shadow', 'none');

@@ -62,6 +62,11 @@ wa-button.workspace-header__text-action::part(base) {
   gap: var(--kui-toolbar-gap, 0.5rem);
   flex: 1 1 auto;
 }
+/* This WorkspaceControls variant parks the closed rail search trigger at the right edge. */
+.workspace-header__search-actions[data-presentation='rail'][data-search-open='false'] {
+  margin-left: auto;
+  flex: 0 1 auto;
+}
 /* Measured widths live on the stable app root. Kerf may morph this slot during typing without
    dropping either width for a frame (HS2-3WQ9A1, HS2-7DHRH4). */
 .workspace-header__search-actions[data-search-open='true'] {

@@ -60,7 +60,7 @@ export function workspaceSearchFit(
       (shown ? 10 : 8)
     );
   };
-  for (const index of [3, 2, 1, 0]) {
+  for (let index = visible.length - 1; index >= 0; index -= 1) {
     if (needed() <= width) break;
     visible[index] = false;
   }
@@ -195,12 +195,24 @@ export function wireWorkspaceToolbarVisibility(
       const fitWidth = Math.max(0, contentWidth - extraWidth);
       const groupWidths = groups.map((item) => itemWidth(item!));
       const moreWidth = itemWidth(more!);
-      const visible = workspaceSearchFit(fitWidth, titleWidth, groupWidths, moreWidth, gap);
+      // The rail's full-width view tabs own row one; only sort and actions share row two
+      // with search. Keep the view visible instead of charging its width to search.
+      const fitted = workspaceSearchFit(
+        fitWidth,
+        rail ? 0 : titleWidth,
+        rail ? groupWidths.slice(1) : groupWidths,
+        moreWidth,
+        gap,
+      );
+      const visible = rail ? [true, true, ...fitted.slice(1)] : fitted;
       const availableSearch =
         fitWidth -
-        (visible[0] ? titleWidth : 0) -
+        (rail ? 0 : visible[0] ? titleWidth : 0) -
         gap -
-        groupWidths.reduce((sum, width, index) => sum + (visible[index + 1] ? width + gap : 0), 0) -
+        groupWidths.reduce(
+          (sum, width, index) => sum + (rail && index === 0 ? 0 : visible[index + 1] ? width + gap : 0),
+          0,
+        ) -
         (visible.every(Boolean) ? 0 : moreWidth + gap);
       const expandedWidth = `${Math.max(0, availableSearch - 8)}px`;
       const slotWidth = Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : moreWidth + gap));

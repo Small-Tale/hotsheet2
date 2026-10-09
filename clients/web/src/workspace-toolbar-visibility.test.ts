@@ -15,6 +15,11 @@ it('uses the rendered title width and retains controls until the search needs th
   expect(workspaceSearchFit(750, 120, groups, 44, 8)).toEqual([true, true, true, true]);
   expect(workspaceSearchFit(750, 320, groups, 44, 8)).toEqual([true, true, false, false]);
   expect(workspaceSearchFit(380, 120, groups, 44, 8)).toEqual([false, false, false, false]);
+  // The rail passes only second-row groups; it can yield utility, then sort, without
+  // creating a phantom fourth visibility state or hiding its full-width view tabs.
+  expect(workspaceSearchFit(500, 0, [88, 96], 44, 8)).toEqual([true, true, true]);
+  expect(workspaceSearchFit(410, 0, [88, 96], 44, 8)).toEqual([true, true, false]);
+  expect(workspaceSearchFit(370, 0, [88, 96], 44, 8)).toEqual([true, false, false]);
 });
 
 it('keeps search sizing on the stable root without redundant style writes', () => {

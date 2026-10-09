@@ -1363,9 +1363,7 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
   });
 });
 
-test('keeps expanded rail search inline and yields controls only when space runs out (HS2-HH1F6P)', async ({
-  page,
-}) => {
+test('keeps rail view tabs above search and parks the closed trigger at the right (HS2-JJ6ZE1)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
   const stage = page.locator('.terminal-ticket-rail-demo');
@@ -1377,12 +1375,26 @@ test('keeps expanded rail search inline and yields controls only when space runs
       const sortBox = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect();
       return [viewBox.left - toolbarBox.left, sortBox.left - toolbarBox.left, toolbarBox.right - viewBox.right];
     });
-  await stage.screenshot({ path: 'target/visual-captures/hs2-jj6ze1-rail-closed-narrow.png', animations: 'disabled' });
+  const closedSearchRightInset = () =>
+    toolbar.evaluate(
+      (node) =>
+        node.getBoundingClientRect().right -
+        node.querySelector<HTMLButtonElement>('[aria-label="Search tickets"]')!.getBoundingClientRect().right,
+    );
+  const searchBelowView = () =>
+    toolbar.evaluate(
+      (node) =>
+        node.querySelector('.view-mode-switcher')!.getBoundingClientRect().bottom <
+        node.querySelector('.workspace-header__search-actions')!.getBoundingClientRect().top,
+    );
+  await stage.screenshot({ path: 'target/visual-captures/hs2-jj6ze1-after-closed-narrow.png', animations: 'disabled' });
   await expect.poll(async () => Math.max(...(await closedGroupMargins()))).toBeLessThan(40);
+  await expect.poll(closedSearchRightInset).toBeLessThan(40);
   const wideRailStyle = await page.addStyleTag({ content: '.terminal-ticket-rail-demo { width: 700px !important; }' });
   await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(650);
   await expect.poll(async () => Math.max(...(await closedGroupMargins()))).toBeLessThan(40);
-  await stage.screenshot({ path: 'target/visual-captures/hs2-jj6ze1-rail-closed-wide.png', animations: 'disabled' });
+  await expect.poll(closedSearchRightInset).toBeLessThan(40);
+  await stage.screenshot({ path: 'target/visual-captures/hs2-jj6ze1-after-closed-wide.png', animations: 'disabled' });
   await toolbar.getByRole('button', { name: 'Search tickets' }).click();
   await expect(toolbar.locator('.view-mode-switcher')).toBeVisible();
   await expect(toolbar.locator('.workspace-header__sort-group')).toBeVisible();
@@ -1391,17 +1403,18 @@ test('keeps expanded rail search inline and yields controls only when space runs
   await expect
     .poll(() => toolbar.locator('.ticket-search-field').evaluate((node) => node.getBoundingClientRect().width))
     .toBeGreaterThan(240);
-  await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(80);
-  await stage.screenshot({ path: 'target/visual-captures/hs2-hh1f6p-rail-wide.png', animations: 'disabled' });
+  await expect.poll(searchBelowView).toBe(true);
+  await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(80);
+  await stage.screenshot({ path: 'target/visual-captures/hs2-jj6ze1-after-open-wide.png', animations: 'disabled' });
   await wideRailStyle.evaluate((node) => {
     (node as HTMLElement).remove();
   });
-  await expect(toolbar.locator('.view-mode-switcher')).toBeHidden();
-  await expect(toolbar.locator('.workspace-header__sort-group')).toBeHidden();
+  await expect(toolbar.locator('.view-mode-switcher')).toBeVisible();
   await expect(toolbar.locator('.workspace-header__utility-group')).toBeHidden();
   await expect(toolbar.getByRole('button', { name: 'More workspace controls' })).toBeVisible();
-  await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(80);
-  await stage.screenshot({ path: 'target/visual-captures/hs2-hh1f6p-rail-narrow.png', animations: 'disabled' });
+  await expect.poll(searchBelowView).toBe(true);
+  await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(80);
+  await stage.screenshot({ path: 'target/visual-captures/hs2-jj6ze1-after-open-narrow.png', animations: 'disabled' });
   await expect
     .poll(() =>
       toolbar.evaluate((node) => {
