@@ -1074,8 +1074,9 @@ and identity-less legacy entries remain conservatively blocking.
   star, sort, view switcher, then title yield. The editor fills the remaining space;
   search stays beside a persistent More menu when controls yield. More includes the same capability-checked
   Up Next toggle and keeps the empty search open while the menu is used (HS2-NZK4KA).
-  Typing or clearing a query keeps search filling the available space through reactive rerenders
-  (HS2-3WQ9A1).
+  Typing or clearing a query keeps search filling the available space through reactive rerenders.
+  If a Kerf morph drops the measured slot style, the last width is restored before the next paint,
+  so each keypress leaves the visible field still (HS2-3WQ9A1).
   In the workspace grid's ticket rail, expanded search also stays on one controls row;
   view, sort, and selection actions move into More only when the rail is too narrow to fit them
   beside a usable search field (HS2-HH1F6P). Closed rail controls fill their toolbar row

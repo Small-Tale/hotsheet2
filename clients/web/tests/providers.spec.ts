@@ -5976,6 +5976,64 @@ test('hides nonempty search on disabled views and restores its open editor on re
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Ready');
 });
 
+for (const width of [2048, 760]) {
+  test(`keeps the expanded search field still on every typing frame at ${width}px (HS2-3WQ9A1)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockProject(page);
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
+    await toolbar.getByRole('button', { name: 'Search tickets' }).click();
+    const editor = toolbar.getByRole('searchbox', { name: 'Search tickets' });
+    await editor.fill('a');
+    await expect(page.locator('.ticket-search-field')).toHaveAttribute('data-expanded', 'true');
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(700);
+    await page.evaluate(() => {
+      const state = window as typeof window & {
+        __searchTypingFrames?: Array<{ left: number; right: number; width: number }>;
+        __searchTypingActive?: boolean;
+      };
+      state.__searchTypingFrames = [];
+      state.__searchTypingActive = true;
+      const record = () => {
+        if (!state.__searchTypingActive) return;
+        const rect = document
+          .querySelector('.workspace-header__search-actions .ticket-search-field')
+          ?.getBoundingClientRect();
+        if (rect) state.__searchTypingFrames!.push({ left: rect.left, right: rect.right, width: rect.width });
+        requestAnimationFrame(record);
+      };
+      requestAnimationFrame(record);
+    });
+    await editor.pressSequentially('sdaasdaskjalsdkj', { delay: 90 });
+    await page.waitForTimeout(200);
+    const frames = await page.evaluate(() => {
+      const state = window as typeof window & {
+        __searchTypingFrames?: Array<{ left: number; right: number; width: number }>;
+        __searchTypingActive?: boolean;
+      };
+      state.__searchTypingActive = false;
+      return state.__searchTypingFrames ?? [];
+    });
+    expect(frames.length).toBeGreaterThan(20);
+    for (const coordinate of ['left', 'right', 'width'] as const) {
+      const values = frames.map((frame) => frame[coordinate]);
+      expect(
+        Math.max(...values) - Math.min(...values),
+        `${coordinate}: ${Math.min(...values)}–${Math.max(...values)} across ${frames.length} frames`,
+      ).toBeLessThan(2);
+    }
+    await page.waitForTimeout(600);
+    await page.screenshot({
+      path: `target/visual-captures/hs2-3wq9a1-search-typing-stable-${width}.png`,
+      clip: { x: 0, y: 0, width, height: 240 },
+      animations: 'disabled',
+    });
+  });
+}
+
 test('keeps a scrolled-back transcript in place while selecting a message range', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

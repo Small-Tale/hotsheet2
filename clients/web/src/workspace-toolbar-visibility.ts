@@ -20,6 +20,32 @@ export function workspaceSlotWidthChanged(current: string, target: number): bool
   return !Number.isFinite(value) || Math.abs(value - target) > 0.01;
 }
 
+interface WorkspaceSearchSizing {
+  width: number;
+  expandedWidth: string;
+}
+
+/** Restore a Kerf-morphed slot before its temporary narrow width can paint. */
+export function repairWorkspaceSearchSlot(
+  style: Pick<CSSStyleDeclaration, 'width' | 'flex' | 'getPropertyValue' | 'setProperty'>,
+  sizing: WorkspaceSearchSizing,
+): boolean {
+  let changed = false;
+  if (style.getPropertyValue('--kui-token-search-expanded-width') !== sizing.expandedWidth) {
+    style.setProperty('--kui-token-search-expanded-width', sizing.expandedWidth);
+    changed = true;
+  }
+  if (workspaceSlotWidthChanged(style.width, sizing.width)) {
+    style.width = `${sizing.width}px`;
+    changed = true;
+  }
+  if (style.flex !== '0 0 auto') {
+    style.flex = '0 0 auto';
+    changed = true;
+  }
+  return changed;
+}
+
 /** Keep the editor usable while retaining every action that fits at its rendered width. */
 export function workspaceSearchFit(
   width: number,
@@ -57,11 +83,13 @@ export function wireWorkspaceToolbarVisibility(
   let header: HTMLElement | null = null;
   let observedSearchSlot: HTMLElement | null = null;
   let styleRefreshFrame = 0;
+  let searchSizing: WorkspaceSearchSizing | undefined;
   const measuredWidths = new WeakMap<HTMLElement, { width: number; sizing: string | null }>();
   const resize = new ResizeObserver(() => {
     refresh();
   });
   const slotStyles = new MutationObserver(() => {
+    if (observedSearchSlot && searchSizing) repairWorkspaceSearchSlot(observedSearchSlot.style, searchSizing);
     if (styleRefreshFrame) return;
     styleRefreshFrame = requestAnimationFrame(() => {
       styleRefreshFrame = 0;
@@ -107,6 +135,7 @@ export function wireWorkspaceToolbarVisibility(
       if (observedSearchSlot) resize.unobserve(observedSearchSlot);
       slotStyles.disconnect();
       observedSearchSlot = searchSlot;
+      searchSizing = undefined;
       if (observedSearchSlot) {
         resize.observe(observedSearchSlot);
         slotStyles.observe(observedSearchSlot, { attributes: true, attributeFilter: ['style'] });
@@ -199,10 +228,8 @@ export function wireWorkspaceToolbarVisibility(
         (visible.every(Boolean) ? 0 : moreWidth + gap);
       const expandedWidth = `${Math.max(0, availableSearch - 8)}px`;
       const slotWidth = Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : moreWidth + gap));
-      if (searchSlot!.style.getPropertyValue('--kui-token-search-expanded-width') !== expandedWidth)
-        searchSlot!.style.setProperty('--kui-token-search-expanded-width', expandedWidth);
-      if (workspaceSlotWidthChanged(searchSlot!.style.width, slotWidth)) searchSlot!.style.width = `${slotWidth}px`;
-      if (searchSlot!.style.flex !== '0 0 auto') searchSlot!.style.flex = '0 0 auto';
+      searchSizing = { width: slotWidth, expandedWidth };
+      repairWorkspaceSearchSlot(searchSlot!.style, searchSizing);
       if (identity) {
         identity.setAttribute('data-hide-below', `${visible[0] ? 0 : contentWidth + 1}px`);
         setHidden(identity, !visible[0]);
@@ -214,6 +241,7 @@ export function wireWorkspaceToolbarVisibility(
       more!.setAttribute('data-show-below', `${visible.every(Boolean) ? 0 : contentWidth + 1}px`);
       setHidden(more!, visible.every(Boolean));
     } else {
+      searchSizing = undefined;
       const closedSearchSlot = header.querySelector<HTMLElement>('.workspace-header__search-actions');
       closedSearchSlot?.style.removeProperty('--kui-token-search-expanded-width');
       closedSearchSlot?.style.removeProperty('width');
@@ -228,6 +256,7 @@ export function wireWorkspaceToolbarVisibility(
     if (observedSearchSlot) resize.unobserve(observedSearchSlot);
     slotStyles.disconnect();
     observedSearchSlot = null;
+    searchSizing = undefined;
     header = next;
     if (header) {
       resize.observe(header);
