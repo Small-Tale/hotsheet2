@@ -19644,9 +19644,7 @@ test('keeps managed workspace search open and focused through repeated controlle
       ).toBeVisible();
       if (width === 1280 && attempt === 1) {
         const slot = page.locator('.workspace-header__search-actions[data-search-open="true"]');
-        await expect
-          .poll(() => slot.evaluate((node) => Number.parseFloat((node as HTMLElement).style.width)))
-          .toBeGreaterThan(200);
+        await expect.poll(() => slot.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(200);
         const styleMutations = await slot.evaluate(async (node) => {
           let count = 0;
           const observer = new MutationObserver(() => {
