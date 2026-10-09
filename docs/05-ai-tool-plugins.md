@@ -101,6 +101,12 @@ narrow sizes and a matching attached after image when the ticket contains visual
 The shared hotsheet skill carries the same review rule itself, so an `AGENTS.md`-only
 project can apply it without a `CLAUDE.md` file.
 
+The testing section (HS2-QG215V) also applies in fresh Claude and Codex projects:
+browser fixtures must match the real API contract, new API compositions need a real-server
+flow, stateful controls must be tested in both directions across resets, and actions must
+work through each shipped parent composition. Project test runners and paths belong in
+local `hotsheet:specifics` blocks, which refresh preserves.
+
 ```markdown
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->

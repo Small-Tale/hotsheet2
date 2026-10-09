@@ -1870,6 +1870,80 @@ args = ["--path", "{{store}}"]
     }
 
     #[test]
+    fn shared_client_testing_rules_reach_claude_and_codex_without_erasing_local_setup() {
+        let testing = GUIDANCE_SECTIONS
+            .iter()
+            .find(|section| section.name == "testing-philosophy")
+            .unwrap();
+        let rules = testing.current;
+        for required in [
+            "real server shapes, optional fields, and status codes",
+            "each newly composed API surface against a real server",
+            "controls in both directions",
+            "Verify resets and a further edit",
+            "assert live properties",
+            "every part of a selected presentation",
+            "through each shipped parent composition",
+            "disable unsupported controls explicitly",
+        ] {
+            assert!(rules.contains(required), "missing shared rule: {required}");
+        }
+        assert!(!rules.contains("docs/TEST-COVERAGE.md"));
+
+        let store = tempfile::tempdir().unwrap();
+        let claude_project = tempfile::tempdir().unwrap();
+        let specifics = "<!-- hotsheet:begin specifics=testing-philosophy v=1 -->\nLocal test runner and fixtures.\n<!-- hotsheet:end specifics=testing-philosophy -->";
+        let legacy = guidance_with_specifics(testing.legacy, testing.name, Some(specifics));
+        std::fs::write(
+            claude_project.path().join("CLAUDE.md"),
+            format!("Local preface.\n\n{legacy}\n"),
+        )
+        .unwrap();
+        run_setup_in(
+            store.path(),
+            claude_project.path(),
+            Some("claude"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        let claude = std::fs::read_to_string(claude_project.path().join("CLAUDE.md")).unwrap();
+        assert!(claude.contains(&guidance_with_specifics(
+            rules,
+            testing.name,
+            Some(specifics)
+        )));
+        assert!(claude.starts_with("Local preface.\n"));
+
+        let codex_project = tempfile::tempdir().unwrap();
+        run_setup_in(
+            store.path(),
+            codex_project.path(),
+            Some("codex"),
+            false,
+            None,
+            &[],
+        )
+        .unwrap();
+        let agents_path = codex_project.path().join("AGENTS.md");
+        let fresh = std::fs::read_to_string(&agents_path).unwrap();
+        assert_eq!(fresh.matches(rules.trim()).count(), 1);
+        let with_specifics = fresh.replace(
+            rules.trim(),
+            &guidance_with_specifics(rules, testing.name, Some(specifics)),
+        );
+        std::fs::write(&agents_path, &with_specifics).unwrap();
+        let enabled = HashSet::from(["codex".to_string()]);
+        refresh_setup_in(store.path(), codex_project.path(), Some(&enabled), &[]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(agents_path).unwrap(),
+            with_specifics
+        );
+        assert!(!codex_project.path().join("CLAUDE.md").exists());
+    }
+
+    #[test]
     fn shared_section_keys_fold_the_target_path() {
         assert_eq!(shared_section_key("AGENTS.md"), "agents-md");
         assert_eq!(
