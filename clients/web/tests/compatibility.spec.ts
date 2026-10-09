@@ -132,9 +132,9 @@ test('tells development users to restart a server built from older local source'
   await expect(dialog.locator('[data-component="heading"]')).toBeVisible();
   await expect(dialog.locator('[data-component="value-table"]')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Close' })).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-xrs9s4-server-details-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xrs9s4-server-details-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: '/private/tmp/hs2-xrs9s4-server-details-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xrs9s4-server-details-narrow.png', fullPage: true });
   await page.mouse.click(4, 4);
   await expect(dialog).not.toBeVisible();
 });

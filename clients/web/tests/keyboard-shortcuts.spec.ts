@@ -180,13 +180,13 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await expect(keyboardSettings.locator('li[data-shortcut-id="project-tab-previous"]')).toContainText(
     /(Ctrl\+Alt\+Shift\+Left|⌘⌥⇧←)/,
   );
-  await page.screenshot({ path: '/private/tmp/hs2-q1bh0v-browser-safe-shortcuts-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-q1bh0v-browser-safe-shortcuts-wide.png', fullPage: true });
   await keyboardSettings
     .locator('li[data-shortcut-id="toggle-right-sidebar"]')
-    .screenshot({ path: '/private/tmp/hs2-q1bh0v-right-sidebar-shortcut-after.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-q1bh0v-right-sidebar-shortcut-after.png' });
   await keyboardSettings
     .locator('li[data-shortcut-id="view-settings"]')
-    .screenshot({ path: '/private/tmp/hs2-q1bh0v-settings-shortcut-after.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-q1bh0v-settings-shortcut-after.png' });
   const firstTabDefault = keyboardSettings.locator('li[data-shortcut-id="project-tab-previous"]');
   const lastTabDefault = keyboardSettings.locator('li[data-shortcut-id="drawer-tab-next"]');
   const captureTabDefaults = async (path: string) => {
@@ -199,9 +199,9 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
       clip: { x: firstBox.x, y: firstBox.y, width: firstBox.width, height: lastBox.y + lastBox.height - firstBox.y },
     });
   };
-  await captureTabDefaults('/private/tmp/hs2-q1bh0v-navigation-shortcuts-after-wide.png');
+  await captureTabDefaults('target/visual-captures/hs2-q1bh0v-navigation-shortcuts-after-wide.png');
   await page.setViewportSize({ width: 760, height: 700 });
-  await captureTabDefaults('/private/tmp/hs2-q1bh0v-navigation-shortcuts-after-narrow.png');
+  await captureTabDefaults('target/visual-captures/hs2-q1bh0v-navigation-shortcuts-after-narrow.png');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.locator('.view-mode-switcher [aria-label="List view"]').click();
 
@@ -209,7 +209,7 @@ test('drives views, panels, tab cycling, and the composer from the keyboard (HS2
   await expect(composer).toBeHidden();
   await page.keyboard.press('c');
   await expect(composer).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-9shywd-shortcuts-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9shywd-shortcuts-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(composer).toBeHidden();
 
@@ -285,7 +285,7 @@ for (const apple of [true, false]) {
     await page.keyboard.press('Control+g');
     await expect(row('undo').getByRole('status')).toContainText('Open search');
     await expect(row('open-search').getByRole('status')).toContainText('Undo');
-    if (apple) await page.screenshot({ path: '/private/tmp/hs2-835bzd-control-conflict-wide.png' });
+    if (apple) await page.screenshot({ path: 'target/visual-captures/hs2-835bzd-control-conflict-wide.png' });
     await row('undo').locator('[data-action="reset-shortcut"]').click();
     await expect(screen.locator('.keyboard-settings__conflict')).toHaveCount(0);
 
@@ -340,7 +340,10 @@ for (const apple of [true, false]) {
     }));
     expect(bounds.scroll).toBeLessThanOrEqual(bounds.width + 1);
     if (apple) {
-      await page.screenshot({ path: '/private/tmp/hs2-835bzd-control-conflict-narrow.png', animations: 'disabled' });
+      await page.screenshot({
+        path: 'target/visual-captures/hs2-835bzd-control-conflict-narrow.png',
+        animations: 'disabled',
+      });
     }
     await row('undo').locator('[data-action="reset-shortcut"]').click();
     await expect(screen.locator('.keyboard-settings__conflict')).toHaveCount(0);

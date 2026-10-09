@@ -89,7 +89,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
   const firstRow = await remote.locator('[data-component="list-item"]').first().boundingBox();
   const list = await remote.getByRole('list', { name: 'Open projects' }).boundingBox();
   expect(firstRow!.y - list!.y).toBeGreaterThanOrEqual(4);
-  await page.screenshot({ path: '/private/tmp/hs2-xx5y2x-remote-project-mobile-dark.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xx5y2x-remote-project-mobile-dark.png' });
   await cancel();
   for (const state of [
     { name: 'Remote loading', copy: 'Loading projects…' },
@@ -102,7 +102,10 @@ test('demonstrates project chooser states and opens again after empty, error, an
     await expect(remote.locator('[data-component="list-item"]')).toHaveCount(0);
     if (state.name === 'Remote empty') {
       await remote.getByRole('button', { name: 'Cancel', exact: true }).focus();
-      await page.screenshot({ path: '/private/tmp/hs2-xx5y2x-remote-project-empty.png', animations: 'disabled' });
+      await page.screenshot({
+        path: 'target/visual-captures/hs2-xx5y2x-remote-project-empty.png',
+        animations: 'disabled',
+      });
     }
     await cancel();
   }

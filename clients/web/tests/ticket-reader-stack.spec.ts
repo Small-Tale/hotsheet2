@@ -242,7 +242,7 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
   await expect(reader).toBeVisible();
   await page.mouse.click(4, 4);
   await expect(reader).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-x1wgx5-reader-modal-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-x1wgx5-reader-modal-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   let bounds = await reader.evaluate((host) => {
     const { x, y, width, height } = (
@@ -254,7 +254,7 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
   expect(bounds.y).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
   expect(bounds.y + bounds.height).toBeLessThanOrEqual(844);
-  await page.screenshot({ path: '/private/tmp/hs2-x1wgx5-reader-modal-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-x1wgx5-reader-modal-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 600, height: 450 });
   bounds = await reader.evaluate((host) => {
     const { x, y, width, height } = (
@@ -264,7 +264,7 @@ test('uses native modality for focus, nested Escape, backdrop policy, and respon
   });
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(600);
   expect(bounds.y + bounds.height).toBeLessThanOrEqual(450);
-  await page.screenshot({ path: '/private/tmp/hs2-x1wgx5-reader-modal-200-percent.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-x1wgx5-reader-modal-200-percent.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(reader).toBeHidden();
   await expect(row).toBeFocused();
@@ -315,10 +315,10 @@ test('layers exact cross-project ticket readers and unwinds focus without changi
   const third = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Deep Work' });
   await expect(third).toBeVisible();
   await expect(third.getByText('Reader 2 of 2')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-t5vnj8-layered-readers-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-t5vnj8-layered-readers-wide.png', fullPage: true });
   await page.setViewportSize({ width: 720, height: 760 });
   await expect(third).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-t5vnj8-layered-readers-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-t5vnj8-layered-readers-narrow.png', fullPage: true });
   // In the mobile layout the workspace inspector is a closed overlay whose content Kerf makes inert, so
   // unwind at the wide layout where the opening link is reachable.
   await page.setViewportSize({ width: 1200, height: 900 });
@@ -361,9 +361,9 @@ test('edits same-slug linked readers through their owning project and flushes be
   const deepReader = page.getByRole('dialog', { name: 'Read and edit HS2-LINK01 in Deep Work' });
   await deepReader.locator('[data-action="edit-markdown"]').click({ position: { x: 4, y: 4 } });
   await deepReader.getByRole('textbox', { name: 'Ticket details' }).fill('Deep project draft stays with git-deep.');
-  await page.screenshot({ path: '/private/tmp/hs2-1xqb2k-linked-edit-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1xqb2k-linked-edit-wide.png', fullPage: true });
   await page.setViewportSize({ width: 720, height: 760 });
-  await page.screenshot({ path: '/private/tmp/hs2-1xqb2k-linked-edit-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1xqb2k-linked-edit-narrow.png', fullPage: true });
   await deepReader.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(deepReader).toHaveCount(0);
   await targetReader.locator('[data-action="edit-markdown"]').click({ position: { x: 4, y: 4 } });

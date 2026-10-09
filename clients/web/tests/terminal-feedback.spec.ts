@@ -133,7 +133,7 @@ test('keeps magnified terminal focus inside the modal and removes a leading zsh 
     expect(await handle.evaluate((element) => getComputedStyle(element, '::before').backgroundColor)).toBe(
       'rgba(0, 0, 0, 0)',
     );
-  await page.screenshot({ path: '/private/tmp/hs2-fxj64w-magnified-wide-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-fxj64w-magnified-wide-after.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 650 });
   await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
   await expect(sidebar).toHaveAttribute('data-separator', 'hidden');
@@ -142,7 +142,7 @@ test('keeps magnified terminal focus inside the modal and removes a leading zsh 
     expect(await handle.evaluate((element) => getComputedStyle(element, '::before').backgroundColor)).toBe(
       'rgba(0, 0, 0, 0)',
     );
-  await page.screenshot({ path: '/private/tmp/hs2-fxj64w-magnified-narrow-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-fxj64w-magnified-narrow-after.png', fullPage: true });
 });
 
 test('opens ticket references from interactive terminals without linking scaled previews (HS2-2DW829)', async ({
@@ -318,12 +318,15 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
     wideFont = await preview.getAttribute('data-font-size');
   await page.waitForTimeout(250);
   await expect(preview).toHaveAttribute('data-font-size', wideFont!);
-  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-canonical-grid-post-paint-after.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-hpjb1k-canonical-grid-post-paint-after.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 900, height: 580 });
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
   await expect.poll(async () => Math.abs((await geometry(preview))!.aspect - wideAspect)).toBeLessThan(0.02);
   await assertGridGeometry();
-  await page.screenshot({ path: '/private/tmp/hs2-ap9dsm-fixed-card-narrow-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ap9dsm-fixed-card-narrow-after.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1100 });
   for (let step = 0; step < 3; step += 1) await dashboard.getByRole('button', { name: /Zoom in/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '1');
@@ -334,7 +337,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   const footerMenu = dashboard.getByRole('menu');
   await expect(footerMenu.getByText('Open')).toBeVisible();
   await expect(footerMenu.getByText('Hide Terminal')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-rq290f-terminal-footer-menu-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rq290f-terminal-footer-menu-after.png', fullPage: true });
   await page.keyboard.press('Escape');
   await tile.click();
   const magnified = dashboard.getByRole('dialog', { name: 'Magnified nano' }),
@@ -366,7 +369,7 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
       );
     })
     .toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-kke1pm-fitted-magnified-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-kke1pm-fitted-magnified-after.png', fullPage: true });
   await magnified.getByRole('button', { name: 'Open nano in project terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
@@ -415,11 +418,11 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   expect(dedicatedEdges.bottom).toBeGreaterThanOrEqual(0);
   expect(dedicatedEdges.canvasWidthError).toBeLessThanOrEqual(2);
   expect(dedicatedEdges.canvasHeightError).toBeLessThanOrEqual(2);
-  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-maximize-immediate-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-hpjb1k-maximize-immediate-after.png', fullPage: true });
   await drawer.getByRole('tab', { name: 'Project grid' }).click();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
   await expect(drawer.locator('wa-select[name="terminal-visibility-group"]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-p0pyh7-drawer-without-visibility.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-p0pyh7-drawer-without-visibility.png', fullPage: true });
   // The drawer grid tile's More actions menu renders (it used to set state nothing drew) with Open
   // only, since terminal visibility is dashboard-scoped; Open switches the drawer to that terminal
   // (HS2-V2CCN6).
@@ -473,14 +476,14 @@ test('releases magnified terminal resources and bounds duplicated scrollback', a
     await expect.poll(liveSockets).toBe(baselineSockets);
     if (cycle === 0) {
       await page.screenshot({
-        path: '/private/tmp/hs2-acmrf6-magnified-placeholder-wide.png',
+        path: 'target/visual-captures/hs2-acmrf6-magnified-placeholder-wide.png',
         fullPage: true,
         animations: 'disabled',
       });
       await page.setViewportSize({ width: 900, height: 650 });
       await expect(viewport).toHaveAttribute('data-geometry-ready', 'true');
       await page.screenshot({
-        path: '/private/tmp/hs2-acmrf6-magnified-placeholder-narrow.png',
+        path: 'target/visual-captures/hs2-acmrf6-magnified-placeholder-narrow.png',
         fullPage: true,
         animations: 'disabled',
       });
@@ -494,7 +497,7 @@ test('releases magnified terminal resources and bounds duplicated scrollback', a
     expect(await page.locator('.xterm').count()).toBe(baselineTerminals);
     if (cycle === 0)
       await dashboard.screenshot({
-        path: '/private/tmp/hs2-acmrf6-restored-preview.png',
+        path: 'target/visual-captures/hs2-acmrf6-restored-preview.png',
         animations: 'disabled',
       });
   }
@@ -601,11 +604,11 @@ test('keeps a scrolled terminal anchored while animated output and size heartbea
     }
   }, grid);
   await expect.poll(visibleRows).toEqual(anchoredRows);
-  await page.screenshot({ path: '/private/tmp/hs2-cjbzpw-scrollback-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cjbzpw-scrollback-wide.png', fullPage: true });
 
   await page.setViewportSize({ width: 1024, height: 700 });
   await expect.poll(async () => (await visibleRows()).join('\n')).not.toContain('history line 159');
-  await page.screenshot({ path: '/private/tmp/hs2-cjbzpw-scrollback-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cjbzpw-scrollback-narrow.png', fullPage: true });
 });
 
 test('keeps current terminal geometry through the complete drawer dashboard round trip', async ({ page }) => {
@@ -740,7 +743,10 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   expect(firstMaximizedFrame!.contained).toBe(true);
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
   await assertDedicated(dedicated);
-  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-post-paint-maximized-wide-after.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-hpjb1k-post-paint-maximized-wide-after.png',
+    fullPage: true,
+  });
   const dashboardFramesId = await startTerminalFrameSampling(
     page,
     '[data-component="terminal-dashboard"] [data-terminal-key="terminal-feedback:terminal-new"] [data-display-mode="scaled-preview"]',
@@ -811,10 +817,16 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
   dedicated = drawer.locator('[data-component="terminal-session"] [data-terminal-id="terminal-new"]');
   await assertDedicated(dedicated);
-  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-post-paint-roundtrip-wide-after.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-hpjb1k-post-paint-roundtrip-wide-after.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 900, height: 650 });
   await assertDedicated(dedicated);
-  await page.screenshot({ path: '/private/tmp/hs2-hpjb1k-post-paint-roundtrip-narrow-after.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-hpjb1k-post-paint-roundtrip-narrow-after.png',
+    fullPage: true,
+  });
 });
 
 // HS2-3ZBQDG: the size arbiter follows the last *interacted* viewport, so a device's steady
@@ -869,7 +881,7 @@ test('marks genuine terminal interaction claims so the last-interacted viewport 
     .locator('[data-terminal-key="terminal-feedback:terminal-new"] [data-display-mode="scaled-preview"]');
   await expect(mobileTile).toHaveAttribute('data-geometry-ready', 'true');
   await expect(mobileTile).toHaveAttribute('data-sizing-focus', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-3zbqdg-mobile-terminal-grid.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-3zbqdg-mobile-terminal-grid.png', fullPage: true });
 });
 
 test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS2-3ZBQDG, HS2-S708S3)', async ({
@@ -942,8 +954,8 @@ test('renders dedicated terminal glyphs at 80xM through DOM on Mobile Safari (HS
   await dedicated.hover();
   await page.mouse.wheel(0, -800);
   await expect(dedicated.locator('.scrollbar.vertical')).toHaveClass(/visible/);
-  await page.screenshot({ path: '/private/tmp/hs2-qbmvfq-mobile-scrollbar-right-edge.png', fullPage: true });
-  await dedicated.screenshot({ path: '/private/tmp/hs2-s708s3-mobile-dedicated-80xm.png', scale: 'css' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-qbmvfq-mobile-scrollbar-right-edge.png', fullPage: true });
+  await dedicated.screenshot({ path: 'target/visual-captures/hs2-s708s3-mobile-dedicated-80xm.png', scale: 'css' });
   await context.close();
 });
 
@@ -983,7 +995,7 @@ test('renders the magnified terminal at 80xM filling the phone height (HS2-Z84F7
   });
   expect(geometry.withinWidth).toBe(true);
   expect(geometry.frameFillsHeight).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-z84f78-mobile-magnified.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-z84f78-mobile-magnified.png', fullPage: true });
 });
 
 // HS2-WMN626: the phone magnified terminal follows the visual viewport (so the virtual keyboard

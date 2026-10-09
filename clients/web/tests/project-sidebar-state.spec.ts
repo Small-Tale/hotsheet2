@@ -176,10 +176,10 @@ test('never renders one project sidebar with another project statistics', async 
   await expect(page.locator('[data-component="quick-ticket-composer"]')).toBeHidden();
   await expect(summary).toHaveAccessibleName('Open project statistics: 2 completed today, 4 in progress');
   await page.waitForTimeout(350);
-  await page.screenshot({ path: '/private/tmp/hs2-brdmbb-project-stats-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-brdmbb-project-stats-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(300);
-  await page.screenshot({ path: '/private/tmp/hs2-brdmbb-project-stats-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-brdmbb-project-stats-narrow.png', fullPage: true });
 });
 
 test('an obsolete background count snapshot cannot overwrite a project after an activation round trip', async ({
@@ -311,10 +311,10 @@ test('an obsolete background count snapshot cannot overwrite a project after an 
     'aria-label',
     'Tickets completed over the last 7 days: 0, 1, 0, 1, 0, 2, 3',
   );
-  await page.screenshot({ path: '/private/tmp/hs2-brdmbb-stale-background-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-brdmbb-stale-background-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(300);
-  await page.screenshot({ path: '/private/tmp/hs2-brdmbb-stale-background-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-brdmbb-stale-background-narrow.png', fullPage: true });
   await finalTickets!.fulfill({
     json: {
       items: [ticket('HS2-DEMO', 'started')],

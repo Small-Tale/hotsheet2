@@ -193,8 +193,8 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   });
   const single = await geometry();
   expect(Number.parseFloat(single.radius)).toBeGreaterThan(16);
-  await page.screenshot({ path: '/private/tmp/hs2-z4t3j0-single-line-search-wide.png', fullPage: true });
-  await page.screenshot({ path: '/private/tmp/hs2-0094cq-inline-search-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-z4t3j0-single-line-search-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-0094cq-inline-search-wide.png', fullPage: true });
   await search.pressSequentially('tag:h', { delay: 30 });
   await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);
   await expect(search).toContainText('tag:h');
@@ -268,9 +268,9 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
     ),
   ).toBe('before [tag:client]after');
   await page.setViewportSize({ width: 680, height: 720 });
-  await searchGroup.screenshot({ path: '/private/tmp/hs2-4rd940-search-chip-caret-narrow.png' });
+  await searchGroup.screenshot({ path: 'target/visual-captures/hs2-4rd940-search-chip-caret-narrow.png' });
   await page.setViewportSize({ width: 1728, height: 971 });
-  await searchGroup.screenshot({ path: '/private/tmp/hs2-4rd940-search-chip-caret-wide.png' });
+  await searchGroup.screenshot({ path: 'target/visual-captures/hs2-4rd940-search-chip-caret-wide.png' });
   await page.setViewportSize({ width: 1800, height: 800 });
   await page.getByRole('button', { name: 'Clear search' }).click();
   await expect(page.locator('[data-component="token-search-token"]')).toHaveCount(0);
@@ -302,7 +302,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   // Peer controls stay exactly in place while the search wraps (HS2-W843B4; exact since HS2-KMDJRH).
   expect(Math.abs(inline.mode.top - single.mode.top)).toBeLessThanOrEqual(0.5);
   expect(Math.abs(inline.sort.top - single.sort.top)).toBeLessThanOrEqual(0.5);
-  await page.screenshot({ path: '/private/tmp/hs2-mz9dmf-inline-search-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mz9dmf-inline-search-wide.png', fullPage: true });
   await page.getByRole('button', { name: 'Edit tag:client' }).click();
   await expect(inlineTag).toHaveCount(0);
   await expect(search).toContainText('NOT tag:client AND parser');
@@ -322,10 +322,10 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
     .poll(() => searchGroup.evaluate((node) => node.getBoundingClientRect().height))
     .toBeGreaterThan(single.group.height);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-mz9dmf-inline-search-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mz9dmf-inline-search-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(page.getByText('Searching tickets')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-0094cq-inline-search-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-0094cq-inline-search-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1800, height: 800 });
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('is:up-next ');
@@ -354,16 +354,16 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await search.fill('is:active ');
   await expect(page.locator('[data-component="token-search-token"][data-token-value="is:active"]')).toBeVisible();
   await expect(page.getByText('Searching tickets')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-vx1v88-search-token-chips-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-vx1v88-search-token-chips-wide.png', fullPage: true });
   await page.setViewportSize({ width: 680, height: 720 });
-  await page.screenshot({ path: '/private/tmp/hs2-vx1v88-search-token-chips-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-vx1v88-search-token-chips-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1800, height: 800 });
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('is:active OR (is:completed AND NOT is:verified)');
   await expect(page.locator('[data-ticket-slug="HS2-ACTIVE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-DONE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-VERIFIED"]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-3cnnjm-boolean-search-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-3cnnjm-boolean-search-wide.png', fullPage: true });
   await search.fill('is:archived OR is:backlogged');
   await expect(page.locator('[data-ticket-slug="HS2-ARCHIVE"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-BACKLOG"]')).toBeVisible();
@@ -379,7 +379,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   for (const slug of ['HS2-DONE', 'HS2-VERIFIED', 'HS2-ARCHIVE', 'HS2-DUPLICATE'])
     await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toBeVisible();
   expect(ticketQueries.at(-1)?.searchParams.get('text') ?? '').toBe('');
-  await page.screenshot({ path: '/private/tmp/hs2-m2zxjc-0y96fm-closed-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-m2zxjc-0y96fm-closed-wide.png', fullPage: true });
   await page.getByRole('button', { name: 'Clear search' }).click();
   await search.fill('is:duplicate ');
   await expect(page.locator('[data-component="token-search-token"][data-token-value="is:duplicate"]')).toBeVisible();
@@ -388,7 +388,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
     await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toHaveCount(0);
   expect(ticketQueries.at(-1)?.searchParams.get('text') ?? '').toBe('');
   await page.setViewportSize({ width: 680, height: 720 });
-  await page.screenshot({ path: '/private/tmp/hs2-m2zxjc-0y96fm-duplicate-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-m2zxjc-0y96fm-duplicate-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Search syntax help' }).click();
   const help = page.getByRole('dialog', { name: 'Search syntax' });
   await expect(help.locator('dt')).toHaveText(['Tags', 'Content', 'Workflow', 'Dates']);
@@ -397,7 +397,7 @@ test('evaluates is: filters and boolean expressions in the workspace search', as
   await expect(help).toContainText('is:closed');
   await expect(help).toContainText('is:duplicate');
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-7efj3e-search-help-compact.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-7efj3e-search-help-compact.png', fullPage: true });
 });
 
 test('keeps the project identity readable beside expanded search at 680px', async ({ page }) => {
@@ -525,7 +525,7 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
     )
     .toBe(true);
   await page.screenshot({
-    path: '/private/tmp/hs2-q0tg43-expanded-search-narrow-after.png',
+    path: 'target/visual-captures/hs2-q0tg43-expanded-search-narrow-after.png',
     clip: {
       x: 0,
       y: 0,
@@ -534,7 +534,7 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
     },
   });
   await page.screenshot({
-    path: '/private/tmp/hs2-vt4r56-search-expanded-680.png',
+    path: 'target/visual-captures/hs2-vt4r56-search-expanded-680.png',
     clip: {
       x: 0,
       y: 0,
@@ -562,5 +562,5 @@ test('keeps the project identity readable beside expanded search at 680px', asyn
       ),
     )
     .toBe(false);
-  await page.screenshot({ path: '/private/tmp/hs2-vt4r56-search-collapsed-680.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-vt4r56-search-collapsed-680.png', fullPage: true });
 });

@@ -722,5 +722,7 @@ for (const keepTyping of [true, false])
     await expect(page.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
     await inspector.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
     await expect(editor).toHaveValue(later);
-    await page.screenshot({ path: `/private/tmp/hs2-re1ps6-no-merge-prompt-${keepTyping ? 'typing' : 'idle'}.png` });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-re1ps6-no-merge-prompt-${keepTyping ? 'typing' : 'idle'}.png`,
+    });
   });

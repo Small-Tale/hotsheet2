@@ -220,13 +220,13 @@ test('orders terminal and AI-chat tabs as one persistent, keyboard-accessible dr
       project.id,
     ),
   ).toBe(JSON.stringify([chatId!, 'shell-two', 'shell-one']));
-  await page.screenshot({ path: '/private/tmp/hs2-41q0ha-drawer-tab-bar-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-41q0ha-drawer-tab-bar-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 720 });
   await page.evaluate(() => {
     scrollTo(0, 0);
   });
   await expect.poll(() => drawerOrder(drawer)).toEqual([chatId!, 'shell-two', 'shell-one']);
-  await page.screenshot({ path: '/private/tmp/hs2-41q0ha-drawer-tab-bar-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-41q0ha-drawer-tab-bar-narrow.png', fullPage: true });
   // Selecting a drawer tab on desktop defers input focus into the selected item's composer by two
   // frames. Wait for that documented consequence before returning focus to the tab; otherwise the
   // deferred focus can land between `focus()` and Delete and swallow the key (HS2-8TS2Z1).
@@ -286,7 +286,7 @@ test('right-click closes mixed terminal and AI-chat ranges from either tab kind'
   await terminalMenu.getByText('Close All Tabs').click();
   await expect.poll(() => drawerOrder(drawer)).toEqual([]);
   await expect(drawer.getByRole('tab', { name: 'Project grid' })).toHaveAttribute('aria-selected', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-3kwk6m-mixed-drawer-close-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-3kwk6m-mixed-drawer-close-wide.png', fullPage: true });
   await page.setViewportSize({ width: 900, height: 650 });
-  await page.screenshot({ path: '/private/tmp/hs2-3kwk6m-mixed-drawer-close-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-3kwk6m-mixed-drawer-close-narrow.png', fullPage: true });
 });

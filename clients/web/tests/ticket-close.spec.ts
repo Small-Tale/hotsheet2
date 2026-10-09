@@ -230,10 +230,13 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   await expect(dialog.getByRole('alert')).toContainText('Search results may be incomplete for Hot Sheet 2');
   await expect(dialog.locator('.ticket-close-dialog__form')).toHaveCSS('gap', '16px');
   await expect(dialog.locator('.ticket-close-dialog__results')).toHaveCSS('padding', '4px');
-  await page.screenshot({ path: '/private/tmp/hs2-sbw2xd-cross-project-duplicate-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-sbw2xd-cross-project-duplicate-wide.png', fullPage: true });
   await page.setViewportSize({ width: 640, height: 760 });
   await expect(candidate).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-sbw2xd-cross-project-duplicate-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-sbw2xd-cross-project-duplicate-narrow.png',
+    fullPage: true,
+  });
   await candidate.click();
   await expect(dialog.getByText('Hot Sheet 2', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Mark as duplicate' }).click();
@@ -254,10 +257,10 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   const staleDialog = page.locator('[data-component="not-working-dialog"]');
   if (await staleDialog.isVisible()) await staleDialog.getByRole('button', { name: 'Cancel' }).click();
   await page.setViewportSize({ width: 1080, height: 900 });
-  await page.screenshot({ path: '/private/tmp/hs2-95jesx-duplicate-of-details-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-95jesx-duplicate-of-details-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 700 });
   await expect(outcome).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-95jesx-duplicate-of-details-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-95jesx-duplicate-of-details-narrow.png', fullPage: true });
   await outcome.getByRole('button', { name: 'Open duplicate target HS2-1S6DS9 from Hot Sheet 2' }).click();
   const reader = page.locator('[data-component="ticket-inspector"][data-presentation="reader"]');
   await expect(reader).toHaveAttribute('data-ticket-slug', 'HS2-1S6DS9');
@@ -282,8 +285,11 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   await expect(backlinks).not.toContainText('Could not check');
   await page.waitForTimeout(800);
   await page.setViewportSize({ width: 1080, height: 900 });
-  await page.screenshot({ path: '/private/tmp/hs2-fg18en-stale-checkouts-ignored-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-fg18en-stale-checkouts-ignored-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 700 });
   await expect(backlinks).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-fg18en-stale-checkouts-ignored-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-fg18en-stale-checkouts-ignored-narrow.png',
+    fullPage: true,
+  });
 });

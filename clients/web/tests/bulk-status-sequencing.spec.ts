@@ -257,9 +257,9 @@ test('serializes rapid Verified then Archive batches onto fresh concurrency toke
   await expect(page.locator('[data-ticket-slug="HS2-FAST01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-FAST02"]')).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-0k2zp3-sequenced-bulk-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-0k2zp3-sequenced-bulk-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 720 });
-  await page.screenshot({ path: '/private/tmp/hs2-0k2zp3-sequenced-bulk-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-0k2zp3-sequenced-bulk-narrow.png', fullPage: true });
   await page.keyboard.press('Meta+z');
   await expect.poll(() => mock.getRows().map((row) => row.status)).toEqual(['verified', 'verified']);
   await page.locator('[data-action="select-view"][data-item-id="all"]').click();
@@ -346,5 +346,8 @@ test('keeps archived tickets hidden when a refresh was already in flight (HS2-91
   await page.waitForTimeout(300);
   await expect(verifiedFirst).toHaveCount(0);
   await expect(verifiedSecond).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-913hfn-archive-stable-after-stale-refresh.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-913hfn-archive-stable-after-stale-refresh.png',
+    fullPage: true,
+  });
 });

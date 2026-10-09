@@ -16,14 +16,14 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   });
   expect(shadowGutter.above).toBeGreaterThanOrEqual(2);
   expect(shadowGutter.below).toBeGreaterThanOrEqual(4);
-  await tabs.screenshot({ path: '/private/tmp/hs2-fhqgjn-terminal-tab-shadow-after.png' });
-  await drawer.screenshot({ path: '/private/tmp/hs2-4y6sm9-terminal-drawer-wide.png' });
+  await tabs.screenshot({ path: 'target/visual-captures/hs2-fhqgjn-terminal-tab-shadow-after.png' });
+  await drawer.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-terminal-drawer-wide.png' });
 
   const gridWidth = (await gridTab.boundingBox())!.width;
   await drawer.evaluate((node) => {
     node.style.width = '520px';
   });
-  await drawer.screenshot({ path: '/private/tmp/hs2-4y6sm9-terminal-drawer-narrow.png' });
+  await drawer.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-terminal-drawer-narrow.png' });
   const overflow = await drawer.evaluate((node) => {
     const tabs = node.querySelector('.kui-tab-bar__tabs')!;
     const source = tabs.querySelector('[data-tab-kind="terminal"]')!;

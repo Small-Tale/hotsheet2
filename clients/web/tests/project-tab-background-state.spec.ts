@@ -250,13 +250,16 @@ test('refreshes non-active project tab counts and live-work state while preservi
   await expect(alphaTab.getByRole('tab')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ALPHA1"]')).toBeVisible();
   await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-mv7s1y-background-project-tab-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mv7s1y-background-project-tab-wide.png', fullPage: true });
 
   await page.setViewportSize({ width: 1100, height: 700 });
   // The label projects the Up Next count (2 here); the ring's segment count projects the 1 active ticket.
   await expect(betaTab.locator('.project-tab__work-count')).toHaveText('2');
-  await page.screenshot({ path: '/private/tmp/hs2-mv7s1y-background-project-tab-narrow.png', fullPage: true });
-  await betaTab.screenshot({ path: '/private/tmp/hs2-mv7s1y-background-project-tab-narrow-detail.png' });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-mv7s1y-background-project-tab-narrow.png',
+    fullPage: true,
+  });
+  await betaTab.screenshot({ path: 'target/visual-captures/hs2-mv7s1y-background-project-tab-narrow-detail.png' });
 
   fixture.rows[projects.beta.id] = fixture.rows[projects.beta.id].map((ticket) =>
     ticket.id === 'BETA01' ? { ...ticket, claim_lease_expires_at: new Date(Date.now() + 500).toISOString() } : ticket,

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { availableParallelism, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -8,6 +8,10 @@ import { localPlaywrightWorkers } from './scripts/playwright-workers.mjs';
 
 const port = Number(process.env.HOTSHEET_WEB_TEST_PORT ?? 4176);
 const viteCacheDir = mkdtempSync(join(tmpdir(), 'hotsheet-playwright-vite-'));
+// Legacy visual captures remain easy to inspect, with portable package-relative paths.
+// These are separate from Playwright's rotated output and safe alongside Kerf doctor scans.
+for (const directory of ['claude', 'claude-501'])
+  mkdirSync(join('target', 'visual-captures', directory), { recursive: true });
 process.once('exit', () => {
   rmSync(viteCacheDir, { recursive: true, force: true });
 });

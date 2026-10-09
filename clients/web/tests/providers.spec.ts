@@ -2158,7 +2158,7 @@ test('activates Dev Review when opted in and preserves its desktop/mobile lifecy
       return Math.abs((checkbox.top + checkbox.bottom - label.top - label.bottom) / 2);
     }),
   ).toBeLessThanOrEqual(1);
-  await page.screenshot({ path: '/private/tmp/hs2-48w3ys-main-dev-review-default-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-48w3ys-main-dev-review-default-wide.png', fullPage: true });
   await dialog.getByRole('textbox', { name: 'Feedback notes' }).fill('Select menus close unexpectedly.');
   await dialog.getByRole('button', { name: 'Create Ticket' }).click();
   await expect.poll(() => submission).toBeTruthy();
@@ -2170,7 +2170,7 @@ test('activates Dev Review when opted in and preserves its desktop/mobile lifecy
   // resize back to desktop, while the headless UI-stability diagnostics stay installed (HS2-9KT6RQ).
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.hs-dev-review')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-sv3f5g-main-dev-review-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-sv3f5g-main-dev-review-narrow.png', fullPage: true });
   expect(
     await page.evaluate(() =>
       Boolean(
@@ -2227,7 +2227,7 @@ test('opens a roomy project dialog with native browse controls and working cance
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(dialog.locator('.project-dialog__error')).toBeEmpty();
   await expect(page.locator('.app-error')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-nvd50p-open-project-dialog.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-nvd50p-open-project-dialog.png', fullPage: true });
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveJSProperty('open', false);
   await expect(dialog).toBeHidden();
@@ -2279,7 +2279,7 @@ test('remote clients pick from the server open-projects list instead of the file
       ),
     )
     .toBe(0);
-  await page.screenshot({ path: '/private/tmp/hs2-xx5y2x-remote-project-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xx5y2x-remote-project-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   const longPath = remote.locator('.remote-project-dialog__path').nth(1);
   await expect(longPath).toHaveText(longRoot);
@@ -2304,11 +2304,11 @@ test('remote clients pick from the server open-projects list instead of the file
   expect(geometry.pathHeight).toBeGreaterThan(geometry.pathLineHeight * 2);
   expect(geometry.wordBreak).toBe('break-all');
   expect(geometry.rowsFit).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-xx5y2x-remote-project-mobile.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xx5y2x-remote-project-mobile.png' });
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(remote.locator('dialog')).toHaveCSS('background-color', 'rgb(44, 44, 46)');
   await expect(item).toHaveCSS('color', 'rgb(245, 245, 247)');
-  await page.screenshot({ path: '/private/tmp/hs2-xx5y2x-remote-project-mobile-dark-production.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xx5y2x-remote-project-mobile-dark-production.png' });
   await item.focus();
   await item.press('Enter');
   await expect(remote).toHaveJSProperty('open', false);
@@ -2368,11 +2368,11 @@ test('offers explicit identity-guarded recovery for an unresponsive local server
   await expect(recovery).toBeVisible();
   await expect(recovery).toContainText('cannot verify active work');
   await expect(recovery).toContainText('process 4242');
-  await page.screenshot({ path: '/private/tmp/hs2-21e6g6-unhealthy-recovery-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-21e6g6-unhealthy-recovery-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(recovery).toBeInViewport();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-21e6g6-unhealthy-recovery-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-21e6g6-unhealthy-recovery-narrow.png', fullPage: true });
   await recovery.getByRole('button', { name: 'Stop server and retry' }).click();
   await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty('value', 'demo-checkout');
   expect(recoveryBody).toEqual({
@@ -2410,7 +2410,7 @@ test('always confirms before closing a project without running resources', async
       ),
     )
     .toBe(0);
-  await page.screenshot({ path: '/private/tmp/hs2-d7haq1-project-close-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-d7haq1-project-close-wide.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(projectTab).toHaveCount(1);
   await projectTab.hover();
@@ -2436,7 +2436,7 @@ test('always confirms before closing a project without running resources', async
       ),
     )
     .toBe(0);
-  await page.screenshot({ path: '/private/tmp/hs2-d7haq1-project-close-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-d7haq1-project-close-narrow.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Close Project' }).click();
   await expect(projectTab).toHaveCount(0);
   await expect(
@@ -2555,11 +2555,11 @@ test('clears a failed project-open error when retrying successfully', async ({ p
   const appError = page.locator('[data-component="app-error"]');
   await expect(appError).toContainText('only supports schema 2');
   await expect(appError.getByRole('button', { name: 'Dismiss error' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-c6at65-dismissible-error-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-c6at65-dismissible-error-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(appError).toBeInViewport();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-c6at65-dismissible-error-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-c6at65-dismissible-error-narrow.png', fullPage: true });
   await appError.getByRole('button', { name: 'Dismiss error' }).click();
   await expect(appError).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add project' })).toBeEnabled();
@@ -2567,7 +2567,7 @@ test('clears a failed project-open error when retrying successfully', async ({ p
   await retry();
   await expect(page.locator('.app-error')).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-nzffdh-successful-project-retry.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-nzffdh-successful-project-retry.png', fullPage: true });
 });
 
 test('opens the native folder chooser directly from Add project and only onboards a source-less checkout once', async ({
@@ -2612,10 +2612,10 @@ test('opens the native folder chooser directly from Add project and only onboard
   await expect(setup).toHaveJSProperty('open', true);
   await expect(setup).toContainText('other is open, but it does not have a ticket source yet.');
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-gcbc3e-direct-add-project-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-gcbc3e-direct-add-project-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-gcbc3e-direct-add-project-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-gcbc3e-direct-add-project-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await setup.getByRole('button', { name: 'Create a Hot Sheet 2 git ticket repository', exact: true }).click();
   await expect(setup.getByText('Back up this ticket repository')).toBeVisible();
@@ -2793,7 +2793,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     expect(Math.abs(icon.y + icon.height / 2 - (box.y + box.height / 2))).toBeLessThanOrEqual(6);
     expect(Math.abs(trailing.y + trailing.height / 2 - (box.y + box.height / 2))).toBeLessThanOrEqual(6);
   }
-  await page.screenshot({ path: '/private/tmp/hs2-4fw7wm-source-setup-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-4fw7wm-source-setup-wide.png', fullPage: true });
   await page.setViewportSize({ width: 620, height: 680 });
   await expect
     .poll(async () =>
@@ -2806,7 +2806,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
       ),
     )
     .toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-4fw7wm-source-setup-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-4fw7wm-source-setup-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await expect(setup).toHaveJSProperty('open', true);
@@ -2833,7 +2833,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await transition.evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
-  await page.screenshot({ path: '/private/tmp/hs2-y4zpqq-provider-config-dialog-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y4zpqq-provider-config-dialog-after.png', fullPage: true });
   await providerForm.getByRole('button', { name: 'Ticket source types' }).click();
   await expect(setup).toHaveAttribute('data-navigation', 'pop');
   await expect(transition).toHaveAttribute('data-active-side', 'a');
@@ -2852,9 +2852,9 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await transition.evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
-  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-sign-in-first-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1jt25r-sign-in-first-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
-  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-sign-in-first-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1jt25r-sign-in-first-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
   await page
@@ -2873,9 +2873,9 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   // The short waiting screen is never scrolled into the hidden source list's space.
   await expect(transition).toHaveJSProperty('scrollTop', 0);
   await expect(providerForm.getByRole('button', { name: 'Ticket source types' })).toBeInViewport();
-  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-waiting-for-github-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1jt25r-waiting-for-github-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
-  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-waiting-for-github-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1jt25r-waiting-for-github-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   // GitHub's approval closes that window and reveals the connection settings.
   await expect(providerForm.getByText('Signed in to GitHub.')).toBeVisible();
@@ -2905,7 +2905,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     'href',
     'https://github.test/apps/hot-sheet/installations/new',
   );
-  await page.screenshot({ path: '/private/tmp/hs2-27t5wt-repository-picker-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-27t5wt-repository-picker-wide.png', fullPage: true });
   await access.getByRole('button', { name: 'Refresh list' }).click();
   await expect(providerForm.locator('#provider-setup-github-repositories option')).toHaveCount(3);
   await expect(providerForm.getByText('3 repositories available.')).toBeVisible();
@@ -2915,11 +2915,11 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await attachmentRepo.fill('small-tale/assets');
   await providerForm.locator('wa-input[name="attachment-folder"] input').fill('evidence');
   await providerForm.locator('wa-input[name="attachment-branch"] input').fill('media');
-  await page.screenshot({ path: '/private/tmp/hs2-8bahrj-assets-setup-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-8bahrj-assets-setup-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
   await providerForm.locator('wa-input[name="attachment-branch"]').scrollIntoViewIfNeeded();
   await expect(attachmentRepo).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-8bahrj-assets-setup-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-8bahrj-assets-setup-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await attachmentRepo.fill('invalid');
   await setup.getByRole('button', { name: 'Connect provider' }).click();
@@ -2952,7 +2952,7 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(primaryConnection).toContainText('small-tale/hotsheet2');
   await expect(primaryConnection).toContainText('Default');
   await expect(sourcesPanel.getByRole('button', { name: 'Remove GitHub Issues from this project' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-y4zpqq-provider-settings-list-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y4zpqq-provider-settings-list-after.png', fullPage: true });
   await page.getByRole('button', { name: 'Add data source' }).click();
   await setup.getByRole('button', { name: 'Connect GitHub Issues' }).click();
   await providerForm.getByRole('button', { name: 'Sign in with GitHub' }).click();
@@ -2983,10 +2983,10 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   );
   // Let the dialog's entrance animation settle before recording visual evidence.
   await page.waitForTimeout(500);
-  await page.screenshot({ path: '/private/tmp/hs2-y5588d-edit-repositories-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y5588d-edit-repositories-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 900 });
   await providerForm.locator('input[name="connection-locator"]').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: '/private/tmp/hs2-y5588d-edit-repositories-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y5588d-edit-repositories-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   await expect(providerForm.locator('wa-checkbox[name="make-default"]')).toHaveJSProperty('checked', true);
   const colorPicker = providerForm.locator('[data-component="ticket-source-color-picker"]');
@@ -3579,9 +3579,9 @@ test('signs in to GitHub Enterprise from its server address before connecting (H
   const server = form.getByLabel('GitHub Enterprise server URL');
   await expect(server).toBeVisible();
   await expect(form.getByRole('button', { name: 'Sign in with GitHub Enterprise' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-enterprise-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1jt25r-enterprise-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 760 });
-  await page.screenshot({ path: '/private/tmp/hs2-1jt25r-enterprise-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1jt25r-enterprise-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1100, height: 760 });
   // An address is required before GitHub is contacted.
   await form.getByRole('button', { name: 'Sign in with GitHub Enterprise' }).click();
@@ -3627,7 +3627,7 @@ test('blocks a new ticket store before an older project server can accept it', a
   await expect(alert).toContainText('supports ticket-store schema through 2');
   await expect(alert).toContainText('stop or restart its detached Hot Sheet server');
   await expect(setup).toHaveAttribute('data-navigation', 'none');
-  await page.screenshot({ path: '/private/tmp/hs2-cew85a-store-schema-preflight-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cew85a-store-schema-preflight-after.png', fullPage: true });
 });
 
 test('keeps a dismissed ticket-source setup dialog closed across later project renders (HS2-4Y37T9)', async ({
@@ -3661,7 +3661,7 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   await expect(dialog.getByText('/work/demo/.hotsheet/db', { exact: true })).toBeVisible();
   await expect(dialog.getByText('17', { exact: true })).toBeVisible();
   await expect.poll(dialogOpacity).toBe('1');
-  await page.screenshot({ path: '/private/tmp/hs2-k4306s-hs1-source-dialog-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-k4306s-hs1-source-dialog-wide.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Not now' }).click();
   const banner = page.locator('.hs1-migration-banner > [data-component="state-banner"]');
   await expect(dialog).toBeHidden();
@@ -3671,10 +3671,10 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   await expect(banner).toHaveAttribute('role', 'status');
   await expect(banner).toHaveAttribute('aria-live', 'polite');
   await expect(banner).toContainText('/work/demo/.hotsheet/db');
-  await banner.screenshot({ path: '/private/tmp/hs2-750wsy-hs1-migration-banner-wide.png' });
+  await banner.screenshot({ path: 'target/visual-captures/hs2-750wsy-hs1-migration-banner-wide.png' });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await banner.screenshot({ path: '/private/tmp/hs2-750wsy-hs1-migration-banner-narrow.png' });
+  await banner.screenshot({ path: 'target/visual-captures/hs2-750wsy-hs1-migration-banner-narrow.png' });
   await page.setViewportSize({ width: 1100, height: 840 });
   await page.reload();
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
@@ -3685,7 +3685,7 @@ test('identifies detected HS1 data and keeps a dismissed import modal closed acr
   await expect.poll(dialogOpacity).toBe('1');
   await page.setViewportSize({ width: 560, height: 720 });
   await expect.poll(dialogOpacity).toBe('1');
-  await page.screenshot({ path: '/private/tmp/hs2-k4306s-hs1-source-dialog-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-k4306s-hs1-source-dialog-narrow.png', fullPage: true });
 });
 
 test('adds a second git ticket store and connects its remote from one guided form', async ({ page }) => {
@@ -3726,21 +3726,21 @@ test('adds a second git ticket store and connects its remote from one guided for
   await setup.evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
-  await page.screenshot({ path: '/private/tmp/hs2-73q89e-git-remote-form-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-73q89e-git-remote-form-after.png', fullPage: true });
   await page.setViewportSize({ width: 560, height: 720 });
   await expect(setup).toBeInViewport();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-73q89e-git-remote-form-after-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-73q89e-git-remote-form-after-narrow.png', fullPage: true });
   await setup.getByRole('button', { name: 'Connect & push' }).click();
   const error = setup.getByRole('alert');
   await expect(error).toContainText('The remote repository was not found');
   await expect(error).toContainText('Verify the clone URL and your access');
   await expect(error).toContainText('Git details: ERROR: Repository not found');
   await page.setViewportSize({ width: 1100, height: 840 });
-  await page.screenshot({ path: '/private/tmp/hs2-mddrcm-remote-error-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mddrcm-remote-error-wide.png', fullPage: true });
   await page.setViewportSize({ width: 560, height: 720 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-mddrcm-remote-error-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mddrcm-remote-error-narrow.png', fullPage: true });
   await setup.getByRole('button', { name: 'Connect & push' }).click();
   await expect(setup).toHaveJSProperty('open', false);
   expect(remoteAttempts).toBe(2);
@@ -3798,7 +3798,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     }, terminalId);
   await expect.poll(() => latestClaim('codex-main')).toMatchObject({ cols: 80, rows: 24, focus: true });
   const naturalClaim = await latestClaim('codex-main');
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-workspace-zoom-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-workspace-zoom-wide.png', fullPage: true });
   await dashboard.getByRole('button', { name: /Zoom in, fit fewer items across/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '3');
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.terminals.fit-across'))).resolves.toBe('3');
@@ -3806,7 +3806,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     .poll(() => latestClaim('codex-main'))
     .toMatchObject({ cols: naturalClaim!.cols, rows: naturalClaim!.rows, focus: true });
   await expect(page.locator('.project-tab-bar')).toHaveCSS('border-bottom-width', '1px');
-  await page.screenshot({ path: '/private/tmp/hs2-aaacfq-terminal-header-separator.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-aaacfq-terminal-header-separator.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(dashboard).toHaveAttribute('data-basis', 'high');
   await expect(dashboard).toHaveAttribute('data-fit', '2');
@@ -3816,12 +3816,12 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await expect(page.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
   await page.getByRole('button', { name: 'Show operations sidebar' }).click();
   await expect(operations).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-mh8qn2-terminal-operations-1024x600.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mh8qn2-terminal-operations-1024x600.png', fullPage: true });
   await dashboard.getByRole('button', { name: /Zoom out, fit more items high/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '3');
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.terminals.fit-high'))).resolves.toBe('3');
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.terminals.fit-across'))).resolves.toBe('3');
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-workspace-zoom-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-workspace-zoom-narrow.png', fullPage: true });
   const compactTile = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]');
   await expect(compactTile).toHaveAttribute('data-preview-only', 'true');
   await expect(compactTile.locator('[data-display-mode="scaled-preview"]')).toHaveCount(1);
@@ -3856,14 +3856,17 @@ test('uses independent width and height terminal dashboard zoom scales', async (
       }),
     )
     .toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-kke1pm-fitted-magnified-provider-after.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-kke1pm-fitted-magnified-provider-after.png',
+    fullPage: true,
+  });
   await magnified.click({ position: { x: 5, y: 5 } });
   await expect(magnified).toHaveCount(0);
   await compactTile.click({ button: 'right' });
   const tileMenu = dashboard.getByRole('menu');
   await expect(tileMenu.getByText('Open')).toBeVisible();
   await expect(tileMenu.getByText('Hide Terminal')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-3d8frb-terminal-context-menu.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-3d8frb-terminal-context-menu.png', fullPage: true });
   await tileMenu.getByText('Hide Terminal').click();
   const manageVisibility = page.getByRole('button', { name: 'Manage workspace visibility' });
   await expect(page.locator('.terminal-dashboard-controls__count')).toHaveText('1');
@@ -3899,7 +3902,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await page.keyboard.press('Escape');
   await expect(compactTile).toBeVisible();
   await expect(page.locator('.terminal-dashboard-controls__count')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-terminal-dashboard-small.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-terminal-dashboard-small.png', fullPage: true });
   await expect(page.locator('wa-select[name="terminal-grouping"]')).toHaveCount(0);
   const visibilitySelect = page.locator('wa-select[name="terminal-visibility-group"]'),
     visibilityPopupGeometry = () =>
@@ -3939,7 +3942,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     expect(option.right).toBeLessThanOrEqual(popupBounds.right);
     expect(option.scrollWidth).toBeLessThanOrEqual(option.clientWidth + 1);
   }
-  await page.screenshot({ path: '/private/tmp/hs2-fkx6mb-visibility-select-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-fkx6mb-visibility-select-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(visibilitySelect).toHaveJSProperty('open', false);
   await page.setViewportSize({ width: 760, height: 632 });
@@ -3950,7 +3953,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   popupBounds = await visibilityPopupGeometry();
   expect(popupBounds.right).toBeLessThanOrEqual(popupBounds.viewport - 10);
   expect(popupBounds.scrollWidth).toBeLessThanOrEqual(popupBounds.clientWidth + 1);
-  await page.screenshot({ path: '/private/tmp/hs2-fkx6mb-visibility-select-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-fkx6mb-visibility-select-narrow.png', fullPage: true });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1100, height: 720 });
   const liveTile = dashboard.locator('[data-terminal-key="demo-checkout:tests"]');
@@ -3986,7 +3989,10 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     .not.toBe('80x24');
   await expect(dedicatedViewport).not.toHaveAttribute('data-viewing-label');
   await expect(dedicatedViewport).not.toHaveAttribute('aria-description');
-  await page.screenshot({ path: '/private/tmp/hs2-kke1pm-terminal-fit-with-external-focus-after.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-kke1pm-terminal-fit-with-external-focus-after.png',
+    fullPage: true,
+  });
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   await expect(dashboard).toBeVisible();
   await dashboard.locator('[data-terminal-key="demo-checkout:tests"]').dblclick();
@@ -3995,7 +4001,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
     .poll(() => latestClaim('tests'))
     .toMatchObject({ cols: expect.any(Number), rows: expect.any(Number), focus: true });
   await expect(dedicatedViewport).toHaveAttribute('data-driving', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-terminal-dashboard-drawer-refit.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-terminal-dashboard-drawer-refit.png', fullPage: true });
 });
 
 test('preserves column view after visiting the terminal dashboard (HS2-BH8ZVD)', async ({ page }) => {
@@ -4047,10 +4053,10 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   await expectDarkChildren(workspaceZoom, 'workspace-zoom');
   await workspaceZoom.getByRole('button', { name: /Zoom in/ }).click();
   await expect(workspace).toHaveAttribute('data-fit', '3');
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-workspace-zoom-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-workspace-zoom-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(workspaceZoom).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-workspace-zoom-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-workspace-zoom-narrow.png', fullPage: true });
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('tab', { name: /demo/ }).click();
@@ -4069,10 +4075,10 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
       };
     })
     .toEqual({ rightInset: 16, bottomInset: 16 });
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-drawer-restore-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-restore-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(restore).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-drawer-restore-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-restore-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await restore.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
@@ -4083,7 +4089,7 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   await expectDarkChildren(drawerZoom, 'drawer-zoom');
   await drawerZoom.getByRole('button', { name: /Zoom in/ }).click();
   await expect(drawerGrid).toHaveAttribute('data-fit', '1');
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-drawer-grid-zoom.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-grid-zoom.png', fullPage: true });
 });
 
 test('paints terminal dashboard transitions immediately and progressively mounts only visible previews at scale (HS2-XEGA6V)', async ({
@@ -4102,7 +4108,10 @@ test('paints terminal dashboard transitions immediately and progressively mounts
   const initialRuntimeCount = await page.locator('.xterm').count();
   expect(initialRuntimeCount).toBeLessThan(48);
   await expect(dashboard.locator('[data-terminal-key="demo-checkout:worker-48"] .xterm')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-xega6v-progressive-terminal-dashboard.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-xega6v-progressive-terminal-dashboard.png',
+    fullPage: true,
+  });
   const projectTransition = await page.getByRole('tab', { name: /demo/ }).evaluate((tab) => {
     const start = performance.now();
     (tab as HTMLElement).click();
@@ -4174,7 +4183,10 @@ for (const theme of ['light', 'dark'] as const) {
     await page.keyboard.press('Enter');
     await expectMode(segments, 'board');
     await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
-    await page.screenshot({ path: `/private/tmp/hs2-f29qat-workspace-${theme}-wide.png`, animations: 'disabled' });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-f29qat-workspace-${theme}-wide.png`,
+      animations: 'disabled',
+    });
     await segments.getByRole('button', { name: 'Notifications view' }).click();
     await expectMode(segments, 'notifications');
     await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
@@ -4190,7 +4202,10 @@ for (const theme of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 390, height: 844 });
     await expectMode(segments, 'board');
     await expect(page.locator('[data-component="ticket-board"]')).toHaveAttribute('data-layout', 'paged');
-    await page.screenshot({ path: `/private/tmp/hs2-f29qat-workspace-${theme}-mobile.png`, animations: 'disabled' });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-f29qat-workspace-${theme}-mobile.png`,
+      animations: 'disabled',
+    });
     await page.setViewportSize({ width: 1728, height: 971 });
     await expectMode(segments, 'board');
     await page.getByRole('button', { name: 'Workspace grid' }).click();
@@ -4211,11 +4226,14 @@ for (const theme of ['light', 'dark'] as const) {
     await railSegments.getByRole('button', { name: 'List view' }).click();
     await expectMode(railSegments, 'list', ['list', 'board', 'notifications']);
     await expect(rail.locator('[data-component="ticket-list"]')).toBeVisible();
-    await rail.screenshot({ path: `/private/tmp/hs2-f29qat-rail-${theme}-wide.png`, animations: 'disabled' });
+    await rail.screenshot({ path: `target/visual-captures/hs2-f29qat-rail-${theme}-wide.png`, animations: 'disabled' });
     await page.setViewportSize({ width: 1024, height: 600 });
     await railSegments.getByRole('button', { name: 'Notifications view' }).click();
     await expectMode(railSegments, 'notifications', ['list', 'board', 'notifications']);
-    await page.screenshot({ path: `/private/tmp/hs2-f29qat-rail-${theme}-narrow.png`, animations: 'disabled' });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-f29qat-rail-${theme}-narrow.png`,
+      animations: 'disabled',
+    });
   });
 }
 
@@ -4256,7 +4274,7 @@ test('pages the workspace-grid rail through one snapped column at a time in its 
   expect(geometry.first.width).toBeLessThan(geometry.board.width);
   expect(geometry.second.left).toBeLessThan(geometry.board.right);
   expect(geometry.overflow).toBeGreaterThan(geometry.first.width);
-  await page.screenshot({ path: '/private/tmp/hs2-656q43-rail-columns-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-656q43-rail-columns-wide.png', fullPage: true });
   // A partial horizontal scroll settles on the nearest column start at the board's 8px scroll padding.
   const columnInset = (index: number) =>
     board.evaluate(
@@ -4354,7 +4372,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expect(composer).toBeVisible();
   await composer.getByRole('button', { name: 'Cancel' }).click();
   await expect(composer).toBeHidden();
-  await page.screenshot({ path: '/private/tmp/hs2-r292m4-workspace-grid-rail-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-r292m4-workspace-grid-rail-wide.png', fullPage: true });
   await viewSelect.click();
   await viewSelect.locator('wa-option[value="backlog"]').click();
   await expect(viewSelect).toHaveJSProperty('value', 'backlog');
@@ -4372,7 +4390,10 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expect(expandedSearch).toHaveCSS('border-style', 'solid');
   await expect(expandedSearch).not.toHaveCSS('box-shadow', 'none');
   await expect(expandedSearch.locator('.kui-token-search')).toHaveCSS('border-width', '0px');
-  await rail.screenshot({ path: '/private/tmp/hs2-tnsd4k-rail-search-empty-focused.png', animations: 'disabled' });
+  await rail.screenshot({
+    path: 'target/visual-captures/hs2-tnsd4k-rail-search-empty-focused.png',
+    animations: 'disabled',
+  });
   await searchInput.fill('has:attachment ');
   await expect(rail.locator('[data-component="token-search-token"][data-token-value="has:attachment"]')).toBeVisible();
   await rail.getByRole('button', { name: 'List view', exact: true }).focus();
@@ -4389,7 +4410,10 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await rail.getByRole('button', { name: 'Search syntax help' }).click();
   await expect(rail.getByRole('dialog', { name: 'Search syntax' })).toBeVisible();
   await rail.getByRole('button', { name: 'Search syntax help' }).click();
-  await page.screenshot({ path: '/private/tmp/hs2-egekzg-terminal-ticket-rail-search-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-egekzg-terminal-ticket-rail-search-wide.png',
+    fullPage: true,
+  });
   await rail.getByRole('button', { name: 'Clear search' }).click();
   await rail.getByRole('button', { name: 'List view', exact: true }).focus();
   await expect(expandedSearch).toHaveAttribute('data-expanded', 'false');
@@ -4458,7 +4482,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   expect(inspectorHeader.slugLeft).toBeGreaterThanOrEqual(inspectorHeader.backRight);
   expect(inspectorHeader.backWidth).toBeGreaterThanOrEqual(36);
   expect(inspectorHeader.toggleCenter).toBeCloseTo(inspectorHeader.slugCenter, 0);
-  await page.screenshot({ path: '/private/tmp/hs2-gzn2hz-terminal-ticket-tabs-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-gzn2hz-terminal-ticket-tabs-wide.png', fullPage: true });
   await back.click();
   await expect(rail.locator('.kui-nav-stack__view[data-nav-key="root"]')).toHaveAttribute('data-nav-active', 'true');
   await page.waitForTimeout(350);
@@ -4468,7 +4492,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(page.getByRole('region', { name: 'Workspace grid' })).toBeVisible();
   await expect(rail).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-r292m4-workspace-grid-rail-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-r292m4-workspace-grid-rail-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(expandedSearch).toHaveAttribute('data-expanded', 'false');
   await rail.getByRole('button', { name: 'Search tickets' }).click();
@@ -4479,7 +4503,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await expandedSearch.evaluate(async (node) => {
     await Promise.all(node.getAnimations().map((animation) => animation.finished));
   });
-  await page.screenshot({ path: '/private/tmp/hs2-n5g6js-workspace-grid-rail-suggestions.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-n5g6js-workspace-grid-rail-suggestions.png' });
   const activeSearchGeometry = await rail.evaluate((node) => {
     const bounds = (selector: string) => {
         const rect = node.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
@@ -4522,10 +4546,10 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
     expect(option.right).toBeLessThanOrEqual(activeSearchGeometry.suggestions.right);
     expect(option.width).toBeGreaterThan(activeSearchGeometry.suggestions.width - 24);
   }
-  await page.screenshot({ path: '/private/tmp/hs2-rqfz8n-f6n412-sidebar-search-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rqfz8n-f6n412-sidebar-search-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-rqfz8n-f6n412-sidebar-search-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rqfz8n-f6n412-sidebar-search-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await rail.getByRole('button', { name: 'Clear search' }).click();
 });
@@ -4660,7 +4684,7 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
     );
   });
   expect(contained).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-pd4mz9-live-terminal.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-pd4mz9-live-terminal.png', fullPage: true });
   const before = await page.evaluate(
     () => (window as unknown as { __terminalSockets: unknown[] }).__terminalSockets.length,
   );
@@ -4763,7 +4787,7 @@ test('keeps dashboard terminals inset and scaled through aggressive viewport res
       }),
     ).toBe(true);
   }
-  await page.screenshot({ path: '/private/tmp/hs2-281qc8-terminal-resize-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-281qc8-terminal-resize-after.png', fullPage: true });
 });
 
 test('centers, focuses, and opens the magnified terminal from its footer', async ({ page }) => {
@@ -4783,7 +4807,7 @@ test('centers, focuses, and opens the magnified terminal from its footer', async
   await expect
     .poll(() => magnifiedTile.evaluate((node) => getComputedStyle(node, '::after').borderTopWidth))
     .toBe('2px');
-  await magnifiedTile.screenshot({ path: '/private/tmp/hs2-ez86d2-magnified-focus.png' });
+  await magnifiedTile.screenshot({ path: 'target/visual-captures/hs2-ez86d2-magnified-focus.png' });
   const geometry = await magnified.evaluate((element) => {
     const overlay = element.getBoundingClientRect(),
       tile = element.querySelector('[data-component="terminal-tile"]')!.getBoundingClientRect();
@@ -4797,7 +4821,7 @@ test('centers, focuses, and opens the magnified terminal from its footer', async
   expect(Math.abs(geometry.tileCenter.x - geometry.viewport.width / 2)).toBeLessThanOrEqual(1);
   expect(Math.abs(geometry.tileCenter.y - geometry.viewport.height / 2)).toBeLessThanOrEqual(1);
   await expect(magnified.getByRole('button', { name: 'Open Codex Main in project terminal drawer' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-kc7tv2-magnified-terminal-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-kc7tv2-magnified-terminal-after.png', fullPage: true });
   await magnified.getByRole('button', { name: 'Open Codex Main in project terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await expect(drawer).toHaveAttribute('data-maximized', 'false');
@@ -4875,7 +4899,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   expect(fitOne.tiles[0].bottom).toBeLessThanOrEqual(fitOne.contentBottom - fitOne.paddingBottom + 1);
   expect(fitOne.tiles[1].y).toBeCloseTo(fitOne.tiles[0].y, 0);
   expect(fitOne.tiles[1].x).toBeGreaterThan(fitOne.tiles[0].x);
-  await page.screenshot({ path: '/private/tmp/hs2-5rj7t0-drawer-fit-one.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-5rj7t0-drawer-fit-one.png', fullPage: true });
   await dashboard.getByRole('button', { name: /Zoom out/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '2');
   const wrapped = await dashboard
@@ -4886,8 +4910,8 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   expect(wrapped[1].y).toBeCloseTo(wrapped[0].y, 0);
   expect(wrapped[1].x).toBeGreaterThan(wrapped[0].x);
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.terminals.drawer-fit-high'))).resolves.toBe('2');
-  await page.screenshot({ path: '/private/tmp/hs2-5rj7t0-drawer-grid.png', fullPage: true });
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-drawer-grid-zoom.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-5rj7t0-drawer-grid.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-grid-zoom.png', fullPage: true });
   const drawerZoom = dashboard.getByRole('toolbar', { name: 'Workspace tile zoom' });
   await expect(drawerZoom).toHaveAttribute('data-component', 'floating-toolbar');
   const codexTile = drawer.locator('[data-component="terminal-tile"][data-terminal-key="demo-checkout:codex-main"]');
@@ -5000,12 +5024,12 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(drawer.getByRole('tab', { name: /Tests/ })).toHaveAttribute('aria-selected', 'true');
   await drawer.getByRole('tab', { name: /Tests/ }).click({ button: 'right', modifiers: ['Alt'] });
   await expect(terminalMenu.getByText('Close Tabs to the Left')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-9n837w-terminal-tabs-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9n837w-terminal-tabs-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
   await drawer.getByRole('button', { name: 'Hide terminal drawer' }).click();
   await expect(drawer).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-586bvq-terminal-drawer-collapsed.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-586bvq-terminal-drawer-collapsed.png', fullPage: true });
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   await page.setViewportSize({ width: 1024, height: 600 });
   const reopenedDrawer = page.locator('[data-component="terminal-drawer"]');
@@ -5013,7 +5037,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(
     reopenedDrawer.locator('[data-component="terminal-session"]:not([hidden]) .xterm-helper-textarea'),
   ).toBeFocused();
-  await page.screenshot({ path: '/private/tmp/hs2-586bvq-terminal-drawer-short.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-586bvq-terminal-drawer-short.png', fullPage: true });
 });
 
 test('keeps fitted terminal sizing by retaining dedicated drawer sessions across tab switches (HS2-V93PYF)', async ({
@@ -5091,7 +5115,7 @@ test('keeps fitted terminal sizing by retaining dedicated drawer sessions across
   expect(((await claimsFor('codex-main')).at(-1) ?? []).map(({ cols, rows }) => `${cols}x${rows}`)).not.toContain(
     '80x24',
   );
-  await page.screenshot({ path: '/private/tmp/hs2-v93pyf-terminal-retained-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-v93pyf-terminal-retained-after.png', fullPage: true });
 });
 
 test('closes a terminal tab after its process has stopped (HS2-DPTG65)', async ({ page }) => {
@@ -5179,7 +5203,10 @@ test('hides the bottom terminal drawer on Notifications and Settings views, pres
   await expect(drawerRegion).toHaveCount(0);
   await expect(restore).toHaveCount(0);
   await expect(page.locator('[data-component="terminal-drawer"]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/claude/hs2-eqejc7-notifications-no-drawer.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/claude/hs2-eqejc7-notifications-no-drawer.png',
+    fullPage: true,
+  });
   // Settings hides it the same way.
   await page.getByRole('button', { name: /Settings view/ }).click();
   await expect(drawerRegion).toHaveCount(0);
@@ -5238,7 +5265,7 @@ test('changes the chat provider and re-seeds the new provider with the prior tra
   expect(seed.content).toContain('What time is it in California?');
   // No prior Codex turn was re-run against Claude: the only Claude turn is the single seed.
   expect(turnPosts.filter((turn) => turn.id === claudeId)).toHaveLength(1);
-  await page.screenshot({ path: '/private/tmp/hs2-prbgrb-provider-reseed.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-prbgrb-provider-reseed.png', fullPage: true });
 });
 
 test("opens an AI shell per provider from the drawer submenu with each provider's own defaults (HS2-3HT4PA)", async ({
@@ -5548,12 +5575,12 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
       );
     await page.screenshot({ path, clip: { x: left, y: top, width: right - left, height: bottom - top } });
   };
-  await captureMenu('/private/tmp/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-wide.png');
+  await captureMenu('target/visual-captures/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-wide.png');
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(menu).toHaveAttribute('open', '');
   await expect.poll(async () => (await popupBounds())?.x ?? -Infinity).toBeGreaterThanOrEqual(8);
-  await page.screenshot({ path: '/private/tmp/hs2-r8smk2-popup-narrow-full.png', fullPage: true });
-  await captureMenu('/private/tmp/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-narrow.png');
+  await page.screenshot({ path: 'target/visual-captures/hs2-r8smk2-popup-narrow-full.png', fullPage: true });
+  await captureMenu('target/visual-captures/hs2-7ctqjc-cv0j2e-rhqatm-drawer-menu-narrow.png');
   await page.setViewportSize({ width: 1280, height: 800 });
   await menu.getByText('AI chat').click({ modifiers: ['Alt'] });
   await expect(region).not.toHaveCSS('overflow', 'visible');
@@ -5579,8 +5606,8 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
     { exact: true },
   );
   await expect(response).toHaveCount(1);
-  await conversation.screenshot({ path: '/private/tmp/hs2-ktw27j-claude-single-response-wide.png' });
-  await drawer.screenshot({ path: '/private/tmp/hs2-ktw27j-drawer-wide.png' });
+  await conversation.screenshot({ path: 'target/visual-captures/hs2-ktw27j-claude-single-response-wide.png' });
+  await drawer.screenshot({ path: 'target/visual-captures/hs2-ktw27j-drawer-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
   await expect.poll(() => page.evaluate(() => scrollX)).toBe(0);
@@ -5630,10 +5657,10 @@ test('creates an embedded AI chat from the polished terminal drawer menu and exp
       }),
     )
     .toEqual([]);
-  await conversation.screenshot({ path: '/private/tmp/hs2-ktw27j-claude-single-response-narrow.png' });
-  await drawer.screenshot({ path: '/private/tmp/hs2-ktw27j-drawer-narrow.png' });
+  await conversation.screenshot({ path: 'target/visual-captures/hs2-ktw27j-claude-single-response-narrow.png' });
+  await drawer.screenshot({ path: 'target/visual-captures/hs2-ktw27j-drawer-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.screenshot({ path: '/private/tmp/hs2-0fr30w-terminal-drawer-ai-chat.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-0fr30w-terminal-drawer-ai-chat.png', fullPage: true });
   await drawer.locator('[data-tab-kind="ai-chat"]').hover();
   await drawer.getByRole('button', { name: 'Close Claude chat' }).click();
   await expect(drawer).toHaveAttribute('data-mode', 'dedicated');
@@ -5686,7 +5713,7 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   await composer.fill('First line\nSecond line\nThird line\nFourth line');
   await expect.poll(async () => (await composer.boundingBox())!.height).toBeGreaterThan(compactHeight);
   await expect(conversation.locator('.ai-conversation__send [data-lucide="arrow-up"]')).toBeVisible();
-  await conversation.screenshot({ path: '/private/tmp/hs2-1rvp5m-chat-composer-wide-after.png' });
+  await conversation.screenshot({ path: 'target/visual-captures/hs2-1rvp5m-chat-composer-wide-after.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect.poll(geometry).toMatchObject({ transcriptScrollable: true, composerVisible: true });
   measured = await geometry();
@@ -5694,7 +5721,7 @@ test('keeps the embedded chat composer usable while a long transcript scrolls', 
   expect(measured.transcriptBottom).toBeGreaterThanOrEqual(measured.composerBottom - 1);
   await composer.fill('Composer remains usable after the narrow transition.');
   await expect(composer).toBeFocused();
-  await conversation.screenshot({ path: '/private/tmp/hs2-1rvp5m-chat-composer-narrow-after.png' });
+  await conversation.screenshot({ path: 'target/visual-captures/hs2-1rvp5m-chat-composer-narrow-after.png' });
 });
 
 test('restores phone shell and drawer geometry after a live desktop resize (HS2-Y2XAFW)', async ({ page }) => {
@@ -5738,7 +5765,7 @@ test('restores phone shell and drawer geometry after a live desktop resize (HS2-
         .evaluate((node) => node.getBoundingClientRect().left),
     )
     .toBeGreaterThanOrEqual(390);
-  await page.screenshot({ path: '/private/tmp/hs2-y2xafw-live-phone.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y2xafw-live-phone.png', fullPage: true });
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dispatchEvent('dblclick');
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
   await expect(drawer).toHaveAttribute('data-mode', 'ai-chat');
@@ -5750,7 +5777,7 @@ test('restores phone shell and drawer geometry after a live desktop resize (HS2-
       }),
     )
     .toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-y2xafw-maximized-phone.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y2xafw-maximized-phone.png', fullPage: true });
   await page.reload();
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   await expect(shell.locator('#app-left-rail')).toHaveAttribute('data-collapsed', 'true');
@@ -5758,7 +5785,7 @@ test('restores phone shell and drawer geometry after a live desktop resize (HS2-
   await expect(drawer).toBeVisible();
   await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dispatchEvent('dblclick');
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-y2xafw-fresh-maximized-phone.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y2xafw-fresh-maximized-phone.png', fullPage: true });
 });
 
 test('keeps production workspace search and More on one row through a phone resize (HS2-NZK4KA)', async ({ page }) => {
@@ -5771,7 +5798,7 @@ test('keeps production workspace search and More on one row through a phone resi
   await header.getByRole('button', { name: 'Search tickets' }).click();
   await expect(header.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
   await expect.poll(() => header.evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(80);
-  await page.screenshot({ path: '/private/tmp/hs2-nzk4ka-production-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-nzk4ka-production-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'true');
   await expect
@@ -5800,7 +5827,7 @@ test('keeps production workspace search and More on one row through a phone resi
     )
     .toBe(true);
   await page.waitForTimeout(1200);
-  await page.screenshot({ path: '/private/tmp/hs2-nzk4ka-production-phone.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-nzk4ka-production-phone.png' });
   await header.getByRole('button', { name: 'More workspace controls' }).click();
   await expect(header.locator('[data-workspace-overflow]')).toHaveJSProperty('open', true);
   await expect(page.locator('[data-workspace-overflow-action="toggle-selected-up-next"]')).toBeVisible();
@@ -5824,19 +5851,19 @@ test('hides nonempty search on disabled views and restores its open editor on re
   await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
   await expect(search).toHaveAttribute('data-expanded', 'false');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
-  await page.screenshot({ path: '/private/tmp/hs2-6zk9kf-notifications.png', animations: 'disabled' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6zk9kf-notifications.png', animations: 'disabled' });
   await modes.getByRole('button', { name: 'List view' }).click();
   await expect(search).toHaveAttribute('data-expanded', 'true');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Started');
-  await toolbar.screenshot({ path: '/private/tmp/hs2-3wq9a1-search-restored.png', animations: 'disabled' });
+  await toolbar.screenshot({ path: 'target/visual-captures/hs2-3wq9a1-search-restored.png', animations: 'disabled' });
   await toolbar.getByRole('searchbox', { name: 'Search tickets' }).fill('Ready');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toContainText('Ready');
   await modes.getByRole('button', { name: 'Settings view' }).click();
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   await expect(search).toHaveAttribute('data-expanded', 'false');
   await expect(toolbar.getByRole('searchbox', { name: 'Search tickets' })).toBeHidden();
-  await page.screenshot({ path: '/private/tmp/hs2-6zk9kf-settings.png', animations: 'disabled' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6zk9kf-settings.png', animations: 'disabled' });
   await page.reload();
   await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
   await expect(search).toHaveAttribute('data-expanded', 'false');
@@ -5914,7 +5941,7 @@ test('keeps a scrolled-back transcript in place while selecting a message range'
   await expect(conversation).toContainText(`${anchorIndex - endIndex + 1} messages selected`);
   await settle();
   await expectReadingPosition();
-  await conversation.screenshot({ path: '/private/tmp/hs2-eqhary-scroll-selection-after.png' });
+  await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-scroll-selection-after.png' });
   await conversation.getByRole('button', { name: 'Clear message selection' }).click();
   await expect(conversation).toContainText('Select a message, then another to select a range.');
   await settle();
@@ -6051,7 +6078,7 @@ test('selects and copies chat messages before saving that range without choosing
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toContain('The referenced proof is ready.');
   expect(await page.evaluate(() => navigator.clipboard.readText())).not.toContain('Export the referenced proof.');
-  await conversation.screenshot({ path: '/private/tmp/hs2-eqhary-selected-chat-wide.png' });
+  await conversation.screenshot({ path: 'target/visual-captures/hs2-eqhary-selected-chat-wide.png' });
   const saveConversation = conversation.getByRole('button', { name: 'Save conversation' });
   await expect(saveConversation).toHaveJSProperty('tagName', 'BUTTON');
   await saveConversation.focus();
@@ -6065,7 +6092,7 @@ test('selects and copies chat messages before saving that range without choosing
   await expect(dialog.locator('input[name="conversation-export-scope"][value="range"]')).toBeChecked();
   await expect(dialog).toContainText('1 message selected in the chat.');
   await expect(dialog.locator('[data-action="pick-conversation-export-message"]')).toHaveCount(0);
-  await dialogPanel.screenshot({ path: '/private/tmp/hs2-eqhary-save-selected-range-wide.png' });
+  await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-eqhary-save-selected-range-wide.png' });
   await page.setViewportSize({ width: 560, height: 760 });
   await expect
     .poll(() =>
@@ -6075,7 +6102,7 @@ test('selects and copies chat messages before saving that range without choosing
       }),
     )
     .toBe(true);
-  await dialogPanel.screenshot({ path: '/private/tmp/hs2-eqhary-save-selected-range-narrow.png' });
+  await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-eqhary-save-selected-range-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   const continueButton = dialog.locator('[data-action="next-conversation-export-step"]');
   await expect(continueButton).toBeEnabled();
@@ -6095,9 +6122,9 @@ test('selects and copies chat messages before saving that range without choosing
   await dialog.evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
-  await dialogPanel.screenshot({ path: '/private/tmp/hs2-r3qfvc-save-pushed-wide.png' });
+  await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-r3qfvc-save-pushed-wide.png' });
   await page.setViewportSize({ width: 560, height: 760 });
-  await dialogPanel.screenshot({ path: '/private/tmp/hs2-r3qfvc-save-pushed-narrow.png' });
+  await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-r3qfvc-save-pushed-narrow.png' });
   await back.click();
   await expect(dialog).toHaveAttribute('data-navigation', 'pop');
   await expect(dialog.locator('[data-transition-region="content"]')).toHaveAttribute(
@@ -6111,7 +6138,7 @@ test('selects and copies chat messages before saving that range without choosing
   await dialog.evaluate(async (node) => {
     await Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished));
   });
-  await dialogPanel.screenshot({ path: '/private/tmp/hs2-r3qfvc-save-popped-narrow.png' });
+  await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-r3qfvc-save-popped-narrow.png' });
   await dialog.locator('[data-action="next-conversation-export-step"]').click();
   await expect(dialog).toHaveAttribute('data-navigation', 'push');
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -6124,7 +6151,7 @@ test('selects and copies chat messages before saving that range without choosing
     nodes.slice(0, 3).map((node) => node.getBoundingClientRect()),
   );
   expect(optionBoxes[1].y).toBeGreaterThan(optionBoxes[0].y + optionBoxes[0].height - 1);
-  await dialogPanel.screenshot({ path: '/private/tmp/hs2-zzpf2b-bundle-options-wide-after.png' });
+  await dialogPanel.screenshot({ path: 'target/visual-captures/hs2-zzpf2b-bundle-options-wide-after.png' });
   await dialog.getByRole('button', { name: 'Save conversation' }).click();
   await expect(page.locator('.app-toast')).toContainText('Saved conversation revision 1');
   await expect.poll(() => savedPayload).toBeTruthy();
@@ -6144,7 +6171,7 @@ test('selects and copies chat messages before saving that range without choosing
   const savedConversation = drawer.locator('[data-component="ai-conversation"][data-read-only="true"]');
   await expect(savedConversation).toContainText('This selected range is read-only');
   await expect(savedConversation.getByLabel('Message Codex')).toHaveCount(0);
-  await savedConversation.screenshot({ path: '/private/tmp/hs2-zzpf2b-saved-read-only-wide.png' });
+  await savedConversation.screenshot({ path: 'target/visual-captures/hs2-zzpf2b-saved-read-only-wide.png' });
   const projectTab = page.locator('[data-tab-kind="project"]');
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
@@ -6176,9 +6203,13 @@ test('shows selection in the main chat and skips export scope after it is cleare
   const messages = conversation.locator('[data-action="pick-conversation-message"]');
   await messages.nth(1).click();
   await expect(conversation).toContainText('1 message selected');
-  await conversation.getByRole('dialog').screenshot({ path: '/private/tmp/hs2-eqhary-main-chat-selection-wide.png' });
+  await conversation
+    .getByRole('dialog')
+    .screenshot({ path: 'target/visual-captures/hs2-eqhary-main-chat-selection-wide.png' });
   await page.setViewportSize({ width: 560, height: 760 });
-  await conversation.getByRole('dialog').screenshot({ path: '/private/tmp/hs2-eqhary-main-chat-selection-narrow.png' });
+  await conversation
+    .getByRole('dialog')
+    .screenshot({ path: 'target/visual-captures/hs2-eqhary-main-chat-selection-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await conversation.getByRole('button', { name: 'Clear message selection' }).click();
   await expect(conversation).toContainText('Select a message, then another to select a range.');
@@ -6189,7 +6220,7 @@ test('shows selection in the main chat and skips export scope after it is cleare
   await expect(activeScreen).toContainText('Bundle contents');
   await expect(activeScreen).not.toContainText('Step 1 of 2');
   await expect(activeScreen.locator('input[name="conversation-export-scope"]')).toHaveCount(0);
-  await dialog.getByRole('dialog').screenshot({ path: '/private/tmp/hs2-eqhary-save-entire-chat.png' });
+  await dialog.getByRole('dialog').screenshot({ path: 'target/visual-captures/hs2-eqhary-save-entire-chat.png' });
 });
 
 test('shows AI chats in the project and workspace grids and reopens them from the global grid', async ({ page }) => {
@@ -6212,7 +6243,7 @@ test('shows AI chats in the project and workspace grids and reopens them from th
     globalChat = dashboard.locator('[data-component="workspace-chat-tile"]');
   await expect(globalChat).toContainText('demo › Codex chat');
   await expect(page.locator('.workspace-header__identity')).toContainText('Workspace grid');
-  await page.screenshot({ path: '/private/tmp/hs2-hpy5r0-workspace-grid-ai-chat-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-hpy5r0-workspace-grid-ai-chat-wide.png', fullPage: true });
   for (let fit = 4; fit < 10; fit += 1)
     await dashboard.getByRole('button', { name: /Zoom out, fit more items/ }).click();
   await expect(dashboard).toHaveAttribute('data-fit', '10');
@@ -6235,13 +6266,16 @@ test('shows AI chats in the project and workspace grids and reopens them from th
   expect(scaledGeometry.scale).toBeLessThan(0.1);
   expect(scaledGeometry.transform).not.toBe('none');
   expect(scaledGeometry.contained).toBe(true);
-  await globalChat.screenshot({ path: '/private/tmp/hs2-7jxdam-chat-grid-scale-after.png' });
+  await globalChat.screenshot({ path: 'target/visual-captures/hs2-7jxdam-chat-grid-scale-after.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await dashboard.locator('.terminal-dashboard__content').evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
   await expect(globalChat).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-hpy5r0-workspace-grid-ai-chat-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-hpy5r0-workspace-grid-ai-chat-narrow.png',
+    fullPage: true,
+  });
   await globalChat.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('button', { name: 'Workspace grid' })).toHaveAttribute('aria-pressed', 'false');
@@ -6315,7 +6349,7 @@ test('previews running project resources with shared menus and explicit keep-run
     await expect.poll(renderedRowHeight).toBeGreaterThanOrEqual(minimumRowHeight);
   };
   await expectPreviewFits(12);
-  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-project-close-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-project-close-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(dialog).toHaveJSProperty('open', true);
   await expectPreviewFits(6);
@@ -6328,7 +6362,7 @@ test('previews running project resources with shared menus and explicit keep-run
     )
     .toBe(true);
   await expect(dialog.locator('[data-project-close-consequences]')).toBeInViewport();
-  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-project-close-phone.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-project-close-phone.png', fullPage: true });
   await dialog.getByRole('button', { name: /Codex chat/ }).click();
   await expect(dialog.getByRole('region', { name: 'Codex chat chat preview' })).toContainText('gpt-6-astra');
   await expect(dialog.getByRole('region', { name: 'Codex chat chat preview' })).toContainText('medium');
@@ -7052,7 +7086,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
       ),
     )
     .toBe(1);
-  await page.screenshot({ path: '/private/tmp/hs2-6c0wzn-7se31f-close-chat-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6c0wzn-7se31f-close-chat-wide.png', fullPage: true });
 
   await dialog.getByRole('button', { name: /Codex Main/ }).click();
   await expect(terminalPreview).not.toHaveAttribute('data-grid-policy', 'dashboard-80x24');
@@ -7063,7 +7097,10 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await expect.poll(async () => (await originalClaims()).last).toBe(initialGrid);
   await page.waitForTimeout(250);
   await expect(createViewDialog).toBeHidden();
-  await page.screenshot({ path: '/private/tmp/hs2-6c0wzn-terminal-restored-after-cancel.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-6c0wzn-terminal-restored-after-cancel.png',
+    fullPage: true,
+  });
 
   await projectTab.hover();
   await page.getByRole('button', { name: 'Close demo' }).click();
@@ -7072,7 +7109,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await expect(dialog).toHaveJSProperty('open', true);
   await expect(preview).toBeVisible();
   await expect(answer).toHaveText('I found the relevant client boundary. The event stream remains authoritative.');
-  await page.screenshot({ path: '/private/tmp/hs2-6c0wzn-7se31f-close-chat-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6c0wzn-7se31f-close-chat-narrow.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 });
 
@@ -7115,11 +7152,11 @@ test('restores a kept-running AI chat tab and its live server session when the p
   await expect(conversation.getByText('The event stream remains authoritative.')).toBeVisible();
   await expect(conversation.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-6-astra');
   await expect(conversation.locator('.ai-conversation__model-effort')).toHaveText('medium');
-  await page.screenshot({ path: '/private/tmp/hs2-d34c2v-restored-chat-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-d34c2v-restored-chat-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(restoredTab).toBeVisible();
   await expect(conversation.getByLabel('Message Codex')).toBeInViewport();
-  await page.screenshot({ path: '/private/tmp/hs2-d34c2v-restored-chat-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-d34c2v-restored-chat-narrow.png', fullPage: true });
   await conversation.getByLabel('Message Codex').fill('What time is it in California?');
   await conversation.getByLabel('Message Codex').press('Enter');
   await expect(conversation.locator('[data-message-id]')).toHaveCount(4);
@@ -7174,10 +7211,13 @@ test('restores an AI transcript and resumes its durable session after client and
   await expect
     .poll(() => connectionPosts.at(-1))
     .toMatchObject({ connection_id: connectionId, session_id: 'claude-thread-1' });
-  await page.screenshot({ path: '/private/tmp/hs2-yhqcs2-restarted-conversation-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-yhqcs2-restarted-conversation-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(conversation.getByLabel('Message Codex')).toBeInViewport();
-  await page.screenshot({ path: '/private/tmp/hs2-yhqcs2-restarted-conversation-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-yhqcs2-restarted-conversation-narrow.png',
+    fullPage: true,
+  });
 });
 
 test('closes every terminal and AI chat before removing a project when Stop All is chosen', async ({ page }) => {
@@ -7256,7 +7296,7 @@ test('holds terminal geometry throughout a slow drawer drag and fits once it set
   await page.waitForTimeout(220);
   expect(await claimCount()).toBe(initialClaims);
   await expect(viewport).toHaveAttribute('data-grid-size', initialGrid!);
-  await page.screenshot({ path: '/private/tmp/hs2-rjev3s-slow-drawer-drag.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rjev3s-slow-drawer-drag.png', fullPage: true });
   await page.mouse.up();
   await expect.poll(claimCount, { timeout: 800 }).toBeGreaterThan(initialClaims);
   await expect(viewport).toHaveAttribute('data-driving', 'true');
@@ -7296,7 +7336,7 @@ test('resists below-minimum drawer resizing before a deliberate drag collapses i
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + 100, { steps: 8 });
   await expect(handle).toHaveAttribute('aria-valuenow', '228');
   await expect(drawer).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-5rj7t0-drawer-minimum-resistance.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-5rj7t0-drawer-minimum-resistance.png', fullPage: true });
   await page.mouse.up();
   await expect(handle).toHaveAttribute('aria-valuenow', '228');
   const minimumGrip = (await handle.boundingBox())!;
@@ -7348,7 +7388,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(rows).toHaveCount(3);
     await dialog
       .locator('dialog')
-      .screenshot({ path: `/private/tmp/hs2-se3rvm-dialog-${theme}-after.png`, animations: 'disabled' });
+      .screenshot({ path: `target/visual-captures/hs2-se3rvm-dialog-${theme}-after.png`, animations: 'disabled' });
     await types.locator('[part~="expand-icon"]').click();
     const choose = async (value: string, selected: string[], count: number) => {
       if (value === 'select-all' || value === 'deselect-all')
@@ -7381,7 +7421,10 @@ for (const theme of ['light', 'dark'] as const) {
     await choose('select-all', ['shell', 'ai', 'chat'], 3);
     await choose('deselect-all', [], 0);
     await choose('chat', ['chat'], 1);
-    await page.screenshot({ path: `/private/tmp/hs2-se3rvm-filter-${theme}-open.png`, animations: 'disabled' });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-se3rvm-filter-${theme}-open.png`,
+      animations: 'disabled',
+    });
     await page.keyboard.press('Escape');
     await expect(types).toHaveJSProperty('open', false);
     await expect(dialog).toHaveJSProperty('open', true);
@@ -7407,13 +7450,19 @@ for (const theme of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 390, height: 844 });
     await types.locator('[part~="expand-icon"]').click();
     await choose('select-all', ['shell', 'ai', 'chat'], 3);
-    await page.screenshot({ path: `/private/tmp/hs2-se3rvm-filter-${theme}-mobile.png`, animations: 'disabled' });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-se3rvm-filter-${theme}-mobile.png`,
+      animations: 'disabled',
+    });
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(chat).toBeVisible();
     await expect(page.locator('.terminal-dashboard-controls__count')).toHaveCount(0);
-    await page.screenshot({ path: `/private/tmp/hs2-se3rvm-dashboard-${theme}-chat.png`, animations: 'disabled' });
+    await page.screenshot({
+      path: `target/visual-captures/hs2-se3rvm-dashboard-${theme}-chat.png`,
+      animations: 'disabled',
+    });
   });
 }
 
@@ -7432,7 +7481,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await expect(visibilityToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
   await expect(manage).toBeInViewport({ ratio: 1 });
   await expect(selector).toBeInViewport({ ratio: 1 });
-  await page.screenshot({ path: '/private/tmp/hs2-kb5yy6-visibility-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-kb5yy6-visibility-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect
     .poll(async () => {
@@ -7444,7 +7493,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await page.waitForTimeout(600);
   await expect(manage).toBeInViewport({ ratio: 1 });
   await expect(selector).toBeInViewport({ ratio: 1 });
-  await page.screenshot({ path: '/private/tmp/hs2-kb5yy6-visibility-phone.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-kb5yy6-visibility-phone.png' });
   await page.setViewportSize({ width: 1440, height: 900 });
   await manage.click();
   let dialog = page.locator('[data-terminal-visibility-dialog]');
@@ -7470,7 +7519,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await expect(dialog.getByRole('tab', { name: 'Deep Focus' })).toHaveAttribute('aria-selected', 'true');
   await dialog.getByRole('button', { name: 'Hide Codex Main' }).click();
   await expect(dialog.getByRole('button', { name: 'Show Codex Main' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-wf0xqa-transparent-tab-bar-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-wf0xqa-transparent-tab-bar-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(codex).toHaveCount(0);
   await expect(page.locator('.terminal-dashboard-controls__count')).toHaveText('1');
@@ -7527,7 +7576,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
       };
     }),
   ).toEqual({ open: true, modal: true, topmost: true, runningAnimations: 0 });
-  await page.screenshot({ path: '/private/tmp/hs2-e7cp5z-settled-narrow-dialog.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-e7cp5z-settled-narrow-dialog.png', fullPage: true });
   await dialog.getByRole('tab', { name: 'Deep Focus' }).click({ button: 'right' });
   await dialog.getByRole('menu', { name: 'Visibility group actions' }).getByText('Delete').click();
   await expect(dialog.getByRole('tab', { name: 'Default' })).toHaveAttribute('aria-selected', 'true');
@@ -7560,7 +7609,7 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
         .evaluate((node) => getComputedStyle(node, '::after').borderTopWidth),
     )
     .toBe('2px');
-  await drawer.screenshot({ path: '/private/tmp/hs2-ez86d2-drawer-focus.png' });
+  await drawer.screenshot({ path: 'target/visual-captures/hs2-ez86d2-drawer-focus.png' });
   await page.keyboard.type('focused immediately');
   await expect
     .poll(() =>
@@ -7580,7 +7629,7 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
         .evaluate((node) => getComputedStyle(node, '::after').content),
     )
     .toBe('none');
-  await page.screenshot({ path: '/private/tmp/hs2-h2m7sp-new-terminal-focus.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-h2m7sp-new-terminal-focus.png', fullPage: true });
 });
 
 test('renames a terminal from its tab menu, saves it on the server, and keeps it after reload (HS2-89FPV1)', async ({
@@ -7696,7 +7745,7 @@ for (const width of [1280, 390])
     await openRename(/Quality shell/);
     await expect(field).toHaveJSProperty('value', 'Quality shell');
     await page.waitForTimeout(400); // let the dialog's open animation settle for the evidence capture
-    await page.screenshot({ path: `/private/tmp/claude/hs2-mew525-rename-prefill-${width}.png` });
+    await page.screenshot({ path: `target/visual-captures/claude/hs2-mew525-rename-prefill-${width}.png` });
   });
 
 test('serializes terminal name writes so a reset made during a slow rename still wins (HS2-0E7Q6E)', async ({
@@ -7801,7 +7850,7 @@ for (const width of [1280, 390])
     expect(renameBox!.x + renameBox!.width).toBeLessThanOrEqual(box!.x + box!.width);
     expect(resetBox!.x + resetBox!.width).toBeLessThan(renameBox!.x);
     expect(Math.abs(resetBox!.y - renameBox!.y)).toBeLessThanOrEqual(2);
-    await page.screenshot({ path: `/private/tmp/claude/hs2-2q7ktx-reset-offered-${width}.png` });
+    await page.screenshot({ path: `target/visual-captures/claude/hs2-2q7ktx-reset-offered-${width}.png` });
     await reset.click();
     await expect(dialog).toHaveJSProperty('open', false);
     await expect(drawer.getByRole('tab', { name: /^Tests/ })).toBeVisible();
@@ -7972,7 +8021,7 @@ test('resizes the terminal drawer to the page-header boundary', async ({ page })
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.layout.app-bottom-drawer.size'))).resolves.toBe(
     String(expected),
   );
-  await page.screenshot({ path: '/private/tmp/hs2-4fzgm7-drawer-max.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-4fzgm7-drawer-max.png', fullPage: true });
 });
 
 test('keeps the Kerf drawer create menu on screen and keyboard operable at the page header', async ({ page }) => {
@@ -8001,7 +8050,7 @@ test('keeps the Kerf drawer create menu on screen and keyboard operable at the p
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900 - 8);
   expect(bounds!.x).toBeGreaterThanOrEqual(8);
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1440 - 8);
-  await page.screenshot({ path: '/private/tmp/hs2-zkkrzs-tall-drawer-menu.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-zkkrzs-tall-drawer-menu.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 300 });
   await expect
     .poll(async () => {
@@ -8078,11 +8127,11 @@ test('double-clicks the drawer rail or any terminal tab to toggle maximization',
   await expect(handle).toHaveAttribute('aria-valuenow', '336');
   await drawer.getByRole('tab', { name: /Codex Main/ }).dispatchEvent('dblclick');
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-terminal-tab-maximized.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-terminal-tab-maximized.png', fullPage: true });
   await rail.dispatchEvent('dblclick');
   await expect(drawer).toHaveAttribute('data-maximized', 'false');
   await expect(handle).toHaveAttribute('aria-valuenow', '336');
-  await page.screenshot({ path: '/private/tmp/hs2-terminal-drawer-restored.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-terminal-drawer-restored.png', fullPage: true });
 });
 
 test('snaps the drawer track while compositing visibility motion and suppressing motion during resize', async ({
@@ -8114,7 +8163,7 @@ test('snaps the drawer track while compositing visibility motion and suppressing
   await expect(drawer).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toHaveCount(0);
   await page.waitForTimeout(100);
-  await page.screenshot({ path: '/private/tmp/hs2-x8fg23-drawer-hiding.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-x8fg23-drawer-hiding.png', fullPage: true });
   await expect(drawer).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
 });
@@ -8143,13 +8192,19 @@ test('keeps the collapsed terminal-drawer restore action on canonical shell inse
       return { right: `${Math.round(main.right - box.right)}px`, bottom: `${Math.round(main.bottom - box.bottom)}px` };
     });
   expect(await insets()).toEqual({ right: '16px', bottom: '16px' });
-  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-app-shell-drawer-restore-wide.png', fullPage: true });
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-drawer-restore-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-4y6sm9-app-shell-drawer-restore-wide.png',
+    fullPage: true,
+  });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-restore-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(restore).toBeVisible();
   expect(await insets()).toEqual({ right: '16px', bottom: '16px' });
-  await page.screenshot({ path: '/private/tmp/hs2-4y6sm9-app-shell-drawer-restore-narrow.png', fullPage: true });
-  await page.screenshot({ path: '/private/tmp/hs2-w3gphw-drawer-restore-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-4y6sm9-app-shell-drawer-restore-narrow.png',
+    fullPage: true,
+  });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-restore-narrow.png', fullPage: true });
 });
 
 test('keeps feedback rectangle input within its frame budget in the populated main app', async ({ page }, testInfo) => {
@@ -8164,9 +8219,9 @@ test('keeps feedback rectangle input within its frame budget in the populated ma
     contentType: 'application/json',
   });
   expectResponsiveFeedbackRectangle(measurement);
-  await page.screenshot({ path: '/private/tmp/hs2-6ppvjc-main-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6ppvjc-main-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: '/private/tmp/hs2-6ppvjc-main-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6ppvjc-main-narrow.png', fullPage: true });
 });
 
 test('projects an indexed feedback-needed note into the real row and inspector rails', async ({ page }) => {
@@ -8189,12 +8244,15 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   );
   await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
   await expect.poll(() => inspector.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('auto');
-  await page.screenshot({ path: '/private/tmp/hs2-9fa1bv-feedback-sidebar-without-rail-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-9fa1bv-feedback-sidebar-without-rail-wide.png',
+    fullPage: true,
+  });
   await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
   const readerInspector = page.getByRole('dialog').locator('[data-component="ticket-inspector"]');
   await expect(readerInspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
   await expect.poll(() => readerInspector.evaluate((node) => getComputedStyle(node, '::before').width)).toBe('auto');
-  await page.screenshot({ path: '/private/tmp/hs2-n6wa7y-reader-no-rail.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-n6wa7y-reader-no-rail.png' });
   await page.getByRole('button', { name: 'Close ticket reader' }).click();
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS(
@@ -8205,7 +8263,10 @@ test('projects an indexed feedback-needed note into the real row and inspector r
     'data-needs-review',
     'true',
   );
-  await page.screenshot({ path: '/private/tmp/hs2-9fa1bv-feedback-sidebar-without-rail-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-9fa1bv-feedback-sidebar-without-rail-narrow.png',
+    fullPage: true,
+  });
 });
 
 test('clicks exact feedback character positions, removes a split, and composes an interleaved Markdown reply', async ({
@@ -8255,13 +8316,13 @@ test('clicks exact feedback character positions, removes a split, and composes a
   const second = note.getByRole('textbox', { name: /Response at character/ }).last();
   await expect(second).toBeFocused();
   await second.fill('My second response');
-  await note.screenshot({ path: '/private/tmp/hs2-c5sab3-inline-feedback-replies.png' });
+  await note.screenshot({ path: 'target/visual-captures/hs2-c5sab3-inline-feedback-replies.png' });
   await page.setViewportSize({ width: 760, height: 900 });
   const noteBox = (await note.boundingBox())!,
     replyBox = (await second.boundingBox())!;
   expect(replyBox.x).toBeGreaterThanOrEqual(noteBox.x);
   expect(replyBox.x + replyBox.width).toBeLessThanOrEqual(noteBox.x + noteBox.width);
-  await note.screenshot({ path: '/private/tmp/hs2-c5sab3-inline-feedback-replies-narrow.png' });
+  await note.screenshot({ path: 'target/visual-captures/hs2-c5sab3-inline-feedback-replies-narrow.png' });
   await note.getByRole('button', { name: 'Respond' }).click();
   await expect
     .poll(() => patches.find((patch) => patch.note_kind === 'regular')?.note)
@@ -8326,7 +8387,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
     return { left: button.left - outer.left, right: outer.right - button.right, bottom: outer.bottom - button.bottom };
   });
   expect(Math.min(...Object.values(sidebarInsets))).toBeGreaterThanOrEqual(9);
-  await sidebarDetails.screenshot({ path: '/private/tmp/hs2-11n1wj-details-feedback-sidebar.png' });
+  await sidebarDetails.screenshot({ path: 'target/visual-captures/hs2-11n1wj-details-feedback-sidebar.png' });
   await expect(open).toBeVisible();
   await open.click();
   const reader = page.getByRole('dialog'),
@@ -8342,9 +8403,9 @@ test('responds to feedback choices embedded in the ticket description', async ({
   await expect(details.getByRole('textbox', { name: 'Feedback response' })).toBeFocused();
   await choices.nth(1).click();
   await details.getByRole('textbox', { name: 'Feedback response' }).fill('This matches the exported design.');
-  await readerSurface.screenshot({ path: '/private/tmp/hs2-11n1wj-details-feedback-reader-wide.png' });
+  await readerSurface.screenshot({ path: 'target/visual-captures/hs2-11n1wj-details-feedback-reader-wide.png' });
   await page.setViewportSize({ width: 940, height: 844 });
-  await readerSurface.screenshot({ path: '/private/tmp/hs2-11n1wj-details-feedback-reader-narrow.png' });
+  await readerSurface.screenshot({ path: 'target/visual-captures/hs2-11n1wj-details-feedback-reader-narrow.png' });
   // The response editor is NoteCard's exported NoteEditor composed by the panel (HS2-3X404M); it keeps
   // both actions inside the surface at phone width.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -8354,7 +8415,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
     expect(box.x).toBeGreaterThanOrEqual(surface.x);
     expect(box.x + box.width).toBeLessThanOrEqual(surface.x + surface.width);
   }
-  await readerSurface.screenshot({ path: '/private/tmp/hs2-3x404m-details-feedback-reader-390.png' });
+  await readerSurface.screenshot({ path: 'target/visual-captures/hs2-3x404m-details-feedback-reader-390.png' });
   await page.setViewportSize({ width: 940, height: 844 });
   await details.getByRole('button', { name: 'Respond' }).click();
   await expect
@@ -8375,7 +8436,7 @@ test('records No response needed as a subtle regular response and clears review 
     note = reader.locator('article[data-note-id="N4"]'),
     dismiss = note.getByRole('button', { name: 'No response needed' }),
     respond = note.getByRole('button', { name: 'Respond', exact: true });
-  await note.screenshot({ path: '/private/tmp/hs2-9fng50-feedback-actions-after.png' });
+  await note.screenshot({ path: 'target/visual-captures/hs2-9fng50-feedback-actions-after.png' });
   const dismissBox = (await dismiss.boundingBox())!,
     respondBox = (await respond.boundingBox())!;
   await expect(dismiss.locator('svg')).toHaveCount(0);
@@ -8393,7 +8454,7 @@ test('records No response needed as a subtle regular response and clears review 
   await ticket.click();
   const acknowledgement = page.locator('#app-right-rail [data-acknowledgement="true"]');
   await expect(acknowledgement).toBeVisible();
-  await acknowledgement.screenshot({ path: '/private/tmp/hs2-yk27gp-no-response-needed.png' });
+  await acknowledgement.screenshot({ path: 'target/visual-captures/hs2-yk27gp-no-response-needed.png' });
 });
 
 test('opens reader at the active feedback note from its inspector action', async ({ page }) => {
@@ -8409,7 +8470,7 @@ test('opens reader at the active feedback note from its inspector action', async
   await action.scrollIntoViewIfNeeded();
   await inspector
     .locator('article[data-note-id="N4"]')
-    .screenshot({ path: '/private/tmp/hs2-f8wrkq-inspector-respond.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-f8wrkq-inspector-respond.png' });
   await action.click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ }),
     active = reader.locator('article[data-note-id="N4"]'),
@@ -8417,7 +8478,7 @@ test('opens reader at the active feedback note from its inspector action', async
   await expect(reader.getByRole('button', { name: 'Respond to Feedback' })).toHaveCount(0);
   await expect(active).toBeInViewport();
   await expect(response).toBeFocused();
-  await reader.screenshot({ path: '/private/tmp/hs2-f8wrkq-reader-feedback.png' });
+  await reader.screenshot({ path: 'target/visual-captures/hs2-f8wrkq-reader-feedback.png' });
 });
 
 test('browses repository files and commits with host-native actions', async ({ page }) => {
@@ -8562,7 +8623,7 @@ test('browses repository files and commits with host-native actions', async ({ p
   expect(stagedDiff?.paths).toContain('src/staged.ts');
   expect(stagedDiff).not.toHaveProperty('path');
   await expect(page.locator('.app-toast')).toContainText('Opened 2 staged files in one diff in Glassbox.');
-  await page.screenshot({ path: '/private/tmp/hs2-jgfm53-multi-file-menu-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jgfm53-multi-file-menu-wide.png' });
   await staged.dblclick();
   await expect
     .poll(() => actions.some((action) => action.action === 'open' && action.path === 'src/staged.ts'))
@@ -8575,11 +8636,11 @@ test('browses repository files and commits with host-native actions', async ({ p
     .poll(() => actions.some((action) => action.action === 'reveal' && action.path === 'src/staged.ts'))
     .toBe(true);
   await page.evaluate(() => getSelection()?.removeAllRanges());
-  await popover.screenshot({ path: '/private/tmp/hs2-stva92-repository-files-wide.png' });
+  await popover.screenshot({ path: 'target/visual-captures/hs2-stva92-repository-files-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
-  await popover.screenshot({ path: '/private/tmp/hs2-stva92-repository-files-narrow.png' });
+  await popover.screenshot({ path: 'target/visual-captures/hs2-stva92-repository-files-narrow.png' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await popover.screenshot({ path: '/private/tmp/hs2-8k7qk7-repository-390.png' });
+  await popover.screenshot({ path: 'target/visual-captures/hs2-8k7qk7-repository-390.png' });
   await page.setViewportSize({ width: 1280, height: 900 });
   await popover.getByRole('button', { name: /Commits 24/ }).click();
   await expect(popover).toContainText('Finish repository status dialog');
@@ -8591,7 +8652,7 @@ test('browses repository files and commits with host-native actions', async ({ p
   await expect(newest.locator('.ticket-code-review__ref[data-ref-kind="tag"]')).toContainText('v0.9.0');
   await expect(newest.locator('.ticket-code-review__ref[data-ref-kind="tag"] [data-lucide="tag"]')).toBeVisible();
   await expect(popover.locator('li[data-commit-sha="aaa1111"] .ticket-code-review__ref')).toHaveCount(0);
-  await popover.screenshot({ path: '/private/tmp/hs2-sfj5te-commit-refs.png' });
+  await popover.screenshot({ path: 'target/visual-captures/hs2-sfj5te-commit-refs.png' });
   await newest.locator('.ticket-code-review__commit-summary').click();
   await expect(newest).toContainText('Expanded third line');
   await newest.locator('.ticket-code-review__commit-summary').click();
@@ -8630,8 +8691,8 @@ test('browses repository files and commits with host-native actions', async ({ p
   );
   expect(sideBackgrounds[0]).not.toBe('rgba(0, 0, 0, 0)');
   expect(sideBackgrounds[0]).not.toBe(sideBackgrounds[1]);
-  await compareBanner.screenshot({ path: '/private/tmp/hs2-8d3qse-compare-wide.png' });
-  await popover.screenshot({ path: '/private/tmp/hs2-b2md8z-compare-wide.png' });
+  await compareBanner.screenshot({ path: 'target/visual-captures/hs2-8d3qse-compare-wide.png' });
+  await popover.screenshot({ path: 'target/visual-captures/hs2-b2md8z-compare-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   // A phone is a compact device class: the list-detail layout becomes a drill-down (HS2-3B8345). The
   // active comparison pushed the Commits detail, whose back control returns to the repository list.
@@ -8662,7 +8723,7 @@ test('browses repository files and commits with host-native actions', async ({ p
   await expect(compareBanner.getByRole('button', { name: 'B', exact: true })).toBeInViewport({ ratio: 1 });
   await expect(compareBanner).toContainText('Select the A side of the comparison.');
   await expect(compareBanner.getByRole('button', { name: 'Open comparison in Glassbox' })).toBeInViewport({ ratio: 1 });
-  await popover.screenshot({ path: '/private/tmp/hs2-b2md8z-compare-phone.png' });
+  await popover.screenshot({ path: 'target/visual-captures/hs2-b2md8z-compare-phone.png' });
   await expect(popover.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
   await newest.locator('.ticket-code-review__commit-summary').click();
   await expect(newest.locator('.ticket-code-review__compare-label')).toHaveText('A');
@@ -8756,8 +8817,8 @@ test('refreshes repository status from the project long-poll stream without simp
   }
   await expect(page.locator('[data-component="server-busy-message"]')).not.toContainText('Checking repository');
   await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
-  await summary.screenshot({ path: '/private/tmp/hs2-tr9369-proactive-repository-status.png' });
-  await page.screenshot({ path: '/private/tmp/hs2-q17w3p-after-ticket-updates.png' });
+  await summary.screenshot({ path: 'target/visual-captures/hs2-tr9369-proactive-repository-status.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-q17w3p-after-ticket-updates.png' });
   await expect.poll(() => pending.length).toBeGreaterThan(0);
   ahead = 4;
   await pending.shift()!.fulfill({
@@ -8783,12 +8844,12 @@ test('keeps exactly 24px above and below the nearly full-height ticket reader', 
     wide = await reader.boundingBox();
   expect(wide!.y).toBe(24);
   expect(wide!.height).toBe(852);
-  await page.screenshot({ path: '/private/tmp/hs2-h5vjet-reader-height-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-h5vjet-reader-height-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
   const narrow = await reader.boundingBox();
   expect(narrow!.y).toBe(24);
   expect(narrow!.height).toBe(852);
-  await page.screenshot({ path: '/private/tmp/hs2-h5vjet-reader-height-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-h5vjet-reader-height-narrow.png', fullPage: true });
 });
 
 test('enlarges reader description and note text 1.5× with a remembered global toggle', async ({ page }) => {
@@ -8866,10 +8927,10 @@ test('enlarges reader description and note text 1.5× with a remembered global t
       .toBeCloseTo(ordinary[name] * 1.5, 1);
   await expect(page.evaluate(() => localStorage.getItem('hotsheet.reader.large-text'))).resolves.toBe('true');
   await feedback.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: '/private/tmp/hs2-p85gec-reader-large-feedback-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-p85gec-reader-large-feedback-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
   await feedback.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: '/private/tmp/hs2-p85gec-reader-large-feedback-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-p85gec-reader-large-feedback-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
   await page.getByRole('button', { name: 'Open ticket reader' }).click();
@@ -8900,7 +8961,7 @@ test('clears needs review when a regular response follows the feedback-needed no
   );
   await inspector
     .locator('[data-component="note-card"][data-note-id="N2"]')
-    .screenshot({ path: '/private/tmp/hs2-98q45q-answered-feedback.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-98q45q-answered-feedback.png' });
 });
 
 test('shows Blocked only when the ticket has a visible blocked reason', async ({ page }) => {
@@ -8915,7 +8976,7 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('[data-component="blocked-badge"]')).toHaveCount(0);
-  await ticket.screenshot({ path: '/private/tmp/hs2-e3c530-edge-without-reason.png' });
+  await ticket.screenshot({ path: 'target/visual-captures/hs2-e3c530-edge-without-reason.png' });
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: [{ ...target, blocked_reason: 'Waiting for access' }, notStartedRow] })
@@ -8923,7 +8984,7 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
   );
   await page.reload();
   await expect(ticket.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
-  await ticket.screenshot({ path: '/private/tmp/hs2-e3c530-visible-blocked-reason.png' });
+  await ticket.screenshot({ path: 'target/visual-captures/hs2-e3c530-visible-blocked-reason.png' });
 });
 
 test('lists associated commits and opens a validated commit or range in the configured diff tool', async ({ page }) => {
@@ -8957,7 +9018,7 @@ test('lists associated commits and opens a validated commit or range in the conf
   await expect(review).toContainText('docs(workflow): require follow-up UI evidence');
   await expect(review).toContainText('Refs: HS2-DEMO01');
   await expectFlushCommit();
-  await review.screenshot({ path: '/private/tmp/hs2-0jv72t-code-review-evidence.png' });
+  await review.screenshot({ path: 'target/visual-captures/hs2-0jv72t-code-review-evidence.png' });
   await evidence.click();
   const evidenceDialog = page.locator('[data-component="change-evidence-dialog"]');
   await expect(evidenceDialog).toBeVisible();
@@ -8965,7 +9026,7 @@ test('lists associated commits and opens a validated commit or range in the conf
   await evidenceDialog.getByRole('button', { name: /Tests 1/ }).click();
   const testFile = evidenceDialog.locator('[data-action="select-repository-file"]');
   await expect(testFile).toHaveAttribute('data-item-id', 'clients/web/src/change-evidence.test.ts');
-  await evidenceDialog.screenshot({ path: '/private/tmp/hs2-s7x4sb-change-evidence.png' });
+  await evidenceDialog.screenshot({ path: 'target/visual-captures/hs2-s7x4sb-change-evidence.png' });
   await testFile.click();
   await expect(evidenceDialog.getByRole('menu')).toHaveCount(0);
   await testFile.getByRole('button', { name: /Actions for/ }).click();
@@ -9015,11 +9076,11 @@ test('lists associated commits and opens a validated commit or range in the conf
       ),
     )
     .toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-ggjed1-code-review-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ggjed1-code-review-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(review.locator('.ticket-code-review__range')).toHaveCount(2);
   await expectFlushCommit();
-  await page.screenshot({ path: '/private/tmp/hs2-ggjed1-code-review-floor.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ggjed1-code-review-floor.png', fullPage: true });
 });
 
 test('renders the exact shared Code Review component in the inspector and reader', async ({ page }) => {
@@ -9040,7 +9101,7 @@ test('renders the exact shared Code Review component in the inspector and reader
   await expect(sidebarReview).toContainText('Opens in Glassbox');
   await expect(sidebarReview).toContainText('No commits referencing this ticket were found.');
   const sharedMarkup = await sidebarReview.evaluate((element) => element.outerHTML);
-  await sidebar.screenshot({ path: '/private/tmp/hs2-g7p7s7-code-review-inspector-after.png' });
+  await sidebar.screenshot({ path: 'target/visual-captures/hs2-g7p7s7-code-review-inspector-after.png' });
   await sidebar.getByRole('button', { name: 'Open ticket reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await reader.getByRole('tab', { name: 'Code Review' }).click();
@@ -9054,7 +9115,7 @@ test('renders the exact shared Code Review component in the inspector and reader
       'class="ticket-inspector-panel ticket-inspector-panel--reader ',
     ),
   );
-  await page.screenshot({ path: '/private/tmp/hs2-g7p7s7-code-review-reader-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-g7p7s7-code-review-reader-after.png', fullPage: true });
 });
 
 test('opens every selected ticket file in one difftool launch (HS2-J7HQ5E)', async ({ page }) => {
@@ -9141,7 +9202,7 @@ test('keeps change evidence interactive when launched from the modal ticket read
       ),
     )
     .toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-6ev2es-evidence-over-reader.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6ev2es-evidence-over-reader.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   const navigation = evidenceDialog.locator('.repository-status-popover__navigation'),
     detail = evidenceDialog.locator('.repository-status-popover__detail');
@@ -9155,7 +9216,7 @@ test('keeps change evidence interactive when launched from the modal ticket read
     .toBeGreaterThanOrEqual(0);
   await expect(navigation.getByRole('button', { name: /Tests 1/ })).toBeInViewport({ ratio: 1 });
   await expect(testFile).toBeInViewport({ ratio: 1 });
-  await evidenceDialog.screenshot({ path: '/private/tmp/hs2-b2md8z-evidence-phone.png' });
+  await evidenceDialog.screenshot({ path: 'target/visual-captures/hs2-b2md8z-evidence-phone.png' });
 });
 
 test('owns and restores sidebar and reader tabs independently', async ({ page }) => {
@@ -9185,10 +9246,10 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
   await readerInfo.press('End');
   await expect(readerAttachments).toHaveAttribute('aria-selected', 'true');
   await expect(sidebarTimeline).toHaveAttribute('aria-selected', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-gzn2hz-tab-bar-reader-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-gzn2hz-tab-bar-reader-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(readerAttachments).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-gzn2hz-tab-bar-reader-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-gzn2hz-tab-bar-reader-narrow.png', fullPage: true });
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(sidebarTimeline).toHaveAttribute('aria-selected', 'true');
   await expect
@@ -9199,7 +9260,7 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
       }),
     )
     .toBe('timeline:attachments');
-  await sidebar.screenshot({ path: '/private/tmp/hs2-gzn2hz-tab-bar-inspector-narrow.png' });
+  await sidebar.screenshot({ path: 'target/visual-captures/hs2-gzn2hz-tab-bar-inspector-narrow.png' });
   await page.reload();
   sidebar = page.locator('#app-right-rail');
   sidebarTimeline = sidebar.getByRole('tab', { name: 'Timeline' });
@@ -9273,10 +9334,10 @@ test('shows animated active state only for the lifetime of a ticket claim lease'
       .locator('.ticket-list-row__metadata')
       .evaluate((node) => [...node.children].map((child) => child.className)),
   ).toEqual(expect.arrayContaining(['ticket-list-row__claim']));
-  await page.screenshot({ path: '/private/tmp/hs2-s3stys-claimed-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-s3stys-claimed-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(indicator).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-s3stys-claimed-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-s3stys-claimed-narrow.png', fullPage: true });
   await expect(indicator).toHaveCount(0, { timeout: 13_000 });
 });
 
@@ -9348,13 +9409,13 @@ test('shows the compact confidence pill on completed list rows and board cards a
   const doneRow = page.locator('[data-ticket-slug="HS2-DONE01"][data-component="ticket-list-row"]').first();
   await expect(doneRow).toHaveAttribute('data-presentation', 'list');
   await expect(doneRow.locator('.ticket-list-row__metadata [data-component="confidence-badge"]')).toHaveCount(1);
-  await page.screenshot({ path: '/private/tmp/claude/hs2-a0q6g6-list-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-a0q6g6-list-wide.png' });
 
   await page.getByLabel('Columns view').click();
   await expect(page.locator('[data-component="ticket-list-row"][data-presentation="column"]').first()).toBeVisible();
   await assertPills('92%', 'verified');
   await assertVerified();
-  await page.screenshot({ path: '/private/tmp/claude/hs2-a0q6g6-columns-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-a0q6g6-columns-wide.png' });
 
   // An agent corrects the score; the change stream refreshes the card's pill and band.
   done = { ...done, latest_confidence: 61 };
@@ -9398,8 +9459,8 @@ test('shows the compact confidence pill on completed list rows and board cards a
   const [pillBox, rowBox] = await Promise.all([narrowPill.boundingBox(), doneRow.boundingBox()]);
   expect(pillBox!.x + pillBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
   await page.waitForTimeout(800); // let the responsive panel transition settle before capturing evidence
-  await page.screenshot({ path: '/private/tmp/claude/hs2-a0q6g6-list-narrow.png' });
-  await doneRow.screenshot({ path: '/private/tmp/claude/hs2-a0q6g6-row-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-a0q6g6-list-narrow.png' });
+  await doneRow.screenshot({ path: 'target/visual-captures/claude/hs2-a0q6g6-row-narrow.png' });
 });
 
 test('shows the live claim and its ETA in the inspector and reader headers and clears it on release (HS2-QKNQXC)', async ({
@@ -9667,7 +9728,7 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await expect(region.locator('.ticket-inspector-placeholder')).toHaveCount(0);
   expect(await region.evaluate((node) => node.getBoundingClientRect().width)).toBe(widthBeforeSwitch);
   await expect(region).not.toContainText('Use real project tickets');
-  await page.screenshot({ path: '/private/tmp/hs2-zt5qnw-inspector-transition-floor.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-zt5qnw-inspector-transition-floor.png', fullPage: true });
   await expect(
     region.locator('[data-component="ticket-inspector-header"][data-ticket-slug="HS2-START02"]'),
   ).toBeVisible();
@@ -9708,7 +9769,7 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   ).toBe(true);
   expect(detailReads).toBe(readsBefore);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
-  await page.screenshot({ path: '/private/tmp/hs2-e0mjm8-reselect-editor-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-e0mjm8-reselect-editor-wide.png', fullPage: true });
   await editor.blur();
   await expect
     .poll(() => patches.some((patch) => patch.details === 'Draft preserved across a redundant reselect'))
@@ -9717,7 +9778,7 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   await expect(editor).toHaveCount(0);
   await row.click();
   await expect(inspector).toContainText('Draft preserved across a redundant reselect');
-  await page.screenshot({ path: '/private/tmp/hs2-e0mjm8-reselect-editor-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-e0mjm8-reselect-editor-narrow.png', fullPage: true });
 });
 
 test('routes mixed git and external ticket reads and edits by qualified id', async ({ page }) => {
@@ -9906,7 +9967,7 @@ test('omits separators below every right-sidebar toolbar state', async ({ page }
   await expect(placeholder).toContainText('Select a ticket to see and edit its details');
   await expect(toolbar).not.toHaveAttribute('divider-sides');
   await expect(toolbar).toHaveCSS('box-shadow', /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/);
-  await page.screenshot({ path: '/private/tmp/hs2-gvk7zy-empty-inspector-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-gvk7zy-empty-inspector-wide.png', fullPage: true });
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(
     page.locator('#app-right-rail [data-component="toolbar"][aria-label="Ticket inspector toolbar"]'),
@@ -9921,7 +9982,7 @@ test('omits separators below every right-sidebar toolbar state', async ({ page }
     'box-shadow',
     /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
   );
-  await page.screenshot({ path: '/private/tmp/hs2-f3nk91-right-sidebar-floor.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-f3nk91-right-sidebar-floor.png', fullPage: true });
 });
 
 test('resizes and persists both production shell sidebars', async ({ page }) => {
@@ -9973,7 +10034,7 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
   const commandGroup = page.getByRole('button', { name: 'Project commands' });
   await commandGroup.click();
   await expect(commandGroup).toHaveAttribute('aria-expanded', 'false');
-  await page.screenshot({ path: '/private/tmp/hs2-qgg6pf-resizable-sidebars.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-qgg6pf-resizable-sidebars.png', fullPage: true });
   await page.getByRole('button', { name: 'Hide project sidebar' }).click();
   await page.getByRole('button', { name: 'Hide ticket inspector' }).click();
   await page.reload();
@@ -9983,7 +10044,7 @@ test('resizes and persists both production shell sidebars', async ({ page }) => 
   await page.getByLabel('List view').click();
   await expect(sortSelect).toHaveJSProperty('value', 'title');
   await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Title, descending');
-  await page.screenshot({ path: '/private/tmp/hs2-w3fdpm-independent-list-sort.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w3fdpm-independent-list-sort.png', fullPage: true });
   await page.getByLabel('Columns view').click();
   await expect(page.getByRole('button', { name: 'Show project sidebar' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Show ticket inspector' })).toBeVisible();
@@ -10108,9 +10169,9 @@ test('loads every ticket page in the active workspace sort order (HS2-X23ME4)', 
           .length,
     )
     .toBeGreaterThan(updatedRequestsBeforeBoard);
-  await page.screenshot({ path: '/private/tmp/hs2-x23me4-sorted-columns-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-x23me4-sorted-columns-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 700 });
-  await page.screenshot({ path: '/private/tmp/hs2-x23me4-sorted-columns-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-x23me4-sorted-columns-narrow.png', fullPage: true });
 });
 
 test('contains and centers inspector tabs while showing labels only when they fit (HS2-WKGMN4)', async ({ page }) => {
@@ -10197,18 +10258,18 @@ test('contains and centers inspector tabs while showing labels only when they fi
       }),
     ),
   ).toBe(true);
-  await captureTabChrome(sidebarTabs, '/private/tmp/hs2-wkgmn4-inspector-tabs-wide.png');
+  await captureTabChrome(sidebarTabs, 'target/visual-captures/hs2-wkgmn4-inspector-tabs-wide.png');
   await page.setViewportSize({ width: 1024, height: 700 });
   await expectTabGeometry(sidebarTabs);
-  await captureTabChrome(sidebarTabs, '/private/tmp/hs2-wkgmn4-inspector-tabs-narrow.png');
+  await captureTabChrome(sidebarTabs, 'target/visual-captures/hs2-wkgmn4-inspector-tabs-narrow.png');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: 'Open ticket reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' }),
     readerTabs = reader.locator('.ticket-inspector__tabs');
   await expect(readerTabs.locator('.kui-app-tab__name').first()).toBeVisible();
   await expectTabGeometry(readerTabs);
-  await captureTabChrome(readerTabs, '/private/tmp/hs2-wkgmn4-reader-tabs-wide.png');
-  await page.screenshot({ path: '/private/tmp/hs2-2p9k4y-segments-wide.png', fullPage: true });
+  await captureTabChrome(readerTabs, 'target/visual-captures/hs2-wkgmn4-reader-tabs-wide.png');
+  await page.screenshot({ path: 'target/visual-captures/hs2-2p9k4y-segments-wide.png', fullPage: true });
   await page.setViewportSize({ width: 868, height: 700 });
   expect(
     await readerTabs.locator('.kui-app-tab__name').evaluateAll((labels) =>
@@ -10220,10 +10281,10 @@ test('contains and centers inspector tabs while showing labels only when they fi
   ).toBe(true);
   await expect(readerTabs.getByRole('tab', { name: 'Code Review' }).locator('svg')).toBeVisible();
   await expectTabGeometry(readerTabs);
-  await page.screenshot({ path: '/private/tmp/hs2-2p9k4y-segments-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-2p9k4y-segments-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expectTabGeometry(readerTabs);
-  await captureTabChrome(readerTabs, '/private/tmp/hs2-wkgmn4-reader-tabs-mobile.png');
+  await captureTabChrome(readerTabs, 'target/visual-captures/hs2-wkgmn4-reader-tabs-mobile.png');
 });
 
 interface RenderMetricsSnapshot {
@@ -10257,7 +10318,7 @@ test('shows no spurious permission popup or repeated work while an open project 
   expect(permissionRequests).toEqual([]);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-n4r6f3-no-spurious-permission-popup.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-n4r6f3-no-spurious-permission-popup.png', fullPage: true });
 });
 
 test('keeps remembered-project startup atomic and does not report its intentional work', async ({ page }) => {
@@ -10344,7 +10405,7 @@ test('retries a temporarily failed remembered project and restores every project
   await expect(
     page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.open-projects') ?? '[]')),
   ).resolves.toEqual([project.root, restoredRoot]);
-  await page.screenshot({ path: '/private/tmp/hs2-hes004-restored-projects.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-hes004-restored-projects.png', fullPage: true });
 });
 
 test('keeps a persistently failed project remembered without obscuring a successful one', async ({ page }) => {
@@ -10395,9 +10456,9 @@ test('keeps a persistently failed project remembered without obscuring a success
   await expect(failure).toContainText('The older server only supports schema 2.');
   await expect(failure).toContainText('process (4242) is not responding');
   await expect(failure).toContainText('Project: /work/older-server');
-  await page.screenshot({ path: '/private/tmp/hs2-cygqfn-project-restore-error-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cygqfn-project-restore-error-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
-  await page.screenshot({ path: '/private/tmp/hs2-cygqfn-project-restore-error-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cygqfn-project-restore-error-narrow.png', fullPage: true });
   await expect(page.locator('.app-error')).toHaveCount(0);
   await expect(
     page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.open-projects') ?? '[]')),
@@ -10475,7 +10536,7 @@ test('projects background AI activity without rerendering the closed conversatio
   await page.waitForTimeout(1_200);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
   await expect(page.locator('[data-component="ai-conversation"]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-jsmkfj-hidden-conversation-stable.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jsmkfj-hidden-conversation-stable.png', fullPage: true });
   await page.locator('[data-action="toggle-terminal-drawer"]').click();
   await expect(page.locator('[data-component="ai-conversation"][data-presentation="embedded"]')).toContainText(
     'background event',
@@ -10619,10 +10680,10 @@ test('drags a newly created selected ticket without requiring reselection (HS2-6
   await backlog.click();
   await expect(created).toBeVisible();
   await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-6e9rrs-created-drag-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6e9rrs-created-drag-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 720 });
   await expect(created).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-6e9rrs-created-drag-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6e9rrs-created-drag-narrow.png', fullPage: true });
 });
 
 test('remembers the last ticket category after cancelling and refreshing', async ({ page }) => {
@@ -10727,7 +10788,7 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   expect(
     await source.evaluate((node) => getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!).cursor),
   ).toBe('pointer');
-  await dialog.locator('form').screenshot({ path: '/private/tmp/hs2-nzmjbj-source-select-wide.png' });
+  await dialog.locator('form').screenshot({ path: 'target/visual-captures/hs2-nzmjbj-source-select-wide.png' });
   const shown = source.evaluate(
     (node) =>
       new Promise<void>((resolve) => {
@@ -10743,7 +10804,7 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   await source.click();
   await shown;
   await expect(source).toHaveJSProperty('open', true);
-  await page.screenshot({ path: '/private/tmp/hs2-nzmjbj-source-select-open.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-nzmjbj-source-select-open.png' });
   await source.locator('wa-option[value="github-acme"]').click();
   await expect(source).toHaveJSProperty('value', 'github-acme');
   await expect(sourceWarning).toBeVisible();
@@ -10782,7 +10843,7 @@ test('creates a ticket in a chosen writable source and preselects it next time i
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(source).toBeVisible();
   await dialog.locator('form').screenshot({ path: test.info().outputPath('hs2-fxn0ez-source-warning-390.png') });
-  await dialog.locator('form').screenshot({ path: '/private/tmp/hs2-nzmjbj-source-select-narrow.png' });
+  await dialog.locator('form').screenshot({ path: 'target/visual-captures/hs2-nzmjbj-source-select-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   // The remembered source is in memory only: a reload falls back to the default source.
@@ -10902,10 +10963,10 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
   await expect(create).toHaveJSProperty('disabled', true);
   await expect(removeAll).toBeVisible();
   await expect(removeAll).toHaveCSS('cursor', 'pointer');
-  await form.screenshot({ path: '/private/tmp/hs2-8hhhk3-stranded-wide.png' });
+  await form.screenshot({ path: 'target/visual-captures/hs2-8hhhk3-stranded-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(removeAll).toBeVisible();
-  await form.screenshot({ path: '/private/tmp/hs2-8hhhk3-stranded-narrow.png' });
+  await form.screenshot({ path: 'target/visual-captures/hs2-8hhhk3-stranded-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   // A programmatic/Enter submit is refused by the same guard: nothing is created or uploaded.
   await form.evaluate((node: HTMLFormElement) => {
@@ -10924,7 +10985,7 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
   await expect(form.getByText('proof.txt')).toBeVisible();
   await expect(form.getByText('trace.log')).toBeVisible();
   await expect(create).toHaveJSProperty('disabled', false);
-  await form.screenshot({ path: '/private/tmp/hs2-8hhhk3-back-to-git-wide.png' });
+  await form.screenshot({ path: 'target/visual-captures/hs2-8hhhk3-back-to-git-wide.png' });
   await create.click();
   await expect(dialog).toBeHidden();
   expect(creates).toEqual(['?source=git-local']);
@@ -11079,7 +11140,7 @@ test('uploads staged files to a GitHub source with an assets repository and show
   await expect(form.getByLabel('Drop or browse attachments for new ticket')).toHaveCount(1);
   await dialog.getByRole('textbox', { name: 'Ticket title' }).fill('Evidence on GitHub');
   await expect(create).toHaveJSProperty('disabled', false);
-  await form.screenshot({ path: '/private/tmp/hs2-hsa64d-composer-github-wide.png' });
+  await form.screenshot({ path: 'target/visual-captures/hs2-hsa64d-composer-github-wide.png' });
   await create.click();
   await expect(dialog).toBeHidden();
   const githubRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="acme/widgets#7"]');
@@ -11112,7 +11173,9 @@ test('uploads staged files to a GitHub source with an assets repository and show
   await expect(page.getByRole('menu', { name: 'Attachment actions' })).toHaveCount(0);
   await expect(panel.locator('video')).not.toHaveAttribute('poster', /.+/);
   expect(posters).toEqual([]);
-  await page.locator('#app-right-rail').screenshot({ path: '/private/tmp/hs2-hsa64d-inspector-readonly-wide.png' });
+  await page
+    .locator('#app-right-rail')
+    .screenshot({ path: 'target/visual-captures/hs2-hsa64d-inspector-readonly-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   // Crossing to the phone layout closes the inspector (HS2-ZK51WP); capturing while that close
   // still slides out showed it offset and clipped (HS2-D2GC8Q). Reopen it and let it settle.
@@ -11124,7 +11187,7 @@ test('uploads staged files to a GitHub source with an assets repository and show
     await Promise.all(node.getAnimations().map((animation) => animation.finished));
   });
   await expect(panel.getByRole('link', { name: 'trace.log' })).toBeInViewport();
-  await rail.screenshot({ path: '/private/tmp/hs2-hsa64d-inspector-readonly-narrow.png' });
+  await rail.screenshot({ path: 'target/visual-captures/hs2-hsa64d-inspector-readonly-narrow.png' });
   await page.getByRole('button', { name: 'Hide ticket inspector' }).click();
   await expect(githubRow).toBeVisible();
   await githubRow.screenshot({ path: testInfo.outputPath('github-issue-row-narrow.png'), animations: 'disabled' });
@@ -11207,7 +11270,7 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
   await expect(title).toHaveValue('');
   await expect(details).toHaveValue('');
   await page.waitForTimeout(350);
-  await page.screenshot({ path: '/private/tmp/hs2-90ntv5-empty-after-cancel-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-90ntv5-empty-after-cancel-wide.png', fullPage: true });
   await title.fill('Created title');
   await details.fill('Created details');
   await dialog.getByRole('button', { name: 'Create ticket' }).click();
@@ -11217,7 +11280,7 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
   await expect(details).toHaveValue('');
   await page.setViewportSize({ width: 560, height: 760 });
   await page.waitForTimeout(350);
-  await page.screenshot({ path: '/private/tmp/hs2-90ntv5-empty-after-create-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-90ntv5-empty-after-create-narrow.png', fullPage: true });
 });
 
 test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7)', async ({ page }, testInfo) => {
@@ -11298,7 +11361,10 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await expect(composerHost.locator('[data-action="create-ticket-form"]')).toHaveCount(0);
   await expect(createViewDialog).toBeHidden();
   await page.waitForTimeout(350);
-  await page.screenshot({ path: '/private/tmp/hs2-dbcf7e-no-composer-after-export-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-dbcf7e-no-composer-after-export-wide.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 560, height: 760 });
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await page.getByRole('textbox', { name: 'Ticket title' }).fill('Second temporary draft');
@@ -11308,7 +11374,10 @@ test('does not resurrect a dismissed ticket composer after another modal closes'
   await expect(composerHost).toBeHidden();
   await expect(createViewDialog).toBeHidden();
   await page.waitForTimeout(350);
-  await page.screenshot({ path: '/private/tmp/hs2-dbcf7e-no-composer-after-export-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-dbcf7e-no-composer-after-export-narrow.png',
+    fullPage: true,
+  });
 });
 
 test('restores a saved composer draft without painting the dialog during remembered-project startup', async ({
@@ -11499,11 +11568,17 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   expect(await composerDialog.evaluate((node) => node.shadowRoot?.querySelector('dialog')?.matches(':modal'))).toBe(
     true,
   );
-  await page.screenshot({ path: '/private/tmp/hs2-bm8cgj-ticket-motion-below-dialog-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-bm8cgj-ticket-motion-below-dialog-wide.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 1024, height: 700 });
-  await page.screenshot({ path: '/private/tmp/hs2-bm8cgj-ticket-motion-below-dialog-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-bm8cgj-ticket-motion-below-dialog-narrow.png',
+    fullPage: true,
+  });
   await composerDialog.getByRole('button', { name: 'Cancel' }).click();
-  await page.screenshot({ path: '/private/tmp/hs2-v1s4hg-ticket-move-midflight-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-v1s4hg-ticket-move-midflight-after.png', fullPage: true });
   await finish();
   await expect(moveGhost).toHaveCount(0);
   await expect(moved).toHaveCSS('visibility', 'visible');
@@ -11528,7 +11603,7 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
     })
     .toBe(true);
   await seek(80);
-  await page.screenshot({ path: '/private/tmp/hs2-fp6ms6-ticket-outgoing-fade-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-fp6ms6-ticket-outgoing-fade-after.png', fullPage: true });
   await finish();
   await expect(outgoingGhost).toHaveCount(0);
   await expect(moved).toHaveCount(0);
@@ -11570,7 +11645,10 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
     .toBe(true);
   await seek(120);
   await expect(incomingGhost).toHaveCSS('opacity', '0');
-  await page.screenshot({ path: '/private/tmp/hs2-fp6ms6-ticket-incoming-make-room-after.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-fp6ms6-ticket-incoming-make-room-after.png',
+    fullPage: true,
+  });
   await seek(320);
   await expect
     .poll(async () => Number.parseFloat(await incomingGhost.evaluate((element) => getComputedStyle(element).opacity)))
@@ -11584,7 +11662,7 @@ test('animates ticket moves, arrivals, and departures in sequence', async ({ pag
   expect(incomingGhostBox).not.toBeNull();
   expect(Math.abs(incomingGhostBox!.x - incomingBox!.x)).toBeLessThan(1);
   expect(Math.abs(incomingGhostBox!.y - incomingBox!.y)).toBeLessThan(1);
-  await page.screenshot({ path: '/private/tmp/hs2-fp6ms6-ticket-incoming-fade-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-fp6ms6-ticket-incoming-fade-after.png', fullPage: true });
   await finish();
   await expect(incomingGhost).toHaveCount(0);
   await expect(incoming).toHaveCSS('visibility', 'visible');
@@ -11730,7 +11808,7 @@ test('finishes local ticket creation motion without redundantly reconciling its 
   const opacity = Number.parseFloat(await ghost.evaluate((element) => getComputedStyle(element).opacity));
   expect(opacity).toBeGreaterThan(0);
   expect(opacity).toBeLessThan(1);
-  await page.screenshot({ path: '/private/tmp/hs2-jgwtjj-create-watch-race-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jgwtjj-create-watch-race-after.png', fullPage: true });
   await expect(ghost).toHaveCount(0);
   await expect(incoming).toHaveCSS('visibility', 'visible');
   await page.waitForTimeout(250);
@@ -11758,7 +11836,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await page.getByRole('button', { name: 'Run checks' }).dispatchEvent('pointerup');
   const history = page.locator('[data-component="command-run-dialog"]');
   await expect(history).toContainText('Stopped by user');
-  await page.screenshot({ path: '/private/tmp/hs2-jn3x4w-commands-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jn3x4w-commands-wide.png', fullPage: true });
   await history.getByRole('button', { name: 'Close' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   const hiddenNarrowCommand = page.locator('[data-action="run-command"]');
@@ -11766,7 +11844,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await page.waitForTimeout(600);
   await hiddenNarrowCommand.dispatchEvent('pointerup');
   await expect(history).toContainText('Stopped by user');
-  await page.screenshot({ path: '/private/tmp/hs2-jn3x4w-commands-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jn3x4w-commands-narrow.png', fullPage: true });
   await history.getByRole('button', { name: 'Close' }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
   const settingsView = page.getByLabel('Settings view');
@@ -11840,10 +11918,10 @@ test('aligns project sidebar highlights, content, and icon hit targets to shared
   expect(chatBox.width).toBeCloseTo(44, 0);
   expect(hideBox.width).toBeCloseTo(44, 0);
   expect(viewActionBox.width).toBeCloseTo(36, 0);
-  await sidebar.screenshot({ path: '/private/tmp/hs2-2p8n8d-sidebar-rails-wide.png' });
+  await sidebar.screenshot({ path: 'target/visual-captures/hs2-2p8n8d-sidebar-rails-wide.png' });
   await page.setViewportSize({ width: 1024, height: 651 });
   await expect(sidebar.getByRole('button', { name: 'Run checks' })).toBeInViewport();
-  await sidebar.screenshot({ path: '/private/tmp/hs2-2p8n8d-sidebar-rails-narrow.png' });
+  await sidebar.screenshot({ path: 'target/visual-captures/hs2-2p8n8d-sidebar-rails-narrow.png' });
 });
 
 test('runs a portable shell command in a named terminal and opens the bottom drawer', async ({ page }) => {
@@ -11897,10 +11975,10 @@ test('runs a portable shell command in a named terminal and opens the bottom dra
   await expect(
     drawer.locator('[data-component="terminal-session"]:not([hidden]) [data-component="terminal-viewport"]'),
   ).toHaveAttribute('data-connection', 'connected');
-  await page.screenshot({ path: '/private/tmp/hs2-2bkgpk-shell-command-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-2bkgpk-shell-command-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1180, height: 651 });
   await expect(drawer.getByRole('tab', { name: 'Lint project' })).toBeInViewport();
-  await page.screenshot({ path: '/private/tmp/hs2-2bkgpk-shell-command-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-2bkgpk-shell-command-narrow.png', fullPage: true });
 });
 
 test('serves the repository Quality commands from a real server and queues Everything (HS2-11285R)', async ({
@@ -12026,7 +12104,7 @@ test('queues a custom AI command as an urgent Up Next ticket and signals an avai
   const created = page.locator('[data-ticket-slug="HS2-NEW001"]');
   await expect(created).toContainText('Review current changes');
   await expect(page.locator('.app-toast')).toContainText('Queued HS2-NEW001 and notified Codex.');
-  await created.screenshot({ path: '/private/tmp/hs2-yxgh0c-ai-command-ticket.png' });
+  await created.screenshot({ path: 'target/visual-captures/hs2-yxgh0c-ai-command-ticket.png' });
 });
 
 test('keeps a custom AI command ticket when no AI connection is available', async ({ page }) => {
@@ -12124,13 +12202,13 @@ test('creates, edits, reorders, deletes, and saves typed custom commands', async
   await page.locator('.app-shell__workspace').evaluate((node) => {
     node.scrollTop = 0;
   });
-  await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-editor-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-656xj2-command-editor-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.locator('.app-shell__workspace').evaluate((node) => {
     node.scrollTop = 0;
   });
   await expect(editor.locator('.command-settings-editor__row', { hasText: 'Review changes' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-656xj2-command-editor-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-656xj2-command-editor-narrow.png', fullPage: true });
 });
 
 test('keeps an empty command group across reloads, populating, and emptying it (HS2-EZ5KMC)', async ({ page }) => {
@@ -12181,7 +12259,10 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await page.locator('.app-shell__workspace').evaluate((node) => {
     node.scrollTop = 0;
   });
-  await page.screenshot({ path: '/private/tmp/hs2-ez5kmc-empty-group-after-reload-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-ez5kmc-empty-group-after-reload-wide.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   // A phone-width load uses the compact shell, whose settings categories sit behind a sidebar toggle.
   await page.reload();
@@ -12194,7 +12275,7 @@ test('keeps an empty command group across reloads, populating, and emptying it (
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect.poll(() => editor.evaluate((node) => Math.round(node.getBoundingClientRect().left))).toBeLessThan(40);
   await page.screenshot({
-    path: '/private/tmp/hs2-ez5kmc-empty-group-after-reload-narrow.png',
+    path: 'target/visual-captures/hs2-ez5kmc-empty-group-after-reload-narrow.png',
     animations: 'disabled',
   });
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -12365,7 +12446,7 @@ test('multi-selects command rows and drags the whole selection to reorder (HS2-V
   await expect(rowFor('Alpha')).toHaveAttribute('data-selected', 'true');
   await expect(rowFor('Gamma')).toHaveAttribute('data-selected', 'true');
   await expect(rowFor('Beta')).not.toHaveAttribute('data-selected', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-vjyqhg-multi-select.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-vjyqhg-multi-select.png', fullPage: true });
   // Drag the whole selection (grabbing Alpha) above Beta; Alpha and Gamma move together.
   const betaBox = (await rowFor('Beta').boundingBox())!,
     dataTransfer = await page.evaluateHandle(() => new DataTransfer());
@@ -12493,7 +12574,7 @@ test('collapses individual project command groups independently and remembers ea
   ] as const)
     await expect(commands.getByRole('button', { name: title }).locator(`[data-lucide="${icon}"]`)).toBeVisible();
   await page.waitForTimeout(220);
-  await commands.screenshot({ path: '/private/tmp/hs2-cpz79w-command-icons-after.png' });
+  await commands.screenshot({ path: 'target/visual-captures/hs2-cpz79w-command-icons-after.png' });
   await quality.click();
   await expect(quality).toHaveAttribute('aria-expanded', 'false');
   await expect(commands.getByRole('button', { name: 'Reqs ↔ Code' })).toHaveCount(0);
@@ -12510,7 +12591,7 @@ test('collapses individual project command groups independently and remembers ea
   await expect(commands.getByRole('button', { name: 'git status' })).toHaveCount(0);
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(220);
-  await commands.screenshot({ path: '/private/tmp/hs2-j963jf-command-groups-narrow.png' });
+  await commands.screenshot({ path: 'target/visual-captures/hs2-j963jf-command-groups-narrow.png' });
   await page.reload();
   commands = page.locator('[data-component="command-navigation"]');
   await expect(commands.getByRole('button', { name: 'Quality', exact: true })).toHaveAttribute('aria-expanded', 'true');
@@ -12713,14 +12794,14 @@ test('switches settings categories from the project sidebar', async ({ page }) =
   await navigation.getByRole('button', { name: 'Column view' }).click();
   await expect(page.getByRole('region', { name: 'Column view settings' })).toBeVisible();
   await expect(page.getByText('Hide Verified column')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-wsmx7c-settings-sidebar-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-wsmx7c-settings-sidebar-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(page.getByRole('region', { name: 'Column view settings' })).toBeVisible();
   await expect(placeholderToolbar).toHaveCSS(
     'box-shadow',
     /^(rgba\(0, 0, 0, 0\) [^,]+)(, rgba\(0, 0, 0, 0\) [^,]+){3}$/,
   );
-  await page.screenshot({ path: '/private/tmp/hs2-wsmx7c-settings-sidebar-floor.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-wsmx7c-settings-sidebar-floor.png', fullPage: true });
   await page.getByLabel('List view').click();
   await expect(selected).toHaveAttribute('data-selected', 'true');
 });
@@ -12773,10 +12854,10 @@ test('renders exactly once when the long poll announces a permission request', a
   const metrics = await renderMetrics(page);
   expect(metrics?.passes).toBe(1);
   expect(metrics?.mutations).toBeGreaterThan(0);
-  await page.screenshot({ path: '/private/tmp/hs2-44zefc-codex-permission-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-44zefc-codex-permission-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 844 });
   await expect(popup).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-44zefc-codex-permission-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-44zefc-codex-permission-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'true');
   await expect(page.locator('#app-left-rail')).toBeVisible();
@@ -12821,7 +12902,7 @@ test('renders exactly once when the long poll announces a permission request', a
       return element === document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
     }),
   ).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-y1hn0d-permission-popup-390.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y1hn0d-permission-popup-390.png', fullPage: true });
 });
 
 for (const viewport of [
@@ -12876,7 +12957,7 @@ for (const viewport of [
     expect(popupBounds.y + popupBounds.height).toBeLessThanOrEqual(viewport.height);
     // The expanded drawer really does sit under the popup, so the hit tests below prove the layering.
     expect(popupBounds.y + popupBounds.height).toBeGreaterThan(drawerBounds.y);
-    await page.screenshot({ path: `/private/tmp/hs2-zescm2-permission-over-drawer-${viewport.width}.png` });
+    await page.screenshot({ path: `target/visual-captures/hs2-zescm2-permission-over-drawer-${viewport.width}.png` });
     for (const name of ['Ignore', 'Deny', 'Always Allow', 'Allow Once']) {
       const button = popup.getByRole('button', { name, exact: true });
       await expect(button).toBeVisible();
@@ -12943,7 +13024,7 @@ for (const viewport of [
     await expect
       .poll(() => composer.evaluate((element) => element.shadowRoot?.querySelector('dialog')?.getAnimations().length))
       .toBe(0);
-    await page.screenshot({ path: `/private/tmp/hs2-mae27t-permission-over-composer-${viewport.width}.png` });
+    await page.screenshot({ path: `target/visual-captures/hs2-mae27t-permission-over-composer-${viewport.width}.png` });
     for (const name of ['Ignore', 'Deny', 'Always Allow', 'Allow Once']) {
       const button = popup.getByRole('button', { name, exact: true });
       await expect(button).toBeVisible();
@@ -13078,12 +13159,15 @@ test('records externally resolved empty-action permissions in notification histo
       return Math.round(card.bottom - summary.bottom - border);
     }),
   ).toBe(16);
-  await page.screenshot({ path: '/private/tmp/hs2-f058ae-responded-notification-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-f058ae-responded-notification-wide.png', fullPage: true });
   await page.getByRole('button', { name: 'Hide notification inspector' }).click();
   await page.setViewportSize({ width: 760, height: 844 });
   await expect(previous).toBeInViewport();
   await expect(previous).toHaveCSS('padding-bottom', '16px');
-  await page.screenshot({ path: '/private/tmp/hs2-f058ae-responded-notification-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-f058ae-responded-notification-narrow.png',
+    fullPage: true,
+  });
 });
 
 test('keeps healthy tickets usable and offers safe reveal plus AI repair recovery', async ({ page }) => {
@@ -13260,10 +13344,10 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(page.locator('.app-toast')).toContainText('Queued HS2-REPAIR for AI repair.');
   await expect(inspector).not.toContainText('Queued HS2-REPAIR for AI repair.');
   expect(recoveryRequests.repair).toEqual({ path: '/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md' });
-  await page.screenshot({ path: '/private/tmp/hs2-j1f744-corrupt-recovery-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-j1f744-corrupt-recovery-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 844 });
   await expect(inspector).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-j1f744-corrupt-recovery-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-j1f744-corrupt-recovery-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 720 });
 
   corruptTickets = [];
@@ -13480,9 +13564,9 @@ test('updates the open project after external ticket additions edits and deletio
   liveRows = [external, ...liveRows];
   await emit('changed', '10', 'HS2-EXTERNAL');
   await expect(page.locator('[data-ticket-slug="HS2-EXTERNAL"]')).toContainText('Externally added ticket');
-  await page.screenshot({ path: '/private/tmp/hs2-9d4hcq-live-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9d4hcq-live-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: '/private/tmp/hs2-9d4hcq-live-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9d4hcq-live-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 720 });
 
   liveRows = liveRows.filter((item) => item.id !== '01');
@@ -13583,10 +13667,10 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   await expect(conflict).toContainText('Their newer wording');
   await expect(conflict).toContainText('My revised local wording');
   await expect(page.locator('.app-error')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-0bp930-field-conflict-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-0bp930-field-conflict-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 940 });
   await expect(conflict).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-0bp930-field-conflict-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-0bp930-field-conflict-narrow.png', fullPage: true });
 
   const resolution = conflict.getByRole('textbox', { name: 'Merged details' });
   await resolution.fill('My local wording\n\nTheir newer wording');
@@ -14079,13 +14163,13 @@ test('shows Trash below Archive and restores deleted tickets through the real ti
   await expect(deleted).toHaveAttribute('data-status', 'deleted');
   await expect(deleted.getByText('Deleted', { exact: true })).toBeVisible();
   await expect(page.locator('[data-ticket-slug]')).toHaveCount(1);
-  await page.screenshot({ path: '/private/tmp/hs2-mwdr19-trash-view-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mwdr19-trash-view-wide.png' });
   await deleted.click({ button: 'right' });
   await expect(page.locator('#app-right-rail [data-status="deleted"]')).toContainText('Deleted');
   const restore = page.locator('[data-context-action="Restore ticket"]');
   await expect(restore).toBeVisible();
   await expect(restore.locator('[data-lucide="archive-restore"]')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-mwdr19-restore-menu-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mwdr19-restore-menu-wide.png' });
   await restore.click();
   await expect
     .poll(() => restoreRequests)
@@ -14097,7 +14181,7 @@ test('shows Trash below Archive and restores deleted tickets through the real ti
   await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
   await expect(trashItem).toHaveCount(0);
   await page.setViewportSize({ width: 760, height: 640 });
-  await page.screenshot({ path: '/private/tmp/hs2-mwdr19-restored-queue-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mwdr19-restored-queue-narrow.png' });
 });
 
 test('projects a newly created ticket within one frame without a collection refresh', async ({ page }, testInfo) => {
@@ -14259,7 +14343,8 @@ test('aligns Status controls without duplicating badge insets and preserves sele
     await expect(badge.locator('svg')).toHaveCount(1);
     await expect(badge).toHaveCSS('background-color', await resolvedColor(badge, `var(--wa-color-${fill})`));
     await expectStatusGeometry(inspector);
-    if (value === 'not_started') await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-wide.png');
+    if (value === 'not_started')
+      await captureInspectorStatus(inspector, 'target/visual-captures/hs2-ahadnk-status-wide.png');
   }
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   await inspector.getByRole('textbox', { name: 'Blocked reason' }).fill('Waiting for review');
@@ -14267,12 +14352,12 @@ test('aligns Status controls without duplicating badge insets and preserves sele
   await expect(inspector.locator('.ticket-info-panel__status-line [data-component="blocked-badge"]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 700 });
   await expectStatusGeometry(inspector);
-  await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-blocked-narrow.png');
+  await captureInspectorStatus(inspector, 'target/visual-captures/hs2-ahadnk-status-blocked-narrow.png');
   await inspector.getByRole('button', { name: 'Open ticket reader' }).click();
   const reader = page.getByRole('dialog', { name: 'Read and edit HS2-DEMO01' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expectStatusGeometry(reader);
-  await captureInspectorStatus(reader, '/private/tmp/hs2-ahadnk-status-reader-mobile.png');
+  await captureInspectorStatus(reader, 'target/visual-captures/hs2-ahadnk-status-reader-mobile.png');
 });
 
 test('matches Details label spacing to Category before and after editing (HS2-S6S709)', async ({ page }) => {
@@ -14303,12 +14388,12 @@ test('matches Details label spacing to Category before and after editing (HS2-S6
   const exerciseDetails = async (surface: Locator, name: string) => {
     const section = surface.locator('.ticket-info-panel__details-section');
     await expectDetailsSpacing(surface);
-    await section.screenshot({ path: `/private/tmp/hs2-s6s709-${name}-preview.png` });
+    await section.screenshot({ path: `target/visual-captures/hs2-s6s709-${name}-preview.png` });
     await surface.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
     const editor = surface.getByRole('textbox', { name: 'Ticket details' });
     await expect(editor).toBeFocused();
     await expectDetailsSpacing(surface);
-    await section.screenshot({ path: `/private/tmp/hs2-s6s709-${name}-editing.png` });
+    await section.screenshot({ path: `target/visual-captures/hs2-s6s709-${name}-editing.png` });
     const next = `Details edited in ${name}.`;
     await editor.fill(next);
     await editor.blur();
@@ -14356,7 +14441,7 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await inspector.locator('.ticket-inspector-panel').evaluate((node) => {
     node.scrollTop = 0;
   });
-  await inspector.screenshot({ path: '/private/tmp/hs2-qbscn2-block-ticket-empty.png' });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-qbscn2-block-ticket-empty.png' });
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   const blocked = inspector.getByRole('textbox', { name: 'Blocked reason' });
   await blocked.fill('Waiting for review');
@@ -14364,7 +14449,7 @@ test('autosaves ticket text fields without explicit save or cancel controls', as
   await expect.poll(() => patches.some((patch) => patch.blocked_reason === 'Waiting for review')).toBe(true);
   await expect(inspector.getByText('Waiting for review', { exact: true })).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Blocked reason' })).toBeVisible();
-  await inspector.screenshot({ path: '/private/tmp/hs2-72kryh-blocked-reason.png' });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-72kryh-blocked-reason.png' });
   await inspector.locator('.ticket-info-panel__blocked-surface').dblclick();
   const clearReason = inspector.getByRole('textbox', { name: 'Blocked reason' });
   await expect(clearReason).toBeFocused();
@@ -14520,7 +14605,7 @@ for (const width of [1280, 390]) {
     expect(feedbackLayout.noteBorder).toBe('0px');
     expect(feedbackLayout.noteInset).toBe('0px');
     await disclosure.blur();
-    await reloaded.screenshot({ path: `/private/tmp/hs2-9r3xy0-feedback-${width}.png` });
+    await reloaded.screenshot({ path: `target/visual-captures/hs2-9r3xy0-feedback-${width}.png` });
     await reloaded.getByRole('button', { name: 'Not helpful — stop suggestions like this' }).click();
     await feedbackDialog.getByLabel('What should Hot Sheet change or stop doing?').fill('Avoid the long summary.');
     await feedbackDialog.getByRole('button', { name: 'Update feedback' }).click();
@@ -14575,16 +14660,16 @@ test('aligns the empty Notes text and preserves Add note before the first note e
         inspector = node.closest('[data-component="ticket-inspector"], #app-right-rail')!.getBoundingClientRect();
       return { x: inspector.left, y: notes.top, width: inspector.width, height: notes.height };
     });
-    await page.screenshot({ path: `/private/tmp/hs2-d4vee8-empty-notes-${name}.png`, clip });
+    await page.screenshot({ path: `target/visual-captures/hs2-d4vee8-empty-notes-${name}.png`, clip });
   };
   await expect(add).toBeVisible();
   await expect(add).toHaveText(/Add note/);
   await expectEmptyNotes(inspector, 'wide');
-  await page.screenshot({ path: '/private/tmp/hs2-yn3x2j-empty-notes-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-yn3x2j-empty-notes-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 844 });
   await expect(add).toBeVisible();
   await expectEmptyNotes(inspector, 'narrow');
-  await page.screenshot({ path: '/private/tmp/hs2-yn3x2j-empty-notes-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-yn3x2j-empty-notes-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 844 });
   await add.click();
   await expect(inspector.getByRole('textbox', { name: 'New note' })).toBeFocused();
@@ -14623,7 +14708,7 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   await expect(notesCount).toHaveText('3');
   await expect(notesCount).toHaveAttribute('aria-hidden', 'true');
   await expect(notesCount).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await notesHeader.screenshot({ path: '/private/tmp/hs2-fycazc-notes-count-wide.png' });
+  await notesHeader.screenshot({ path: 'target/visual-captures/hs2-fycazc-notes-count-wide.png' });
   const geometry = await info.evaluate((node) => {
     const style = getComputedStyle(node),
       detailsHeadingNode = node.querySelector<HTMLElement>(
@@ -14658,12 +14743,12 @@ test('aligns the right inspector on shared menu primitives and its shared conten
   expect(geometry.leftGutter).toBe('0px');
   expect(geometry.rightGutter).toBe('0px');
   expect(Math.max(...geometry.lefts) - Math.min(...geometry.lefts)).toBeLessThanOrEqual(1);
-  await page.screenshot({ path: '/private/tmp/hs2-h5cx3g-right-sidebar-wide-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-h5cx3g-right-sidebar-wide-after.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 700 });
   await expect(info).toBeVisible();
   await expect.poll(() => info.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await notesHeader.screenshot({ path: '/private/tmp/hs2-fycazc-notes-count-narrow.png' });
-  await page.screenshot({ path: '/private/tmp/hs2-h5cx3g-right-sidebar-narrow-after.png', fullPage: true });
+  await notesHeader.screenshot({ path: 'target/visual-captures/hs2-fycazc-notes-count-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-h5cx3g-right-sidebar-narrow-after.png', fullPage: true });
 });
 
 test('edits title and tags through controlled capability-aware inspector state', async ({ page }) => {
@@ -14685,7 +14770,7 @@ test('edits title and tags through controlled capability-aware inspector state',
     addTag = tagsHeader.getByRole('button', { name: 'Add tag' });
   await expect(tagsHeader).toHaveCount(1);
   await expect(addTag.locator('[data-lucide="plus"]')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-9zpyr8-tags-production-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9zpyr8-tags-production-wide.png', fullPage: true });
   await addTag.click();
   const tagInput = inspector.getByRole('combobox', { name: 'Tag name' });
   await tagInput.fill('regression');
@@ -14706,7 +14791,7 @@ test('edits title and tags through controlled capability-aware inspector state',
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.mouse.move(10, 10);
   await expect(tagsHeader).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-9zpyr8-tags-production-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9zpyr8-tags-production-narrow.png', fullPage: true });
 });
 
 test('wraps long titles while editing in the sidebar and reader at 1280 and 390 (HS2-98ZVPE)', async ({ page }) => {
@@ -14857,7 +14942,7 @@ test('hides title and tag mutation affordances when the provider cannot update',
   await expect(status).not.toHaveAttribute('data-action');
   await expect(inspector.locator('wa-select[name="inspector-started-phase"]')).toHaveCount(0);
   await expect(status.locator('[data-lucide="clock"]')).toBeVisible();
-  await captureInspectorStatus(inspector, '/private/tmp/hs2-ahadnk-status-readonly.png');
+  await captureInspectorStatus(inspector, 'target/visual-captures/hs2-ahadnk-status-readonly.png');
 });
 
 test('keeps an open inspector status popup at its trigger after its anchor is morphed away @ci-smoke @ci-webkit', async ({
@@ -14923,7 +15008,7 @@ test('edits and clears the Started phase without changing lifecycle status', asy
     await expect.poll(() => row.evaluate((element) => element.matches(':hover')), startedPhase).toBe(true);
   }
   await page.screenshot({
-    path: '/private/tmp/hs2-hhkjsc-menu-wide.png',
+    path: 'target/visual-captures/hs2-hhkjsc-menu-wide.png',
     clip: { x: 780, y: 220, width: 350, height: 455 },
   });
   await status.locator('[data-started-phase="initial_testing"]').click();
@@ -14933,31 +15018,31 @@ test('edits and clears the Started phase without changing lifecycle status', asy
   await expect(inspector.locator('[data-component="ticket-notes"]')).not.toContainText('Started phase changed');
   await inspector.getByRole('tab', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toContainText('Initial testing');
-  await inspector.screenshot({ path: '/private/tmp/hs2-6t2vjm-phase-timeline-wide.png' });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-6t2vjm-phase-timeline-wide.png' });
   await inspector.getByRole('tab', { name: 'Info' }).click();
   await inspector
     .locator('.ticket-info-panel__metadata')
-    .screenshot({ path: '/private/tmp/hs2-hhkjsc-phase-wide.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-hhkjsc-phase-wide.png' });
   await page.getByLabel('Columns view').click();
   await expect(
     page.locator('[data-column-id="started"] [data-ticket-slug="HS2-DEMO01"] [data-component="status-badge"]'),
   ).toHaveText('Initial testing');
   await page
     .locator('[data-column-id="started"] [data-ticket-slug="HS2-DEMO01"]')
-    .screenshot({ path: '/private/tmp/hs2-hhkjsc-column-wide.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-hhkjsc-column-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
   await inspector.getByRole('tab', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toContainText('Initial testing');
-  await inspector.screenshot({ path: '/private/tmp/hs2-6t2vjm-phase-timeline-narrow.png' });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-6t2vjm-phase-timeline-narrow.png' });
   await inspector.getByRole('tab', { name: 'Info' }).click();
   await inspector
     .locator('.ticket-info-panel__metadata')
-    .screenshot({ path: '/private/tmp/hs2-hhkjsc-phase-narrow.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-hhkjsc-phase-narrow.png' });
   await status.locator('[data-action="open-inspector-status-menu"]').click();
   await status.locator('[data-ticket-status="started"]').hover();
   await page.waitForTimeout(300);
-  await page.screenshot({ path: '/private/tmp/hs2-hhkjsc-menu-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-hhkjsc-menu-narrow.png' });
   await status.locator('[data-started-phase=""]').click();
   await expect.poll(() => patches.at(-1)?.started_phase).toBeNull();
   await expect(phase).toHaveText('Started');
@@ -14992,7 +15077,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   const activityNote = page.locator('article[data-note-id="N1"]');
   await expect(activityNote).toHaveAttribute('data-kind', 'activity');
   await expect(activityNote).toContainText('Loaded checkout-scoped tickets.');
-  await page.screenshot({ path: '/private/tmp/hs2-a32eak-activity-note-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-a32eak-activity-note-wide.png', fullPage: true });
   await page.locator('[data-action="open-inspector-status-menu"]').click();
   await page.locator('[data-inspector-status-menu] [data-ticket-status="completed"]').click();
   await expect(page.locator('#app-right-rail [data-component="status-badge"]')).toContainText('Completed');
@@ -15009,14 +15094,14 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await page.getByRole('tab', { name: 'Timeline' }).click();
   await expect(timeline.getByText('Moved to backlog', { exact: true })).toBeVisible();
   await expect(timeline).not.toContainText('Status changed from Completed to Backlog');
-  await page.screenshot({ path: '/private/tmp/hs2-22gcky-timeline-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-22gcky-timeline-wide.png' });
   await page.setViewportSize({ width: 940, height: 900 });
   await expect(page.locator('[data-component="ticket-timeline"]')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-22gcky-timeline-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-22gcky-timeline-narrow.png' });
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
   await page.getByRole('tab', { name: 'Info' }).click();
   await expect(activityNote).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-a32eak-activity-note-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-a32eak-activity-note-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole('button', { name: 'New ticket…' }).click();
   await page.locator('wa-input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
@@ -15031,7 +15116,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   );
   await page
     .locator('[data-action="create-ticket-form"]')
-    .screenshot({ path: '/private/tmp/hs2-new-ticket-composer-production.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-new-ticket-composer-production.png' });
   await page.getByRole('button', { name: 'Create ticket' }).click();
   const createdRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
   await expect(createdRow).toContainText('Created from the real shell');
@@ -15054,9 +15139,9 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(1);
   await expect(page.locator('#app-right-rail')).toContainText('client');
   await expect(page.locator('#app-right-rail')).toContainText('Needs-Review');
-  await page.screenshot({ path: '/private/tmp/hs2-chzkr5-create-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-chzkr5-create-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
-  await page.screenshot({ path: '/private/tmp/hs2-chzkr5-create-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-chzkr5-create-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(page.locator('[data-component="app-shell"]')).toHaveAttribute('data-mobile', 'false');
   await page.getByLabel('Settings view').click();
@@ -15080,7 +15165,7 @@ test('adapts the production AppShell below the former 1024 by 600 desktop floor'
   await expect(page.locator('wa-select[name="mobile-project"]')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(300);
-  await page.screenshot({ path: '/private/tmp/hs2-501eph-production-shell-floor.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-501eph-production-shell-floor.png', fullPage: true });
 });
 
 test('shows reactive open and Up Next counts immediately above Drive', async ({ page }) => {
@@ -15105,7 +15190,7 @@ test('shows reactive open and Up Next counts immediately above Drive', async ({ 
   });
   expect(geometry.centerDelta).toBeLessThan(1);
   expect(geometry.orderGap).toBeGreaterThanOrEqual(0);
-  await page.screenshot({ path: '/private/tmp/hs2-a94d3h-project-work-summary-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-a94d3h-project-work-summary-wide.png', fullPage: true });
   await page.locator('[data-ticket-slug="HS2-NEXT01"]').click();
   const statusSelect = page.locator('.ticket-status-menu');
   await statusSelect.locator('[data-action="open-inspector-status-menu"]').click();
@@ -15116,7 +15201,7 @@ test('shows reactive open and Up Next counts immediately above Drive', async ({ 
   await expect(summary).toBeVisible();
   await expect(drive).toBeVisible();
   expect(await summary.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-a94d3h-project-work-summary-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-a94d3h-project-work-summary-narrow.png', fullPage: true });
 });
 
 test('overrides the default provider and reuses its dedicated drawer Drive chat', async ({ page }) => {
@@ -15144,11 +15229,11 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
   await expect(drive).toHaveAccessibleName('Drive with Claude');
   await sidebar
     .locator('[data-component="drive-control"]')
-    .screenshot({ path: '/private/tmp/hs2-0fr30w-drive-control-wide.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-0fr30w-drive-control-wide.png' });
   await page.setViewportSize({ width: 1024, height: 600 });
   await sidebar
     .locator('[data-component="drive-control"]')
-    .screenshot({ path: '/private/tmp/hs2-0fr30w-drive-control-narrow.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-0fr30w-drive-control-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await drive.click();
   await expect(drive).toHaveAccessibleName('Claude workflow is running');
@@ -15174,7 +15259,7 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
         body: { content: '$hotsheet', model: 'sonnet', effort: 'medium' },
       },
     ]);
-  await page.screenshot({ path: '/private/tmp/hs2-ndda7p-project-drive-claude-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ndda7p-project-drive-claude-wide.png', fullPage: true });
   page.once('dialog', (dialog) => dialog.accept());
   await drawer.getByRole('button', { name: 'Stop Claude' }).click();
   await expect(drive).toHaveAccessibleName('Drive with Claude');
@@ -15190,7 +15275,7 @@ test('overrides the default provider and reuses its dedicated drawer Drive chat'
   });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(drive).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-ndda7p-project-drive-claude-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ndda7p-project-drive-claude-narrow.png', fullPage: true });
 });
 
 test('keeps the Drive menu open while choosing provider, model, and effort', async ({ page }) => {
@@ -15225,9 +15310,9 @@ test('keeps the Drive menu open while choosing provider, model, and effort', asy
     'checked',
     '',
   );
-  await page.screenshot({ path: '/private/tmp/hs2-s010qf-drive-options-open-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-s010qf-drive-options-open-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
-  await page.screenshot({ path: '/private/tmp/hs2-s010qf-drive-options-open-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-s010qf-drive-options-open-narrow.png', fullPage: true });
   await page.mouse.click(1, 1);
   await expect(effort).toBeHidden();
 });
@@ -15277,7 +15362,7 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await expect(conversationHost.locator('[data-component="conversation-model-control"]')).toBeVisible();
   await expect(conversationHost.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-6-astra');
   await expect(conversationHost.locator('.ai-conversation__model-effort')).toHaveText('medium');
-  await dialog.screenshot({ path: '/private/tmp/hs2-ndda7p-empty-codex-chat-wide.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-ndda7p-empty-codex-chat-wide.png' });
   const composer = conversationHost.getByLabel('Message Codex');
   await composer.fill('Explain the client event boundary.');
   await composer.press('Enter');
@@ -15305,7 +15390,9 @@ test('opens a Codex chat without implicitly starting Drive through the productio
   await conversationHost.getByRole('button', { name: 'Helpful — keep suggestions like this' }).last().click();
   const feedbackDialog = page.locator('[data-component="ai-feedback-dialog"]');
   await expect(feedbackDialog.getByRole('dialog')).toBeVisible();
-  await feedbackDialog.getByRole('dialog').screenshot({ path: '/private/tmp/hs2-js82bz-feedback-dialog.png' });
+  await feedbackDialog
+    .getByRole('dialog')
+    .screenshot({ path: 'target/visual-captures/hs2-js82bz-feedback-dialog.png' });
   await feedbackDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(feedbackDialog).toHaveCount(0);
   expect(patches.some((patch) => Boolean(patch.ai_feedback))).toBe(false);
@@ -15327,24 +15414,24 @@ test('opens a Codex chat without implicitly starting Drive through the productio
     )
     .toBe(true);
   await expect(page.locator('.app-toast')).toContainText('AI feedback saved as a ticket note.');
-  await page.screenshot({ path: '/private/tmp/hs2-t6a83t-permission-over-chat-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-t6a83t-permission-over-chat-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
-  await page.screenshot({ path: '/private/tmp/hs2-t6a83t-permission-over-chat-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-t6a83t-permission-over-chat-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await dialog.screenshot({ path: '/private/tmp/hs2-bxspmn-conversation-usage-wide.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-bxspmn-conversation-usage-wide.png' });
   await conversationHost
     .locator('[data-component="permission-request-card"]')
     .getByRole('button', { name: 'Allow Once' })
     .click();
   await expect(conversationHost.locator('[data-component="permission-request-card"]')).toHaveCount(0);
   await page.setViewportSize({ width: 760, height: 640 });
-  await dialog.screenshot({ path: '/private/tmp/hs2-bxspmn-conversation-usage-narrow.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-bxspmn-conversation-usage-narrow.png' });
   page.once('dialog', (nativeDialog) => nativeDialog.accept());
   await conversationHost.getByRole('button', { name: 'Stop Codex' }).click();
   await expect(conversationHost.getByRole('button', { name: 'Stop Codex' })).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-293gfj-light-dismiss-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-293gfj-light-dismiss-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.screenshot({ path: '/private/tmp/hs2-293gfj-light-dismiss-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-293gfj-light-dismiss-wide.png', fullPage: true });
   await page.mouse.click(1, 1);
   await expect(dialog).toBeHidden();
 });
@@ -15384,7 +15471,7 @@ test('keeps activity before the result that resumes after a permission pause', a
     ),
   );
   expect(order).toEqual(['user', 'activity', 'assistant']);
-  await dialog.screenshot({ path: '/private/tmp/hs2-kv6sad-ordered-conversation-wide.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-kv6sad-ordered-conversation-wide.png' });
   await page.setViewportSize({ width: 760, height: 760 });
   await expect
     .poll(async () =>
@@ -15398,7 +15485,7 @@ test('keeps activity before the result that resumes after a permission pause', a
   await transcript.evaluate((node) => {
     node.scrollTop = node.scrollHeight;
   });
-  await dialog.screenshot({ path: '/private/tmp/hs2-kv6sad-ordered-conversation-narrow.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-kv6sad-ordered-conversation-narrow.png' });
 });
 
 for (const viewport of [
@@ -15633,14 +15720,14 @@ test('clears a foreground permission from its authoritative event while the Allo
     )
     .toBe(1);
   await page.screenshot({
-    path: '/private/tmp/hs2-t6a83t-authoritative-permission-resolution-wide.png',
+    path: 'target/visual-captures/hs2-t6a83t-authoritative-permission-resolution-wide.png',
     fullPage: true,
   });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(dialog).toBeVisible();
   await expect(popup).toHaveCount(0);
   await page.screenshot({
-    path: '/private/tmp/hs2-t6a83t-authoritative-permission-resolution-narrow.png',
+    path: 'target/visual-captures/hs2-t6a83t-authoritative-permission-resolution-narrow.png',
     fullPage: true,
   });
   releaseAnswer();
@@ -15685,11 +15772,17 @@ test('restores an optimistically dismissed permission only when communication fa
     'Could not send the permission decision. Permission bridge unavailable',
   );
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-66tbwx-permission-failure-restored-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-66tbwx-permission-failure-restored-wide.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(popup).toBeInViewport();
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-66tbwx-permission-failure-restored-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-66tbwx-permission-failure-restored-narrow.png',
+    fullPage: true,
+  });
 });
 
 test('does not reopen a permission popup after the server reports that approval is gone', async ({ page }) => {
@@ -15737,10 +15830,10 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
   await modelSubmenu.locator('[data-action="select-conversation-model"][data-value="gpt-5.6-sol"]').click();
   await expect(modelControl.locator('.ai-conversation__model-name')).toHaveAttribute('title', 'gpt-5.6-sol');
   await expect(dialog).toBeVisible();
-  await dialog.screenshot({ path: '/private/tmp/hs2-jvwhq8-model-selection-open-wide.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-jvwhq8-model-selection-open-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(dialog).toBeVisible();
-  await dialog.screenshot({ path: '/private/tmp/hs2-jvwhq8-model-selection-open-narrow.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-jvwhq8-model-selection-open-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await composer.fill('What time is it in California?');
   await composer.press('Enter');
@@ -15759,11 +15852,11 @@ test('presents a legible, aligned AI chat without exposing its session id', asyn
       });
     });
   await expect.poll(contained).toBe(true);
-  await dialog.screenshot({ path: '/private/tmp/hs2-wj3yr2-ai-chat-polish-wide.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-wj3yr2-ai-chat-polish-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect.poll(contained).toBe(true);
   await expect(userCopy).toHaveCSS('color', 'rgb(255, 255, 255)');
-  await dialog.screenshot({ path: '/private/tmp/hs2-wj3yr2-ai-chat-polish-narrow.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-wj3yr2-ai-chat-polish-narrow.png' });
 });
 
 test('omits effort after selecting a model that does not support it', async ({ page }) => {
@@ -15812,7 +15905,7 @@ test('omits effort after selecting a model that does not support it', async ({ p
     host.getByText('I found the relevant client boundary. The event stream remains authoritative.', { exact: true }),
   ).toBeVisible();
   await expect(host.getByRole('alert')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-8xrcyx-haiku-without-effort-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-8xrcyx-haiku-without-effort-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 800 });
   await expect(host).toBeVisible();
   await expect(host.locator('.ai-conversation__model-effort')).toHaveCount(0);
@@ -15820,7 +15913,7 @@ test('omits effort after selecting a model that does not support it', async ({ p
     element.scrollTop = 0;
   });
   await expect(host.locator('.ai-conversation__message--user')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-8xrcyx-haiku-without-effort-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-8xrcyx-haiku-without-effort-narrow.png', fullPage: true });
 });
 
 test('configures per-provider AI defaults and exposes Claude Fable effort (HS2-EK24KF)', async ({ page }) => {
@@ -15944,7 +16037,7 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await expect(dialog).toBeVisible();
   await expect(dialogHost).toContainText('accepted by Codex');
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-p28pv9-other-model-dialog-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-p28pv9-other-model-dialog-wide.png', fullPage: true });
   await page.getByRole('textbox', { name: /Model identifier/ }).fill(custom);
   await dialogHost.getByRole('button', { name: 'Use model' }).click();
   await expect
@@ -15956,7 +16049,7 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await page.setViewportSize({ width: 760, height: 640 });
   await model.click();
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-p28pv9-selected-manual-model-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-p28pv9-selected-manual-model-narrow.png', fullPage: true });
   await model.locator('wa-option[value="gpt-6-astra"]').click();
   await expect
     .poll(() => saves.at(-1))
@@ -15981,7 +16074,10 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await page.getByRole('textbox', { name: /Model identifier/ }).fill(driveCustom);
   await page.setViewportSize({ width: 760, height: 640 });
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-p28pv9-drive-other-model-dialog-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-p28pv9-drive-other-model-dialog-narrow.png',
+    fullPage: true,
+  });
   await dialogHost.getByRole('button', { name: 'Use model' }).click();
   await page.setViewportSize({ width: 1280, height: 800 });
   await options.click();
@@ -15989,7 +16085,10 @@ test('chooses Other for a literal manual model and forgets it after a catalog se
   await modelMenu.hover();
   await expect(selectedCustom).toHaveAttribute('checked', '');
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-p28pv9-drive-selected-manual-model-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-p28pv9-drive-selected-manual-model-wide.png',
+    fullPage: true,
+  });
   await selectedCustom.click();
   await sidebar.locator('[data-action="toggle-drive"]').click();
   await expect
@@ -16084,14 +16183,14 @@ test('shows runtime-discovered Antigravity and OpenCode model catalogs', async (
   await expect(tool).toHaveAttribute('value', 'antigravity');
   await expect(model).toHaveAttribute('value', 'gemini-3.8-flash-high');
   await expect(model.locator('wa-option[value="claude-sonnet-4-6"]')).toBeAttached();
-  await page.screenshot({ path: '/private/tmp/hs2-cx4xzr-antigravity-models-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cx4xzr-antigravity-models-wide.png', fullPage: true });
   await tool.click();
   await tool.locator('wa-option[value="opencode"]').click();
   await expect(opencode).toHaveAttribute('value', 'opencode/big-pickle');
   await expect(settings.locator('[data-ai-provider="opencode"]')).toHaveAttribute('data-ai-provider-default', 'true');
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(opencode.locator('wa-option[value="openai/gpt-5.6"]')).toBeAttached();
-  await page.screenshot({ path: '/private/tmp/hs2-cx4xzr-opencode-models-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cx4xzr-opencode-models-narrow.png', fullPage: true });
 });
 
 test('retries a failed AI-tool discovery from Drive without showing a false empty state', async ({ page }) => {
@@ -16135,14 +16234,14 @@ test('retries a failed AI-tool discovery from Drive without showing a false empt
   const menu = sidebar.locator('[data-component="drive-options-menu"]');
   await expect(menu).toContainText('Detecting AI tools…');
   await expect(menu).not.toContainText('No AI tools detected');
-  await page.screenshot({ path: '/private/tmp/hs2-cx4xzr-discovery-retry-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cx4xzr-discovery-retry-wide.png', fullPage: true });
   await expect.poll(() => refreshAttempts).toBe(1);
   releaseDiscovery();
   await expect(menu.locator('[data-action="select-drive-tool"][data-value="opencode"]')).toBeAttached();
   await expect(menu).not.toContainText('No AI tools detected');
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(menu.locator('[data-action="select-drive-model"][data-value="openai/gpt-5.6"]')).toBeAttached();
-  await page.screenshot({ path: '/private/tmp/hs2-cx4xzr-discovery-retry-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cx4xzr-discovery-retry-narrow.png', fullPage: true });
 });
 
 test('uses the exact seven-day completion chart beyond retained rows and opens project-scoped statistics', async ({
@@ -16184,7 +16283,7 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await expect(summary).toHaveAccessibleName('Open project statistics: 7 completed today, 5 in progress');
   await expect(chart).toHaveAttribute('aria-label', 'Tickets completed over the last 7 days: 1, 2, 3, 4, 5, 6, 7');
   await expect(summary.locator('[data-zero="false"]')).toHaveCount(7);
-  await page.screenshot({ path: '/private/tmp/hs2-q1y8z7-completion-chart-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-q1y8z7-completion-chart-wide.png', fullPage: true });
   await summary.click();
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toHaveAttribute('data-mode', 'stats');
@@ -16192,7 +16291,7 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await expect(
     page.getByRole('region', { name: 'demo project statistics' }).locator('[data-component="confidence-calibration"]'),
   ).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-y51ehn-project-stats-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y51ehn-project-stats-wide.png', fullPage: true });
   await page.getByRole('tab', { name: 'demo' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'project');
   await page.setViewportSize({ width: 1024, height: 600 });
@@ -16200,10 +16299,10 @@ test('uses the exact seven-day completion chart beyond retained rows and opens p
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.mouse.move(1000, 580);
   await expect(summary).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await page.screenshot({ path: '/private/tmp/hs2-q1y8z7-completion-chart-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-q1y8z7-completion-chart-narrow.png', fullPage: true });
   await summary.click();
   await expect(page.getByRole('region', { name: 'demo project statistics' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-y51ehn-project-stats-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-y51ehn-project-stats-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Cross-project stats' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Cross-project stats' })).toBeVisible();
 });
@@ -16243,7 +16342,7 @@ test('uses the compact workspace title and project-tab action on desktop while p
   expect(desktopGeometry.centerDelta).toBeLessThan(2);
   const openProjectDialog = page.locator('[data-project-dialog]').locator('dialog');
   await expect(openProjectDialog).toBeHidden();
-  await page.screenshot({ path: '/private/tmp/hs2-9r1f91-main-header-wide-final.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9r1f91-main-header-wide-final.png', fullPage: true });
   await page.getByRole('button', { name: 'Hide project sidebar' }).click();
 
   await page.getByRole('button', { name: 'Workspace grid' }).click();
@@ -16258,7 +16357,10 @@ test('uses the compact workspace title and project-tab action on desktop while p
     shell.locator('.app-shell__mobile-view-header').getByRole('button', { name: 'New ticket…' }),
   ).toHaveCount(1);
   await expect(launcher).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-9r1f91-main-header-mobile-unchanged-final.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-9r1f91-main-header-mobile-unchanged-final.png',
+    fullPage: true,
+  });
 });
 
 test('keeps the priority select open when opened right after creating a ticket (HS2-43F14D)', async ({ page }) => {
@@ -16281,7 +16383,7 @@ test('keeps the priority select open when opened right after creating a ticket (
   // user opened within its ~300ms window (HS2-43F14D). Wait past that window and assert it stays open.
   await page.waitForTimeout(450);
   await expect(priority).toHaveJSProperty('open', true);
-  await page.screenshot({ path: '/private/tmp/hs2-43f14d-priority-open-after-create.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-43f14d-priority-open-after-create.png' });
 });
 
 test('focuses the ticket title every time the real composer expands', async ({ page }) => {
@@ -16333,7 +16435,7 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
   await expect(launcherHost).not.toHaveAttribute('data-dragging', 'true');
   const form = page.locator('[data-action="create-ticket-form"]');
   await expect(form.getByText('first-proof.txt')).toBeVisible();
-  await form.screenshot({ path: '/private/tmp/hs2-v1xn4t-new-ticket-drop-wide.png' });
+  await form.screenshot({ path: 'target/visual-captures/hs2-v1xn4t-new-ticket-drop-wide.png' });
   await form.evaluate((node) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File(['second proof'], 'second-proof.txt', { type: 'text/plain' }));
@@ -16343,7 +16445,7 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
   await form.getByRole('button', { name: 'Remove first-proof.txt' }).click();
   await expect(form.getByText('first-proof.txt')).toHaveCount(0);
   await page.setViewportSize({ width: 940, height: 844 });
-  await form.screenshot({ path: '/private/tmp/hs2-v1xn4t-new-ticket-drop-narrow.png' });
+  await form.screenshot({ path: 'target/visual-captures/hs2-v1xn4t-new-ticket-drop-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 844 });
   await form.getByRole('button', { name: 'Cancel' }).click();
   await launcher.click();
@@ -16445,7 +16547,7 @@ test('generates video posters in the browser for uploads and lazy backfills with
   const playableGallery = page.getByRole('dialog', { name: /Video 1 of 3: legacy.webm/ }),
     playableVideo = playableGallery.locator('video');
   await expect(playableVideo).not.toHaveAttribute('poster', /.+/);
-  await playableGallery.screenshot({ path: '/private/tmp/hs2-rkhdn8-initial-video-frame.png' });
+  await playableGallery.screenshot({ path: 'target/visual-captures/hs2-rkhdn8-initial-video-frame.png' });
   await resetRenderMetrics(page);
   const playbackUpdateMs = await playableVideo.evaluate((node) => {
     const started = performance.now();
@@ -16577,7 +16679,7 @@ test('releases video resources and event work after repeated gallery playback cy
     });
     expect(updateMs).toBeLessThan(1000);
     expect((await renderMetrics(page))?.passes).toBe(0);
-    if (cycle === 2) await gallery.screenshot({ path: '/private/tmp/hs2-3f7n4p-third-playback-cycle.png' });
+    if (cycle === 2) await gallery.screenshot({ path: 'target/visual-captures/hs2-3f7n4p-third-playback-cycle.png' });
     await gallery.getByRole('button', { name: 'Close video gallery' }).click();
     await expect(gallery).toHaveCount(0);
     expect(
@@ -16603,9 +16705,9 @@ test('releases video resources and event work after repeated gallery playback cy
     await page.waitForTimeout(250);
     expect(requests).toHaveLength(settledRequests);
   }
-  await page.screenshot({ path: '/private/tmp/hs2-3f7n4p-after-three-cycles-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-3f7n4p-after-three-cycles-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 700 });
-  await page.screenshot({ path: '/private/tmp/hs2-3f7n4p-after-three-cycles-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-3f7n4p-after-three-cycles-narrow.png', fullPage: true });
 });
 
 test('keeps decoded video seeks responsive across repeated real playback sessions', async ({ page }) => {
@@ -16734,9 +16836,9 @@ test('keeps decoded video seeks responsive across repeated real playback session
     await page.waitForTimeout(120);
     await gallery.getByRole('button', { name: 'Pause' }).click();
     if (cycle === 2) {
-      await gallery.screenshot({ path: '/private/tmp/hs2-video-reliability-gallery-wide.png' });
+      await gallery.screenshot({ path: 'target/visual-captures/hs2-video-reliability-gallery-wide.png' });
       await page.setViewportSize({ width: 760, height: 640 });
-      await gallery.screenshot({ path: '/private/tmp/hs2-video-reliability-gallery-narrow.png' });
+      await gallery.screenshot({ path: 'target/visual-captures/hs2-video-reliability-gallery-narrow.png' });
       // At 760px the inspector is a closed mobile overlay whose content Kerf keeps inert; return to the
       // desktop layout so the preview it owns stays reachable for the release assertion.
       await page.setViewportSize({ width: 1280, height: 900 });
@@ -16757,9 +16859,12 @@ test('keeps decoded video seeks responsive across repeated real playback session
   await page.waitForTimeout(300);
   expect(requests).toHaveLength(settled);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.screenshot({ path: '/private/tmp/hs2-video-reliability-after-cycles-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-video-reliability-after-cycles-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
-  await page.screenshot({ path: '/private/tmp/hs2-video-reliability-after-cycles-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-video-reliability-after-cycles-narrow.png',
+    fullPage: true,
+  });
 });
 
 test('restores project-scoped ticket creation and staged files after reload', async ({ page }) => {
@@ -16787,7 +16892,7 @@ test('restores project-scoped ticket creation and staged files after reload', as
   );
   await expect(dialog.getByRole('textbox', { name: 'Details' })).toHaveValue('Draft **Markdown** details');
   await expect(dialog.getByText('restored-proof.txt')).toBeVisible();
-  await restoredForm.screenshot({ path: '/private/tmp/hs2-3qxhf3-restored-ticket-draft.png' });
+  await restoredForm.screenshot({ path: 'target/visual-captures/hs2-3qxhf3-restored-ticket-draft.png' });
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 });
 
@@ -16820,7 +16925,7 @@ test('keeps Markdown attachment images in flow and reports reference copies with
   expect(followingBox.y).toBeGreaterThanOrEqual(imageBox.y + imageBox.height);
   await markdownImage
     .locator('xpath=ancestor::article')
-    .screenshot({ path: '/private/tmp/hs2-xane1p-direct-attachment-reference.png' });
+    .screenshot({ path: 'target/visual-captures/hs2-xane1p-direct-attachment-reference.png' });
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'More actions for proof.png' }).click();
   await page
@@ -16829,7 +16934,7 @@ test('keeps Markdown attachment images in flow and reports reference copies with
     .click();
   await expect(page.locator('.app-toast')).toContainText('Attachment reference copied to clipboard.');
   await expect(page.locator('.ticket-attachments__status')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-859hq1-attachment-copy-toast.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-859hq1-attachment-copy-toast.png', fullPage: true });
 });
 
 test('shows the attachment actions menu above the modal ticket reader (HS2-EZ10RS)', async ({ page }) => {
@@ -16858,7 +16963,7 @@ test('shows the attachment actions menu above the modal ticket reader (HS2-EZ10R
   await expect(menu).toHaveCount(1);
   const dialog = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
   expect(await menu.evaluate((el, d) => d.contains(el), await dialog.elementHandle())).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-ez10rs-reader-attachment-menu.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ez10rs-reader-attachment-menu.png', fullPage: true });
   // A menu item is clickable and performs its action above the modal reader.
   await menu.getByRole('menuitem', { name: 'Copy reference' }).click();
   await expect(menu).toBeHidden();
@@ -16916,11 +17021,11 @@ test('renders canonical attachment references for filenames containing backticks
     reference = inspector.getByRole('link', { name: filename });
   await expect(reference).toBeVisible();
   await expect(reference).toHaveAttribute('href', /\/attachments\/A-BACKTICK$/);
-  await inspector.screenshot({ path: '/private/tmp/hs2-h2ptvz-backtick-reference-wide.png' });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-h2ptvz-backtick-reference-wide.png' });
   await page.setViewportSize({ width: 760, height: 700 });
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
   await expect(reference).toBeVisible();
-  await inspector.screenshot({ path: '/private/tmp/hs2-h2ptvz-backtick-reference-narrow.png' });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-h2ptvz-backtick-reference-narrow.png' });
 });
 
 test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY, HS2-KGC823) @ci-smoke', async ({
@@ -17018,11 +17123,11 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await expect(footerToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
   await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toBeInViewport({ ratio: 1 });
   await expect(gallery.getByRole('button', { name: 'Zoom in' })).toBeInViewport({ ratio: 1 });
-  await gallery.screenshot({ path: '/private/tmp/hs2-kb5yy6-gallery-wide.png' });
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-kb5yy6-gallery-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toBeInViewport({ ratio: 1 });
   await expect(gallery.getByRole('button', { name: 'Zoom in' })).toBeInViewport({ ratio: 1 });
-  await gallery.screenshot({ path: '/private/tmp/hs2-kb5yy6-gallery-phone.png' });
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-kb5yy6-gallery-phone.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   await gallery.getByRole('button', { name: 'Add rectangle' }).click();
   const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
@@ -17050,7 +17155,7 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   const updatedAnnotation = gallery.getByRole('button', { name: /Annotation 1, rect, comment: Updated annotation/ });
   await expect(updatedAnnotation).toBeVisible();
   await expect.poll(() => writes.length).toBe(0);
-  await gallery.screenshot({ path: '/private/tmp/hs2-grgdze-annotation-batch-wide.png' });
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-grgdze-annotation-batch-wide.png' });
   await gallery.getByRole('button', { name: 'Finish markup' }).click();
   await expect.poll(() => writes.length).toBe(1);
   await expect(page.locator('.app-toast')).toContainText('Annotations saved.');
@@ -17069,11 +17174,11 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await expect(activity.getByRole('link', { name: 'attachment:proof.png' })).toBeVisible();
   await expect(activity.getByRole('listitem')).toContainText('Removed');
   await activity.scrollIntoViewIfNeeded();
-  await inspector.screenshot({ path: '/private/tmp/hs2-grgdze-annotation-note-wide.png' });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-grgdze-annotation-note-wide.png' });
   await page.setViewportSize({ width: 940, height: 844 });
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
   await activity.scrollIntoViewIfNeeded();
-  await inspector.screenshot({ path: '/private/tmp/hs2-grgdze-annotation-note-narrow.png' });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-grgdze-annotation-note-narrow.png' });
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
   await gallery.getByRole('button', { name: 'Annotate media' }).click();
@@ -17637,7 +17742,7 @@ test('links ticket references in details and notes and layers the referenced tic
   await expect(backlogLink).toBeVisible();
   await expect(archiveLink).toBeVisible();
   await expect(inspector.getByText('HS2-CODE12')).toHaveCount(1);
-  await inspector.screenshot({ path: '/private/tmp/hs2-bd09b6-ticket-links.png' });
+  await inspector.screenshot({ path: 'target/visual-captures/hs2-bd09b6-ticket-links.png' });
   await backlogLink.click();
   await expect(page.getByRole('dialog', { name: 'Read and edit HS2-BACK01 in demo' })).toBeVisible();
   await expect(inspector.locator('[data-component="ticket-inspector-header"]')).toHaveAttribute(
@@ -17699,7 +17804,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   expect(
     await gallery.locator('[data-gallery-image="true"]').evaluate((node) => (node as HTMLImageElement).naturalWidth),
   ).toBeGreaterThan(0);
-  await gallery.screenshot({ path: '/private/tmp/hs2-64651d-gallery-wide.png' });
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-64651d-gallery-wide.png' });
   await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
   await page.locator('#app-right-rail').getByRole('button', { name: 'Open ticket reader' }).click();
@@ -17709,7 +17814,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await expect(gallery).toBeVisible();
   await gallery.getByRole('button', { name: 'More image actions' }).click();
   await expect(page.getByRole('menu', { name: 'Attachment actions' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-wqe7br-reader-gallery-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-wqe7br-reader-gallery-after.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(gallery).toHaveCount(0);
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
@@ -17729,7 +17834,10 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   expect(menuBounds.y).toBeGreaterThanOrEqual(8);
   expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(1272);
   expect(menuBounds.y + menuBounds.height).toBeLessThanOrEqual(716);
-  await page.screenshot({ path: '/private/tmp/hs2-attachment-context-menu-viewport-safe.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-attachment-context-menu-viewport-safe.png',
+    fullPage: true,
+  });
   await page.keyboard.press('Escape');
   await page.getByLabel('Browse and add attachments').setInputFiles({
     name: 'second.svg',
@@ -17758,7 +17866,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
     'data-gallery-attachment-id',
     'A2',
   );
-  await twoImageGallery.screenshot({ path: '/private/tmp/hs2-4r31nb-gallery-navigation-wide.png' });
+  await twoImageGallery.screenshot({ path: 'target/visual-captures/hs2-4r31nb-gallery-navigation-wide.png' });
   await page.setViewportSize({ width: 940, height: 844 });
   await page.keyboard.press('ArrowLeft');
   await expect(twoImageGallery).toHaveAccessibleName(/Image 1 of 2: proof.png/);
@@ -17766,14 +17874,14 @@ test('renders attachment identity from a selected real ticket', async ({ page })
     'data-gallery-attachment-id',
     'A1',
   );
-  await twoImageGallery.screenshot({ path: '/private/tmp/hs2-4r31nb-gallery-navigation-narrow.png' });
+  await twoImageGallery.screenshot({ path: 'target/visual-captures/hs2-4r31nb-gallery-navigation-narrow.png' });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole('tab', { name: 'Info' }).click();
   const noteGalleryImage = page.locator('.markdown-preview__attachment-image');
   await noteGalleryImage.click();
   await expect(twoImageGallery).toHaveAccessibleName(/Image 1 of 2: proof.png/);
-  await page.screenshot({ path: '/private/tmp/hs2-note-reference-gallery-navigation.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-note-reference-gallery-navigation.png', fullPage: true });
   await page.keyboard.press('Escape');
   await page.getByRole('tab', { name: /Attachments/ }).click();
   await page.locator('#app-right-rail').getByRole('heading', { name: 'Attachments' }).scrollIntoViewIfNeeded();
@@ -17781,14 +17889,18 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   attachmentMenu = page.getByRole('menu', { name: 'Attachment actions' });
   await expect(attachmentMenu.getByRole('menuitem')).toHaveCount(6);
   await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
-  await page.locator('#app-right-rail').screenshot({ path: '/private/tmp/hs2-vqvf5b-attachment-menu-wide.png' });
+  await page
+    .locator('#app-right-rail')
+    .screenshot({ path: 'target/visual-captures/hs2-vqvf5b-attachment-menu-wide.png' });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 940, height: 844 });
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
   await item.scrollIntoViewIfNeeded();
   await more.click();
   await expect(attachmentMenu.getByRole('menuitem', { name: 'Show in Finder' })).toBeVisible();
-  await page.locator('#app-right-rail').screenshot({ path: '/private/tmp/hs2-vqvf5b-attachment-menu-narrow.png' });
+  await page
+    .locator('#app-right-rail')
+    .screenshot({ path: 'target/visual-captures/hs2-vqvf5b-attachment-menu-narrow.png' });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1280, height: 720 });
   // Narrow the inspector body inside the right rail's panel content (HS2-QQW6CT).
@@ -17841,7 +17953,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   await expect
     .poll(() => referencedImage.locator('img').evaluate((image: HTMLImageElement) => image.naturalWidth))
     .toBeGreaterThan(0);
-  await referencedNote.screenshot({ path: '/private/tmp/hs2-b6937s-inline-image-reference.png' });
+  await referencedNote.screenshot({ path: 'target/visual-captures/hs2-b6937s-inline-image-reference.png' });
 });
 
 test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async ({ page }) => {
@@ -17878,7 +17990,7 @@ test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async (
     paddingInline: '0px',
     resize: 'vertical',
   });
-  await detailsSurface.screenshot({ path: '/private/tmp/hs2-7nzkyc-details-editor-wide.png' });
+  await detailsSurface.screenshot({ path: 'target/visual-captures/hs2-7nzkyc-details-editor-wide.png' });
   await page.getByRole('button', { name: 'Open ticket reader' }).click();
   const reader = page.getByRole('dialog', { name: /Read and edit HS2-DEMO01/ });
   await expect(reader).toBeVisible();
@@ -17904,7 +18016,7 @@ test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async (
   );
   await page.getByRole('button', { name: 'Edit Ticket details' }).click({ position: { x: 4, y: 4 } });
   await page.setViewportSize({ width: 1024, height: 600 });
-  await detailsSurface.screenshot({ path: '/private/tmp/hs2-7nzkyc-details-editor-narrow.png' });
+  await detailsSurface.screenshot({ path: 'target/visual-captures/hs2-7nzkyc-details-editor-narrow.png' });
 });
 
 test('keeps reader details, blocked reason, and note edit state independent from the sidebar', async ({ page }) => {
@@ -17944,7 +18056,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
   await preview.click({ position: { x: 4, y: 4 } });
   source = reader.getByRole('textbox', { name: 'Ticket details' });
   await source.fill('Saved while the reader closes');
-  await page.screenshot({ path: '/private/tmp/hs2-x3gx39-reader-edit-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-x3gx39-reader-edit-wide.png', fullPage: true });
   await reader.getByRole('button', { name: 'Close ticket reader' }).click();
   await expect(reader).toHaveCount(0);
   await expect.poll(() => patches.some((patch) => patch.details === 'Saved while the reader closes')).toBe(true);
@@ -17953,7 +18065,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
     'Saved while the reader closes',
   );
   await page.setViewportSize({ width: 1024, height: 600 });
-  await page.screenshot({ path: '/private/tmp/hs2-x3gx39-reader-close-floor.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-x3gx39-reader-close-floor.png', fullPage: true });
 });
 
 test('persists separate sidebar, reader, and new-ticket heights through rerenders', async ({ page }) => {
@@ -18031,7 +18143,7 @@ test('persists separate sidebar, reader, and new-ticket heights through rerender
       { message: 'composer height after reopen' },
     )
     .toEqual({ height: 157, inline: '', computed: '157px', minHeight: '157px', variable: '157px', stored: '157' });
-  await composer.screenshot({ path: '/private/tmp/hs2-eaha4e-composer-height.png' });
+  await composer.screenshot({ path: 'target/visual-captures/hs2-eaha4e-composer-height.png' });
   await expect(
     page.evaluate(() => localStorage.getItem('hotsheet.ticket-editor-height.new-ticket-details.sidebar')),
   ).resolves.toBe('157');
@@ -18130,7 +18242,7 @@ test('loads all 138 Queue tickets before mixed-status pagination is applied', as
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(138);
   expect(collectionRequests).toContain('queue');
-  await page.screenshot({ path: '/private/tmp/hs2-cs8agd-queue-138.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-cs8agd-queue-138.png', fullPage: true });
 });
 
 test('loads ticket rows beyond the first 200 from the visible queue continuation', async ({ page }) => {
@@ -18185,7 +18297,7 @@ test('loads ticket rows beyond the first 200 from the visible queue continuation
   await expect(more).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-P00204"]')).toHaveCount(0);
   await more.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: '/private/tmp/hs2-q9yq2b-load-more-before.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-q9yq2b-load-more-before.png', fullPage: true });
   await more.click();
   await expect(page.locator('[data-ticket-slug="HS2-P00204"]')).toBeVisible();
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(205);
@@ -18195,7 +18307,7 @@ test('loads ticket rows beyond the first 200 from the visible queue continuation
       (url) => url.searchParams.get('cursor') === 'after-200' && url.searchParams.get('page_size') === '200',
     ),
   ).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-q9yq2b-load-more.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-q9yq2b-load-more.png', fullPage: true });
 });
 
 /** Serve one status stream the way the server does: `page_size` rows after the numeric offset cursor. */
@@ -18304,9 +18416,9 @@ test('loads each board column independently, 100 rows at a time in the active so
   expect(initial.filter((url) => url.searchParams.get('counts') !== 'false')).toHaveLength(1);
   await expect(page.locator('[data-component="server-busy-bars"]')).toHaveAttribute('data-visible', 'false');
   await page.setViewportSize({ width: 1840, height: 1150 });
-  await page.screenshot({ path: '/private/tmp/claude/hs2-hnzzhc-board-columns-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-hnzzhc-board-columns-wide.png' });
   await page.setViewportSize({ width: 1100, height: 800 });
-  await page.screenshot({ path: '/private/tmp/claude/hs2-hnzzhc-board-columns-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-hnzzhc-board-columns-narrow.png' });
   await page.setViewportSize({ width: 1440, height: 900 });
 
   // Loading Not Started pages only its own status stream from its own cursor.
@@ -18588,7 +18700,10 @@ test('paginates the merged Completed column through completed then verified when
   await expect(page.locator('[data-ticket-slug="HS2-VF079"]')).toBeAttached();
   expect(statusRequests).toContain('verified:50');
   await expect(completedMore()).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/claude/hs2-f2n4zn-merged-completed-paginated.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/claude/hs2-f2n4zn-merged-completed-paginated.png',
+    fullPage: true,
+  });
 });
 
 test('measures real local Git board performance for a 100-ticket verification and refill (HS2-NY9MC5, HS2-GAJHRC, HS2-KA1VJS, HS2-0JZDQ8)', async ({
@@ -18787,7 +18902,7 @@ test('measures real local Git board performance for a 100-ticket verification an
       contentType: 'application/json',
     });
     await page.setViewportSize({ width: 1840, height: 900 });
-    await page.screenshot({ path: '/private/tmp/hs2-ka1vjs-refilled-wide.png', fullPage: true });
+    await page.screenshot({ path: 'target/visual-captures/hs2-ka1vjs-refilled-wide.png', fullPage: true });
     await page.setViewportSize({ width: 1100, height: 800 });
     await completed.scrollIntoViewIfNeeded();
     await completed.locator('[data-ticket-slug]').first().scrollIntoViewIfNeeded();
@@ -18801,7 +18916,7 @@ test('measures real local Git board performance for a 100-ticket verification an
           ),
         ),
     );
-    await page.screenshot({ path: '/private/tmp/hs2-ka1vjs-refilled-narrow.png', fullPage: true });
+    await page.screenshot({ path: 'target/visual-captures/hs2-ka1vjs-refilled-narrow.png', fullPage: true });
     expect(measurement!.verifiedMs!).toBeLessThanOrEqual(100);
     expect(measurement!.refillMs!).toBeLessThanOrEqual(100);
   } finally {
@@ -18829,9 +18944,15 @@ test('stores the shell-history inheritance opt-out locally and applies it only t
   await expect(page.getByText('Saved locally. New terminals will use this setting.', { exact: true })).toContainText(
     'Saved locally. New terminals will use this setting.',
   );
-  await page.screenshot({ path: '/private/tmp/hs2-a5v801-terminal-history-setting-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-a5v801-terminal-history-setting-wide.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 760, height: 700 });
-  await page.screenshot({ path: '/private/tmp/hs2-a5v801-terminal-history-setting-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-a5v801-terminal-history-setting-narrow.png',
+    fullPage: true,
+  });
 });
 
 test('keeps managed workspace search open and focused through repeated controlled clears (HS2-M4BNX5)', async ({
@@ -18873,11 +18994,14 @@ test('keeps managed workspace search open and focused through repeated controlle
     });
     await expect(editor).toBeVisible();
     await page.screenshot({
-      path: `/private/tmp/hs2-m4bnx5-context-${name}.png`,
+      path: `target/visual-captures/hs2-m4bnx5-context-${name}.png`,
       fullPage: true,
       animations: 'disabled',
     });
-    await group.screenshot({ path: `/private/tmp/hs2-m4bnx5-adopted-clear-${name}.png`, animations: 'disabled' });
+    await group.screenshot({
+      path: `target/visual-captures/hs2-m4bnx5-adopted-clear-${name}.png`,
+      animations: 'disabled',
+    });
     await page.getByRole('button', { name: 'Clear search', exact: true }).click();
     await expect(editor).toBeFocused();
     await page.getByRole('button', { name: 'Add project', exact: true }).focus();
@@ -18960,7 +19084,7 @@ test('searches indexed ticket details and notes without discarding the full proj
   await page.locator('.app-shell__work-area').focus();
   await page.waitForTimeout(250);
   expect(searchRequests).toHaveLength(settledRequests);
-  await page.screenshot({ path: '/private/tmp/hs2-pdze14-search-blur-no-request.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-pdze14-search-blur-no-request.png', fullPage: true });
   await page.getByRole('button', { name: 'Clear search' }).click();
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-SHG7YS"]')).toBeVisible();
@@ -19035,7 +19159,7 @@ test('clips animated ticket search results above the terminal drawer (HS2-29T4D8
     expect(layer.bottom).toBeLessThanOrEqual(geometry.drawer.top + 1);
     expect(layer.overflow).toBe('hidden');
   }
-  await page.screenshot({ path: '/private/tmp/hs2-29t4d8-clipped-ticket-motion.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-29t4d8-clipped-ticket-motion.png', fullPage: true });
 });
 
 test('searches only the current view before updating scoped sidebar counts', async ({ page }) => {
@@ -19141,7 +19265,7 @@ test('searches only the current view before updating scoped sidebar counts', asy
   expect(searchBadgeGeometry.iconRight).toBeLessThan(searchBadgeGeometry.numberLeft);
   expect(searchBadgeGeometry.numberLeft).toBeLessThan(searchBadgeGeometry.badgeRight);
   expect(searchBadgeGeometry.iconCenterY).toBeCloseTo(searchBadgeGeometry.numberCenterY, 0);
-  await navigation.screenshot({ path: '/private/tmp/hs2-41szwd-search-counts.png' });
+  await navigation.screenshot({ path: 'target/visual-captures/hs2-41szwd-search-counts.png' });
   await page.locator('[data-workspace-overflow]').getByRole('button', { name: 'More workspace controls' }).click();
   await page.locator('[data-workspace-overflow] [data-view-mode="board"]').click();
   const board = page.locator('[data-component="ticket-board"]');
@@ -19151,10 +19275,10 @@ test('searches only the current view before updating scoped sidebar counts', asy
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(500);
   await expect(board.locator('[data-component="empty-state"]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-xr7dfr-scoped-search-columns-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xr7dfr-scoped-search-columns-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(500);
-  await page.screenshot({ path: '/private/tmp/hs2-xr7dfr-scoped-search-columns-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xr7dfr-scoped-search-columns-narrow.png', fullPage: true });
   const settledRequestCount = requests.length;
   await navigation.getByRole('button', { name: /Backlog/ }).click();
   await expect(navigation.getByLabel('Searching this view')).toHaveCount(1);
@@ -19165,7 +19289,7 @@ test('searches only the current view before updating scoped sidebar counts', asy
   await expect.poll(() => requests.slice(settledRequestCount)).toEqual(['backlog']);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(500);
-  await page.screenshot({ path: '/private/tmp/hs2-1qqxdh-cached-search-counts-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-1qqxdh-cached-search-counts-wide.png', fullPage: true });
 });
 
 test('filters duplicate tickets on the server before bounded search pagination', async ({ page }) => {
@@ -19237,7 +19361,7 @@ test('filters duplicate tickets on the server before bounded search pagination',
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(duplicateRows.length);
   expect(queries.at(-1)?.searchParams.get('close_reason')).toBe('duplicate');
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.screenshot({ path: '/private/tmp/hs2-v59atp-duplicate-results.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-v59atp-duplicate-results.png', fullPage: true });
 });
 
 test('evaluates boolean search matches beyond the first ticket page', async ({ page }) => {
@@ -19295,9 +19419,9 @@ test('evaluates boolean search matches beyond the first ticket page', async ({ p
     ),
   ).toBe(true);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.screenshot({ path: '/private/tmp/hs2-dwvpcx-boolean-page-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-dwvpcx-boolean-page-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 700 });
-  await page.screenshot({ path: '/private/tmp/hs2-dwvpcx-boolean-page-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-dwvpcx-boolean-page-narrow.png', fullPage: true });
 });
 
 test('tokenizes inline tag search with autocomplete and no separate advanced-search button', async ({ page }) => {
@@ -19320,10 +19444,10 @@ test('tokenizes inline tag search with autocomplete and no separate advanced-sea
   await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-BACK01"]')).toHaveCount(0);
   await page.waitForTimeout(400);
-  await page.screenshot({ path: '/private/tmp/hs2-383d6k-inline-search-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-383d6k-inline-search-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(400);
-  await page.screenshot({ path: '/private/tmp/hs2-383d6k-inline-search-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-383d6k-inline-search-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Remove tag:client' }).click();
   await expect(chip).toHaveCount(0);
 });
@@ -19558,7 +19682,10 @@ for (const surface of ['workspace', 'saved-view']) {
     await expect(query).toHaveText('refilled more after ');
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.screenshot({ path: `/private/tmp/hs2-pr5tna-${surface}-${width}.png`, animations: 'disabled' });
+      await page.screenshot({
+        path: `target/visual-captures/hs2-pr5tna-${surface}-${width}.png`,
+        animations: 'disabled',
+      });
     }
   });
 }
@@ -19665,7 +19792,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
   await expect(help).toContainText('has:media-annotation');
   await expect(help).toContainText('updated-after:4h ago');
   await expect(help).toContainText('started, verified, archived, and updated');
-  await page.screenshot({ path: '/private/tmp/hs2-7efj3e-search-help-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-7efj3e-search-help-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
   await expect(help).toBeVisible();
   await expect
@@ -19676,7 +19803,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
       }),
     )
     .toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-7efj3e-search-help-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-7efj3e-search-help-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(help).toBeVisible();
   expect(
@@ -19685,13 +19812,13 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
       return box.left >= 0 && box.right <= innerWidth && node.scrollWidth <= node.clientWidth + 1;
     }),
   ).toBe(true);
-  await help.screenshot({ path: '/private/tmp/hs2-pv2ag1-production-help-panel-phone.png' });
+  await help.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-production-help-panel-phone.png' });
   await page.getByRole('button', { name: 'Search syntax help' }).click();
   await query.fill('created-after:');
   await expect(helper).toBeVisible();
   expect(await helper.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   await expect(helper.getByRole('button', { name: 'Apply' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-pv2ag1-production-date-phone.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-production-date-phone.png', fullPage: true });
 });
 
 test('distinguishes pending and empty ticket search feedback in list and board views', async ({ page }) => {
@@ -19721,13 +19848,13 @@ test('distinguishes pending and empty ticket search feedback in list and board v
   await expect(page.getByRole('status').filter({ hasText: 'No tickets match' })).toContainText(
     'No tickets match “missing parser”',
   );
-  await page.screenshot({ path: '/private/tmp/hs2-ydrmad-search-empty-list-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-search-empty-list-wide.png', fullPage: true });
   await page.locator('[data-workspace-overflow]').getByRole('button', { name: 'More workspace controls' }).click();
   await page.locator('[data-workspace-overflow] [data-view-mode="board"]').click();
   await expect(page.locator('[data-component="ticket-board"] [data-component="empty-state"]')).toHaveCount(1);
   await expect(page.getByText('No tickets match “missing parser”')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 600 });
-  await page.screenshot({ path: '/private/tmp/hs2-ydrmad-search-empty-board-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-search-empty-board-narrow.png', fullPage: true });
 });
 
 test('shows new-project feedback when a project has no tickets', async ({ page }) => {
@@ -19744,11 +19871,11 @@ test('shows new-project feedback when a project has no tickets', async ({ page }
   await expect(empty).toHaveClass(/ticket-empty-state--project/);
   await expect(empty).toContainText('No tickets yet');
   await expect(empty).toContainText('Create a ticket to start planning this project.');
-  await page.screenshot({ path: '/private/tmp/hs2-ydrmad-project-empty-list-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-project-empty-list-wide.png', fullPage: true });
   await page.getByLabel('Columns view').click();
   await expect(page.locator('[data-component="ticket-board"] [data-component="empty-state"]')).toHaveCount(1);
   await expect(empty).toContainText('No tickets yet');
-  await page.screenshot({ path: '/private/tmp/hs2-ydrmad-project-empty-board-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-project-empty-board-wide.png', fullPage: true });
 });
 
 test('shows local tickets and a partial-data warning when a GitHub source is rate limited (HS2-190BAS)', async ({
@@ -19797,14 +19924,22 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
   await expect(page.getByText('No tickets yet')).toHaveCount(0);
   await page.getByLabel('Columns view').click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-190bas-partial-phone.png', fullPage: true, animations: 'disabled' });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-190bas-partial-phone.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'false');
   await expect(
     page.getByRole('navigation', { name: 'Ticket views' }).locator('.view-navigation__count').first(),
   ).toContainText('≥1');
-  await page.screenshot({ path: '/private/tmp/hs2-190bas-partial-wide.png', fullPage: true, animations: 'disabled' });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-190bas-partial-wide.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
   partial = false;
   await page.reload();
   await expect(page.locator('[data-component="project-work-summary"]')).toContainText('1 open');
@@ -19917,11 +20052,11 @@ test('shows view-specific feedback when a populated project has no tickets in th
   await expect(empty).toHaveClass(/ticket-empty-state--view/);
   await expect(empty).toContainText('No tickets in Queue');
   await expect(empty).toContainText('Tickets will appear here when they enter this view.');
-  await page.screenshot({ path: '/private/tmp/hs2-ydrmad-empty-queue-list-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-empty-queue-list-wide.png', fullPage: true });
   await page.getByLabel('Columns view').click();
   await expect(page.locator('[data-component="ticket-board"] [data-component="empty-state"]')).toHaveCount(1);
   await expect(empty).toContainText('No tickets in Queue');
-  await page.screenshot({ path: '/private/tmp/hs2-ydrmad-empty-queue-board-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-empty-queue-board-wide.png', fullPage: true });
 });
 
 test('shows honest loading feedback while a selected view collection is unresolved', async ({ page }) => {
@@ -19975,10 +20110,10 @@ test('shows honest loading feedback while a selected view collection is unresolv
   await expect(page.getByRole('button', { name: 'Load more tickets' })).toHaveCount(0);
   await page.getByRole('button', { name: /List view/ }).click();
   await page.waitForTimeout(300);
-  await page.screenshot({ path: '/private/tmp/hs2-wr2p01-view-loading-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-wr2p01-view-loading-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await page.waitForTimeout(300);
-  await page.screenshot({ path: '/private/tmp/hs2-wr2p01-view-loading-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-wr2p01-view-loading-narrow.png', fullPage: true });
   releaseArchive();
   await expect(page.locator('[data-ticket-slug="HS2-ARCH01"]')).toBeVisible();
   await expect(loading).toHaveCount(0);
@@ -20009,9 +20144,9 @@ test('does not announce an empty project while its initial ticket collection is 
   await expect(loading).toBeVisible();
   await expect(page.locator('.app-loading')).toHaveCount(0);
   await expect(page.getByText('No tickets yet')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-e2az2n-loading-board-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-e2az2n-loading-board-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 640 });
-  await page.screenshot({ path: '/private/tmp/hs2-e2az2n-loading-board-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-e2az2n-loading-board-narrow.png', fullPage: true });
   releaseTickets();
   await expect(page.getByText('No tickets yet')).toBeVisible();
 });
@@ -20031,7 +20166,7 @@ test('leaves individual empty board columns blank when another column has ticket
   await expect(verified.locator('[data-component="empty-state"]')).toHaveCount(0);
   await expect(verified.getByText('No tickets in Verified')).toHaveCount(0);
   await page.waitForTimeout(500);
-  await page.screenshot({ path: '/private/tmp/hs2-m0frwd-empty-column-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-m0frwd-empty-column-wide.png', fullPage: true });
 });
 
 test('requires confirmation before permanently emptying Trash', async ({ page }) => {
@@ -20064,16 +20199,16 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   expect(iconBox).not.toBeNull();
   expect(textBox).not.toBeNull();
   expect(Math.abs(iconBox!.y + iconBox!.height / 2 - (textBox!.y + textBox!.height / 2))).toBeLessThan(2);
-  await emptyHost.screenshot({ path: '/private/tmp/hs2-rdvwzx-empty-trash-action.png' });
+  await emptyHost.screenshot({ path: 'target/visual-captures/hs2-rdvwzx-empty-trash-action.png' });
   await emptyButton.click();
   const dialog = page.locator('[data-component="empty-trash-dialog"]');
   await expect(dialog).toContainText('Permanently remove 1 ticket');
   await expect(dialog).toContainText('Git history will still contain the removed files');
   await settledAnimations(dialog);
-  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-empty-trash-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-empty-trash-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-empty-trash-phone.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-empty-trash-phone.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
@@ -20086,12 +20221,12 @@ test('requires confirmation before permanently emptying Trash', async ({ page })
   await expect(page.locator('[data-component="not-working-dialog"]')).toHaveCount(0);
   await expect(page.getByText('Loading Queue')).toBeVisible();
   expect(emptyRequests).toHaveLength(1);
-  await page.screenshot({ path: '/private/tmp/hs2-rdvwzx-empty-trash-optimistic.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rdvwzx-empty-trash-optimistic.png', fullPage: true });
   releaseEmptyTrash();
   await expect(page.locator('wa-toast-item .app-toast')).toHaveText('Emptied Trash — 1 ticket permanently removed.');
   await expect(page.locator('wa-toast-item .app-toast')).toBeVisible();
   await page.setViewportSize({ width: 780, height: 760 });
-  await page.screenshot({ path: '/private/tmp/hs2-rdvwzx-empty-trash-complete-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rdvwzx-empty-trash-complete-narrow.png', fullPage: true });
 });
 
 test('restores Trash and surfaces a persistent error when emptying fails', async ({ page }) => {
@@ -20110,7 +20245,7 @@ test('restores Trash and surfaces a persistent error when emptying fails', async
   await expect(page.locator('#workspace-page-title')).toContainText('Trash');
   await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
   await page.waitForTimeout(350);
-  await page.screenshot({ path: '/private/tmp/hs2-rdvwzx-empty-trash-error.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rdvwzx-empty-trash-error.png', fullPage: true });
 });
 
 test('derives board columns from the selected view and merges Verified by project setting', async ({ page }) => {
@@ -20158,7 +20293,7 @@ test('derives board columns from the selected view and merges Verified by projec
   const backlogCard = board.locator('[data-column-id="backlog"] [data-component="ticket-list-row"]');
   expect(await backlogCard.evaluate((node) => parseFloat(getComputedStyle(node).borderRadius))).toBeGreaterThan(0);
   await expect(backlogCard).toHaveCSS('border-style', 'solid');
-  await page.screenshot({ path: '/private/tmp/hs2-rzd9d4-backlog-column.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rzd9d4-backlog-column.png', fullPage: true });
   await page.getByRole('button', { name: /Archive/ }).click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText(['Archive']);
   await expect(board.locator('[data-column-id="archive"]')).toContainText('Archived ticket');
@@ -20170,7 +20305,7 @@ test('derives board columns from the selected view and merges Verified by projec
   const archiveCard = archiveCards.first();
   expect(await archiveCard.evaluate((node) => parseFloat(getComputedStyle(node).borderRadius))).toBeGreaterThan(0);
   await expect(archiveCard).toHaveCSS('border-style', 'solid');
-  await page.screenshot({ path: '/private/tmp/hs2-v20ewj-archive-column.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-v20ewj-archive-column.png', fullPage: true });
 });
 
 test('switches and searches large ticket views without cloning every row into motion ghosts', async ({ page }) => {
@@ -20234,7 +20369,7 @@ test('switches and searches large ticket views without cloning every row into mo
     await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
     if (view === 'Archive') {
       expect(initial).toMatchObject({ rendered: '40', total: '2075', loading: true });
-      await page.screenshot({ path: '/private/tmp/hs2-w52rer-progressive-archive.png' });
+      await page.screenshot({ path: 'target/visual-captures/hs2-w52rer-progressive-archive.png' });
     }
     await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(count, { timeout: 20_000 });
     await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
@@ -20246,7 +20381,7 @@ test('switches and searches large ticket views without cloning every row into mo
       expect(Date.now() - started).toBeLessThan(250);
       await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
       await expect(page.locator('[data-ticket-slug="HS2-LARGE2074"]')).toBeVisible();
-      await page.screenshot({ path: '/private/tmp/hs2-e76c4k-large-search.png', fullPage: true });
+      await page.screenshot({ path: 'target/visual-captures/hs2-e76c4k-large-search.png', fullPage: true });
       await page.getByRole('button', { name: 'Clear search', exact: true }).click();
       await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(count, { timeout: 20_000 });
       await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
@@ -20270,11 +20405,11 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await expect(inspector).toBeVisible();
   await first.hover();
   await expect(first).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
-  await first.screenshot({ path: '/private/tmp/hs2-77bn46-hover-border.png' });
+  await first.screenshot({ path: 'target/visual-captures/hs2-77bn46-hover-border.png' });
   await first.click();
   await second.click({ modifiers: ['Meta'] });
   await expect(inspector).toContainText('2 items selected — use batch actions to edit them together');
-  await page.screenshot({ path: '/private/tmp/hotsheet-multi-selection-placeholder.png' });
+  await page.screenshot({ path: 'target/visual-captures/hotsheet-multi-selection-placeholder.png' });
   await expect(first).toHaveAttribute('data-selected', 'true');
   await expect(second).toHaveAttribute('data-selected', 'true');
   await expect(first).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
@@ -20299,18 +20434,18 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await expect(crossColumn).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
   await expect(closedReader).toBeHidden();
   expect(await closedReader.boundingBox()).toBeNull();
-  await page.screenshot({ path: '/private/tmp/hs2-6thrgf-selected-board-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6thrgf-selected-board-wide.png' });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(closedReader).toBeHidden();
   expect(await closedReader.boundingBox()).toBeNull();
-  await page.screenshot({ path: '/private/tmp/hs2-6thrgf-selected-board-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-6thrgf-selected-board-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page
     .locator('[data-column-id="not-started"] .ticket-board-column__tickets')
     .click({ position: { x: 240, y: 300 } });
   await expect(page.locator('.ticket-board [data-selected="true"]')).toHaveCount(0);
   await expect(inspector).toContainText('Select a ticket to see and edit its details');
-  await page.screenshot({ path: '/private/tmp/hotsheet-zero-selection-placeholder.png' });
+  await page.screenshot({ path: 'target/visual-captures/hotsheet-zero-selection-placeholder.png' });
 });
 
 test('drops ticket selection across ticket views but preserves it across view modes', async ({ page }) => {
@@ -20433,7 +20568,7 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
     .getByLabel('Browse evidence attachments')
     .setInputFiles({ name: 'verified-proof.png', mimeType: 'image/png', buffer: Buffer.from('png') });
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-bmhnsx-reopen-verified-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-bmhnsx-reopen-verified-wide.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Reopen Ticket' }).click();
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => patches.filter((patch) => patch.operation === 'not-working').length).toBe(1);
@@ -20455,7 +20590,7 @@ test('reopens Verified and Archive tickets into Not Started plus Up Next', async
   await archiveNote.fill('The archived result needs another pass.');
   await expect(archiveNote).toBeVisible();
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-bmhnsx-reopen-archive-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-bmhnsx-reopen-archive-narrow.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Reopen Ticket' }).click();
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => patches.filter((patch) => patch.operation === 'not-working').length).toBe(2);
@@ -20559,7 +20694,7 @@ test('hides a pending Not Working report immediately and restores its draft on f
   await dialog.getByRole('button', { name: 'Report Not Working' }).click();
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => requestStarted).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-8eeyxd-submission-hidden.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-8eeyxd-submission-hidden.png', fullPage: true });
   releaseFailure();
   await expect(dialog.getByRole('textbox', { name: 'What’s wrong?' })).toBeVisible();
   await expect(dialog.getByRole('alert')).toContainText('atomic report failed');
@@ -20567,7 +20702,7 @@ test('hides a pending Not Working report immediately and restores its draft on f
   expect(deletes).toEqual([]);
   await expect(dialog.getByRole('button', { name: 'Report Not Working' })).toBeEnabled();
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-8eeyxd-failure-restored.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-8eeyxd-failure-restored.png', fullPage: true });
 });
 
 test('opens the matching ticket reader on row double-click in list and columns', async ({ page }) => {
@@ -20754,7 +20889,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   expect(chooserGeometry.rows).toHaveLength(2);
   expect(chooserGeometry.rows[1].top).toBeGreaterThanOrEqual(chooserGeometry.rows[0].bottom - 1);
   for (const row of chooserGeometry.rows) expect(row.overflow).toBeLessThanOrEqual(1);
-  await choice.locator('dialog').screenshot({ path: '/private/tmp/hs2-xb41pf-ticket-link-final-wide.png' });
+  await choice.locator('dialog').screenshot({ path: 'target/visual-captures/hs2-xb41pf-ticket-link-final-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await settledAnimations(choice);
   await expect(choice.locator('[data-component="list-item"]')).toHaveCount(2);
@@ -20764,7 +20899,7 @@ test('resolves exact ticket links across projects and shows only a compact ambig
     ),
   );
   expect(phoneOverflow.every((overflow) => overflow <= 1)).toBe(true);
-  await choice.locator('dialog').screenshot({ path: '/private/tmp/hs2-xb41pf-ticket-link-final-phone.png' });
+  await choice.locator('dialog').screenshot({ path: 'target/visual-captures/hs2-xb41pf-ticket-link-final-phone.png' });
   await page.setViewportSize({ width: 1180, height: 760 });
   const chosenSource = choice.getByRole('button').filter({ hasText: 'Other shared ticket' });
   await chosenSource.focus();
@@ -20831,7 +20966,7 @@ test('auto-links a single-digit legacy HS-N reference to the imported ticket (HS
   await expect(linked).toBeVisible();
   await expect(linked).toContainText('The imported ticket body.');
   await page.waitForTimeout(200);
-  await page.screenshot({ path: '/private/tmp/hs2-xb5r3y-legacy-link.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb5r3y-legacy-link.png', fullPage: true });
 });
 
 test('ships TicketRow context-menu behavior through real list and board compositions', async ({ page }) => {
@@ -20862,7 +20997,7 @@ test('ships TicketRow context-menu behavior through real list and board composit
     await expect(option).toBeVisible();
     if (field === 'category') {
       await page.waitForTimeout(200);
-      await page.screenshot({ path: '/private/tmp/hotsheet-real-context-submenu.png' });
+      await page.screenshot({ path: 'target/visual-captures/hotsheet-real-context-submenu.png' });
     }
     await option.click();
     await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);
@@ -20887,7 +21022,7 @@ test('ships TicketRow context-menu behavior through real list and board composit
   const boardRow = page.locator('[data-column-id="verified"] [data-ticket-slug="HS2-DEMO01"]');
   await boardRow.click({ button: 'right' });
   await expect(menu).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hotsheet-real-context-menu.png' });
+  await page.screenshot({ path: 'target/visual-captures/hotsheet-real-context-menu.png' });
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
 });
@@ -20915,7 +21050,7 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   let dialog = page.locator('[data-component="bulk-tag-dialog"]');
   await expect(dialog).toContainText('Add tag — 2 selected');
   await settledAnimations(dialog);
-  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-add-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-bulk-add-wide.png', fullPage: true });
   await page.getByRole('textbox', { name: 'Tag to add *' }).fill('regression');
   await dialog.getByRole('button', { name: 'Add tag' }).click();
   await expect
@@ -20930,10 +21065,10 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   dialog = page.locator('[data-component="bulk-tag-dialog"]');
   await expect(dialog).toContainText('Remove tag — 2 selected');
   await settledAnimations(dialog);
-  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-remove-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-bulk-remove-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-remove-phone.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-bulk-remove-phone.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 800 });
   await dialog.getByRole('button', { name: 'client' }).click();
   await dialog.getByRole('button', { name: 'Remove tag' }).click();
@@ -20948,10 +21083,10 @@ test('adds and removes tags and confirms deletion for a real multi-selection', a
   const deletion = page.locator('[data-component="bulk-delete-dialog"]');
   await expect(deletion).toContainText('Delete 2 tickets?');
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-delete-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-bulk-delete-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/hs2-xb41pf-bulk-delete-phone.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-xb41pf-bulk-delete-phone.png', fullPage: true });
   await deletion.getByRole('button', { name: 'Delete 2 tickets' }).click();
   await expect.poll(() => patches.filter((patch) => patch.status === 'deleted').length).toBe(2);
   await expect(first).toHaveCount(0);
@@ -21073,7 +21208,7 @@ test('keeps optimistically archived verified tickets hidden through an intermedi
   await page.waitForTimeout(1_100);
   await expect(verifiedFirst).toHaveCount(0);
   await expect(verifiedSecond).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-215bdb-archive-stable-through-event.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-215bdb-archive-stable-through-event.png', fullPage: true });
   await expect.poll(() => patches.filter((patch) => patch.status === 'archive').length, { timeout: 4_000 }).toBe(2);
   await expect(verifiedFirst).toHaveCount(0);
   await expect(verifiedSecond).toHaveCount(0);
@@ -21102,7 +21237,7 @@ test('applies selected-ticket toolbar actions and clears tickets moved outside t
   await more.click();
   await expect(menu).toBeVisible();
   await expect(menu.getByText('Toggle Up Next')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-z4vzjm-selected-toolbar-actions.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-z4vzjm-selected-toolbar-actions.png', fullPage: true });
   await page.keyboard.press('Escape');
   await first.click();
   await more.click();
@@ -21111,7 +21246,7 @@ test('applies selected-ticket toolbar actions and clears tickets moved outside t
   await expect(first).toHaveCount(0);
   await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(0);
   await expect(page.getByText('Select a ticket to see and edit its details')).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-czmm6x-hidden-selection-cleared.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-czmm6x-hidden-selection-cleared.png', fullPage: true });
 });
 
 for (const surface of ['workspace', 'rail'] as const) {
@@ -21191,7 +21326,10 @@ for (const surface of ['workspace', 'rail'] as const) {
       }));
       expect(shape.width).toBe(shape.height);
       expect(shape.radius).toBeGreaterThanOrEqual(shape.width / 2);
-      await page.screenshot({ path: `/private/tmp/hs2-wp15af-${surface}-${theme}-all.png`, animations: 'disabled' });
+      await page.screenshot({
+        path: `target/visual-captures/hs2-wp15af-${surface}-${theme}-all.png`,
+        animations: 'disabled',
+      });
       await select('HS2-START02', true, false);
       await expectState('mixed');
       if (surface === 'rail')
@@ -21199,7 +21337,7 @@ for (const surface of ['workspace', 'rail'] as const) {
           node.scrollTop = 0;
         });
       await controls.screenshot({
-        path: `/private/tmp/hs2-wp15af-${surface}-${theme}-mixed.png`,
+        path: `target/visual-captures/hs2-wp15af-${surface}-${theme}-mixed.png`,
         animations: 'disabled',
       });
       await page.setViewportSize({ width: surface === 'workspace' ? 390 : 1024, height: 844 });
@@ -21211,13 +21349,13 @@ for (const surface of ['workspace', 'rail'] as const) {
         await expect(item).toHaveAttribute('data-workspace-overflow-state', 'mixed');
         await expect(item.locator('.workspace-header__up-next-icon')).toHaveAttribute('data-up-next-state', 'mixed');
         await page.screenshot({
-          path: `/private/tmp/hs2-wp15af-${surface}-${theme}-narrow.png`,
+          path: `target/visual-captures/hs2-wp15af-${surface}-${theme}-narrow.png`,
           animations: 'disabled',
         });
         await item.click();
       } else {
         await rail.screenshot({
-          path: `/private/tmp/hs2-wp15af-${surface}-${theme}-narrow.png`,
+          path: `target/visual-captures/hs2-wp15af-${surface}-${theme}-narrow.png`,
           animations: 'disabled',
         });
         await star.click();
@@ -21239,7 +21377,7 @@ for (const surface of ['workspace', 'rail'] as const) {
       await expect(star).toBeDisabled();
       await expectState('none');
       await page.screenshot({
-        path: `/private/tmp/hs2-wp15af-${surface}-${theme}-completed-disabled.png`,
+        path: `target/visual-captures/hs2-wp15af-${surface}-${theme}-completed-disabled.png`,
         animations: 'disabled',
       });
       await select('HS2-VERIFY01');
@@ -21313,7 +21451,7 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   await trigger.click();
   await expect(overflow).toHaveJSProperty('open', true);
   await page.waitForTimeout(250);
-  await page.screenshot({ path: '/private/tmp/kf-zfg6z5-toolbar-overflow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/kf-zfg6z5-toolbar-overflow.png', fullPage: true });
   await trigger.click();
   await expect(overflow).toHaveJSProperty('open', false);
   await toolbar.evaluate((node) => {
@@ -21334,8 +21472,8 @@ test('keeps every responsive-hidden workspace command keyboard and pointer acces
   await expect(overflow).toBeVisible();
   await expect(overflow).toHaveJSProperty('open', false);
   expect(await toolbar.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/kf-zfg6z5-toolbar-search.png', fullPage: true });
-  await page.screenshot({ path: '/private/tmp/hs2-vt4r56-overflow-search-1024.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/kf-zfg6z5-toolbar-search.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-vt4r56-overflow-search-1024.png', fullPage: true });
   await search.fill('');
   await page.locator('.app-shell__work-area').focus();
   await expect(search).toHaveCount(0);
@@ -21429,7 +21567,7 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   await expect.poll(() => creates.at(-1)?.status).toBe('not_started');
   const copied = page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets (Copy)' });
   await expect(copied).toHaveAttribute('data-status', 'not_started');
-  await page.screenshot({ path: '/private/tmp/hs2-skp8cw-pasted-completed-ticket.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-skp8cw-pasted-completed-ticket.png', fullPage: true });
   await ticket.evaluate((node) => {
     const transfer = new DataTransfer();
     node.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
@@ -21499,7 +21637,7 @@ test('drags single and selected tickets across columns, views, and the duplicate
   await dragTo(duplicateFirst, '[data-ticket-drop-action="duplicate"]');
   await expect.poll(() => mutations.filter((value) => value.endsWith('/tickets')).length).toBe(createsBefore + 2);
   await expect(page.locator('.app-toast')).toContainText('2 tickets copied to demo.');
-  await page.screenshot({ path: '/private/tmp/hs2-w2743r-ticket-drag-targets.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-w2743r-ticket-drag-targets.png', fullPage: true });
 });
 
 test('previews rows with a border-only outline and keeps column cards borderless until selected', async ({ page }) => {
@@ -21513,20 +21651,20 @@ test('previews rows with a border-only outline and keeps column cards borderless
   await row.hover();
   await expect(row).toHaveCSS('background-color', background);
   expect(await row.evaluate((node) => getComputedStyle(node).boxShadow)).toBe(shadow);
-  await page.screenshot({ path: '/private/tmp/hs2-rxy39s-row-hover-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rxy39s-row-hover-after.png', fullPage: true });
   await page.getByLabel('Columns view').click();
   const card = page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]');
   await expect(card).toHaveCSS('border-color', 'rgba(0, 0, 0, 0)');
   await card.click();
   await expect(card).toHaveCSS('border-color', 'color(srgb 0.42 0.686118 0.918118)');
-  await page.screenshot({ path: '/private/tmp/hs2-2n2tcr-column-border-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-2n2tcr-column-border-after.png', fullPage: true });
   const workArea = page.locator('.app-shell__work-area');
   const focusColor = await resolvedColor(workArea, 'var(--wa-color-focus)');
   await expect
     .poll(() => workArea.evaluate((node) => getComputedStyle(node, '::after').borderTopColor))
     .toBe(focusColor);
   expect(await workArea.evaluate((node) => getComputedStyle(node, '::after').zIndex)).toBe('20');
-  await page.screenshot({ path: '/private/tmp/hs2-2rn2hh-work-area-focus-after.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-2rn2hh-work-area-focus-after.png', fullPage: true });
 });
 
 test('drops selected tickets on another project tab to copy them there', async ({ page }) => {
@@ -21600,7 +21738,7 @@ test('drops selected tickets on another project tab to copy them there', async (
   const copied = page.locator('[data-component="ticket-list-row"]', { hasText: 'Use real project tickets (Copy)' });
   await expect(copied).toHaveAttribute('data-status', 'not_started');
   await expect(copied).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-skp8cw-dropped-started-tickets.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-skp8cw-dropped-started-tickets.png', fullPage: true });
 });
 
 test('drops files on another project tab to stage a new ticket in that project (HS2-Z2KY20)', async ({ page }) => {
@@ -21652,9 +21790,9 @@ test('drops files on another project tab to stage a new ticket in that project (
   const form = page.locator('[data-action="create-ticket-form"]');
   await expect(form.getByText('first-proof.txt')).toBeVisible();
   await expect(form.getByText('second-proof.txt')).toBeVisible();
-  await form.screenshot({ path: '/private/tmp/hs2-z2ky20-project-tab-file-drop-wide.png' });
+  await form.screenshot({ path: 'target/visual-captures/hs2-z2ky20-project-tab-file-drop-wide.png' });
   await page.setViewportSize({ width: 940, height: 844 });
-  await form.screenshot({ path: '/private/tmp/hs2-z2ky20-project-tab-file-drop-narrow.png' });
+  await form.screenshot({ path: 'target/visual-captures/hs2-z2ky20-project-tab-file-drop-narrow.png' });
   await form.locator('wa-input[name="new-ticket-title"]').evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'Created from project tab drop';
     node.dispatchEvent(new Event('input', { bubbles: true }));
@@ -21834,9 +21972,12 @@ test('switches already-open projects from cache within one frame and rejects sta
   await expect(page.getByText('Stale demo response must stay hidden')).toHaveCount(0);
   await expect(projectTabs.filter({ hasText: 'demo' }).locator('.project-tab__work-count')).toHaveText('1');
   await expect(projectTabs.filter({ hasText: 'other' }).locator('.project-tab__work-count')).toHaveText('2');
-  await page.screenshot({ path: '/private/tmp/hs2-q8n2q4-instant-project-switch-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-q8n2q4-instant-project-switch-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
-  await page.screenshot({ path: '/private/tmp/hs2-q8n2q4-instant-project-switch-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-q8n2q4-instant-project-switch-narrow.png',
+    fullPage: true,
+  });
 });
 
 test('keeps the new-ticket composer open when it is opened right after a project tab switch (HS2-T1F2VT)', async ({
@@ -21947,10 +22088,16 @@ test('reorders project and terminal tabs while preserving project order and comp
     });
   expect(focusGeometry.leftInset).toBeGreaterThanOrEqual(3);
   expect(focusGeometry.rightInset).toBeGreaterThanOrEqual(3);
-  await page.screenshot({ path: '/private/tmp/hs2-bkgfy7-q6f4f3-project-tab-focus-wide.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-bkgfy7-q6f4f3-project-tab-focus-wide.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 700, height: 720 });
   await expect(page.locator('wa-select[name="mobile-project"]')).toHaveJSProperty('value', 'demo-checkout');
-  await page.screenshot({ path: '/private/tmp/hs2-bkgfy7-q6f4f3-project-tab-focus-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-bkgfy7-q6f4f3-project-tab-focus-narrow.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 1100, height: 840 });
   await page.reload();
   await expect.poll(projectNames).toEqual(['other', 'demo']);
@@ -22053,11 +22200,11 @@ test('scopes ticket clipboard shortcuts to the focused work area and preserves n
   await page.keyboard.press(`${shortcut}+v`);
   await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
   expect(creates).toHaveLength(1);
-  await page.screenshot({ path: '/private/tmp/hs2-rg612c-work-area-focus-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rg612c-work-area-focus-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await workArea.focus();
   await expect(workArea).toHaveCSS('outline-width', '2px');
-  await page.screenshot({ path: '/private/tmp/hs2-rg612c-work-area-focus-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rg612c-work-area-focus-narrow.png', fullPage: true });
 });
 
 test('preserves attachments and atomically undoes and redoes cut-paste', async ({ page }) => {
@@ -22149,12 +22296,12 @@ test('shows and resolves cross-project permission notifications with badges and 
   await expect(popup.getByRole('button', { name: 'Deny' })).toBeInViewport({ ratio: 1 });
   await expect(popup.getByRole('button', { name: 'Always Allow' })).toBeInViewport({ ratio: 1 });
   await expect(popup.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
-  await page.screenshot({ path: '/private/tmp/hs2-m8gnt7-pending-phone.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-m8gnt7-pending-phone.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.screenshot({ path: '/private/tmp/hotsheet-permission-shell.png' });
+  await page.screenshot({ path: 'target/visual-captures/hotsheet-permission-shell.png' });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expect(popup).toBeInViewport();
-  await page.screenshot({ path: '/private/tmp/hotsheet-permission-shell-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/hotsheet-permission-shell-narrow.png' });
   await popup.getByRole('button', { name: 'Always Allow' }).click();
   await expect.poll(() => answer).toEqual({ decision: 'allow', scope: 'always' });
   await expect(popup).toHaveCount(0);
@@ -22250,7 +22397,7 @@ test('scopes the notification center, navigation counts, and header badge to the
   await expect(center).toContainText('other pending action');
   await expect(center).not.toContainText('demo pending action');
   await expect(navigation.locator('.notification-navigation__count')).toHaveText(['1', '1', '1']);
-  await page.screenshot({ path: '/private/tmp/hs2-feddpx-notifications-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-feddpx-notifications-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect
     .poll(async () => {
@@ -22262,7 +22409,7 @@ test('scopes the notification center, navigation counts, and header badge to the
   await expect(pendingCard).toBeInViewport({ ratio: 1 });
   await expect(pendingCard.getByRole('button', { name: 'Always Allow' })).toBeInViewport({ ratio: 1 });
   await expect(pendingCard.getByRole('button', { name: 'Allow Once' })).toBeInViewport({ ratio: 1 });
-  await page.screenshot({ path: '/private/tmp/hs2-m8gnt7-notifications-phone.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-m8gnt7-notifications-phone.png' });
   // The relocated Workbench toggle names the panel it shows (the notification navigator here).
   await page.getByRole('button', { name: 'Show notification sidebar' }).click();
   await expect
@@ -22270,7 +22417,7 @@ test('scopes the notification center, navigation counts, and header badge to the
     .toBeGreaterThanOrEqual(0);
   await expect(navigation.getByRole('button', { name: /Pending/ })).toBeInViewport({ ratio: 1 });
   await expect(navigation.getByRole('button', { name: /Last 7 Days/ })).toBeInViewport({ ratio: 1 });
-  await page.screenshot({ path: '/private/tmp/hs2-m8gnt7-navigation-phone.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-m8gnt7-navigation-phone.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   await navigation.getByRole('button', { name: /Last 7 Days/ }).click();
   await expect(center).toContainText('other history action');
@@ -22562,7 +22709,7 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
       )
       .toBe(0);
   await settle();
-  await page.screenshot({ path: '/private/tmp/hs2-ebgcgw-delay-open-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ebgcgw-delay-open-wide.png' });
   await page.keyboard.press('Escape');
   await expect(delay).toHaveJSProperty('open', false);
   // Switching to Auto-deny never keeps an immediate delay: it moves to the shortest deny delay.
@@ -22587,7 +22734,7 @@ test('offers 0 seconds only for Auto-allow and keeps both selects in sync (HS2-E
   await delay.click();
   await expect(delay).toHaveJSProperty('open', true);
   await settle();
-  await page.screenshot({ path: '/private/tmp/hs2-ebgcgw-delay-open-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ebgcgw-delay-open-narrow.png' });
 });
 
 test('shows and persists the shared Trash retention period in Lifecycle settings', async ({ page }) => {
@@ -22620,13 +22767,13 @@ test('shows and persists the shared Trash retention period in Lifecycle settings
     'PUT /__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/trash-settings',
   ]);
   await expect(page.locator('wa-toast-item .app-toast')).toHaveText('Trash retention saved.');
-  await page.screenshot({ path: '/private/tmp/hs2-ew2wxa-trash-retention-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ew2wxa-trash-retention-wide.png', fullPage: true });
   await page.getByLabel('List view').click();
   await page.getByLabel('Settings view').click();
   await page.getByRole('button', { name: 'Lifecycle' }).click();
   await expect(input).toHaveJSProperty('value', '14');
   await page.setViewportSize({ width: 760, height: 720 });
-  await page.screenshot({ path: '/private/tmp/hs2-ew2wxa-trash-retention-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-ew2wxa-trash-retention-narrow.png', fullPage: true });
 });
 
 test('shares the settings category across projects but scopes command drafts to each project (HS2-4J50K3, HS2-G9FMQJ)', async ({
@@ -22702,7 +22849,7 @@ test('shares the settings category across projects but scopes command drafts to 
   await expect(commandDialog.getByLabel('Button label')).toHaveValue('Other checks');
   await expect(editor).not.toContainText('Unsaved demo draft');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
-  await page.screenshot({ path: '/private/tmp/hs2-g9fmqj-other-project-settings-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-g9fmqj-other-project-settings-wide.png', fullPage: true });
   await page.getByRole('tab', { name: 'demo' }).click();
   editor = page.locator('[data-component="command-settings-editor"]');
   await expect(page.getByRole('region', { name: 'Commands settings' })).toBeVisible();
@@ -22721,7 +22868,7 @@ test('shares the settings category across projects but scopes command drafts to 
   await expect(editor).not.toContainText('Other checks');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
   await page.setViewportSize({ width: 1024, height: 640 });
-  await page.screenshot({ path: '/private/tmp/hs2-g9fmqj-demo-project-settings-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-g9fmqj-demo-project-settings-narrow.png', fullPage: true });
 });
 
 test('live project visual review', async ({ page }) => {
@@ -22757,10 +22904,10 @@ test('live project visual review', async ({ page }) => {
     await page.getByRole('button', { name: `Remove ${filename}` }).click();
     await expect(page.locator('[data-component="ticket-attachments"]')).not.toContainText(filename);
   }
-  await page.screenshot({ path: '/private/tmp/hotsheet-real-app.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hotsheet-real-app.png', fullPage: true });
   await page.setViewportSize({ width: 900, height: 760 });
   await expect(page.locator('[data-component="ticket-list-row"]').first()).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hotsheet-real-app-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hotsheet-real-app-narrow.png', fullPage: true });
 });
 
 test('anchors ticket context menus to the pointer while preserving scroller positions (HS2-H4MWDB, HS2-SWC9E4) @ci-smoke', async ({
@@ -23095,7 +23242,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await expect(tickets.first()).toContainText('Demo scroll ticket');
   await expect.poll(scroll).toBe(queueTop);
   await page.screenshot({
-    path: '/private/tmp/hs2-pdyxyj-project-list-restored.png',
+    path: 'target/visual-captures/hs2-pdyxyj-project-list-restored.png',
     fullPage: true,
     animations: 'disabled',
   });
@@ -23106,7 +23253,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await page.getByLabel('Columns view').click();
   await expect.poll(() => columns.evaluateAll((nodes) => nodes.map((node) => node.scrollTop))).toEqual(boardPositions);
   await page.screenshot({
-    path: '/private/tmp/hs2-pdyxyj-board-columns-restored.png',
+    path: 'target/visual-captures/hs2-pdyxyj-board-columns-restored.png',
     fullPage: true,
     animations: 'disabled',
   });
@@ -23115,7 +23262,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await expect(columns).toHaveCount(4);
   await expect.poll(scroll).toBe(0);
   await page.screenshot({
-    path: '/private/tmp/hs2-pdyxyj-mobile-board-paged.png',
+    path: 'target/visual-captures/hs2-pdyxyj-mobile-board-paged.png',
     fullPage: true,
     animations: 'disabled',
   });
@@ -23137,7 +23284,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   await expect.poll(() => grid.evaluate((node) => node.scrollTop)).toBe(gridTop);
   await page.screenshot({
-    path: '/private/tmp/hs2-pdyxyj-terminal-grid-restored.png',
+    path: 'target/visual-captures/hs2-pdyxyj-terminal-grid-restored.png',
     fullPage: true,
     animations: 'disabled',
   });
@@ -23154,7 +23301,7 @@ test('remembers scroll per project, mode and view through delayed loading and sh
   expect(clamped).toBeLessThan(queueTop);
   expect(clamped).toBeGreaterThan(0);
   await page.screenshot({
-    path: '/private/tmp/hs2-pdyxyj-shrunken-list-clamped.png',
+    path: 'target/visual-captures/hs2-pdyxyj-shrunken-list-clamped.png',
     fullPage: true,
     animations: 'disabled',
   });
@@ -23361,14 +23508,18 @@ test('preserves list and every board-column scroll position across ticket mutati
     }
   }
   await page.screenshot({
-    path: '/private/tmp/hs2-q9z4km-board-scroll-wide.png',
+    path: 'target/visual-captures/hs2-q9z4km-board-scroll-wide.png',
     fullPage: true,
     animations: 'disabled',
   });
   await page.setViewportSize({ width: 900, height: 760 });
   await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'true');
   await expect(page.locator('[data-component="ticket-list-row"]')).not.toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-q9z4km-scroll-narrow.png', fullPage: true, animations: 'disabled' });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-q9z4km-scroll-narrow.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
 });
 
 test('dismisses every remaining dialog through its native close event (HS2-3RQ7V7)', async ({ page }) => {
@@ -23425,7 +23576,7 @@ test('dismisses every remaining dialog through its native close event (HS2-3RQ7V
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-3rq7v7-native-dialog-dismissal.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-3rq7v7-native-dialog-dismissal.png', fullPage: true });
 });
 
 test('edits and contains a wrapping attachment group title through the production inspector (HS2-C0R4MX, HS2-YCTQCZ)', async ({
@@ -23507,10 +23658,13 @@ test('edits and contains a wrapping attachment group title through the productio
     expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth);
   };
   await expectWrappedAndContained();
-  await page.screenshot({ path: '/private/tmp/hs2-yctqcz-attachment-group-title-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-yctqcz-attachment-group-title-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });
   await expectWrappedAndContained();
-  await page.screenshot({ path: '/private/tmp/hs2-yctqcz-attachment-group-title-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-yctqcz-attachment-group-title-narrow.png',
+    fullPage: true,
+  });
 });
 
 test('keeps a production attachment label edit open while a live ticket update rerenders the inspector (HS2-SG0AZY)', async ({
@@ -23855,20 +24009,20 @@ test('moves a media thumbnail between batches and removes active media from its 
   await expect.poll(() => metadataWrites).toHaveLength(1);
   expect(metadataWrites[0]).toMatchObject({ attachment_ids: ['A1'], batch_id: 'after', batch_label: 'After' });
   expect(uploads).toHaveLength(0);
-  await attachments.screenshot({ path: '/private/tmp/hs2-9pa2kd-media-move-wide.png' });
+  await attachments.screenshot({ path: 'target/visual-captures/hs2-9pa2kd-media-move-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
-  await attachments.screenshot({ path: '/private/tmp/hs2-9pa2kd-media-move-narrow.png' });
+  await attachments.screenshot({ path: 'target/visual-captures/hs2-9pa2kd-media-move-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   await thumbnail.click();
   const gallery = page.getByRole('dialog', { name: /proof.png/ });
   await gallery.getByRole('button', { name: 'More image actions' }).click();
   const menu = page.getByRole('menu', { name: 'Attachment actions' });
   await expect(menu.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
-  await gallery.screenshot({ path: '/private/tmp/hs2-edx5j3-gallery-remove-wide.png' });
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-edx5j3-gallery-remove-wide.png' });
   await page.setViewportSize({ width: 760, height: 640 });
   await gallery.getByRole('button', { name: 'More image actions' }).click();
   await expect(menu.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
-  await gallery.screenshot({ path: '/private/tmp/hs2-edx5j3-gallery-remove-narrow.png' });
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-edx5j3-gallery-remove-narrow.png' });
   await menu.getByRole('menuitem', { name: 'Remove' }).click();
   await expect(gallery).toHaveCount(0);
   await expect(page.locator('.app-toast')).toContainText('Attachment removed.');
@@ -23902,7 +24056,7 @@ test('shows the decorative server-busy bars while a server request is in flight 
   await statusSelect.locator('[data-action="open-inspector-status-menu"]').click();
   await statusSelect.locator('[data-ticket-status="completed"]').click();
   await expect(bars).toHaveAttribute('data-visible', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-mw1v3m-busy-bars-wide.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-mw1v3m-busy-bars-wide.png' });
   await expect(bars).toHaveAttribute('data-visible', 'false');
 });
 
@@ -23943,7 +24097,7 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)', as
   expect(
     await page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.keyboard-shortcuts') || '{}')),
   ).toMatchObject({ 'open-search': { key: 'g', mod: true } });
-  await screen.screenshot({ path: '/private/tmp/hs2-qt6pgr-keyboard-settings.png' });
+  await screen.screenshot({ path: 'target/visual-captures/hs2-qt6pgr-keyboard-settings.png' });
   // Conflict: rebinding Undo onto the same chord flags both shortcuts (still on the screen).
   await screen.locator('[data-shortcut-id="undo"] [data-action="edit-shortcut"]').click();
   await expect(screen.locator('[data-shortcut-capture="undo"]')).toBeFocused();
@@ -23992,7 +24146,9 @@ test('applies a saved command color and icon to the sidebar command button (HS2-
   await expect(command).toBeVisible();
   await expect(command).toHaveAttribute('data-command-color', '#22c55e');
   await expect(command.locator('[data-lucide="circle-check-big"]')).toHaveCount(1);
-  await page.locator('#app-left-rail').screenshot({ path: '/private/tmp/hs2-656xj2-sidebar-command-color-icon.png' });
+  await page
+    .locator('#app-left-rail')
+    .screenshot({ path: 'target/visual-captures/hs2-656xj2-sidebar-command-color-icon.png' });
 });
 
 test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-5VSNV3)', async ({ page }) => {
@@ -24016,12 +24172,12 @@ test('searches the full Lucide catalog to assign an arbitrary command icon (HS2-
   await expect(picker.locator('[data-icon-name="send"]')).toBeVisible();
   await expect(picker.locator('[data-icon-name="compass"]')).toHaveCount(0);
   await picker.scrollIntoViewIfNeeded();
-  await picker.screenshot({ path: '/private/tmp/hs2-5vsnv3-icon-picker-popular.png' });
+  await picker.screenshot({ path: 'target/visual-captures/hs2-5vsnv3-icon-picker-popular.png' });
   // Typing a query loads the full catalog and surfaces the matching icon.
   await picker.getByRole('searchbox', { name: 'Search icons' }).fill('compass');
   const compass = picker.locator('[data-action="select-command-icon"][data-icon-name="compass"]').first();
   await expect(compass).toBeVisible();
-  await picker.screenshot({ path: '/private/tmp/hs2-5vsnv3-icon-picker-search.png' });
+  await picker.screenshot({ path: 'target/visual-captures/hs2-5vsnv3-icon-picker-search.png' });
   await compass.click();
   await expect(compass).toHaveAttribute('aria-pressed', 'true');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
@@ -24196,7 +24352,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     await expect(reason).toHaveJSProperty('value', 'works_as_designed');
     await expect(reason).toHaveJSProperty('open', false);
     await page.waitForTimeout(300);
-    await page.screenshot({ path: '/private/tmp/claude/hs2-n11t22-close-dialog.png' });
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-n11t22-close-dialog.png' });
     await dialog.getByRole('button', { name: 'Close ticket' }).click();
     await expect
       .poll(async () => (await server.request<FullTicket>(`/tickets/${created.id}`)).close_reason)
@@ -24205,7 +24361,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
     const outcome = page.locator('#app-right-rail [data-close-reason="works_as_designed"]');
     await expect(outcome).toHaveText('Closed as works as designed');
     await expect(page.locator('.app-toast')).toContainText(`${created.slug} closed as works as designed.`);
-    await page.screenshot({ path: '/private/tmp/claude/hs2-n11t22-closed-outcome.png' });
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-n11t22-closed-outcome.png' });
   } finally {
     await server.stop();
   }
@@ -24274,13 +24430,13 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
     await expect(noteBadge(second.id)).toHaveText('86%');
     await expect(inspector.locator('[data-component="confidence-badge"]')).toHaveCount(3);
     await inspector.locator(`article[data-note-id="${second.id}"]`).scrollIntoViewIfNeeded();
-    await inspector.screenshot({ path: '/private/tmp/claude/hs2-dwtj43-inspector-wide.png' });
+    await inspector.screenshot({ path: 'target/visual-captures/claude/hs2-dwtj43-inspector-wide.png' });
     // Timeline: each completion carries the score it was completed with.
     await inspector.locator('[data-inspector-tab="timeline"]').click();
     const timeline = inspector.locator('[data-component="ticket-timeline"]');
     await expect(timeline.getByText('Completed · 48% confidence')).toBeVisible();
     await expect(timeline.getByText('Completed · 86% confidence')).toBeVisible();
-    await inspector.screenshot({ path: '/private/tmp/claude/hs2-dwtj43-timeline-wide.png' });
+    await inspector.screenshot({ path: 'target/visual-captures/claude/hs2-dwtj43-timeline-wide.png' });
     await inspector.locator('[data-inspector-tab="info"]').click();
     // Reopen through the real status control: the derived score disappears, the history stays.
     const status = inspector.locator('.ticket-status-menu');
@@ -24312,11 +24468,11 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
       '48%',
     );
     await page.waitForTimeout(500); // let the reader's open transition settle before capturing evidence
-    await reader.screenshot({ path: '/private/tmp/claude/hs2-dwtj43-reader-wide.png' });
+    await reader.screenshot({ path: 'target/visual-captures/claude/hs2-dwtj43-reader-wide.png' });
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(reader.locator('.ticket-inspector__confidence')).toBeVisible();
     await reader.locator(`article[data-note-id="${second.id}"]`).scrollIntoViewIfNeeded();
-    await reader.screenshot({ path: '/private/tmp/claude/hs2-dwtj43-reader-narrow.png' });
+    await reader.screenshot({ path: 'target/visual-captures/claude/hs2-dwtj43-reader-narrow.png' });
   } finally {
     await server.stop();
   }
@@ -24409,7 +24565,7 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     await expect(rowPill).toHaveAttribute('data-band', 'assumed');
     await expect(card).toContainText('Shipped and documented.');
     await card.scrollIntoViewIfNeeded();
-    await inspector.screenshot({ path: '/private/tmp/claude/hs2-cy4cwc-corrected-wide.png' });
+    await inspector.screenshot({ path: 'target/visual-captures/claude/hs2-cy4cwc-corrected-wide.png' });
 
     // Clearing the score removes the badge and the derived header, leaving the note intact.
     await patch({ note_id: scored.id, note_confidence: null });
@@ -24423,7 +24579,7 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
     await expect(rowPill).toHaveCount(0);
     await page.setViewportSize({ width: 1024, height: 700 });
     await card.scrollIntoViewIfNeeded();
-    await inspector.screenshot({ path: '/private/tmp/claude/hs2-cy4cwc-cleared-narrow.png' });
+    await inspector.screenshot({ path: 'target/visual-captures/claude/hs2-cy4cwc-cleared-narrow.png' });
   } finally {
     await server.stop();
   }
@@ -24500,12 +24656,12 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
     await expect(mixed).toHaveAccessibleName('AI-generated activity by Codex; may contain errors');
     await expect(mixed.locator('footer [data-component="ai-content-label"]')).toBeVisible();
     await ai.scrollIntoViewIfNeeded();
-    await inspector.screenshot({ path: '/private/tmp/claude/hs2-32qdz3-authorship-wide.png' });
+    await inspector.screenshot({ path: 'target/visual-captures/claude/hs2-32qdz3-authorship-wide.png' });
     await page.setViewportSize({ width: 1024, height: 700 });
     await page.waitForTimeout(500); // let the responsive panel transition settle before capturing evidence
     await ai.scrollIntoViewIfNeeded();
     await expect(ai.locator('footer [data-component="ai-content-label"]')).toBeVisible();
-    await inspector.screenshot({ path: '/private/tmp/claude/hs2-32qdz3-authorship-narrow.png' });
+    await inspector.screenshot({ path: 'target/visual-captures/claude/hs2-32qdz3-authorship-narrow.png' });
     await page.setViewportSize({ width: 1440, height: 900 });
     await ai.locator('.note-card__body p').click();
     const editor = ai.getByRole('textbox', { name: 'Note body' });
@@ -24599,7 +24755,7 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
     await expect(recent).toHaveCount(3);
     await expect(recent.first()).toContainText(unscored.slug);
     await expect(recent.first()).toContainText('Awaiting outcome');
-    await page.screenshot({ path: '/private/tmp/claude/hs2-q1wccy-calibration-wide.png' });
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-q1wccy-calibration-wide.png' });
     // Narrow: the table scrolls inside its own container rather than widening the page.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(500); // let the responsive shell settle before capturing evidence
@@ -24608,7 +24764,7 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(pageOverflow).toBeLessThanOrEqual(0);
-    await page.screenshot({ path: '/private/tmp/claude/hs2-q1wccy-calibration-narrow.png' });
+    await page.screenshot({ path: 'target/visual-captures/claude/hs2-q1wccy-calibration-narrow.png' });
   } finally {
     await server.stop();
   }
@@ -24767,7 +24923,7 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
       note = reader.locator(`article[data-note-id="${requestNote.id}"]`);
     await expect(inspector).toHaveAttribute('data-needs-review', 'true');
     await note.scrollIntoViewIfNeeded();
-    await reader.screenshot({ path: '/private/tmp/hs2-avxycb-feedback-before-wide.png' });
+    await reader.screenshot({ path: 'target/visual-captures/hs2-avxycb-feedback-before-wide.png' });
     // The real inline composer quotes the original request when inserting an answer.
     await note.getByRole('button', { name: 'Add response at a character position' }).click();
     await note.getByRole('textbox', { name: /Response at character/ }).fill('Use the revised flow. This is my answer.');
@@ -24785,11 +24941,11 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
     await expect(replyCard.locator('.note-card__feedback-block')).toHaveCount(0);
     await expect(note.locator('.note-card__feedback-block')).toHaveCount(0);
     await replyCard.scrollIntoViewIfNeeded();
-    await reader.screenshot({ path: '/private/tmp/hs2-avxycb-feedback-answered-wide.png' });
+    await reader.screenshot({ path: 'target/visual-captures/hs2-avxycb-feedback-answered-wide.png' });
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(inspector).toHaveAttribute('data-needs-review', 'false');
     await replyCard.scrollIntoViewIfNeeded();
-    await reader.screenshot({ path: '/private/tmp/hs2-avxycb-feedback-answered-mobile.png' });
+    await reader.screenshot({ path: 'target/visual-captures/hs2-avxycb-feedback-answered-mobile.png' });
     await page.getByRole('button', { name: 'Close ticket reader' }).click();
     await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
     await page.reload();
@@ -24823,7 +24979,10 @@ test('preserves feature-controller command editing and run-dialog parity across 
   await dialog.getByRole('button', { name: 'Done' }).click();
   await expect(editor.getByRole('status')).toContainText('Saved.');
   await expect(editor).toContainText('Feature parity');
-  await page.screenshot({ path: '/private/tmp/hs2-dhygxj-command-settings-wide.png', animations: 'disabled' });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-dhygxj-command-settings-wide.png',
+    animations: 'disabled',
+  });
   await page.getByLabel('List view').click();
   await expect(page.getByRole('button', { name: 'Feature parity', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Feature parity', exact: true }).click();
@@ -24842,7 +25001,10 @@ test('preserves feature-controller command editing and run-dialog parity across 
   await dialog.getByRole('button', { name: 'Done' }).click();
   await expect(editor.getByRole('status')).toContainText('Saved.');
   await expect(editor).toContainText('After return');
-  await page.screenshot({ path: '/private/tmp/hs2-dhygxj-command-settings-narrow.png', animations: 'disabled' });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-dhygxj-command-settings-narrow.png',
+    animations: 'disabled',
+  });
 });
 
 test('keeps terminal visibility anchored through interrupted close, resize, and repeated reopen (HS2-MX14DQ)', async ({

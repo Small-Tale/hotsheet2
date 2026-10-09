@@ -19,13 +19,13 @@ test('serves installable PWA identity and decodable branding assets', async ({ p
       return color;
     });
   expect(await surfaceColor()).toBe('rgb(255, 255, 255)');
-  await page.screenshot({ path: '/private/tmp/hs2-h229wa-light-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-h229wa-light-wide.png', fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
   expect(await lightTheme.evaluate((meta: HTMLMetaElement) => matchMedia(meta.media).matches)).toBe(false);
   expect(await darkTheme.evaluate((meta: HTMLMetaElement) => matchMedia(meta.media).matches)).toBe(true);
   expect(await surfaceColor()).toBe('rgb(28, 28, 30)');
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: '/private/tmp/hs2-h229wa-dark-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-h229wa-dark-narrow.png', fullPage: true });
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.webmanifest');
   await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', '/apple-touch-icon.png');
 
@@ -55,10 +55,10 @@ test('serves installable PWA identity and decodable branding assets', async ({ p
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/app-icon-512.png');
   await expect(page.locator('img')).toHaveJSProperty('complete', true);
-  await page.screenshot({ path: '/private/tmp/hs2-z8mk4g-app-icon-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-z8mk4g-app-icon-wide.png', fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/favicon-256.png');
   await expect(page.locator('img')).toHaveJSProperty('complete', true);
-  await page.screenshot({ path: '/private/tmp/hs2-z8mk4g-favicon-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-z8mk4g-favicon-narrow.png', fullPage: true });
 });

@@ -236,7 +236,7 @@ test('opens remembered projects concurrently, wires original order, and restores
   // Cross the normal session debounce while startup is still hidden; no stored draft may be overwritten.
   await page.waitForTimeout(850);
   await expect(draft(page, 'beta')).resolves.toBe('beta preserved draft');
-  await page.screenshot({ path: '/private/tmp/hs2-v9zvw0-restoring-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-v9zvw0-restoring-wide.png', fullPage: true });
   tickets.release();
   await expect(restoring).toHaveCount(0);
   const tabs = page.locator('.project-tab-bar [role="tab"]');
@@ -246,7 +246,7 @@ test('opens remembered projects concurrently, wires original order, and restores
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);
   await expect(draft(page, 'alpha')).resolves.toBe('alpha preserved draft');
   await expect(draft(page, 'gamma')).resolves.toBe('gamma preserved draft');
-  await page.screenshot({ path: '/private/tmp/hs2-v9zvw0-restored-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-v9zvw0-restored-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => {
     document.documentElement.dataset.theme = 'dark';
@@ -260,7 +260,7 @@ test('opens remembered projects concurrently, wires original order, and restores
         .map((animation) => animation.finished.catch(() => undefined)),
     );
   });
-  await page.screenshot({ path: '/private/tmp/hs2-v9zvw0-restored-mobile-dark.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-v9zvw0-restored-mobile-dark.png', fullPage: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('tab', { name: /^alpha/ }).click();
   await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
@@ -357,7 +357,7 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   await expect(page.locator('[data-component="quick-ticket-composer"]')).toBeHidden();
   await page.getByRole('tab', { name: 'alpha', exact: true }).click();
   await expect(failure).toContainText('111');
-  await page.screenshot({ path: '/private/tmp/hs2-v9zvw0-partial-recovery-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-v9zvw0-partial-recovery-wide.png', fullPage: true });
 });
 
 test('defers inactive setup and migration prompts until their tab is activated', async ({ page }) => {

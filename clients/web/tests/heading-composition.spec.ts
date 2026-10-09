@@ -10,7 +10,9 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
   await expect(demo.getByRole('heading', { name: 'Notifications', level: 1 })).toBeVisible();
   await demo.getByRole('button', { name: 'List view' }).click();
   await expect(demo.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
-  await demo.locator('.app-heading').screenshot({ path: '/private/tmp/hs2-agdj6e-workspace-heading-wide.png' });
+  await demo
+    .locator('.app-heading')
+    .screenshot({ path: 'target/visual-captures/hs2-agdj6e-workspace-heading-wide.png' });
 
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -35,6 +37,6 @@ test('preserves page headings and dialog naming with direct Toolbar compositions
         return Math.abs(title.y + title.height / 2 - icon.y - icon.height / 2);
       }),
     ).toBeLessThan(1);
-    await dialog.screenshot({ path: `/private/tmp/hs2-agdj6e-dialog-heading-${width}.png` });
+    await dialog.screenshot({ path: `target/visual-captures/hs2-agdj6e-dialog-heading-${width}.png` });
   }
 });

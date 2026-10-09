@@ -175,7 +175,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
   await expect(restoring).toBeVisible();
   await expect(page.locator('[data-component="app-shell"]')).toHaveCount(0);
   await expect(page.locator('[data-component="terminal-drawer"]')).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-rpgs2s-atomic-restore-loading.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rpgs2s-atomic-restore-loading.png', fullPage: true });
   releaseTickets();
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible({ timeout: 5_000 });
@@ -212,7 +212,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
   await expect(drawer.locator('[data-component="app-tab"][data-tab-id="other-shell"]')).toHaveCount(1);
   await expect.poll(() => claimsFor('other-shell')).not.toEqual([]);
   expect(await claimsFor('other-shell')).not.toContainEqual(expect.objectContaining({ cols: 80, rows: 24 }));
-  await page.screenshot({ path: '/private/tmp/hs2-a0ykmh-project-switch-dedicated.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-a0ykmh-project-switch-dedicated.png', fullPage: true });
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   const sidebar = page.locator('#app-left-rail'),
     all = sidebar.locator('.terminal-operations-sidebar__group[data-project-id="all"]'),
@@ -248,12 +248,12 @@ test('reveals a restored terminal workspace atomically and separates All Project
   expect(layers[0]!.height).toBeGreaterThan(layers[1]!.height);
   expect(layers[0]!.width).toBeGreaterThan(layers[1]!.width);
   expect(Math.abs(layers[0]!.y + layers[0]!.height - (layers[1]!.y + layers[1]!.height))).toBeLessThan(1);
-  await page.screenshot({ path: '/private/tmp/hs2-hph6c5-workspace-scale-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-hph6c5-workspace-scale-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 650 });
   await expect(all).toHaveAttribute('divider-sides', 'b');
   await expect(all).not.toHaveCSS('box-shadow', 'none');
   await expect(demoSummary).toHaveAttribute('data-chart-background', 'true');
-  await page.screenshot({ path: '/private/tmp/hs2-hph6c5-workspace-scale-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-hph6c5-workspace-scale-narrow.png', fullPage: true });
   await page.close();
-  await video?.saveAs('/private/tmp/hs2-rpgs2s-atomic-refresh-after.webm');
+  await video?.saveAs('target/visual-captures/hs2-rpgs2s-atomic-refresh-after.webm');
 });

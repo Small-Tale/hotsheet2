@@ -36,7 +36,7 @@ test('adds tags from the shared Tags menu header at wide and narrow sizes (HS2-9
     };
   });
   expect(wideLayout).toEqual({ belowTrigger: true, withinViewport: true });
-  await page.screenshot({ path: '/private/tmp/hs2-9zpyr8-tags-menu-header-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9zpyr8-tags-menu-header-wide.png', fullPage: true });
 
   await page.keyboard.press('Escape');
   await expect(popover).toBeHidden();
@@ -44,7 +44,7 @@ test('adds tags from the shared Tags menu header at wide and narrow sizes (HS2-9
   await page.setViewportSize({ width: 760, height: 640 });
   await trigger.click();
   await expect(input).toBeFocused();
-  await page.screenshot({ path: '/private/tmp/hs2-9zpyr8-tags-menu-header-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-9zpyr8-tags-menu-header-narrow.png', fullPage: true });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
   await input.fill('regression');

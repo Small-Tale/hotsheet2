@@ -41,13 +41,19 @@ test('demonstrates adjacent full-width A-B push/pop with chrome crossfades and r
     node.parentNode?.removeChild(node);
   });
   await expect(transition.locator('[data-side="a"]')).toHaveCSS('opacity', '0');
-  await page.screenshot({ path: '/private/tmp/hs2-0epnb7-content-transition-push-after.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-0epnb7-content-transition-push-after.png',
+    fullPage: true,
+  });
 
   await page.setViewportSize({ width: 720, height: 720 });
   await transition.scrollIntoViewIfNeeded();
   await expect(transition).toBeInViewport();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/private/tmp/hs2-0epnb7-content-transition-push-after-narrow.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-0epnb7-content-transition-push-after-narrow.png',
+    fullPage: true,
+  });
 
   const backwardPause = await page.addStyleTag({ content: pausedMotion });
   await page.getByRole('button', { name: 'Back', exact: true }).click();

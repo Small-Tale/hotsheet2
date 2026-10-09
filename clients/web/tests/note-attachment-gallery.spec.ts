@@ -122,9 +122,9 @@ test('each image in one note opens its own gallery attachment', async ({ page })
     'href',
     /\/tickets\/HS2-OTHER\/attachments\/by-name\/report.pdf$/,
   );
-  await details.screenshot({ path: '/private/tmp/hs2-w2mwf3-details-attachments-wide.png' });
+  await details.screenshot({ path: 'target/visual-captures/hs2-w2mwf3-details-attachments-wide.png' });
   await page.setViewportSize({ width: 940, height: 720 });
-  await details.screenshot({ path: '/private/tmp/hs2-w2mwf3-details-attachments-narrow.png' });
+  await details.screenshot({ path: 'target/visual-captures/hs2-w2mwf3-details-attachments-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.locator('.app-shell[data-mobile="false"]')).toBeVisible();
   const note = visibleInspector.locator('article[data-note-id="N1"]'),
@@ -136,12 +136,12 @@ test('each image in one note opens its own gallery attachment', async ({ page })
   let gallery = page.getByRole('dialog', { name: 'Image 2 of 2: second.svg' });
   await expect(gallery).toBeVisible();
   await expect(gallery.locator('img')).toHaveAttribute('src', /\/attachments\/A-SECOND$/);
-  await page.screenshot({ path: '/private/tmp/hs2-dafv82-note-second-image-wide.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-dafv82-note-second-image-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
   await first.click();
   gallery = page.getByRole('dialog', { name: 'Image 1 of 2: first.svg' });
   await expect(gallery).toBeVisible();
   await expect(gallery.locator('img')).toHaveAttribute('src', /\/attachments\/A-FIRST$/);
   await page.setViewportSize({ width: 940, height: 720 });
-  await page.screenshot({ path: '/private/tmp/hs2-dafv82-note-first-image-narrow.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-dafv82-note-first-image-narrow.png', fullPage: true });
 });

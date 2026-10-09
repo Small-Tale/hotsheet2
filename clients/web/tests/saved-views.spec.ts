@@ -190,7 +190,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
       .toEqual({ typography: true, labelInset: true, edges: true });
     await query.fill('tag:docs ');
     await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
-    await page.screenshot({ path: `/private/tmp/hs2-y5hmrt-query-${width}.png` });
+    await page.screenshot({ path: `target/visual-captures/hs2-y5hmrt-query-${width}.png` });
     await dialog.getByRole('button', { name: 'Clear search query' }).click();
   }
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -198,7 +198,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:docs');
   await page.waitForTimeout(250);
   await page.screenshot({
-    path: '/private/tmp/hs2-r7gpjm-create-view-wide.png',
+    path: 'target/visual-captures/hs2-r7gpjm-create-view-wide.png',
     clip: { x: 430, y: 175, width: 580, height: 550 },
   });
   await dialog.getByRole('button', { name: 'Create View' }).click();
@@ -215,7 +215,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(menu).toBeVisible();
   await page.waitForTimeout(250);
   await page.screenshot({
-    path: '/private/tmp/hs2-r7gpjm-view-menu-wide.png',
+    path: 'target/visual-captures/hs2-r7gpjm-view-menu-wide.png',
     clip: { x: 0, y: 260, width: 520, height: 400 },
   });
   await menu.getByText('Edit view…').click();
@@ -227,7 +227,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(dialog.locator('[data-component="token-search-token"]')).toContainText('tag:client');
   await page.waitForTimeout(250);
   await page.screenshot({
-    path: '/private/tmp/hs2-r7gpjm-edit-view-wide.png',
+    path: 'target/visual-captures/hs2-r7gpjm-edit-view-wide.png',
     clip: { x: 430, y: 175, width: 580, height: 550 },
   });
   await dialog.getByRole('button', { name: 'Edit View' }).click();
@@ -253,7 +253,7 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(narrowMenu).toBeVisible();
   await page.waitForTimeout(250);
   await page.screenshot({
-    path: '/private/tmp/hs2-r7gpjm-view-menu-narrow.png',
+    path: 'target/visual-captures/hs2-r7gpjm-view-menu-narrow.png',
     clip: { x: 0, y: 230, width: 420, height: 430 },
   });
   // The phone sidebar overlay stays open through the menu and the dialog it launches: presses in
@@ -263,12 +263,18 @@ test('creates, renames, deletes, and shares a custom ticket view', async ({ page
   await expect(sidebarRail).toHaveAttribute('data-collapsed', 'false');
   const confirmation = page.locator('[data-component="saved-view-delete-dialog"]');
   await expect(confirmation).toContainText('Tickets are not affected.');
-  await page.screenshot({ path: '/private/tmp/hs2-5apx20-sidebar-delete-dialog-narrow.png', animations: 'disabled' });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-5apx20-sidebar-delete-dialog-narrow.png',
+    animations: 'disabled',
+  });
   await confirmation.getByRole('button', { name: 'Delete View' }).click();
   await expect(confirmation).toHaveJSProperty('open', false);
   await expect(sidebarRail).toHaveAttribute('data-collapsed', 'false');
   await expect(page.getByRole('button', { name: 'Hide project sidebar' })).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-5apx20-sidebar-after-delete-narrow.png', animations: 'disabled' });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-5apx20-sidebar-after-delete-narrow.png',
+    animations: 'disabled',
+  });
   await expect(page.getByRole('button', { name: /Queue/ })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('button', { name: /Documentation/ })).toHaveCount(0);
   await expect(page.locator('[data-ticket-slug="HS2-CODE"]')).toBeVisible();
@@ -383,7 +389,10 @@ test('keeps immediate saved-view query replacement focused when opening frames r
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await expect(query).toBeInViewport();
-      await page.screenshot({ path: `/private/tmp/hs2-n7xtp4-immediate-query-${width}.png`, animations: 'disabled' });
+      await page.screenshot({
+        path: `target/visual-captures/hs2-n7xtp4-immediate-query-${width}.png`,
+        animations: 'disabled',
+      });
     }
   } finally {
     await frames.evaluate((clock) => {
@@ -480,7 +489,10 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await expect(name).toBeInViewport();
-      await page.screenshot({ path: `/private/tmp/hs2-zqnw62-name-reset-${width}.png`, animations: 'disabled' });
+      await page.screenshot({
+        path: `target/visual-captures/hs2-zqnw62-name-reset-${width}.png`,
+        animations: 'disabled',
+      });
     }
   } finally {
     await frames.evaluate((clock) => {
@@ -539,7 +551,7 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
     }),
   ).toEqual({ position: 'static', external: true, inside: true, tall: true });
   await page.screenshot({
-    path: '/private/tmp/hs2-n5g6js-saved-view-help-wide.png',
+    path: 'target/visual-captures/hs2-n5g6js-saved-view-help-wide.png',
     clip: { x: 380, y: 60, width: 680, height: 840 },
   });
   await dialog.getByRole('button', { name: 'Search syntax help' }).click();
@@ -557,7 +569,7 @@ test('offers tag completion, the date helper, and syntax help inside the saved-v
   await expect(helper).toHaveCount(0);
   expect(views()).toEqual([]);
   await page.screenshot({
-    path: '/private/tmp/hs2-n5g6js-saved-view-chips-wide.png',
+    path: 'target/visual-captures/hs2-n5g6js-saved-view-chips-wide.png',
     clip: { x: 430, y: 175, width: 580, height: 420 },
   });
   await dialog.getByRole('button', { name: 'Create View' }).click();

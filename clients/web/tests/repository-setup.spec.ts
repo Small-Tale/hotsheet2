@@ -187,9 +187,9 @@ test('recovers a project folder without Git and optionally connects origin', asy
     )
     .toBeLessThan(1);
   await expect(dialog.getByText(/will not stage or commit/)).toBeVisible();
-  await dialog.screenshot({ path: '/private/tmp/hs2-9r3w53-no-git-wide.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-9r3w53-no-git-wide.png' });
   await page.setViewportSize({ width: 720, height: 640 });
-  await dialog.screenshot({ path: '/private/tmp/hs2-9r3w53-no-git-narrow.png' });
+  await dialog.screenshot({ path: 'target/visual-captures/hs2-9r3w53-no-git-narrow.png' });
 
   await dialog.getByRole('button', { name: 'Initialize Git repository' }).click();
   await expect(dialog.getByText('Git is ready', { exact: true })).toBeVisible();

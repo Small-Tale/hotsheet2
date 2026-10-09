@@ -253,7 +253,10 @@ test('captures the container-stable cross-column overlay in flight', async ({ pa
   await expect(ghost).toBeAttached();
   await expect(ghost).not.toContainText('HS2-MOVING');
   await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-MOVING"]')).toHaveCount(1);
-  await page.screenshot({ path: '/private/tmp/hs2-jgwtjj-ticket-motion-midflight-after.png', fullPage: true });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-jgwtjj-ticket-motion-midflight-after.png',
+    fullPage: true,
+  });
   await expect(page.locator('[data-ticket-motion-ghost="move"]')).toHaveCount(0);
   await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-MOVING"]')).toBeVisible();
 });

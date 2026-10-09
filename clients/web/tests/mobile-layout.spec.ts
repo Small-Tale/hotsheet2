@@ -229,14 +229,14 @@ test('mobile floating controls stay inside the dynamic viewport and safe area (H
   expect(rootGeometry).toEqual({ innerHeight: 844, html: 844, body: 844, app: 844, shell: 844 });
   const restoreBottom = await restoreToolbar.evaluate((node) => innerHeight - node.getBoundingClientRect().bottom);
   expect(restoreBottom).toBeCloseTo(64, 0);
-  await page.screenshot({ path: '/private/tmp/hs2-43n9zb-mobile-drawer-restore.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-43n9zb-mobile-drawer-restore.png', fullPage: true });
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   const zoom = page.getByRole('toolbar', { name: 'Workspace tile zoom' });
   await expect(zoom).toBeVisible();
   // `.terminal-dashboard__zoom` is the zero-size safe-area anchor; measure the floating toolbar itself.
   const zoomBottom = await zoom.evaluate((node) => innerHeight - node.getBoundingClientRect().bottom);
   expect(zoomBottom).toBeCloseTo(64, 0);
-  await page.screenshot({ path: '/private/tmp/hs2-43n9zb-mobile-floating-controls.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-43n9zb-mobile-floating-controls.png', fullPage: true });
 });
 
 test('gives a focused mobile terminal the visual viewport until explicit exit (HS2-GMTQZM)', async ({
@@ -399,7 +399,7 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await expect(sidebar).toHaveCSS('position', 'absolute');
   await expect(sidebar.locator('.kui-workbench__panel-content')).toHaveCSS('transform', 'none');
 
-  await page.screenshot({ path: '/private/tmp/hs2-zk51wp-mobile-sidebar-overlay.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-zk51wp-mobile-sidebar-overlay.png', fullPage: true });
 
   // Click-away scrim dismisses the open sidebar and returns to a single column. (The scrim covers
   // the toolbar, so switching overlays is dismiss-then-open — normal mobile drawer behavior.) Click
@@ -414,13 +414,13 @@ test('mobile viewport uses a single-column layout with overlay sidebars, one at 
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
   await expect(scrim).toBeVisible();
   await expect(inspector.locator('.kui-workbench__panel-content')).toHaveCSS('transform', 'none');
-  await page.screenshot({ path: '/private/tmp/hs2-zk51wp-mobile-inspector-overlay.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-zk51wp-mobile-inspector-overlay.png', fullPage: true });
 
   // Dismiss via the scrim strip the right inspector does not cover.
   await scrim.click({ position: { x: 10, y: 400 } });
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
   await expect(scrim).toHaveCount(0);
-  await page.screenshot({ path: '/private/tmp/hs2-zk51wp-mobile-single-column.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-zk51wp-mobile-single-column.png', fullPage: true });
 });
 
 test('mobile side panels cover the terminal drawer and pad interactive content inside safe areas (HS2-3BVWME)', async ({
@@ -463,7 +463,7 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
     844,
   );
   await page.screenshot({
-    path: '/private/tmp/hs2-3bvwme-mobile-sidebar-full-height.png',
+    path: 'target/visual-captures/hs2-3bvwme-mobile-sidebar-full-height.png',
     fullPage: true,
     animations: 'disabled',
   });
@@ -494,7 +494,7 @@ test('mobile side panels cover the terminal drawer and pad interactive content i
   ).toBe(844);
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   await page.screenshot({
-    path: '/private/tmp/hs2-3bvwme-mobile-inspector-full-height.png',
+    path: 'target/visual-captures/hs2-3bvwme-mobile-inspector-full-height.png',
     fullPage: true,
     animations: 'disabled',
   });
@@ -561,7 +561,7 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
   await page.locator('.app-shell__workspace').evaluate((node) => {
     node.scrollTop = node.scrollHeight;
   });
-  await page.screenshot({ path: '/private/tmp/hs2-4a29rr-mobile-list-bottom.png', animations: 'disabled' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-4a29rr-mobile-list-bottom.png', animations: 'disabled' });
   // Each board column scroller does the same.
   await page.getByLabel('Columns view').click();
   await expect(page.locator('.ticket-board-column__tickets').first()).toBeVisible();
@@ -579,7 +579,7 @@ test('mobile ticket scrollers reach the screen bottom and inset their content fo
       const tickets = node.querySelector<HTMLElement>('.ticket-board-column__tickets')!;
       tickets.scrollTop = tickets.scrollHeight;
     });
-  await page.screenshot({ path: '/private/tmp/hs2-4a29rr-mobile-board-bottom.png', animations: 'disabled' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-4a29rr-mobile-board-bottom.png', animations: 'disabled' });
   // An expanded terminal drawer owns the bottom edge, so the scrollers return to their ordinary padding.
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   await expect(page.locator('#app-bottom-drawer[data-collapsed="false"]')).toBeVisible();
@@ -611,7 +611,7 @@ test('mobile keyboard shortcuts toggle mutually exclusive sidebar overlays witho
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   await expect(scrim).toBeVisible();
-  await page.screenshot({ path: '/private/tmp/hs2-kn79xp-mobile-keyboard-overlays.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/hs2-kn79xp-mobile-keyboard-overlays.png', fullPage: true });
   await page.keyboard.press(`${modifier}+Alt+Shift+b`);
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
   await expect(scrim).toHaveCount(0);
@@ -872,14 +872,14 @@ test('mobile toolbar drops the project name, uses borderless content-fit selects
     page.locator('.project-tab-bar--mobile').boundingBox(),
   ]);
   expect(selectBox!.width).toBeLessThan(barBox!.width * 0.5);
-  await page.screenshot({ path: '/private/tmp/claude/hs2-0sardd-mobile-toolbar.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-0sardd-mobile-toolbar.png', fullPage: true });
   // 4. Opening search hides the view-mode segmented control to give the field more space.
   const switcher = page.locator('.view-mode-switcher');
   await expect(switcher).toBeVisible();
   await page.getByRole('button', { name: 'Search tickets' }).click();
   await expect(page.getByLabel('Search tickets')).toBeVisible();
   await expect(switcher).toBeHidden();
-  await page.screenshot({ path: '/private/tmp/claude/hs2-0sardd-mobile-search.png', fullPage: true });
+  await page.screenshot({ path: 'target/visual-captures/claude/hs2-0sardd-mobile-search.png', fullPage: true });
 });
 
 test('resizing from mobile back to desktop restores the side-by-side layout (HS2-ZK51WP)', async ({ page }) => {
@@ -928,7 +928,10 @@ test('keeps reopened inspector content within the viewport across desktop and mo
     await expect(notes.getByRole('button', { name: 'Add note', exact: true }).last()).toBeInViewport();
     await expect(notes.locator('.ticket-notes__empty')).toBeInViewport();
     if (width === 940 || width === 390)
-      await page.screenshot({ path: `/private/tmp/hs2-5jkngs-inspector-${width}-settled.png`, animations: 'disabled' });
+      await page.screenshot({
+        path: `target/visual-captures/hs2-5jkngs-inspector-${width}-settled.png`,
+        animations: 'disabled',
+      });
     if (width < 1024) {
       await content.getByRole('button', { name: 'Hide ticket inspector', exact: true }).click();
       await expect(inspector).toHaveAttribute('data-collapsed', 'true');
@@ -942,7 +945,7 @@ test('keeps reopened inspector content within the viewport across desktop and mo
   }
   await content
     .locator('[data-component="ticket-notes"]')
-    .screenshot({ path: '/private/tmp/hs2-5jkngs-inspector-desktop-restored.png', animations: 'disabled' });
+    .screenshot({ path: 'target/visual-captures/hs2-5jkngs-inspector-desktop-restored.png', animations: 'disabled' });
 });
 
 for (const initialWidth of [390, 1280]) {
@@ -990,7 +993,7 @@ for (const initialWidth of [390, 1280]) {
       }
       await expect(page.getByText('Searching tickets', { exact: true })).toHaveCount(0);
       await page.screenshot({
-        path: `/private/tmp/hs2-jbtpnr-search-${initialWidth}-to-${width}.png`,
+        path: `target/visual-captures/hs2-jbtpnr-search-${initialWidth}-to-${width}.png`,
         animations: 'disabled',
       });
       await page.getByRole('button', { name: 'Clear search', exact: true }).click();
@@ -1025,7 +1028,7 @@ test('preserves child scrolling and usable mobile overlays after search focus (H
     )
     .toBe(true);
   await expect(sidebar.getByRole('button', { name: /^Queue / })).toBeInViewport();
-  await page.screenshot({ path: '/private/tmp/hs2-jbtpnr-sidebar-mobile.png', animations: 'disabled' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jbtpnr-sidebar-mobile.png', animations: 'disabled' });
   await scrim.click({ position: { x: 380, y: 300 } });
   await workspace.hover();
   await page.mouse.wheel(0, -3000);
@@ -1045,7 +1048,7 @@ test('preserves child scrolling and usable mobile overlays after search focus (H
   await page.mouse.wheel(0, 600);
   await expect.poll(() => body.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
   await expect(inspector.getByRole('button', { name: 'Add note', exact: true }).last()).toBeInViewport();
-  await page.screenshot({ path: '/private/tmp/hs2-jbtpnr-inspector-mobile.png', animations: 'disabled' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-jbtpnr-inspector-mobile.png', animations: 'disabled' });
   await inspector.getByRole('button', { name: 'Hide ticket inspector', exact: true }).click();
   await expect(scrim).toHaveCount(0);
   await expect.poll(() => shell.evaluate((node) => node.scrollLeft)).toBe(0);
@@ -1618,7 +1621,7 @@ test('side panels settle cleanly across a 1280 -> 390 -> 1280 resize with the si
   await settled();
   const desktop = { sidebar: await geometry(sidebar), inspector: await geometry(inspector) };
   expect(desktop.inspector.right).toBe(1280);
-  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-1280-before.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-d2gc8q-1280-before.png' });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
@@ -1627,7 +1630,7 @@ test('side panels settle cleanly across a 1280 -> 390 -> 1280 resize with the si
   expect(await onScreen(sidebar)).toBe(0);
   expect(await onScreen(inspector)).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-390-settled.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-d2gc8q-390-settled.png' });
 
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
@@ -1636,7 +1639,7 @@ test('side panels settle cleanly across a 1280 -> 390 -> 1280 resize with the si
   expect(phone.right).toBe(390);
   expect(phone.left).toBeGreaterThan(0);
   await expect(inspector.getByRole('button', { name: 'Hide ticket inspector' })).toBeInViewport({ ratio: 1 });
-  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-390-inspector.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-d2gc8q-390-inspector.png' });
   await inspector.getByRole('button', { name: 'Hide ticket inspector' }).click();
   await expect(inspector).toHaveAttribute('data-collapsed', 'true');
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
@@ -1645,14 +1648,14 @@ test('side panels settle cleanly across a 1280 -> 390 -> 1280 resize with the si
   const phoneSidebar = await geometry(sidebar);
   expect(phoneSidebar.left).toBe(0);
   expect(phoneSidebar.right).toBeLessThanOrEqual(390);
-  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-390-sidebar.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-d2gc8q-390-sidebar.png' });
 
   await page.setViewportSize({ width: 1280, height: 844 });
   await expect(sidebar).toHaveAttribute('data-collapsed', 'false');
   await expect(inspector).toHaveAttribute('data-collapsed', 'false');
   await settled();
   expect({ sidebar: await geometry(sidebar), inspector: await geometry(inspector) }).toEqual(desktop);
-  await page.screenshot({ path: '/private/tmp/hs2-d2gc8q-1280-after.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-d2gc8q-1280-after.png' });
 });
 
 test('pane chrome draws scroll dividers only while content scrolls beneath it (HS2-TAZJ0V)', async ({ page }) => {
