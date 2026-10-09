@@ -269,10 +269,13 @@ export function TicketSourceSetupDialog({
         <strong>Name</strong>
         <span>{editingGit.name}</span>
       </div>
-      <div class="ticket-source-setup__source-detail">
-        <strong>Location</strong>
-        <code>{editingGit.locator}</code>
-      </div>
+      <form id="git-source-relink-form" {...PROJECT_LIFECYCLE_ACTIONS.relinkGitSource.attrs}>
+        <label class="ticket-source-setup__source-location">
+          <strong>Location</strong>
+          <input name="git-store-path" type="text" value={editingGit.locator} required disabled={providerBusy} />
+        </label>
+        <small>If the ticket repository moved, enter its new folder path.</small>
+      </form>
       <TicketSourceColorPicker
         source={{ provider: 'git', name: editingGit.name, color: editingGit.color }}
         sourceId={editingGit.connectionId}
@@ -330,9 +333,19 @@ export function TicketSourceSetupDialog({
         </wa-button>
       </>
     ) : editingGit ? (
-      <wa-button appearance="accent" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
-        Done
-      </wa-button>
+      <>
+        <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
+          Done
+        </wa-button>
+        <wa-button
+          appearance="accent"
+          type="button"
+          disabled={providerBusy}
+          {...PROJECT_LIFECYCLE_ACTIONS.submitGitSourceRelink.attrs}
+        >
+          {providerBusy ? 'Saving…' : 'Save location'}
+        </wa-button>
+      </>
     ) : editing && removingProviderId === editing.id ? (
       // One wrapping group, so the morph replaces the edit actions instead of recycling the clicked
       // "Remove from this project…" button into "Keep" while that same click is still dispatching.

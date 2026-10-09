@@ -896,6 +896,11 @@ export class Api {
       `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/color`,
       { method: 'PATCH', body: JSON.stringify({ color }) },
     );
+  relinkCheckoutGitSource = (checkout: string, connectionId: string, path: string) =>
+    this.request<{ checkouts: Checkout[]; connection_id: string }>(
+      `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/relink`,
+      { method: 'PATCH', body: JSON.stringify({ path }) },
+    );
   transfer = (kind: 'copy' | 'move', source: Ticket, destination_connection: string) =>
     this.request(`/provider-transfers/${kind}`, {
       method: 'POST',

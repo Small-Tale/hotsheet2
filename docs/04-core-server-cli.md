@@ -600,6 +600,15 @@ accepts the eight ticket-source palette colors (Blue, Green, Orange, Red, Purple
 and Gray). Gray removes the stored override; Transparent is not a ticket-source option
 (HS2-H1FZNV). Removing or renaming a source removes or moves its project color with it.
 
+`PATCH /checkouts/{reference}/sources/{connection_id}/relink` accepts
+`{"path":"<new-ticket-store-folder>"}` for a moved Git ticket repository. The server
+opens the destination as a Hot Sheet store before changing links; an invalid path returns
+a save error. One locked registry write updates every checkout sharing the old Git source
+id, its default and color mapping, and historical source-id aliases. The response names
+the new `connection_id` and affected `checkouts`; new store hosting and index routing are
+ready before the links switch (HS2-8BG4W9). The destination must be selected by the user:
+existing store metadata has no durable instance id to prove it is the same moved folder.
+
 `github-sign-in` works without a running server. It prints GitHub's verification URL and
 one-time code, waits for approval, and then prints a `github-app-*` credential reference;
 it never prints the access or refresh token. Use `--web-base https://github.example.com`

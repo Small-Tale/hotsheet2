@@ -710,6 +710,70 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     );
   }
 
+  async function relinkProjectGitSource(form: HTMLFormElement) {
+    const current = ticketSourceSetupProject.value ?? dependencies.project(),
+      id = providerEditingId.value,
+      rawPath = new FormData(form).get('git-store-path'),
+      path = typeof rawPath === 'string' ? rawPath.trim() : '';
+    if (!current || !id || providerSettingsBusy.value) return;
+    if (!path) {
+      providerSettingsError.value = 'Enter the new ticket repository folder path.';
+      return;
+    }
+    providerSettingsBusy.value = true;
+    providerSettingsError.value = '';
+    try {
+      const client = new Api(current.apiPath);
+      const result = await client.relinkCheckoutGitSource(current.id, id, path);
+      projects.value = projects.value.map((project) => {
+        const checkout = result.checkouts.find((entry) => entry.id === project.id);
+        return checkout ? { ...project, stores: checkout.stores } : project;
+      });
+      const updatedProviders = { ...defaultProviders.value };
+      for (const checkout of result.checkouts) {
+        const previous = updatedProviders[checkout.id];
+        const source = checkout.sources?.find((entry) => entry.connection_id === result.connection_id);
+        if (!previous || !source) continue;
+        updatedProviders[checkout.id] = {
+          ...previous,
+          connectionId: previous.connectionId === id ? result.connection_id : previous.connectionId,
+          sources: previous.sources.map((item) =>
+            item.connectionId === id ? { ...item, connectionId: result.connection_id, locator: source.locator } : item,
+          ),
+        };
+      }
+      defaultProviders.value = updatedProviders;
+      if (Object.hasOwn(providerCapabilities.value, id))
+        providerCapabilities.value = {
+          ...providerCapabilities.value,
+          [result.connection_id]: providerCapabilities.value[id],
+        };
+      ticketSourceSetupProject.value = projects.value.find((project) => project.id === current.id) ?? current;
+      providerEditingId.value = result.connection_id;
+      let refreshFailed = false;
+      for (const checkout of result.checkouts) {
+        const project = projects.value.find((item) => item.id === checkout.id);
+        if (!project) continue;
+        try {
+          const projectClient = new Api(project.apiPath);
+          applyProviderDescriptors(project, await projectClient.providers());
+          await dependencies.requestProjectRefresh(project);
+        } catch {
+          refreshFailed = true;
+        }
+      }
+      dependencies.showToast(
+        result.checkouts.length ? 'Ticket repository location updated.' : 'Location is unchanged.',
+      );
+      if (refreshFailed)
+        providerSettingsError.value = 'Location saved, but tickets could not refresh. Reopen the project.';
+    } catch (reason) {
+      providerSettingsError.value = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      providerSettingsBusy.value = false;
+    }
+  }
+
   /**
    * Switch the connection open for editing off or back on (HS2-SF6W34). While disabled the server
    * neither reads nor writes it, so its tickets drop out of the refreshed views.
@@ -1200,6 +1264,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     requestProjectSourceRemoval,
     setProjectDefaultSource,
     setProjectSourceColor,
+    relinkProjectGitSource,
     requestProviderRemoval,
     cancelProviderRemoval,
     removeExternalProvider,

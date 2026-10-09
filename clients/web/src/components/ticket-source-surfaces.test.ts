@@ -432,7 +432,7 @@ describe('ticket source surfaces', () => {
     ).toContain('Some ticket sources look alike');
   });
 
-  it('opens the default git source in a view and color editor (HS2-XKEHAK)', () => {
+  it('opens the default git source in a path and color editor (HS2-XKEHAK, HS2-8BG4W9)', () => {
     const source = {
       connectionId: 'git-local',
       name: 'HS2 git tickets',
@@ -455,7 +455,10 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('<strong>Name</strong>');
     expect(markup).toContain('<span>HS2 git tickets</span>');
     expect(markup).toContain('<strong>Location</strong>');
-    expect(markup).toContain('<code>/work/demo.hs2</code>');
+    expect(markup).toContain('name="git-store-path" type="text" value="/work/demo.hs2"');
+    expect(markup).toContain('data-action="relink-git-source"');
+    expect(markup).toContain('data-action="submit-git-source-relink"');
+    expect(markup).toContain('>Save location</wa-button>');
     expect(markup).toContain('name="project-source-color" value="#3b82f6" data-source-id="git-local" checked');
     expect(markup).toContain('>Done</wa-button>');
     expect(markup).not.toContain('Remove from this project…');

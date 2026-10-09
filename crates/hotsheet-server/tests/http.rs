@@ -16671,6 +16671,134 @@ async fn reopening_a_project_after_server_restart_keeps_its_github_source() {
     );
 }
 
+#[tokio::test]
+async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let (_primary, state) = state();
+    let root = tempfile::tempdir().unwrap();
+    let first = root.path().join("first");
+    let second = root.path().join("second");
+    let old_store = root.path().join("old-store");
+    let new_store = root.path().join("new-store");
+    std::fs::create_dir(&first).unwrap();
+    std::fs::create_dir(&second).unwrap();
+    let store = FsStore::init(&old_store, &StoreMetadata::new("HS")).unwrap();
+    let ticket = ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-10-09T00:00:00Z"),
+        NewTicket {
+            title: "Relinked ticket".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let old_id = hotsheet_ticketing::checkouts::TicketSource::git(&old_store).connection_id;
+    let old_locator = old_store
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let app = app(state.with_checkout_registry(root.path().join("checkouts.json")));
+    for (checkout, alias) in [(&first, "first"), (&second, "second")] {
+        let body = serde_json::json!({"root":checkout,"alias":alias,"stores":[old_store]});
+        let response = app
+            .clone()
+            .oneshot(authed("POST", "/checkouts", Some(&body.to_string())))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+    let path = format!("/checkouts/first/sources/{old_id}/relink");
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("GET", "/checkouts/first/providers", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let invalid = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &path,
+            Some(&serde_json::json!({"path":first}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    std::fs::rename(&old_store, &new_store).unwrap();
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &path,
+            Some(&serde_json::json!({"path":new_store}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let changed = body_json(response).await;
+    assert_eq!(changed["checkouts"].as_array().unwrap().len(), 2);
+    let new_id = changed["connection_id"].as_str().unwrap();
+    assert_ne!(new_id, old_id);
+    let hosted = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/stores", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        hosted
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|store| store["root"] != old_locator)
+    );
+    for reference in ["first", "second"] {
+        let checkout = body_json(
+            app.clone()
+                .oneshot(authed("GET", &format!("/checkouts/{reference}"), None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(checkout["sources"][0]["connection_id"], new_id);
+        assert_eq!(
+            checkout["sources"][0]["locator"],
+            new_store.canonicalize().unwrap().to_str().unwrap()
+        );
+        let providers = app
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{reference}/providers"),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(providers.status(), StatusCode::OK);
+        assert_eq!(body_json(providers).await[0]["connection_id"], new_id);
+        let ticket_response = app
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{reference}/tickets/{old_id}:{}", ticket.id),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(ticket_response.status(), StatusCode::OK);
+        assert_eq!(body_json(ticket_response).await["title"], "Relinked ticket");
+    }
+}
+
 /// HS2-3SCH1K: a checkout's provider list holds only the sources it links, marked default by
 /// the checkout's own default source, even though the connection catalog is machine-wide.
 #[tokio::test]

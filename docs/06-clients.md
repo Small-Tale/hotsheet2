@@ -657,7 +657,9 @@ and identity-less legacy entries remain conservatively blocking.
   edit/view dialog. External source dialogs provide details, this project's default,
   **Disable / Enable**, and a visual icon color grid that previews the mark on subtly
   tinted tiles. The Git dialog shows its name and location for reference and offers the
-  same color grid. Moving or renaming a Git repository is tracked by HS2-8BG4W9.
+  same color grid. The Git dialog lets users replace a moved or renamed ticket repository
+  path; Save location validates the destination, updates every linked project, and shows
+  an actionable error when the selected folder is not a Hot Sheet store (HS2-8BG4W9).
   Icon color belongs to the project and defaults to Gray (`#6b7280`); there is no
   Transparent source-color option (HS2-XKEHAK, HS2-H1FZNV).
   The trailing **Remove from this project** action opens the connection editor at an

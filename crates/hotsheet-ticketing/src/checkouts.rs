@@ -671,8 +671,8 @@ impl CheckoutRegistry {
     }
 
     /// Rename an external provider connection while retaining its previous id for durable
-    /// ticket references. Git source ids are derived from their store path and therefore
-    /// require a store migration rather than a connection rename.
+    /// ticket references. Git source ids are derived from their store path and use
+    /// `relink_git_source` when that path moves.
     pub fn rename_source(
         &self,
         reference: &str,
@@ -714,7 +714,7 @@ impl CheckoutRegistry {
             .ok_or_else(|| CheckoutError::NotFound(connection_id.into()))?;
         if source.provider == "git" {
             return Err(CheckoutError::Invalid(
-                "git source ids cannot be renamed; migrate the store path instead".into(),
+                "git source ids cannot be renamed; relink the store path instead".into(),
             ));
         }
         source.connection_id = new_connection_id.to_string();
@@ -736,6 +736,87 @@ impl CheckoutRegistry {
         let renamed = entry.clone();
         self.write_locked(&file)?;
         Ok(renamed)
+    }
+
+    /// Relink a moved Git store in every checkout that shares its path-derived source id.
+    /// The registry update, including defaults, colors, and historical aliases, is one
+    /// locked write. Callers must validate the destination as a Hot Sheet store first.
+    pub fn relink_git_source(
+        &self,
+        checkout_reference: &str,
+        connection_id: &str,
+        new_path: &Path,
+    ) -> Result<Vec<Checkout>, CheckoutError> {
+        let canonical = new_path
+            .canonicalize()
+            .map_err(|_| CheckoutError::Missing(new_path.display().to_string()))?;
+        let replacement = TicketSource::git(&canonical);
+        let _lock = self.acquire_lock()?;
+        let mut file = self.read_locked()?;
+        let selected = resolve_checkout(file.checkouts.clone(), checkout_reference)?;
+        let original = selected
+            .source(connection_id)
+            .filter(|source| source.provider == "git")
+            .ok_or_else(|| CheckoutError::NotFound(connection_id.to_string()))?;
+        if replacement.connection_id == original.connection_id {
+            return Ok(Vec::new());
+        }
+        let mut updated = Vec::new();
+        for checkout in &mut file.checkouts {
+            if !checkout
+                .source(connection_id)
+                .is_some_and(|source| source.provider == "git")
+            {
+                continue;
+            }
+            if checkout.source(&replacement.connection_id).is_some() {
+                return Err(CheckoutError::Invalid(format!(
+                    "destination ticket source is already linked to checkout {}",
+                    checkout.id
+                )));
+            }
+            let aliases = file.source_aliases.entry(checkout.id.clone()).or_default();
+            if aliases
+                .get(&replacement.connection_id)
+                .is_some_and(|target| target != connection_id)
+            {
+                return Err(CheckoutError::Invalid(format!(
+                    "destination ticket source id is retained for another source in checkout {}",
+                    checkout.id
+                )));
+            }
+            aliases.remove(&replacement.connection_id);
+            for target in aliases.values_mut() {
+                if target == connection_id {
+                    *target = replacement.connection_id.clone();
+                }
+            }
+            aliases.insert(connection_id.to_string(), replacement.connection_id.clone());
+            let source = checkout
+                .sources
+                .iter_mut()
+                .find(|source| source.connection_id == connection_id)
+                .expect("checked source remains linked");
+            *source = replacement.clone();
+            checkout.stores = checkout
+                .sources
+                .iter()
+                .filter(|source| source.provider == "git")
+                .map(|source| source.locator.clone())
+                .collect();
+            checkout.stores.sort();
+            if checkout.default_source.as_deref() == Some(connection_id) {
+                checkout.default_source = Some(replacement.connection_id.clone());
+            }
+            if let Some(color) = checkout.source_colors.remove(connection_id) {
+                checkout
+                    .source_colors
+                    .insert(replacement.connection_id.clone(), color);
+            }
+            updated.push(checkout.clone());
+        }
+        self.write_locked(&file)?;
+        Ok(updated)
     }
 
     /// Rewrite the copied locator of every checkout link that names the external connection
@@ -1601,6 +1682,127 @@ mod tests {
             "ordinary reopen keeps the migrated id"
         );
         assert_eq!(registry.list().unwrap(), vec![reopened]);
+    }
+
+    #[test]
+    fn moved_git_source_relinks_every_checkout_and_retains_old_ids() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        let old_path = temp.path().join("old-store");
+        let new_path = temp.path().join("new-store");
+        for path in [&first, &second, &old_path] {
+            std::fs::create_dir(path).unwrap();
+        }
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let old = TicketSource::git(&old_path);
+        let first_checkout = registry
+            .register_sources(
+                &first,
+                None,
+                None,
+                vec![old.clone()],
+                Some(old.connection_id.clone()),
+            )
+            .unwrap();
+        let second_checkout = registry
+            .register_sources(&second, None, None, vec![old.clone()], None)
+            .unwrap();
+        registry
+            .set_source_color(&first_checkout.id, &old.connection_id, "#3b82f6")
+            .unwrap();
+        std::fs::rename(&old_path, &new_path).unwrap();
+        let new = TicketSource::git(&new_path);
+
+        let updated = registry
+            .relink_git_source(&first_checkout.id, &old.connection_id, &new_path)
+            .unwrap();
+        assert_eq!(updated.len(), 2);
+        let first_after = registry.resolve(&first_checkout.id).unwrap();
+        let second_after = registry.resolve(&second_checkout.id).unwrap();
+        for checkout in [&first_after, &second_after] {
+            assert_eq!(checkout.sources, vec![new.clone()]);
+            assert_eq!(checkout.stores, vec![new.locator.clone()]);
+            assert_eq!(
+                registry
+                    .resolve_source(&checkout.id, &old.connection_id)
+                    .unwrap()
+                    .1,
+                new
+            );
+        }
+        assert_eq!(first_after.default_source, Some(new.connection_id.clone()));
+        assert_eq!(second_after.default_source, Some(new.connection_id.clone()));
+        assert_eq!(first_after.source_colors[&new.connection_id], "#3b82f6");
+        assert!(!first_after.source_colors.contains_key(&old.connection_id));
+        assert!(
+            registry
+                .relink_git_source(&first_checkout.id, &new.connection_id, &new_path)
+                .unwrap()
+                .is_empty()
+        );
+        registry
+            .register_sources(
+                &first,
+                None,
+                None,
+                vec![new.clone()],
+                Some(new.connection_id.clone()),
+            )
+            .unwrap();
+        assert_eq!(
+            registry
+                .resolve_source(&first_checkout.id, &old.connection_id)
+                .unwrap()
+                .1,
+            new
+        );
+        std::fs::rename(&new_path, &old_path).unwrap();
+        registry
+            .relink_git_source(&first_checkout.id, &new.connection_id, &old_path)
+            .unwrap();
+        for checkout in [&first_checkout, &second_checkout] {
+            assert_eq!(
+                registry
+                    .resolve_source(&checkout.id, &new.connection_id)
+                    .unwrap()
+                    .1,
+                old
+            );
+        }
+    }
+
+    #[test]
+    fn git_relink_collision_does_not_partially_update_shared_checkouts() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        let old_path = temp.path().join("old-store");
+        let new_path = temp.path().join("new-store");
+        for path in [&first, &second, &old_path, &new_path] {
+            std::fs::create_dir(path).unwrap();
+        }
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let old = TicketSource::git(&old_path);
+        let new = TicketSource::git(&new_path);
+        let first_checkout = registry
+            .register_sources(&first, None, None, vec![old.clone()], None)
+            .unwrap();
+        let second_checkout = registry
+            .register_sources(&second, None, None, vec![old.clone(), new], None)
+            .unwrap();
+        let before = registry.list().unwrap();
+        assert!(
+            registry
+                .relink_git_source(&first_checkout.id, &old.connection_id, &new_path)
+                .is_err()
+        );
+        assert_eq!(registry.list().unwrap(), before);
+        assert!(
+            registry
+                .resolve_source(&second_checkout.id, &old.connection_id)
+                .is_ok()
+        );
     }
 
     #[test]

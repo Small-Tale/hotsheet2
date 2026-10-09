@@ -25,6 +25,8 @@ export const PROJECT_LIFECYCLE_ACTIONS = {
   dismissCodexHooksNotice: action('dismiss-codex-hooks-notice'),
   dismissHs1Cleanup: action('dismiss-hs1-cleanup'),
   dismissTicketSourceSetup: action('dismiss-ticket-source-setup'),
+  submitGitSourceRelink: action('submit-git-source-relink'),
+  relinkGitSource: action('relink-git-source'),
   submitTicketStoreRemote: action('submit-ticket-store-remote'),
   connectTicketStoreRemote: action('connect-ticket-store-remote'),
   backTicketStoreRemote: action('back-ticket-store-remote'),

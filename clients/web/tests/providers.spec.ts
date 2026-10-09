@@ -858,6 +858,7 @@ async function mockProject(
   let githubAuthWaits = 0;
   let ticketSourceConfigured = !emptyAtFirst;
   let gitStores = ticketSourceConfigured ? [...project.stores] : [];
+  let gitStoreIds = gitStores.map((_, index) => (index === 0 ? 'git-local' : `git-${index + 1}`));
   let providerConnectionRecords: Array<{
     id: string;
     provider: string;
@@ -938,7 +939,7 @@ async function mockProject(
     return [...accounts.values()];
   };
   // The first linked store is the one the fixture rows name.
-  const gitSourceId = (index: number) => (index === 0 ? 'git-local' : `git-${index + 1}`);
+  const gitSourceId = (index: number) => gitStoreIds[index];
   const checkoutRecord = () => ({
     id: 'demo-checkout',
     root: '/work/demo',
@@ -1107,29 +1108,39 @@ async function mockProject(
       const id = decodeURIComponent(sourceColor[1]),
         color = request.postDataJSON().color;
       const linked = gitStores.some((_, index) => gitSourceId(index) === id) || linkedConnectionIds.includes(id);
-      const allowed = [
-        'transparent',
-        '#3b82f6',
-        '#22c55e',
-        '#f97316',
-        '#ef4444',
-        '#8b5cf6',
-        '#ec4899',
-        '#14b8a6',
-        '#6b7280',
-      ];
+      const allowed = ['#3b82f6', '#22c55e', '#f97316', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6b7280'];
       if (!linked || !allowed.includes(color))
         return route.fulfill({ status: 400, json: { error: 'invalid source or color' } });
-      if (color === 'transparent') Reflect.deleteProperty(sourceColors, id);
+      if (color === '#6b7280') Reflect.deleteProperty(sourceColors, id);
       else sourceColors[id] = color;
       return route.fulfill({ json: checkoutRecord() });
+    }
+    const sourceRelink = path.match(/\/sources\/([^/]+)\/relink$/);
+    if (sourceRelink && request.method() === 'PATCH') {
+      const oldId = decodeURIComponent(sourceRelink[1]),
+        index = gitStoreIds.indexOf(oldId),
+        newPath = request.postDataJSON().path;
+      if (index < 0 || newPath !== '/work/renamed.hs2')
+        return route.fulfill({ status: 400, json: { error: 'Choose a Hot Sheet ticket repository.' } });
+      if (gitStores[index] === newPath)
+        return route.fulfill({ json: { checkouts: [], connection_id: gitStoreIds[index] } });
+      gitStores[index] = newPath;
+      gitStoreIds[index] = 'git-moved';
+      if (checkoutDefaultSource === oldId) checkoutDefaultSource = 'git-moved';
+      if (sourceColors[oldId]) {
+        sourceColors['git-moved'] = sourceColors[oldId];
+        Reflect.deleteProperty(sourceColors, oldId);
+      }
+      return route.fulfill({ json: { checkouts: [checkoutRecord()], connection_id: 'git-moved' } });
     }
     if (path.includes('/sources/') && request.method() === 'PUT') {
       const body = request.postDataJSON(),
         id = decodeURIComponent(path.split('/').pop()!);
       ticketSourceConfigured = true;
-      if (body.provider === 'git' && !gitStores.includes(body.locator)) gitStores = [...gitStores, body.locator];
-      else if (body.provider !== 'git' && !linkedConnectionIds.includes(id))
+      if (body.provider === 'git' && !gitStores.includes(body.locator)) {
+        gitStores = [...gitStores, body.locator];
+        gitStoreIds = [...gitStoreIds, id];
+      } else if (body.provider !== 'git' && !linkedConnectionIds.includes(id))
         linkedConnectionIds = [...linkedConnectionIds, id];
       if (body.make_default) checkoutDefaultSource = id;
       return route.fulfill({ json: checkoutRecord() });
@@ -2677,6 +2688,36 @@ test('changes a project source color and updates card and inspector badges (HS2-
   await page.locator('[data-ticket-source-setup-dialog]').getByRole('button', { name: 'Done' }).click();
   await page.getByLabel('List view').click();
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(107, 114, 128)');
+});
+
+test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9) @ci-smoke', async ({
+  page,
+}, testInfo) => {
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Settings view').click();
+  await page
+    .locator(
+      '.ticket-provider-settings__source-row[data-source-id="git-local"] [data-action="edit-provider-connection"]',
+    )
+    .click();
+  const dialog = page.locator('[data-ticket-source-setup-dialog]');
+  await page.screenshot({ path: testInfo.outputPath('git-relink-wide.png'), animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('git-relink-narrow.png'), animations: 'disabled' });
+  await dialog.locator('input[name="git-store-path"]').fill('/work/missing.hs2');
+  await dialog.getByRole('button', { name: 'Save location' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('Choose a Hot Sheet ticket repository');
+  await dialog.locator('input[name="git-store-path"]').fill('/work/renamed.hs2');
+  await dialog.getByRole('button', { name: 'Save location' }).click();
+  await expect(page.locator('.app-toast')).toContainText('Ticket repository location updated.');
+  await expect(dialog.locator('input[name="git-store-path"]')).toHaveValue('/work/renamed.hs2');
+  await dialog.getByRole('button', { name: 'Save location' }).click();
+  await expect(page.locator('.app-toast')).toContainText('Location is unchanged.');
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.ticket-provider-settings__source-row[data-source-id="git-moved"]')).toBeVisible();
 });
 
 test('centers the compact source mark with the type icon and ticket number in columns (HS2-XTF923) @ci-smoke', async ({

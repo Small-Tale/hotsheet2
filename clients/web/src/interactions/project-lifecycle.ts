@@ -39,6 +39,7 @@ export interface ProjectLifecycleInteractionsDependencies {
   readonly providerSettingsError: Signal<string>;
   readonly ticketSourceRemoteError: Signal<string>;
   readonly connectCreatedGitRemote: (form: HTMLFormElement) => Promise<void>;
+  readonly relinkProjectGitSource: (form: HTMLFormElement) => Promise<void>;
   readonly createProjectGitSource: (custom?: boolean) => Promise<void>;
   readonly chooseProjectPath: (button: Element) => Promise<void>;
   readonly recoverUnhealthyProjectServer: () => Promise<void>;
@@ -75,6 +76,7 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
     providerSettingsError,
     ticketSourceRemoteError,
     connectCreatedGitRemote,
+    relinkProjectGitSource,
     createProjectGitSource,
     chooseProjectPath,
     recoverUnhealthyProjectServer,
@@ -255,6 +257,17 @@ export function wireProjectLifecycleInteractions(dependencies: ProjectLifecycleI
       providerSettingsError.value = '';
       createdGitTicketStore.value = '';
       ticketSourceRemoteError.value = '';
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', PROJECT_LIFECYCLE_ACTIONS.submitGitSourceRelink.selector, () =>
+      document.querySelector<HTMLFormElement>('#git-source-relink-form')?.requestSubmit(),
+    ),
+  );
+  lifetime.add(
+    delegate(document.body, 'submit', PROJECT_LIFECYCLE_ACTIONS.relinkGitSource.selector, (event, target) => {
+      event.preventDefault();
+      void relinkProjectGitSource(target as HTMLFormElement);
     }),
   );
   lifetime.add(

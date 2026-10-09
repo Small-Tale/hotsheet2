@@ -1711,6 +1711,10 @@ pub fn app(state: AppState) -> Router {
             patch(set_checkout_source_color),
         )
         .route(
+            "/checkouts/{reference}/sources/{connection_id}/relink",
+            patch(relink_checkout_git_source),
+        )
+        .route(
             "/checkouts/{reference}/default-source",
             put(set_checkout_default_source),
         )
@@ -4645,6 +4649,67 @@ struct CheckoutDefaultSourceBody {
 #[derive(Deserialize)]
 struct CheckoutSourceColorBody {
     color: String,
+}
+
+#[derive(Deserialize)]
+struct RelinkGitSourceBody {
+    path: String,
+}
+
+#[derive(Serialize)]
+struct RelinkGitSourceResponse {
+    checkouts: Vec<hotsheet_ticketing::checkouts::Checkout>,
+    connection_id: String,
+}
+
+async fn relink_checkout_git_source(
+    State(state): State<AppState>,
+    Path((reference, connection_id)): Path<(String, String)>,
+    Json(body): Json<RelinkGitSourceBody>,
+) -> Result<Json<RelinkGitSourceResponse>, ApiError> {
+    let hosting_state = state.clone();
+    let path = body.path;
+    let old_id = connection_id.clone();
+    let (updated, new_id) = tokio::task::spawn_blocking(move || {
+        let store = FsStore::open(&path).map_err(|error| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                format!("Choose a Hot Sheet ticket repository: {error}"),
+            )
+        })?;
+        let replacement = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
+        let added = hosting_state.host_project_store(store)?;
+        let result = hosting_state.checkout_registry.relink_git_source(
+            &reference,
+            &old_id,
+            std::path::Path::new(&replacement.locator),
+        );
+        let updated = match result {
+            Ok(updated) => updated,
+            Err(error) => {
+                if added {
+                    hosting_state.unhost_store(&replacement.connection_id);
+                }
+                return Err(ApiError::new(StatusCode::BAD_REQUEST, error.to_string()));
+            }
+        };
+        Ok::<_, ApiError>((updated, replacement.connection_id))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+    for checkout in &updated {
+        schedule_worklist_regeneration(&state, checkout);
+        schedule_setup_freshness(&state, checkout);
+    }
+    if !updated.is_empty() {
+        state.unhost_store(&connection_id);
+    } else if new_id != connection_id {
+        state.unhost_store(&new_id);
+    }
+    Ok(Json(RelinkGitSourceResponse {
+        checkouts: updated,
+        connection_id: new_id,
+    }))
 }
 
 async fn set_checkout_source_color(
