@@ -154,6 +154,26 @@ rollout. Native PATCH routes retain their existing
 synchronous behavior. Phase 3 still owns dispatch, confirmation, conflict handling,
 retry/attention states, events, and the pending-state UI.
 
+The pending overlay's paged read now walks 100-issue native pages and retains only
+the best `limit + 1` projected candidates plus pending operations (HS2-93Y887).
+It applies pending edits before search, sort, and keyset comparison, including a
+pending ticket omitted from a stale native page. A read over more than 100,000
+native issues fails explicitly instead of allocating an unbounded ticket list.
+Unpaged reads still return all matching tickets and retain their full-list cost.
+HS2-5XXM4P tracks an indexed or selective-native-query path to reduce the 1,000
+network pages at 100,000 issues before wider rollout.
+
+Opt-in synthetic Jira transport profile, 50-row title-sorted page, one pending
+title edit, separate processes per sample. Times exclude real network latency;
+peak RSS includes the Rust test harness and adapter. The transport returned 100
+issues per page, so request counts are the same in both modes.
+
+|  Issues | Native pages | Full-list elapsed | Full-list peak RSS | Bounded elapsed | Bounded peak RSS |
+| ------: | -----------: | ----------------: | -----------------: | --------------: | ---------------: |
+|   1,000 |           10 |             38 ms |           19.6 MiB |           37 ms |         17.0 MiB |
+|  10,000 |          100 |            364 ms |           43.3 MiB |          366 ms |         17.3 MiB |
+| 100,000 |        1,000 |          3,607 ms |          262.2 MiB |        3,597 ms |         17.3 MiB |
+
 ### Phase 3 Jira dispatch and pending controls (HS2-YSF8TV)
 
 When the same flag is set, the server starts a two-second dispatch loop. Each pass

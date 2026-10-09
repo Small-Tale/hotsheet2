@@ -122,10 +122,10 @@ and don't imply reading order — read by group.
 
 **G · Integrations**
 
-| Doc                                                            | Topic                                                                             | Status                                                                                                                                        |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [16-external-sync-interface.md](16-external-sync-interface.md) | Pluggable authoritative ticket providers (git default; GitHub/GitLab/Jira direct) | Shipped (HS2-ZVZP80/A90JRH/JAXS4Z/0RK4YC/VFXFFP; GitHub live CRUD validated; project-owned sources + machine-wide accounts HS2-SM9PM8)        |
-| [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md)   | Durable provider write-behind and provisional Jira field edits                    | Partial: opt-in Jira admission, dispatch, overlay, and settled-payload retention shipped (HS2-056R8P/YSF8TV/X5AJ7M); broader rollout deferred |
+| Doc                                                            | Topic                                                                             | Status                                                                                                                                                             |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [16-external-sync-interface.md](16-external-sync-interface.md) | Pluggable authoritative ticket providers (git default; GitHub/GitLab/Jira direct) | Shipped (HS2-ZVZP80/A90JRH/JAXS4Z/0RK4YC/VFXFFP; GitHub live CRUD validated; project-owned sources + machine-wide accounts HS2-SM9PM8)                             |
+| [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md)   | Durable provider write-behind and provisional Jira field edits                    | Partial: opt-in Jira admission, dispatch, bounded paged overlay, and settled-payload retention shipped (HS2-056R8P/YSF8TV/93Y887/X5AJ7M); broader rollout deferred |
 
 **H · Test evidence**
 

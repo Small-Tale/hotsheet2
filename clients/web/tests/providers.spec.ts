@@ -10328,6 +10328,11 @@ test('shows Jira outbox attention and lets a user retry then discard an edit (HS
   const sync = page.getByRole('region', { name: 'Jira sync status' });
   await expect(sync).toContainText('Needs attention');
   await expect(sync).toContainText('Jira rejected the write');
+  await page.screenshot({ path: 'target/visual-captures/hs2-93y887-jira-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await expect(sync).toBeVisible();
+  await page.screenshot({ path: 'target/visual-captures/hs2-93y887-jira-phone.png', fullPage: true });
   await sync.getByRole('button', { name: 'Retry' }).click();
   await expect.poll(() => state).toBe('queued');
   await expect(sync).toContainText('Queued locally');
