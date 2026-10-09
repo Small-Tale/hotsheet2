@@ -12,6 +12,7 @@ tier = "cli-agent"
 binaries = ["codex"]
 
 [instructions]
+shared_guidance = true
 # Codex reads AGENTS.md; same merge-safe managed-block mechanism as CLAUDE.md.
 target = "AGENTS.md"
 section = "instructions.md"

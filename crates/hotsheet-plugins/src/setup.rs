@@ -276,6 +276,7 @@ pub fn refresh_setup_in(
         let run_ids = HashSet::new();
         for target in &reconcile_targets {
             write_instruction_target(project_dir, target, &[], Some(&run_ids))?;
+            write_guidance_target(project_dir, target, false)?;
         }
         Vec::new()
     } else {
@@ -643,9 +644,23 @@ fn setup_plugins(
             .collect();
         write_instruction_target(project_dir, target, &writers, membership)?;
     }
+    // These independently versioned, project-neutral sections are shared by opted-in
+    // tools that read an instruction target. They are not copies of this
+    // repository's CLAUDE.md, whose nested specifics remain project-owned.
+    let guidance_targets: HashSet<&str> = plugins
+        .iter()
+        .filter(|plugin| plugin.manifest.instructions.shared_guidance)
+        .map(|plugin| plugin.manifest.instructions.target.as_str())
+        .collect();
+    for target in &guidance_targets {
+        write_guidance_target(project_dir, target, true)?;
+    }
     for target in refresh_targets.unwrap_or_default() {
         if !targets.contains(&target.as_str()) {
             write_instruction_target(project_dir, target, &[], membership)?;
+        }
+        if !guidance_targets.contains(target.as_str()) {
+            write_guidance_target(project_dir, target, false)?;
         }
     }
 
@@ -689,6 +704,116 @@ fn setup_plugins(
 
 const INSTRUCTIONS_VERSION_PREFIX: &str = "<!-- hotsheet-instructions-version: ";
 const SKILL_VERSION_PREFIX: &str = "<!-- hotsheet-skill-version: ";
+
+struct GuidanceSection {
+    name: &'static str,
+    current: &'static str,
+    legacy: &'static str,
+}
+
+const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
+    GuidanceSection {
+        name: "ticket-driven-work",
+        current: include_str!("../../../plugins/shared/ticket-driven-work.md"),
+        legacy: include_str!("../../../plugins/shared/legacy-ticket-driven-work.md"),
+    },
+    GuidanceSection {
+        name: "testing-philosophy",
+        current: include_str!("../../../plugins/shared/testing-philosophy.md"),
+        legacy: include_str!("../../../plugins/shared/legacy-testing-philosophy.md"),
+    },
+    GuidanceSection {
+        name: "requirements-documentation",
+        current: include_str!("../../../plugins/shared/requirements-documentation.md"),
+        legacy: include_str!("../../../plugins/shared/legacy-requirements-documentation.md"),
+    },
+];
+
+fn guidance_bounds(contents: &str, name: &str) -> Option<(usize, usize)> {
+    let begin = format!("<!-- hotsheet:begin section={name} v=");
+    let end = format!("<!-- hotsheet:end section={name} -->");
+    let start = contents.find(&begin)?;
+    let finish = contents[start..].find(&end)? + start + end.len();
+    Some((start, finish))
+}
+
+/// Separate the versioned generic text from project-owned nested specifics. A malformed
+/// specifics block is left untouched rather than risking its loss during refresh.
+fn guidance_parts<'a>(block: &'a str, name: &str) -> Option<(String, Option<&'a str>)> {
+    let specifics_begin = format!("<!-- hotsheet:begin specifics={name} v=");
+    let Some(start) = block.find(&specifics_begin) else {
+        return Some((block.trim().to_string(), None));
+    };
+    let specifics_end = format!("<!-- hotsheet:end specifics={name} -->");
+    let finish = block[start..].find(&specifics_end)? + start + specifics_end.len();
+    let outer_end = format!("<!-- hotsheet:end section={name} -->");
+    let generic = format!("{}\n\n{outer_end}", block[..start].trim_end());
+    Some((generic, Some(&block[start..finish])))
+}
+
+fn guidance_with_specifics(template: &str, name: &str, specifics: Option<&str>) -> String {
+    let Some(specifics) = specifics else {
+        return template.trim().to_string();
+    };
+    let end = format!("<!-- hotsheet:end section={name} -->");
+    format!(
+        "{}\n\n{}\n\n{end}",
+        template.trim().strip_suffix(&end).unwrap().trim_end(),
+        specifics.trim()
+    )
+}
+
+/// Install fresh sections and upgrade only an exact known predecessor. A newer version,
+/// an equal-version edit, or an unknown older body is treated as project customization.
+fn render_guidance_sections(existing: &str, active: bool) -> String {
+    let mut rendered = existing.to_string();
+    for section in GUIDANCE_SECTIONS {
+        let Some((start, finish)) = guidance_bounds(&rendered, section.name) else {
+            let marker = format!("<!-- hotsheet:begin section={}", section.name);
+            if active && !rendered.contains(&marker) {
+                rendered = append_block(&rendered, section.current.trim());
+            }
+            continue;
+        };
+        let installed = &rendered[start..finish];
+        let Some((generic, specifics)) = guidance_parts(installed, section.name) else {
+            continue;
+        };
+        let current = section.current.trim();
+        if generic == current {
+            if !active && specifics.is_none() {
+                rendered = remove_range(&rendered, (start, finish));
+            }
+            continue;
+        }
+        if generic != section.legacy.trim() {
+            continue;
+        }
+        if active {
+            let replacement = guidance_with_specifics(current, section.name, specifics);
+            rendered.replace_range(start..finish, &replacement);
+        } else if specifics.is_none() {
+            rendered = remove_range(&rendered, (start, finish));
+        }
+    }
+    rendered
+}
+
+fn write_guidance_target(project: &Path, rel: &str, active: bool) -> Result<(), SetupError> {
+    let path = project.join(rel);
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    if !active && existing.is_empty() {
+        return Ok(());
+    }
+    let rendered = render_guidance_sections(&existing, active);
+    if rendered == existing {
+        return Ok(());
+    }
+    if rendered.trim().is_empty() {
+        return remove_managed_file(project, rel, false).map(|_| ());
+    }
+    write_file(&path, &rendered)
+}
 
 fn marked_version(contents: &str, prefix: &str) -> Option<u64> {
     contents.lines().find_map(|line| {
@@ -1620,6 +1745,94 @@ args = ["--path", "{{store}}"]
 
     fn per_tool(id: &str, body: &str) -> String {
         format!("<!-- BEGIN hotsheet:{id} -->\n{body}\n<!-- END hotsheet:{id} -->")
+    }
+
+    #[test]
+    fn shared_guidance_preserves_local_text_and_version_boundaries() {
+        for section in GUIDANCE_SECTIONS {
+            let current = section.current.trim();
+            let legacy = section.legacy.trim();
+            let specifics = format!(
+                "<!-- hotsheet:begin specifics={} v=7 -->\nLocal policy.\n<!-- hotsheet:end specifics={} -->",
+                section.name, section.name
+            );
+            let older_with_specifics =
+                guidance_with_specifics(legacy, section.name, Some(&specifics));
+            let upgraded = render_guidance_sections(
+                &format!("User preface.\n\n{older_with_specifics}\n\nUser footer.\n"),
+                true,
+            );
+            assert!(upgraded.contains(&guidance_with_specifics(
+                current,
+                section.name,
+                Some(&specifics)
+            )));
+            assert!(upgraded.starts_with("User preface.\n"));
+            assert!(upgraded.contains("User footer.\n"));
+            assert_eq!(render_guidance_sections(&upgraded, true), upgraded);
+
+            for protected in [
+                legacy.replace("## ", "## Customized "),
+                current.replace("## ", "## Customized "),
+                current.replace(" v=", " v=99"),
+                guidance_with_specifics(legacy, section.name, Some(&specifics)).replace(
+                    &format!("<!-- hotsheet:end specifics={} -->", section.name),
+                    "",
+                ),
+            ] {
+                let input = format!("Before.\n\n{protected}\n\nAfter.\n");
+                let rendered = render_guidance_sections(&input, true);
+                assert!(
+                    rendered.contains(&protected),
+                    "protected section was replaced"
+                );
+            }
+            let retired =
+                render_guidance_sections(&format!("Before.\n\n{current}\n\nAfter.\n"), false);
+            assert_eq!(retired, "Before.\n\nAfter.\n");
+        }
+    }
+
+    #[test]
+    fn fresh_second_project_installs_all_four_tools_and_refreshes_guidance() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let dirs = [];
+        std::fs::write(project.path().join("AGENTS.md"), "Local agent text.\n").unwrap();
+        std::fs::write(project.path().join("CLAUDE.md"), "Local Claude text.\n").unwrap();
+        for id in ["claude", "codex", "antigravity", "opencode"] {
+            run_setup_in(store.path(), project.path(), Some(id), false, None, &dirs).unwrap();
+        }
+        let agents_path = project.path().join("AGENTS.md");
+        let claude_path = project.path().join("CLAUDE.md");
+        let agents = std::fs::read_to_string(&agents_path).unwrap();
+        let claude = std::fs::read_to_string(&claude_path).unwrap();
+        assert!(agents.starts_with("Local agent text.\n"));
+        assert!(claude.starts_with("Local Claude text.\n"));
+        for section in GUIDANCE_SECTIONS {
+            assert_eq!(agents.matches(section.current.trim()).count(), 1);
+            assert_eq!(claude.matches(section.current.trim()).count(), 1);
+        }
+        let enabled = ["claude", "codex", "antigravity", "opencode"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        refresh_setup_in(store.path(), project.path(), Some(&enabled), &dirs).unwrap();
+        let refreshed_agents = std::fs::read_to_string(&agents_path).unwrap();
+        let refreshed_claude = std::fs::read_to_string(&claude_path).unwrap();
+        for section in GUIDANCE_SECTIONS {
+            assert_eq!(refreshed_agents.matches(section.current.trim()).count(), 1);
+            assert_eq!(refreshed_claude.matches(section.current.trim()).count(), 1);
+        }
+        refresh_setup_in(store.path(), project.path(), Some(&enabled), &dirs).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&agents_path).unwrap(),
+            refreshed_agents
+        );
+        assert_eq!(
+            std::fs::read_to_string(&claude_path).unwrap(),
+            refreshed_claude
+        );
     }
 
     #[test]

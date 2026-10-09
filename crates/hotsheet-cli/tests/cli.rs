@@ -1143,7 +1143,10 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
     let body = include_str!("../../../plugins/codex/instructions.md").trim_end();
     let expected = |tools: &str| {
         format!(
-            "User text.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: {tools} -->\n{body}\n<!-- END hotsheet:agents-md -->\n\nMiddle user text.\n"
+            "User text.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: {tools} -->\n{body}\n<!-- END hotsheet:agents-md -->\n\nMiddle user text.\n\n{}\n\n{}\n\n{}\n",
+            include_str!("../../../plugins/shared/ticket-driven-work.md").trim(),
+            include_str!("../../../plugins/shared/testing-philosophy.md").trim(),
+            include_str!("../../../plugins/shared/requirements-documentation.md").trim(),
         )
     };
 
@@ -1522,9 +1525,10 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
         .assert()
         .success();
 
-    assert_eq!(
-        std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
-        instructions
+    let refreshed = std::fs::read_to_string(project.join("AGENTS.md")).unwrap();
+    assert!(refreshed.starts_with(instructions));
+    assert!(
+        refreshed.contains(include_str!("../../../plugins/shared/ticket-driven-work.md").trim())
     );
     assert_eq!(std::fs::read_to_string(skill_path).unwrap(), skill);
     assert!(project.join(".codex/config.toml").is_file());
@@ -1565,9 +1569,10 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
         .assert()
         .success();
 
-    assert_eq!(
-        std::fs::read_to_string(project.join("AGENTS.md")).unwrap(),
-        instructions
+    let refreshed = std::fs::read_to_string(project.join("AGENTS.md")).unwrap();
+    assert!(refreshed.starts_with(instructions));
+    assert!(
+        refreshed.contains(include_str!("../../../plugins/shared/ticket-driven-work.md").trim())
     );
     assert_eq!(std::fs::read_to_string(skill_path).unwrap(), skill);
     assert!(project.join(".codex/config.toml").is_file());

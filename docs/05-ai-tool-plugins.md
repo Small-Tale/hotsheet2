@@ -84,6 +84,18 @@ file — Codex, Antigravity, and OpenCode all read `AGENTS.md`. When the tools b
 for one file carry byte-identical instruction bodies, setup writes **one shared section**
 instead of one copy per tool:
 
+**Versioned shared guidance (HS2-GG03S7).** The four built-in tool manifests opt into
+three independently versioned sections from `plugins/shared/`: ticket work,
+testing, and requirements documentation. Setup installs each section once per instruction
+target (`CLAUDE.md` or `AGENTS.md`), even when several tools share the target. Refresh
+upgrades only an exact known predecessor in `plugins/shared/legacy-*.md`. It preserves nested
+project `hotsheet:specifics` text, unrelated content, equal-version edits, unknown older
+variants, and newer versions. Disabled tools retire unmodified default sections only
+when no enabled tool still uses that target and the section has no project specifics.
+Plugin authors opt in with `instructions.shared_guidance = true`; external plugins do not
+receive these defaults unless they explicitly request them. Repository-specific policies
+remain local to each project.
+
 ```markdown
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->

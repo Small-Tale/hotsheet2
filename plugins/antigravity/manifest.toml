@@ -11,6 +11,7 @@ tier = "cli-agent"
 binaries = ["agy"]
 
 [instructions]
+shared_guidance = true
 # Antigravity reads AGENTS.md (shared cross-tool convention). Verify against agy's docs.
 target = "AGENTS.md"
 section = "instructions.md"

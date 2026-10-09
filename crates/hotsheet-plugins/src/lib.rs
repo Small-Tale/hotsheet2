@@ -298,6 +298,9 @@ pub struct Instructions {
     pub target: String,
     /// The plugin-relative file whose contents are the Hot Sheet section.
     pub section: String,
+    /// Install Hot Sheet's independently versioned, shared project guidance.
+    #[serde(default)]
+    pub shared_guidance: bool,
 }
 
 /// The worklist skill: where it's written, and its source in the plugin.
@@ -543,16 +546,82 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
             hash.update([0]);
         }
     }
+    // Keep this final pseudo-plugin in the same byte order as the development client's
+    // sorted `plugins/` directory walk. These files are setup assets, even though they
+    // are shared across plugin manifests rather than loaded as a plugin of their own.
+    hash.update(b"shared");
+    hash.update([0]);
+    for (name, contents) in [
+        (
+            "legacy-requirements-documentation.md",
+            include_str!("../../../plugins/shared/legacy-requirements-documentation.md"),
+        ),
+        (
+            "legacy-testing-philosophy.md",
+            include_str!("../../../plugins/shared/legacy-testing-philosophy.md"),
+        ),
+        (
+            "legacy-ticket-driven-work.md",
+            include_str!("../../../plugins/shared/legacy-ticket-driven-work.md"),
+        ),
+        (
+            "requirements-documentation.md",
+            include_str!("../../../plugins/shared/requirements-documentation.md"),
+        ),
+        (
+            "testing-philosophy.md",
+            include_str!("../../../plugins/shared/testing-philosophy.md"),
+        ),
+        (
+            "ticket-driven-work.md",
+            include_str!("../../../plugins/shared/ticket-driven-work.md"),
+        ),
+    ] {
+        hash.update(name.as_bytes());
+        hash.update([0]);
+        hash.update(contents.as_bytes());
+        hash.update([0]);
+    }
     format!("{:x}", hash.finalize())
 }
 
 #[cfg(test)]
 #[test]
 fn embedded_setup_assets_match_the_source_plugin_tree() {
-    let source = load_dir(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins"));
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+    let source = load_dir(&root);
     assert_eq!(
         builtin_setup_assets_fingerprint(),
         setup_assets_fingerprint(&source)
+    );
+    // Independently follow the development client's sorted directory/file walk.
+    // This catches a newly added setup asset that was omitted from the compiled digest.
+    let mut directories: Vec<_> = fs::read_dir(root)
+        .unwrap()
+        .map(Result::unwrap)
+        .filter(|entry| entry.file_type().unwrap().is_dir())
+        .collect();
+    directories.sort_by_key(|entry| entry.file_name());
+    let mut hash = Sha256::new();
+    for directory in directories {
+        hash.update(directory.file_name().to_string_lossy().as_bytes());
+        hash.update([0]);
+        let mut files: Vec<_> = fs::read_dir(directory.path())
+            .unwrap()
+            .map(Result::unwrap)
+            .filter(|entry| entry.file_type().unwrap().is_file())
+            .collect();
+        files.sort_by_key(|entry| entry.file_name());
+        for file in files {
+            hash.update(file.file_name().to_string_lossy().as_bytes());
+            hash.update([0]);
+            hash.update(fs::read(file.path()).unwrap());
+            hash.update([0]);
+        }
+    }
+    assert_eq!(
+        builtin_setup_assets_fingerprint(),
+        format!("{:x}", hash.finalize())
     );
 }
 
