@@ -4124,6 +4124,25 @@ fn report_terminal_session(
         Ok(())
     };
     match session {
+        SessionHookEvent::QuestionAsked {
+            question,
+            tool_use_id,
+        } => post(
+            "question",
+            serde_json::json!({ "question": question, "tool_use_id": tool_use_id, "session_id": session_id }),
+        ),
+        SessionHookEvent::QuestionResolved { tool_use_id } => {
+            let url = format!(
+                "{}?tool_use_id={}",
+                endpoint("question"),
+                urlencoding_component(tool_use_id)
+            );
+            ureq::delete(&url)
+                .set("X-Hotsheet-Secret", secret)
+                .timeout(std::time::Duration::from_secs(5))
+                .call()?;
+            Ok(())
+        }
         SessionHookEvent::Halted {
             error_type,
             message,

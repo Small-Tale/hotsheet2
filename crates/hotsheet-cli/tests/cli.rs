@@ -446,6 +446,44 @@ fn capture_one_request(listener: std::net::TcpListener) -> (String, String, Stri
 }
 
 #[test]
+fn permission_hook_reports_interactive_question_lifecycle_to_terminal() {
+    let home = tempfile::tempdir().unwrap();
+    let hook = |input: &'static str| {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || capture_one_request(listener));
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", home.path())
+            .env_remove("HOTSHEET_PROJECT")
+            .env("HOTSHEET_SERVER", &url)
+            .env("HOTSHEET_SECRET", "terminal-secret")
+            .env("HOTSHEET_TERMINAL_ID", "claude 7")
+            .args(["permission-hook", "--agent", "claude"])
+            .write_stdin(input)
+            .assert()
+            .success()
+            .stdout(predicate::str::is_empty());
+        server.join().unwrap()
+    };
+    let asked = hook(
+        r#"{"hook_event_name":"PreToolUse","session_id":"s-1","tool_name":"AskUserQuestion","tool_use_id":"tool-1","tool_input":{"questions":[{"question":"Which direction?"}]}}"#,
+    );
+    assert_eq!(asked.0, "POST /terminals/claude%207/question HTTP/1.1");
+    let body: serde_json::Value = serde_json::from_str(&asked.2).unwrap();
+    assert_eq!(body["question"], "Which direction?");
+    assert_eq!(body["tool_use_id"], "tool-1");
+    assert_eq!(body["session_id"], "s-1");
+    let resolved = hook(
+        r#"{"hook_event_name":"PostToolUse","session_id":"s-1","tool_name":"AskUserQuestion","tool_use_id":"tool-1"}"#,
+    );
+    assert_eq!(
+        resolved.0,
+        "DELETE /terminals/claude%207/question?tool_use_id=tool-1 HTTP/1.1"
+    );
+}
+
+#[test]
 fn permission_hook_reports_halted_and_resumed_sessions_to_its_terminal() {
     // HS2-HJ4D1H: StopFailure marks the hook's Hot Sheet terminal halted; UserPromptSubmit clears
     // it. Neither prints a decision, and outside a Hot Sheet terminal nothing is sent.

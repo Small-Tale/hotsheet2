@@ -2,7 +2,7 @@ import './halted-session-popup.css';
 
 import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Bot, CircleAlert } from 'lucide';
+import { Bot, CircleAlert, CircleHelp } from 'lucide';
 
 import type { HaltedSessionEpisode } from '../halted-sessions';
 import { NOTIFICATIONS_AND_LINKS_ACTIONS } from '../interaction-attrs/notifications-and-links';
@@ -18,12 +18,13 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
     <dialog
       class="halted-session-popup"
       data-component="halted-session-popup"
+      data-kind={episode.kind}
       data-halt-key={episode.key}
       popover="manual"
       {...{ [TOP_LAYER_OVERLAY_ATTRIBUTE]: '' }}
       {...{ [TOP_LAYER_PRESENTATION_KEY_ATTRIBUTE]: episode.key }}
       tabindex={-1}
-      aria-label="AI session halted"
+      aria-label={episode.kind === 'question' ? 'AI waiting for your answer' : 'AI session halted'}
     >
       <article class="halted-session-popup__card">
         <header class="halted-session-popup__header">
@@ -37,12 +38,14 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
         </header>
         <div class="halted-session-popup__summary">
           <LucideIcon
-            icon={CircleAlert}
-            name="circle-alert"
+            icon={episode.kind === 'question' ? CircleHelp : CircleAlert}
+            name={episode.kind === 'question' ? 'circle-help' : 'circle-alert'}
             size={17.6}
-            color={foregroundColorVar('--wa-color-danger-fill-loud')}
+            color={foregroundColorVar(
+              episode.kind === 'question' ? '--wa-color-brand-fill-loud' : '--wa-color-danger-fill-loud',
+            )}
           />
-          <strong>AI session halted</strong>
+          <strong>{episode.kind === 'question' ? 'AI waiting for your answer' : 'AI session halted'}</strong>
         </div>
         <pre class="halted-session-popup__details">
           <code>{episode.message}</code>

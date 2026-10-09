@@ -6,7 +6,7 @@ import type { DrawerAIChat } from './project-drive';
 
 export interface HaltedSessionEpisode {
   key: string;
-  kind: 'terminal' | 'chat';
+  kind: 'terminal' | 'chat' | 'question';
   projectId: string;
   projectName: string;
   sessionId: string;
@@ -23,20 +23,33 @@ export function projectHaltedSessions(
   conversations: Readonly<Record<string, ConversationState>>,
 ): HaltedSessionEpisode[] {
   return projects.flatMap((project) => [
-    ...(groups.find((group) => group.projectId === project.id)?.sessions ?? []).flatMap((session) =>
-      session.halt
-        ? [
-            {
-              key: JSON.stringify(['terminal', project.id, session.id, session.halt.at]),
-              kind: 'terminal' as const,
-              projectId: project.id,
-              projectName: project.name,
-              sessionId: session.id,
-              sessionName: session.title ?? session.id,
-              message: session.halt.message,
-            },
-          ]
-        : [],
+    ...(groups.find((group) => group.projectId === project.id)?.sessions ?? []).flatMap(
+      (session): HaltedSessionEpisode[] =>
+        session.halt
+          ? [
+              {
+                key: JSON.stringify(['terminal', project.id, session.id, session.halt.at]),
+                kind: 'terminal' as const,
+                projectId: project.id,
+                projectName: project.name,
+                sessionId: session.id,
+                sessionName: session.title ?? session.id,
+                message: session.halt.message,
+              },
+            ]
+          : session.question
+            ? [
+                {
+                  key: JSON.stringify(['question', project.id, session.id, session.question.tool_use_id]),
+                  kind: 'question' as const,
+                  projectId: project.id,
+                  projectName: project.name,
+                  sessionId: session.id,
+                  sessionName: session.title ?? session.id,
+                  message: session.question.question,
+                },
+              ]
+            : [],
     ),
     ...(chats[project.id] ?? []).flatMap((chat) => {
       const state = conversations[chat.connectionId] as ConversationState | undefined;

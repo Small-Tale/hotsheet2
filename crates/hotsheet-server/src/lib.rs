@@ -186,6 +186,8 @@ pub struct AppState {
     terminal_server_url: Arc<Mutex<Option<String>>>,
     /// AI sessions in terminals that halted on an API error, by terminal id (HS2-HJ4D1H).
     terminal_halts: Arc<Mutex<std::collections::HashMap<String, TerminalHalt>>>,
+    /// Claude questions currently waiting in a terminal (HS2-KP9K85).
+    terminal_questions: Arc<Mutex<std::collections::HashMap<String, TerminalQuestion>>>,
     /// AI sessions whose Hot Sheet hooks reported in from a terminal, by terminal id (HS2-EV1XK3).
     terminal_ai_connections: Arc<Mutex<std::collections::HashMap<String, TerminalAiConnection>>>,
     /// Last trusted hook report for each live terminal, retained after SessionEnd for diagnosis.
@@ -382,6 +384,7 @@ impl AppState {
             setup_refreshes: Arc::new(Mutex::new(std::collections::HashSet::new())),
             terminal_server_url: Arc::new(Mutex::new(None)),
             terminal_halts: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_questions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_ai_connections: Arc::new(Mutex::new(std::collections::HashMap::new())),
             terminal_ai_last_reports: Arc::new(Mutex::new(std::collections::HashMap::new())),
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
@@ -2026,6 +2029,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/terminals/{id}/halt",
             post(halt_terminal).delete(clear_terminal_halt),
+        )
+        .route(
+            "/terminals/{id}/question",
+            post(ask_terminal_question).delete(resolve_terminal_question),
         )
         .route(
             "/terminals/{id}/ai-connection",
@@ -9311,6 +9318,9 @@ struct TerminalInfo {
     /// (HS2-HJ4D1H); absent while it is running normally.
     #[serde(skip_serializing_if = "Option::is_none")]
     halt: Option<TerminalHalt>,
+    /// An interactive question from the AI session awaiting an answer in this terminal.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    question: Option<TerminalQuestion>,
     /// An AI session in this terminal started with Hot Sheet's hooks active, so its permission
     /// prompts come to Hot Sheet (HS2-EV1XK3); absent when no session has reported in.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -9358,6 +9368,15 @@ pub struct TerminalHalt {
     at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TerminalQuestion {
+    question: String,
+    tool_use_id: String,
+    #[serde(skip)]
+    session_id: Option<String>,
+    at: String,
+}
+
 /// The AI tool of an `ai` terminal, recovered from its `<tool>-<id>` worker id. Shell terminals,
 /// workers that do not follow that shape, and an explicit-command terminal that also connects a
 /// tool (whose session worker is in the reserved `terminal` namespace) have none.
@@ -9393,6 +9412,7 @@ fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
         tool: ai_terminal_tool(term.kind(), term.worker_id(), id),
         name: None,
         halt: None,
+        question: None,
         ai_connection: None,
         last_hook_report: None,
     }
@@ -9412,6 +9432,7 @@ fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInfo {
         tool,
         name: None,
         halt: None,
+        question: None,
         ai_connection: None,
         last_hook_report: None,
     }
@@ -10341,6 +10362,7 @@ async fn live_terminal_infos(state: &AppState) -> Vec<TerminalInfo> {
 fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<TerminalInfo> {
     let names = terminal_names::all(&Settings::new(state.store.root())).unwrap_or_default();
     let halts = state.terminal_halts.lock().unwrap().clone();
+    let mut questions = state.terminal_questions.lock().unwrap();
     let connections = state.terminal_ai_connections.lock().unwrap().clone();
     let mut last_reports = state.terminal_ai_last_reports.lock().unwrap();
     for info in &mut infos {
@@ -10349,6 +10371,12 @@ fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<Te
         }
         info.name = names.get(&info.id).cloned();
         info.halt = halts.get(&info.id).cloned();
+        info.question = if info.alive {
+            questions.get(&info.id).cloned()
+        } else {
+            questions.remove(&info.id);
+            None
+        };
         info.ai_connection = info
             .alive
             .then(|| connections.get(&info.id).cloned())
@@ -10356,6 +10384,112 @@ fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<Te
         info.last_hook_report = last_reports.get(&info.id).cloned();
     }
     infos
+}
+
+#[derive(Deserialize)]
+struct TerminalQuestionReq {
+    question: String,
+    tool_use_id: String,
+    session_id: Option<String>,
+}
+
+/// A trusted Claude hook reports the question before the terminal waits for its answer.
+async fn ask_terminal_question(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<TerminalQuestionReq>,
+) -> Result<StatusCode, ApiError> {
+    if !live_terminal_infos(&state)
+        .await
+        .iter()
+        .any(|info| info.id == id)
+    {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "no such terminal"));
+    }
+    if body.tool_use_id.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "missing tool_use_id",
+        ));
+    }
+    if state
+        .terminal_ai_connections
+        .lock()
+        .unwrap()
+        .get(&id)
+        .is_some_and(|connection| {
+            connection.session_id.is_some() && connection.session_id != body.session_id
+        })
+    {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    if forget_terminal_halt(&state, &id) {
+        emit_terminal_halted(&state, &id, None);
+    }
+    let mut questions = state.terminal_questions.lock().unwrap();
+    let same = questions.get(&id).is_some_and(|current| {
+        current.tool_use_id == body.tool_use_id && current.session_id == body.session_id
+    });
+    if !same {
+        questions.insert(
+            id.clone(),
+            TerminalQuestion {
+                question: body.question.trim().chars().take(500).collect(),
+                tool_use_id: body.tool_use_id,
+                session_id: body.session_id,
+                at: OffsetDateTime::now_utc()
+                    .format(&Rfc3339)
+                    .unwrap_or_default(),
+            },
+        );
+    }
+    drop(questions);
+    if !same {
+        emit_terminal_question(&state, &id);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Default, Deserialize)]
+struct TerminalQuestionClearQuery {
+    tool_use_id: Option<String>,
+}
+
+async fn resolve_terminal_question(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<TerminalQuestionClearQuery>,
+) -> StatusCode {
+    if forget_terminal_question(&state, &id, query.tool_use_id.as_deref()) {
+        emit_terminal_question(&state, &id);
+    }
+    StatusCode::NO_CONTENT
+}
+
+fn forget_terminal_question(state: &AppState, id: &str, tool_use_id: Option<&str>) -> bool {
+    let mut questions = state.terminal_questions.lock().unwrap();
+    if tool_use_id.is_some_and(|expected| {
+        questions
+            .get(id)
+            .is_none_or(|current| current.tool_use_id != expected)
+    }) {
+        return false;
+    }
+    questions.remove(id).is_some()
+}
+
+fn emit_terminal_question(state: &AppState, id: &str) {
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: String::new(),
+        kind: "terminal_question".into(),
+        id: id.to_owned(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
 }
 
 /// Body for `POST /terminals/{id}/halt`, sent by the AI tool's hook adapter in that terminal.
@@ -10384,6 +10518,9 @@ async fn halt_terminal(
         .any(|info| info.id == id)
     {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "no such terminal"));
+    }
+    if forget_terminal_question(&state, &id, None) {
+        emit_terminal_question(&state, &id);
     }
     let clean = |value: Option<String>, fallback: &str| {
         let value = value.unwrap_or_default();
@@ -10432,6 +10569,9 @@ async fn clear_terminal_halt(
     Path(id): Path<String>,
     Query(query): Query<TerminalHaltClearQuery>,
 ) -> StatusCode {
+    if forget_terminal_question(&state, &id, None) {
+        emit_terminal_question(&state, &id);
+    }
     if forget_terminal_halt_if(&state, &id, query.at.as_deref()) {
         emit_terminal_halted(&state, &id, None);
     }
@@ -10481,6 +10621,9 @@ async fn connect_terminal_ai(
     // A new or resumed AI session in this terminal cannot inherit an earlier session's halt.
     if forget_terminal_halt(&state, &id) {
         emit_terminal_halted(&state, &id, None);
+    }
+    if forget_terminal_question(&state, &id, None) {
+        emit_terminal_question(&state, &id);
     }
     let agent = body
         .agent
@@ -10535,6 +10678,9 @@ async fn disconnect_terminal_ai(
     };
     if forget_terminal_halt(&state, &id) {
         emit_terminal_halted(&state, &id, None);
+    }
+    if forget_terminal_question(&state, &id, None) {
+        emit_terminal_question(&state, &id);
     }
     if removed {
         emit_terminal_ai_connection(&state, &id, None);
@@ -10760,6 +10906,9 @@ async fn kill_terminal(
                 if forget_terminal_halt(&state, &id) {
                     emit_terminal_halted(&state, &id, None);
                 }
+                if forget_terminal_question(&state, &id, None) {
+                    emit_terminal_question(&state, &id);
+                }
                 forget_terminal_ai_connection(&state, &id);
                 state.terminal_ai_last_reports.lock().unwrap().remove(&id);
                 Ok(StatusCode::NO_CONTENT)
@@ -10774,6 +10923,9 @@ async fn kill_terminal(
     forget_terminal_name(&state, &id);
     if forget_terminal_halt(&state, &id) {
         emit_terminal_halted(&state, &id, None);
+    }
+    if forget_terminal_question(&state, &id, None) {
+        emit_terminal_question(&state, &id);
     }
     forget_terminal_ai_connection(&state, &id);
     state.terminal_ai_last_reports.lock().unwrap().remove(&id);

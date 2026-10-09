@@ -86,6 +86,7 @@ test('keeps workspace toolbar visibility responsive without CSS probe work durin
 async function haltedSessionFixture(page: Page) {
   await mockProject(page);
   let halt: { at: string; message: string; error_type: string } | undefined,
+    question: { at: string; question: string; tool_use_id: string } | undefined,
     pending: Array<{ id: number; connection: string; project: string; tool: string; action: string }> = [],
     failing = false,
     cursor = 0;
@@ -98,7 +99,9 @@ async function haltedSessionFixture(page: Page) {
     return failing
       ? route.fulfill({ status: 500, json: { error: 'snapshot unavailable' } })
       : route.fulfill({
-          json: [{ id: 'halt-worker', name: 'Claude worker', alive: true, busy: false, cwd: '/work/demo', halt }],
+          json: [
+            { id: 'halt-worker', name: 'Claude worker', alive: true, busy: false, cwd: '/work/demo', halt, question },
+          ],
         });
   });
   await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
@@ -134,6 +137,12 @@ async function haltedSessionFixture(page: Page) {
       halt = at ? { at, message: `Selected model is at capacity (${at}).`, error_type: 'overloaded' } : undefined;
       await emit('terminal_halted');
     },
+    question: async (toolUseId?: string) => {
+      question = toolUseId
+        ? { at: 'now', question: 'Which direction should I take?', tool_use_id: toolUseId }
+        : undefined;
+      await emit('terminal_question');
+    },
     permission: async (connection = 'claude-worker') => {
       pending = [{ id: 99, connection, project: '/work/demo', tool: 'Bash', action: 'cargo test' }];
       await emit('permission_asked', '99');
@@ -148,6 +157,27 @@ async function haltedSessionFixture(page: Page) {
     },
   };
 }
+
+test('alerts for a terminal question and opens its originating session (HS2-KP9K85)', async ({ page }) => {
+  const fixture = await haltedSessionFixture(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await fixture.question('tool-1');
+  const popup = page.getByRole('dialog', { name: 'AI waiting for your answer' });
+  await expect(popup).toBeVisible();
+  await expect(popup).toContainText('Which direction should I take?');
+  await expect(page.getByRole('tab', { name: /demo An AI session needs your attention/ })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('hs2-kp9k85-question-alert.png') });
+  await popup.getByRole('button', { name: 'Open session' }).click();
+  await expect(
+    page.locator('[data-component="terminal-drawer"] [data-tab-kind="terminal"][data-terminal-id="halt-worker"]'),
+  ).toHaveAttribute('data-selected', 'true');
+  await fixture.question();
+  await expect(popup).toHaveCount(0);
+  await fixture.question('tool-2');
+  await expect(popup).toBeVisible();
+});
 
 for (const width of [1280, 390]) {
   test(`halts prompt through permission priority, pause/resume, resolution and reload dedupe at ${width}px (HS2-E6KAWY)`, async ({

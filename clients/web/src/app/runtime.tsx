@@ -4023,6 +4023,7 @@ export async function startHotSheetWebClient() {
               response.events.some(
                 (event) =>
                   event.kind === 'terminal_halted' ||
+                  event.kind === 'terminal_question' ||
                   event.kind === 'terminal_ai_connection' ||
                   event.kind === 'terminal_hook_report' ||
                   event.kind === 'permission_asked',
@@ -4987,11 +4988,13 @@ export async function startHotSheetWebClient() {
           location: 'local' as const,
           selected: !restoreFailure && item.id === selectedProjectId.value,
           notificationCount: permissionCount(item.id),
-          // A halted AI session in one of this project's terminals needs the user (HS2-HJ4D1H).
+          // A halted session or unanswered AI question in this project's terminals needs the user.
           ...(terminalGroups.value.some(
-            (group) => group.projectId === item.id && group.sessions.some((session) => Boolean(session.halt)),
+            (group) =>
+              group.projectId === item.id &&
+              group.sessions.some((session) => Boolean(session.halt || session.question)),
           )
-            ? { attention: true, attentionLabel: 'An AI session stopped on an error' }
+            ? { attention: true, attentionLabel: 'An AI session needs your attention' }
             : {}),
           upNextCount: counts.up_next,
           activeTicketCount: counts.active,

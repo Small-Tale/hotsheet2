@@ -1176,6 +1176,114 @@ async fn terminal_rename_persists_announces_and_is_forgotten_on_kill() {
 }
 
 #[tokio::test]
+async fn terminal_question_tracks_tool_identity_and_clears_on_answer_or_exit() {
+    let (_dir, state) = state();
+    let router = app(state);
+    let send = |method: &'static str, path: &'static str, body: Option<&'static str>| {
+        let router = router.clone();
+        async move { router.oneshot(authed(method, path, body)).await.unwrap() }
+    };
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"question-me"}"#)
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    let first = r#"{"question":"Which direction?","tool_use_id":"tool-1","session_id":"s-1"}"#;
+    assert_eq!(
+        send("POST", "/terminals/question-me/question", Some(first))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    let at = body_json(send("GET", "/terminals/question-me", None).await).await["question"]["at"]
+        .clone();
+    assert_eq!(
+        send("POST", "/terminals/question-me/question", Some(first))
+            .await
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        body_json(send("GET", "/terminals", None).await).await[0]["question"]["at"],
+        at
+    );
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/question-me/question",
+            Some(r#"{"question":"Another question","tool_use_id":"tool-2","session_id":"s-1"}"#)
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    send(
+        "DELETE",
+        "/terminals/question-me/question?tool_use_id=tool-1",
+        None,
+    )
+    .await;
+    assert_eq!(
+        body_json(send("GET", "/terminals", None).await).await[0]["question"]["tool_use_id"],
+        "tool-2"
+    );
+    send(
+        "DELETE",
+        "/terminals/question-me/question?tool_use_id=tool-2",
+        None,
+    )
+    .await;
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("question")
+            .is_none()
+    );
+    send(
+        "POST",
+        "/terminals/question-me/ai-connection",
+        Some(r#"{"agent":"claude","session_id":"s-1"}"#),
+    )
+    .await;
+    send(
+        "POST",
+        "/terminals/question-me/question",
+        Some(r#"{"question":"Stale","tool_use_id":"old","session_id":"s-old"}"#),
+    )
+    .await;
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("question")
+            .is_none()
+    );
+    send("POST", "/terminals/question-me/question", Some(first)).await;
+    send(
+        "DELETE",
+        "/terminals/question-me/ai-connection?session_id=s-1",
+        None,
+    )
+    .await;
+    assert!(
+        body_json(send("GET", "/terminals", None).await).await[0]
+            .get("question")
+            .is_none()
+    );
+    send("POST", "/terminals/question-me/question", Some(first)).await;
+    send("DELETE", "/terminals/question-me", None).await;
+    assert!(
+        body_json(send("GET", "/terminals", None).await)
+            .await
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn terminal_halt_is_reported_listed_announced_cleared_and_forgotten_on_kill() {
     // HS2-HJ4D1H: an AI session's StopFailure hook marks its terminal halted until the user
     // prompts again (UserPromptSubmit → DELETE) or the terminal is killed.

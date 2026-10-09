@@ -171,6 +171,30 @@ describe('halt episode projection', () => {
     expect(projectHaltedSessions([], groups, {}, {}, {})).toEqual([]);
   });
 
+  it('projects a waiting question with a stable tool-use identity and clears it on resolution', () => {
+    const groups = [
+      {
+        projectId: 'p',
+        sessions: [
+          {
+            id: 't',
+            title: 'Claude',
+            question: { question: 'Which direction?', tool_use_id: 'tool-1', at: 'now' },
+          },
+        ],
+      },
+    ] as TerminalDashboardGroup[];
+    const episodes = projectHaltedSessions(projects, groups, {}, {}, {});
+    expect(episodes).toMatchObject([{ kind: 'question', message: 'Which direction?' }]);
+    expect(episodes[0].key).toBe(JSON.stringify(['question', 'p', 't', 'tool-1']));
+    const inbox = new HaltedSessionInbox();
+    inbox.reconcile(episodes);
+    expect(inbox.visible(false, false)?.kind).toBe('question');
+    groups[0].sessions[0].question = undefined;
+    inbox.reconcile(projectHaltedSessions(projects, groups, {}, {}, {}));
+    expect(inbox.visible(false, false)).toBeUndefined();
+  });
+
   it('requires the latest assistant to have completed failure, suppressing retryable errors and in-flight retries', () => {
     const project = (state: ConversationState, busy = false) =>
       projectHaltedSessions(

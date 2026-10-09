@@ -59,6 +59,7 @@ export interface TerminalDashboardSession {
   progress?: number;
   /** The AI session halted on an API error (HS2-HJ4D1H). */
   halt?: TerminalHalt;
+  question?: { question: string; tool_use_id: string; at: string };
   /** The AI tool an `ai` terminal launched (for example `codex`). */
   tool?: string;
   /** The session's own `SessionStart` report (HS2-EV1XK3). */

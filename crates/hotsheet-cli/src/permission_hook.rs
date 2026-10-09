@@ -43,6 +43,13 @@ pub fn permission_hook_event(input: &Value) -> PermissionHookEvent {
 /// A session lifecycle event the same adapter reports to the terminal it runs in (HS2-HJ4D1H).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionHookEvent {
+    /// Claude is presenting AskUserQuestion in the terminal.
+    QuestionAsked {
+        question: String,
+        tool_use_id: String,
+    },
+    /// The question tool returned or failed.
+    QuestionResolved { tool_use_id: String },
     /// Claude Code's `StopFailure`: the turn ended on an API error (for example `overloaded`,
     /// "Selected model is at capacity") and the session is waiting for the user.
     Halted { error_type: String, message: String },
@@ -67,6 +74,30 @@ pub fn session_hook_event(input: &Value) -> Option<SessionHookEvent> {
             .map(str::to_owned)
     };
     match input.get("hook_event_name").and_then(Value::as_str) {
+        Some("PreToolUse")
+            if input.get("tool_name").and_then(Value::as_str) == Some("AskUserQuestion") =>
+        {
+            let question = input
+                .get("tool_input")
+                .and_then(|tool| tool.get("questions"))
+                .and_then(Value::as_array)
+                .and_then(|questions| questions.first())
+                .and_then(|first| first.get("question"))
+                .and_then(Value::as_str)
+                .unwrap_or("Claude has a question for you.")
+                .trim();
+            Some(SessionHookEvent::QuestionAsked {
+                question: question.to_owned(),
+                tool_use_id: text("tool_use_id").unwrap_or_default(),
+            })
+        }
+        Some("PostToolUse" | "PostToolUseFailure")
+            if input.get("tool_name").and_then(Value::as_str) == Some("AskUserQuestion") =>
+        {
+            Some(SessionHookEvent::QuestionResolved {
+                tool_use_id: text("tool_use_id").unwrap_or_default(),
+            })
+        }
         Some("StopFailure") => Some(SessionHookEvent::Halted {
             // Current Claude reports `error` as the error type and `last_assistant_message` as
             // the rendered diagnostic. Keep the older fields for existing installations.
@@ -187,6 +218,36 @@ pub fn decision_from_server(reply: &Value) -> HookDecision {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maps_question_tool_lifecycle_without_touching_other_pre_tool_events() {
+        let question = json!({
+            "hook_event_name": "PreToolUse", "tool_name": "AskUserQuestion",
+            "tool_use_id": "tool-1",
+            "tool_input": { "questions": [{ "question": "Which direction?" }] },
+        });
+        assert_eq!(
+            session_hook_event(&question),
+            Some(SessionHookEvent::QuestionAsked {
+                question: "Which direction?".into(),
+                tool_use_id: "tool-1".into(),
+            })
+        );
+        assert_eq!(
+            session_hook_event(&json!({ "hook_event_name": "PreToolUse", "tool_name": "Bash" })),
+            None
+        );
+        for event in ["PostToolUse", "PostToolUseFailure"] {
+            assert_eq!(
+                session_hook_event(
+                    &json!({ "hook_event_name": event, "tool_name": "AskUserQuestion", "tool_use_id": "tool-1" })
+                ),
+                Some(SessionHookEvent::QuestionResolved {
+                    tool_use_id: "tool-1".into()
+                })
+            );
+        }
+    }
 
     #[test]
     fn maps_bash_and_edit_inputs_to_tool_action() {

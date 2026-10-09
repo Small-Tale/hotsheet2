@@ -88,6 +88,12 @@
     Consolas,
     monospace;
 }
+.halted-session-popup[data-kind='question'] .halted-session-popup__details {
+  font: 400 var(--wa-font-size-s)/1.45 var(--wa-font-family-body);
+}
+.halted-session-popup[data-kind='question'] .halted-session-popup__details code {
+  font: inherit;
+}
 .halted-session-popup__footer {
   display: flex;
   padding: remify(12.8px) remify(16px) remify(16px);

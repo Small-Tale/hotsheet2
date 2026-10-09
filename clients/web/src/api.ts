@@ -576,6 +576,8 @@ export interface TerminalInfo {
   name?: string;
   /** The terminal's AI session stopped on an API error and waits for the user (HS2-HJ4D1H). */
   halt?: TerminalHalt;
+  /** An interactive AI question waiting for an answer in this terminal. */
+  question?: TerminalQuestion;
   /** An AI session in the terminal started with Hot Sheet's hooks active, so its permission
    * prompts come to Hot Sheet (HS2-EV1XK3); absent when none has reported in. */
   ai_connection?: TerminalAiConnection;
@@ -596,6 +598,11 @@ export interface TerminalHalt {
   message: string;
   agent?: string;
   /** RFC 3339 time the halt was reported. */
+  at: string;
+}
+export interface TerminalQuestion {
+  question: string;
+  tool_use_id: string;
   at: string;
 }
 /** `PUT /terminals/{id}/name` response; `name` is absent after a clear. */

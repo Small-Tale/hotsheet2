@@ -2582,6 +2582,12 @@ loading chrome; independent project responses merge and stale responses cannot o
 snapshots. Killing a halted terminal announces resolution to other clients. The pause
 banner counts waiting halted sessions, and Resume presents them after pending permissions.
 
+Claude Code `AskUserQuestion` in a Hot Sheet terminal appears as a waiting episode with a
+top-layer notice and project attention marker (HS2-KP9K85). The notice shows the first
+question and opens the originating terminal for the answer. A `terminal_question` change
+refreshes the snapshot; `PostToolUse`, failure, session end, or terminal removal clears it.
+Repeated reports for one tool use keep one episode, while a later question gets a new key.
+
 Acknowledged episode keys persist in `hotsheet.halted-session-seen` and merge across windows.
 Inactive history is capped at 256; active acknowledgments and those awaiting project snapshots
 are retained. Unavailable storage preserves this window's dedupe, but cannot promise reload

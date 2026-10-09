@@ -836,6 +836,13 @@ request. Launch-time route-back variables remain a fallback when no instance rec
 available. A retained Codex or Claude session can therefore send a new approval request
 to the replacement server without restarting the terminal (HS2-39S586).
 
+**Interactive questions (HS2-KP9K85).** Claude's `PreToolUse` hook for `AskUserQuestion`
+POSTs the first question and its `tool_use_id` to `/terminals/{id}/question` before the
+terminal waits. `PostToolUse` or `PostToolUseFailure` clears that same tool use; an older
+completion cannot clear a newer question. Session start/end and terminal removal also clear
+stale questions. The app alerts the user and opens the terminal for an answer. Answering in
+the alert itself is tracked by `HS2-SWY32A`.
+
 **The claim/lease primitive** (`coord`) is what keeps distributed work sane, and it
 underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-storage.md)
 §2.7). Two regimes:
