@@ -1161,6 +1161,9 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
     assert!(migrated_text.contains("meaningful subtask starts and finishes"));
     assert!(migrated_text.contains("`note_summary`"));
     assert!(migrated_text.contains("`--note-file <path>`"));
+    assert!(migrated_text.contains("repository-relative locations"));
+    assert!(migrated_text.contains("If either document is absent"));
+    assert!(!project.join("docs").exists());
     refresh();
     assert_eq!(
         std::fs::read(project.join("AGENTS.md")).unwrap(),

@@ -121,6 +121,12 @@ regular Markdown notes, pair AI activity with a short `note_summary`, and send m
 CLI Markdown through `--note-file`. Setup installs it for Claude and AGENTS-based tools;
 refresh upgrades the exact prior v4 section while preserving nested project specifics.
 
+The requirements section (HS2-0Y6M00) asks for a codebase map and status-marked
+requirements summary at project-chosen relative paths. Fresh setup installs the rule but
+does not invent project facts or files; the first relevant change creates any missing
+synthesis document and links it from the documentation index. Refresh upgrades the exact
+v2 section and retains local paths inside `hotsheet:specifics`.
+
 ```markdown
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->

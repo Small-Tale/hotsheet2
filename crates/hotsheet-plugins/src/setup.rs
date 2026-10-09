@@ -731,9 +731,10 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
     GuidanceSection {
         name: "requirements-documentation",
         current: include_str!("../../../plugins/shared/requirements-documentation.md"),
-        legacy: &[include_str!(
-            "../../../plugins/shared/legacy-requirements-documentation.md"
-        )],
+        legacy: &[
+            include_str!("../../../plugins/shared/legacy-requirements-documentation.md"),
+            include_str!("../../../plugins/shared/legacy-requirements-documentation-v2.md"),
+        ],
     },
     GuidanceSection {
         name: "visual-qa",
@@ -1960,6 +1961,51 @@ args = ["--path", "{{store}}"]
             with_specifics
         );
         assert!(!codex_project.path().join("CLAUDE.md").exists());
+    }
+
+    #[test]
+    fn synthesis_guidance_reaches_fresh_projects_and_preserves_custom_paths_on_refresh() {
+        let section = GUIDANCE_SECTIONS
+            .iter()
+            .find(|section| section.name == "requirements-documentation")
+            .unwrap();
+        for required in [
+            "codebase map",
+            "requirements summary",
+            "repository-relative locations",
+            "If either document is absent",
+            "do not invent a map or product status",
+        ] {
+            assert!(
+                section.current.contains(required),
+                "missing shared rule: {required}"
+            );
+        }
+        let specifics = "<!-- hotsheet:begin specifics=requirements-documentation v=1 -->\nCode map: notes/map.md. Status summary: notes/status.md.\n<!-- hotsheet:end specifics=requirements-documentation -->";
+        let store = tempfile::tempdir().unwrap();
+        for (tool, filename) in [("claude", "CLAUDE.md"), ("codex", "AGENTS.md")] {
+            let project = tempfile::tempdir().unwrap();
+            run_setup_in(store.path(), project.path(), Some(tool), false, None, &[]).unwrap();
+            let path = project.path().join(filename);
+            let fresh = std::fs::read_to_string(&path).unwrap();
+            assert_eq!(fresh.matches(section.current.trim()).count(), 1);
+            assert!(!project.path().join("docs").exists());
+            assert_eq!(project.path().join("CLAUDE.md").exists(), tool == "claude");
+
+            let previous =
+                guidance_with_specifics(section.legacy[1], section.name, Some(specifics));
+            std::fs::write(&path, fresh.replace(section.current.trim(), &previous)).unwrap();
+            let enabled = HashSet::from([tool.to_string()]);
+            refresh_setup_in(store.path(), project.path(), Some(&enabled), &[]).unwrap();
+            let refreshed = std::fs::read_to_string(&path).unwrap();
+            assert!(refreshed.contains(&guidance_with_specifics(
+                section.current,
+                section.name,
+                Some(specifics)
+            )));
+            assert!(refreshed.contains("notes/map.md"));
+            assert!(refreshed.contains("notes/status.md"));
+        }
     }
 
     #[test]

@@ -553,6 +553,10 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
     hash.update([0]);
     for (name, contents) in [
         (
+            "legacy-requirements-documentation-v2.md",
+            include_str!("../../../plugins/shared/legacy-requirements-documentation-v2.md"),
+        ),
+        (
             "legacy-requirements-documentation.md",
             include_str!("../../../plugins/shared/legacy-requirements-documentation.md"),
         ),
