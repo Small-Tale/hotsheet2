@@ -5937,19 +5937,19 @@ export async function startHotSheetWebClient() {
   });
   async function openStartupTicketDeepLink(link: TicketDeepLink) {
     try {
-      let target = projects.value.find((item) => item.id === link.store || item.root === link.store);
+      let target = projects.value.find((item) => item.id === link.project || item.root === link.project);
       if (!target) {
         const response = await fetch('/__hotsheet/checkouts');
         if (!response.ok) throw new Error('Could not find registered Hot Sheet projects.');
-        const root = ticketDeepLinkRoot(link.store, (await response.json()) as Checkout[]);
-        if (!root) throw new Error(`No registered project matches ${link.store}.`);
+        const root = ticketDeepLinkRoot(link.project, (await response.json()) as Checkout[]);
+        if (!root) throw new Error(`No registered project matches ${link.project}.`);
         target = projects.value.find((item) => item.root === root);
         if (!target) {
           if (!(await openProject(root, undefined, true, false))) throw new Error(`Could not open project ${root}.`);
           target = projects.value.find((item) => item.root === root);
         }
       }
-      if (!target) throw new Error(`Could not open project ${link.store}.`);
+      if (!target) throw new Error(`Could not open project ${link.project}.`);
       if (selectedProjectId.value !== target.id) await activateOpenedProject(target);
       setShellMode('project');
       const ticket = (await new Api(target.apiPath).checkoutTicket(target.id, link.ticket)).ticket;

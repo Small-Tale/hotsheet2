@@ -5,13 +5,17 @@ import { parseTicketDeepLink, ticketDeepLinkRoot } from './ticket-deep-link';
 
 describe('ticket deep links', () => {
   it('decodes an exact ticket and project root, rejecting incomplete links', () => {
-    expect(parseTicketDeepLink('?store=%2Fwork%2FUX+Review&ticket=UX-123')).toEqual({
-      store: '/work/UX Review',
+    expect(parseTicketDeepLink('?project=%2Fwork%2FUX+Review&ticket=UX-123')).toEqual({
+      project: '/work/UX Review',
       ticket: 'UX-123',
     });
+    expect(parseTicketDeepLink('?store=ux&ticket=UX-123')).toEqual({ project: 'ux', ticket: 'UX-123' });
+    expect(parseTicketDeepLink('?store=old&project=new&ticket=UX-123')).toEqual({ project: 'new', ticket: 'UX-123' });
+    expect(parseTicketDeepLink('?project=%20&store=ux&ticket=UX-123')).toEqual({ project: 'ux', ticket: 'UX-123' });
     expect(parseTicketDeepLink('?store=project')).toBeUndefined();
     expect(parseTicketDeepLink('?ticket=UX-123')).toBeUndefined();
     expect(parseTicketDeepLink('?store=%20&ticket=UX-123')).toBeUndefined();
+    expect(parseTicketDeepLink('?project=%20&ticket=UX-123')).toBeUndefined();
   });
 
   it('resolves a checkout id or alias and accepts an absolute path', () => {
