@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FullTicket, Note } from './api';
-import { completionConfidenceByNote, ticketTimelineEntries } from './ticket-timeline-data';
+import { completionConfidenceByNote, ticketTimelineEntries, timelineDuration } from './ticket-timeline-data';
 
 const note = (id: string, kind: Note['kind'], created_at: string, text: string): Note => ({
   id,
@@ -33,6 +33,16 @@ const ticket = (overrides: Partial<FullTicket> = {}): FullTicket => ({
 });
 
 describe('ticketTimelineEntries', () => {
+  it('labels each gap with its elapsed time and leaves the last event unlabeled', () => {
+    const entries = ticketTimelineEntries(
+      ticket({
+        completed_at: undefined,
+        notes: [note('later', 'activity', '2026-09-02T01:00:45Z', 'Started')],
+      }),
+    );
+    expect(entries.map((entry) => entry.durationToNext)).toEqual(['45 s', undefined]);
+  });
+
   it('backfills legacy lifecycle timestamps so an old ticket timeline is never empty', () => {
     expect(ticketTimelineEntries(ticket()).map((entry) => entry.title)).toEqual(['Ticket created', 'Completed']);
   });
@@ -197,5 +207,25 @@ describe('ticketTimelineEntries', () => {
     expect(entries.at(-2)).toMatchObject({ title: 'Resolved the refresh regression' });
     expect(entries.at(-2)?.subtitle).toBeUndefined();
     expect(entries.at(-1)?.title).toBe('A very long legacy activity headline with enough words that it must be…');
+  });
+});
+
+describe('timelineDuration', () => {
+  const start = '2026-09-02T00:00:00Z';
+  it.each([
+    [0, '0 s'],
+    [179, '179 s'],
+    [180, '3 m'],
+    [10_799, '179 m'],
+    [10_800, '3 h'],
+    [259_199, '71 h'],
+    [259_200, '3 d'],
+  ])('formats %i seconds as %s at the display thresholds', (seconds, expected) => {
+    expect(timelineDuration(start, new Date(Date.parse(start) + seconds * 1000).toISOString())).toBe(expected);
+  });
+
+  it('does not show a duration for invalid or reversed timestamps', () => {
+    expect(timelineDuration('invalid', start)).toBeUndefined();
+    expect(timelineDuration(start, '2026-09-01T23:59:59Z')).toBeUndefined();
   });
 });

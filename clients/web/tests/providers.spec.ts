@@ -15193,6 +15193,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(page.getByText('Connected project client', { exact: true })).toBeVisible();
   await expect(page.getByText('Loaded checkout-scoped tickets.')).toHaveCount(0);
   const timeline = page.locator('[data-component="ticket-timeline"]');
+  await expect(timeline.locator('[data-entry-id="01-created"] .ticket-timeline__duration')).toHaveText('30 m');
   await expect(timeline.getByText('Completed', { exact: true })).toBeVisible();
   await expect(timeline).not.toContainText('Status changed from Started to Completed');
   await page.getByRole('tab', { name: 'Info' }).click();

@@ -37,6 +37,16 @@ function noteEntry(note: Note, confidence?: number): TimestampedTimelineEntry {
 const chronological = (left: Note, right: Note) =>
   left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id);
 
+/** Keep the gap more precise than the event's coarse relative timestamp. */
+export function timelineDuration(start: string, end: string): string | undefined {
+  const elapsed = Date.parse(end) - Date.parse(start);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return undefined;
+  if (elapsed < 180_000) return `${Math.floor(elapsed / 1_000)} s`;
+  if (elapsed < 10_800_000) return `${Math.floor(elapsed / 60_000)} m`;
+  if (elapsed < 259_200_000) return `${Math.floor(elapsed / 3_600_000)} h`;
+  return `${Math.floor(elapsed / 86_400_000)} d`;
+}
+
 function transitionDestination(note: Note): string | undefined {
   if (note.kind !== 'activity') return undefined;
   return note.text.split('\n')[0].match(statusTransition)?.[2];
@@ -117,11 +127,15 @@ export function ticketTimelineEntries(ticket: FullTicket): TimestampedTimelineEn
   addLifecycle(`${ticket.id}-created`, ticket.created_at, 'Ticket created');
   addLifecycle(`${ticket.id}-completed`, ticket.completed_at, 'Completed', true);
   addLifecycle(`${ticket.id}-verified`, verifiedAt, 'Verified', true);
-  return entries.sort(
+  const sorted = entries.sort(
     (left, right) =>
       left.timestamp.localeCompare(right.timestamp) ||
       tiePriority(left) - tiePriority(right) ||
       (noteOrder.get(left.id) ?? -1) - (noteOrder.get(right.id) ?? -1) ||
       left.id.localeCompare(right.id),
   );
+  return sorted.map((entry, index) => ({
+    ...entry,
+    durationToNext: sorted[index + 1] && timelineDuration(entry.timestamp, sorted[index + 1].timestamp),
+  }));
 }

@@ -54,6 +54,15 @@
   background: var(--wa-color-neutral-border-normal);
   content: '';
 }
+.ticket-timeline__duration {
+  position: absolute;
+  bottom: remify(2px);
+  left: remify(12px);
+  color: var(--wa-color-neutral-on-quiet);
+  font-size: var(--wa-font-size-xs);
+  line-height: 1;
+  white-space: nowrap;
+}
 .ticket-timeline__list time {
   padding-top: remify(0.32px);
   color: var(--wa-color-neutral-on-quiet);

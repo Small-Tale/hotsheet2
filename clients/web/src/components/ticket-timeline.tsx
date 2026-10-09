@@ -7,6 +7,8 @@ export interface TicketTimelineEntry {
   time: string;
   title: string;
   subtitle?: string;
+  /** Elapsed time from this event to the next chronological event. */
+  durationToNext?: string;
   emphasized?: boolean;
 }
 export const DEFAULT_TIMELINE_ENTRIES: readonly TicketTimelineEntry[] = [
@@ -50,13 +52,18 @@ export function TicketTimeline({
       <section class="ticket-timeline__section">
         <h2 class="ticket-timeline__heading">Timeline</h2>
         <ol class="ticket-timeline__list">
-          {entries.map((entry) => (
+          {entries.map((entry, index) => (
             <li data-entry-id={entry.id} data-emphasized={String(Boolean(entry.emphasized))}>
               <time>{entry.time}</time>
               <div>
                 <strong>{entry.title}</strong>
                 {entry.subtitle && <p class="ticket-timeline__subtitle">{entry.subtitle}</p>}
               </div>
+              {index < entries.length - 1 && entry.durationToNext && (
+                <span class="ticket-timeline__duration" aria-label={`Elapsed to next event: ${entry.durationToNext}`}>
+                  {entry.durationToNext}
+                </span>
+              )}
             </li>
           ))}
         </ol>
