@@ -295,8 +295,6 @@ function WorkspaceOverflowControls({
   selectedTicketsUpNextEligible: boolean;
   presentation: WorkspaceControlsPresentation;
 }) {
-  // The rail keeps its controls on wrapped rows; its overflow menu was never shown.
-  if (presentation === 'rail') return <></>;
   const modes: ReadonlyArray<{ value: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }> = [
     { value: 'list', label: 'Show List View', icon: List, iconName: 'list' },
     { value: 'board', label: 'Show Columns View', icon: Columns3, iconName: 'columns-3' },
@@ -364,16 +362,18 @@ function WorkspaceOverflowControls({
           },
         },
         { kind: 'divider' },
-        ...modes.map((option): PopupMenuItem => ({
-          label: option.label,
-          checked: option.value === mode,
-          icon: overflowIcon(option.icon, option.iconName),
-          attributes: {
-            'data-workspace-overflow-kind': 'view',
-            'data-workspace-overflow-action': 'set-view-mode',
-            'data-view-mode': option.value,
-          },
-        })),
+        ...modes
+          .filter((option) => presentation !== 'rail' || option.value !== 'settings')
+          .map((option): PopupMenuItem => ({
+            label: option.label,
+            checked: option.value === mode,
+            icon: overflowIcon(option.icon, option.iconName),
+            attributes: {
+              'data-workspace-overflow-kind': 'view',
+              'data-workspace-overflow-action': 'set-view-mode',
+              'data-view-mode': option.value,
+            },
+          })),
       ]}
     />
   );
@@ -384,7 +384,7 @@ function WorkspaceOverflowControls({
       single
       appearance="borderless"
       nestedDropdown
-      showBelow={px(480)}
+      showBelow={px(presentation === 'rail' ? 0 : 480)}
     >
       {menu}
     </ToolbarControlGroup>
@@ -395,7 +395,7 @@ function WorkspaceOverflowControls({
  * The workspace controls as Toolbar zone content: view-mode switcher, sort, selection
  * actions, the collapsible ticket search, and the narrow-width overflow menu, each a
  * cataloged ToolbarControlGroup (or the TicketSearchField that renders one). The toolbar
- * groups search and More in an app-owned flex slot; the rail owns its wrapped rows. Search
+ * groups search and More in an app-owned flex slot; the rail uses the same measured fit. Search
  * sizing remains Kerf-owned (HS2-8FS5BJ, HS2-DAMHD1, HS2-NZK4KA).
  */
 export function WorkspaceControls({
@@ -426,8 +426,8 @@ export function WorkspaceControls({
   const sortLabel = sortOptions.find((option) => option.value === sort)!.label,
     trigger = workspaceSortTrigger(sort, sortDirection);
   // The rail's groups carry a `--rail` modifier so the header's responsive overflow queries (which
-  // fire in any narrow Kerf toolbar) leave them in place; the rail's toolbar wraps them onto rows
-  // instead of yielding them to the overflow menu (HS2-K9KWJJ). Kerf's analyzer classifies only
+  // fire in any narrow Kerf toolbar) leave them in place; the measured fit yields them instead.
+  // Kerf's analyzer classifies only
   // literal class names on its components, so each rail variant is spelled out.
   const rail = presentation === 'rail',
     viewSwitcher = (
@@ -481,8 +481,7 @@ export function WorkspaceControls({
         </button>
       </>
     );
-  // The compact toolbar gives search and More one app-owned flex slot; the other groups yield
-  // below the width needed to show them together. The rail keeps its own wrapped rows.
+  // Both toolbars give search and More one app-owned flex slot; other groups yield as needed.
   const searchField = (
     <TicketSearchField
       id="workspace-search"
@@ -493,7 +492,7 @@ export function WorkspaceControls({
       collapsible
       expanded={visibleSearchOpen}
       helpOpen={searchHelpOpen && visibleSearchOpen}
-      layout={rail ? 'row' : 'inline'}
+      layout="inline"
     />
   );
   const overflowControls = (
@@ -514,7 +513,11 @@ export function WorkspaceControls({
   return (
     <>
       {rail ? (
-        <ToolbarControlGroup className="view-mode-switcher view-mode-switcher--rail" shape="rounded" sizing="fill">
+        <ToolbarControlGroup
+          className="view-mode-switcher view-mode-switcher--rail"
+          shape="rounded"
+          sizing={visibleSearchOpen ? 'content' : 'fill'}
+        >
           {viewSwitcher}
         </ToolbarControlGroup>
       ) : (
@@ -568,14 +571,10 @@ export function WorkspaceControls({
           {utilityButtons}
         </ToolbarControlGroup>
       )}
-      {rail ? (
-        searchField
-      ) : (
-        <div class="workspace-header__search-actions" data-search-open={String(visibleSearchOpen)}>
-          {searchField}
-          {overflowControls}
-        </div>
-      )}
+      <div class="workspace-header__search-actions" data-search-open={String(visibleSearchOpen)}>
+        {searchField}
+        {overflowControls}
+      </div>
     </>
   );
 }

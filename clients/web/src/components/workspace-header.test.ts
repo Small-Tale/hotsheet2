@@ -84,7 +84,7 @@ describe('WorkspaceHeader', () => {
     // The rail pages a Columns view like the phone board; Settings stays in the main workspace (HS2-656Q43).
     expect(markup.match(/data-action="set-view-mode"/g)).toHaveLength(3);
     expect(markup).toContain('data-segment-value="board"');
-    expect(markup).not.toContain('data-workspace-overflow');
+    expect(markup).toContain('data-workspace-overflow');
     expect(markup).not.toContain('data-segment-value="settings"');
     expect(markup).not.toContain('data-view-mode="settings"');
   });
@@ -444,8 +444,8 @@ describe('WorkspaceHeader', () => {
       '.workspace-header__sort-group { --kui-select-selected-color: var(--kui-toolbar-control-color); }',
     );
     expect(headerCss).not.toContain('.kui-select__custom-selected');
-    // Kerf applies strict Toolbar content-width thresholds; the rail keeps its wrapped groups and
-    // does not render the narrow header's overflow menu (HS2-BBG8ZC).
+    // Kerf applies strict Toolbar content-width thresholds; the rail's More menu starts hidden
+    // and appears when measured open search needs other controls to yield (HS2-HH1F6P).
     expect(headerCss).not.toContain('@container kui-toolbar');
     expect(markup).toMatch(/view-mode-switcher"[^>]*data-hide-below="176px"/);
     expect(markup).toMatch(/workspace-header__sort-group"[^>]*data-hide-below="416px"/);
@@ -456,16 +456,17 @@ describe('WorkspaceHeader', () => {
     );
     for (const group of ['view-mode-switcher', 'workspace-header__sort-group', 'workspace-header__utility-group'])
       expect(railMarkup).toContain(`${group} ${group}--rail`);
-    expect(railMarkup).not.toContain('workspace-header__overflow-group');
+    expect(railMarkup).toMatch(/workspace-header__overflow-group"[^>]*data-show-below="0px"/);
     expect(railMarkup).not.toContain('data-hide-below');
     expect(markup).not.toContain('--rail');
-    // The rail fills its own row; the header keeps Kerf's shrinkable inline search (HS2-NZK4KA).
-    expect(railMarkup).toMatch(
-      /class="kui-toolbar-control-group ticket-search-field"[^>]*data-sizing="fill"[^>]*data-placement="end"/,
-    );
+    // Both toolbars keep Kerf's shrinkable inline search; the closed rail view fills its row.
+    expect(railMarkup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-sizing="content"/);
     expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-content="search"/);
     // The rail's view switcher fills its own row through Kerf's `sizing="fill"`.
     expect(railMarkup).toMatch(/view-mode-switcher view-mode-switcher--rail"[^>]*data-sizing="fill"/);
+    expect(String(WorkspaceControls({ mode: 'list', presentation: 'rail', searchOpen: true }))).toMatch(
+      /view-mode-switcher view-mode-switcher--rail"[^>]*data-sizing="content"/,
+    );
     // Transition matrix for the yield state: closed -> open -> closed again, toolbar and rail. The
     // header's groups always opt into Kerf's yield, which acts only while a sibling is expanded, so
     // the search's own expanded state is the single source of truth.

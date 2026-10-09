@@ -85,19 +85,18 @@ describe('TerminalTicketRail', () => {
     expect(markup).not.toContain('terminal-ticket-rail__back');
     expect(markup.match(/data-component="toolbar" /g)?.length).toBeGreaterThan(0);
   });
-  it('keeps compact search last, animates active search onto a full row, and centers the ticket header independently', () => {
+  it('keeps open search in the controls row and centers the ticket header independently', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8'),
       source = readFileSync(new URL('./terminal-ticket-rail.tsx', import.meta.url), 'utf8');
-    // The controls are the trailing zone of a cataloged Toolbar that stacks and wraps at group
-    // granularity; no app-owned grid places them (HS2-K9KWJJ).
+    // The controls are the trailing zone of a cataloged Toolbar; measured fit keeps open search
+    // inline and no app-owned grid places them (HS2-HH1F6P).
     expect(source).toMatch(
-      /<Toolbar\s+className="terminal-ticket-rail__controls"[^>]*responsive="stack"[^>]*responsiveAt="narrow"[^>]*trailing=\{controls\}/,
+      /<Toolbar\s+className="terminal-ticket-rail__controls"[^>]*responsive="none"[^>]*trailing=\{controls\}/,
     );
     expect(css).not.toMatch(/__controls \{/);
     expect(css).not.toMatch(/__controls[^{]*\{[^}]*grid-(?:column|row)/);
-    // The composed groups take their rail presentation through their own props: the view switcher's
-    // full-row Kerf `sizing="fill"` and the search field's `layout="row"` placement and entrance
-    // (HS2-8FS5BJ, HS2-DAMHD1). This stylesheet styles no other component.
+    // The composed groups take their rail presentation through their own props; this stylesheet
+    // styles no other component.
     expect(css).not.toContain('view-mode-switcher');
     expect(css).not.toContain('ticket-search-field');
     expect(css).not.toContain('quick-ticket-composer');

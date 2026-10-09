@@ -109,17 +109,13 @@ export function terminalTicketRailPanel({
     },
     header: (
       <div class="terminal-ticket-rail__header" data-component="terminal-ticket-rail-header">
-        {/* The shared WorkspaceControls groups are genuine Toolbar zone content here too (HS2-K9KWJJ).
-            The rail is always narrower than Kerf's stack breakpoint, so the zone stacks and wraps at
-            group granularity: the full-width view switcher takes the first row; sort, selection
-            actions, and the collapsible search share the next; an expanded search wraps onto its own
-            full row. */}
+        {/* The shared WorkspaceControls groups stay on one row while expanded search fits the
+            available rail width; lower-priority actions move into More when space runs out. */}
         <Toolbar
           className="terminal-ticket-rail__controls"
           label="Ticket rail controls"
           dividerSides=""
-          responsive="stack"
-          responsiveAt="narrow"
+          responsive="none"
           trailing={controls}
         />
         <div class="terminal-ticket-rail__heading">

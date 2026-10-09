@@ -44,10 +44,13 @@ export function workspaceSearchFit(
   return visible;
 }
 
-export function wireWorkspaceToolbarVisibility(root: HTMLElement): () => void {
+export function wireWorkspaceToolbarVisibility(
+  root: HTMLElement,
+  selector = '.workspace-header[data-component="toolbar"], [data-component="toolbar"][aria-label="Workspace toolbar"]',
+): () => void {
   let header: HTMLElement | null = null;
   let observedSearchSlot: HTMLElement | null = null;
-  const baseThresholds = new WeakMap<HTMLElement, { hide: string | null; show: string | null }>();
+  const measuredWidths = new WeakMap<HTMLElement, { width: number; sizing: string | null }>();
   const resize = new ResizeObserver(() => {
     refresh();
   });
@@ -100,29 +103,41 @@ export function wireWorkspaceToolbarVisibility(root: HTMLElement): () => void {
     const more = header.querySelector<HTMLElement>('.workspace-header__overflow-group');
     const dynamic = Boolean(searchOpen && groups.every(Boolean) && more);
     const fitItems = dynamic ? [...(identity ? [identity] : []), ...(groups as HTMLElement[]), more!] : [];
-    for (const item of header.querySelectorAll<HTMLElement>(ITEM)) {
+    const rail = header.classList.contains('terminal-ticket-rail__controls');
+    const items = new Set<HTMLElement>([
+      ...header.querySelectorAll<HTMLElement>(ITEM),
+      ...[identity, ...groups, more].filter((item): item is HTMLElement => Boolean(item)),
+    ]);
+    for (const item of items) {
       if (fitItems.includes(item)) {
-        if (!baseThresholds.has(item))
-          baseThresholds.set(item, {
-            hide: item.getAttribute('data-hide-below'),
-            show: item.getAttribute('data-show-below'),
-          });
-        setHidden(item, false);
+        if (item !== identity && measuredWidths.get(item)?.sizing !== item.getAttribute('data-sizing')) {
+          measuredWidths.delete(item);
+          setHidden(item, false);
+        }
         continue;
       }
-      const base = baseThresholds.get(item);
-      if (base) {
-        if (base.hide === null) item.removeAttribute('data-hide-below');
-        else item.setAttribute('data-hide-below', base.hide);
-        if (base.show === null) item.removeAttribute('data-show-below');
-        else item.setAttribute('data-show-below', base.show);
-        baseThresholds.delete(item);
-      }
+      if (item === identity) item.setAttribute('data-hide-below', '224px');
+      else if (item === groups[0]) {
+        if (rail) item.removeAttribute('data-hide-below');
+        else item.setAttribute('data-hide-below', '176px');
+      } else if (item === groups[1]) {
+        if (rail) item.removeAttribute('data-hide-below');
+        else item.setAttribute('data-hide-below', '416px');
+      } else if (item === groups[2]) {
+        if (rail) item.removeAttribute('data-hide-below');
+        else item.setAttribute('data-hide-below', '480px');
+      } else if (item === more) item.setAttribute('data-show-below', rail ? '0px' : '480px');
       const hide = threshold(item, 'data-hide-below');
       const show = threshold(item, 'data-show-below');
       setHidden(item, workspaceToolbarHidden(contentWidth, hide, show));
     }
     if (dynamic) {
+      const itemWidth = (item: HTMLElement): number => {
+        const visibleWidth = item.getBoundingClientRect().width;
+        if (visibleWidth > 0)
+          measuredWidths.set(item, { width: visibleWidth, sizing: item.getAttribute('data-sizing') });
+        return measuredWidths.get(item)?.width ?? visibleWidth;
+      };
       const titleText = identity?.querySelector<HTMLElement>('.kui-toolbar-text__text');
       const titleStyle = identity ? getComputedStyle(identity) : null;
       let titleWidth = 0;
@@ -151,24 +166,17 @@ export function wireWorkspaceToolbarVisibility(root: HTMLElement): () => void {
         return sum + (width > 0 ? width + gap : 0);
       }, 0);
       const fitWidth = Math.max(0, contentWidth - extraWidth);
-      const visible = workspaceSearchFit(
-        fitWidth,
-        titleWidth,
-        groups.map((item) => item!.getBoundingClientRect().width),
-        more!.getBoundingClientRect().width,
-        gap,
-      );
+      const groupWidths = groups.map((item) => itemWidth(item!));
+      const moreWidth = itemWidth(more!);
+      const visible = workspaceSearchFit(fitWidth, titleWidth, groupWidths, moreWidth, gap);
       const availableSearch =
         fitWidth -
         (visible[0] ? titleWidth : 0) -
         gap -
-        groups.reduce(
-          (sum, item, index) => sum + (visible[index + 1] ? item!.getBoundingClientRect().width + gap : 0),
-          0,
-        ) -
-        (visible.every(Boolean) ? 0 : more!.getBoundingClientRect().width + gap);
+        groupWidths.reduce((sum, width, index) => sum + (visible[index + 1] ? width + gap : 0), 0) -
+        (visible.every(Boolean) ? 0 : moreWidth + gap);
       searchSlot!.style.setProperty('--kui-token-search-expanded-width', `${Math.max(0, availableSearch - 8)}px`);
-      searchSlot!.style.width = `${Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : more!.getBoundingClientRect().width + gap))}px`;
+      searchSlot!.style.width = `${Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : moreWidth + gap))}px`;
       searchSlot!.style.flex = '0 0 auto';
       if (identity) {
         identity.setAttribute('data-hide-below', `${visible[0] ? 0 : contentWidth + 1}px`);
@@ -189,9 +197,7 @@ export function wireWorkspaceToolbarVisibility(root: HTMLElement): () => void {
   }
 
   function findHeader(): boolean {
-    const next = root.querySelector<HTMLElement>(
-      '.workspace-header[data-component="toolbar"], [data-component="toolbar"][aria-label="Workspace toolbar"]',
-    );
+    const next = root.querySelector<HTMLElement>(selector);
     if (next === header) return false;
     if (header) resize.unobserve(header);
     if (observedSearchSlot) resize.unobserve(observedSearchSlot);
@@ -224,4 +230,9 @@ export function wireWorkspaceToolbarVisibility(root: HTMLElement): () => void {
     mutations.disconnect();
     resize.disconnect();
   };
+}
+
+/** The ticket rail shares the measured search policy while keeping its own observer lifecycle. */
+export function wireTicketRailToolbarVisibility(root: HTMLElement): () => void {
+  return wireWorkspaceToolbarVisibility(root, '.terminal-ticket-rail__controls[data-component="toolbar"]');
 }

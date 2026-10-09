@@ -1074,8 +1074,8 @@ border. Hot Sheet only sizes and places that composition; expansion must not str
 group's chrome in either the workspace header or workspace-grid ticket rail. The rail
 demo binds the same search signals for expansion, query filtering, help, and clearing,
 including populated blur and empty-collapse/reopen transitions. Its mode controls project
-the shared List/Notifications state into the selected button and corresponding content,
-with search disabled in Notifications and no Columns choice (HS2-TNSD4K).
+the shared List/Columns/Notifications state into the selected button and corresponding content,
+with search disabled in Notifications (HS2-TNSD4K).
 
 - `SearchQueryInput` — **built**: one multiline editable flow containing ordinary text and
   atomic chips in their expression order, with character-level text wrapping and token-level
@@ -1965,11 +1965,11 @@ and the rail toggle; the catalog demo pushes a ticket on a plain row click and p
 The rail remains independently resizable and hideable beside the terminal grid and is represented
 directly in the UX catalog. It already composes Kerf `Toolbar`, `ToolbarControlGroup`, `ToolbarText`,
 `SegmentedControl`, and `Select` primitives. Its shared `WorkspaceControls` groups are the
-trailing zone of a cataloged `Toolbar` (`responsive="stack"`, `responsiveAt="narrow"`): the rail
-is always narrower than that breakpoint, so the zone stacks and wraps at group granularity, giving
-the full-width view switcher its own row, sort plus selection actions plus the trailing-aligned
-collapsible search the next, and an expanded search a full row of its own with Kerf's stacked
-fill-search entrance (the search field's `layout="row"`); the toolbar's own 8px inset and gap replace the
+trailing zone of a cataloged `Toolbar`. With search closed, the full-width view switcher has
+its own row and sort, selection actions, and the search button share the next. Expanded search
+stays on one row. The rail measures its controls and fills the available search slot; when they
+cannot fit, view, sort, and selection actions yield to search plus More. More preserves the
+view, sort, and Up Next actions (HS2-HH1F6P). The toolbar's own 8px inset and gap replace the
 earlier app-owned grid (HS2-K9KWJJ, superseding the 4px connected top inset from HS2-4Y6SM9).
 
 ## 7. Overlays and shared interaction components

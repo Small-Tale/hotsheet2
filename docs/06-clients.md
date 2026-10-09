@@ -1073,6 +1073,9 @@ and identity-less legacy entries remain conservatively blocking.
   star, sort, view switcher, then title yield. The editor fills the remaining space;
   search stays beside a persistent More menu when controls yield. More includes the same capability-checked
   Up Next toggle and keeps the empty search open while the menu is used (HS2-NZK4KA).
+  In the workspace grid's ticket rail, expanded search also stays on one controls row;
+  view, sort, and selection actions move into More only when the rail is too narrow to fit them
+  beside a usable search field (HS2-HH1F6P).
   A disabled collapsible search renders closed even with a nonempty query. Switching to
   Notifications or Settings collapses the workspace search without clearing its query;
   returning to a ticket view restores that active query (HS2-6ZK9KF).

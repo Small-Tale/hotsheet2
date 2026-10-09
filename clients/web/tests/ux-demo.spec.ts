@@ -1302,7 +1302,7 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
   const group = rail.locator('.ticket-search-field');
   const search = rail.getByRole('searchbox', { name: 'Search tickets' });
   const rows = rail.locator('[data-component="ticket-list-row"]');
-  const blurTarget = rail.getByRole('button', { name: 'List view', exact: true });
+  const blurTarget = rail.getByRole('button', { name: 'Hide ticket rail' });
   await expect(rows).toHaveCount(7);
   // Exercise the rail's Columns projection before the search and notification transitions
   // so the control is verified as a working mode, not merely present (HS2-YJJ1MJ).
@@ -1361,6 +1361,50 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
     path: 'target/visual-captures/hs2-tnsd4k-rail-search-demo-narrow.png',
     animations: 'disabled',
   });
+});
+
+test('keeps expanded rail search inline and yields controls only when space runs out (HS2-HH1F6P)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
+  const stage = page.locator('.terminal-ticket-rail-demo');
+  const wideRailStyle = await page.addStyleTag({ content: '.terminal-ticket-rail-demo { width: 700px !important; }' });
+  const toolbar = stage.locator('.terminal-ticket-rail__controls');
+  await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(650);
+  await toolbar.getByRole('button', { name: 'Search tickets' }).click();
+  await expect(toolbar.locator('.view-mode-switcher')).toBeVisible();
+  await expect(toolbar.locator('.workspace-header__sort-group')).toBeVisible();
+  await expect(toolbar.locator('.workspace-header__utility-group')).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'More workspace controls' })).toBeHidden();
+  await expect
+    .poll(() => toolbar.locator('.ticket-search-field').evaluate((node) => node.getBoundingClientRect().width))
+    .toBeGreaterThan(240);
+  await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(80);
+  await stage.screenshot({ path: 'target/visual-captures/hs2-hh1f6p-rail-wide.png', animations: 'disabled' });
+  await wideRailStyle.evaluate((node) => {
+    (node as HTMLElement).remove();
+  });
+  await expect(toolbar.locator('.view-mode-switcher')).toBeHidden();
+  await expect(toolbar.locator('.workspace-header__sort-group')).toBeHidden();
+  await expect(toolbar.locator('.workspace-header__utility-group')).toBeHidden();
+  await expect(toolbar.getByRole('button', { name: 'More workspace controls' })).toBeVisible();
+  await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(80);
+  await stage.screenshot({ path: 'target/visual-captures/hs2-hh1f6p-rail-narrow.png', animations: 'disabled' });
+  await expect
+    .poll(() =>
+      toolbar.evaluate((node) => {
+        const more = node.querySelector<HTMLElement>('.workspace-header__overflow-group')!;
+        const box = more.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return hit === more || Boolean(hit?.closest('.workspace-header__overflow-group'));
+      }),
+    )
+    .toBe(true);
+  await toolbar.getByRole('button', { name: 'More workspace controls' }).click();
+  await expect(stage.locator('[data-workspace-overflow-action="toggle-selected-up-next"]')).toBeVisible();
+  await expect(stage.locator('[data-workspace-overflow-action="set-workspace-sort"]')).toHaveCount(4);
+  await expect(stage.locator('[data-workspace-overflow-action="set-view-mode"]')).toHaveCount(3);
 });
 
 test('catalogs every FixedAspectTerminalCard variant and its dashboard relationship', async ({ page }) => {

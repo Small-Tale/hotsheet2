@@ -4439,7 +4439,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   });
   await searchInput.fill('has:attachment ');
   await expect(rail.locator('[data-component="token-search-token"][data-token-value="has:attachment"]')).toBeVisible();
-  await rail.getByRole('button', { name: 'List view', exact: true }).focus();
+  await rail.getByRole('button', { name: 'Hide ticket rail' }).focus();
   await expect(expandedSearch).toHaveAttribute('data-expanded', 'true');
   await expect(expandedSearch).toHaveCSS('border-width', '1px');
   await expect(expandedSearch).toHaveCSS('box-shadow', 'none');
@@ -4458,7 +4458,7 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
     fullPage: true,
   });
   await rail.getByRole('button', { name: 'Clear search' }).click();
-  await rail.getByRole('button', { name: 'List view', exact: true }).focus();
+  await rail.getByRole('button', { name: 'Hide ticket rail' }).focus();
   await expect(expandedSearch).toHaveAttribute('data-expanded', 'false');
   await expect(expandedSearch).toHaveCSS('border-width', '1px');
   await rail.getByRole('button', { name: 'Search tickets' }).click();
@@ -4543,10 +4543,10 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
   await searchInput.fill('tag:');
   const suggestions = rail.locator('.kui-token-search__suggestions');
   await expect(suggestions).toBeVisible();
-  await expandedSearch.evaluate(async (node) => {
-    await Promise.all(node.getAnimations().map((animation) => animation.finished));
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-n5g6js-workspace-grid-rail-suggestions.png',
+    animations: 'disabled',
   });
-  await page.screenshot({ path: 'target/visual-captures/hs2-n5g6js-workspace-grid-rail-suggestions.png' });
   const activeSearchGeometry = await rail.evaluate((node) => {
     const bounds = (selector: string) => {
         const rect = node.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
@@ -4570,17 +4570,17 @@ test('keeps a compact ticket rail beside the terminal dashboard and pushes into 
         };
       })(),
       search: bounds('.ticket-search-field'),
+      more: bounds('.workspace-header__overflow-group'),
       sort: bounds('.workspace-header__sort-group'),
       utility: bounds('.workspace-header__utility-group'),
       suggestions: bounds('.kui-token-search__suggestions'),
       options,
     };
   });
-  expect(activeSearchGeometry.search.top).toBeGreaterThan(
-    Math.max(activeSearchGeometry.sort.bottom, activeSearchGeometry.utility.bottom),
-  );
-  expect(activeSearchGeometry.search.left).toBeCloseTo(activeSearchGeometry.actions.left, 0);
-  expect(activeSearchGeometry.search.right).toBeCloseTo(activeSearchGeometry.actions.right, 0);
+  expect(activeSearchGeometry.search.top).toBeCloseTo(activeSearchGeometry.more.top, 0);
+  expect(activeSearchGeometry.search.left).toBeGreaterThanOrEqual(activeSearchGeometry.actions.left);
+  expect(activeSearchGeometry.search.right).toBeLessThan(activeSearchGeometry.more.left);
+  expect(activeSearchGeometry.more.right).toBeLessThanOrEqual(activeSearchGeometry.actions.right + 1);
   expect(activeSearchGeometry.options.length).toBeGreaterThan(0);
   for (const option of activeSearchGeometry.options) {
     // Kerf's own suggestion rows align their labels to the start edge (HS2-5JXBQY).

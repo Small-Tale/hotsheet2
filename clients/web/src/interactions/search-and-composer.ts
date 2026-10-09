@@ -15,7 +15,7 @@ import {
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { type InlineSearchToken } from '../inline-search';
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
-import { isWhitespaceOnlySearch } from '../search-collapse';
+import { isWhitespaceOnlySearch, keepSearchOpenForShadowTarget } from '../search-collapse';
 import { type BulkTicketAction } from '../ticket-bulk-operations';
 import { saveLastTicketCategory } from '../ticket-category-preference';
 import { type TicketHistory } from '../ticket-operations';
@@ -167,7 +167,7 @@ export function wireSearchAndComposerInteractions(dependencies: SearchAndCompose
   // collapsing row never shifts the control the user pressed (Kerf KF-64W0RN, HS2-YVBGW3).
   const tokenSearchFields = wireTokenSearchFields(document.body, {
     models: { 'workspace-search': workspaceSearchModel, 'saved-view-query': savedViewSearchModel },
-    collapsible: { signals: { 'workspace-search': searchOpen } },
+    collapsible: { signals: { 'workspace-search': searchOpen }, keepOpenOn: keepSearchOpenForShadowTarget },
     // Enter commits a trailing filter through the model; the rebuilt editor gets its caret back at the end.
     onSubmit: ({ id }) => {
       focusField(id);

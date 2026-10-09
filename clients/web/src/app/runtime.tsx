@@ -385,7 +385,7 @@ import {
   saveProjectWorkspaceSession,
 } from '../workspace-session';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
-import { wireWorkspaceToolbarVisibility } from '../workspace-toolbar-visibility';
+import { wireTicketRailToolbarVisibility, wireWorkspaceToolbarVisibility } from '../workspace-toolbar-visibility';
 import { installDevelopmentDiagnostics } from './development-bootstrap';
 import { createHotSheetInteractionBindings, type InteractionBindingsPort } from './interaction-bindings';
 import { wireHotSheetInteractions } from './wire-interactions';
@@ -5577,6 +5577,7 @@ export async function startHotSheetWebClient() {
     },
   });
   const disposeToolbarVisibility = wireWorkspaceToolbarVisibility(appRoot);
+  const disposeRailToolbarVisibility = wireTicketRailToolbarVisibility(appRoot);
 
   const savedViewMenuRoot = document.createElement('div');
   document.body.append(savedViewMenuRoot);
@@ -5999,6 +6000,7 @@ export async function startHotSheetWebClient() {
     appRoot,
     disposeInteractions: () => {
       disposeToolbarVisibility();
+      disposeRailToolbarVisibility();
       toastHost.removeEventListener('wa-after-hide', onToastHide);
       toastPresentation.dispose();
       toastHost.remove();
