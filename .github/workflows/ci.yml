@@ -32,10 +32,10 @@ jobs:
         working-directory: clients/web
         run: |
           for attempt in 1 2; do
-            if timeout --kill-after=15s 6m npx playwright install --with-deps webkit; then
+            if npx playwright install --with-deps webkit; then
               exit 0
             fi
-            echo "::warning::WebKit dependency install attempt $attempt failed or timed out"
+            echo "::warning::WebKit dependency install attempt $attempt failed"
           done
           echo "::error::WebKit dependency install failed after two bounded attempts"
           exit 1
