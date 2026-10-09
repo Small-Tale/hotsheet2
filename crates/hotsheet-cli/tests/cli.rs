@@ -1157,6 +1157,10 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
         String::from_utf8_lossy(&migrated),
         expected("antigravity, codex, opencode")
     );
+    let migrated_text = String::from_utf8_lossy(&migrated);
+    assert!(migrated_text.contains("meaningful subtask starts and finishes"));
+    assert!(migrated_text.contains("`note_summary`"));
+    assert!(migrated_text.contains("`--note-file <path>`"));
     refresh();
     assert_eq!(
         std::fs::read(project.join("AGENTS.md")).unwrap(),
@@ -1514,7 +1518,7 @@ fn setup_refresh_preserves_a_newer_managed_workflow_bundle() {
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "<!-- hotsheet-skill-version: 59 -->\nnewer skill\n";
+    let skill = "<!-- hotsheet-skill-version: 61 -->\nnewer skill\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
@@ -1558,7 +1562,7 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 59 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 60 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)

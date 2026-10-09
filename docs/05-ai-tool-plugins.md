@@ -115,6 +115,12 @@ feature coverage, treated as a floor for transition and interaction tests. Exact
 stacks, coverage paths, validators, and thresholds stay project-specific. Refresh knows
 both earlier testing-section versions and retains their nested specifics while upgrading.
 
+The ticket workflow section (HS2-PDD7XG) includes project-neutral note guidance: use
+activity history for meaningful subtask starts and finishes, preserve conclusions in
+regular Markdown notes, pair AI activity with a short `note_summary`, and send multiline
+CLI Markdown through `--note-file`. Setup installs it for Claude and AGENTS-based tools;
+refresh upgrades the exact prior v4 section while preserving nested project specifics.
+
 ```markdown
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->

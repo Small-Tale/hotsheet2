@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 59 -->
+<!-- hotsheet-skill-version: 60 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -92,6 +92,7 @@ never replaces a `FEEDBACK NEEDED` blocker.
 **Completion confidence:** the note that moves a ticket to `completed` must include a
 `## Confidence` section with the integer score (0-100) and one line per factor, each rated
 high/medium/low with a short phrase:
+
 - clarity of the request;
 - context and supporting information available;
 - comprehensiveness and realism of verification (unit, E2E, real-browser visual QA;
@@ -166,6 +167,7 @@ first: run `hotsheet-cli ls --claimed` and release each ticket you are no longer
 working (use `--force` only for a delegated worker's claim you are taking back).
 
 Notes:
+
 - The CLI (`hotsheet-cli …`) and `hotsheet_*` MCP tools use the same engine and work
   without a server.
 - Confirm HS2 generation before using connected MCP: `hotsheet-store.json` (directly
@@ -180,6 +182,9 @@ Notes:
   to make a decision easier, not to offload ordinary implementation judgment or replace
   an open-ended question. Users may select zero or multiple options and may always add a
   freeform response, so do not describe the list as exhaustive or require a selection.
+- Record `activity` notes at the start and finish of meaningful subtasks. Keep repeated
+  and reversed transitions as separate history entries, with durable findings in a
+  `regular` Markdown note.
 - AI-authored `activity` notes include `--note-summary "Concise outcome"` (or MCP
   `note_summary`) in the same update. Keep it plain-text, one line, outcome-oriented,
   preferably at most 80 characters, and leave implementation/verification detail in

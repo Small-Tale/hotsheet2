@@ -715,9 +715,10 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
     GuidanceSection {
         name: "ticket-driven-work",
         current: include_str!("../../../plugins/shared/ticket-driven-work.md"),
-        legacy: &[include_str!(
-            "../../../plugins/shared/legacy-ticket-driven-work.md"
-        )],
+        legacy: &[
+            include_str!("../../../plugins/shared/legacy-ticket-driven-work.md"),
+            include_str!("../../../plugins/shared/legacy-ticket-driven-work-v4.md"),
+        ],
     },
     GuidanceSection {
         name: "testing-philosophy",
@@ -1829,6 +1830,16 @@ args = ["--path", "{{store}}"]
             assert_eq!(agents.matches(section.current.trim()).count(), 1);
             assert_eq!(claude.matches(section.current.trim()).count(), 1);
         }
+        for rule in [
+            "meaningful subtask starts and finishes",
+            "separate history entries",
+            "`regular` Markdown notes",
+            "`note_summary`",
+            "`--note-file <path>`",
+        ] {
+            assert!(agents.contains(rule), "AGENTS.md omitted {rule}");
+            assert!(claude.contains(rule), "CLAUDE.md omitted {rule}");
+        }
         let enabled = ["claude", "codex", "antigravity", "opencode"]
             .into_iter()
             .map(str::to_string)
@@ -1868,6 +1879,9 @@ args = ["--path", "{{store}}"]
         let agents_path = project.path().join("AGENTS.md");
         let first = std::fs::read_to_string(&agents_path).unwrap();
         assert!(first.contains(include_str!("../../../plugins/shared/visual-qa.md").trim()));
+        assert!(
+            first.contains(include_str!("../../../plugins/shared/ticket-driven-work.md").trim())
+        );
         assert!(!project.path().join("CLAUDE.md").exists());
         let enabled = HashSet::from(["codex".to_string()]);
         refresh_setup_in(store.path(), project.path(), Some(&enabled), &dirs).unwrap();
