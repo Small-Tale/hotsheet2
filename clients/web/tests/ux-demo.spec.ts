@@ -5656,11 +5656,11 @@ test('deselects an image annotation when the media canvas is clicked away', asyn
   await page.goto('/ux-demo?component=attachment-gallery');
   const gallery = page.locator('[data-component="attachment-gallery"]');
   await gallery.getByRole('button', { name: 'Annotate media, 1 annotation' }).click();
-  const annotation = gallery.getByRole('button', { name: /Review this alignment/ });
+  const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
+    annotation = surface.getByRole('button', { name: /Review this alignment/ });
   await expect(annotation).toHaveAttribute('data-selected', 'true');
   await expect(annotation.locator('[data-annotation-handle]')).toHaveCount(8);
-  const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
-    box = (await surface.boundingBox())!;
+  const box = (await surface.boundingBox())!;
   await surface.click({ position: { x: box.width * 0.9, y: box.height * 0.9 } });
   await expect(annotation).toHaveAttribute('data-selected', 'false');
   await expect(annotation.locator('[data-annotation-handle]')).toHaveCount(0);
