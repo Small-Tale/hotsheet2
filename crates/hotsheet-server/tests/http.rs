@@ -13858,6 +13858,7 @@ async fn checkout_sources_aggregate_and_route_external_provider_mutations() {
     let app = app(st
         .with_checkout_registry(registry.path().join("checkouts.json"))
         .with_ticket_provider(Arc::new(provider)));
+    register_test_provider_records(&app, &[("github-main", "acme/repo")]).await;
     let registration = serde_json::json!({
         "root": checkout.path(),
         "alias": "external",
@@ -13987,6 +13988,7 @@ async fn external_checkout_pages_use_provider_cursors_and_summaries() {
             GitHubConfig::new("github-page", "acme/repo", "fixture-token"),
             transport,
         ))));
+    register_test_provider_records(&app, &[("github-page", "acme/repo")]).await;
     let registration=serde_json::json!({"root":checkout.path(),"alias":"external-page","sources":[{"connection_id":"github-page","provider":"github","locator":"acme/repo"}],"default_source":"github-page"}).to_string();
     app.clone()
         .oneshot(authed("POST", "/checkouts", Some(&registration)))
@@ -15411,6 +15413,26 @@ async fn checkout_call(
     body_json(response).await
 }
 
+/// Keep mocked provider routes faithful to the persisted connection contract.
+async fn register_test_provider_records(router: &axum::Router, sources: &[(&str, &str)]) {
+    for (id, locator) in sources {
+        let connection = serde_json::json!({
+            "id":id,"provider":"github","locator":locator,"default":false,
+            "settings":{"credential":{"secret":"fixture-token"}}
+        });
+        let response = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/provider-connections",
+                Some(&connection.to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+}
+
 /// Value-keyset continuations (HS2-74H84S): for every sort and direction, mutate the store
 /// between pages — edit the boundary row's sort key, purge it, insert rows on both sides of
 /// the cursor, and move another row across the boundary — interleaved across continuations.
@@ -15670,6 +15692,7 @@ async fn paged_github_checkout_with_cache(
     let router = app(st
         .with_checkout_registry(registry.path().join("checkouts.json"))
         .with_ticket_provider(Arc::new(provider)));
+    register_test_provider_records(&router, &[("github-paged", "acme/repo")]).await;
     checkout_call(
         &router,
         "POST",
@@ -17070,6 +17093,40 @@ async fn checkout_providers_list_only_linked_sources_with_the_checkout_default()
         .await
         .unwrap();
     assert_eq!(stale_link.status(), StatusCode::BAD_REQUEST);
+    let third = tempfile::tempdir().unwrap();
+    let stale_source = serde_json::json!({
+        "connection_id":"github-a","provider":"github","locator":"acme/a"
+    });
+    let stale_registration = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(
+                &serde_json::json!({
+                    "root":third.path(), "alias":"third", "sources":[stale_source.clone()]
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(stale_registration.status(), StatusCode::BAD_REQUEST);
+    let stale_open = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(
+                &serde_json::json!({
+                    "root":third.path(), "alias":"third", "sources":[stale_source]
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(stale_open.status(), StatusCode::BAD_REQUEST);
     // Detaching the default falls back to the checkout's git store.
     assert_eq!(
         summary(providers("first").await),
@@ -17876,6 +17933,15 @@ async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_ba
         .with_ticket_provider(Arc::new(assets))
         .with_ticket_provider(Arc::new(bare))
         .with_ticket_provider(Arc::new(denied)));
+    register_test_provider_records(
+        &app,
+        &[
+            ("github-assets", "acme/repo"),
+            ("github-bare", "acme/other"),
+            ("github-denied", "acme/denied"),
+        ],
+    )
+    .await;
     let registration = serde_json::json!({
         "root": checkout.path(),
         "alias": "external-assets",
@@ -18038,6 +18104,7 @@ async fn github_checkout_markup_round_trips_revision_and_original_bytes() {
     let app = app(st
         .with_checkout_registry(registry.path().join("checkouts.json"))
         .with_ticket_provider(Arc::new(provider)));
+    register_test_provider_records(&app, &[("github-assets", "acme/repo")]).await;
     app.clone()
         .oneshot(authed(
             "POST",
@@ -18167,6 +18234,7 @@ async fn github_checkout_serves_cropped_rendition_and_immutable_original() {
     let app = app(st
         .with_checkout_registry(registry.path().join("checkouts.json"))
         .with_ticket_provider(Arc::new(provider)));
+    register_test_provider_records(&app, &[("github-assets", "acme/repo")]).await;
     app.clone()
         .oneshot(authed(
             "POST",

@@ -217,6 +217,12 @@ pub enum OpenSourceMode {
     Discovered,
 }
 
+pub struct OpenSourceSelection {
+    pub sources: Vec<TicketSource>,
+    pub default_source: Option<String>,
+    pub mode: OpenSourceMode,
+}
+
 /// Holds the checkout registry lock while a provider record and its project links are
 /// changed together. Ordinary checkout mutations acquire this same file lock.
 pub(crate) struct LockedCheckoutRegistry<'a> {
@@ -338,10 +344,60 @@ impl CheckoutRegistry {
         self.register_sources_locked(root, alias, repository, sources, default_source, false)
     }
 
+    /// Register external links only while their provider records still exist.
+    pub fn register_registered_sources(
+        &self,
+        providers: &ProviderConfigRegistry,
+        root: &Path,
+        alias: Option<&str>,
+        repository: Option<String>,
+        sources: Vec<TicketSource>,
+        default_source: Option<String>,
+    ) -> Result<Checkout, CheckoutError> {
+        let _lock = self.acquire_lock()?;
+        Self::validate_provider_sources(providers, &sources)?;
+        self.register_sources_locked(root, alias, repository, sources, default_source, false)
+    }
+
     /// Reopening a project must retain linked providers and its selected default. Only an
     /// explicit full source set replaces every link; selecting a different sole git store
     /// replaces that git link while keeping external providers (HS2-JY6JZE).
     pub fn open_sources(
+        &self,
+        root: &Path,
+        alias: Option<&str>,
+        repository: Option<String>,
+        sources: Vec<TicketSource>,
+        default_source: Option<String>,
+        mode: OpenSourceMode,
+    ) -> Result<Checkout, CheckoutError> {
+        let _lock = self.acquire_lock()?;
+        self.open_sources_locked(root, alias, repository, sources, default_source, mode)
+    }
+
+    /// Project reopen validates requested external links under the removal lock. Existing
+    /// links are retained when no new external source is requested.
+    pub fn open_registered_sources(
+        &self,
+        providers: &ProviderConfigRegistry,
+        root: &Path,
+        alias: Option<&str>,
+        repository: Option<String>,
+        selection: OpenSourceSelection,
+    ) -> Result<Checkout, CheckoutError> {
+        let _lock = self.acquire_lock()?;
+        Self::validate_provider_sources(providers, &selection.sources)?;
+        self.open_sources_locked(
+            root,
+            alias,
+            repository,
+            selection.sources,
+            selection.default_source,
+            selection.mode,
+        )
+    }
+
+    fn open_sources_locked(
         &self,
         root: &Path,
         alias: Option<&str>,
@@ -353,7 +409,6 @@ impl CheckoutRegistry {
         let root = root
             .canonicalize()
             .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
-        let _lock = self.acquire_lock()?;
         let existing = self
             .read_locked()?
             .checkouts
@@ -1137,6 +1192,95 @@ fn migrate_checkout(checkout: &mut Checkout) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::ProviderConnection;
+
+    #[test]
+    fn registered_project_links_require_a_live_provider_record() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(&second).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let providers = ProviderConfigRegistry::new(temp.path().join("providers.json"));
+        let connection = ProviderConnection {
+            id: "github-main".into(),
+            provider: "github".into(),
+            locator: "acme/repo".into(),
+            name: None,
+            default: false,
+            settings: serde_json::Value::Null,
+            disabled: false,
+        };
+        let source = TicketSource {
+            connection_id: connection.id.clone(),
+            provider: connection.provider.clone(),
+            locator: connection.locator.clone(),
+        };
+        providers.save(std::slice::from_ref(&connection)).unwrap();
+        registry
+            .register_registered_sources(&providers, &first, None, None, vec![source.clone()], None)
+            .unwrap();
+        providers.save(&[]).unwrap();
+        assert!(matches!(
+            registry.register_registered_sources(
+                &providers,
+                &second,
+                None,
+                None,
+                vec![source.clone()],
+                None
+            ),
+            Err(CheckoutError::Invalid(_))
+        ));
+        assert!(matches!(
+            registry.open_registered_sources(
+                &providers,
+                &second,
+                None,
+                None,
+                OpenSourceSelection {
+                    sources: vec![source.clone()],
+                    default_source: None,
+                    mode: OpenSourceMode::Explicit,
+                }
+            ),
+            Err(CheckoutError::Invalid(_))
+        ));
+        assert_eq!(registry.list().unwrap().len(), 1);
+        let reopened = registry
+            .open_registered_sources(
+                &providers,
+                &first,
+                None,
+                None,
+                OpenSourceSelection {
+                    sources: Vec::new(),
+                    default_source: None,
+                    mode: OpenSourceMode::Discovered,
+                },
+            )
+            .unwrap();
+        assert!(reopened.source("github-main").is_some());
+        providers.save(&[connection]).unwrap();
+        assert!(
+            registry
+                .open_registered_sources(
+                    &providers,
+                    &second,
+                    None,
+                    None,
+                    OpenSourceSelection {
+                        sources: vec![source],
+                        default_source: None,
+                        mode: OpenSourceMode::Explicit,
+                    },
+                )
+                .unwrap()
+                .source("github-main")
+                .is_some()
+        );
+    }
 
     #[test]
     fn ids_are_readable_stable_and_distinguish_checkouts() {

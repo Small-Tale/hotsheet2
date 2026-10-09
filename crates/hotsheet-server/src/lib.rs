@@ -4495,13 +4495,16 @@ async fn open_project(
     let root = FsPath::new(&body.root);
     let checkout = state
         .checkout_registry
-        .open_sources(
+        .open_registered_sources(
+            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
             root,
             body.alias.as_deref(),
             body.repository,
-            sources,
-            body.default_source,
-            source_mode,
+            hotsheet_ticketing::checkouts::OpenSourceSelection {
+                sources,
+                default_source: body.default_source,
+                mode: source_mode,
+            },
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     state.watch_checkout_repository(&checkout);
@@ -4541,7 +4544,8 @@ async fn register_checkout(
         .or_else(|| (sources.len() == 1).then(|| sources[0].connection_id.clone()));
     let entry = state
         .checkout_registry
-        .register_sources(
+        .register_registered_sources(
+            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
             FsPath::new(&body.root),
             body.alias.as_deref(),
             body.repository,
