@@ -620,10 +620,12 @@ owner of editor normalization before the controlled query state rerenders (HS2-H
   - `divider`: draws the bottom rule (default `true`).
 
   The demo shows the standalone strip and the shell-column variant (`surface="default"`,
-  `divider={false}`). On desktop, Add project stays beside the last tab (TabBar's adjacent trailing
-  placement) and the workspace action sits in TabBar's far-edge `end` zone (KF-A59SC4, HS2-T44PFW), so
-  the strip needs no trailing-flex token, growing group, or auto margin. When the tabs overflow they
-  shrink and scroll while + and the action stay visible.
+  `divider={false}`). On desktop project views, Add project stays beside the last tab (TabBar's
+  adjacent trailing placement) and the workspace action sits in TabBar's far-edge `end` zone
+  (KF-A59SC4, HS2-T44PFW). In Workspace grid and Stats, Add project takes TabBar's separate trailing
+  placement at the far edge, removing the empty strip after the last control (HS2-0KSBW7). The strip
+  needs no trailing-flex token, growing group, or auto margin. When the tabs overflow they shrink and
+  scroll while + and the action stay visible.
 
   Every zone holds catalog-accepted content, written as literal JSX so Kerf's `KUI-L202`
   composition rule checks each placement (HS2-PNCDAE):

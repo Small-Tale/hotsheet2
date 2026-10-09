@@ -422,6 +422,10 @@ describe('application shell components', () => {
     expect(
       String(ProjectTabBar({ tabs: [{ id: 'focus', name: 'Focus', location: 'local', selected: true }] })),
     ).toContain('data-trailing-placement="adjacent"');
+    for (const mode of ['terminals', 'stats'] as const)
+      expect(String(ProjectTabBar({ tabs: [{ id: 'focus', name: 'Focus', location: 'local' }], mode }))).toContain(
+        'data-trailing-placement="separate"',
+      );
   });
 
   it('composes tabs with add and overflow actions', () => {

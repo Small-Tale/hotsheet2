@@ -131,9 +131,9 @@ export function ProjectTabBar({
         // Selecting a project loads/refreshes it, so keep manual activation: arrow keys move roving focus
         // only and the user selects with Enter/Space/click (HS2-08ZG4J). `wireTabBars` reads this.
         activation="manual"
-        // Add-project stays beside the last tab; Kerf pins the workspace action (a standalone
-        // primary action) at the far edge through its `end` zone (HS2-NE8JBS, KF-A59SC4, HS2-T44PFW).
-        trailingPlacement="adjacent"
+        // Project views keep Add project beside the last tab while their workspace action uses the
+        // far-edge `end` zone. Dashboards have no workspace action, so Add project takes that edge.
+        trailingPlacement={mode === 'project' ? 'adjacent' : 'separate'}
         leading={<ProjectDashboardModes mode={mode} />}
         trailing={<AddProjectAction />}
         end={workspaceAction && <TicketViewAction action={workspaceAction} />}

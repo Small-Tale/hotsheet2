@@ -25234,6 +25234,38 @@ test('keeps Add project beside the last project tab and New ticket at the far ed
   expect(box.launcher.right).toBeLessThanOrEqual(box.bar.right);
   await expect(strip).toBeVisible();
   await page.locator('.project-tab-bar').screenshot({ path: 'test-results/hs2-ne8jbs-many-tabs-wide.png' });
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await expect(page.locator('.project-tab-bar')).toHaveAttribute('data-mode', 'terminals');
+  await expect(add).toBeVisible();
+  const dashboardBar = (await page.locator('.project-tab-bar').boundingBox())!,
+    dashboardAdd = (await add.boundingBox())!;
+  expect(dashboardBar.x + dashboardBar.width - (dashboardAdd.x + dashboardAdd.width)).toBeLessThanOrEqual(32);
+});
+
+test('pins Add project to the far edge of dashboard project strips (HS2-0KSBW7)', async ({ page }) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const strip = page.locator('.project-tab-bar'),
+    add = strip.getByRole('button', { name: 'Add project' });
+  for (const [mode, width] of [
+    ['Workspace grid', 1920],
+    ['Cross-project stats', 1024],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await strip.getByRole('button', { name: mode }).click();
+    await expect(strip).toHaveAttribute('data-mode', mode === 'Workspace grid' ? 'terminals' : 'stats');
+    const barBox = (await strip.boundingBox())!,
+      addBox = (await add.boundingBox())!;
+    expect(barBox.x + barBox.width - (addBox.x + addBox.width)).toBeLessThanOrEqual(32);
+    await strip.screenshot({
+      path: `target/visual-captures/hs2-0ksbw7-${mode === 'Workspace grid' ? 'grid' : 'stats'}-${width}.png`,
+    });
+    if (mode === 'Workspace grid')
+      await page.screenshot({ path: 'target/visual-captures/hs2-0ksbw7-grid-full-1920.png', fullPage: true });
+  }
 });
 
 test('keeps the gallery zoom and markup toolbars visible on a phone while the inspector overlay is open (HS2-5TYNAS)', async ({
