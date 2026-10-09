@@ -1,13 +1,16 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
+import '@kerfjs/ui/surface-scaffold/register';
 import './project-close-dialog.css';
 
+import { remify } from '@kerfjs/ui/css-values';
+import { deviceClass } from '@kerfjs/ui/device-class';
 import { List } from '@kerfjs/ui/list';
 import { ListHeader } from '@kerfjs/ui/list-header';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { CircleAlert, MessageSquare, SquareTerminal } from 'lucide';
 
@@ -43,6 +46,9 @@ export interface ProjectCloseAIChat extends ProjectCloseResourceBase {
 }
 
 export type ProjectCloseResource = ProjectCloseTerminal | ProjectCloseAIChat;
+
+// Match the dialog's 672px resource-layout breakpoint when choosing its 8px phone gutter.
+const projectCloseDevice = deviceClass({ breakpoints: { tablet: 673 } });
 
 export interface ProjectCloseDialogState {
   projectId: string;
@@ -119,119 +125,127 @@ function ResourceDetail({ resource, projectId }: { resource: ProjectCloseResourc
 export function ProjectCloseDialog({ state }: { state?: ProjectCloseDialogState }) {
   if (!state) return <></>;
   const hasResources = state.resources.length > 0,
+    phone = projectCloseDevice.value.handset,
     selected = selectedProjectCloseResource(state.resources, state.selectedKey),
     busy = Boolean(state.operation),
     closingAll = state.operation === 'closing-all',
     closingProject = state.operation === 'closing-project';
   return (
-    <wa-dialog
-      class="project-close-dialog"
-      {...TERMINALS_TARGETS.projectCloseDialog.attrs}
-      data-project-id={state.projectId}
-      data-has-resources={String(hasResources)}
-      label={`Close ${state.projectName}?`}
-      aria-describedby={hasResources ? 'project-close-dialog-summary' : ''}
-      open
+    <DialogSurface
+      preferredWidth={remify(hasResources ? 832 : 480)}
+      viewportGutter={remify(phone ? 8 : 16)}
+      maxHeight={phone ? 'viewport' : undefined}
+      bodyInset="none"
     >
-      {hasResources && (
-        <div id="project-close-dialog-summary">
-          <StateBanner
-            tone="warning"
-            title={projectCloseRunningSummary(state.resources)}
-            icon={<LucideIcon size={17.6} icon={CircleAlert} name="circle-alert" />}
-          />
-        </div>
-      )}
-      {hasResources ? (
-        <div class="project-close-dialog__layout" aria-busy={String(busy)}>
-          <aside class="project-close-dialog__resources" aria-label="Running terminals and AI chats">
-            <List fill scrollable controlInsets="trbl">
-              <ListHeader label="Running items" />
-              <nav>
-                <List gap="none">
-                  {state.resources.map((resource) => {
-                    const key = projectCloseResourceKey(resource),
-                      terminal = resource.kind === 'terminal';
-                    return (
-                      <ListItem
-                        action="select-project-close-resource"
-                        itemId={key}
-                        selected={resource === selected}
-                        disabled={busy}
-                        icon={
-                          <LucideIcon
-                            icon={terminal ? SquareTerminal : MessageSquare}
-                            name={terminal ? 'square-terminal' : 'message-square'}
-                          />
-                        }
-                        label={resource.name}
-                        description={`${terminal ? 'Terminal' : resource.tool} · ${resource.busy ? 'Busy' : 'Running'}`}
-                        multiline
-                      />
-                    );
-                  })}
-                </List>
-              </nav>
-            </List>
-          </aside>
-          {selected ? (
-            <ResourceDetail resource={selected} projectId={state.projectId} />
-          ) : (
-            <List vAlign="middle" hAlign="center">
-              <Text flush>Close this project tab?</Text>
-            </List>
+      <wa-dialog
+        class="project-close-dialog"
+        {...TERMINALS_TARGETS.projectCloseDialog.attrs}
+        data-project-id={state.projectId}
+        data-has-resources={String(hasResources)}
+        label={`Close ${state.projectName}?`}
+        aria-describedby={hasResources ? 'project-close-dialog-summary' : ''}
+        open
+      >
+        {hasResources && (
+          <div id="project-close-dialog-summary">
+            <StateBanner
+              tone="warning"
+              title={projectCloseRunningSummary(state.resources)}
+              icon={<LucideIcon size={17.6} icon={CircleAlert} name="circle-alert" />}
+            />
+          </div>
+        )}
+        {hasResources ? (
+          <div class="project-close-dialog__layout" aria-busy={String(busy)}>
+            <aside class="project-close-dialog__resources" aria-label="Running terminals and AI chats">
+              <List fill scrollable controlInsets="trbl">
+                <ListHeader label="Running items" />
+                <nav>
+                  <List gap="none">
+                    {state.resources.map((resource) => {
+                      const key = projectCloseResourceKey(resource),
+                        terminal = resource.kind === 'terminal';
+                      return (
+                        <ListItem
+                          action="select-project-close-resource"
+                          itemId={key}
+                          selected={resource === selected}
+                          disabled={busy}
+                          icon={
+                            <LucideIcon
+                              icon={terminal ? SquareTerminal : MessageSquare}
+                              name={terminal ? 'square-terminal' : 'message-square'}
+                            />
+                          }
+                          label={resource.name}
+                          description={`${terminal ? 'Terminal' : resource.tool} · ${resource.busy ? 'Busy' : 'Running'}`}
+                          multiline
+                        />
+                      );
+                    })}
+                  </List>
+                </nav>
+              </List>
+            </aside>
+            {selected ? (
+              <ResourceDetail resource={selected} projectId={state.projectId} />
+            ) : (
+              <List vAlign="middle" hAlign="center">
+                <Text flush>Close this project tab?</Text>
+              </List>
+            )}
+          </div>
+        ) : (
+          <Text>Close this project tab? You can reopen it later.</Text>
+        )}
+        <List textInsets="rl" controlInsets="tb" gap="xs">
+          {hasResources && (
+            <Text flush size="compact" tone="quiet" data-project-close-consequences>
+              <strong>Keep running</strong> closes only this tab. Terminals and AI chat tabs return when reopened.
+              Received chat history and the latest durable provider session return after an app or server restart.{' '}
+              <strong>Stop all</strong> ends every item, then closes the tab.
+            </Text>
           )}
-        </div>
-      ) : (
-        <Text>Close this project tab? You can reopen it later.</Text>
-      )}
-      <List textInsets="rl" controlInsets="tb" gap="xs">
-        {hasResources && (
-          <Text flush size="compact" tone="quiet" data-project-close-consequences>
-            <strong>Keep running</strong> closes only this tab. Terminals and AI chat tabs return when reopened.
-            Received chat history and the latest durable provider session return after an app or server restart.{' '}
-            <strong>Stop all</strong> ends every item, then closes the tab.
-          </Text>
-        )}
-        {Boolean(state.error) && (
-          <Text flush size="compact" tone="danger" role="alert">
-            {state.error}
-          </Text>
-        )}
-      </List>
-      <Row slot="footer" hAlign="right" vAlign="middle" gap="xs" wrap>
-        <wa-button
-          type="button"
-          size="small"
-          appearance="outlined"
-          {...TERMINALS_ACTIONS.cancelProjectClose.attrs}
-          disabled={busy}
-        >
-          Cancel
-        </wa-button>
-        <wa-button
-          type="button"
-          size="small"
-          appearance="outlined"
-          {...TERMINALS_ACTIONS.confirmCloseProject.attrs}
-          data-project-id={state.projectId}
-          disabled={busy}
-        >
-          {closingProject ? 'Closing…' : hasResources ? 'Keep Running' : 'Close Project'}
-        </wa-button>
-        {hasResources && (
+          {Boolean(state.error) && (
+            <Text flush size="compact" tone="danger" role="alert">
+              {state.error}
+            </Text>
+          )}
+        </List>
+        <Row slot="footer" hAlign="right" vAlign="middle" gap="xs" wrap>
           <wa-button
             type="button"
             size="small"
-            variant="danger"
-            {...TERMINALS_ACTIONS.closeAllProjectResources.attrs}
+            appearance="outlined"
+            {...TERMINALS_ACTIONS.cancelProjectClose.attrs}
+            disabled={busy}
+          >
+            Cancel
+          </wa-button>
+          <wa-button
+            type="button"
+            size="small"
+            appearance="outlined"
+            {...TERMINALS_ACTIONS.confirmCloseProject.attrs}
             data-project-id={state.projectId}
             disabled={busy}
           >
-            {closingAll ? 'Stopping…' : 'Stop & Close'}
+            {closingProject ? 'Closing…' : hasResources ? 'Keep Running' : 'Close Project'}
           </wa-button>
-        )}
-      </Row>
-    </wa-dialog>
+          {hasResources && (
+            <wa-button
+              type="button"
+              size="small"
+              variant="danger"
+              {...TERMINALS_ACTIONS.closeAllProjectResources.attrs}
+              data-project-id={state.projectId}
+              disabled={busy}
+            >
+              {closingAll ? 'Stopping…' : 'Stop & Close'}
+            </wa-button>
+          )}
+        </Row>
+      </wa-dialog>
+    </DialogSurface>
   );
 }

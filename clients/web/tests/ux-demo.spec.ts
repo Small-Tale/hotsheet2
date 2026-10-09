@@ -8243,6 +8243,17 @@ test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKK
     )
     .toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-project-close-narrow.png', fullPage: true });
+  for (const [width, gutter] of [
+    [672, 8],
+    [673, 16],
+  ]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect
+      .poll(() =>
+        projectClose.evaluate((node) => node.shadowRoot!.querySelector('dialog')!.getBoundingClientRect().left),
+      )
+      .toBeCloseTo(gutter, 0);
+  }
   await page.setViewportSize({ width: 1280, height: 900 });
 
   await page.goto('/ux-demo?component=conversation-export-dialog');

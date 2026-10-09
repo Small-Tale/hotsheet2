@@ -1,12 +1,3 @@
-.project-close-dialog {
-  --width: min(remify(832px), calc(100vw - 2 * var(--kui-space-m)));
-}
-.project-close-dialog[data-has-resources='false'] {
-  --width: min(remify(480px), calc(100vw - 2 * var(--kui-space-m)));
-}
-.project-close-dialog::part(body) {
-  padding: 0;
-}
 .project-close-dialog__layout {
   display: grid;
   min-width: 0;
@@ -33,15 +24,6 @@
   background: var(--hs-terminal-background);
 }
 @media (max-width: remify(672px)) {
-  .project-close-dialog {
-    --width: calc(100vw - 2 * var(--kui-space-xs));
-  }
-  /* The phone dialog keeps the same 8px viewport gutter vertically as horizontally instead of Web
-     Awesome's 80% height cap, so the canvas-aspect preview, the consequences, and the actions all fit
-     without scrolling the body (HS2-28EVHV). */
-  .project-close-dialog::part(dialog) {
-    max-height: calc(100dvh - 2 * var(--kui-space-xs));
-  }
   .project-close-dialog__layout {
     min-height: remify(304px);
     max-height: calc(100vh - remify(400px));

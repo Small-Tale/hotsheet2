@@ -171,14 +171,20 @@ describe('ProjectCloseDialog', () => {
     expect(markup).toContain('data-component="row"');
   });
 
-  it('gives the phone preview frame its published grid aspect and retains the raw shell viewport cap', () => {
+  it('gives the phone preview frame its published grid aspect and delegates shell geometry to DialogSurface', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'project-close-dialog.css'), 'utf8'),
-      phone = css.slice(css.indexOf('@media (max-width: remify(672px))'));
+      phone = css.slice(css.indexOf('@media (max-width: remify(672px))')),
+      markup = String(ProjectCloseDialog({ state: { projectId: 'demo', projectName: 'Demo', resources } }));
     expect(phone).toMatchSource(/__layout \{[^}]*grid-template-rows:auto minmax\(remify\(192px\), 1fr\)/);
     expect(phone).toMatchSource(/__resources \{[^}]*max-height:remify\(160px\)/);
     expect(phone).toMatchSource(
       /__terminal \{[^}]*box-sizing:content-box[^}]*max-height:remify\(224px\)[^}]*aspect-ratio:var\(--terminal-preview-grid-aspect, 5 \/ 3\)/,
     );
-    expect(phone).toMatchSource(/::part\(dialog\) \{ max-height:calc\(100dvh - 2 \* var\(--kui-space-xs\)\)/);
+    expect(css).not.toContain('::part(');
+    expect(css).not.toContain('--width:');
+    expect(markup).toContain('data-component="dialog-surface"');
+    expect(markup).toContain('data-body-inset="none"');
+    expect(markup).toContain('data-preferred-width');
+    expect(markup).toContain('data-viewport-gutter');
   });
 });

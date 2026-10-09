@@ -3015,9 +3015,8 @@ Trash busy/error state, and native modal dismissal stay application-owned. Neith
 
 `ProjectCloseDialog` composes its warning through `StateBanner`, its scrolling resource list through
 `List`/`ListHeader`/`ListItem`, consequences and errors through `Text`, and its footer through wrapping
-`Row`. Its remaining stylesheet owns the raw dialog's resource-dependent width and phone viewport cap,
-the asymmetric resource/preview tracks, and the terminal preview's public canvas aspect/inset contract.
-The read-only `AIConversation` and `TerminalPreview` keep their own rendering and styles. Beta.76
-`DialogSurface` has size, presentation, body inset, and footer inset props, but no modal viewport gutter
-or maximum-height configuration; it cannot preserve this dialog's 8px phone gutter and visible,
-unscrolled terminal-preview contract. The raw shell therefore remains until that configuration exists (`KF-E2J9ND`; downstream adoption `HS2-FXAAA6`).
+`Row`. Kerf beta.88 `DialogSurface` owns its 832px resource and 480px empty-state preferred widths,
+16px desktop and 8px phone viewport gutters, zero body inset, and the phone dynamic-viewport height
+cap (`KF-E2J9ND`, `HS2-FXAAA6`). Its remaining stylesheet owns the asymmetric resource/preview tracks
+and the terminal preview's public canvas aspect/inset contract. The read-only `AIConversation` and
+`TerminalPreview` keep their own rendering and styles.
