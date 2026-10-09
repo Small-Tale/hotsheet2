@@ -708,29 +708,36 @@ const SKILL_VERSION_PREFIX: &str = "<!-- hotsheet-skill-version: ";
 struct GuidanceSection {
     name: &'static str,
     current: &'static str,
-    legacy: &'static str,
+    legacy: &'static [&'static str],
 }
 
 const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
     GuidanceSection {
         name: "ticket-driven-work",
         current: include_str!("../../../plugins/shared/ticket-driven-work.md"),
-        legacy: include_str!("../../../plugins/shared/legacy-ticket-driven-work.md"),
+        legacy: &[include_str!(
+            "../../../plugins/shared/legacy-ticket-driven-work.md"
+        )],
     },
     GuidanceSection {
         name: "testing-philosophy",
         current: include_str!("../../../plugins/shared/testing-philosophy.md"),
-        legacy: include_str!("../../../plugins/shared/legacy-testing-philosophy.md"),
+        legacy: &[
+            include_str!("../../../plugins/shared/legacy-testing-philosophy.md"),
+            include_str!("../../../plugins/shared/legacy-testing-philosophy-v3.md"),
+        ],
     },
     GuidanceSection {
         name: "requirements-documentation",
         current: include_str!("../../../plugins/shared/requirements-documentation.md"),
-        legacy: include_str!("../../../plugins/shared/legacy-requirements-documentation.md"),
+        legacy: &[include_str!(
+            "../../../plugins/shared/legacy-requirements-documentation.md"
+        )],
     },
     GuidanceSection {
         name: "visual-qa",
         current: include_str!("../../../plugins/shared/visual-qa.md"),
-        legacy: "",
+        legacy: &[],
     },
 ];
 
@@ -791,7 +798,7 @@ fn render_guidance_sections(existing: &str, active: bool) -> String {
             }
             continue;
         }
-        if section.legacy.is_empty() || generic != section.legacy.trim() {
+        if !section.legacy.iter().any(|legacy| generic == legacy.trim()) {
             continue;
         }
         if active {
@@ -1756,12 +1763,12 @@ args = ["--path", "{{store}}"]
     fn shared_guidance_preserves_local_text_and_version_boundaries() {
         for section in GUIDANCE_SECTIONS {
             let current = section.current.trim();
-            let legacy = section.legacy.trim();
             let specifics = format!(
                 "<!-- hotsheet:begin specifics={} v=7 -->\nLocal policy.\n<!-- hotsheet:end specifics={} -->",
                 section.name, section.name
             );
-            if !legacy.is_empty() {
+            for legacy in section.legacy {
+                let legacy = legacy.trim();
                 let older_with_specifics =
                     guidance_with_specifics(legacy, section.name, Some(&specifics));
                 let upgraded = render_guidance_sections(
@@ -1776,6 +1783,9 @@ args = ["--path", "{{store}}"]
                 assert!(upgraded.starts_with("User preface.\n"));
                 assert!(upgraded.contains("User footer.\n"));
                 assert_eq!(render_guidance_sections(&upgraded, true), upgraded);
+                let customized_older = legacy.replace("## ", "## Customized ");
+                let input = format!("Before.\n\n{customized_older}\n\nAfter.\n");
+                assert!(render_guidance_sections(&input, true).contains(&customized_older));
             }
 
             for protected in [
@@ -1792,11 +1802,6 @@ args = ["--path", "{{store}}"]
                     rendered.contains(&protected),
                     "protected section was replaced"
                 );
-            }
-            if !legacy.is_empty() {
-                let customized_older = legacy.replace("## ", "## Customized ");
-                let input = format!("Before.\n\n{customized_older}\n\nAfter.\n");
-                assert!(render_guidance_sections(&input, true).contains(&customized_older));
             }
             let retired =
                 render_guidance_sections(&format!("Before.\n\n{current}\n\nAfter.\n"), false);
@@ -1893,7 +1898,7 @@ args = ["--path", "{{store}}"]
         let store = tempfile::tempdir().unwrap();
         let claude_project = tempfile::tempdir().unwrap();
         let specifics = "<!-- hotsheet:begin specifics=testing-philosophy v=1 -->\nLocal test runner and fixtures.\n<!-- hotsheet:end specifics=testing-philosophy -->";
-        let legacy = guidance_with_specifics(testing.legacy, testing.name, Some(specifics));
+        let legacy = guidance_with_specifics(testing.legacy[0], testing.name, Some(specifics));
         std::fs::write(
             claude_project.path().join("CLAUDE.md"),
             format!("Local preface.\n\n{legacy}\n"),

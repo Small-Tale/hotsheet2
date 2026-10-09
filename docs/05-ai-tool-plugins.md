@@ -107,6 +107,14 @@ flow, stateful controls must be tested in both directions across resets, and act
 work through each shipped parent composition. Project test runners and paths belong in
 local `hotsheet:specifics` blocks, which refresh preserves.
 
+The lint and coverage rule (HS2-DHYWSD) asks each code package for a working local lint
+command and configuration, warning-free results, and documented suppressions. Teams keep
+a feature-by-feature unit, end-to-end, and manual coverage record and a manual plan for
+behavior automation cannot verify. The shared target is 100% line, branch, and documented
+feature coverage, treated as a floor for transition and interaction tests. Exact lint
+stacks, coverage paths, validators, and thresholds stay project-specific. Refresh knows
+both earlier testing-section versions and retains their nested specifics while upgrading.
+
 ```markdown
 <!-- BEGIN hotsheet:agents-md -->
 <!-- hotsheet-shared-section: antigravity, codex, opencode -->
