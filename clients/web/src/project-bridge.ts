@@ -1167,6 +1167,16 @@ export function serverNeedsSelectedBuild(
   return Boolean(selectedRevision && server?.build_revision !== selectedRevision);
 }
 
+export function requireSelectedServerBuild(
+  server: ServerCompatibility | undefined,
+  selectedRevision: string | undefined,
+): void {
+  if (serverNeedsSelectedBuild(server, selectedRevision))
+    throw new Error(
+      'The running Hot Sheet server does not match the current local build. Run `npm run server:rebuild` or `npm run server:rebuild:release`, then reopen the project.',
+    );
+}
+
 function supportsSafeRestart(server: ServerCompatibility | undefined): boolean {
   return server?.capabilities?.lifecycle_restart === true && server.capabilities.lifecycle_quiescence === true;
 }
@@ -1229,10 +1239,9 @@ async function openPreparedLocalProject(
     metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
     compatibility = assessCompatibility(metadata, undefined, selectedRevision);
   }
-  if (selectedRevision && (serverNeedsSelectedBuild(metadata, selectedRevision) || compatibility.sourceStale))
-    throw new Error(
-      'The running Hot Sheet server does not match the current local build. Run `npm run server:rebuild` or `npm run server:rebuild:release`, then reopen the project.',
-    );
+  // A running production host pins its selected binaries at launch. Source edits after
+  // that point do not change the served client or server until an explicit rebuild.
+  requireSelectedServerBuild(metadata, selectedRevision);
   if (ticketStore && cli) requireStoreSchemaCompatibility(metadata, cli, 'open');
   requireCompatibleServer(compatibility);
   const opened = await serverRequest<{

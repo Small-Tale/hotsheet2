@@ -59,6 +59,13 @@ describe('assessCompatibility', () => {
       sourceStale: true,
     });
     expect(
+      assessCompatibility(
+        server(1, 1, { build_revision: 'pinned', source_revision: 'edited', source_stale: true }),
+        undefined,
+        'pinned',
+      ),
+    ).toMatchObject({ kind: 'compatible', revisionMismatch: false, sourceStale: true });
+    expect(
       assessCompatibility(server(1, 1, { build_revision: 'release', source_revision: null, source_stale: false })),
     ).toMatchObject({ kind: 'compatible', revisionMismatch: false, sourceStale: false });
     expect(

@@ -149,6 +149,31 @@ it('serves the production client and the local bridge without Vite', async () =>
     expect(unhosted).toBe(true);
     expect((await fetch(`${api}/checkouts/${encodeURIComponent(id)}/tickets`)).status).toBe(200);
     expect(await hostsProject()).toBe(true);
+
+    // A second browser client can render the project through the still-running production host.
+    // Capture the connected state at the viewport of the reported failure and on a phone.
+    await page.setViewportSize({ width: 1969, height: 1240 });
+    await page.goto(origin);
+    await page.getByRole('button', { name: 'Open project' }).first().click();
+    await page.getByRole('textbox', { name: 'Project folder' }).fill(project);
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('heading', { name: 'Queue', level: 1 }).waitFor({ state: 'visible' });
+    await mkdir(resolve(webRoot, 'target/visual-captures'), { recursive: true });
+    await page.screenshot({
+      path: resolve(webRoot, 'target/visual-captures/hs2-efewsc-connected-wide.png'),
+      fullPage: true,
+    });
+    const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await phone.goto(origin);
+    await phone.getByRole('button', { name: 'Open project' }).first().click();
+    await phone.getByRole('textbox', { name: 'Project folder' }).fill(project);
+    await phone.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await phone.getByRole('combobox', { name: 'Ticket view' }).waitFor({ state: 'visible' });
+    await phone.screenshot({
+      path: resolve(webRoot, 'target/visual-captures/hs2-efewsc-connected-narrow.png'),
+      fullPage: true,
+    });
+    await phone.close();
   } finally {
     await browser?.close();
     if (child) {

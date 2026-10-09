@@ -90,6 +90,17 @@ test('surfaces a compatible detached server from another development revision', 
   await expect(banner).toContainText('protocol is compatible');
 });
 
+test('keeps a pinned production build connected after workspace source changes', async ({ page }) => {
+  await openWithCompatibility(page, {
+    kind: 'compatible',
+    revisionMismatch: false,
+    sourceStale: true,
+    canRestartServer: false,
+  });
+  await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
+  await expect(page.locator('.connection-state-banner')).toHaveCount(0);
+});
+
 test('tells development users to restart a server built from older local source', async ({ page }) => {
   await openWithCompatibility(page, {
     kind: 'compatible',
@@ -112,6 +123,7 @@ test('tells development users to restart a server built from older local source'
   const banner = page.locator('.connection-state-banner');
   await expect(banner).toContainText('Different server build is running');
   await expect(banner).toContainText('Rebuild if needed, then restart it to pick up your latest build');
+  await expect(page.getByRole('heading', { name: 'Queue', level: 1 })).toBeVisible();
   await banner.getByRole('button', { name: 'View details' }).click();
   const dialog = page.getByRole('dialog', { name: 'Server build details' });
   await expect(dialog).toBeVisible();

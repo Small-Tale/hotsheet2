@@ -37,6 +37,7 @@ import {
   requireCompatibleServer,
   requireCurrentSetupAssets,
   requireReportedCorruptPath,
+  requireSelectedServerBuild,
   requireStoreSchemaCompatibility,
   revealCommand,
   runGitCommand,
@@ -1295,5 +1296,20 @@ describe('machine server supervision', () => {
     expect(serverNeedsSelectedBuild(server, 'old')).toBe(false);
     expect(serverNeedsSelectedBuild(server, undefined)).toBe(false);
     expect(serverNeedsSelectedBuild(undefined, 'current')).toBe(true);
+    expect(
+      serverNeedsSelectedBuild(
+        { ...server, build_revision: 'current', source_revision: 'changed', source_stale: true },
+        'current',
+      ),
+    ).toBe(false);
+    expect(() => {
+      requireSelectedServerBuild(
+        { ...server, build_revision: 'current', source_revision: 'changed', source_stale: true },
+        'current',
+      );
+    }).not.toThrow();
+    expect(() => {
+      requireSelectedServerBuild(server, 'current');
+    }).toThrow(/does not match the current local build/);
   });
 });

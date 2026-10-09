@@ -1,5 +1,13 @@
 # Feature Coverage Matrix
 
+HS2-EFEWSC covers a production host pinned to one server revision while workspace
+source changes: `clients/web/src/project-bridge.test.ts` and `compatibility.test.ts`
+check that source staleness does not count as a selected-binary mismatch, while a
+different server build still does. The browser flow in
+`clients/web/tests/compatibility.spec.ts` keeps project data visible without a
+false build-mismatch banner; the local production-host
+integration flow remains in `clients/web/scripts/local-host.e2e.test.mjs`.
+
 HS2-K7FJVK adds opt-in desktop/narrow Chromium PTY load coverage in
 `clients/web/tests/providers.spec.ts` (`npm run profile:pty`). It exercises the
 real web UI and terminal WebSocket contract with binary output, input echo,

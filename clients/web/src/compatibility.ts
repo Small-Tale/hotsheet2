@@ -57,8 +57,9 @@ export function assessCompatibility(
   const sourceStale =
     server.source_stale === true ||
     Boolean(server.build_revision && server.source_revision && server.build_revision !== server.source_revision);
-  const revisionMismatch =
-    sourceStale || Boolean(clientRevision && server.build_revision && clientRevision !== server.build_revision);
+  // A production host selects one binary revision when it starts. Source edits later
+  // make that binary stale for the next launch, but do not skew the running pair.
+  const revisionMismatch = clientRevision ? server.build_revision !== clientRevision : sourceStale;
   if (server.protocol.max < client.min)
     return {
       kind: 'server_too_old',
