@@ -8,6 +8,15 @@ frame gaps, retained heap, interaction windows, and raw traces. The narrow
 drawer covers workspace controls, so covered actions use DOM events in
 the load window. Real PTY/server/network timing remains in `HS2-E035F5`.
 
+HS2-EFBAPC covers durable Git store identity in
+`crates/hotsheet-ticketing/src/store.rs` (new, reinitialized, and legacy
+metadata) and `checkouts.rs` (shared links, wrong valid destination,
+collision, migration before/after a move). The real HTTP relink flow in
+`crates/hotsheet-server/tests/http.rs` rejects an unrelated valid store
+without changing either checkout, then routes both through the moved store.
+`clients/web/tests/providers.spec.ts` shows the different-store error in the
+source dialog at narrow and wide sizes before a successful relink.
+
 HS2-6DHS8B covers cropped-rendition cache recency, byte and entry eviction,
 in-progress file preservation, concurrent publication, and oversized bypass in
 `crates/hotsheet-server/src/image_crop_cache.rs`, plus HTTP rendition/original

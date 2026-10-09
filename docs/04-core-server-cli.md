@@ -611,8 +611,14 @@ opens the destination as a Hot Sheet store before changing links; an invalid pat
 a save error. One locked registry write updates every checkout sharing the old Git source
 id, its default and color mapping, and historical source-id aliases. The response names
 the new `connection_id` and affected `checkouts`; new store hosting and index routing are
-ready before the links switch (HS2-8BG4W9). The destination must be selected by the user:
-existing store metadata has no durable instance id to prove it is the same moved folder.
+ready before the links switch (HS2-8BG4W9). Each Git checkout link records
+the store's durable `instanceId` from `hotsheet-store.json` in
+`store_instance_ids`; relink rejects a different valid store before changing
+any shared checkout. New stores receive the id at initialization. A legacy
+store and its links migrate while its old path is still reachable; after a
+pre-identity store has already moved, no recorded evidence can prove the
+destination, so relink returns a verification error (HS2-EFBAPC). The
+explicit recovery path for that exceptional case is tracked in `HS2-RAQSX7`.
 
 `github-sign-in` works without a running server. It prints GitHub's verification URL and
 one-time code, waits for approval, and then prints a `github-app-*` credential reference;

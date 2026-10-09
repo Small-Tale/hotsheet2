@@ -97,6 +97,10 @@ pub struct StoreMetadata {
     pub ticket_prefix: String,
     pub id_strategy: String,
     pub shard: String,
+    /// Stable identity of this store across directory moves. Legacy metadata omits it
+    /// until a linked checkout migrates the store under its registry lock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_id: Option<String>,
 }
 
 fn serialize_store_schema<S: Serializer>(version: &u32, serializer: S) -> Result<S::Ok, S::Error> {
@@ -133,7 +137,17 @@ impl StoreMetadata {
             ticket_prefix: ticket_prefix.into(),
             id_strategy: "ulid".to_string(),
             shard: SHARD_ID_SUFFIX_2.to_string(),
+            instance_id: Some(Ulid::new().to_string()),
         }
+    }
+
+    fn validate_instance_id(&self) -> Result<(), StoreError> {
+        if let Some(id) = &self.instance_id
+            && id.parse::<Ulid>().is_err()
+        {
+            return Err(StoreError::InvalidStoreIdentity(id.clone()));
+        }
+        Ok(())
     }
 }
 
@@ -157,6 +171,8 @@ pub enum StoreError {
     NotAStore(PathBuf),
     #[error("invalid hotsheet-store.json: {0}")]
     Metadata(#[from] serde_json::Error),
+    #[error("invalid Hot Sheet store instance id '{0}'")]
+    InvalidStoreIdentity(String),
     #[error(
         "This {format} was created by a newer version of Hot Sheet 2 and cannot be opened by this version. Update Hot Sheet 2 to open it (found {found}, supported through {supported})."
     )]
@@ -296,12 +312,24 @@ struct BackgroundPushObserver {
 
 impl FsStore {
     /// Initialize a new store at `root` (creates `tickets/` and writes metadata).
-    /// Idempotent on the directory; overwrites metadata with the given values.
+    /// Idempotent on the directory; updates settings but preserves its durable identity.
     pub fn init(root: impl Into<PathBuf>, meta: &StoreMetadata) -> Result<Self, StoreError> {
         let root = root.into();
         fs::create_dir_all(root.join("tickets"))?;
-        let json = serde_json::to_string_pretty(meta)?;
-        fs::write(root.join(STORE_METADATA_FILE), format!("{json}\n"))?;
+        let path = root.join(STORE_METADATA_FILE);
+        let mut meta = meta.clone();
+        if path.is_file() {
+            let existing: StoreMetadata = serde_json::from_slice(&fs::read(&path)?)?;
+            existing.validate_instance_id()?;
+            if existing.instance_id.is_some() {
+                meta.instance_id = existing.instance_id;
+            }
+        }
+        meta.instance_id
+            .get_or_insert_with(|| Ulid::new().to_string());
+        meta.validate_instance_id()?;
+        let json = serde_json::to_string_pretty(&meta)?;
+        write_file_atomically(&path, format!("{json}\n").as_bytes())?;
         let store = Self {
             root,
             push_after_commit: true,
@@ -469,7 +497,30 @@ impl FsStore {
                 });
             }
         }
-        Ok(serde_json::from_value(value)?)
+        let metadata: StoreMetadata = serde_json::from_value(value)?;
+        metadata.validate_instance_id()?;
+        Ok(metadata)
+    }
+
+    /// Assign an identity to a legacy store once, under the store's writer lock. The
+    /// metadata is committed with the store so a later Git clone or move retains it.
+    pub fn ensure_instance_id(&self) -> Result<String, StoreError> {
+        self.with_ticket_transaction(|| {
+            let mut metadata = self.metadata()?;
+            let path = self.root.join(STORE_METADATA_FILE);
+            if let Some(id) = metadata.instance_id {
+                // Also retries publication if an earlier write reached disk but its
+                // Git commit failed before the checkout link could be recorded.
+                self.autocommit_paths("Initialize Hot Sheet store identity", &[path])?;
+                return Ok(id);
+            }
+            let id = Ulid::new().to_string();
+            metadata.instance_id = Some(id.clone());
+            let json = serde_json::to_string_pretty(&metadata)?;
+            write_file_atomically(&path, format!("{json}\n").as_bytes())?;
+            self.autocommit_paths("Initialize Hot Sheet store identity", &[path])?;
+            Ok(id)
+        })
     }
 
     /// The on-disk path for a ticket id. Current stores use the final two random ULID
@@ -2314,7 +2365,14 @@ mod tests {
     #[test]
     fn init_open_and_metadata_round_trip() {
         let (dir, store) = temp_store();
-        assert_eq!(store.metadata().unwrap(), StoreMetadata::new("HS"));
+        let metadata = store.metadata().unwrap();
+        assert_eq!(metadata.ticket_prefix, "HS");
+        assert!(
+            metadata
+                .instance_id
+                .as_deref()
+                .is_some_and(|id| id.parse::<Ulid>().is_ok())
+        );
         let raw = fs::read_to_string(dir.path().join(STORE_METADATA_FILE)).unwrap();
         assert!(raw.contains(r#""schemaVersion": "hotsheet/v3-random-suffix-shards""#));
         assert!(raw.contains(r#""shard": "id-suffix-2""#));
@@ -2327,6 +2385,87 @@ mod tests {
         assert!(serde_json::from_str::<LegacyMetadata>(&raw).is_err());
         // A second open of the same dir succeeds.
         assert!(FsStore::open(dir.path()).is_ok());
+    }
+
+    #[test]
+    fn store_identity_survives_reinitialization_and_legacy_migration() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let first = store.metadata().unwrap().instance_id.unwrap();
+        FsStore::init(dir.path(), &StoreMetadata::new("OTHER")).unwrap();
+        assert_eq!(
+            store.metadata().unwrap().instance_id.as_deref(),
+            Some(first.as_str())
+        );
+
+        let mut legacy = store.metadata().unwrap();
+        legacy.instance_id = None;
+        fs::write(
+            dir.path().join(STORE_METADATA_FILE),
+            format!("{}\n", serde_json::to_string_pretty(&legacy).unwrap()),
+        )
+        .unwrap();
+        let migrated = store.ensure_instance_id().unwrap();
+        assert_ne!(migrated, first);
+        assert_eq!(store.ensure_instance_id().unwrap(), migrated);
+        assert_eq!(
+            store.metadata().unwrap().instance_id.as_deref(),
+            Some(migrated.as_str())
+        );
+    }
+
+    #[test]
+    fn malformed_store_identity_is_rejected_before_reinitialization_or_relink() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let mut metadata = store.metadata().unwrap();
+        metadata.instance_id = Some("not-an-ulid".into());
+        fs::write(
+            dir.path().join(STORE_METADATA_FILE),
+            serde_json::to_vec_pretty(&metadata).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            store.metadata(),
+            Err(StoreError::InvalidStoreIdentity(_))
+        ));
+        assert!(matches!(
+            FsStore::init(dir.path(), &StoreMetadata::new("HS")),
+            Err(StoreError::InvalidStoreIdentity(_))
+        ));
+    }
+
+    #[test]
+    fn legacy_identity_migration_commits_metadata_and_retries_an_uncommitted_id() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        assert!(store.autocommit("initial store").unwrap());
+        let path = dir.path().join(STORE_METADATA_FILE);
+        let mut legacy = store.metadata().unwrap();
+        legacy.instance_id = None;
+        fs::write(&path, serde_json::to_vec_pretty(&legacy).unwrap()).unwrap();
+        assert!(
+            store
+                .autocommit_paths("legacy store", std::slice::from_ref(&path))
+                .unwrap()
+        );
+
+        let id = store.ensure_instance_id().unwrap();
+        assert_eq!(
+            store.metadata().unwrap().instance_id.as_deref(),
+            Some(id.as_str())
+        );
+        assert_eq!(git_stdout(dir.path(), &["status", "--short"]).unwrap(), "");
+        assert_eq!(
+            git_stdout(dir.path(), &["log", "-1", "--pretty=%s"])
+                .unwrap()
+                .trim(),
+            "Initialize Hot Sheet store identity"
+        );
+
+        fs::write(&path, format!("{}\n", fs::read_to_string(&path).unwrap())).unwrap();
+        assert_eq!(store.ensure_instance_id().unwrap(), id);
+        assert_eq!(git_stdout(dir.path(), &["status", "--short"]).unwrap(), "");
     }
 
     #[test]

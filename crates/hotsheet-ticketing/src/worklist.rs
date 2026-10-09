@@ -580,6 +580,7 @@ mod tests {
                 second.root().to_string_lossy().into_owned(),
             ],
             sources: Vec::new(),
+            store_instance_ids: Default::default(),
             source_colors: Default::default(),
             default_source: None,
             default_source_cleared: false,

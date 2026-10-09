@@ -1242,6 +1242,11 @@ async function mockProject(
       const oldId = decodeURIComponent(sourceRelink[1]),
         index = gitStoreIds.indexOf(oldId),
         newPath = request.postDataJSON().path;
+      if (newPath === '/work/unrelated.hs2')
+        return route.fulfill({
+          status: 400,
+          json: { error: 'This location contains a different Hot Sheet ticket repository.' },
+        });
       if (index < 0 || newPath !== '/work/renamed.hs2')
         return route.fulfill({ status: 400, json: { error: 'Choose a Hot Sheet ticket repository.' } });
       if (gitStores[index] === newPath)
@@ -2812,7 +2817,7 @@ test('changes a sole project source color in settings and inspector while cards 
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
 });
 
-test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9) @ci-smoke', async ({
+test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, HS2-EFBAPC) @ci-smoke', async ({
   page,
 }, testInfo) => {
   await mockProject(page);
@@ -2832,6 +2837,13 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9) 
   await dialog.locator('input[name="git-store-path"]').fill('/work/missing.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(dialog.getByRole('alert')).toContainText('Choose a Hot Sheet ticket repository');
+  await dialog.locator('input[name="git-store-path"]').fill('/work/unrelated.hs2');
+  await dialog.getByRole('button', { name: 'Save location' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('different Hot Sheet ticket repository');
+  await page.screenshot({ path: testInfo.outputPath('git-wrong-store-narrow.png'), animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: testInfo.outputPath('git-wrong-store-wide.png'), animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
   await dialog.locator('input[name="git-store-path"]').fill('/work/renamed.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(page.locator('.app-toast')).toContainText('Ticket repository location updated.');

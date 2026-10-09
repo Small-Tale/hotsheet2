@@ -17072,6 +17072,7 @@ async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
     std::fs::create_dir(&first).unwrap();
     std::fs::create_dir(&second).unwrap();
     let store = FsStore::init(&old_store, &StoreMetadata::new("HS")).unwrap();
+    let store_instance_id = store.metadata().unwrap().instance_id.unwrap();
     let ticket = ops::create(
         &store,
         Ulid::new(),
@@ -17119,6 +17120,28 @@ async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
         .await
         .unwrap();
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let unrelated_store = root.path().join("unrelated-store");
+    FsStore::init(&unrelated_store, &StoreMetadata::new("HS")).unwrap();
+    let wrong_valid_store = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &path,
+            Some(&serde_json::json!({"path":unrelated_store}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(wrong_valid_store.status(), StatusCode::BAD_REQUEST);
+    for reference in ["first", "second"] {
+        let checkout = body_json(
+            app.clone()
+                .oneshot(authed("GET", &format!("/checkouts/{reference}"), None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(checkout["sources"][0]["connection_id"], old_id);
+    }
     std::fs::rename(&old_store, &new_store).unwrap();
     let response = app
         .clone()
@@ -17157,6 +17180,7 @@ async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
         )
         .await;
         assert_eq!(checkout["sources"][0]["connection_id"], new_id);
+        assert_eq!(checkout["store_instance_ids"][new_id], store_instance_id);
         assert_eq!(
             checkout["sources"][0]["locator"],
             new_store.canonicalize().unwrap().to_str().unwrap()

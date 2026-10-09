@@ -414,8 +414,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   See `secrets.rs::{SecretStore,KeyRegistry,resolve_setting_secret}`.
 - **Checkout discovery:** `${HOTSHEET_HOME}/checkouts.json` is version-guarded (legacy
   unversioned files remain readable) and maps readable path-derived
-  checkout ids to optional repository identities and any number of ticket stores. It
-  never contains authentication material; use `checkout register|list|resolve`.
+  checkout ids to optional repository identities and any number of ticket stores.
+  Linked Git stores also record their durable `instanceId` by connection id
+  for moved-path verification (HS2-EFBAPC). It never contains authentication
+  material; use `checkout register|list|resolve`.
 - **People roster:** `people.json` (shared, committed) — `{people:[{email,name?,github?}]}`
   mapping git identity → display name for assignment. See `roster.rs::Roster` (HS2-20).
 - **Multi-store discovery:** `${HOTSHEET_HOME}/stores.json` — `{"stores":["/path/a",…]}`,

@@ -134,7 +134,7 @@ one **live** ticket (see the move tombstones in §2.13).
 
 ```
 <store-root>/
-  hotsheet-store.json         # store metadata (schema version, prefix, id strategy)
+  hotsheet-store.json         # store metadata (schema version, prefix, id strategy, instance id)
   tickets/
     6X/                       # final 2 random ULID characters (see §2.5)
       01J9ZK3M7Q8F2N4V6X.md
@@ -153,8 +153,18 @@ one **live** ticket (see the move tombstones in §2.13).
   "ticketPrefix": "HS", // display prefix; the dash is added automatically
   "idStrategy": "ulid",
   "shard": "id-suffix-2", // final 2 random ULID characters
+  "instanceId": "01ARZ3NDEKTSV4RRFFQ69G5FAV", // stable across directory moves
 }
 ```
+
+New stores receive an `instanceId` at initialization. Reinitialization preserves
+the existing value. A legacy store without one receives an identity when a
+linked checkout is opened or listed while the old store path is still
+reachable; the metadata change uses the store's normal automatic Git commit
+path when automatic commits are enabled.
+Checkout links record that identity in their machine-local registry and use
+it to verify a later relink. The instance id identifies the store lineage:
+a copy of the repository and metadata intentionally carries the same id.
 
 **Sharding uses the final two ULID characters.** ULID prefixes encode time, so active
 stores otherwise concentrate nearly every ticket in the same `01/` directory. The

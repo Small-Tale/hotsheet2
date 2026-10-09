@@ -92,6 +92,12 @@ and don't imply reading order — read by group.
 | [03-indexing-and-query.md](03-indexing-and-query.md) | SQLite+FTS5 index, file watching, reindex, query surface                                                                                                                                                                                                                                                           | Confirmed               |
 | [17-ticket-file-format.md](17-ticket-file-format.md) | Canonical frontmatter plus bounded notes with created/edited timestamps (parser SSOT; legacy reader retained)                                                                                                                                                                                                      | Shipped                 |
 
+Store instance identity and moved-path relink verification in
+[02](02-ticket-storage.md) and [04](04-core-server-cli.md) are shipped
+(`HS2-EFBAPC`). Recovery for a legacy store already moved before identity
+migration is deferred to `HS2-RAQSX7`; ordinary same-path replacement checks
+are tracked in `HS2-BGTDQ1`.
+
 **D · Services & clients**
 
 | Doc                                                | Topic                                                                                                                                                                                                                                             | Status                     |

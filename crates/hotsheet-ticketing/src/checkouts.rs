@@ -13,6 +13,7 @@ use thiserror::Error;
 
 use crate::file_lock::FileLock;
 use crate::provider::ProviderConfigRegistry;
+use crate::store::{FsStore, STORE_METADATA_FILE, StoreError};
 
 pub const DEFAULT_SOURCE_COLOR: &str = "#6b7280";
 const SOURCE_COLORS: &[&str] = &[
@@ -43,6 +44,10 @@ pub struct Checkout {
     pub stores: Vec<String>,
     #[serde(default)]
     pub sources: Vec<TicketSource>,
+    /// Stable store identities keyed by the Git source connection id. Legacy checkout
+    /// links omit entries until their still-present stores can be migrated.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub store_instance_ids: BTreeMap<String, String>,
     /// Project-local source accent colors keyed by connection id; omitted entries use Gray.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub source_colors: BTreeMap<String, String>,
@@ -155,6 +160,18 @@ pub enum CheckoutError {
     UpgradeRequired { found: u64, supported: u64 },
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Store(#[from] StoreError),
+}
+
+fn git_store_instance_id(source: &TicketSource) -> Result<Option<String>, CheckoutError> {
+    let path = Path::new(&source.locator);
+    if !path.join(STORE_METADATA_FILE).is_file() {
+        return Ok(None);
+    }
+    Ok(Some(
+        FsStore::open_without_maintenance(path)?.ensure_instance_id()?,
+    ))
 }
 
 /// Discover conventional git-backed ticket stores for a checkout. The first convention
@@ -256,7 +273,70 @@ impl CheckoutRegistry {
     }
 
     pub fn list(&self) -> Result<Vec<Checkout>, CheckoutError> {
-        let mut entries = self.read()?.checkouts;
+        let mut file = self.read()?;
+        let missing = file
+            .checkouts
+            .iter()
+            .flat_map(|checkout| {
+                checkout
+                    .sources
+                    .iter()
+                    .filter(|source| {
+                        source.provider == "git"
+                            && !checkout
+                                .store_instance_ids
+                                .contains_key(&source.connection_id)
+                            && Path::new(&source.locator)
+                                .join(STORE_METADATA_FILE)
+                                .is_file()
+                    })
+                    .map(|source| (checkout.id.clone(), source.clone()))
+            })
+            .collect::<Vec<_>>();
+        if !missing.is_empty() {
+            let mut identities = Vec::new();
+            for (checkout_id, source) in missing {
+                if let Ok(Some(id)) = git_store_instance_id(&source) {
+                    identities.push((checkout_id, source, id));
+                }
+            }
+            if !identities.is_empty() {
+                let _lock = self.acquire_lock()?;
+                file = self.read_locked()?;
+                let mut changed = false;
+                for (checkout_id, source, id) in identities {
+                    let Some(checkout) = file
+                        .checkouts
+                        .iter_mut()
+                        .find(|checkout| checkout.id == checkout_id)
+                    else {
+                        continue;
+                    };
+                    if checkout.source(&source.connection_id) != Some(&source) {
+                        continue;
+                    }
+                    match checkout.store_instance_ids.entry(source.connection_id) {
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(id);
+                            changed = true;
+                        }
+                        std::collections::btree_map::Entry::Occupied(entry)
+                            if entry.get() != &id =>
+                        {
+                            return Err(CheckoutError::Invalid(format!(
+                                "checkout {} records a different Git store identity",
+                                checkout.id
+                            )));
+                        }
+                        std::collections::btree_map::Entry::Occupied(_) => {}
+                    }
+                }
+                if changed {
+                    self.write_locked(&file)?;
+                }
+            }
+        }
+        let mut entries = file.checkouts;
         entries.sort_by(|a, b| a.alias.cmp(&b.alias).then(a.id.cmp(&b.id)));
         Ok(entries)
     }
@@ -531,6 +611,24 @@ impl CheckoutRegistry {
             .find(|checkout| checkout.root == root.to_string_lossy())
             .map(|checkout| checkout.id.clone())
             .unwrap_or(generated_id);
+        let previous = file.checkouts.iter().find(|checkout| checkout.id == id);
+        let mut store_instance_ids = BTreeMap::new();
+        for source in sources.iter().filter(|source| source.provider == "git") {
+            let prior = previous
+                .and_then(|checkout| checkout.store_instance_ids.get(&source.connection_id));
+            let found = git_store_instance_id(source).ok().flatten();
+            if let (Some(prior), Some(found)) = (prior, found.as_ref())
+                && prior != found
+            {
+                return Err(CheckoutError::Invalid(format!(
+                    "ticket store at {} has a different identity than the linked source",
+                    source.locator
+                )));
+            }
+            if let Some(instance_id) = found.or_else(|| prior.cloned()) {
+                store_instance_ids.insert(source.connection_id.clone(), instance_id);
+            }
+        }
         let default_source_cleared = default_source.is_none()
             && (explicit_clear
                 || file
@@ -567,6 +665,7 @@ impl CheckoutRegistry {
             repository,
             stores: store_strings,
             sources,
+            store_instance_ids,
             source_colors,
             default_source,
             default_source_cleared,
@@ -888,6 +987,12 @@ impl CheckoutRegistry {
             .canonicalize()
             .map_err(|_| CheckoutError::Missing(new_path.display().to_string()))?;
         let replacement = TicketSource::git(&canonical);
+        let replacement_instance_id = git_store_instance_id(&replacement)?.ok_or_else(|| {
+            CheckoutError::Invalid(format!(
+                "destination is not a Hot Sheet ticket store: {}",
+                canonical.display()
+            ))
+        })?;
         let _lock = self.acquire_lock()?;
         let mut file = self.read_locked()?;
         let selected = resolve_checkout(file.checkouts.clone(), checkout_reference)?;
@@ -895,6 +1000,20 @@ impl CheckoutRegistry {
             .source(connection_id)
             .filter(|source| source.provider == "git")
             .ok_or_else(|| CheckoutError::NotFound(connection_id.to_string()))?;
+        let recorded = selected.store_instance_ids.get(connection_id);
+        let original_instance_id = git_store_instance_id(original)?.or_else(|| recorded.cloned());
+        let original_instance_id = original_instance_id.ok_or_else(|| {
+            CheckoutError::Invalid(
+                "original Git store identity was never recorded and its old path is unavailable; relink cannot verify this destination".into(),
+            )
+        })?;
+        if recorded.is_some_and(|recorded| recorded != &original_instance_id)
+            || original_instance_id != replacement_instance_id
+        {
+            return Err(CheckoutError::Invalid(
+                "This location contains a different Hot Sheet ticket repository.".into(),
+            ));
+        }
         if replacement.connection_id == original.connection_id {
             return Ok(Vec::new());
         }
@@ -909,6 +1028,16 @@ impl CheckoutRegistry {
             if checkout.source(&replacement.connection_id).is_some() {
                 return Err(CheckoutError::Invalid(format!(
                     "destination ticket source is already linked to checkout {}",
+                    checkout.id
+                )));
+            }
+            if checkout
+                .store_instance_ids
+                .get(connection_id)
+                .is_some_and(|id| id != &original_instance_id)
+            {
+                return Err(CheckoutError::Invalid(format!(
+                    "shared checkout {} records a different Git store identity",
                     checkout.id
                 )));
             }
@@ -935,6 +1064,11 @@ impl CheckoutRegistry {
                 .find(|source| source.connection_id == connection_id)
                 .expect("checked source remains linked");
             *source = replacement.clone();
+            checkout.store_instance_ids.remove(connection_id);
+            checkout.store_instance_ids.insert(
+                replacement.connection_id.clone(),
+                replacement_instance_id.clone(),
+            );
             checkout.stores = checkout
                 .sources
                 .iter()
@@ -1925,9 +2059,10 @@ mod tests {
         let second = temp.path().join("second");
         let old_path = temp.path().join("old-store");
         let new_path = temp.path().join("new-store");
-        for path in [&first, &second, &old_path] {
+        for path in [&first, &second] {
             std::fs::create_dir(path).unwrap();
         }
+        FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let old = TicketSource::git(&old_path);
         let first_checkout = registry
@@ -1942,9 +2077,34 @@ mod tests {
         let second_checkout = registry
             .register_sources(&second, None, None, vec![old.clone()], None)
             .unwrap();
+        let store_id = FsStore::open(&old_path)
+            .unwrap()
+            .metadata()
+            .unwrap()
+            .instance_id
+            .unwrap();
+        assert_eq!(
+            first_checkout.store_instance_ids[&old.connection_id],
+            store_id
+        );
+        assert_eq!(
+            second_checkout.store_instance_ids[&old.connection_id],
+            store_id
+        );
         registry
             .set_source_color(&first_checkout.id, &old.connection_id, "#3b82f6")
             .unwrap();
+        let unrelated = temp.path().join("unrelated-store");
+        FsStore::init(&unrelated, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let before_wrong_destination = registry.list().unwrap();
+        assert!(
+            registry
+                .relink_git_source(&first_checkout.id, &old.connection_id, &unrelated)
+                .unwrap_err()
+                .to_string()
+                .contains("different Hot Sheet ticket repository")
+        );
+        assert_eq!(registry.list().unwrap(), before_wrong_destination);
         std::fs::rename(&old_path, &new_path).unwrap();
         let new = TicketSource::git(&new_path);
 
@@ -1956,6 +2116,7 @@ mod tests {
         let second_after = registry.resolve(&second_checkout.id).unwrap();
         for checkout in [&first_after, &second_after] {
             assert_eq!(checkout.sources, vec![new.clone()]);
+            assert_eq!(checkout.store_instance_ids[&new.connection_id], store_id);
             assert_eq!(checkout.stores, vec![new.locator.clone()]);
             assert_eq!(
                 registry
@@ -2013,9 +2174,11 @@ mod tests {
         let second = temp.path().join("second");
         let old_path = temp.path().join("old-store");
         let new_path = temp.path().join("new-store");
-        for path in [&first, &second, &old_path, &new_path] {
+        for path in [&first, &second] {
             std::fs::create_dir(path).unwrap();
         }
+        let original = FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        FsStore::init(&new_path, &original.metadata().unwrap()).unwrap();
         let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
         let old = TicketSource::git(&old_path);
         let new = TicketSource::git(&new_path);
@@ -2037,6 +2200,125 @@ mod tests {
                 .resolve_source(&second_checkout.id, &old.connection_id)
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn legacy_checkout_links_migrate_identity_before_a_move() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("project");
+        let old_path = temp.path().join("old-store");
+        let new_path = temp.path().join("new-store");
+        std::fs::create_dir(&checkout).unwrap();
+        let store = FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let registry_path = temp.path().join("checkouts.json");
+        let registry = CheckoutRegistry::new(&registry_path);
+        let linked = registry
+            .register(&checkout, None, None, vec![old_path.clone()])
+            .unwrap();
+        let source_id = linked.sources[0].connection_id.clone();
+        let mut metadata = store.metadata().unwrap();
+        metadata.instance_id = None;
+        std::fs::write(
+            old_path.join(STORE_METADATA_FILE),
+            serde_json::to_vec_pretty(&metadata).unwrap(),
+        )
+        .unwrap();
+        let mut file: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&registry_path).unwrap()).unwrap();
+        file["checkouts"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("store_instance_ids");
+        std::fs::write(&registry_path, serde_json::to_vec_pretty(&file).unwrap()).unwrap();
+
+        let migrated = registry.list().unwrap();
+        let durable_id = store.metadata().unwrap().instance_id.unwrap();
+        assert_eq!(migrated[0].store_instance_ids[&source_id], durable_id);
+        assert_eq!(registry.list().unwrap(), migrated);
+        std::fs::rename(&old_path, &new_path).unwrap();
+        let updated = registry
+            .relink_git_source(&linked.id, &source_id, &new_path)
+            .unwrap();
+        let new_id = updated[0].sources[0].connection_id.clone();
+        assert_eq!(updated[0].store_instance_ids[&new_id], durable_id);
+    }
+
+    #[test]
+    fn unmigrated_legacy_link_cannot_verify_an_already_moved_store() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("project");
+        let old_path = temp.path().join("old-store");
+        let new_path = temp.path().join("new-store");
+        std::fs::create_dir(&checkout).unwrap();
+        let store = FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let registry_path = temp.path().join("checkouts.json");
+        let registry = CheckoutRegistry::new(&registry_path);
+        let linked = registry
+            .register(&checkout, None, None, vec![old_path.clone()])
+            .unwrap();
+        let source_id = linked.sources[0].connection_id.clone();
+        let mut metadata = store.metadata().unwrap();
+        metadata.instance_id = None;
+        std::fs::write(
+            old_path.join(STORE_METADATA_FILE),
+            serde_json::to_vec_pretty(&metadata).unwrap(),
+        )
+        .unwrap();
+        let mut file: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&registry_path).unwrap()).unwrap();
+        file["checkouts"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("store_instance_ids");
+        std::fs::write(&registry_path, serde_json::to_vec_pretty(&file).unwrap()).unwrap();
+        std::fs::rename(&old_path, &new_path).unwrap();
+
+        let before = registry.list().unwrap();
+        assert!(
+            registry
+                .relink_git_source(&linked.id, &source_id, &new_path)
+                .unwrap_err()
+                .to_string()
+                .contains("identity was never recorded")
+        );
+        assert_eq!(registry.list().unwrap(), before);
+    }
+
+    #[test]
+    fn reused_store_path_cannot_hide_an_identity_change() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("project");
+        let store_path = temp.path().join("store");
+        std::fs::create_dir(&checkout).unwrap();
+        let store = FsStore::init(&store_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let linked = registry
+            .register(&checkout, None, None, vec![store_path.clone()])
+            .unwrap();
+        let before = registry.list().unwrap();
+        let mut metadata = store.metadata().unwrap();
+        metadata.instance_id = Some(hotsheet_model::Ulid::new().to_string());
+        std::fs::write(
+            store_path.join(STORE_METADATA_FILE),
+            serde_json::to_vec_pretty(&metadata).unwrap(),
+        )
+        .unwrap();
+        let source_id = &linked.sources[0].connection_id;
+        assert!(
+            registry
+                .relink_git_source(&linked.id, source_id, &store_path)
+                .unwrap_err()
+                .to_string()
+                .contains("different Hot Sheet ticket repository")
+        );
+        assert!(
+            registry
+                .register(&checkout, None, None, vec![store_path])
+                .unwrap_err()
+                .to_string()
+                .contains("different identity")
+        );
+        assert_eq!(registry.list().unwrap(), before);
     }
 
     #[test]
