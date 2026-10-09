@@ -2198,6 +2198,11 @@ fn checkout_register_list_and_resolve_are_store_independent() {
     let checkout = tempfile::tempdir().unwrap();
     let store = tempfile::tempdir().unwrap();
     let home = tempfile::tempdir().unwrap();
+    std::fs::write(
+        home.path().join("providers.json"),
+        r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/web","default":false,"settings":{}}]}"#,
+    )
+    .unwrap();
     let mut register = Command::cargo_bin("hotsheet-cli").unwrap();
     register
         .env("HOTSHEET_HOME", home.path())
@@ -2234,6 +2239,8 @@ fn checkout_register_list_and_resolve_are_store_independent() {
     let mut add_source = Command::cargo_bin("hotsheet-cli").unwrap();
     add_source
         .env("HOTSHEET_HOME", home.path())
+        .arg("-C")
+        .arg(home.path())
         .args([
             "checkout",
             "add-source",
@@ -2273,6 +2280,8 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .env("HOTSHEET_HOME", home.path())
         .env_remove("HOTSHEET_STORE")
         .current_dir(home.path())
+        .arg("-C")
+        .arg(home.path())
         .args(["checkout", "remove-source", "web", "github-main"])
         .assert()
         .success()
@@ -2325,6 +2334,12 @@ fn checkout_clear_default_survives_fresh_cli_processes_and_reregistration() {
 #[test]
 fn checkout_source_color_is_project_local_and_has_stable_json() {
     let home = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    std::fs::write(
+        store.path().join("providers.json"),
+        r#"{"connections":[{"id":"github-main","provider":"github","locator":"acme/issues","default":false,"settings":{}}]}"#,
+    )
+    .unwrap();
     let first = tempfile::tempdir().unwrap();
     let second = tempfile::tempdir().unwrap();
     let first_root = first.path().to_str().unwrap();
@@ -2333,6 +2348,8 @@ fn checkout_source_color_is_project_local_and_has_stable_json() {
         let output = Command::cargo_bin("hotsheet-cli")
             .unwrap()
             .env("HOTSHEET_HOME", home.path())
+            .arg("-C")
+            .arg(store.path())
             .args(args)
             .assert()
             .success()
@@ -2447,9 +2464,16 @@ fn setup_refresh_preserves_a_project_github_source() {
         &hotsheet_ticketing::StoreMetadata::new("HS"),
     )
     .unwrap();
+    std::fs::write(
+        store_dir.path().join("providers.json"),
+        r#"{"connections":[{"id":"github-issues","provider":"github","locator":"acme/issues","default":false,"settings":{}}]}"#,
+    )
+    .unwrap();
     Command::cargo_bin("hotsheet-cli")
         .unwrap()
         .env("HOTSHEET_HOME", home.path())
+        .arg("-C")
+        .arg(store_dir.path())
         .args([
             "checkout",
             "register",
@@ -2462,6 +2486,8 @@ fn setup_refresh_preserves_a_project_github_source() {
     Command::cargo_bin("hotsheet-cli")
         .unwrap()
         .env("HOTSHEET_HOME", home.path())
+        .arg("-C")
+        .arg(store_dir.path())
         .args([
             "checkout",
             "add-source",
