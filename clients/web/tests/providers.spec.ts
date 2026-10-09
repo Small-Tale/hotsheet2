@@ -14234,6 +14234,206 @@ test('keeps primary 138-ticket interactions within the painted UI budget', async
   }
 });
 
+for (const viewport of [
+  { name: 'desktop', width: 1440, height: 900 },
+  { name: 'narrow', width: 760, height: 900 },
+]) {
+  test(`profiles mixed project, search, ticket, and terminal UI activity on ${viewport.name} (HS2-WDTN3W)`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(process.env.HOTSHEET_UI_PROFILE !== '1', 'Run npm run profile:ui.');
+    test.setTimeout(60_000);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.addInitScript(() => {
+      const scope = window as typeof window & { __interactionTimings?: unknown[] };
+      scope.__interactionTimings = [];
+      document.addEventListener('hotsheet:interaction-timing', (event) => {
+        scope.__interactionTimings!.push((event as CustomEvent).detail);
+      });
+    });
+    await mockProject(page, true, false, 0, 0, 0, false, 12);
+    await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
+    await page.route('**/__hotsheet/projects/open', (route) => {
+      const root = route.request().postDataJSON().root as string;
+      return route.fulfill({
+        status: 201,
+        json:
+          root === '/work/other'
+            ? {
+                ...project,
+                id: 'other-checkout',
+                root,
+                name: 'other',
+                apiPath: '/__hotsheet/project-api/other-checkout',
+              }
+            : project,
+      });
+    });
+    const largeRows = [
+      row,
+      ...Array.from({ length: 137 }, (_, index) => ({
+        ...notStartedRow,
+        id: `profile-${index}`,
+        native_id: `profile-${index}`,
+        qualified_id: `git-local:profile-${index}`,
+        slug: `HS2-PROF${String(index).padStart(3, '0')}`,
+        title: `Profile ticket ${index + 1}`,
+        status: index < 18 ? 'backlog' : 'not_started',
+        up_next: false,
+      })),
+    ];
+    await page.route(/\/tickets(?:\?.*)?$/, (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      const url = new URL(route.request().url());
+      if (url.searchParams.has('text')) return route.fallback();
+      return route.fulfill({
+        json: url.pathname.includes('/other-checkout/')
+          ? [{ ...row, id: 'other', native_id: 'other', slug: 'HS2-OTHER1', title: 'Other ticket' }]
+          : largeRows,
+      });
+    });
+    let connectionId: string | undefined;
+    let cursor = 0;
+    const sockets: import('@playwright/test').WebSocketRoute[] = [];
+    page.on('request', (request) => {
+      const match = new URL(request.url()).pathname.match(/\/drive\/connections\/([^/]+)\/turns$/);
+      if (match && request.method() === 'POST') connectionId = decodeURIComponent(match[1]);
+    });
+    await page.route('**/ws/poll*', (route) => route.fulfill({ json: { cursor, events: [], overflow: false } }));
+    await page.routeWebSocket(/\/ws\/sync(?:\?|$)/, (route) => {
+      sockets.push(route);
+    });
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.getByRole('button', { name: 'Add project' }).click();
+    const projectPicker = page.locator('wa-select[name="mobile-project"]');
+    const switchProject = async (name: 'demo' | 'other') => {
+      if (viewport.name === 'desktop') {
+        await page.getByRole('tab', { name: new RegExp(`^${name}`) }).click();
+      } else {
+        await projectPicker.click();
+        await projectPicker.getByRole('option', { name: new RegExp(`^${name}`) }).click();
+      }
+    };
+    if (viewport.name === 'desktop')
+      await expect(page.getByRole('tab', { name: /^other/ })).toHaveAttribute('aria-selected', 'true');
+    else await expect(projectPicker).toHaveJSProperty('value', 'other-checkout');
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Tracing.start', {
+      transferMode: 'ReturnAsStream',
+      categories: 'devtools.timeline,blink.user_timing,v8,loading,disabled-by-default-devtools.timeline',
+      options: 'sampling-frequency=10000',
+    });
+    const windows: Array<{ name: string; elapsed_ms: number }> = [];
+    const sample = async (name: string, action: () => Promise<unknown>) => {
+      const before = await page.evaluate(() => performance.now());
+      await page.evaluate((label) => performance.mark(`hs2-profile:${label}:start`), name);
+      await action();
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                resolve();
+              });
+            }),
+          ),
+      );
+      await page.evaluate((label) => performance.mark(`hs2-profile:${label}:end`), name);
+      windows.push({ name, elapsed_ms: (await page.evaluate(() => performance.now())) - before });
+    };
+    try {
+      for (let index = 0; index < 3; index += 1) {
+        await sample(`project-demo-${index}`, () => switchProject('demo'));
+        await sample(`project-other-${index}`, () => switchProject('other'));
+      }
+      await switchProject('demo');
+      await sample('search-open', () => page.getByRole('button', { name: 'Search tickets' }).click());
+      await sample('search-query', () => page.getByRole('searchbox', { name: 'Search tickets' }).fill('QQRY00'));
+      await expect(page.locator('[data-ticket-slug="HS2-QQRY00"]')).toBeVisible();
+      await sample('search-clear', () => page.getByRole('button', { name: 'Clear search' }).click());
+      const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]').first();
+      await sample('ticket-select', () => ticket.click());
+      await sample('ticket-up-next', () =>
+        viewport.name === 'desktop'
+          ? ticket.getByRole('button', { name: 'Remove from Up Next' }).click()
+          : page.locator('#app-right-rail').getByRole('button', { name: 'Remove from Up Next' }).click(),
+      );
+      if (viewport.name === 'narrow') await page.getByRole('button', { name: 'Hide ticket inspector' }).click();
+      await sample('terminal-drawer', () => page.getByRole('button', { name: 'Show terminal drawer' }).click());
+      const drawer = page.locator('[data-component="terminal-drawer"]');
+      await sample('terminal-tab', () => drawer.locator('[data-tab-kind="terminal"]').first().click());
+      await sample('ai-chat-create', async () => {
+        await drawer.getByRole('button', { name: 'New drawer item' }).click();
+        await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
+      });
+      await expect(drawer.locator('[data-component="ai-conversation"]')).toBeVisible();
+      const composer = drawer.getByLabel('Message Codex');
+      await composer.fill('Profile a sustained response');
+      await composer.press('Enter');
+      await expect.poll(() => connectionId).toBeTruthy();
+      await expect.poll(() => sockets.length).toBeGreaterThan(0);
+      await sample('ai-stream', async () => {
+        for (let index = 0; index < 30; index += 1) {
+          cursor += 1;
+          sockets[0].send(
+            JSON.stringify({
+              cursor,
+              store: '/work/demo.hs2',
+              kind: 'turn_event',
+              id: connectionId,
+              slug: 'codex',
+              turn: {
+                connection_id: connectionId,
+                event: { type: 'output', content: `profile stream chunk ${index} ` },
+              },
+            }),
+          );
+          await page.waitForTimeout(20);
+        }
+        await expect(drawer).toContainText('profile stream chunk 29');
+      });
+      await sample('project-with-activity', () => switchProject('other'));
+      await sample('project-return-with-activity', () => switchProject('demo'));
+    } finally {
+      const complete = new Promise<string>((resolve, reject) => {
+        cdp.once('Tracing.tracingComplete', ({ stream }) => {
+          if (stream) resolve(stream);
+          else reject(new Error('Chromium trace stream is missing'));
+        });
+      });
+      await cdp.send('Tracing.end');
+      const stream = await complete;
+      const chunks: Buffer[] = [];
+      let done = false;
+      while (!done) {
+        const part = await cdp.send('IO.read', { handle: stream });
+        chunks.push(Buffer.from(part.data, part.base64Encoded ? 'base64' : 'utf8'));
+        done = part.eof;
+      }
+      await cdp.send('IO.close', { handle: stream });
+      mkdirSync('target/performance-traces', { recursive: true });
+      const tracePath = `target/performance-traces/hs2-wdtn3w-${viewport.name}-chromium-trace.json`;
+      writeFileSync(tracePath, Buffer.concat(chunks));
+      await testInfo.attach(`hs2-wdtn3w-${viewport.name}-chromium-trace.json`, {
+        path: tracePath,
+        contentType: 'application/json',
+      });
+    }
+    const timings = await page.evaluate(
+      () => (window as typeof window & { __interactionTimings?: unknown[] }).__interactionTimings ?? [],
+    );
+    const windowsPath = `target/performance-traces/hs2-wdtn3w-${viewport.name}-interaction-windows.json`;
+    writeFileSync(windowsPath, JSON.stringify({ viewport, windows, timings }, null, 2));
+    await testInfo.attach(`hs2-wdtn3w-${viewport.name}-interaction-windows.json`, {
+      path: windowsPath,
+      contentType: 'application/json',
+    });
+    expect(windows).toHaveLength(17);
+  });
+}
+
 test('shows Trash below Archive and restores deleted tickets through the real ticket menu (HS2-MWDR19)', async ({
   page,
 }) => {

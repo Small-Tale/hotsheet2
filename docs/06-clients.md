@@ -3488,6 +3488,8 @@ frame opportunity; the performance command runs one worker and additionally enfo
 100 ms ceiling, keeping machine contention separate from application scheduling. The
 creation regression deliberately delays the request and reports transport separately,
 so network or fixture latency cannot be mistaken for rendering work (HS2-126KNQ).
+The mixed-project browser CPU baseline and worker boundary analysis are in
+[22-ui-responsiveness-profile.md](22-ui-responsiveness-profile.md).
 
 ## 6.10 Repository status browser
 
