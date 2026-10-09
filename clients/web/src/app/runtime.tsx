@@ -347,6 +347,7 @@ import {
   ticketReaderEditState,
   type TicketReaderFrame,
 } from '../ticket-reader-stack';
+import { supportsTicketRowContainment } from '../ticket-row-containment';
 import { TicketScrollMemory } from '../ticket-scroll-state';
 import { createTicketSearchModel, inlineSearchTokens, replaceTicketSearch } from '../ticket-search-model';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
@@ -395,6 +396,10 @@ import { wireHotSheetInteractions } from './wire-interactions';
  * removes every delegated and native interaction listener the runtime registered.
  */
 export async function startHotSheetWebClient() {
+  document.documentElement.toggleAttribute(
+    'data-hs-ticket-row-containment',
+    supportsTicketRowContainment(navigator.userAgent),
+  );
   const uiStabilityDiagnostics = await installDevelopmentDiagnostics();
   const turnStreamReplayGuard = new TurnStreamReplayGuard();
   const localTicketChangeAcknowledgements = new LocalTicketChangeAcknowledgements();

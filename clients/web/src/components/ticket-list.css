@@ -15,6 +15,13 @@
   min-width: 0;
   min-height: 0;
 }
+.ticket-list__tickets {
+  display: block;
+}
+html[data-hs-ticket-row-containment] .ticket-list__tickets {
+  --hs-ticket-row-content-visibility: auto;
+  --hs-ticket-row-intrinsic-size: auto 72px;
+}
 .ticket-list[data-empty='true'] > .ticket-list__tickets {
   min-height: remify(288px);
 }

@@ -14347,7 +14347,8 @@ for (const viewport of [
     });
     const largeRows = [
       row,
-      ...Array.from({ length: 137 }, (_, index) => ({
+      searchSlugRow,
+      ...Array.from({ length: 136 }, (_, index) => ({
         ...notStartedRow,
         id: `profile-${index}`,
         native_id: `profile-${index}`,
@@ -14361,6 +14362,10 @@ for (const viewport of [
     await page.route(/\/tickets(?:\?.*)?$/, (route) => {
       if (route.request().method() !== 'GET') return route.fallback();
       const url = new URL(route.request().url());
+      if (url.searchParams.get('text') === 'QQRY00') {
+        const items = url.searchParams.get('collection') === 'backlog' ? [] : [searchSlugRow];
+        return route.fulfill({ json: { items, counts: { total: items.length } } });
+      }
       if (url.searchParams.has('text')) return route.fallback();
       return route.fulfill({
         json: url.pathname.includes('/other-checkout/')
@@ -23574,6 +23579,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
 
 test('remembers scroll per project, mode and view through delayed loading and shrinking contents (HS2-PDYXYJ)', async ({
   page,
+  browserName,
 }) => {
   test.setTimeout(60000);
   const makeRows = (prefix: string) =>
@@ -23646,6 +23652,17 @@ test('remembers scroll per project, mode and view through delayed loading and sh
       }, top),
     selectView = (view: string) => page.locator(`[data-action="select-view"][data-item-id="${view}"]`).click();
   await expect(tickets).toHaveCount(160);
+  const rowLayout = await tickets.nth(100).evaluate((node) => {
+    const wrapper = node.parentElement!;
+    return {
+      contentVisibility: getComputedStyle(wrapper).contentVisibility,
+      intrinsicSize: getComputedStyle(wrapper).containIntrinsicSize,
+      listDisplay: getComputedStyle(wrapper.parentElement!).display,
+    };
+  });
+  expect(rowLayout.listDisplay).toBe('block');
+  expect(rowLayout.contentVisibility).toBe(browserName === 'chromium' ? 'auto' : 'visible');
+  if (browserName === 'chromium') expect(rowLayout.intrinsicSize).toBe('auto 72px');
   const queueTop = await setScroll(4500);
   expect(queueTop).toBe(4500);
   await selectView('backlog');

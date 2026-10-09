@@ -43,6 +43,15 @@ The 138-ticket transitions usually contain around 115–136 ms of inclusive
 lighter at 94 ms and 19 ms. Switches to the small project contain around
 55–66 ms of `FunctionCall` and 1–3 ms of `Layout`.
 The list's rendered row count is therefore a useful explanatory variable.
+Blink list rows use `content-visibility: auto` with a 72px intrinsic estimate,
+and the list stack uses block layout (`HS2-WRY9Q2`). WebKit keeps normal row
+visibility because skipping row contents clamps deep scroll restoration there.
+In the same 138-ticket Chromium desktop and narrow profile, warm-return
+layout fell to about 16–21 ms and search-clear
+layout to about 19–22 ms. All rows still mount through the existing progressive
+render path; deep scroll, project/view restoration, and mutation flows remain
+covered by Chromium and WebKit browser tests. Ticket selection still exceeds
+the painted budget in some runs and remains in `HS2-KCXMAT`.
 The app's measured project click-to-next-paint ranged roughly 52–92 ms
 before terminal and AI activity. Returning to the large project with
 activity present took 103 ms on desktop and 100 ms on narrow screens.
