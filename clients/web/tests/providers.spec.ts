@@ -5889,7 +5889,22 @@ test('hides nonempty search on disabled views and restores its open editor on re
   const modes = toolbar.getByRole('group', { name: 'View mode', exact: true });
   await toolbar.getByRole('button', { name: 'Search tickets' }).click();
   await expect(search).toHaveAttribute('data-expanded', 'true');
+  await toolbar.screenshot({ path: 'target/visual-captures/hs2-3wq9a1-search-empty.png', animations: 'disabled' });
+  const emptySearchWidth = await search.evaluate((node) => node.getBoundingClientRect().width);
   await toolbar.getByRole('searchbox', { name: 'Search tickets' }).fill('Started');
+  await toolbar.screenshot({ path: 'target/visual-captures/hs2-3wq9a1-search-typed.png', animations: 'disabled' });
+  await expect
+    .poll(() => search.evaluate((node) => node.getBoundingClientRect().width))
+    .toBeGreaterThan(emptySearchWidth * 0.8);
+  await expect
+    .poll(() =>
+      toolbar.evaluate(
+        (node) =>
+          node.getBoundingClientRect().right -
+          node.querySelector('.ticket-search-field')!.getBoundingClientRect().right,
+      ),
+    )
+    .toBeLessThan(20);
   await modes.getByRole('button', { name: 'Notifications view' }).click();
   await expect(page.locator('[data-component="notification-center"]')).toBeVisible();
   await expect(search).toHaveAttribute('data-expanded', 'false');

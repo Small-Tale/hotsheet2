@@ -54,6 +54,9 @@ export function wireWorkspaceToolbarVisibility(
   const resize = new ResizeObserver(() => {
     refresh();
   });
+  const slotStyles = new MutationObserver(() => {
+    refresh();
+  });
 
   function setHidden(item: HTMLElement, hidden: boolean) {
     const value = hidden ? 'true' : null;
@@ -91,8 +94,12 @@ export function wireWorkspaceToolbarVisibility(
     const searchSlot = searchOpen instanceof HTMLElement ? searchOpen : null;
     if (searchSlot !== observedSearchSlot) {
       if (observedSearchSlot) resize.unobserve(observedSearchSlot);
+      slotStyles.disconnect();
       observedSearchSlot = searchSlot;
-      if (observedSearchSlot) resize.observe(observedSearchSlot);
+      if (observedSearchSlot) {
+        resize.observe(observedSearchSlot);
+        slotStyles.observe(observedSearchSlot, { attributes: true, attributeFilter: ['style'] });
+      }
     }
     const identity = header.querySelector<HTMLElement>('.workspace-header__identity');
     const groups = [
@@ -175,9 +182,12 @@ export function wireWorkspaceToolbarVisibility(
         gap -
         groupWidths.reduce((sum, width, index) => sum + (visible[index + 1] ? width + gap : 0), 0) -
         (visible.every(Boolean) ? 0 : moreWidth + gap);
-      searchSlot!.style.setProperty('--kui-token-search-expanded-width', `${Math.max(0, availableSearch - 8)}px`);
-      searchSlot!.style.width = `${Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : moreWidth + gap))}px`;
-      searchSlot!.style.flex = '0 0 auto';
+      const expandedWidth = `${Math.max(0, availableSearch - 8)}px`;
+      const slotWidth = `${Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : moreWidth + gap))}px`;
+      if (searchSlot!.style.getPropertyValue('--kui-token-search-expanded-width') !== expandedWidth)
+        searchSlot!.style.setProperty('--kui-token-search-expanded-width', expandedWidth);
+      if (searchSlot!.style.width !== slotWidth) searchSlot!.style.width = slotWidth;
+      if (searchSlot!.style.flex !== '0 0 auto') searchSlot!.style.flex = '0 0 auto';
       if (identity) {
         identity.setAttribute('data-hide-below', `${visible[0] ? 0 : contentWidth + 1}px`);
         setHidden(identity, !visible[0]);
@@ -201,6 +211,7 @@ export function wireWorkspaceToolbarVisibility(
     if (next === header) return false;
     if (header) resize.unobserve(header);
     if (observedSearchSlot) resize.unobserve(observedSearchSlot);
+    slotStyles.disconnect();
     observedSearchSlot = null;
     header = next;
     if (header) {
@@ -224,10 +235,13 @@ export function wireWorkspaceToolbarVisibility(
     )
       refresh();
   });
+  // Kerf may morph the app-rendered search slot after a query edit, dropping its inline width
+  // without changing the slot's layout box. The separate observer watches only that slot.
   mutations.observe(root, { childList: true, attributes: true, attributeFilter: ['data-search-open'], subtree: true });
   findHeader();
   return () => {
     mutations.disconnect();
+    slotStyles.disconnect();
     resize.disconnect();
   };
 }

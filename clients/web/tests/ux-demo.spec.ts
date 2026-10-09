@@ -3725,6 +3725,20 @@ test('fits open search around the rendered project name and fills the remaining 
       }),
     )
     .toBeLessThan(20);
+  await header.screenshot({ animations: 'disabled' });
+  const emptySearchWidth = await header
+    .locator('.ticket-search-field')
+    .evaluate((node) => node.getBoundingClientRect().width);
+  await header.getByRole('searchbox', { name: 'Search tickets' }).fill('sample query');
+  await header.screenshot({ animations: 'disabled' });
+  await expect
+    .poll(() => header.locator('.ticket-search-field').evaluate((node) => node.getBoundingClientRect().width))
+    .toBeGreaterThan(emptySearchWidth - 2);
+  await header.getByRole('searchbox', { name: 'Search tickets' }).fill('');
+  await header.screenshot({ animations: 'disabled' });
+  await expect
+    .poll(() => header.locator('.ticket-search-field').evaluate((node) => node.getBoundingClientRect().width))
+    .toBeGreaterThan(emptySearchWidth - 2);
   await header.locator('.workspace-header__identity .kui-toolbar-text__text').evaluate((node) => {
     node.textContent = 'A substantially longer project name for this workspace';
   });
