@@ -191,3 +191,119 @@ fn main() {
         unsafe { std::env::remove_var(name) };
     }
 }
+
+#[cfg(windows)]
+#[test]
+fn trusted_windows_cli_bypasses_path_launcher_and_invalidates_cache() {
+    use std::fs;
+    use std::process::Command;
+
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("agy_fixture.rs");
+    fs::write(
+        &source,
+        r#"
+fn main() {
+    use std::io::Write;
+    let arg = std::env::args().nth(1).unwrap_or_default();
+    let marker = std::env::var("AGY_FIXTURE_MARKER").unwrap();
+    let mut log = std::fs::OpenOptions::new().create(true).append(true).open(marker).unwrap();
+    writeln!(log, "{arg}").unwrap();
+    match arg.as_str() {
+        "--version" => println!("agy 1"),
+        "models" => match std::env::var("AGY_FIXTURE_MODE").unwrap_or_default().as_str() {
+            "new" => println!("gemini-new-high    Gemini New (High)"),
+            _ => println!("gemini-live-high    Gemini Live (High)"),
+        },
+        _ => std::process::exit(2),
+    }
+}
+"#,
+    )
+    .unwrap();
+    let native = temp.path().join("native-agy.exe");
+    assert!(
+        Command::new("rustc")
+            .arg("--edition=2024")
+            .arg(&source)
+            .arg("-o")
+            .arg(&native)
+            .status()
+            .unwrap()
+            .success()
+    );
+
+    let ide_dir = temp.path().join("ide");
+    fs::create_dir(&ide_dir).unwrap();
+    let ide_marker = temp.path().join("ide-launched");
+    fs::write(
+        ide_dir.join("agy.cmd"),
+        format!("@echo off\r\necho ide>>\"{}\"\r\n", ide_marker.display()),
+    )
+    .unwrap();
+    fs::write(ide_dir.join("agy.exe"), b"IDE launcher, not a native CLI").unwrap();
+    let original_path = std::env::var_os("PATH");
+    let original_trusted_dir = std::env::var_os("HOTSHEET_ANTIGRAVITY_CLI_DIR");
+    let original_marker = std::env::var_os("AGY_FIXTURE_MARKER");
+    let original_mode = std::env::var_os("AGY_FIXTURE_MODE");
+    let mut path_entries = vec![ide_dir.clone()];
+    if let Some(path) = &original_path {
+        path_entries.extend(std::env::split_paths(path));
+    }
+    let path = std::env::join_paths(path_entries).unwrap();
+    let marker = temp.path().join("native-launched");
+    unsafe {
+        std::env::set_var("PATH", path);
+        std::env::remove_var("HOTSHEET_ANTIGRAVITY_CLI_DIR");
+        std::env::set_var("AGY_FIXTURE_MARKER", &marker);
+        std::env::set_var("AGY_FIXTURE_MODE", "live");
+    }
+    let mut cache = hotsheet_aitools::ModelCatalogCache::default();
+    let discover = |cache: &mut hotsheet_aitools::ModelCatalogCache| {
+        hotsheet_aitools::discover_ai_tool_descriptors(&[], temp.path(), cache, false)
+            .into_iter()
+            .find(|tool| tool.id == "antigravity")
+            .unwrap()
+    };
+    assert_eq!(discover(&mut cache).models.len(), 7);
+    assert!(!marker.exists());
+    assert!(!ide_marker.exists());
+
+    let first = temp.path().join("first/bin");
+    let second = temp.path().join("second/bin");
+    for dir in [&first, &second] {
+        fs::create_dir_all(dir).unwrap();
+        fs::copy(&native, dir.join("agy.exe")).unwrap();
+    }
+    unsafe { std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", &first) };
+    assert_eq!(discover(&mut cache).models[0].id, "gemini-live-high");
+    unsafe {
+        std::env::set_var("HOTSHEET_ANTIGRAVITY_CLI_DIR", &second);
+        std::env::set_var("AGY_FIXTURE_MODE", "new");
+    }
+    assert_eq!(
+        discover(&mut cache).models[0].id,
+        "gemini-new-high",
+        "changing the trusted path invalidates a same-version catalog"
+    );
+    assert_eq!(
+        fs::read_to_string(&marker)
+            .unwrap()
+            .matches("models")
+            .count(),
+        2
+    );
+    assert!(!ide_marker.exists());
+
+    for (name, previous) in [
+        ("PATH", original_path),
+        ("HOTSHEET_ANTIGRAVITY_CLI_DIR", original_trusted_dir),
+        ("AGY_FIXTURE_MARKER", original_marker),
+        ("AGY_FIXTURE_MODE", original_mode),
+    ] {
+        match previous {
+            Some(value) => unsafe { std::env::set_var(name, value) },
+            None => unsafe { std::env::remove_var(name) },
+        }
+    }
+}

@@ -56,6 +56,8 @@ held-pointer drags; intermediate drag frames are allowed while the pointer is mo
 HS2-6FVRZS covers explicitly trusted custom Antigravity CLI directories with a
 real native fixture, an IDE launcher collision on `PATH`, invalid or relative
 trusted paths, and same-version cache invalidation when the trusted path changes.
+HS2-EHEF1H exercises the custom `agy.exe` directory, PATH launcher bypass, and
+same-version cache invalidation with a compiled native fixture in Windows CI.
 
 HS2-NX6JQJ covers partial checkout reads beyond the initial collection: the web API
 retains unpaged partial/truncated headers and page-walk source errors; refresh unit tests

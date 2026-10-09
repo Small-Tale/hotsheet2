@@ -89,6 +89,11 @@ jobs:
           CC: cl
         run: cargo test -p hotsheet-ticketing windows_credential_manager_round_trip
 
+      - name: Exercise trusted Antigravity CLI discovery on Windows
+        env:
+          CC: cl
+        run: cargo test -p hotsheet-aitools --test antigravity_discovery
+
   check:
     name: fmt · clippy · test
     runs-on: ubuntu-latest
