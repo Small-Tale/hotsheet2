@@ -886,6 +886,12 @@ completion cannot clear a newer question. Session start/end and terminal removal
 stale questions. The app alerts the user and opens the terminal for an answer. Answering in
 the alert itself is tracked by `HS2-SWY32A`.
 
+The plugin hook manifest can override `matcher` per event through `event_matchers`; events
+without an override keep the shared matcher. Claude installs `AskUserQuestion` for the two
+post-tool events, so unrelated tool completions do not launch the hook adapter. Its
+`PermissionRequest` and `PreToolUse` hooks retain their wildcard matcher and permission
+behavior. Refresh replaces older Hot Sheet hook entries while preserving other hooks.
+
 **The claim/lease primitive** (`coord`) is what keeps distributed work sane, and it
 underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-storage.md)
 §2.7). Two regimes:

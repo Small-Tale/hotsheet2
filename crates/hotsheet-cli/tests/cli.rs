@@ -1091,6 +1091,39 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
 }
 
 #[test]
+fn setup_claude_scopes_question_resolution_hooks_without_narrowing_permissions() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir(&store).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    std::fs::create_dir(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["setup", "claude", "--project"])
+        .arg(&project)
+        .assert()
+        .success();
+
+    let settings: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(project.join(".claude/settings.local.json")).unwrap(),
+    )
+    .unwrap();
+    for event in ["PermissionRequest", "PreToolUse"] {
+        assert_eq!(settings["hooks"][event][0]["matcher"], "*");
+    }
+    for event in ["PostToolUse", "PostToolUseFailure"] {
+        assert_eq!(settings["hooks"][event][0]["matcher"], "AskUserQuestion");
+    }
+}
+
+#[test]
 fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("tickets.hs2");

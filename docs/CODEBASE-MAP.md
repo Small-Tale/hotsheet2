@@ -328,6 +328,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/setup.rs           #   run_setup: core-owned one-shot setup writers (monotonic versioned instructions/skill bundle; equal-version divergent project variants are preserved; tools sharing one instruction file with identical bodies get one `hotsheet:<target-key>` shared section, migrated from per-tool copies and reconciled on refresh, HS2-329EED; MCP config and permission hook via [hooks] capability; merge-safe and idempotent, HS2-XCTAHM) + mcp_command — shared by CLI + server (HS2-91)
       src/lib.rs             #   Manifest/Plugin, from_dir (bundled) + from_fs_dir (on-disk),
                              #     all_plugins(search_dirs)/find_in/builtin_plugins; ${HOTSHEET_HOME:-~/.hotsheet2}/plugins
+                             #     HooksSpec.event_matchers overrides the shared matcher for named hook events
       src/tests.rs           #   built-in + on-disk loading, first-party-wins-collision
       tests/no_tool_id_branches.rs # HS2-9 plugin-first lint: core must not branch on a tool id (ids derived from the registry)
   plugins/                   # first-party AI-tool plugin dirs, bundled into the binary (docs/05 §5.11)

@@ -1382,10 +1382,6 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<(String, bool)>, Set
     if let Some(timeout) = spec.timeout_seconds {
         handler["timeout"] = serde_json::json!(timeout);
     }
-    let entry = serde_json::json!({
-        "matcher": spec.matcher,
-        "hooks": [handler],
-    });
     let mut events = vec![spec.event.as_str()];
     for event in &spec.additional_events {
         if !events.contains(&event.as_str()) {
@@ -1393,13 +1389,17 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<(String, bool)>, Set
         }
     }
     for event_name in events {
+        let entry = serde_json::json!({
+            "matcher": spec.event_matchers.get(event_name).unwrap_or(&spec.matcher),
+            "hooks": [handler],
+        });
         let event = hooks
             .entry(event_name.to_string())
             .or_insert_with(|| serde_json::json!([]));
         if !event.is_array() {
             *event = serde_json::json!([]);
         }
-        event.as_array_mut().unwrap().push(entry.clone());
+        event.as_array_mut().unwrap().push(entry);
     }
 
     let rendered = serde_json::to_string_pretty(&root).unwrap() + "\n";

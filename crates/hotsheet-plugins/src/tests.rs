@@ -259,6 +259,7 @@ fn codex_declares_its_project_local_skill() {
     assert_eq!(hooks.matcher, ".*");
     assert_eq!(hooks.event, "PermissionRequest");
     assert_eq!(hooks.timeout_seconds, Some(86_430));
+    assert!(hooks.event_matchers.is_empty());
 
     // Codex opts into the metrics capability (docs/14, HS2-8PSAFE): it reports usage the
     // host maps via the `codex-usage` source.

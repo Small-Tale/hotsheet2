@@ -157,6 +157,10 @@ pub struct HooksSpec {
     /// interactive and headless permission lifecycles expose different hook events.
     #[serde(default)]
     pub additional_events: Vec<String>,
+    /// Optional provider-native matcher overrides keyed by event name. Events without an
+    /// override continue to use `matcher` for backward-compatible permission behavior.
+    #[serde(default)]
+    pub event_matchers: BTreeMap<String, String>,
     /// The command line to run (e.g. `hotsheet-cli permission-hook`); its first token is
     /// resolved to the absolute sibling binary at setup (no PATH reliance, HS2-103).
     pub command: String,

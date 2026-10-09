@@ -137,7 +137,7 @@ mod tests {
         .unwrap();
         std::fs::write(
             d.path().join(".claude/settings.local.json"),
-            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-hook"}]},{"matcher":"*","hooks":[{"type":"command","command":"old/hotsheet-cli permission-hook"}]}],"PermissionRequest":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-request-hook"}]}]}}"#,
+            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-hook"}]},{"matcher":"*","hooks":[{"type":"command","command":"old/hotsheet-cli permission-hook"}]}],"PermissionRequest":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-request-hook"}]}],"PostToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"old/hotsheet-cli permission-hook"}]},{"matcher":"Bash","hooks":[{"type":"command","command":"my-post-hook"}]}],"PostToolUseFailure":[{"matcher":"*","hooks":[{"type":"command","command":"old/hotsheet-cli permission-hook"}]}]}}"#,
         )
         .unwrap();
 
@@ -185,6 +185,31 @@ mod tests {
         assert_eq!(ours.len(), 1, "one interactive permission hook");
         assert_eq!(ours[0]["matcher"], "*");
         assert_eq!(ours[0]["hooks"][0]["timeout"], 86_430);
+        for event in ["PostToolUse", "PostToolUseFailure"] {
+            let entries = s["hooks"][event].as_array().unwrap();
+            let ours: Vec<_> = entries
+                .iter()
+                .filter(|entry| {
+                    entry["hooks"][0]["command"]
+                        .as_str()
+                        .is_some_and(|command| command.contains("permission-hook --agent claude"))
+                })
+                .collect();
+            assert_eq!(
+                ours.len(),
+                1,
+                "exactly one question-resolution hook for {event}"
+            );
+            assert_eq!(ours[0]["matcher"], "AskUserQuestion");
+        }
+        assert!(
+            s["hooks"]["PostToolUse"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entry| entry["hooks"][0]["command"] == "my-post-hook"),
+            "unrelated user post hooks survive setup"
+        );
         // Codex declares its own native PermissionRequest hook in its own config.
         let d2 = project();
         let reports = run_setup(d2.path(), d2.path(), Some("codex"), false).unwrap();

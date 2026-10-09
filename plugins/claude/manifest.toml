@@ -82,6 +82,9 @@ event = "PermissionRequest"
 # Sheet terminal is connected to Hot Sheet (HS2-EV1XK3). Older Claude versions ignore unknown
 # hook events.
 additional_events = ["PreToolUse", "PostToolUse", "PostToolUseFailure", "StopFailure", "Stop", "UserPromptSubmit", "SessionStart", "SessionEnd"]
+# Question-resolution events only need AskUserQuestion; permission and lifecycle hooks
+# retain their existing matchers and decisions.
+event_matchers = { PostToolUse = "AskUserQuestion", PostToolUseFailure = "AskUserQuestion" }
 command = "hotsheet-cli permission-hook --agent claude"
 timeout_seconds = 86430
 
