@@ -3035,7 +3035,10 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   const colorPicker = providerForm.locator('[data-component="ticket-source-color-picker"]');
   await expect(
     colorPicker.locator('.ticket-source-color-picker__preview [data-component="ticket-source-icon"]'),
-  ).toHaveCount(9);
+  ).toHaveCount(8);
+  await expect(colorPicker.getByRole('radio', { name: 'Neutral' })).toHaveCount(0);
+  await colorPicker.scrollIntoViewIfNeeded();
+  await colorPicker.screenshot({ path: 'target/visual-captures/hs2-ant2r8-source-color-picker.png' });
   await colorPicker.getByRole('radio', { name: 'Purple' }).check();
   const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');
   await expect(footer.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();

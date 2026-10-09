@@ -8588,15 +8588,16 @@ test('renders project-owned ticket sources and machine-wide accounts at wide and
     await page.goto('/ux-demo?component=ticket-sources-settings');
     const sources = page.locator('[data-component="ticket-sources-settings"]');
     await expect(sources.locator('wa-select[name="project-default-source"]')).toHaveJSProperty('value', 'github-main');
-    await expect(sources.locator('select[name="project-source-color"]')).toHaveCount(3);
+    // Colors are edited in each source's dialog; the settings list shows the chosen marks.
+    await expect(sources.locator('input[name="project-source-color"]')).toHaveCount(0);
     await expect(sources.locator('[data-component="ticket-source-icon"]')).toHaveCount(3);
     const gitSourceCopy = sources.locator(
-      '.ticket-provider-settings__store .ticket-provider-settings__connection-copy',
+      '.ticket-provider-settings__source-row[data-source-provider="git"] .ticket-provider-settings__connection-copy',
     );
     expect((await gitSourceCopy.boundingBox())!.width).toBeGreaterThan(100);
     await expect(sources).toContainText('Some ticket sources look alike');
     await expect(sources.locator('[data-component="ticket-source-icon"][data-provider="github"]').first()).toHaveCSS(
-      'background-color',
+      'color',
       'rgb(59, 130, 246)',
     );
     await expect(sources.getByRole('button', { name: 'Remove Product issues from this project' })).toBeVisible();
