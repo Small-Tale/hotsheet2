@@ -6729,7 +6729,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
     const picker = page.locator('wa-select[name="mobile-project"]'),
       selectedAttention = picker.locator('.project-tab-bar__selected-project [data-lucide="circle-alert"]');
     await expect(selectedAttention).toBeVisible();
-    await expect(selectedAttention).toHaveAttribute('aria-label', 'An AI session stopped on an error');
+    await expect(selectedAttention).toHaveAttribute('aria-label', 'An AI session needs your attention');
     await picker.click();
     await expect(picker.getByRole('option', { name: /Needs attention/ })).toBeVisible();
     await settledAnimations(picker);

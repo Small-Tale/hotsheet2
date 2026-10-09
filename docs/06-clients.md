@@ -2569,8 +2569,9 @@ failure. Each change emits a
 refetches its terminals on that event. A halted terminal's drawer tab replaces its busy dot
 with a danger `triangle-alert` icon, and its dashboard tile replaces the state dot the same
 way. Both name the error ("Stopped: …") in the icon's label and tooltip. Its project tab
-shows the attention icon ("An AI session stopped on an error") even beside notification and
-work counts. The phone project picker shows the same labelled danger icon for the selected
+shows the attention icon ("An AI session needs your attention") even beside notification and
+work counts. This generic label also covers an unanswered AI question in the project.
+The phone project picker shows the same labelled danger icon for the selected
 project and marks attention-bearing options with the icon and “Needs attention” (HS2-34VG07).
 The selected icon names the full reason.
 
