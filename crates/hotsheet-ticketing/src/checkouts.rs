@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::file_lock::FileLock;
+use crate::provider::ProviderConfigRegistry;
 
 pub const DEFAULT_SOURCE_COLOR: &str = "#6b7280";
 const SOURCE_COLORS: &[&str] = &[
@@ -216,6 +217,33 @@ pub enum OpenSourceMode {
     Discovered,
 }
 
+/// Holds the checkout registry lock while a provider record and its project links are
+/// changed together. Ordinary checkout mutations acquire this same file lock.
+pub(crate) struct LockedCheckoutRegistry<'a> {
+    registry: &'a CheckoutRegistry,
+    _lock: FileLock,
+}
+
+impl LockedCheckoutRegistry<'_> {
+    pub(crate) fn resolve(&self, reference: &str) -> Result<Checkout, CheckoutError> {
+        self.registry.resolve_locked(reference)
+    }
+
+    pub(crate) fn list(&self) -> Result<Vec<Checkout>, CheckoutError> {
+        let mut entries = self.registry.read_locked()?.checkouts;
+        entries.sort_by(|a, b| a.alias.cmp(&b.alias).then(a.id.cmp(&b.id)));
+        Ok(entries)
+    }
+
+    pub(crate) fn remove_source(
+        &self,
+        reference: &str,
+        connection_id: &str,
+    ) -> Result<Checkout, CheckoutError> {
+        self.registry.remove_source_locked(reference, connection_id)
+    }
+}
+
 impl CheckoutRegistry {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
@@ -239,6 +267,13 @@ impl CheckoutRegistry {
             .truncate(false)
             .open(path)?;
         Ok(FileLock::acquire(file)?)
+    }
+
+    pub(crate) fn lock_source_links(&self) -> Result<LockedCheckoutRegistry<'_>, CheckoutError> {
+        Ok(LockedCheckoutRegistry {
+            registry: self,
+            _lock: self.acquire_lock()?,
+        })
     }
 
     pub fn register(
@@ -651,6 +686,53 @@ impl CheckoutRegistry {
         make_default: bool,
     ) -> Result<Checkout, CheckoutError> {
         let _lock = self.acquire_lock()?;
+        self.add_source_locked(reference, source, make_default)
+    }
+
+    /// Link an external source only while its provider record exists. This shares the
+    /// checkout lock with orphan collection, so a concurrent removal cannot pass its
+    /// final link scan and delete the record while this link is being written.
+    pub fn add_registered_source(
+        &self,
+        providers: &ProviderConfigRegistry,
+        reference: &str,
+        source: TicketSource,
+        make_default: bool,
+    ) -> Result<Checkout, CheckoutError> {
+        let _lock = self.acquire_lock()?;
+        Self::validate_provider_sources(providers, std::slice::from_ref(&source))?;
+        self.add_source_locked(reference, source, make_default)
+    }
+
+    fn validate_provider_sources(
+        providers: &ProviderConfigRegistry,
+        sources: &[TicketSource],
+    ) -> Result<(), CheckoutError> {
+        if sources.iter().all(|source| source.provider == "git") {
+            return Ok(());
+        }
+        let registered = providers
+            .load()
+            .map_err(|error| CheckoutError::Invalid(error.to_string()))?;
+        for source in sources.iter().filter(|source| source.provider != "git") {
+            if !registered.iter().any(|connection| {
+                connection.id == source.connection_id && connection.provider == source.provider
+            }) {
+                return Err(CheckoutError::Invalid(format!(
+                    "ticket source '{}' is not registered in providers.json",
+                    source.connection_id
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn add_source_locked(
+        &self,
+        reference: &str,
+        source: TicketSource,
+        make_default: bool,
+    ) -> Result<Checkout, CheckoutError> {
         let mut checkout = self.resolve_locked(reference)?;
         checkout
             .sources
@@ -859,6 +941,14 @@ impl CheckoutRegistry {
         connection_id: &str,
     ) -> Result<Checkout, CheckoutError> {
         let _lock = self.acquire_lock()?;
+        self.remove_source_locked(reference, connection_id)
+    }
+
+    fn remove_source_locked(
+        &self,
+        reference: &str,
+        connection_id: &str,
+    ) -> Result<Checkout, CheckoutError> {
         let mut checkout = self.resolve_locked(reference)?;
         let before = checkout.sources.len();
         checkout

@@ -14479,6 +14479,20 @@ async fn checkout_pages_globally_merge_local_and_provider_sources_across_continu
             GitHubConfig::new("github-mixed", "acme/repo", "fixture-token"),
             transport,
         ))));
+    let connection = serde_json::json!({
+        "id":"github-mixed","provider":"github","locator":"acme/repo",
+        "default":false,"settings":{"credential":{"secret":"fixture-token"}}
+    });
+    let registered = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/provider-connections",
+            Some(&connection.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
     let opened = body_json(
         router
             .clone()
@@ -17046,6 +17060,16 @@ async fn checkout_providers_list_only_linked_sources_with_the_checkout_default()
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
+    let stale_link = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/checkouts/first/sources/github-a",
+            Some(&serde_json::json!({"provider":"github","locator":"acme/a"}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(stale_link.status(), StatusCode::BAD_REQUEST);
     // Detaching the default falls back to the checkout's git store.
     assert_eq!(
         summary(providers("first").await),

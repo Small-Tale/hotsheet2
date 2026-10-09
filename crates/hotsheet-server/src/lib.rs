@@ -3273,7 +3273,8 @@ async fn create_checkout_provider_connection(
     connection.default = false;
     fill_reused_sign_in_endpoint(&state, &mut connection);
     save_provider_connections(&state, connections, connection.clone(), None)?;
-    let linked = state.checkout_registry.add_source(
+    let linked = state.checkout_registry.add_registered_source(
+        &registry,
         &checkout.id,
         hotsheet_ticketing::checkouts::TicketSource {
             connection_id: connection.id.clone(),
@@ -4615,7 +4616,12 @@ async fn add_checkout_source(
     };
     state
         .checkout_registry
-        .add_source(&reference, source, body.make_default)
+        .add_registered_source(
+            &ProviderConfigRegistry::new(state.store.root().join("providers.json")),
+            &reference,
+            source,
+            body.make_default,
+        )
         .map(Json)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
 }

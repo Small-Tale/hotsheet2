@@ -587,6 +587,10 @@ unsupported value.
 `checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
 Project Settings → Ticket sources and App Settings → Accounts; like the other provider
 commands they read the `-C` store's `providers.json`.
+Source removal holds the checkout registry lock while it scans remaining links and updates
+`providers.json`. Explicit `checkout add-source` checks for its provider record under that same
+lock, so a concurrent orphan removal cannot leave a new dangling project link (HS2-PNCKJR).
+Project registration and reopen validation are tracked by HS2-2SFDY4.
 `account backfill-logins` is an explicit keychain and GitHub network action; plain listing
 does not look up usernames. It tries up to five missing managed GitHub logins by default
 (`--limit` accepts 1–10); `--after <credential-ref>` reaches later accounts even if earlier

@@ -83,6 +83,17 @@ pub fn detach_source(
     reference: &str,
     connection_id: &str,
 ) -> Result<SourceDetach, ConnectionRemovalError> {
+    detach_source_with_hook(providers, checkouts, reference, connection_id, || {})
+}
+
+fn detach_source_with_hook(
+    providers: &ProviderConfigRegistry,
+    checkouts: &CheckoutRegistry,
+    reference: &str,
+    connection_id: &str,
+    before_provider_save: impl FnOnce(),
+) -> Result<SourceDetach, ConnectionRemovalError> {
+    let checkouts = checkouts.lock_source_links()?;
     let checkout = checkouts.resolve(reference)?;
     let linked_provider = checkout
         .source(connection_id)
@@ -98,6 +109,7 @@ pub fn detach_source(
         .filter(|other| other.source(connection_id).is_some())
         .map(|other| other.id)
         .collect::<Vec<_>>();
+    before_provider_save();
     let mut removed_connection = false;
     if linked_provider.as_deref() != Some("git") && still_used_by.is_empty() {
         let mut connections = providers.load()?;
@@ -127,6 +139,7 @@ pub fn remove_provider_connection(
     checkouts: &CheckoutRegistry,
     connection_id: &str,
 ) -> Result<ConnectionRemoval, ConnectionRemovalError> {
+    let checkouts = checkouts.lock_source_links()?;
     let mut connections = providers.load()?;
     let removed = connections
         .iter()
@@ -170,6 +183,8 @@ pub fn remove_provider_connection(
 mod tests {
     use std::cell::RefCell;
     use std::collections::HashMap;
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     use super::*;
     use crate::checkouts::TicketSource;
@@ -257,6 +272,58 @@ mod tests {
             checkout_id: ids.remove(0),
             other_checkout_id: ids.remove(0),
         }
+    }
+
+    #[test]
+    fn concurrent_link_cannot_resurrect_an_orphaned_provider() {
+        let f = fixture();
+        let (attempt_tx, attempt_rx) = mpsc::channel();
+        let (result_tx, result_rx) = mpsc::channel();
+        let checkouts = f.checkouts.clone();
+        let providers = f.providers.clone();
+        let other = f.other_checkout_id.clone();
+        let report = detach_source_with_hook(
+            &f.providers,
+            &f.checkouts,
+            &f.checkout_id,
+            "github-wiki",
+            || {
+                std::thread::spawn(move || {
+                    attempt_tx.send(()).unwrap();
+                    let linked = checkouts.add_registered_source(
+                        &providers,
+                        &other,
+                        TicketSource {
+                            connection_id: "github-wiki".into(),
+                            provider: "github".into(),
+                            locator: "acme/github-wiki".into(),
+                        },
+                        false,
+                    );
+                    result_tx.send(linked).unwrap();
+                });
+                attempt_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+                assert!(result_rx.recv_timeout(Duration::from_millis(100)).is_err());
+            },
+        )
+        .unwrap();
+        assert!(report.removed_connection);
+        let result = result_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(matches!(result, Err(CheckoutError::Invalid(_))));
+        assert!(
+            f.checkouts
+                .list()
+                .unwrap()
+                .iter()
+                .all(|checkout| checkout.source("github-wiki").is_none())
+        );
+        assert!(
+            f.providers
+                .load()
+                .unwrap()
+                .iter()
+                .all(|connection| connection.id != "github-wiki")
+        );
     }
 
     #[test]

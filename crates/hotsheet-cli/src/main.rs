@@ -2731,7 +2731,8 @@ fn cmd_github_connect(
     )?;
     registry.save(&updated)?;
     if let Some(reference) = &checkout {
-        checkout_registry.add_source(
+        checkout_registry.add_registered_source(
+            &registry,
             reference,
             hotsheet_ticketing::checkouts::TicketSource {
                 connection_id: connection_id.clone(),
@@ -6449,9 +6450,17 @@ fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                     locator,
                 }
             };
+            let store_root = FsStore::open(store)
+                .map(|opened| opened.root().to_path_buf())
+                .unwrap_or_else(|_| store.to_path_buf());
             println!(
                 "{}",
-                serde_json::to_string_pretty(&registry.add_source(&reference, source, default)?)?
+                serde_json::to_string_pretty(&registry.add_registered_source(
+                    &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                    &reference,
+                    source,
+                    default,
+                )?)?
             );
         }
         CheckoutCmd::RemoveSource {

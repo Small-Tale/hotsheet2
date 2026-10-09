@@ -6368,6 +6368,17 @@ fn provider_remove_unlinks_checkouts_and_repeats_cleanly() {
         .clone();
     let checkout: serde_json::Value = serde_json::from_slice(&checkout).unwrap();
     assert!(!checkout.to_string().contains("github-main"), "{checkout}");
+    run(&[
+        "checkout",
+        "add-source",
+        "linked",
+        "github-main",
+        "github",
+        "acme/repo",
+    ])
+    .assert()
+    .failure()
+    .stderr(predicate::str::contains("not registered in providers.json"));
 
     run(&["provider-remove", "github-main"])
         .assert()
