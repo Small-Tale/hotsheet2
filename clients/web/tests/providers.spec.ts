@@ -15554,7 +15554,24 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(page.getByText('Connected project client', { exact: true })).toBeVisible();
   await expect(page.getByText('Loaded checkout-scoped tickets.')).toHaveCount(0);
   const timeline = page.locator('[data-component="ticket-timeline"]');
-  await expect(timeline.locator('[data-entry-id="01-created"] .ticket-timeline__duration')).toHaveText('30 m');
+  const firstDuration = timeline.locator('[data-entry-id="01-created"] .ticket-timeline__duration');
+  await expect(firstDuration).toHaveText('30m');
+  const durationOffsetFromConnectorCenter = () =>
+    timeline.evaluate((node) => {
+      const labels = node.querySelectorAll('.ticket-timeline__duration');
+      return Math.max(
+        ...Array.from(labels, (label) => {
+          const row = label.parentElement!;
+          const rowBox = row.getBoundingClientRect();
+          const labelBox = label.getBoundingClientRect();
+          const connector = getComputedStyle(row, '::after');
+          const connectorCenter =
+            rowBox.top + (Number.parseFloat(connector.top) + rowBox.height - Number.parseFloat(connector.bottom)) / 2;
+          return Math.abs(labelBox.top + labelBox.height / 2 - connectorCenter);
+        }),
+      );
+    });
+  await expect.poll(durationOffsetFromConnectorCenter).toBeLessThan(2);
   await expect(timeline.getByText('Completed', { exact: true })).toBeVisible();
   await expect(timeline).not.toContainText('Status changed from Started to Completed');
   await page.getByRole('tab', { name: 'Info' }).click();
@@ -15563,11 +15580,12 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await page.getByRole('tab', { name: 'Timeline' }).click();
   await expect(timeline.getByText('Moved to backlog', { exact: true })).toBeVisible();
   await expect(timeline).not.toContainText('Status changed from Completed to Backlog');
-  await page.screenshot({ path: 'target/visual-captures/hs2-22gcky-timeline-wide.png' });
-  await page.setViewportSize({ width: 940, height: 900 });
-  await expect(page.locator('[data-component="ticket-timeline"]')).toBeVisible();
-  await page.screenshot({ path: 'target/visual-captures/hs2-22gcky-timeline-narrow.png' });
+  await page.screenshot({ path: 'target/visual-captures/hs2-szycjv-timeline-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+  await expect(page.locator('[data-component="ticket-timeline"]')).toBeVisible();
+  await expect.poll(durationOffsetFromConnectorCenter).toBeLessThan(2);
+  await page.screenshot({ path: 'target/visual-captures/hs2-szycjv-timeline-narrow.png' });
   await page.getByRole('tab', { name: 'Info' }).click();
   await expect(activityNote).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-a32eak-activity-note-narrow.png', fullPage: true });

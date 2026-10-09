@@ -41,10 +41,10 @@ const chronological = (left: Note, right: Note) =>
 export function timelineDuration(start: string, end: string): string | undefined {
   const elapsed = Date.parse(end) - Date.parse(start);
   if (!Number.isFinite(elapsed) || elapsed < 0) return undefined;
-  if (elapsed < 180_000) return `${Math.floor(elapsed / 1_000)} s`;
-  if (elapsed < 10_800_000) return `${Math.floor(elapsed / 60_000)} m`;
-  if (elapsed < 259_200_000) return `${Math.floor(elapsed / 3_600_000)} h`;
-  return `${Math.floor(elapsed / 86_400_000)} d`;
+  if (elapsed < 180_000) return `${Math.floor(elapsed / 1_000)}s`;
+  if (elapsed < 10_800_000) return `${Math.floor(elapsed / 60_000)}m`;
+  if (elapsed < 259_200_000) return `${Math.floor(elapsed / 3_600_000)}h`;
+  return `${Math.floor(elapsed / 86_400_000)}d`;
 }
 
 function transitionDestination(note: Note): string | undefined {

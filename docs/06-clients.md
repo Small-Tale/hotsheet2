@@ -3274,7 +3274,8 @@ backlog`, `Re-enqueued`) while retaining the full durable note text and using th
   source state where it changes the action's meaning.
   Show elapsed time along the connector between successive entries, with seconds for
   gaps under three minutes, minutes under three hours, hours under three days, and days
-  thereafter. The final entry has no gap label.
+  thereafter. Place each label at the center of its connector and join the number and unit
+  without a space (for example, `98s` or `3m`). The final entry has no gap label.
   Started-phase changes appear as concise Timeline entries (`Analyzing`,
   `Planning`, and so on). Their generated activity notes are omitted from the
   Notes list, while other activity notes remain visible there.

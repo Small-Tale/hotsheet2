@@ -40,7 +40,7 @@ describe('ticketTimelineEntries', () => {
         notes: [note('later', 'activity', '2026-09-02T01:00:45Z', 'Started')],
       }),
     );
-    expect(entries.map((entry) => entry.durationToNext)).toEqual(['45 s', undefined]);
+    expect(entries.map((entry) => entry.durationToNext)).toEqual(['45s', undefined]);
   });
 
   it('backfills legacy lifecycle timestamps so an old ticket timeline is never empty', () => {
@@ -213,13 +213,13 @@ describe('ticketTimelineEntries', () => {
 describe('timelineDuration', () => {
   const start = '2026-09-02T00:00:00Z';
   it.each([
-    [0, '0 s'],
-    [179, '179 s'],
-    [180, '3 m'],
-    [10_799, '179 m'],
-    [10_800, '3 h'],
-    [259_199, '71 h'],
-    [259_200, '3 d'],
+    [0, '0s'],
+    [179, '179s'],
+    [180, '3m'],
+    [10_799, '179m'],
+    [10_800, '3h'],
+    [259_199, '71h'],
+    [259_200, '3d'],
   ])('formats %i seconds as %s at the display thresholds', (seconds, expected) => {
     expect(timelineDuration(start, new Date(Date.parse(start) + seconds * 1000).toISOString())).toBe(expected);
   });
