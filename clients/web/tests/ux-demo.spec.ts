@@ -8651,7 +8651,7 @@ test('shows the source mark after the type on cards and beside the inspector num
   await page.goto('/ux-demo?component=ticket-row');
   const row = page.locator('[data-component="ticket-list-row"]');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
-  await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('background-color', 'rgb(59, 130, 246)');
+  await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
   await expect(
