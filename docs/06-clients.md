@@ -1131,7 +1131,7 @@ and identity-less legacy entries remain conservatively blocking.
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
   The web client pins `kerfjs`, `@kerfjs/ui`, and `eslint-plugin-kerfjs`, and its
-  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.58.
+  Kerf/Web Awesome spike pins the runtime and lint plugin, exactly at 5.0.0-beta.90.
   The web package's workspace-scoped Kerf UI profile and doctor configuration are gated
   in CI by `npm run ui:doctor`: catalog, TypeScript, Kerf ESLint, and static analysis run
   and any active error, review finding, or warning fails the gate; known Kerf gaps are
@@ -2494,7 +2494,7 @@ fit, and input state survive that cycle (HS2-V93PYF, HS2-9B8QHF). Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
 its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action
-at the far edge. Terminal whole-tab snapping is temporarily disabled because Kerf beta.88
+at the far edge. Terminal whole-tab snapping remains disabled in Kerf beta.90 because it
 can expand a 12-tab strip beyond the rail (`HS2-3P7TZV`). A newly created selected tab is
 revealed without stealing the dedicated xterm's one-shot input focus; plus
 opens Kerf PopupMenu choices for Terminal (the default shell, renamed by HS2-92C6AR), AI shell, AI chat, and saved conversations.

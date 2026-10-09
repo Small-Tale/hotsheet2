@@ -32,12 +32,12 @@
   "dependencies": {
     "@awesome.me/webawesome": "3.12.0",
     "@hono/node-server": "1.19.17",
-    "@kerfjs/ui": "5.0.0-beta.88",
+    "@kerfjs/ui": "5.0.0-beta.90",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "hono": "^4.13.7",
-    "kerfjs": "5.0.0-beta.88",
+    "kerfjs": "5.0.0-beta.90",
     "lucide": "1.43.0",
     "marked": "^18.0.11",
     "ws": "^8.21.3"
@@ -52,7 +52,7 @@
     "domotion-svg": "^0.24.0",
     "eslint": "^10.9.1",
     "eslint-plugin-import-x": "^4.17.1",
-    "eslint-plugin-kerfjs": "5.0.0-beta.88",
+    "eslint-plugin-kerfjs": "5.0.0-beta.90",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "eslint-plugin-tsdoc": "^0.5.2",
     "html2canvas": "^1.4.1",

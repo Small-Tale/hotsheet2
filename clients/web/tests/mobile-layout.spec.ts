@@ -1264,7 +1264,7 @@ test('keeps every tab strip horizontally scrollable only (HS2-QG4K9W)', async ({
   }
 });
 
-test('rests the overflowing phone drawer strip on whole tabs beside the pinned grid tab (HS2-6Y8HSH)', async ({
+test('keeps overflowing phone drawer tabs and actions reachable without snap (HS2-3P7TZV)', async ({
   browser,
 }, testInfo) => {
   const context = await browser.newContext({
@@ -1285,54 +1285,19 @@ test('rests the overflowing phone drawer strip on whole tabs beside the pinned g
     gridTab = drawer.getByRole('tab', { name: 'Project grid' }),
     peers = drawer.locator('.terminal-drawer__views [data-tab-kind="terminal"]');
   await expect(peers).toHaveCount(3);
-  await expect(strip).toHaveAttribute('data-snap-tabs', 'true');
+  await expect(strip).not.toHaveAttribute('data-snap-tabs', 'true');
   expect(await strip.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeGreaterThan(0);
-
-  // Every peer either starts at or after the pinned grid tab's trailing edge, or is scrolled wholly
-  // behind it. A peer straddling that edge is the clipped sliver this ticket fixed. A partial tab at
-  // the strip's far edge stays allowed as the overflow affordance.
-  const restingPeers = () =>
-    strip.evaluate((node) => {
-      const pinned = node.querySelector<HTMLElement>('.kui-app-tab[data-pinned="true"]')!,
-        pinnedEnd = pinned.getBoundingClientRect().right,
-        stripStart = node.getBoundingClientRect().left;
-      return [...node.querySelectorAll<HTMLElement>('[data-tab-kind="terminal"]')].map((tab) => {
-        const box = tab.getBoundingClientRect();
-        return {
-          straddles: box.left < pinnedEnd - 1 && box.right > pinnedEnd + 1,
-          visibleStart: box.left >= pinnedEnd - 1 && box.left >= stripStart,
-        };
-      });
-    });
-  const settled = async () => {
-    await expect.poll(async () => (await restingPeers()).some((peer) => peer.straddles), { timeout: 5000 }).toBe(false);
-    // A peer must be fully visible next to the pinned grid tab, not just absent.
-    expect((await restingPeers()).some((peer) => peer.visibleStart)).toBe(true);
-  };
-
-  // Reveal the trailing peer (the original repro), then select the pinned grid tab.
   await peers.last().tap();
   await expect(peers.last()).toHaveAttribute('data-selected', 'true');
   await expect.poll(() => strip.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
-  await settled();
   await strip.screenshot({ path: testInfo.outputPath('hs2-6y8hsh-strip-after-reveal-390.png') });
+  await drawer.getByRole('button', { name: 'New drawer item' }).tap();
+  await expect(drawer.locator('[data-terminal-drawer-create]')).toHaveAttribute('open');
+  await page.keyboard.press('Escape');
   await gridTab.tap();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
-  await settled();
   await strip.screenshot({ path: testInfo.outputPath('hs2-6y8hsh-strip-grid-selected-390.png') });
   await page.screenshot({ path: testInfo.outputPath('hs2-6y8hsh-strip-grid-390-after.png') });
-
-  // A swipe that ends mid-tab also settles on a whole-tab start.
-  await strip.evaluate((node) => {
-    node.scrollTo({ left: 0 });
-  });
-  await settled();
-  const start = await strip.evaluate((node) => node.scrollLeft);
-  await strip.evaluate((node) => {
-    node.scrollBy({ left: 37 });
-  });
-  await settled();
-  expect(await strip.evaluate((node) => node.scrollLeft)).not.toBe(start + 37);
   await context.close();
 });
 

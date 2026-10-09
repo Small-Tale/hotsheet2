@@ -1751,11 +1751,11 @@ splitter resists below 228 px and treats a continued 48 px overshoot as an inten
 The rail follows Kerf's canonical spacing relationships: 8 px within its toolbar groups and
 terminal inset, 4 px for the tab-strip focus gutter and icon-label air, and no gap between the
 connected rows in its create menu (HS2-4Y6SM9).
-When the tab strip overflows (for example at a 390 px phone width), its Kerf `TabBar` uses
-`snapTabs`, so the strip settles at whole-tab starts past the pinned Project grid tab. A reveal of
-the trailing tab, a later grid selection, or a swipe that ends mid-tab never leaves a peer tab
-clipped to a sliver beside the grid tab; only the far edge may show a partial tab as the overflow
-affordance (HS2-6Y8HSH, Kerf `KF-4ESG02`).
+When the tab strip overflows (for example at a 390 px phone width), its Kerf `TabBar`
+scrolls horizontally past the pinned Project grid tab. The trailing tab, pinned grid tab,
+and creation action remain reachable. Whole-tab snapping (HS2-6Y8HSH, Kerf `KF-4ESG02`)
+is disabled because its end padding can expand a twelve-tab strip beyond the drawer rail;
+the beta.90 check still reproduced that overflow (HS2-3P7TZV).
 On mobile, focusing the active dedicated xterm temporarily replaces that drawer chrome with a
 full visual-viewport terminal and one Exit pill. The terminal tracks the visual viewport's
 offset and height while the software keyboard opens, so it never extends underneath the keyboard.
@@ -2451,6 +2451,13 @@ HS2-309T7K advances the web client and compatibility spike to 5.0.0-beta.88. Thi
 Contrast, Reduce motion, and Background settings to Kerf's Catalog and updates its UI
 composition guidance. Hot Sheet's existing toolbar and search contracts continue to use
 the same component API.
+HS2-H2RZGB advances those aligned pins to 5.0.0-beta.90. Beta.89 improves Catalog
+preview sizing and recognizes registration imports reachable from the app entry. Beta.90
+clarifies event-driven server-backed updates, timer cleanup, and enabled-action cursor,
+keyboard, focus, and disabled cues. Hot Sheet keeps its existing component APIs and
+checks the upgrade with Kerf UI doctor and browser flows. Beta.90 still pushes a
+twelve-tab drawer strip 115px past its rail when `snapTabs` is enabled, so Hot Sheet
+keeps that option disabled pending HS2-3P7TZV.
 
 Beta.80's component-style doctor checks recognize explicit classes matching five application
 component roots: AppLoadingIndicator, SettingsWorkspace, TicketRowContextMenu,
