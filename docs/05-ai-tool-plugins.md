@@ -85,8 +85,8 @@ for one file carry byte-identical instruction bodies, setup writes **one shared 
 instead of one copy per tool:
 
 **Versioned shared guidance (HS2-GG03S7).** The four built-in tool manifests opt into
-three independently versioned sections from `plugins/shared/`: ticket work,
-testing, and requirements documentation. Setup installs each section once per instruction
+four independently versioned sections from `plugins/shared/`: ticket work,
+testing, requirements documentation, and visual QA. Setup installs each section once per instruction
 target (`CLAUDE.md` or `AGENTS.md`), even when several tools share the target. Refresh
 upgrades only an exact known predecessor in `plugins/shared/legacy-*.md`. It preserves nested
 project `hotsheet:specifics` text, unrelated content, equal-version edits, unknown older
@@ -95,6 +95,11 @@ when no enabled tool still uses that target and the section has no project speci
 Plugin authors opt in with `instructions.shared_guidance = true`; external plugins do not
 receive these defaults unless they explicitly request them. Repository-specific policies
 remain local to each project.
+
+The visual QA section (HS2-7WPJQ2) requires direct review of changed UI at wide and
+narrow sizes and a matching attached after image when the ticket contains visual evidence.
+The shared hotsheet skill carries the same review rule itself, so an `AGENTS.md`-only
+project can apply it without a `CLAUDE.md` file.
 
 ```markdown
 <!-- BEGIN hotsheet:agents-md -->

@@ -727,6 +727,11 @@ const GUIDANCE_SECTIONS: &[GuidanceSection] = &[
         current: include_str!("../../../plugins/shared/requirements-documentation.md"),
         legacy: include_str!("../../../plugins/shared/legacy-requirements-documentation.md"),
     },
+    GuidanceSection {
+        name: "visual-qa",
+        current: include_str!("../../../plugins/shared/visual-qa.md"),
+        legacy: "",
+    },
 ];
 
 fn guidance_bounds(contents: &str, name: &str) -> Option<(usize, usize)> {
@@ -786,7 +791,7 @@ fn render_guidance_sections(existing: &str, active: bool) -> String {
             }
             continue;
         }
-        if generic != section.legacy.trim() {
+        if section.legacy.is_empty() || generic != section.legacy.trim() {
             continue;
         }
         if active {
@@ -1756,26 +1761,27 @@ args = ["--path", "{{store}}"]
                 "<!-- hotsheet:begin specifics={} v=7 -->\nLocal policy.\n<!-- hotsheet:end specifics={} -->",
                 section.name, section.name
             );
-            let older_with_specifics =
-                guidance_with_specifics(legacy, section.name, Some(&specifics));
-            let upgraded = render_guidance_sections(
-                &format!("User preface.\n\n{older_with_specifics}\n\nUser footer.\n"),
-                true,
-            );
-            assert!(upgraded.contains(&guidance_with_specifics(
-                current,
-                section.name,
-                Some(&specifics)
-            )));
-            assert!(upgraded.starts_with("User preface.\n"));
-            assert!(upgraded.contains("User footer.\n"));
-            assert_eq!(render_guidance_sections(&upgraded, true), upgraded);
+            if !legacy.is_empty() {
+                let older_with_specifics =
+                    guidance_with_specifics(legacy, section.name, Some(&specifics));
+                let upgraded = render_guidance_sections(
+                    &format!("User preface.\n\n{older_with_specifics}\n\nUser footer.\n"),
+                    true,
+                );
+                assert!(upgraded.contains(&guidance_with_specifics(
+                    current,
+                    section.name,
+                    Some(&specifics)
+                )));
+                assert!(upgraded.starts_with("User preface.\n"));
+                assert!(upgraded.contains("User footer.\n"));
+                assert_eq!(render_guidance_sections(&upgraded, true), upgraded);
+            }
 
             for protected in [
-                legacy.replace("## ", "## Customized "),
                 current.replace("## ", "## Customized "),
                 current.replace(" v=", " v=99"),
-                guidance_with_specifics(legacy, section.name, Some(&specifics)).replace(
+                guidance_with_specifics(current, section.name, Some(&specifics)).replace(
                     &format!("<!-- hotsheet:end specifics={} -->", section.name),
                     "",
                 ),
@@ -1786,6 +1792,11 @@ args = ["--path", "{{store}}"]
                     rendered.contains(&protected),
                     "protected section was replaced"
                 );
+            }
+            if !legacy.is_empty() {
+                let customized_older = legacy.replace("## ", "## Customized ");
+                let input = format!("Before.\n\n{customized_older}\n\nAfter.\n");
+                assert!(render_guidance_sections(&input, true).contains(&customized_older));
             }
             let retired =
                 render_guidance_sections(&format!("Before.\n\n{current}\n\nAfter.\n"), false);
@@ -1833,6 +1844,29 @@ args = ["--path", "{{store}}"]
             std::fs::read_to_string(&claude_path).unwrap(),
             refreshed_claude
         );
+    }
+
+    #[test]
+    fn codex_only_project_receives_visual_qa_without_claude_file() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let dirs = [];
+        run_setup_in(
+            store.path(),
+            project.path(),
+            Some("codex"),
+            false,
+            None,
+            &dirs,
+        )
+        .unwrap();
+        let agents_path = project.path().join("AGENTS.md");
+        let first = std::fs::read_to_string(&agents_path).unwrap();
+        assert!(first.contains(include_str!("../../../plugins/shared/visual-qa.md").trim()));
+        assert!(!project.path().join("CLAUDE.md").exists());
+        let enabled = HashSet::from(["codex".to_string()]);
+        refresh_setup_in(store.path(), project.path(), Some(&enabled), &dirs).unwrap();
+        assert_eq!(std::fs::read_to_string(&agents_path).unwrap(), first);
     }
 
     #[test]

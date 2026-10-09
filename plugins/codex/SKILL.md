@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 58 -->
+<!-- hotsheet-skill-version: 59 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -139,8 +139,8 @@ for a ticket attachment. If capture or attachment is genuinely impossible after 
 safe alternatives, state the specific reason in the completion note. Screenshots supplement
 behavioral assertions; they do not replace them.
 
-Before attaching correctness evidence, apply `CLAUDE.md`'s visual-QA policy to the actual
-capture, not just its assertions: critically inspect readability, usability, contextual
+Before attaching correctness evidence, inspect the actual capture, not just its assertions:
+critically review readability, usability, contextual
 aesthetic fit and flow/order, clipping or truncation, icon-label alignment, spacing,
 responsive behavior, and any other obvious defect. Fix every defect found, rerun affected
 checks, and recapture; attach only evidence fit to hand off. An imperfect screenshot may be

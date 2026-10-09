@@ -576,6 +576,10 @@ fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
             "ticket-driven-work.md",
             include_str!("../../../plugins/shared/ticket-driven-work.md"),
         ),
+        (
+            "visual-qa.md",
+            include_str!("../../../plugins/shared/visual-qa.md"),
+        ),
     ] {
         hash.update(name.as_bytes());
         hash.update([0]);

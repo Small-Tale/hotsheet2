@@ -1143,10 +1143,11 @@ fn setup_refresh_migrates_agents_md_sharers_into_one_shared_section() {
     let body = include_str!("../../../plugins/codex/instructions.md").trim_end();
     let expected = |tools: &str| {
         format!(
-            "User text.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: {tools} -->\n{body}\n<!-- END hotsheet:agents-md -->\n\nMiddle user text.\n\n{}\n\n{}\n\n{}\n",
+            "User text.\n\n<!-- BEGIN hotsheet:agents-md -->\n<!-- hotsheet-shared-section: {tools} -->\n{body}\n<!-- END hotsheet:agents-md -->\n\nMiddle user text.\n\n{}\n\n{}\n\n{}\n\n{}\n",
             include_str!("../../../plugins/shared/ticket-driven-work.md").trim(),
             include_str!("../../../plugins/shared/testing-philosophy.md").trim(),
             include_str!("../../../plugins/shared/requirements-documentation.md").trim(),
+            include_str!("../../../plugins/shared/visual-qa.md").trim(),
         )
     };
 
@@ -1557,7 +1558,7 @@ fn setup_refresh_preserves_an_equal_version_customized_workflow_bundle() {
     std::fs::write(project.join("AGENTS.md"), instructions).unwrap();
     let skill_path = project.join(".agents/skills/hotsheet/SKILL.md");
     std::fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
-    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 58 -->\n\nRead the canonical project workflow.\n";
+    let skill = "---\nname: hotsheet\ndescription: Project adapter\n---\n\n<!-- hotsheet-skill-version: 59 -->\n\nRead the canonical project workflow.\n";
     std::fs::write(&skill_path, skill).unwrap();
 
     hs(&store)
