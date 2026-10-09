@@ -2327,7 +2327,7 @@ fn checkout_source_color_is_project_local_and_has_stable_json() {
         serde_json::json!({
             "checkout_id": first_id,
             "connection_id": "github-main",
-            "color": "transparent"
+            "color": "#6b7280"
         })
     );
     let first_color = run(&[
@@ -2339,7 +2339,7 @@ fn checkout_source_color_is_project_local_and_has_stable_json() {
     ]);
     assert_eq!(first_color["color"], "#3b82f6");
     assert_eq!(inspect(first_root), first_color);
-    assert_eq!(inspect(second_root)["color"], "transparent");
+    assert_eq!(inspect(second_root)["color"], "#6b7280");
     let second_color = run(&[
         "checkout",
         "set-source-color",
@@ -2378,12 +2378,25 @@ fn checkout_source_color_is_project_local_and_has_stable_json() {
             "set-source-color",
             first_root,
             "github-main",
-            "transparent",
+            "#6b7280",
         ])["color"],
-        "transparent"
+        "#6b7280"
     );
-    assert_eq!(inspect(first_root)["color"], "transparent");
+    assert_eq!(inspect(first_root)["color"], "#6b7280");
     assert_eq!(inspect(second_root)["color"], "#ef4444");
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "checkout",
+            "set-source-color",
+            first_root,
+            "github-main",
+            "transparent",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unsupported ticket source color"));
 }
 
 #[test]

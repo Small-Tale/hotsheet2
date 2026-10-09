@@ -3061,7 +3061,15 @@ async fn list_checkout_providers(
         };
         if let Some(mut descriptor) = descriptor {
             descriptor.default = is_default;
-            descriptor.color = checkout.source_colors.get(&source.connection_id).cloned();
+            descriptor.color = Some(
+                hotsheet_ticketing::checkouts::effective_source_color(
+                    checkout
+                        .source_colors
+                        .get(&source.connection_id)
+                        .map(String::as_str),
+                )
+                .to_owned(),
+            );
             descriptors.push(descriptor);
         }
     }

@@ -6521,11 +6521,12 @@ fn print_checkout_source_color(
             checkout.id
         );
     }
-    let color = checkout
-        .source_colors
-        .get(connection_id)
-        .map(String::as_str)
-        .unwrap_or("transparent");
+    let color = hotsheet_ticketing::checkouts::effective_source_color(
+        checkout
+            .source_colors
+            .get(connection_id)
+            .map(String::as_str),
+    );
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({

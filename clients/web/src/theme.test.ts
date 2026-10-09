@@ -111,6 +111,7 @@ describe('shared client theme', () => {
       '--hs-command-pink',
       '--hs-command-teal',
       '--hs-command-gray',
+      '--hs-ticket-source-default',
       '--hs-annotation-blue',
       '--hs-annotation-red',
       '--hs-annotation-orange',

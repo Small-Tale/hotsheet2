@@ -2,7 +2,7 @@
   display: inline-grid;
   place-items: center;
   flex: none;
-  color: var(--wa-color-surface-lowered);
+  color: var(--hs-ticket-source-default);
   vertical-align: middle;
 }
 .ticket-source-icon[data-size='list'] {

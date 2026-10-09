@@ -658,7 +658,8 @@ and identity-less legacy entries remain conservatively blocking.
   **Disable / Enable**, and a visual icon color grid that previews the mark on subtly
   tinted tiles. The Git dialog shows its name and location for reference and offers the
   same color grid. Moving or renaming a Git repository is tracked by HS2-8BG4W9.
-  Icon color belongs to the project and defaults to Transparent (HS2-XKEHAK).
+  Icon color belongs to the project and defaults to Gray (`#6b7280`); there is no
+  Transparent source-color option (HS2-XKEHAK, HS2-H1FZNV).
   The trailing **Remove from this project** action opens the connection editor at an
   inline confirmation; a source shared with another project (attached
   headlessly) says "Also used by …". There is no list of other projects' connections.
@@ -666,9 +667,8 @@ and identity-less legacy entries remain conservatively blocking.
   second locator line.
   A warning banner appears when two sources from the same provider share an icon color.
   Ticket cards show the source mark directly after the type icon; Git and GitHub use
-  their filled data-source logo exports, with the selected color on the mark itself
-  and the lowered surface color for Transparent. Column cards vertically center the
-  compact source mark with the type icon and ticket number. The inspector
+  their filled data-source logo exports, with the selected color on the mark itself.
+  Column cards vertically center the compact source mark with the type icon and ticket number. The inspector
   toolbar shows it wholly inside the toolbar with a tight gap beside the ticket
   number, including in the terminal rail. For an opt-in Jira write-behind source,
   supported field edits show a

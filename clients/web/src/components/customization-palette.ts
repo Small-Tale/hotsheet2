@@ -22,6 +22,14 @@ export const COMMAND_CUSTOMIZATION_COLORS = [
   ...CUSTOMIZATION_COLORS.slice(1),
 ] as const;
 
+/** Ticket-source marks always have a visible color; an unset or legacy transparent value reads as Gray. */
+export const DEFAULT_TICKET_SOURCE_COLOR = '#6b7280';
+export const TICKET_SOURCE_COLORS = CUSTOMIZATION_COLORS.slice(1);
+
+export function resolveTicketSourceColor(color?: string): string {
+  return TICKET_SOURCE_COLORS.some((option) => option.value === color) ? color! : DEFAULT_TICKET_SOURCE_COLOR;
+}
+
 /** True when a command color renders with no background fill (its icon/text keep the default styling). */
 export function isTransparentCommandColor(color?: string): boolean {
   return !color || color === TRANSPARENT_CUSTOMIZATION_COLOR || color === CUSTOMIZATION_COLORS[0].value;

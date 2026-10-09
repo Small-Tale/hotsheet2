@@ -8,12 +8,20 @@ describe('TicketSourceColorPicker', () => {
     const markup = String(
       TicketSourceColorPicker({ source: { provider: 'github', name: 'Issues', color: '#3b82f6' } }),
     );
-    expect(markup.match(/type="radio"/g)).toHaveLength(9);
-    expect(markup.match(/data-provider="github"/g)).toHaveLength(9);
+    expect(markup.match(/type="radio"/g)).toHaveLength(8);
+    expect(markup.match(/data-provider="github"/g)).toHaveLength(8);
     expect(markup).toContain('--ticket-source-choice-color: #3b82f6');
     expect(markup).toMatch(/value="#3b82f6"[^>]*checked/);
-    expect(markup).toContain('>Transparent</span>');
+    expect(markup).not.toContain('>Transparent</span>');
     expect(markup).toContain('>Blue</span>');
+  });
+
+  it('selects Gray when a source has no color or a legacy transparent value (HS2-H1FZNV)', () => {
+    for (const color of [undefined, 'transparent']) {
+      const markup = String(TicketSourceColorPicker({ source: { provider: 'git', name: 'Local', color } }));
+      expect(markup).toMatch(/value="#6b7280"[^>]*checked/);
+      expect(markup).not.toContain('value="transparent"');
+    }
   });
 
   it('keeps project-local color inside the external connection editor', () => {

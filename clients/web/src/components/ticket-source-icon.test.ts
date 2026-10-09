@@ -19,11 +19,13 @@ describe('TicketSourceIcon', () => {
     }
   });
 
-  it('uses the sunken surface fill for a transparent source', () => {
-    const markup = String(TicketSourceIcon({ source: { provider: 'git', name: 'Local', color: 'transparent' } }));
+  it('uses visible Gray for an unset or legacy transparent source (HS2-H1FZNV)', () => {
+    for (const color of [undefined, 'transparent']) {
+      const markup = String(TicketSourceIcon({ source: { provider: 'git', name: 'Local', color } }));
+      expect(markup).toContain('style="color: #6b7280"');
+    }
     const css = readFileSync(new URL('./ticket-source-icon.css', import.meta.url), 'utf8');
-    expect(markup).not.toContain('style="color:');
-    expect(css).toContain('color: var(--wa-color-surface-lowered)');
+    expect(css).toContain('color: var(--hs-ticket-source-default)');
     expect(css).not.toContain('border-radius');
   });
 });

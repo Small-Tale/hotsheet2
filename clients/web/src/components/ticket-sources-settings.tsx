@@ -11,7 +11,7 @@ import { Cable, ChevronRight, Database, LogOut, Unlink } from 'lucide';
 
 import type { ProviderAccount } from '../api';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
-import { resolveCommandColor } from './customization-palette';
+import { resolveTicketSourceColor } from './customization-palette';
 import { ProviderIcon, type ProviderIconKind } from './provider-icon';
 import { type ExternalProviderKind, providerName } from './provider-setup-form';
 import { TicketSourceIcon } from './ticket-source-icon';
@@ -82,7 +82,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
       sources.findIndex(
         (candidate) =>
           candidate.provider === source.provider &&
-          resolveCommandColor(candidate.color) === resolveCommandColor(source.color),
+          resolveTicketSourceColor(candidate.color) === resolveTicketSourceColor(source.color),
       ) < index,
   );
   return (

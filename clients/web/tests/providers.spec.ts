@@ -2642,6 +2642,7 @@ test('changes a project source color and updates card and inspector badges (HS2-
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const ticketRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'git');
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(107, 114, 128)');
   await page.getByLabel('Settings view').click();
   const sourceRow = page.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]');
   await expect(sourceRow).not.toContainText('Edit icon color');
@@ -2650,13 +2651,14 @@ test('changes a project source color and updates card and inspector badges (HS2-
   await expect(appearance).toContainText('Default ticket source for this project.');
   await expect(appearance).toContainText('Location');
   await expect(appearance.locator('[data-component="ticket-source-color-picker"]')).toBeVisible();
+  await expect(appearance.locator('input[name="project-source-color"][value="transparent"]')).toHaveCount(0);
   await page.screenshot({
     path: testInfo.outputPath('hs2-xkehak-source-dialog.png'),
     animations: 'disabled',
   });
   await expect(
     appearance.locator('.ticket-source-color-picker__preview [data-component="ticket-source-icon"]'),
-  ).toHaveCount(9);
+  ).toHaveCount(8);
   await appearance.locator('input[name="project-source-color"][value="#3b82f6"]').check();
   await expect(page.locator('.app-toast')).toContainText('Ticket source color updated.');
   await expect(appearance.locator('input[name="project-source-color"][value="#3b82f6"]')).toBeChecked();
@@ -2670,11 +2672,11 @@ test('changes a project source color and updates card and inspector badges (HS2-
   );
   await page.getByLabel('Settings view').click();
   await sourceRow.locator('[data-action="edit-provider-connection"]').click();
-  await appearance.locator('input[name="project-source-color"][value="transparent"]').check();
-  await expect(appearance.locator('input[name="project-source-color"][value="transparent"]')).toBeChecked();
+  await appearance.locator('input[name="project-source-color"][value="#6b7280"]').check();
+  await expect(appearance.locator('input[name="project-source-color"][value="#6b7280"]')).toBeChecked();
   await page.locator('[data-ticket-source-setup-dialog]').getByRole('button', { name: 'Done' }).click();
   await page.getByLabel('List view').click();
-  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).not.toHaveAttribute('style', /color/);
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(107, 114, 128)');
 });
 
 test('centers the compact source mark with the type icon and ticket number in columns (HS2-XTF923) @ci-smoke', async ({

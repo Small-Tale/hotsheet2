@@ -16746,6 +16746,7 @@ async fn checkout_providers_list_only_linked_sources_with_the_checkout_default()
             .collect::<Vec<_>>()
     };
     let git_id = summary(providers("first").await)[0].1.clone();
+    assert_eq!(providers("first").await[0]["color"], "#6b7280");
     let color_path = format!("/checkouts/first/sources/{git_id}/color");
     let response = app
         .clone()
@@ -16758,7 +16759,7 @@ async fn checkout_providers_list_only_linked_sources_with_the_checkout_default()
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(providers("first").await[0]["color"], "#8b5cf6");
-    assert!(providers("second").await[0].get("color").is_none());
+    assert_eq!(providers("second").await[0]["color"], "#6b7280");
     let invalid = app
         .clone()
         .oneshot(authed(

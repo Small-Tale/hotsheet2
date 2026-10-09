@@ -571,7 +571,7 @@ hotsheet provider-remove github-main [--json]  # permanent, every project; the a
 hotsheet checkout remove-source web github-main [--json]  # this project only; deletes the connection if no other project uses it
 hotsheet checkout source-color web github-main              # JSON: checkout_id, connection_id, effective color
 hotsheet checkout set-source-color web github-main '#3b82f6' # set this project's source accent
-hotsheet checkout set-source-color web github-main transparent # clear this project's accent
+hotsheet checkout set-source-color web github-main '#6b7280' # restore the default Gray mark
 hotsheet account list [--json]            # machine-wide sign-ins, their sources, and the projects using each
 hotsheet account backfill-logins [--limit 5] # resolve missing managed GitHub usernames in a bounded batch
 hotsheet account sign-out github-app-<id> # refused while a ticket source still uses it
@@ -581,7 +581,7 @@ Ticket sources belong to projects and sign-ins are machine-wide accounts (HS2-SM
 [16](16-external-sync-interface.md#project-owned-sources-machine-wide-accounts-hs2-sm9pm8)).
 Source colors are also project-local: two checkouts linked to one connection may choose
 different accents. Both color commands emit the same JSON object with `checkout_id`,
-`connection_id`, and `color`; an unset color reads as `transparent`. The write command
+`connection_id`, and `color`; an unset color reads as Gray (`#6b7280`). The write command
 accepts the same palette as the checkout color API and rejects an unlinked source or
 unsupported value.
 `checkout remove-source`, `account list`, and `account sign-out` run the same workflows as
@@ -595,9 +595,10 @@ expired or unreachable credentials without discarding other successes. Each refr
 login HTTP request has a 30-second transport timeout; a failed batch exits nonzero.
 Each checkout stores its own source icon colors in `checkouts.json`, keyed by connection id;
 linked projects can give a shared connection different colors. The checkout provider
-descriptors include the color, and `PATCH /checkouts/{reference}/sources/{connection_id}/color`
-accepts `transparent` or a custom-palette color. Removing or renaming a source removes or
-moves its project color with it.
+descriptors include the effective color, and `PATCH /checkouts/{reference}/sources/{connection_id}/color`
+accepts the eight ticket-source palette colors (Blue, Green, Orange, Red, Purple, Pink, Teal,
+and Gray). Gray removes the stored override; Transparent is not a ticket-source option
+(HS2-H1FZNV). Removing or renaming a source removes or moves its project color with it.
 
 `github-sign-in` works without a running server. It prints GitHub's verification URL and
 one-time code, waits for approval, and then prints a `github-app-*` credential reference;

@@ -53,6 +53,7 @@
   --hs-command-pink: #ec4899;
   --hs-command-teal: var(--hs-category-task);
   --hs-command-gray: var(--hs-category-issue);
+  --hs-ticket-source-default: var(--hs-command-gray);
   /* Media annotations keep vivid strokes over either light or dark source pixels. */
   --hs-annotation-blue: #5ca8ff;
   --hs-annotation-red: #ff626b;

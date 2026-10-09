@@ -3,7 +3,7 @@ import './ticket-source-icon.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Plug } from 'lucide';
 
-import { isTransparentCommandColor } from './customization-palette';
+import { resolveTicketSourceColor } from './customization-palette';
 import { GIT_SOURCE_MARK, GITHUB_SOURCE_MARK } from './ticket-source-marks';
 
 export interface TicketSourceIdentity {
@@ -20,7 +20,7 @@ export function TicketSourceIcon({
   source: TicketSourceIdentity;
   size?: 'list' | 'compact';
 }) {
-  const color = isTransparentCommandColor(source.color) ? undefined : source.color;
+  const color = resolveTicketSourceColor(source.color);
   return (
     <span
       class="ticket-source-icon"
@@ -29,7 +29,7 @@ export function TicketSourceIcon({
       data-provider={source.provider}
       title={`${source.name} source`}
       aria-label={`${source.name} source`}
-      style={color ? `color: ${color}` : undefined}
+      style={`color: ${color}`}
     >
       {(() => {
         switch (source.provider) {

@@ -11,7 +11,7 @@ import {
 } from '../api';
 import { isRemoteClient } from '../client-origin';
 import { copyWhenReady } from '../clipboard-when-ready';
-import { resolveCommandColor } from '../components/customization-palette';
+import { resolveTicketSourceColor } from '../components/customization-palette';
 import { type ProjectRestoreFailure, rememberedProjectName } from '../components/project-restore-error';
 import { type ExternalProviderKind, type GithubAuthState, providerName } from '../components/provider-setup-form';
 import { githubAttachmentSettings } from '../github-attachment-settings';
@@ -622,7 +622,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
           : await client.createConnection(connection, makeDefault);
       if (editingId && makeDefault !== wasProjectDefault)
         await client.setCheckoutDefaultSource(current.id, makeDefault ? editingId : null);
-      if (editingId && sourceColor && resolveCommandColor(sourceColor) !== resolveCommandColor(previousColor))
+      if (editingId && sourceColor && resolveTicketSourceColor(sourceColor) !== resolveTicketSourceColor(previousColor))
         await client.setCheckoutSourceColor(current.id, editingId, sourceColor);
       await reloadProviderDescriptors(client, current);
       projects.value = projects.value.map((item) =>

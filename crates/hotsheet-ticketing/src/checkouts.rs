@@ -13,6 +13,24 @@ use thiserror::Error;
 
 use crate::file_lock::FileLock;
 
+pub const DEFAULT_SOURCE_COLOR: &str = "#6b7280";
+const SOURCE_COLORS: &[&str] = &[
+    "#3b82f6",
+    "#22c55e",
+    "#f97316",
+    "#ef4444",
+    "#8b5cf6",
+    "#ec4899",
+    "#14b8a6",
+    DEFAULT_SOURCE_COLOR,
+];
+
+pub fn effective_source_color(color: Option<&str>) -> &str {
+    color
+        .filter(|value| SOURCE_COLORS.contains(value))
+        .unwrap_or(DEFAULT_SOURCE_COLOR)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Checkout {
     pub id: String,
@@ -24,7 +42,7 @@ pub struct Checkout {
     pub stores: Vec<String>,
     #[serde(default)]
     pub sources: Vec<TicketSource>,
-    /// Project-local source accent colors keyed by connection id; omitted entries are transparent.
+    /// Project-local source accent colors keyed by connection id; omitted entries use Gray.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub source_colors: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -782,25 +800,14 @@ impl CheckoutRegistry {
     }
 
     /// Set this project's visual accent for a linked source. It has no effect on projects
-    /// sharing the same provider connection. Transparent is represented by no map entry.
+    /// sharing the same provider connection. The default Gray is represented by no map entry.
     pub fn set_source_color(
         &self,
         reference: &str,
         connection_id: &str,
         color: &str,
     ) -> Result<Checkout, CheckoutError> {
-        const COLORS: &[&str] = &[
-            "transparent",
-            "#3b82f6",
-            "#22c55e",
-            "#f97316",
-            "#ef4444",
-            "#8b5cf6",
-            "#ec4899",
-            "#14b8a6",
-            "#6b7280",
-        ];
-        if !COLORS.contains(&color) {
+        if !SOURCE_COLORS.contains(&color) {
             return Err(CheckoutError::Invalid(format!(
                 "unsupported ticket source color '{color}'"
             )));
@@ -816,7 +823,7 @@ impl CheckoutRegistry {
         if entry.source(connection_id).is_none() {
             return Err(CheckoutError::NotFound(connection_id.into()));
         }
-        if color == "transparent" {
+        if color == DEFAULT_SOURCE_COLOR {
             entry.source_colors.remove(connection_id);
         } else {
             entry
@@ -1229,6 +1236,12 @@ mod tests {
 
     #[test]
     fn source_colors_are_project_local_and_follow_source_lifecycle() {
+        assert_eq!(effective_source_color(None), DEFAULT_SOURCE_COLOR);
+        assert_eq!(
+            effective_source_color(Some("transparent")),
+            DEFAULT_SOURCE_COLOR
+        );
+        assert_eq!(effective_source_color(Some("#3b82f6")), "#3b82f6");
         let temp = tempfile::tempdir().unwrap();
         let first = temp.path().join("first");
         let second = temp.path().join("second");
@@ -1291,7 +1304,7 @@ mod tests {
             "#3b82f6"
         );
         reopened
-            .set_source_color(first_ref, "github-b", "transparent")
+            .set_source_color(first_ref, "github-b", DEFAULT_SOURCE_COLOR)
             .unwrap();
         assert!(
             reopened

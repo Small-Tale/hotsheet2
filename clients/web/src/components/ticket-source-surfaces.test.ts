@@ -417,9 +417,19 @@ describe('ticket source surfaces', () => {
     expect(gitEditor).not.toContain('Edit icon color');
     expect(gitEditor).not.toContain('name="project-source-color"');
     expect(repeated).toContain('data-provider="github"');
+    expect(String(TicketSourcesSettings({ sources: [{ ...sources[0], color: undefined }, sources[1]] }))).not.toContain(
+      'Some ticket sources look alike',
+    );
     expect(
-      String(TicketSourcesSettings({ sources: [{ ...sources[0], color: 'transparent' }, sources[1]] })),
-    ).not.toContain('Some ticket sources look alike');
+      String(
+        TicketSourcesSettings({
+          sources: [
+            { ...sources[0], color: 'transparent' },
+            { ...sources[1], color: '#6b7280' },
+          ],
+        }),
+      ),
+    ).toContain('Some ticket sources look alike');
   });
 
   it('opens the default git source in a view and color editor (HS2-XKEHAK)', () => {
