@@ -2686,7 +2686,7 @@ test('opens the native folder chooser directly from Add project and only onboard
   expect(openedRoots).toEqual(['.', '/work/other', '/work/other']);
 });
 
-test('changes a project source color and updates card and inspector badges (HS2-068Q55) @ci-smoke', async ({
+test('changes a sole project source color in settings and inspector while cards omit its mark (HS2-068Q55, HS2-MYW20V) @ci-smoke', async ({
   page,
 }, testInfo) => {
   await mockProject(page);
@@ -2694,8 +2694,8 @@ test('changes a project source color and updates card and inspector badges (HS2-
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const ticketRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
-  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'git');
-  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(107, 114, 128)');
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
+  await ticketRow.screenshot({ path: 'target/visual-captures/hs2-myw20v-single-list-wide.png' });
   await page.getByLabel('Settings view').click();
   const sourceRow = page.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]');
   await expect(sourceRow).not.toContainText('Edit icon color');
@@ -2717,7 +2717,7 @@ test('changes a project source color and updates card and inspector badges (HS2-
   await expect(appearance.locator('input[name="project-source-color"][value="#3b82f6"]')).toBeChecked();
   await page.locator('[data-ticket-source-setup-dialog]').getByRole('button', { name: 'Done' }).click();
   await page.getByLabel('List view').click();
-  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await ticketRow.click();
   await expect(page.locator('.ticket-inspector__source-identity [data-component="ticket-source-icon"]')).toHaveCSS(
     'color',
@@ -2729,7 +2729,7 @@ test('changes a project source color and updates card and inspector badges (HS2-
   await expect(appearance.locator('input[name="project-source-color"][value="#6b7280"]')).toBeChecked();
   await page.locator('[data-ticket-source-setup-dialog]').getByRole('button', { name: 'Done' }).click();
   await page.getByLabel('List view').click();
-  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(107, 114, 128)');
+  await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
 });
 
 test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9) @ci-smoke', async ({
@@ -2765,10 +2765,13 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9) 
 test('centers the compact source mark with the type icon and ticket number in columns (HS2-XTF923) @ci-smoke', async ({
   page,
 }) => {
-  await mockProject(page);
+  await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, true);
   await page.goto('/?dev-review=false');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const listRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  await expect(listRow.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'git');
+  await listRow.screenshot({ path: 'target/visual-captures/hs2-myw20v-multiple-list-wide.png' });
   await page.getByLabel('Columns view').click();
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
   const type = await row.locator('.ticket-list-row__category-icon').boundingBox();
@@ -2786,6 +2789,7 @@ test('centers the compact source mark with the type icon and ticket number in co
   const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
   expect(Math.abs(middle(source!) - middle(type!))).toBeLessThanOrEqual(3);
   expect(Math.abs(middle(source!) - middle(number!))).toBeLessThanOrEqual(3);
+  await row.screenshot({ path: 'target/visual-captures/hs2-myw20v-multiple-column-wide.png' });
 });
 
 test('aligns ticket source marks with their names in project settings (HS2-Q93H9A) @ci-smoke', async ({ page }) => {

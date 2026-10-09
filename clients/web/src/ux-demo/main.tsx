@@ -3653,6 +3653,9 @@ demoListeners.add(
       case 'busy':
         ticketRowSettings.busy.value = control.checked;
         break;
+      case 'show-source-icon':
+        ticketRowSettings.showSourceIcon.value = control.checked;
+        break;
       case 'claim-eta':
         ticketRowSettings.claimEta.value = control.value as typeof ticketRowSettings.claimEta.value;
         break;

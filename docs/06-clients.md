@@ -669,8 +669,9 @@ and identity-less legacy entries remain conservatively blocking.
   Source marks align with each row's name line, including local Git sources with a
   second locator line.
   A warning banner appears when two sources from the same provider share an icon color.
-  Ticket cards show the source mark directly after the type icon; Git and GitHub use
-  their filled data-source logo exports, with the selected color on the mark itself.
+  Ticket cards show the source mark directly after the type icon only when their project
+  has multiple linked ticket sources. Git and GitHub use their filled data-source logo
+  exports, with the selected color on the mark itself.
   Column cards vertically center the compact source mark with the type icon and ticket number. The inspector
   toolbar shows it wholly inside the toolbar with a tight gap beside the ticket
   number, including in the terminal rail. For an opt-in Jira write-behind source,

@@ -8665,6 +8665,17 @@ test('shows the source mark after the type on cards and beside the inspector num
   const row = page.locator('[data-component="ticket-list-row"]');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveAttribute('data-provider', 'github');
   await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCSS('color', 'rgb(59, 130, 246)');
+  await page.locator('[data-action="toggle-settings"]').click();
+  const multipleSources = page.locator('[data-settings="ticket-list-row"] wa-checkbox[name="show-source-icon"]');
+  await multipleSources.click();
+  await expect(row.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
+  await expect(row.locator('.ticket-list-row__body')).toHaveAttribute('data-has-source', 'false');
+  await multipleSources.click();
+  await expect(row.locator('[data-component="ticket-source-icon"]')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Close settings' }).click();
+  await expect(row.locator('[data-component="ticket-source-icon"]')).toBeVisible();
+  await row.screenshot({ path: 'target/visual-captures/hs2-myw20v-multiple-list-phone.png' });
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
   await expect(

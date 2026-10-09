@@ -42,6 +42,7 @@ export const ticketRowSettings = {
   confidence: signal<string>('none'),
   categoryIcon: signal('sparkles'),
   categoryColor: signal('#3b82f6'),
+  showSourceIcon: signal(true),
   agentName: signal('Claude'),
   updatedLabel: signal('1h ago'),
   event: signal('No actions yet'),
@@ -64,6 +65,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.confidence.value = 'none';
   ticketRowSettings.categoryIcon.value = 'sparkles';
   ticketRowSettings.categoryColor.value = '#3b82f6';
+  ticketRowSettings.showSourceIcon.value = true;
   ticketRowSettings.agentName.value = 'Claude';
   ticketRowSettings.updatedLabel.value = '1h ago';
   ticketRowSettings.event.value = 'No actions yet';
@@ -90,6 +92,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
         'feedback-needed': ticketRowSettings.feedbackNeeded.value,
         selected: ticketRowSettings.selected.value,
         busy: ticketRowSettings.busy.value,
+        'show-source-icon': ticketRowSettings.showSourceIcon.value,
       },
     });
 }
@@ -108,6 +111,7 @@ export function TicketRowDemo() {
           priority: ticketRowSettings.priority.value,
           category: ticketRowSettings.category.value,
           source: { provider: 'github', name: 'Product issues', color: '#3b82f6' },
+          showSourceIcon: ticketRowSettings.showSourceIcon.value,
           tags: ticketRowSettings.tags.value.split(','),
           upNext: ticketRowSettings.upNext.value,
           blocked: ticketRowSettings.blocked.value,
@@ -204,6 +208,9 @@ export function TicketRowSettings() {
       </wa-checkbox>
       <wa-checkbox name="busy" checked={ticketRowSettings.busy.value}>
         AI working
+      </wa-checkbox>
+      <wa-checkbox name="show-source-icon" checked={ticketRowSettings.showSourceIcon.value}>
+        Multiple ticket sources
       </wa-checkbox>
       <Select
         name="claim-eta"

@@ -784,6 +784,7 @@ describe('UX demo catalog', () => {
     ticketRowSettings.busy.value = false;
     ticketRowSettings.categoryIcon.value = 'bug';
     ticketRowSettings.categoryColor.value = '#ef4444';
+    ticketRowSettings.showSourceIcon.value = false;
     ticketRowSettings.agentName.value = 'Codex';
     ticketRowSettings.updatedLabel.value = 'Now';
     ticketRowSettings.event.value = 'Changed';
@@ -801,6 +802,7 @@ describe('UX demo catalog', () => {
       busy: ticketRowSettings.busy.value,
       categoryIcon: ticketRowSettings.categoryIcon.value,
       categoryColor: ticketRowSettings.categoryColor.value,
+      showSourceIcon: ticketRowSettings.showSourceIcon.value,
       agentName: ticketRowSettings.agentName.value,
       updatedLabel: ticketRowSettings.updatedLabel.value,
       event: ticketRowSettings.event.value,
@@ -817,6 +819,7 @@ describe('UX demo catalog', () => {
       busy: true,
       categoryIcon: 'sparkles',
       categoryColor: '#3b82f6',
+      showSourceIcon: true,
       event: 'No actions yet',
       agentName: 'Claude',
       updatedLabel: '1h ago',

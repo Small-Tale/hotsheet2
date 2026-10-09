@@ -36,6 +36,8 @@ export interface TicketRowProps {
   priority: TicketPriority;
   category: string;
   source?: TicketSourceIdentity;
+  /** The provider mark helps distinguish cards only when this project has multiple ticket sources. */
+  showSourceIcon?: boolean;
   tags: string[];
   upNext?: boolean;
   upNextEligible?: boolean;
@@ -126,6 +128,7 @@ export function normalizeTicketRowProps(props: TicketRowProps): TicketRowProps {
 
 export function TicketRow(raw: TicketRowProps) {
   const props = normalizeTicketRowProps(raw);
+  const cardSource = props.showSourceIcon !== false && props.source;
   const needsReview = props.needsReview || props.feedbackNeeded;
   const indicator = ticketRowIndicator(props);
   const categoryIcon = resolveCategoryIcon(props.categoryIcon);
@@ -181,9 +184,9 @@ export function TicketRow(raw: TicketRowProps) {
             aria-label={indicator.replace('-', ' ')}
           />
         )}
-        <div class="ticket-list-row__body" data-has-source={String(Boolean(props.source))}>
+        <div class="ticket-list-row__body" data-has-source={String(Boolean(cardSource))}>
           {props.presentation === 'list' && category}
-          {props.presentation === 'list' && props.source && <TicketSourceIcon source={props.source} />}
+          {props.presentation === 'list' && cardSource && <TicketSourceIcon source={cardSource} />}
           <div class="ticket-list-row__content">
             <div class="ticket-list-row__first-line">
               <div class="ticket-list-row__identity">
@@ -191,9 +194,9 @@ export function TicketRow(raw: TicketRowProps) {
                 {props.presentation === 'column' ? (
                   <span class="ticket-list-row__identifier">
                     {category}
-                    {props.source && (
+                    {cardSource && (
                       <span class="ticket-list-row__source">
-                        <TicketSourceIcon source={props.source} size="compact" />
+                        <TicketSourceIcon source={cardSource} size="compact" />
                       </span>
                     )}
                     <span class="ticket-list-row__slug">{ticketDisplayNumber(props.slug, props.source?.provider)}</span>

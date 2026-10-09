@@ -29,6 +29,9 @@ describe('TicketRow', () => {
       expect(markup).toContain('style="color: #3b82f6"');
       expect(markup).toContain('fill="currentColor"');
       expect(markup.indexOf('task category')).toBeLessThan(markup.indexOf('data-provider="github"'));
+      const singleSource = String(TicketRow({ ...ticket, presentation, showSourceIcon: false }));
+      expect(singleSource).not.toContain('data-component="ticket-source-icon"');
+      expect(singleSource).toContain('data-has-source="false"');
     }
   });
   it('shows a compact GitHub issue number while retaining its canonical row identity', () => {
@@ -42,7 +45,7 @@ describe('TicketRow', () => {
       source: { provider: 'github', name: 'GitHub Issues' },
     };
     for (const presentation of ['list', 'column'] as const) {
-      const markup = String(TicketRow({ ...ticket, presentation }));
+      const markup = String(TicketRow({ ...ticket, presentation, showSourceIcon: false }));
       expect(markup).toContain('class="ticket-list-row__slug">#5</span>');
       expect(markup).toContain('data-ticket-slug="Small-Tale/hotsheet2#5"');
       expect(markup).toContain('aria-label="Small-Tale/hotsheet2#5: Ticket number"');

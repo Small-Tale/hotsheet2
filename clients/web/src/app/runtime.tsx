@@ -2543,6 +2543,7 @@ export async function startHotSheetWebClient() {
     source: defaultProviders.value[project()?.id ?? '']?.sources.find(
       (source) => source.connectionId === ticket.connection_id,
     ),
+    showSourceIcon: (defaultProviders.value[project()?.id ?? '']?.sources.length ?? 0) > 1,
     tags: ticket.tags,
     upNext: ticket.up_next,
     upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
