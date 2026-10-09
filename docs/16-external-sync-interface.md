@@ -338,10 +338,17 @@ error explains this requirement and names the assets repository.
   link to that rendition. The marker stores crop and original-space annotations;
   normal reads return the rendition, while `/original` returns the original bytes.
   Clearing the crop relinks the original without deleting it. The attachment's
-  `revision` is a hash of the marker comment body; markup writes require that revision
+  `revision` is a hash of the effective marker body; markup writes require that revision
   and reject a changed comment. Retrying after an upload-only failure reuses the
-  rendition. Because GitHub comment PATCH has no conditional revision, the final
-  read/check does not fully exclude concurrent writers (HS2-X09EJ1).
+  rendition. A per-attachment JSON manifest under `.hotsheet-markers/` in the assets
+  repository records the previous comment revision and the new marker body (HS2-X09EJ1).
+  The GitHub Contents PUT uses the current manifest blob SHA, so one concurrent editor
+  wins and another receives a conflict, including on initial manifest creation. Reads
+  use the manifest when the comment projection is delayed; the next markup operation
+  repairs an interrupted comment PATCH. A direct GitHub edit to a comment that diverges
+  from both the prior and intended body is rejected rather than overwritten. Detail reads
+  currently check a manifest per attachment; HS2-3KA0QG tracks measuring and bounding
+  that added request cost without losing concurrent-edit correctness.
 - **Other edits:** `attachment_edit` remains `false`. Renaming, deleting,
   re-labelling, video posters, and local file actions stay git-only and are refused
   by name (`provider connection '…' (github) does not support this operation`).

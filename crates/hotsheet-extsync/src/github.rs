@@ -919,6 +919,16 @@ impl TicketProvider for GitHubProvider {
 
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
         let mut ticket = self.api_ticket(self.issue(native_id)?, self.comments(native_id)?);
+        if let Some(assets) = &self.config.attachments {
+            for attachment in &mut ticket.attachments {
+                if let Some((manifest, _)) = self.attachment_manifest(assets, &attachment.id)? {
+                    let marker = self.manifest_marker(assets, &attachment.id, &manifest)?;
+                    attachment.crop = marker.crop;
+                    attachment.annotations = marker.annotations;
+                    attachment.revision = Some(attachment_comment_revision(&manifest.body));
+                }
+            }
+        }
         if note_trailer::needs_reopen_history(ticket.status, &ticket.notes) {
             let reopens = self.reopen_times(native_id)?;
             ticket.latest_confidence = note_trailer::latest_confidence(
@@ -1180,7 +1190,12 @@ impl TicketProvider for GitHubProvider {
         attachment_id: &str,
     ) -> Result<Vec<u8>, ProviderError> {
         validate_number(native_id)?;
-        let (_, marker) = self.attachment_marker_comment(native_id, attachment_id)?;
+        let (_, mut marker) = self.attachment_marker_comment(native_id, attachment_id)?;
+        if let Some(assets) = &self.config.attachments
+            && let Some((manifest, _)) = self.attachment_manifest(assets, attachment_id)?
+        {
+            marker = self.manifest_marker(assets, attachment_id, &manifest)?;
+        }
         self.asset_bytes(
             &marker,
             marker.rendition_sha.as_deref().or(marker.sha.as_deref()),
@@ -1343,6 +1358,100 @@ impl GitHubProvider {
             })
     }
 
+    fn attachment_manifest(
+        &self,
+        assets: &GitHubAttachmentRepository,
+        attachment_id: &str,
+    ) -> Result<Option<(AttachmentRevisionManifest, String)>, ProviderError> {
+        let path = assets.marker_manifest_path(attachment_id);
+        let url = self.repository_endpoint(
+            &assets.repository,
+            &format!(
+                "contents/{}?ref={}",
+                github_attachments::encode_path(&path),
+                github_attachments::encode_path(&assets.branch)
+            ),
+        );
+        let response = match self.request("GET", &url, None) {
+            Ok(response) => response,
+            Err(ProviderError::NotFound { .. }) => return Ok(None),
+            Err(error) => return Err(asset_repository_access_error(error, &assets.repository)),
+        };
+        let file: GitHubContentFile = self.json(response)?;
+        let content = file.content.ok_or_else(|| ProviderError::Conflict {
+            ticket: attachment_id.into(),
+            message: "GitHub omitted the attachment revision manifest content".into(),
+        })?;
+        let compact: String = content.chars().filter(|c| !c.is_whitespace()).collect();
+        let bytes = BASE64
+            .decode(compact)
+            .map_err(|error| ProviderError::Conflict {
+                ticket: attachment_id.into(),
+                message: format!("invalid attachment revision manifest encoding: {error}"),
+            })?;
+        let manifest = serde_json::from_slice(&bytes).map_err(|error| ProviderError::Conflict {
+            ticket: attachment_id.into(),
+            message: format!("invalid attachment revision manifest: {error}"),
+        })?;
+        Ok(Some((manifest, file.sha)))
+    }
+
+    fn manifest_marker(
+        &self,
+        assets: &GitHubAttachmentRepository,
+        attachment_id: &str,
+        manifest: &AttachmentRevisionManifest,
+    ) -> Result<AttachmentMarker, ProviderError> {
+        let (id, marker) = github_attachments::parse_comment(&manifest.body).ok_or_else(|| {
+            ProviderError::Conflict {
+                ticket: attachment_id.into(),
+                message: "attachment revision manifest has an invalid comment".into(),
+            }
+        })?;
+        if id != attachment_id
+            || marker.repository != assets.repository
+            || marker.branch != assets.branch
+        {
+            return Err(ProviderError::Conflict {
+                ticket: attachment_id.into(),
+                message: "attachment revision manifest identity does not match".into(),
+            });
+        }
+        Ok(marker)
+    }
+
+    fn write_attachment_manifest(
+        &self,
+        assets: &GitHubAttachmentRepository,
+        attachment_id: &str,
+        previous_sha: Option<&str>,
+        manifest: &AttachmentRevisionManifest,
+    ) -> Result<(), ProviderError> {
+        let path = assets.marker_manifest_path(attachment_id);
+        let url = self.repository_endpoint(
+            &assets.repository,
+            &format!("contents/{}", github_attachments::encode_path(&path)),
+        );
+        let mut body = json!({
+            "message": format!("Update attachment markup: {}#{attachment_id}", self.config.repository),
+            "content": BASE64.encode(serde_json::to_vec(manifest).expect("manifest serializes")),
+            "branch": assets.branch,
+        });
+        if let Some(sha) = previous_sha {
+            body["sha"] = sha.into();
+        }
+        self.request("PUT", &url, Some(&body)).map_err(
+            |error| match asset_repository_access_error(error, &assets.repository) {
+                ProviderError::Conflict { .. } => ProviderError::Conflict {
+                    ticket: format!("{}:{attachment_id}", self.config.connection_id),
+                    message: "attachment changed during crop upload".into(),
+                },
+                other => other,
+            },
+        )?;
+        Ok(())
+    }
+
     fn update_attachment_markup(
         &self,
         native_id: &str,
@@ -1360,12 +1469,31 @@ impl GitHubProvider {
                 message: error.to_string(),
             }
         })?;
-        let (comment, mut marker) = self.attachment_marker_comment(native_id, attachment_id)?;
+        let (mut comment, mut marker) = self.attachment_marker_comment(native_id, attachment_id)?;
         if marker.repository != assets.repository || marker.branch != assets.branch {
             return Err(ProviderError::Conflict {
                 ticket: format!("{}:{native_id}", self.config.connection_id),
                 message: "attachment asset repository changed; reconnect the original repository before editing markup".into(),
             });
+        }
+        let manifest = self.attachment_manifest(assets, attachment_id)?;
+        if let Some((saved, _)) = &manifest {
+            if comment.body != saved.body {
+                if attachment_comment_revision(&comment.body) != saved.base_comment_revision {
+                    return Err(ProviderError::Conflict {
+                        ticket: format!("{}:{native_id}", self.config.connection_id),
+                        message: "attachment comment changed outside the revision manifest".into(),
+                    });
+                }
+                let saved_marker = self.manifest_marker(assets, attachment_id, saved)?;
+                self.request(
+                    "PATCH",
+                    &self.endpoint(&format!("issues/comments/{}", comment.id)),
+                    Some(&json!({ "body": saved.body })),
+                )?;
+                comment.body = saved.body.clone();
+                marker = saved_marker;
+            }
         }
         let current_revision = attachment_comment_revision(&comment.body);
         if expected_revision != Some(current_revision.as_str()) {
@@ -1438,6 +1566,15 @@ impl GitHubProvider {
         let path = marker.rendition_path.as_deref().unwrap_or(&marker.path);
         let url = assets.link_url(&self.config.api_base, path, None);
         let body = github_attachments::compose_comment(attachment_id, &url, &marker);
+        self.write_attachment_manifest(
+            assets,
+            attachment_id,
+            manifest.as_ref().map(|(_, sha)| sha.as_str()),
+            &AttachmentRevisionManifest {
+                base_comment_revision: current_revision,
+                body: body.clone(),
+            },
+        )?;
         self.request(
             "PATCH",
             &self.endpoint(&format!("issues/comments/{}", comment.id)),
@@ -1553,6 +1690,12 @@ struct GitHubUser {
 #[derive(Debug, Clone, Deserialize)]
 struct GitHubContentWrite {
     content: GitHubContentFile,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AttachmentRevisionManifest {
+    base_comment_revision: String,
+    body: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -3499,6 +3642,7 @@ mod tests {
 
     struct CropTransport {
         state: Mutex<CropState>,
+        manifest_gate: Mutex<Option<Arc<std::sync::Barrier>>>,
     }
 
     struct CropState {
@@ -3523,6 +3667,7 @@ mod tests {
                     fail_patch_once: false,
                     uploads: 0,
                 }),
+                manifest_gate: Mutex::new(None),
             })
         }
     }
@@ -3535,6 +3680,12 @@ mod tests {
             _: &[(&str, String)],
             body: Option<&Value>,
         ) -> Result<HttpResponse, String> {
+            if method == "PUT" && url.contains("/.hotsheet-markers/") {
+                let gate = self.manifest_gate.lock().unwrap().clone();
+                if let Some(gate) = gate {
+                    gate.wait();
+                }
+            }
             let mut state = self.state.lock().unwrap();
             let result = if method == "GET" && url.ends_with("/issues/42") {
                 issue(42, "broken widget", "details")
@@ -3545,8 +3696,13 @@ mod tests {
                 json!({"content":BASE64.encode(state.blobs.get(sha).ok_or("missing blob")?)})
             } else if method == "PUT" && url.contains("/contents/") {
                 let path = url.split("/contents/").nth(1).unwrap().to_owned();
-                if state.files.contains_key(&path) {
-                    return Ok(response(422, json!({"message":"file exists"})));
+                let expected = body.unwrap().get("sha").and_then(Value::as_str);
+                if let Some(current) = state.files.get(&path) {
+                    if expected != Some(current.as_str()) {
+                        return Ok(response(409, json!({"message":"file changed"})));
+                    }
+                } else if expected.is_some() {
+                    return Ok(response(409, json!({"message":"file missing"})));
                 }
                 let bytes = BASE64
                     .decode(body.unwrap()["content"].as_str().unwrap())
@@ -3554,7 +3710,10 @@ mod tests {
                 let sha = format!("{:x}", Sha256::digest(&bytes));
                 state.blobs.insert(sha.clone(), bytes);
                 state.files.insert(path.clone(), sha.clone());
-                state.uploads += 1;
+                if !path.contains("/.hotsheet-markers/") && !path.starts_with(".hotsheet-markers/")
+                {
+                    state.uploads += 1;
+                }
                 json!({"content":{"path":path,"sha":sha}})
             } else if method == "GET" && url.contains("/contents/") {
                 let path = url
@@ -3564,7 +3723,10 @@ mod tests {
                     .split('?')
                     .next()
                     .unwrap();
-                json!({"path":path,"sha":state.files.get(path).ok_or("missing file")?})
+                let Some(sha) = state.files.get(path) else {
+                    return Ok(response(404, json!({"message":"Not Found"})));
+                };
+                json!({"path":path,"sha":sha,"content":BASE64.encode(state.blobs.get(sha).ok_or("missing blob")?)})
             } else if method == "PATCH" && url.ends_with("/issues/comments/9") {
                 if state.fail_patch_once {
                     state.fail_patch_once = false;
@@ -3613,6 +3775,14 @@ mod tests {
                 .is_err()
         );
         assert_eq!(transport.state.lock().unwrap().uploads, 1);
+        let pending = provider.get("42").unwrap();
+        assert_eq!(pending.attachments[0].crop, Some(crop));
+        assert_eq!(
+            image::load_from_memory(&provider.attachment_bytes("42", ATTACHMENT_ID).unwrap())
+                .unwrap()
+                .width(),
+            12
+        );
         let cropped = provider
             .set_attachment_markup("42", ATTACHMENT_ID, Some(&revision), markup())
             .unwrap();
@@ -3699,6 +3869,100 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_crop_writers_choose_one_contents_revision_and_preserve_its_comment() {
+        let transport = CropTransport::new(crop_fixture());
+        let provider = assets_provider(transport.clone());
+        for crops in [
+            [
+                hotsheet_model::ImageCrop {
+                    x: 1,
+                    y: 1,
+                    width: 10,
+                    height: 10,
+                },
+                hotsheet_model::ImageCrop {
+                    x: 5,
+                    y: 2,
+                    width: 12,
+                    height: 9,
+                },
+            ],
+            [
+                hotsheet_model::ImageCrop {
+                    x: 0,
+                    y: 0,
+                    width: 8,
+                    height: 8,
+                },
+                hotsheet_model::ImageCrop {
+                    x: 3,
+                    y: 4,
+                    width: 14,
+                    height: 10,
+                },
+            ],
+        ] {
+            let revision = provider.get("42").unwrap().attachments[0]
+                .revision
+                .clone()
+                .unwrap();
+            *transport.manifest_gate.lock().unwrap() = Some(Arc::new(std::sync::Barrier::new(2)));
+            let writers = crops.map(|crop| {
+                let provider = provider.clone();
+                let revision = revision.clone();
+                std::thread::spawn(move || {
+                    provider.set_attachment_markup(
+                        "42",
+                        ATTACHMENT_ID,
+                        Some(&revision),
+                        hotsheet_ticketing::store::AttachmentMarkup {
+                            annotations: vec![],
+                            crop: Some(crop),
+                        },
+                    )
+                })
+            });
+            let results = writers.map(|writer| writer.join().unwrap());
+            *transport.manifest_gate.lock().unwrap() = None;
+            assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+            assert!(
+                results
+                    .iter()
+                    .any(|result| matches!(result, Err(ProviderError::Conflict { .. })))
+            );
+            let winner = results.into_iter().find_map(Result::ok).unwrap();
+            let current = provider.get("42").unwrap();
+            assert_eq!(current.attachments[0].crop, winner.attachments[0].crop);
+            let state = transport.state.lock().unwrap();
+            let path = "hotsheet-attachments/.hotsheet-markers/ATTACHMENT_ID.json"
+                .replace("ATTACHMENT_ID", ATTACHMENT_ID);
+            let sha = state.files.get(&path).unwrap();
+            let manifest: AttachmentRevisionManifest =
+                serde_json::from_slice(state.blobs.get(sha).unwrap()).unwrap();
+            assert_eq!(manifest.body, state.comment);
+        }
+        let current = provider.get("42").unwrap();
+        let mut state = transport.state.lock().unwrap();
+        let (_, mut manual) = github_attachments::parse_comment(&state.comment).unwrap();
+        manual.batch_label = Some("Edited on GitHub".into());
+        state.comment =
+            github_attachments::compose_comment(ATTACHMENT_ID, "https://x/manual", &manual);
+        let manual_body = state.comment.clone();
+        drop(state);
+        let conflict = provider.set_attachment_markup(
+            "42",
+            ATTACHMENT_ID,
+            current.attachments[0].revision.as_deref(),
+            hotsheet_ticketing::store::AttachmentMarkup {
+                annotations: vec![],
+                crop: None,
+            },
+        );
+        assert!(matches!(conflict, Err(ProviderError::Conflict { .. })));
+        assert_eq!(transport.state.lock().unwrap().comment, manual_body);
+    }
+
+    #[test]
     fn attachments_are_unsupported_without_an_assets_repository() {
         let transport = FakeTransport::with(vec![]);
         let github = provider(transport.clone());
@@ -3736,6 +4000,7 @@ mod tests {
                     uploaded_comment(6, ATTACHMENT_ID, "shot_1.png"),
                 ]),
             ),
+            response(404, json!({"message":"Not Found"})),
         ]);
         let ticket = assets_provider(transport.clone())
             .add_attachment(
@@ -3859,6 +4124,7 @@ mod tests {
             response(200, json!([uploaded_comment(6, ATTACHMENT_ID, "a.txt")])),
             response(200, issue(42, "broken widget", "details")),
             response(200, json!([uploaded_comment(6, ATTACHMENT_ID, "a.txt")])),
+            response(404, json!({"message":"Not Found"})),
         ]);
         let ticket = assets_provider(linked.clone())
             .add_attachment("42", evidence(ATTACHMENT_ID, "a.txt"), b"x".to_vec())
@@ -3881,6 +4147,7 @@ mod tests {
             response(201, json!({"id": 8})),
             response(200, issue(42, "broken widget", "details")),
             response(200, json!([uploaded_comment(8, ATTACHMENT_ID, "a.txt")])),
+            response(404, json!({"message":"Not Found"})),
         ]);
         let ticket = assets_provider(half.clone())
             .add_attachment("42", evidence(ATTACHMENT_ID, "a.txt"), b"x".to_vec())
@@ -3919,6 +4186,7 @@ mod tests {
     fn attachment_bytes_read_the_blob_through_the_authenticated_api() {
         let transport = FakeTransport::with(vec![
             response(200, json!([uploaded_comment(6, ATTACHMENT_ID, "a.bin")])),
+            response(404, json!({"message":"Not Found"})),
             response(
                 200,
                 json!({"content": "AJ//\nAA==\n", "encoding": "base64"}),
@@ -3931,7 +4199,7 @@ mod tests {
             vec![0, 159, 255, 0]
         );
         assert_eq!(
-            transport.requests.lock().unwrap()[1].1,
+            transport.requests.lock().unwrap()[2].1,
             "https://api.test/repos/acme/assets/git/blobs/blobsha1"
         );
         assert!(matches!(

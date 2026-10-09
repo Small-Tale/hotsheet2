@@ -2,6 +2,7 @@
 
 use axum::body::{Body, Bytes};
 use axum::http::{Request, StatusCode, header};
+use base64::Engine as _;
 use hotsheet_server::client_drive::{
     ClientDriveBackend, ClientTurnRequest, PrepareDrive, PreparedClientDrive,
 };
@@ -9,6 +10,7 @@ use hotsheet_server::source_revision::{SourceRevisionMonitor, revision_for_sourc
 use hotsheet_server::{AppState, MAX_ATTACHMENT_BODY_BYTES, app};
 use hotsheet_ticketing::{FsStore, STORE_SCHEMA_VERSION, Scope, Settings, StoreMetadata};
 use http_body_util::BodyExt;
+use sha2::Digest as _;
 use std::collections::{HashMap, VecDeque};
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
@@ -18125,10 +18127,13 @@ async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_ba
                 github_response(201, serde_json::json!({"id": 9})),
                 github_response(200, github_issue(42, "with evidence")),
                 github_response(200, link_comment.clone()),
+                github_response(404, serde_json::json!({"message":"Not Found"})),
                 // Read back: ticket detail, then the blob through the authenticated API.
                 github_response(200, github_issue(42, "with evidence")),
                 github_response(200, link_comment.clone()),
+                github_response(404, serde_json::json!({"message":"Not Found"})),
                 github_response(200, link_comment),
+                github_response(404, serde_json::json!({"message":"Not Found"})),
                 github_response(200, serde_json::json!({"content": "cG5nIGJ5dGVz\n"})),
             ]
             .into(),
@@ -18314,22 +18319,47 @@ async fn github_checkout_markup_round_trips_revision_and_original_bytes() {
     let before = comment(&marker);
     let mut changed_marker = marker.clone();
     changed_marker.annotations = vec![annotation.clone()];
-    let after = comment(&changed_marker);
+    let before_body = before[0]["body"].as_str().unwrap();
+    let base_revision = format!("{:x}", sha2::Sha256::digest(before_body.as_bytes()));
+    let after = serde_json::json!([{
+        "id":9,
+        "body":hotsheet_extsync::github_attachments::compose_comment(
+            attachment_id,
+            &format!("https://raw.githubusercontent.com/acme/assets/main/hotsheet-attachments/{attachment_id}-proof.png"),
+            &changed_marker,
+        ),
+        "created_at":"2026-10-01T00:00:05Z"
+    }]);
+    let manifest = serde_json::json!({
+        "base_comment_revision":base_revision,
+        "body":after[0]["body"],
+    });
+    let manifest_file = serde_json::json!({
+        "path":format!("hotsheet-attachments/.hotsheet-markers/{attachment_id}.json"),
+        "sha":"manifest-sha",
+        "content":base64::engine::general_purpose::STANDARD.encode(manifest.to_string()),
+    });
     let transport = Arc::new(FakeGitHub {
         responses: Mutex::new(
             vec![
                 github_response(200, github_issue(42, "with evidence")),
                 github_response(200, before.clone()),
+                github_response(404, serde_json::json!({"message":"Not Found"})),
                 github_response(200, before.clone()),
+                github_response(404, serde_json::json!({"message":"Not Found"})),
                 github_response(200, before),
+                github_response(201, serde_json::json!({"content":{"sha":"manifest-sha"}})),
                 github_response(200, serde_json::json!({"id":9})),
                 github_response(200, github_issue(42, "with evidence")),
                 github_response(200, after.clone()),
+                github_response(200, manifest_file.clone()),
                 github_response(200, github_issue(42, "with evidence")),
                 github_response(200, after.clone()),
+                github_response(200, manifest_file.clone()),
                 github_response(200, after.clone()),
                 github_response(200, serde_json::json!({"content":"b3JpZ2luYWw="})),
                 github_response(200, after),
+                github_response(200, manifest_file),
             ]
             .into(),
         ),
@@ -18381,8 +18411,9 @@ async fn github_checkout_markup_round_trips_revision_and_original_bytes() {
         ))
         .await
         .unwrap();
-    assert_eq!(updated.status(), StatusCode::OK);
+    let updated_status = updated.status();
     let updated = body_json(updated).await;
+    assert_eq!(updated_status, StatusCode::OK, "{updated}");
     assert_eq!(
         updated["attachments"][0]["annotations"][0]["text"],
         "Check this"
@@ -18454,10 +18485,13 @@ async fn github_checkout_serves_cropped_rendition_and_immutable_original() {
             vec![
                 github_response(200, github_issue(42, "cropped")),
                 github_response(200, comments.clone()),
+                github_response(404, serde_json::json!({"message":"Not Found"})),
                 github_response(200, comments.clone()),
+                github_response(404, serde_json::json!({"message":"Not Found"})),
                 github_response(200, serde_json::json!({"content":"Y3JvcHBlZA=="})),
                 github_response(200, github_issue(42, "cropped")),
                 github_response(200, comments.clone()),
+                github_response(404, serde_json::json!({"message":"Not Found"})),
                 github_response(200, comments),
                 github_response(200, serde_json::json!({"content":"b3JpZ2luYWw="})),
             ]

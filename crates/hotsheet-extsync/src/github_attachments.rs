@@ -135,6 +135,16 @@ impl GitHubAttachmentRepository {
         }
     }
 
+    /// Provider-owned revision file; separate from uploaded evidence paths.
+    pub fn marker_manifest_path(&self, attachment_id: &str) -> String {
+        let name = format!(".hotsheet-markers/{attachment_id}.json");
+        if self.folder.is_empty() {
+            name
+        } else {
+            format!("{}/{name}", self.folder)
+        }
+    }
+
     /// The permanent URL linked from the issue comment. On github.com this is the original
     /// plugin's `raw.githubusercontent.com` form (not the short-lived `download_url`); on
     /// GitHub Enterprise it is the file page's `/raw/` form.
@@ -338,10 +348,18 @@ mod tests {
                 .unwrap();
         assert_eq!(repo.folder, "hotsheet-attachments");
         assert_eq!(repo.branch, "main");
+        assert_eq!(
+            repo.marker_manifest_path("ATTACHMENT"),
+            "hotsheet-attachments/.hotsheet-markers/ATTACHMENT.json"
+        );
         let custom =
             GitHubAttachmentRepository::new("acme/assets", Some("/evidence/hs/"), Some("media"))
                 .unwrap();
         assert_eq!(custom.folder, "evidence/hs");
+        assert_eq!(
+            custom.marker_manifest_path("ATTACHMENT"),
+            "evidence/hs/.hotsheet-markers/ATTACHMENT.json"
+        );
         let mut settings = json!({"credential": {"secret": "k"}});
         custom.write_settings(&mut settings);
         assert_eq!(settings["attachment_folder"], "evidence/hs");
