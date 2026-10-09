@@ -1140,7 +1140,7 @@ enum CheckoutCmd {
         reference: String,
         connection_id: String,
     },
-    /// Set a linked source's project-local color; use transparent to clear it.
+    /// Set a linked source's project-local color; use Gray (#6b7280) to restore the default.
     SetSourceColor {
         reference: String,
         connection_id: String,
