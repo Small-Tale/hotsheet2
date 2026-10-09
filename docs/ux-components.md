@@ -787,7 +787,8 @@ always retain native clipboard behavior.
   in board columns. The comfortable list keeps the category in its dedicated
   leading slot; compact board rows remove that empty left gutter and place a reduced
   category icon inline immediately before and vertically centered against the slug's
-  first line. The remaining flow is ordered
+  first line. A compact identifier wrapper groups the category icon, optional source mark,
+  and ticket number in that order. The remaining flow is ordered
   slug → priority → title so bounded priority remains visible before an arbitrarily
   long title (the slug is a stable-width inline block). Updated time is the first item in that identity flow and
   floats right, allowing later lines of a long title to use the space beneath it.

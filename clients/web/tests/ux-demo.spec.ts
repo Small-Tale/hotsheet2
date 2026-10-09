@@ -3577,8 +3577,14 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const inlineOrder = await narrowRow
     .locator('.ticket-list-row__identity')
     .evaluate((node) => [...node.children].map((child) => child.className));
-  expect(inlineOrder[1]).toContain('ticket-list-row__category');
-  expect(inlineOrder[2]).toContain('ticket-list-row__slug');
+  expect(inlineOrder[1]).toContain('ticket-list-row__identifier');
+  const identifierOrder = await narrowRow
+    .locator('.ticket-list-row__identifier')
+    .evaluate((node) => [...node.children].map((child) => child.className));
+  expect(identifierOrder[0]).toContain('ticket-list-row__category');
+  expect(identifierOrder.at(-1)).toContain('ticket-list-row__slug');
+  const sourcePosition = identifierOrder.findIndex((name) => name.includes('ticket-list-row__source'));
+  if (sourcePosition >= 0) expect(sourcePosition).toBe(1);
   const [categoryBox, slugBox] = await Promise.all([
     inlineCategory.boundingBox(),
     narrowRow.locator('.ticket-list-row__slug').boundingBox(),

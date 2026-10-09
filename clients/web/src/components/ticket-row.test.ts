@@ -292,7 +292,8 @@ describe('TicketRow', () => {
     expect(list).toContain('data-component="status-badge"');
     expect(column).not.toContain('data-component="status-badge"');
     expect(column.match(/ticket-list-row__category/g)).toHaveLength(2);
-    expect(column.indexOf('ticket-list-row__category')).toBeGreaterThan(column.indexOf('ticket-list-row__identity'));
+    expect(column.indexOf('ticket-list-row__identifier')).toBeGreaterThan(column.indexOf('ticket-list-row__identity'));
+    expect(column.indexOf('ticket-list-row__category')).toBeGreaterThan(column.indexOf('ticket-list-row__identifier'));
     expect(column.indexOf('ticket-list-row__category')).toBeLessThan(column.indexOf('ticket-list-row__slug'));
     expect(css).toMatch(/ticket-list-row__identity[^}]*max-height: 2\.6em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 5\.2em/);
