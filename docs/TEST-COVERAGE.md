@@ -1,5 +1,13 @@
 # Feature Coverage Matrix
 
+HS2-K7FJVK adds opt-in desktop/narrow Chromium PTY load coverage in
+`clients/web/tests/providers.spec.ts` (`npm run profile:pty`). It exercises the
+real web UI and terminal WebSocket contract with binary output, input echo,
+search/update, project switching, and concurrent AI events, then records
+frame gaps, retained heap, interaction windows, and raw traces. The narrow
+drawer covers workspace controls, so covered actions use DOM events in
+the load window. Real PTY/server/network timing remains in `HS2-E035F5`.
+
 HS2-6DHS8B covers cropped-rendition cache recency, byte and entry eviction,
 in-progress file preservation, concurrent publication, and oversized bypass in
 `crates/hotsheet-server/src/image_crop_cache.rs`, plus HTTP rendition/original

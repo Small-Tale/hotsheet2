@@ -13,6 +13,8 @@ ticket update, terminal opening, AI chat creation, a sustained AI output
 stream, and switches with activity present. It runs at 1440 × 900 and
 760 × 900. The real application UI and state logic run in Chromium; HTTP,
 WebSocket, and terminal data are deterministic, contract-shaped fixtures.
+Run `npm run profile:pty` from the same directory for the `HS2-K7FJVK`
+load scenario described below.
 The 200-ticket real Git/server board test remains available through
 `npm run test:real-world-performance` for storage and transport timing.
 
@@ -32,8 +34,59 @@ Repeat on the same build and machine before comparing a change; use the
 interaction timing events and a production build for final user-facing
 latency targets. The synthetic transport keeps this profile focused on the
 browser main thread and cannot establish live server, network, or disk
-latency. Terminal data describes session presence, not a high-volume PTY
-output stream.
+latency. The default `profile:ui` terminal data describes session presence;
+`profile:pty` adds a binary WebSocket output stream.
+
+## PTY output with concurrent workspace activity
+
+`npm run profile:pty` keeps the same two projects, 138-ticket main board,
+12 terminal sessions, search/update flow, and AI chat. With a terminal
+viewport visible, it sends 600 binary PTY frames (1,161,600 bytes) and
+30 concurrent AI events while searching, updating Up Next, and switching
+projects at 1440 × 900 and 760 × 900. It writes separate
+`hs2-k7fjvk-<viewport>-chromium-trace.json` and
+`hs2-k7fjvk-<viewport>-interaction-windows.json` files in the trace
+directory above. Run the same trace summarizer for the `pty-load` and
+`pty-*` windows. The three pre-load switches in each direction provide a
+same-run idle comparison.
+
+| Single Chromium run                           |    Desktop |     Narrow |
+| --------------------------------------------- | ---------: | ---------: |
+| Idle switch to one-ticket project, three runs | 136–186 ms | 162–205 ms |
+| Switch to one-ticket project during PTY load  |   1,518 ms |     200 ms |
+| First PTY paint upper bound                   |     232 ms |      85 ms |
+| Input-to-WebSocket-route upper bound          |       2 ms |      23 ms |
+| Input echo paint upper bound                  |      79 ms |      96 ms |
+| PTY send API time, 600 calls summed           |     137 ms |     142 ms |
+| Frame gaps over 50 ms during load             |         15 |          6 |
+| Longest main-thread task during load          |     562 ms |     125 ms |
+| Garbage-collected retained JS heap delta      |   +1.76 MB |   +1.75 MB |
+
+The desktop load window accumulated 1,522 ms of style updates, and its
+project switch to the small project accumulated 1,134 ms. The same switch
+had a 562 ms main-thread task. The narrow switch remained near its idle
+range, but uses a dispatched change event while the expanded terminal
+drawer covers the project picker. Its wall time therefore cannot be used
+as a pointer-interaction comparison with desktop. `HS2-DM2SK3` tracks the
+desktop project-switch bottleneck.
+
+The PTY route sends the same binary frame shape as the terminal WebSocket
+but has no OS PTY, server attach, or real network. The recorded
+`networkTransportMs` is therefore `null`; `messageSendApiMs` sums the
+600 synchronous fixture send calls, and the first-paint and echo numbers
+include screenshot polling and Playwright scheduling. The narrow drawer
+covers workspace controls, so the load scenario dispatches their DOM
+click/change events while keeping the PTY viewport open. This exercises
+application state and rendering under load, but those narrow action wall
+times omit physical pointer targeting. Frame gaps come from
+`requestAnimationFrame`; a gap over 50 ms is a coarse dropped-frame
+signal, not a complete frame-by-frame presentation trace. The heap delta
+compares `Runtime.getHeapUsage` after garbage collection before and after
+the burst; it is a single-run retained-heap observation, not a leak rate.
+These development-build traces include CDP tracing overhead. Repeat on
+the same build and machine before drawing a performance conclusion.
+`HS2-E035F5` tracks a real local-server PTY profile to measure transport
+and echo outside the fixture.
 
 ## Baseline observations
 
@@ -83,8 +136,8 @@ Thirty AI output events over roughly 770 ms accumulated 413–494 ms of
 renderer-main task time and 149–192 ms of style updates, but no single
 task in that stream exceeded 50 ms. The message path deserves a bounded
 worker experiment after rendering improvements; this trace does not show
-it dominating an individual frame. The follow-up PTY benchmark
-(`HS2-K7FJVK`) will measure output traffic absent from this fixture.
+it dominating an individual frame. The opt-in PTY benchmark above measures
+output traffic absent from the default fixture.
 
 ## Worker boundaries
 

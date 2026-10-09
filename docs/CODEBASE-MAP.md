@@ -183,7 +183,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
       command-run-dialog-demo.tsx # CommandRunDialog fixture: run-output / stop-confirmation Presentation setting, showModal reopen, dismiss/stop fixture events (HS2-CWWX7S)
       demo-actions.ts      # Kerf attr() specs (DEMO_ACTIONS/COMPONENTS/FIELDS/MARKERS) for every simple selector the catalog delegates on (HS2-G838PZ)
-    tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review
+    tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in UI and binary-PTY load traces (`profile:ui`, `profile:pty`)
     tests/insecure-origin.ts # Streaming HTTP proxy preserving actual non-loopback browser security rules
     tests/browser-ids-lan.spec.ts # LAN WebKit draft/attachment persistence, visibility and chat identity transitions
     tests/terminal-safari.spec.ts # Real WebKit on ordinary HTTP origin: real PTY glyph pixels across preview/magnified/drawer, resize/reconnect and visible startup failures

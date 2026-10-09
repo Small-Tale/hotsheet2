@@ -14537,16 +14537,49 @@ for (const viewport of [
     page,
   }, testInfo) => {
     test.skip(process.env.HOTSHEET_UI_PROFILE !== '1', 'Run npm run profile:ui.');
-    test.setTimeout(60_000);
+    const ptyProfile = process.env.HOTSHEET_PTY_PROFILE === '1';
+    test.setTimeout(ptyProfile ? 120_000 : 60_000);
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await page.addInitScript(() => {
+    await page.addInitScript((enablePtyFrames) => {
       const scope = window as typeof window & { __interactionTimings?: unknown[] };
       scope.__interactionTimings = [];
       document.addEventListener('hotsheet:interaction-timing', (event) => {
         scope.__interactionTimings!.push((event as CustomEvent).detail);
       });
-    });
+      if (!enablePtyFrames) return;
+      const pty = window as typeof window & {
+        __ptyFrames?: { active: boolean; previous: number; gaps: number[]; longTasks: number[] };
+      };
+      pty.__ptyFrames = { active: false, previous: 0, gaps: [], longTasks: [] };
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries())
+          if (pty.__ptyFrames?.active) pty.__ptyFrames.longTasks.push(entry.duration);
+      }).observe({ entryTypes: ['longtask'] });
+      const frame = (now: number) => {
+        const state = pty.__ptyFrames!;
+        if (state.active && state.previous) state.gaps.push(now - state.previous);
+        state.previous = now;
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    }, ptyProfile);
     await mockProject(page, true, false, 0, 0, 0, false, 12);
+    const ptyRoutes: import('@playwright/test').WebSocketRoute[] = [];
+    const ptyInputs: string[] = [];
+    if (ptyProfile)
+      await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
+        ptyRoutes.push(route);
+        route.onMessage((message) => {
+          if (typeof message === 'string' && !message.startsWith('{')) {
+            ptyInputs.push(message);
+            route.send(Buffer.from(message));
+          }
+        });
+        route.onClose(() => {
+          const index = ptyRoutes.indexOf(route);
+          if (index >= 0) ptyRoutes.splice(index, 1);
+        });
+      });
     await page.route('**/__hotsheet/folders/choose', (route) => route.fulfill({ json: { path: '/work/other' } }));
     await page.route('**/__hotsheet/projects/open', (route) => {
       const root = route.request().postDataJSON().root as string;
@@ -14608,9 +14641,18 @@ for (const viewport of [
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Add project' }).click();
     const projectPicker = page.locator('wa-select[name="mobile-project"]');
+    let ptyLoadActive = false;
     const switchProject = async (name: 'demo' | 'other') => {
       if (viewport.name === 'desktop') {
         await page.getByRole('tab', { name: new RegExp(`^${name}`) }).click();
+      } else if (ptyLoadActive) {
+        await projectPicker.evaluate(
+          (element, value) => {
+            (element as HTMLElement & { value: string }).value = value;
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+          },
+          name === 'demo' ? project.id : 'other-checkout',
+        );
       } else {
         await projectPicker.click();
         await projectPicker.getByRole('option', { name: new RegExp(`^${name}`) }).click();
@@ -14626,6 +14668,7 @@ for (const viewport of [
       options: 'sampling-frequency=10000',
     });
     const windows: Array<{ name: string; elapsed_ms: number }> = [];
+    const ptyMetrics: Record<string, number | number[] | null> = {};
     const sample = async (name: string, action: () => Promise<unknown>) => {
       const before = await page.evaluate(() => performance.now());
       await page.evaluate((label) => performance.mark(`hs2-profile:${label}:start`), name);
@@ -14664,6 +14707,7 @@ for (const viewport of [
       await sample('terminal-drawer', () => page.getByRole('button', { name: 'Show terminal drawer' }).click());
       const drawer = page.locator('[data-component="terminal-drawer"]');
       await sample('terminal-tab', () => drawer.locator('[data-tab-kind="terminal"]').first().click());
+      if (ptyProfile) await expect.poll(() => ptyRoutes.length).toBeGreaterThan(0);
       await sample('ai-chat-create', async () => {
         await drawer.getByRole('button', { name: 'New drawer item' }).click();
         await drawer.locator('[data-terminal-drawer-create]').getByText('AI chat', { exact: true }).click();
@@ -14694,6 +14738,136 @@ for (const viewport of [
         }
         await expect(drawer).toContainText('profile stream chunk 29');
       });
+      if (ptyProfile) {
+        ptyLoadActive = true;
+        await drawer.locator('[data-tab-kind="terminal"]').first().click();
+        const terminal = drawer.locator('[data-component="terminal-viewport"]:visible').first();
+        await expect(terminal).toBeVisible();
+        await expect.poll(() => ptyRoutes.length).toBeGreaterThan(0);
+        const beforeOutput = await terminal.screenshot({ animations: 'disabled' });
+        const outputStart = Date.now();
+        ptyRoutes.at(-1)!.send(Buffer.from('\r\nPTY-PROFILE-START\r\n'));
+        await expect.poll(async () => !(await terminal.screenshot()).equals(beforeOutput)).toBe(true);
+        ptyMetrics.firstPaintUpperBoundMs = Date.now() - outputStart;
+
+        const beforeEcho = await terminal.screenshot({ animations: 'disabled' });
+        const inputsBefore = ptyInputs.length;
+        await terminal.locator('.xterm-helper-textarea').focus();
+        const echoStart = Date.now();
+        await page.keyboard.insertText('E');
+        await expect.poll(() => ptyInputs.length).toBeGreaterThan(inputsBefore);
+        ptyMetrics.inputToRouteMs = Date.now() - echoStart;
+        await expect.poll(async () => !(await terminal.screenshot()).equals(beforeEcho)).toBe(true);
+        ptyMetrics.echoPaintUpperBoundMs = Date.now() - echoStart;
+
+        await cdp.send('HeapProfiler.collectGarbage');
+        const heapBeforeBytes = (await cdp.send('Runtime.getHeapUsage')).usedSize;
+        ptyMetrics.heapBeforeBytes = heapBeforeBytes;
+        await page.evaluate(() => performance.mark('hs2-profile:pty-load:start'));
+        await page.evaluate(() => {
+          const frames = (
+            window as typeof window & { __ptyFrames: { active: boolean; gaps: number[]; longTasks: number[] } }
+          ).__ptyFrames;
+          frames.gaps = [];
+          frames.longTasks = [];
+          frames.active = true;
+        });
+        let sentBytes = 0;
+        let sentMessages = 0;
+        let aiMessages = 0;
+        let messageSendApiMs = 0;
+        const burstStart = Date.now();
+        const burst = (async () => {
+          for (let index = 0; index < 600; index += 1) {
+            const output = Buffer.from(`PTY ${String(index).padStart(4, '0')} ${'x'.repeat(110)}\r\n`.repeat(16));
+            const route = ptyRoutes.at(-1);
+            if (route) {
+              const sendStart = performance.now();
+              route.send(output);
+              messageSendApiMs += performance.now() - sendStart;
+              sentBytes += output.length;
+              sentMessages += 1;
+            }
+            if (index % 20 === 0) {
+              cursor += 1;
+              sockets[0].send(
+                JSON.stringify({
+                  cursor,
+                  store: '/work/demo.hs2',
+                  kind: 'turn_event',
+                  id: connectionId,
+                  slug: 'codex',
+                  turn: {
+                    connection_id: connectionId,
+                    event: { type: 'output', content: `PTY concurrent AI ${index}` },
+                  },
+                }),
+              );
+              aiMessages += 1;
+            }
+            await page.waitForTimeout(3);
+          }
+        })();
+        await sample('pty-search', async () => {
+          const searchButton = page.getByRole('button', { name: 'Search tickets' });
+          if (viewport.name === 'narrow')
+            await searchButton.evaluate((element) => {
+              (element as HTMLButtonElement).click();
+            });
+          else await searchButton.click();
+          const search = page.getByRole('searchbox', { name: 'Search tickets' });
+          await search.fill('QQRY00');
+          await expect(page.locator('[data-ticket-slug="HS2-QQRY00"]')).toBeVisible();
+          if (viewport.name === 'narrow') await search.fill('');
+          else await page.getByRole('button', { name: 'Clear search' }).click();
+        });
+        await sample('pty-ticket-update', async () => {
+          if (viewport.name === 'narrow') {
+            await ticket.getByRole('button', { name: 'Add to Up Next' }).evaluate((element) => {
+              (element as HTMLButtonElement).click();
+            });
+          } else await ticket.getByRole('button', { name: 'Add to Up Next' }).click();
+        });
+        await expect(ticket.getByRole('button', { name: 'Remove from Up Next' })).toHaveCount(1);
+        await sample('pty-project-other', () => switchProject('other'));
+        if (viewport.name === 'desktop')
+          await expect(page.getByRole('tab', { name: /^other/ })).toHaveAttribute('aria-selected', 'true');
+        else await expect(projectPicker).toHaveJSProperty('value', 'other-checkout');
+        await sample('pty-project-return', () => switchProject('demo'));
+        if (viewport.name === 'desktop')
+          await expect(page.getByRole('tab', { name: /^demo/ })).toHaveAttribute('aria-selected', 'true');
+        else await expect(projectPicker).toHaveJSProperty('value', project.id);
+        await burst;
+        expect(sentMessages).toBe(600);
+        expect(aiMessages).toBe(30);
+        await page.evaluate(() => performance.mark('hs2-profile:pty-load:end'));
+        ptyMetrics.burstMs = Date.now() - burstStart;
+        ptyMetrics.sentBytes = sentBytes;
+        ptyMetrics.sentMessages = sentMessages;
+        ptyMetrics.aiMessages = aiMessages;
+        ptyMetrics.messageSendApiMs = messageSendApiMs;
+        ptyMetrics.networkTransportMs = null;
+        await cdp.send('HeapProfiler.collectGarbage');
+        const heapAfterBytes = (await cdp.send('Runtime.getHeapUsage')).usedSize;
+        ptyMetrics.heapAfterBytes = heapAfterBytes;
+        ptyMetrics.heapRetainedDeltaBytes = heapAfterBytes - heapBeforeBytes;
+        Object.assign(
+          ptyMetrics,
+          await page.evaluate(() => {
+            const frames = (
+              window as typeof window & {
+                __ptyFrames: { active: boolean; gaps: number[]; longTasks: number[] };
+              }
+            ).__ptyFrames;
+            frames.active = false;
+            return {
+              frameGapsMs: frames.gaps,
+              droppedFramesOver50Ms: frames.gaps.filter((gap) => gap > 50).length,
+              longTasksMs: frames.longTasks,
+            };
+          }),
+        );
+      }
       await sample('project-with-activity', () => switchProject('other'));
       await sample('project-return-with-activity', () => switchProject('demo'));
     } finally {
@@ -14714,9 +14888,10 @@ for (const viewport of [
       }
       await cdp.send('IO.close', { handle: stream });
       mkdirSync('target/performance-traces', { recursive: true });
-      const tracePath = `target/performance-traces/hs2-wdtn3w-${viewport.name}-chromium-trace.json`;
+      const prefix = ptyProfile ? 'hs2-k7fjvk' : 'hs2-wdtn3w';
+      const tracePath = `target/performance-traces/${prefix}-${viewport.name}-chromium-trace.json`;
       writeFileSync(tracePath, Buffer.concat(chunks));
-      await testInfo.attach(`hs2-wdtn3w-${viewport.name}-chromium-trace.json`, {
+      await testInfo.attach(`${prefix}-${viewport.name}-chromium-trace.json`, {
         path: tracePath,
         contentType: 'application/json',
       });
@@ -14724,13 +14899,14 @@ for (const viewport of [
     const timings = await page.evaluate(
       () => (window as typeof window & { __interactionTimings?: unknown[] }).__interactionTimings ?? [],
     );
-    const windowsPath = `target/performance-traces/hs2-wdtn3w-${viewport.name}-interaction-windows.json`;
-    writeFileSync(windowsPath, JSON.stringify({ viewport, windows, timings }, null, 2));
-    await testInfo.attach(`hs2-wdtn3w-${viewport.name}-interaction-windows.json`, {
+    const prefix = ptyProfile ? 'hs2-k7fjvk' : 'hs2-wdtn3w';
+    const windowsPath = `target/performance-traces/${prefix}-${viewport.name}-interaction-windows.json`;
+    writeFileSync(windowsPath, JSON.stringify({ viewport, windows, timings, ptyMetrics }, null, 2));
+    await testInfo.attach(`${prefix}-${viewport.name}-interaction-windows.json`, {
       path: windowsPath,
       contentType: 'application/json',
     });
-    expect(windows).toHaveLength(17);
+    expect(windows).toHaveLength(ptyProfile ? 21 : 17);
   });
 }
 
