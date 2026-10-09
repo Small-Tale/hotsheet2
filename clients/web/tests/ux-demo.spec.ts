@@ -3635,7 +3635,7 @@ test('keeps expanded workspace search inline with More at narrow widths (HS2-NZK
         toolbarRight: toolbar.right,
       };
     });
-    expect(geometry.height).toBeLessThan(80);
+    expect(geometry.height, `viewport ${width}px`).toBeLessThan(80);
     expect(geometry.fieldTop - geometry.toolbarTop).toBeLessThan(20);
     expect(geometry.fieldRight).toBeLessThanOrEqual(geometry.toolbarRight + 1);
     await expect
@@ -3659,6 +3659,40 @@ test('keeps expanded workspace search inline with More at narrow widths (HS2-NZK
       await page.screenshot({ path: 'target/visual-captures/hs2-nzk4ka-search-more-390.png', fullPage: true });
     }
   }
+});
+
+test('fits open search around the rendered project name and fills the remaining row (HS2-NZK4KA)', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+  const header = page.locator('.workspace-header');
+  await header.getByRole('button', { name: 'Search tickets' }).click();
+  await expect(header.locator('.view-mode-switcher')).toBeVisible();
+  await expect(header.locator('.workspace-header__sort-group')).toBeVisible();
+  await expect(header.locator('.workspace-header__utility-group')).toBeVisible();
+  await expect(header.getByRole('button', { name: 'More workspace controls' })).toBeHidden();
+  await expect
+    .poll(() => header.locator('.ticket-search-field').evaluate((node) => node.getBoundingClientRect().width))
+    .toBeGreaterThan(300);
+  await expect
+    .poll(() =>
+      header.evaluate((node) => {
+        const search = node.querySelector('.ticket-search-field')!.getBoundingClientRect();
+        return node.getBoundingClientRect().right - search.right;
+      }),
+    )
+    .toBeLessThan(20);
+  await header.locator('.workspace-header__identity .kui-toolbar-text__text').evaluate((node) => {
+    node.textContent = 'A substantially longer project name for this workspace';
+  });
+  await expect(header.locator('.workspace-header__identity')).toBeVisible();
+  await expect(header.locator('.workspace-header__utility-group')).toBeHidden();
+  await expect(header.getByRole('button', { name: 'More workspace controls' })).toBeVisible();
+  await expect(header.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible();
+  await header.locator('.workspace-header__identity .kui-toolbar-text__text').evaluate((node) => {
+    node.textContent = 'Hot Sheet 2';
+  });
+  await expect(header.locator('.workspace-header__utility-group')).toBeVisible();
+  await expect(header.getByRole('button', { name: 'More workspace controls' })).toBeHidden();
 });
 
 test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({ page }) => {

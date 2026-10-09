@@ -187,7 +187,7 @@ describe('WorkspaceHeader', () => {
     // No wrapper element: the search field sizes itself inside whichever Toolbar zone holds it (HS2-EZ1N7Z).
     expect(headerCss).not.toContain('workspace-header__actions');
     expect(headerCss).not.toContain('.kui-toolbar-control-group');
-    // The header uses Kerf's inline search sizing without restyling its group (HS2-NZK4KA).
+    // The header uses Kerf's search sizing without restyling its group (HS2-NZK4KA).
     expect(headerCss).not.toContain('ticket-search-field');
     expect(markup).toMatch(/class="kui-toolbar-control-group ticket-search-field"[^>]*data-content="search"/);
     // Token colors and the helper popovers belong to TicketSearchField, not the header (HS2-N5G6JS).
@@ -197,7 +197,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('.workspace-header__overflow-group {');
     // More stays beside expanded search and retains the Up Next action (HS2-NZK4KA).
     expect(String(WorkspaceControls({ mode: 'list', searchOpen: true }))).toMatch(
-      /class="kui-toolbar-control-group workspace-header__overflow-group"[^>]*data-show-below="1024px"/,
+      /class="kui-toolbar-control-group workspace-header__overflow-group"[^>]*data-show-below="480px"/,
     );
     // The header module owns the Empty Trash text action that the page header places (HS2-T35VN7).
     const emptyTrash = String(EmptyTrashAction());

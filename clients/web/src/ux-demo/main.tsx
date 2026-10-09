@@ -115,6 +115,7 @@ import {
 import { wireTerminalVisibilityTypeFilter } from '../terminal-visibility-filter';
 import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
 import { wireTopLayerOverlays } from '../top-layer-overlay';
+import { wireWorkspaceToolbarVisibility } from '../workspace-toolbar-visibility';
 import {
   AIConversationDemo,
   aiConversationDemoOpen,
@@ -1612,6 +1613,7 @@ const applyCatalogTheme = () => {
 applyCatalogTheme();
 mount(root, withControlledOpen(root, DemoApp));
 demoListeners.add(wireToolbarVisibility(root));
+demoListeners.add(wireWorkspaceToolbarVisibility(root));
 demoListeners.add(wireProjectDialogDemo(root));
 // Demo stages render context-mode PopupMenus statically; keep every one open so the catalog shows
 // the menu itself (the app opens them from its own signals, HS2-2EHD8R).

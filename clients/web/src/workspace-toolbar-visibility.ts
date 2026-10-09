@@ -1,5 +1,4 @@
-/** The workspace header uses fixed pixel thresholds. Observe its width without making every
- * mutation elsewhere in the app remeasure the header's computed CSS variables. */
+/** Observe the workspace header's width without remeasuring on mutations elsewhere in the app. */
 const ITEM = '[data-hide-below], [data-show-below]';
 const STATE = 'data-toolbar-visibility-state';
 const HIDDEN = 'data-toolbar-width-hidden';
@@ -15,11 +14,63 @@ export function workspaceToolbarHidden(width: number, hide?: number, show?: numb
   return (hide !== undefined && width < hide) || (show !== undefined && width >= show);
 }
 
+/** Keep the editor usable while retaining every action that fits at its rendered width. */
+export function workspaceSearchFit(
+  width: number,
+  title: number,
+  groups: readonly number[],
+  more: number,
+  gap: number,
+  minimumSearch = 240,
+): boolean[] {
+  const visible = [true, ...groups.map(() => true)];
+  const needed = () => {
+    const shown = visible.slice(1).filter(Boolean).length;
+    const overflow = visible.some((item) => !item);
+    return (
+      (visible[0] ? title : 0) +
+      gap +
+      groups.reduce((sum, item, index) => sum + (visible[index + 1] ? item + gap : 0), 0) +
+      minimumSearch +
+      (overflow ? more + gap : 0) +
+      // Leave room for the search slot's own border and fractional pixel rounding.
+      (shown ? 10 : 8)
+    );
+  };
+  for (const index of [3, 2, 1, 0]) {
+    if (needed() <= width) break;
+    visible[index] = false;
+  }
+  return visible;
+}
+
 export function wireWorkspaceToolbarVisibility(root: HTMLElement): () => void {
   let header: HTMLElement | null = null;
+  let observedSearchSlot: HTMLElement | null = null;
+  const baseThresholds = new WeakMap<HTMLElement, { hide: string | null; show: string | null }>();
   const resize = new ResizeObserver(() => {
     refresh();
   });
+
+  function setHidden(item: HTMLElement, hidden: boolean) {
+    const value = hidden ? 'true' : null;
+    let state = item.querySelector<HTMLElement>(`:scope > [${STATE}]`);
+    if (!state) {
+      state = document.createElement('span');
+      state.setAttribute(STATE, '');
+      state.setAttribute('data-morph-preserve', '');
+      state.setAttribute('aria-hidden', 'true');
+      state.hidden = true;
+      item.append(state);
+    }
+    if (value === null) {
+      if (item.hasAttribute(HIDDEN)) item.removeAttribute(HIDDEN);
+      if (state.hasAttribute(HIDDEN)) state.removeAttribute(HIDDEN);
+    } else {
+      if (item.getAttribute(HIDDEN) !== value) item.setAttribute(HIDDEN, value);
+      if (state.getAttribute(HIDDEN) !== value) state.setAttribute(HIDDEN, value);
+    }
+  }
 
   function refresh() {
     if (!header?.isConnected) return;
@@ -33,34 +84,118 @@ export function wireWorkspaceToolbarVisibility(root: HTMLElement): () => void {
         (Number.parseFloat(style.borderLeftWidth) || 0) -
         (Number.parseFloat(style.borderRightWidth) || 0),
     );
+    const searchOpen = header.querySelector('.workspace-header__search-actions[data-search-open="true"]');
+    const searchSlot = searchOpen instanceof HTMLElement ? searchOpen : null;
+    if (searchSlot !== observedSearchSlot) {
+      if (observedSearchSlot) resize.unobserve(observedSearchSlot);
+      observedSearchSlot = searchSlot;
+      if (observedSearchSlot) resize.observe(observedSearchSlot);
+    }
+    const identity = header.querySelector<HTMLElement>('.workspace-header__identity');
+    const groups = [
+      header.querySelector<HTMLElement>('.view-mode-switcher'),
+      header.querySelector<HTMLElement>('.workspace-header__sort-group'),
+      header.querySelector<HTMLElement>('.workspace-header__utility-group'),
+    ];
+    const more = header.querySelector<HTMLElement>('.workspace-header__overflow-group');
+    const dynamic = Boolean(searchOpen && groups.every(Boolean) && more);
+    const fitItems = dynamic ? [...(identity ? [identity] : []), ...(groups as HTMLElement[]), more!] : [];
     for (const item of header.querySelectorAll<HTMLElement>(ITEM)) {
+      if (fitItems.includes(item)) {
+        if (!baseThresholds.has(item))
+          baseThresholds.set(item, {
+            hide: item.getAttribute('data-hide-below'),
+            show: item.getAttribute('data-show-below'),
+          });
+        setHidden(item, false);
+        continue;
+      }
+      const base = baseThresholds.get(item);
+      if (base) {
+        if (base.hide === null) item.removeAttribute('data-hide-below');
+        else item.setAttribute('data-hide-below', base.hide);
+        if (base.show === null) item.removeAttribute('data-show-below');
+        else item.setAttribute('data-show-below', base.show);
+        baseThresholds.delete(item);
+      }
       const hide = threshold(item, 'data-hide-below');
       const show = threshold(item, 'data-show-below');
-      const hidden = workspaceToolbarHidden(contentWidth, hide, show);
-      const value = hidden ? 'true' : null;
-      let state = item.querySelector<HTMLElement>(`:scope > [${STATE}]`);
-      if (!state) {
-        state = document.createElement('span');
-        state.setAttribute(STATE, '');
-        state.setAttribute('data-morph-preserve', '');
-        state.setAttribute('aria-hidden', 'true');
-        state.hidden = true;
-        item.append(state);
+      setHidden(item, workspaceToolbarHidden(contentWidth, hide, show));
+    }
+    if (dynamic) {
+      const titleText = identity?.querySelector<HTMLElement>('.kui-toolbar-text__text');
+      const titleStyle = identity ? getComputedStyle(identity) : null;
+      let titleWidth = 0;
+      if (identity && titleText && titleStyle) {
+        const probe = document.createElement('span');
+        const textStyle = getComputedStyle(titleText);
+        probe.textContent = titleText.textContent;
+        probe.style.cssText = `position:fixed;visibility:hidden;width:max-content;white-space:nowrap;font:${textStyle.font};letter-spacing:${textStyle.letterSpacing}`;
+        document.body.append(probe);
+        titleWidth =
+          probe.getBoundingClientRect().width +
+          (Number.parseFloat(titleStyle.paddingLeft) || 0) +
+          (Number.parseFloat(titleStyle.paddingRight) || 0);
+        probe.remove();
       }
-      if (value === null) {
-        if (item.hasAttribute(HIDDEN)) item.removeAttribute(HIDDEN);
-        if (state.hasAttribute(HIDDEN)) state.removeAttribute(HIDDEN);
-      } else {
-        if (item.getAttribute(HIDDEN) !== value) item.setAttribute(HIDDEN, value);
-        if (state.getAttribute(HIDDEN) !== value) state.setAttribute(HIDDEN, value);
+      const trailing = header.querySelector<HTMLElement>('.kui-toolbar__trailing');
+      const gap = Number.parseFloat(getComputedStyle(trailing ?? header).columnGap) || 8;
+      const leading = header.querySelector<HTMLElement>('.kui-toolbar__leading');
+      const extraWidth = [
+        ...(leading ? Array.from(leading.children).filter((item) => item !== identity) : []),
+        ...(trailing
+          ? Array.from(trailing.children).filter((item) => !groups.includes(item as HTMLElement) && item !== searchSlot)
+          : []),
+      ].reduce((sum, item) => {
+        const width = item.getBoundingClientRect().width;
+        return sum + (width > 0 ? width + gap : 0);
+      }, 0);
+      const fitWidth = Math.max(0, contentWidth - extraWidth);
+      const visible = workspaceSearchFit(
+        fitWidth,
+        titleWidth,
+        groups.map((item) => item!.getBoundingClientRect().width),
+        more!.getBoundingClientRect().width,
+        gap,
+      );
+      const availableSearch =
+        fitWidth -
+        (visible[0] ? titleWidth : 0) -
+        gap -
+        groups.reduce(
+          (sum, item, index) => sum + (visible[index + 1] ? item!.getBoundingClientRect().width + gap : 0),
+          0,
+        ) -
+        (visible.every(Boolean) ? 0 : more!.getBoundingClientRect().width + gap);
+      searchSlot!.style.setProperty('--kui-token-search-expanded-width', `${Math.max(0, availableSearch - 8)}px`);
+      searchSlot!.style.width = `${Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : more!.getBoundingClientRect().width + gap))}px`;
+      searchSlot!.style.flex = '0 0 auto';
+      if (identity) {
+        identity.setAttribute('data-hide-below', `${visible[0] ? 0 : contentWidth + 1}px`);
+        setHidden(identity, !visible[0]);
       }
+      groups.forEach((item, index) => {
+        item!.setAttribute('data-hide-below', `${visible[index + 1] ? 0 : contentWidth + 1}px`);
+        setHidden(item!, !visible[index + 1]);
+      });
+      more!.setAttribute('data-show-below', `${visible.every(Boolean) ? 0 : contentWidth + 1}px`);
+      setHidden(more!, visible.every(Boolean));
+    } else {
+      const closedSearchSlot = header.querySelector<HTMLElement>('.workspace-header__search-actions');
+      closedSearchSlot?.style.removeProperty('--kui-token-search-expanded-width');
+      closedSearchSlot?.style.removeProperty('width');
+      closedSearchSlot?.style.removeProperty('flex');
     }
   }
 
   function findHeader(): boolean {
-    const next = root.querySelector<HTMLElement>(ITEM)?.closest<HTMLElement>('[data-component="toolbar"]') ?? null;
+    const next = root.querySelector<HTMLElement>(
+      '.workspace-header[data-component="toolbar"], [data-component="toolbar"][aria-label="Workspace toolbar"]',
+    );
     if (next === header) return false;
     if (header) resize.unobserve(header);
+    if (observedSearchSlot) resize.unobserve(observedSearchSlot);
+    observedSearchSlot = null;
     header = next;
     if (header) {
       resize.observe(header);
@@ -83,7 +218,7 @@ export function wireWorkspaceToolbarVisibility(root: HTMLElement): () => void {
     )
       refresh();
   });
-  mutations.observe(root, { childList: true, subtree: true });
+  mutations.observe(root, { childList: true, attributes: true, attributeFilter: ['data-search-open'], subtree: true });
   findHeader();
   return () => {
     mutations.disconnect();

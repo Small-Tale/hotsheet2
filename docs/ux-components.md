@@ -970,8 +970,9 @@ never styles the field from its own stylesheet (HS2-8FS5BJ). Each policy is a se
   It takes the whole row on a compact toolbar, and its collapsed icon leaves toolbars of 224px or
   less (`visibility="hide-collapsed-tiny"`).
 - The workspace header uses `layout="inline"` (`HS2-NZK4KA`), allowing the expanded field
-  to shrink beside More at compact widths. The toolbar stays on one row; the title, view,
-  sort, and selection groups yield below 1024px, and More exposes the same Up Next action.
+  to fill the space beside the other controls. The toolbar stays on one row and measures the
+  rendered project name and controls; the selection, sort, view, then title yield as space
+  runs out. More appears when controls yield and exposes the same Up Next action.
 - `layout="row"` is the narrow-rail policy (`sizing="fill"`, `placement="end"`). The collapsed
   icon sits at its stacked row's trailing edge, and the open field fills a row of its own,
   entering from the row above with Kerf's reduced-motion-aware motion.

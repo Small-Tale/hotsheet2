@@ -5177,12 +5177,7 @@ export async function startHotSheetWebClient() {
           viewportMobile.value ? (
             <></>
           ) : (
-            <WorkspaceIdentity
-              projectName={workspaceTitle}
-              id="workspace-page-title"
-              headingLevel={1}
-              searchOpen={searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')}
-            />
+            <WorkspaceIdentity projectName={workspaceTitle} id="workspace-page-title" headingLevel={1} />
           )
         }
         headerActions={

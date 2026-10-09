@@ -39,7 +39,6 @@ export type WorkspaceControlsPresentation = 'toolbar' | 'rail';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
 export type WorkspaceSortDirection = 'ascending' | 'descending';
 export type WorkspaceUpNextState = 'none' | 'mixed' | 'all';
-export const WORKSPACE_SEARCH_INLINE_BREAKPOINT = 1024;
 
 export function workspaceUpNextState(values: readonly boolean[]): WorkspaceUpNextState {
   return values.some(Boolean) ? (values.every(Boolean) ? 'all' : 'mixed') : 'none';
@@ -106,17 +105,15 @@ export function WorkspaceIdentity({
   projectName,
   id,
   headingLevel,
-  searchOpen = false,
 }: {
   projectName: string;
   id?: string;
   headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
-  searchOpen?: boolean;
 }) {
   return (
     <ToolbarText
       className="workspace-header__identity"
-      hideBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 224)}
+      hideBelow={px(224)}
       text={projectName}
       id={id}
       size="large"
@@ -387,7 +384,7 @@ function WorkspaceOverflowControls({
       single
       appearance="borderless"
       nestedDropdown
-      showBelow={px(searchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 480)}
+      showBelow={px(480)}
     >
       {menu}
     </ToolbarControlGroup>
@@ -525,7 +522,7 @@ export function WorkspaceControls({
           className="view-mode-switcher"
           shape="pill"
           visibility="yield-to-expanded-sibling"
-          hideBelow={px(visibleSearchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 176)}
+          hideBelow={px(176)}
         >
           {viewSwitcher}
         </ToolbarControlGroup>
@@ -545,7 +542,7 @@ export function WorkspaceControls({
           shape="pill"
           focusRing="outline"
           visibility="yield-to-expanded-sibling"
-          hideBelow={px(visibleSearchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 416)}
+          hideBelow={px(416)}
         >
           {sortSelect}
         </ToolbarControlGroup>
@@ -566,7 +563,7 @@ export function WorkspaceControls({
           selectedChrome="outline"
           selectedTone="pop"
           visibility="yield-to-expanded-sibling"
-          hideBelow={px(visibleSearchOpen ? WORKSPACE_SEARCH_INLINE_BREAKPOINT : 480)}
+          hideBelow={px(480)}
         >
           {utilityButtons}
         </ToolbarControlGroup>

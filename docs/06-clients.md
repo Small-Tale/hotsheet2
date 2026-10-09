@@ -1069,8 +1069,9 @@ and identity-less legacy entries remain conservatively blocking.
   and focus ring in both collapsed and expanded states. The ordinary workspace header
   and workspace-grid ticket rail share that package-owned treatment (HS2-TNSD4K).
   In the workspace header, expanded search stays on the main toolbar row. Below the width
-  needed for the full controls, the title, view switcher, sort, and selection star yield;
-  search stays beside a persistent More menu. More includes the same capability-checked
+  needed for the rendered project name, controls, and a usable search editor, the selection
+  star, sort, view switcher, then title yield. The editor fills the remaining space;
+  search stays beside a persistent More menu when controls yield. More includes the same capability-checked
   Up Next toggle and keeps the empty search open while the menu is used (HS2-NZK4KA).
   A disabled collapsible search renders closed even with a nonempty query. Switching to
   Notifications or Settings collapses the workspace search without clearing its query;
