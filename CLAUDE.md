@@ -275,32 +275,25 @@ and other non-action structure are the only ordinary exception.
 
 ### This project's test setup
 
-> **Early implementation.** The stack below is the _agreed plan_ (see
-> [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md) §12.7,
-> the authority). What exists today: `cargo nextest run` (model + ticketing + CLI
-> unit/integration tests) and the migrator's `vitest` suite (`cd migrator && npx
-vitest run`), including the cross-language conformance test (Rust `hotsheet import`
-> ingests the Node exporter's JSON). **Property tests** cover the parser (`proptest`:
-> round-trip + byte-idempotent + never-panics), and a **cargo-fuzz** target exists
-> (`crates/hotsheet-model/fuzz`, nightly: `cargo +nightly fuzz run parse_file`).
-> **Per-language coverage gates** are wired for Rust (CI `cargo llvm-cov` with a
-> `--fail-under-lines` floor) and the migrator (`npm run test:coverage`, thresholds in
-> `migrator/vitest.config.mjs`); a creds-gated **live tier** (`.github/workflows/live.yml`)
-> runs the `#[ignore]` codex/claude turns nightly. Server E2E is wired
-> (`crates/hotsheet-server/tests/http.rs` — in-process HTTP/WS against a temp store);
-> snapshot tests and **web** (Playwright) E2E are not wired yet. Commands that work now:
-> `cargo build` · `cargo nextest run` · `cargo fmt --all --check` · `cargo clippy
---all-targets --all-features -- -D warnings` · `npx vitest run` / `npm run test:coverage`
-> (in `migrator/`).
+> **Implemented test paths.** Rust unit/integration tests run with `cargo nextest run`;
+> server HTTP/WS tests use temporary stores. `clients/web` runs Vitest unit tests and
+> Playwright browser flows (`npm run test:unit`, `npm run test:e2e`), including real
+> checkout/server compositions. CI runs web lint, typecheck, unit tests, build, Chromium
+> smoke flows, and a WebKit lane (`.github/workflows/ci.yml`). The migrator's Vitest
+> suite includes cross-language export/import conformance. Rust and migrator coverage
+> gates are separate; `node scripts/check-test-coverage.mjs` validates the feature
+> coverage matrix. A credentials-gated live tier runs separately. See
+> [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md)
+> §12.7 and [`docs/CODEBASE-MAP.md`](docs/CODEBASE-MAP.md) for current commands.
 
 - **Rust unit + integration** (`crates/*/src/**` inline `#[cfg(test)]` and
   `crates/*/tests/**`): run with **`cargo-nextest`**. Pure logic uses injected-fake
   adapters (in-memory fs, temp git repo, in-memory SQLite); integration uses a real
   temp store + real SQLite. **Always use the shared fixtures:** `TempStore` builder
   and the `TestServer` harness.
-- **Property / fuzz / snapshot:** `proptest` for the semantic **merge driver**,
-  `cargo-fuzz` for the file-format parser, `insta` for 3-way-merge snapshots. The
-  **git-native claim** has deterministic bare-repo integration tests (concurrent
+- **Property / fuzz / snapshot:** `proptest` for the semantic **merge driver** and
+  `cargo-fuzz` for the file-format parser are implemented; `insta` snapshots remain
+  planned. The **git-native claim** has deterministic bare-repo integration tests (concurrent
   workers); the GitHub-live variant is opt-in (creds-gated).
 - **Server E2E:** boot the real server on an ephemeral port against a temp store,
   drive over HTTP/WS. **Web E2E** (`clients/web`): **Playwright** against a real
@@ -318,10 +311,10 @@ vitest run`), including the cross-language conformance test (Rust `hotsheet impo
 - **Coverage:** per-language gates + the feature-layer matrix in
   `docs/TEST-COVERAGE.md` (NOT one merged lcov):
   `cargo llvm-cov` (Rust) · Playwright/istanbul (web) · `vitest` coverage (migrator).
-- **Commands** (once code exists): unit `cargo nextest run` · web E2E
-  `pnpm -C clients/web test:e2e` · migrator `pnpm -C migrator test` · coverage
-  `cargo llvm-cov` (+ per-surface). Fast tier vs. full/live tier (GitHub-remote +
-  creds-gated) in CI (GitHub Actions).
+- **Commands:** Rust `cargo nextest run` and `cargo lint`; from `clients/web`,
+  `npm run lint`, `npm run typecheck`, `npm run test:unit`, `npm run test:e2e`, and
+  `npm run build`; from `migrator`, `npm run lint`, `npm test`, and
+  `npm run test:coverage`. CI runs a separate Rust `cargo llvm-cov` gate.
 
 <!-- hotsheet:end specifics=testing-philosophy -->
 <!-- hotsheet:end section=testing-philosophy -->
@@ -352,10 +345,9 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
   orientation doc (directory tree, entry points, formats, build/test, where-to-look).
   Keep it in sync in the same change that adds a file/dir, command, schema field, or
   setting.
-- The project is now in **early implementation**: the Rust core model + ticket file
-  format, filesystem stores, CLI, server, SQLite/FTS index, automatic sync, MCP shim,
-  AI-tool plugins, and terminal/permission infrastructure exist; clients remain
-  design-only. See [`docs/README.md`](docs/README.md) for the index + core bets and
+- The Rust core, CLI/server, migrator, and Kerf web client are implemented; some
+  client and provider areas remain partial. See [`docs/README.md`](docs/README.md)
+  for the requirements status and
   [`docs/CODEBASE-MAP.md`](docs/CODEBASE-MAP.md) for what's built.
 
 <!-- hotsheet:end specifics=requirements-documentation -->
@@ -409,8 +401,8 @@ or risking completed work. CI may still surface issues from heavier CI-only test
 the local environment must be green before every push. **Exception:** when deliberately
 testing CI itself, a red-ish push may be intentional, but then do not push to `main`.
 
-(While the repo is still design-only, "lint/test" is a no-op for docs changes;
-this rhythm applies once implementation code exists.)
+For documentation-only changes, verify referenced paths and commands against the
+current repository; run code gates when documentation changes code-facing contracts.
 
 ## Project attribution
 

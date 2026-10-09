@@ -342,7 +342,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   test-projects/             # full-binary E2E harnesses (not in-process unit tests)
     e2e-headless-claude.sh   #   headless loop: setup + drive hotsheet-mcp (serverless + server) [HS2-99]
   docs/                      # design docs 00–17 (+ this map)
-  .github/workflows/ci.yml   # fmt --check · clippy -D warnings · nextest · migrator vitest · gated cargo-llvm-cov (--fail-under-lines 80)
+  .github/workflows/ci.yml   # Rust fmt/lint/nextest/coverage · web lint/unit/build/Chromium smoke/WebKit · migrator lint/coverage
   .github/workflows/live.yml # creds-gated nightly live tier (#[ignore] codex/claude turns)
 ```
 
@@ -442,6 +442,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 
 - **Build:** `cargo build`
 - **Rust tests:** `cargo nextest run` (fallback `cargo test`)
+- **Web client:** from `clients/web`, `npm run lint`, `npm run typecheck`,
+  `npm run test:unit`, `npm run test:e2e` (Playwright against the running client
+  and real server flows), and `npm run build`. CI runs the browser smoke and WebKit
+  lanes through `test:ci:browser` and `test:ci:webkit`.
 - **Optional local Rust compile cache:** install `sccache`, then run Cargo with
   `RUSTC_WRAPPER=sccache` (setup and rationale: [12](12-code-organization-and-testing.md)
   §12.6.1). It works with lint, nextest, and llvm-cov without making the tool a
