@@ -879,12 +879,18 @@ request. Launch-time route-back variables remain a fallback when no instance rec
 available. A retained Codex or Claude session can therefore send a new approval request
 to the replacement server without restarting the terminal (HS2-39S586).
 
-**Interactive questions (HS2-KP9K85).** Claude's `PreToolUse` hook for `AskUserQuestion`
-POSTs the first question and its `tool_use_id` to `/terminals/{id}/question` before the
-terminal waits. `PostToolUse` or `PostToolUseFailure` clears that same tool use; an older
-completion cannot clear a newer question. Session start/end and terminal removal also clear
-stale questions. The app alerts the user and opens the terminal for an answer. Answering in
-the alert itself is tracked by `HS2-SWY32A`.
+**Interactive questions (HS2-KP9K85, HS2-SWY32A).** Claude's `PreToolUse` hook for
+`AskUserQuestion` POSTs the complete question input and `tool_use_id` to
+`/terminals/{id}/question`, then polls for an answer. The notice offers the original choices,
+multiple selections, and free text for up to four questions. Submission includes the visible
+episode time and tool ID; the server accepts it only for that live question, while the hook
+poll also checks the Claude session ID. The hook returns Claude's documented `allow` response
+with the original `questions` and the user's `answers`. “Answer in terminal” releases the hook
+without an override, restoring Claude's native question prompt and clearing the shared notice.
+Server loss or hook timeout also falls back to that prompt; failed polls make a best-effort
+clear of the exact tool and session. `PostToolUse` or `PostToolUseFailure` clears the same tool use;
+an older completion cannot clear a newer question. Session start/end and terminal removal
+clear stale questions.
 
 The plugin hook manifest can override `matcher` per event through `event_matchers`; events
 without an override keep the shared matcher. Claude installs `AskUserQuestion` for the two

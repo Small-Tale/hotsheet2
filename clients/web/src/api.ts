@@ -606,6 +606,12 @@ export interface TerminalQuestion {
   question: string;
   tool_use_id: string;
   at: string;
+  questions?: Array<{
+    question: string;
+    header?: string;
+    options?: Array<{ label: string; description?: string }>;
+    multiSelect?: boolean;
+  }>;
 }
 /** `PUT /terminals/{id}/name` response; `name` is absent after a clear. */
 export interface TerminalName {
@@ -1231,6 +1237,15 @@ export class Api {
       body: JSON.stringify(value),
     });
   terminal = (id: string) => this.request<TerminalRead>(`/terminals/${encodeURIComponent(id)}`);
+  answerTerminalQuestion = (id: string, question: TerminalQuestion, answers?: Record<string, string>) =>
+    this.request<void>(`/terminals/${encodeURIComponent(id)}/question/answer`, {
+      method: 'POST',
+      body: JSON.stringify({
+        tool_use_id: question.tool_use_id,
+        at: question.at,
+        ...(answers ? { answers } : { native: true }),
+      }),
+    });
   createTerminal = (
     value: {
       id?: string;

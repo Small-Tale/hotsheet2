@@ -438,6 +438,12 @@
       "rules": ["KUI-L008"],
       "target": "src/components/sidebar-panel.tsx",
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={className}"
+    },
+    {
+      "id": "intentional-nested-inset-halted-session-question",
+      "rules": ["KUI-L004"],
+      "target": "src/components/halted-session-popup.tsx",
+      "rationale": "Reviewed HS2-SWY32A: design: halted-session-popup__question adds room inside the bordered question group, while halted-session-popup__free-text supplies the text field's own input inset; both are visible and intentional in wide and phone captures."
     }
   ]
 }

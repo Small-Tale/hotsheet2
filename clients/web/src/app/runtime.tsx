@@ -1088,6 +1088,11 @@ export async function startHotSheetWebClient() {
       if (episode.kind === 'chat') openGridAIChat(episode.projectId, episode.sessionId);
       else openTerminalInProject(`${episode.projectId}:${episode.sessionId}`);
     },
+    answer: async (episode, answers) => {
+      const current = projects.peek().find((item) => item.id === episode.projectId);
+      if (!current || !episode.question) throw new Error('Question is no longer active.');
+      await new Api(current.apiPath).answerTerminalQuestion(episode.sessionId, episode.question, answers);
+    },
   });
   const projectLifecycleController = createProjectLifecycleController({
     projects,

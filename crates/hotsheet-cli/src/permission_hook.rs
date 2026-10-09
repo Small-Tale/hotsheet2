@@ -47,6 +47,7 @@ pub enum SessionHookEvent {
     QuestionAsked {
         question: String,
         tool_use_id: String,
+        questions: Value,
     },
     /// The question tool returned or failed.
     QuestionResolved { tool_use_id: String },
@@ -89,6 +90,7 @@ pub fn session_hook_event(input: &Value) -> Option<SessionHookEvent> {
             Some(SessionHookEvent::QuestionAsked {
                 question: question.to_owned(),
                 tool_use_id: text("tool_use_id").unwrap_or_default(),
+                questions: input["tool_input"]["questions"].clone(),
             })
         }
         Some("PostToolUse" | "PostToolUseFailure")
@@ -187,6 +189,32 @@ pub fn hook_decision_json(decision: HookDecision) -> Value {
     })
 }
 
+/// Answer an interactive Claude question with the exact original tool input and the user's
+/// responses. Claude requires both `allow` and `updatedInput` for this tool.
+pub fn question_answer_json(tool_input: &Value, answers: &Value) -> Option<Value> {
+    let questions = tool_input.get("questions")?.as_array()?;
+    let answers = answers.as_object()?;
+    if questions.is_empty()
+        || questions.iter().any(|question| {
+            question
+                .get("question")
+                .and_then(Value::as_str)
+                .is_none_or(|text| !answers.get(text).is_some_and(Value::is_string))
+        })
+    {
+        return None;
+    }
+    let mut updated = tool_input.as_object()?.clone();
+    updated.insert("answers".into(), Value::Object(answers.clone()));
+    Some(json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "updatedInput": updated,
+        }
+    }))
+}
+
 /// Render a decision for the native interactive `PermissionRequest` hook shared by Claude
 /// Code and Codex. Unlike `PreToolUse`, this event uses a nested permission-result object.
 pub fn permission_request_decision_json(decision: HookDecision) -> Option<Value> {
@@ -231,6 +259,7 @@ mod tests {
             Some(SessionHookEvent::QuestionAsked {
                 question: "Which direction?".into(),
                 tool_use_id: "tool-1".into(),
+                questions: json!([{ "question": "Which direction?" }]),
             })
         );
         assert_eq!(
@@ -247,6 +276,27 @@ mod tests {
                 })
             );
         }
+    }
+
+    #[test]
+    fn question_answer_preserves_all_original_inputs_and_requires_every_answer() {
+        let input = json!({"questions": [{"question":"First?"}, {"question":"Second?","multiSelect":true} ], "metadata":"keep"});
+        let answers = json!({"First?":"A", "Second?":"B, C"});
+        let output = question_answer_json(&input, &answers).unwrap();
+        assert_eq!(output["hookSpecificOutput"]["permissionDecision"], "allow");
+        assert_eq!(
+            output["hookSpecificOutput"]["updatedInput"]["questions"],
+            input["questions"]
+        );
+        assert_eq!(
+            output["hookSpecificOutput"]["updatedInput"]["metadata"],
+            "keep"
+        );
+        assert_eq!(
+            output["hookSpecificOutput"]["updatedInput"]["answers"],
+            answers
+        );
+        assert!(question_answer_json(&input, &json!({"First?":"A"})).is_none());
     }
 
     #[test]

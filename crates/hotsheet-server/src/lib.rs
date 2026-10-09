@@ -2032,7 +2032,13 @@ pub fn app(state: AppState) -> Router {
         )
         .route(
             "/terminals/{id}/question",
-            post(ask_terminal_question).delete(resolve_terminal_question),
+            post(ask_terminal_question)
+                .get(poll_terminal_question_answer)
+                .delete(resolve_terminal_question),
+        )
+        .route(
+            "/terminals/{id}/question/answer",
+            post(answer_terminal_question),
         )
         .route(
             "/terminals/{id}/ai-connection",
@@ -9387,8 +9393,12 @@ pub struct TerminalHalt {
 pub struct TerminalQuestion {
     question: String,
     tool_use_id: String,
+    #[serde(default)]
+    questions: serde_json::Value,
     #[serde(skip)]
     session_id: Option<String>,
+    #[serde(skip)]
+    answer: Option<serde_json::Value>,
     at: String,
 }
 
@@ -10406,6 +10416,8 @@ struct TerminalQuestionReq {
     question: String,
     tool_use_id: String,
     session_id: Option<String>,
+    #[serde(default)]
+    questions: serde_json::Value,
 }
 
 /// A trusted Claude hook reports the question before the terminal waits for its answer.
@@ -10451,7 +10463,9 @@ async fn ask_terminal_question(
             TerminalQuestion {
                 question: body.question.trim().chars().take(500).collect(),
                 tool_use_id: body.tool_use_id,
+                questions: body.questions,
                 session_id: body.session_id,
+                answer: None,
                 at: OffsetDateTime::now_utc()
                     .format(&Rfc3339)
                     .unwrap_or_default(),
@@ -10465,9 +10479,102 @@ async fn ask_terminal_question(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+struct TerminalQuestionIdentity {
+    tool_use_id: String,
+    session_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct TerminalQuestionAnswerReq {
+    tool_use_id: String,
+    at: String,
+    #[serde(default)]
+    answers: serde_json::Value,
+    #[serde(default)]
+    native: bool,
+}
+
+/// The browser may answer only the exact live tool use in the exact Claude session. A stale
+/// notice cannot deliver text to a replacement question or a replacement terminal session.
+async fn answer_terminal_question(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<TerminalQuestionAnswerReq>,
+) -> Result<StatusCode, ApiError> {
+    let mut questions = state.terminal_questions.lock().unwrap();
+    let current = questions
+        .get_mut(&id)
+        .filter(|current| current.tool_use_id == body.tool_use_id && current.at == body.at)
+        .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "question is no longer active"))?;
+    if current.answer.is_some() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "question already answered",
+        ));
+    }
+    if body.native {
+        questions.remove(&id);
+        drop(questions);
+        emit_terminal_question(&state, &id);
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    let expected = current
+        .questions
+        .as_array()
+        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "question options unavailable"))?;
+    let answers = body
+        .answers
+        .as_object()
+        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "answers must be an object"))?;
+    if expected.is_empty()
+        || expected.len() > 4
+        || answers.len() != expected.len()
+        || expected.iter().any(|question| {
+            question
+                .get("question")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|text| answers.get(text))
+                .and_then(serde_json::Value::as_str)
+                .is_none_or(|answer| answer.trim().is_empty() || answer.len() > 2000)
+        })
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "incomplete question answers",
+        ));
+    }
+    current.answer = Some(body.answers);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// A short HTTP poll keeps the PreToolUse hook responsive to server loss without exposing the
+/// answer in the terminal snapshot. Repeated polls return the same answer until resolution.
+async fn poll_terminal_question_answer(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<TerminalQuestionIdentity>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let questions = state.terminal_questions.lock().unwrap();
+    let current = questions
+        .get(&id)
+        .filter(|current| {
+            current.tool_use_id == query.tool_use_id && current.session_id == query.session_id
+        })
+        .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "question is no longer active"))?;
+    if let Some(answer) = &current.answer {
+        return Ok((
+            StatusCode::OK,
+            Json(serde_json::json!({ "answers": answer })),
+        ));
+    }
+    Ok((StatusCode::NO_CONTENT, Json(serde_json::Value::Null)))
+}
+
 #[derive(Default, Deserialize)]
 struct TerminalQuestionClearQuery {
     tool_use_id: Option<String>,
+    session_id: Option<String>,
 }
 
 async fn resolve_terminal_question(
@@ -10475,18 +10582,39 @@ async fn resolve_terminal_question(
     Path(id): Path<String>,
     Query(query): Query<TerminalQuestionClearQuery>,
 ) -> StatusCode {
-    if forget_terminal_question(&state, &id, query.tool_use_id.as_deref()) {
+    if forget_terminal_question_for_session(
+        &state,
+        &id,
+        query.tool_use_id.as_deref(),
+        query.session_id.as_deref(),
+    ) {
         emit_terminal_question(&state, &id);
     }
     StatusCode::NO_CONTENT
 }
 
 fn forget_terminal_question(state: &AppState, id: &str, tool_use_id: Option<&str>) -> bool {
+    forget_terminal_question_for_session(state, id, tool_use_id, None)
+}
+
+fn forget_terminal_question_for_session(
+    state: &AppState,
+    id: &str,
+    tool_use_id: Option<&str>,
+    session_id: Option<&str>,
+) -> bool {
     let mut questions = state.terminal_questions.lock().unwrap();
     if tool_use_id.is_some_and(|expected| {
         questions
             .get(id)
             .is_none_or(|current| current.tool_use_id != expected)
+    }) {
+        return false;
+    }
+    if session_id.is_some_and(|expected| {
+        questions
+            .get(id)
+            .is_none_or(|current| current.session_id.as_deref() != Some(expected))
     }) {
         return false;
     }

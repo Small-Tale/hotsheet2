@@ -2606,10 +2606,14 @@ snapshots. Killing a halted terminal announces resolution to other clients. The 
 banner counts waiting halted sessions, and Resume presents them after pending permissions.
 
 Claude Code `AskUserQuestion` in a Hot Sheet terminal appears as a waiting episode with a
-top-layer notice and project attention marker (HS2-KP9K85). The notice shows the first
-question and opens the originating terminal for the answer. A `terminal_question` change
-refreshes the snapshot; `PostToolUse`, failure, session end, or terminal removal clears it.
-Repeated reports for one tool use keep one episode, while a later question gets a new key.
+top-layer notice and project attention marker (HS2-KP9K85, HS2-SWY32A). The notice renders
+all questions, their choices and descriptions, multiple selections, and free-text answers.
+It checks that each question is answered before sending the answer to the exact live episode.
+“Answer in terminal” clears the shared notice, releases the hook to Claude's native question
+prompt, and opens the originating terminal. A `terminal_question` change refreshes the snapshot; `PostToolUse`,
+failure, session end, or terminal removal clears it. Repeated reports for one tool use keep
+one episode, while a later question gets a new key. A stale notice cannot answer a newer
+tool call or session.
 
 Acknowledged episode keys persist in `hotsheet.halted-session-seen` and merge across windows.
 Inactive history is capped at 256; active acknowledgments and those awaiting project snapshots

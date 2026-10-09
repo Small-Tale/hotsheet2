@@ -1284,6 +1284,203 @@ async fn terminal_question_tracks_tool_identity_and_clears_on_answer_or_exit() {
 }
 
 #[tokio::test]
+async fn terminal_question_answer_is_bound_to_the_live_episode() {
+    let (_dir, state) = state();
+    let router = app(state);
+    let send = |method: &'static str, path: &'static str, body: Option<String>| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(authed(method, path, body.as_deref()))
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"answer-me"}"#.into())
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    let question = serde_json::json!({
+        "question": "First?", "tool_use_id": "tool-1", "session_id": "session-1",
+        "questions": [{ "question": "First?", "options": [{"label":"Yes"}] }, { "question": "Second?" }],
+    });
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/answer-me/question",
+            Some(question.to_string())
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let snapshot = body_json(send("GET", "/terminals/answer-me", None).await).await;
+    let at = snapshot["question"]["at"].as_str().unwrap();
+    assert_eq!(snapshot["question"]["questions"], question["questions"]);
+    assert_eq!(
+        send(
+            "GET",
+            "/terminals/answer-me/question?tool_use_id=tool-1&session_id=session-1",
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let answer = |at: &str, answers: serde_json::Value| {
+        serde_json::json!({
+            "tool_use_id": "tool-1", "at": at, "answers": answers,
+        })
+        .to_string()
+    };
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/answer-me/question/answer",
+            Some(answer(
+                "old",
+                serde_json::json!({"First?":"Yes","Second?":"Text"})
+            ))
+        )
+        .await
+        .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/answer-me/question/answer",
+            Some(answer(at, serde_json::json!({"First?":"Yes"})))
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/answer-me/question/answer",
+            Some(answer(
+                at,
+                serde_json::json!({"First?":"Yes","Second?":"Text"})
+            ))
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/answer-me/question/answer",
+            Some(answer(
+                at,
+                serde_json::json!({"First?":"No","Second?":"Text"})
+            ))
+        )
+        .await
+        .status(),
+        StatusCode::CONFLICT
+    );
+    let reply = body_json(
+        send(
+            "GET",
+            "/terminals/answer-me/question?tool_use_id=tool-1&session_id=session-1",
+            None,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(
+        reply["answers"],
+        serde_json::json!({"First?":"Yes","Second?":"Text"})
+    );
+    assert_eq!(
+        send(
+            "GET",
+            "/terminals/answer-me/question?tool_use_id=tool-1&session_id=stale",
+            None
+        )
+        .await
+        .status(),
+        StatusCode::CONFLICT
+    );
+    send(
+        "DELETE",
+        "/terminals/answer-me/question?tool_use_id=tool-1",
+        None,
+    )
+    .await;
+    assert_eq!(
+        send(
+            "GET",
+            "/terminals/answer-me/question?tool_use_id=tool-1&session_id=session-1",
+            None
+        )
+        .await
+        .status(),
+        StatusCode::CONFLICT
+    );
+    send(
+        "POST",
+        "/terminals/answer-me/question",
+        Some(question.to_string()),
+    )
+    .await;
+    let at = body_json(send("GET", "/terminals/answer-me", None).await).await["question"]["at"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        send(
+            "POST",
+            "/terminals/answer-me/question/answer",
+            Some(serde_json::json!({"tool_use_id":"tool-1","at":at,"native":true}).to_string())
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        send(
+            "GET",
+            "/terminals/answer-me/question?tool_use_id=tool-1&session_id=session-1",
+            None,
+        )
+        .await
+        .status(),
+        StatusCode::CONFLICT
+    );
+    assert!(body_json(send("GET", "/terminals/answer-me", None).await).await["question"].is_null());
+    let newer = serde_json::json!({
+        "question": "New session?", "tool_use_id": "tool-1", "session_id": "session-2",
+        "questions": [{ "question": "New session?" }],
+    });
+    send(
+        "POST",
+        "/terminals/answer-me/question",
+        Some(newer.to_string()),
+    )
+    .await;
+    send(
+        "DELETE",
+        "/terminals/answer-me/question?tool_use_id=tool-1&session_id=session-1",
+        None,
+    )
+    .await;
+    assert_eq!(
+        body_json(send("GET", "/terminals/answer-me", None).await).await["question"]["question"],
+        "New session?"
+    );
+}
+
+#[tokio::test]
 async fn terminal_halt_is_reported_listed_announced_cleared_and_forgotten_on_kill() {
     // HS2-HJ4D1H: an AI session's StopFailure hook marks its terminal halted until the user
     // prompts again (UserPromptSubmit → DELETE) or the terminal is killed.

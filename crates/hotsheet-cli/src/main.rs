@@ -3743,7 +3743,30 @@ fn cmd_permission_hook(installed_agent: Option<&str>) -> Result<()> {
             let env_agent = std::env::var("HOTSHEET_AGENT").ok();
             let agent = installed_agent.or(env_agent.as_deref());
             let session_id = input.get("session_id").and_then(serde_json::Value::as_str);
-            let _ = report_terminal_session(&url, &secret, &terminal, &session, agent, session_id);
+            if report_terminal_session(&url, &secret, &terminal, &session, agent, session_id)
+                .is_ok()
+            {
+                if let hotsheet_cli::permission_hook::SessionHookEvent::QuestionAsked {
+                    tool_use_id,
+                    ..
+                } = &session
+                {
+                    if let Some(answers) = wait_for_terminal_question_answer(
+                        &url,
+                        &secret,
+                        &terminal,
+                        tool_use_id,
+                        session_id,
+                    ) {
+                        if let Some(output) = hotsheet_cli::permission_hook::question_answer_json(
+                            &input["tool_input"],
+                            &answers,
+                        ) {
+                            println!("{output}");
+                        }
+                    }
+                }
+            }
         }
         return Ok(());
     }
@@ -4128,16 +4151,21 @@ fn report_terminal_session(
         SessionHookEvent::QuestionAsked {
             question,
             tool_use_id,
+            questions,
         } => post(
             "question",
-            serde_json::json!({ "question": question, "tool_use_id": tool_use_id, "session_id": session_id }),
+            serde_json::json!({ "question": question, "tool_use_id": tool_use_id, "session_id": session_id, "questions": questions }),
         ),
         SessionHookEvent::QuestionResolved { tool_use_id } => {
-            let url = format!(
+            let mut url = format!(
                 "{}?tool_use_id={}",
                 endpoint("question"),
                 urlencoding_component(tool_use_id)
             );
+            if let Some(session_id) = session_id {
+                url.push_str("&session_id=");
+                url.push_str(&urlencoding_component(session_id));
+            }
             ureq::delete(&url)
                 .set("X-Hotsheet-Secret", secret)
                 .timeout(std::time::Duration::from_secs(5))
@@ -4158,6 +4186,56 @@ fn report_terminal_session(
         ),
         SessionHookEvent::Disconnected => delete("ai-connection", session_id),
     }
+}
+
+fn wait_for_terminal_question_answer(
+    url: &str,
+    secret: &str,
+    terminal: &str,
+    tool_use_id: &str,
+    session_id: Option<&str>,
+) -> Option<serde_json::Value> {
+    let mut endpoint = format!(
+        "{}/terminals/{}/question?tool_use_id={}",
+        url.trim_end_matches('/'),
+        urlencoding_component(terminal),
+        urlencoding_component(tool_use_id),
+    );
+    if let Some(session_id) = session_id {
+        endpoint.push_str("&session_id=");
+        endpoint.push_str(&urlencoding_component(session_id));
+    }
+    // Claude's installed hook timeout is just over one day. Leave a small margin so Claude
+    // gets its native prompt if nobody answers or the server disappears.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(86_400);
+    while std::time::Instant::now() < deadline {
+        match ureq::get(&endpoint)
+            .set("X-Hotsheet-Secret", secret)
+            .timeout(std::time::Duration::from_secs(5))
+            .call()
+        {
+            Ok(response) if response.status() == 204 => {}
+            Ok(response) => {
+                let reply: serde_json::Value =
+                    serde_json::from_str(&response.into_string().ok()?).ok()?;
+                if reply["native"] == true {
+                    return None;
+                }
+                return reply.get("answers").cloned();
+            }
+            Err(_) => {
+                // A failed poll returns Claude to its native prompt. Clear the matching notice
+                // when the server is still reachable; a newer session/tool cannot be removed.
+                let _ = ureq::delete(&endpoint)
+                    .set("X-Hotsheet-Secret", secret)
+                    .timeout(std::time::Duration::from_secs(2))
+                    .call();
+                return None;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(350));
+    }
+    None
 }
 
 /// Percent-encode a terminal id for one URL path segment.

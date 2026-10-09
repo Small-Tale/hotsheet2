@@ -46,7 +46,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       commands.tsx            # Project command drafts, selection, autosave, kept (possibly empty) command groups, icons, and dialog composition
       repository.tsx          # Status/detail paging, stale-response guards, observer, review, and evidence projection
       permissions.tsx         # Permission inbox/history, polling/countdown, optimistic rollback, and popup
-      halted-sessions.tsx     # Halt prompt acknowledgment, cross-window persistence, and production Open/Dismiss wiring (HS2-E6KAWY)
+      halted-sessions.tsx     # Halt/question prompt acknowledgment, direct Claude question answers and terminal fallback, cross-window persistence, and Open/Dismiss wiring (HS2-E6KAWY/HS2-SWY32A)
       gallery.tsx             # Gallery gestures/playback/measurement, annotation sessions, and surfaces
       conversation-archive.tsx # Range selection, copy, export, and saved-chat opening
       saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion
@@ -123,6 +123,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-warm-cache.ts # Bounded LRU (default 8) of warm project ids whose resident projection + AI config make tab switches instant; eviction drops the projection (HS2-AZZ9TF)
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
     src/halted-sessions.ts    # Pure terminal/failed-chat episode projection, pause/permission queue policy, active dedupe and bounded historical seen keys
+    src/terminal-question-answer.ts # Extract all Claude AskUserQuestion answers from the notice's form, including multi-select and free text
     src/terminal-snapshot-refresh.ts # Per-project response generations and authoritative snapshot merge; retains failed fetches and independent project results
     src/notification-pause.ts # App-wide per-device notification pause (localStorage hotsheet.notifications-paused, storage-event sync, banner copy); gates the permission popup via features/permissions visiblePermission (HS2-QYA9SC)
     src/not-working-workflow.ts # Input validation + one atomic provider Not Working report request
@@ -241,7 +242,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, Trash `restore`/`purge-trash`, providers/provider-ls/get/new/edit/close/attach/disable/enable/remove, github-connect (incl. assets-repository attachment settings, HS2-HSA64D), provider-copy/move, setup/plugins/settings/server/workflows
-      src/permission_hook.rs #   Claude permission-hook adapter (HS2-YMR9HE/N4R6F3): interactive PermissionRequest events and explicitly marked headless PreToolUse events map to bridge (tool,action) + their distinct Claude response schemas; unrelated interactive PreToolUse events remain native; the `permission-hook` cmd POSTs /permissions/ask when governed
+      src/permission_hook.rs #   Claude permission-hook adapter (HS2-YMR9HE/N4R6F3/HS2-SWY32A): interactive PermissionRequest events and explicitly marked headless PreToolUse events map to bridge (tool,action) + their distinct Claude response schemas; AskUserQuestion waits for a Hot Sheet answer and returns updatedInput; unrelated interactive PreToolUse events remain native
       src/external_launch.rs #   capability-aware external-terminal launch preparation: per-store server-instance discovery + permission route-back data; Claude hook supported, native Codex rejected until adapted (HS2-C46G58)
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety

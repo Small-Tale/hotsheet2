@@ -479,7 +479,81 @@ fn permission_hook_reports_interactive_question_lifecycle_to_terminal() {
     );
     assert_eq!(
         resolved.0,
-        "DELETE /terminals/claude%207/question?tool_use_id=tool-1 HTTP/1.1"
+        "DELETE /terminals/claude%207/question?tool_use_id=tool-1&session_id=s-1 HTTP/1.1"
+    );
+}
+
+#[test]
+fn permission_hook_returns_all_browser_answers_to_claude() {
+    use std::io::{BufRead, BufReader, Read, Write};
+
+    let home = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let mut paths = Vec::new();
+        for index in 0..2 {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut path = String::new();
+            reader.read_line(&mut path).unwrap();
+            paths.push(path.trim().to_owned());
+            let mut length = 0;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    length = value.trim().parse().unwrap();
+                }
+            }
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).unwrap();
+            let reply = if index == 0 {
+                String::new()
+            } else {
+                r#"{"answers":{"First?":"A","Second?":"B, C"}}"#.to_owned()
+            };
+            let status = if index == 0 {
+                "204 No Content"
+            } else {
+                "200 OK"
+            };
+            write!(reader.get_mut(), "HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: application/json\r\n\r\n{reply}", reply.len()).unwrap();
+        }
+        paths
+    });
+    let input = r#"{"hook_event_name":"PreToolUse","session_id":"s-1","tool_name":"AskUserQuestion","tool_use_id":"tool-1","tool_input":{"questions":[{"question":"First?"},{"question":"Second?","multiSelect":true}]}}"#;
+    let output = Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", home.path())
+        .env("HOTSHEET_SERVER", &url)
+        .env("HOTSHEET_SECRET", "terminal-secret")
+        .env("HOTSHEET_TERMINAL_ID", "claude-7")
+        .args(["permission-hook", "--agent", "claude"])
+        .write_stdin(input)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let output: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(output["hookSpecificOutput"]["permissionDecision"], "allow");
+    assert_eq!(
+        output["hookSpecificOutput"]["updatedInput"]["answers"],
+        serde_json::json!({"First?":"A","Second?":"B, C"})
+    );
+    assert_eq!(
+        output["hookSpecificOutput"]["updatedInput"]["questions"],
+        serde_json::from_str::<serde_json::Value>(input).unwrap()["tool_input"]["questions"]
+    );
+    let paths = server.join().unwrap();
+    assert_eq!(paths[0], "POST /terminals/claude-7/question HTTP/1.1");
+    assert_eq!(
+        paths[1],
+        "GET /terminals/claude-7/question?tool_use_id=tool-1&session_id=s-1 HTTP/1.1"
     );
 }
 

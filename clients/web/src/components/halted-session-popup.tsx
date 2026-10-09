@@ -47,9 +47,54 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
           />
           <strong>{episode.kind === 'question' ? 'AI waiting for your answer' : 'AI session halted'}</strong>
         </div>
-        <pre class="halted-session-popup__details">
-          <code>{episode.message}</code>
-        </pre>
+        {episode.kind === 'question' && episode.question?.questions?.length ? (
+          <form
+            class="halted-session-popup__questions"
+            {...NOTIFICATIONS_AND_LINKS_ACTIONS.answerTerminalQuestion.attrs}
+            data-halt-key={episode.key}
+          >
+            {episode.question.questions.map((question, index) => (
+              <fieldset class="halted-session-popup__question">
+                <legend>{question.question}</legend>
+                {(question.options ?? []).map((option, optionIndex) => (
+                  <label class="halted-session-popup__option">
+                    <input
+                      type={question.multiSelect ? 'checkbox' : 'radio'}
+                      name={`choice-${index}`}
+                      value={String(optionIndex)}
+                    />
+                    <span>
+                      <strong>{option.label}</strong>
+                      {option.description ? <small>{option.description}</small> : null}
+                    </span>
+                  </label>
+                ))}
+                {(question.options ?? []).length ? (
+                  <label class="halted-session-popup__option">
+                    <input type={question.multiSelect ? 'checkbox' : 'radio'} name={`choice-${index}`} value="other" />
+                    <span>Other</span>
+                  </label>
+                ) : null}
+                <input
+                  class="halted-session-popup__free-text"
+                  type="text"
+                  name={`other-${index}`}
+                  aria-label={`Other answer for ${question.question}`}
+                  placeholder="Enter your answer"
+                  maxLength={2000}
+                />
+              </fieldset>
+            ))}
+            <p class="halted-session-popup__answer-error" role="alert" hidden />
+            <button class="halted-session-popup__primary" type="submit">
+              Send answer
+            </button>
+          </form>
+        ) : (
+          <pre class="halted-session-popup__details">
+            <code>{episode.message}</code>
+          </pre>
+        )}
         <footer class="halted-session-popup__footer">
           <div class="halted-session-popup__quiet-actions">
             <button
@@ -67,10 +112,12 @@ export function HaltedSessionPopup({ episode }: { episode: HaltedSessionEpisode 
           <button
             class="halted-session-popup__primary"
             type="button"
-            {...NOTIFICATIONS_AND_LINKS_ACTIONS.openHaltedSession.attrs}
+            {...(episode.kind === 'question' && episode.question?.questions?.length
+              ? NOTIFICATIONS_AND_LINKS_ACTIONS.returnTerminalQuestion.attrs
+              : NOTIFICATIONS_AND_LINKS_ACTIONS.openHaltedSession.attrs)}
             data-halt-key={episode.key}
           >
-            Open session
+            {episode.kind === 'question' && episode.question?.questions?.length ? 'Answer in terminal' : 'Open session'}
           </button>
         </footer>
       </article>

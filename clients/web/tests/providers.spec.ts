@@ -98,10 +98,27 @@ test('keeps workspace toolbar visibility responsive without CSS probe work durin
 async function haltedSessionFixture(page: Page) {
   await mockProject(page);
   let halt: { at: string; message: string; error_type: string } | undefined,
-    question: { at: string; question: string; tool_use_id: string } | undefined,
+    question:
+      | {
+          at: string;
+          question: string;
+          tool_use_id: string;
+          questions?: Array<{
+            question: string;
+            options?: Array<{ label: string; description?: string }>;
+            multiSelect?: boolean;
+          }>;
+        }
+      | undefined,
     pending: Array<{ id: number; connection: string; project: string; tool: string; action: string }> = [],
     failing = false,
     cursor = 0;
+  const questionAnswers: Array<{
+    tool_use_id: string;
+    at: string;
+    answers?: Record<string, string>;
+    native?: boolean;
+  }> = [];
   const sockets: import('@playwright/test').WebSocketRoute[] = [];
   const terminalGets: string[] = [];
   const events: Array<{ cursor: number; store: string; kind: string; id: string; slug: string }> = [];
@@ -117,6 +134,20 @@ async function haltedSessionFixture(page: Page) {
         });
   });
   await page.route('**/permissions', (route) => route.fulfill({ json: pending }));
+  await page.route('**/terminals/halt-worker/question/answer', async (route) => {
+    const body = route.request().postDataJSON() as {
+      tool_use_id: string;
+      at: string;
+      answers?: Record<string, string>;
+      native?: boolean;
+    };
+    if (!question || body.tool_use_id !== question.tool_use_id || body.at !== question.at)
+      return route.fulfill({ status: 409, json: { error: 'question is no longer active' } });
+    questionAnswers.push(body);
+    await route.fulfill({ status: 204 });
+    question = undefined;
+    await emit('terminal_question');
+  });
   await page.route('**/ws/poll*', (route) => {
     const since = Number(new URL(route.request().url()).searchParams.get('since') ?? cursor);
     return route.fulfill({ json: { cursor, events: events.filter((event) => event.cursor > since), overflow: false } });
@@ -140,6 +171,7 @@ async function haltedSessionFixture(page: Page) {
   };
   return {
     terminalGets: () => [...terminalGets],
+    questionAnswers: () => [...questionAnswers],
     socketCount: () => sockets.length,
     beforeReload: () => {
       sockets.splice(0);
@@ -149,9 +181,9 @@ async function haltedSessionFixture(page: Page) {
       halt = at ? { at, message: `Selected model is at capacity (${at}).`, error_type: 'overloaded' } : undefined;
       await emit('terminal_halted');
     },
-    question: async (toolUseId?: string) => {
+    question: async (toolUseId?: string, questions?: NonNullable<typeof question>['questions']) => {
       question = toolUseId
-        ? { at: 'now', question: 'Which direction should I take?', tool_use_id: toolUseId }
+        ? { at: 'now', question: 'Which direction should I take?', tool_use_id: toolUseId, questions }
         : undefined;
       await emit('terminal_question');
     },
@@ -190,6 +222,54 @@ test('alerts for a terminal question and opens its originating session (HS2-KP9K
   await fixture.question('tool-2');
   await expect(popup).toBeVisible();
 });
+
+for (const width of [1280, 390]) {
+  test(`answers all AI terminal questions from the notice at ${width}px (HS2-SWY32A)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const fixture = await haltedSessionFixture(page);
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await fixture.question('tool-multi', [
+      { question: 'Which direction should I take?', options: [{ label: 'North' }, { label: 'South' }] },
+      { question: 'What else?', options: [{ label: 'Fast' }, { label: 'Safe' }], multiSelect: true },
+      { question: 'Any details?' },
+    ]);
+    const popup = page.getByRole('dialog', { name: 'AI waiting for your answer' });
+    await expect(popup).toBeVisible();
+    await popup.getByRole('button', { name: 'Send answer' }).click();
+    await expect(popup.getByRole('alert')).toContainText('Answer every question');
+    await popup.getByLabel('South').check();
+    await popup.getByLabel('Fast').check();
+    await popup.getByRole('textbox', { name: 'Other answer for What else?' }).fill('Careful');
+    await expect(popup.locator('input[name="choice-1"][value="other"]')).toBeChecked();
+    await popup.getByRole('textbox', { name: 'Other answer for Any details?' }).fill('Use tests');
+    await expect(popup.getByRole('alert')).toBeHidden();
+    await page.screenshot({ path: test.info().outputPath(`hs2-swy32a-question-${width}.png`) });
+    await popup.getByRole('button', { name: 'Send answer' }).click();
+    await expect.poll(() => fixture.questionAnswers().length).toBe(1);
+    expect(fixture.questionAnswers()[0]).toMatchObject({
+      tool_use_id: 'tool-multi',
+      answers: {
+        'Which direction should I take?': 'South',
+        'What else?': 'Fast, Careful',
+        'Any details?': 'Use tests',
+      },
+    });
+    await expect(popup).toHaveCount(0);
+    await fixture.question('tool-native', [
+      { question: 'Which direction should I take?', options: [{ label: 'North' }] },
+    ]);
+    await expect(popup).toBeVisible();
+    await popup.getByRole('button', { name: 'Answer in terminal' }).click();
+    await expect.poll(() => fixture.questionAnswers().length).toBe(2);
+    expect(fixture.questionAnswers()[1]).toMatchObject({ tool_use_id: 'tool-native', native: true });
+    await expect(
+      page.locator('[data-tab-kind="terminal"][data-terminal-id="halt-worker"][data-selected="true"]'),
+    ).toBeVisible();
+    await expect(popup).toHaveCount(0);
+  });
+}
 
 for (const width of [1280, 390]) {
   test(`halts prompt through permission priority, pause/resume, resolution and reload dedupe at ${width}px (HS2-E6KAWY)`, async ({

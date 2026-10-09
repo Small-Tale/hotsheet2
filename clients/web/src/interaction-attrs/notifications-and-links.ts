@@ -16,6 +16,8 @@ export const NOTIFICATIONS_AND_LINKS_ACTIONS = {
   dismissAppError: action('dismiss-app-error'),
   openHaltedSession: action('open-halted-session'),
   dismissHaltedSession: action('dismiss-halted-session'),
+  answerTerminalQuestion: action('answer-terminal-question'),
+  returnTerminalQuestion: action('return-terminal-question'),
   toggleVerifiedColumn: action('toggle-verified-column'),
   openLinkedTicket: action('open-linked-ticket'),
   selectTicketLinkMatch: action('select-ticket-link-match'),

@@ -1,5 +1,5 @@
 import { conversationError, type ConversationState } from './ai-conversation';
-import type { ToolConnection } from './api';
+import type { TerminalQuestion, ToolConnection } from './api';
 import type { TerminalDashboardGroup } from './components/terminal-dashboard';
 import type { Project } from './interactions/types';
 import type { DrawerAIChat } from './project-drive';
@@ -12,6 +12,7 @@ export interface HaltedSessionEpisode {
   sessionId: string;
   sessionName: string;
   message: string;
+  question?: TerminalQuestion;
 }
 
 /** Only currently halted terminals and completed failed turns are interruptive episodes. */
@@ -47,6 +48,7 @@ export function projectHaltedSessions(
                   sessionId: session.id,
                   sessionName: session.title ?? session.id,
                   message: session.question.question,
+                  question: session.question,
                 },
               ]
             : [],
