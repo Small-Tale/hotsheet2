@@ -62,5 +62,12 @@ wa-button.workspace-header__text-action::part(base) {
   gap: var(--kui-toolbar-gap, 0.5rem);
   flex: 1 1 auto;
 }
+/* Measured widths live on the stable app root. Kerf may morph this slot during typing without
+   dropping either width for a frame (HS2-3WQ9A1, HS2-7DHRH4). */
+.workspace-header__search-actions[data-search-open='true'] {
+  --kui-token-search-expanded-width: var(--hs-workspace-search-expanded-width, 30rem);
+  width: var(--hs-workspace-search-slot-width, auto);
+  flex: 0 0 auto;
+}
 /* Kerf's typed width thresholds and wireToolbarVisibility control Toolbar items. The rail keeps
    its groups on wrapped rows and never renders the narrow header's overflow menu (HS2-BBG8ZC). */

@@ -14,33 +14,24 @@ export function workspaceToolbarHidden(width: number, hide?: number, show?: numb
   return (hide !== undefined && width < hide) || (show !== undefined && width >= show);
 }
 
-/** CSSOM rounds inline pixel widths, so compare rendered precision before writing again. */
-export function workspaceSlotWidthChanged(current: string, target: number): boolean {
-  const value = Number.parseFloat(current);
-  return !Number.isFinite(value) || Math.abs(value - target) > 0.01;
-}
-
 interface WorkspaceSearchSizing {
   width: number;
   expandedWidth: string;
 }
 
-/** Restore a Kerf-morphed slot before its temporary narrow width can paint. */
-export function repairWorkspaceSearchSlot(
-  style: Pick<CSSStyleDeclaration, 'width' | 'flex' | 'getPropertyValue' | 'setProperty'>,
+/** Keep measured widths on the stable mount root so a Kerf morph cannot reset the slot. */
+export function applyWorkspaceSearchSizing(
+  style: Pick<CSSStyleDeclaration, 'getPropertyValue' | 'setProperty'>,
   sizing: WorkspaceSearchSizing,
 ): boolean {
   let changed = false;
-  if (style.getPropertyValue('--kui-token-search-expanded-width') !== sizing.expandedWidth) {
-    style.setProperty('--kui-token-search-expanded-width', sizing.expandedWidth);
+  if (style.getPropertyValue('--hs-workspace-search-expanded-width') !== sizing.expandedWidth) {
+    style.setProperty('--hs-workspace-search-expanded-width', sizing.expandedWidth);
     changed = true;
   }
-  if (workspaceSlotWidthChanged(style.width, sizing.width)) {
-    style.width = `${sizing.width}px`;
-    changed = true;
-  }
-  if (style.flex !== '0 0 auto') {
-    style.flex = '0 0 auto';
+  const width = `${sizing.width}px`;
+  if (style.getPropertyValue('--hs-workspace-search-slot-width') !== width) {
+    style.setProperty('--hs-workspace-search-slot-width', width);
     changed = true;
   }
   return changed;
@@ -82,19 +73,9 @@ export function wireWorkspaceToolbarVisibility(
 ): () => void {
   let header: HTMLElement | null = null;
   let observedSearchSlot: HTMLElement | null = null;
-  let styleRefreshFrame = 0;
-  let searchSizing: WorkspaceSearchSizing | undefined;
   const measuredWidths = new WeakMap<HTMLElement, { width: number; sizing: string | null }>();
   const resize = new ResizeObserver(() => {
     refresh();
-  });
-  const slotStyles = new MutationObserver(() => {
-    if (observedSearchSlot && searchSizing) repairWorkspaceSearchSlot(observedSearchSlot.style, searchSizing);
-    if (styleRefreshFrame) return;
-    styleRefreshFrame = requestAnimationFrame(() => {
-      styleRefreshFrame = 0;
-      refresh();
-    });
   });
 
   function setHidden(item: HTMLElement, hidden: boolean) {
@@ -133,13 +114,8 @@ export function wireWorkspaceToolbarVisibility(
     const searchSlot = searchOpen instanceof HTMLElement ? searchOpen : null;
     if (searchSlot !== observedSearchSlot) {
       if (observedSearchSlot) resize.unobserve(observedSearchSlot);
-      slotStyles.disconnect();
       observedSearchSlot = searchSlot;
-      searchSizing = undefined;
-      if (observedSearchSlot) {
-        resize.observe(observedSearchSlot);
-        slotStyles.observe(observedSearchSlot, { attributes: true, attributeFilter: ['style'] });
-      }
+      if (observedSearchSlot) resize.observe(observedSearchSlot);
     }
     const identity = header.querySelector<HTMLElement>('.workspace-header__identity');
     const groups = [
@@ -228,8 +204,7 @@ export function wireWorkspaceToolbarVisibility(
         (visible.every(Boolean) ? 0 : moreWidth + gap);
       const expandedWidth = `${Math.max(0, availableSearch - 8)}px`;
       const slotWidth = Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : moreWidth + gap));
-      searchSizing = { width: slotWidth, expandedWidth };
-      repairWorkspaceSearchSlot(searchSlot!.style, searchSizing);
+      applyWorkspaceSearchSizing(root.style, { width: slotWidth, expandedWidth });
       if (identity) {
         identity.setAttribute('data-hide-below', `${visible[0] ? 0 : contentWidth + 1}px`);
         setHidden(identity, !visible[0]);
@@ -241,11 +216,8 @@ export function wireWorkspaceToolbarVisibility(
       more!.setAttribute('data-show-below', `${visible.every(Boolean) ? 0 : contentWidth + 1}px`);
       setHidden(more!, visible.every(Boolean));
     } else {
-      searchSizing = undefined;
-      const closedSearchSlot = header.querySelector<HTMLElement>('.workspace-header__search-actions');
-      closedSearchSlot?.style.removeProperty('--kui-token-search-expanded-width');
-      closedSearchSlot?.style.removeProperty('width');
-      closedSearchSlot?.style.removeProperty('flex');
+      root.style.removeProperty('--hs-workspace-search-expanded-width');
+      root.style.removeProperty('--hs-workspace-search-slot-width');
     }
   }
 
@@ -254,9 +226,7 @@ export function wireWorkspaceToolbarVisibility(
     if (next === header) return false;
     if (header) resize.unobserve(header);
     if (observedSearchSlot) resize.unobserve(observedSearchSlot);
-    slotStyles.disconnect();
     observedSearchSlot = null;
-    searchSizing = undefined;
     header = next;
     if (header) {
       resize.observe(header);
@@ -285,9 +255,9 @@ export function wireWorkspaceToolbarVisibility(
   findHeader();
   return () => {
     mutations.disconnect();
-    slotStyles.disconnect();
-    if (styleRefreshFrame) cancelAnimationFrame(styleRefreshFrame);
     resize.disconnect();
+    root.style.removeProperty('--hs-workspace-search-expanded-width');
+    root.style.removeProperty('--hs-workspace-search-slot-width');
   };
 }
 

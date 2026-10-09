@@ -14186,6 +14186,8 @@ test('keeps primary 138-ticket interactions within the painted UI budget', async
   });
   await page.route(/\/tickets(?:\?.*)?$/, (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
+    if (new URL(route.request().url()).searchParams.get('text') === 'PERF000')
+      return route.fulfill({ json: { items: [largeRows[1]], counts: { total: 1 } } });
     return route.fulfill({
       json: new URL(route.request().url()).pathname.includes('/other-checkout/')
         ? [
@@ -14264,6 +14266,15 @@ test('keeps primary 138-ticket interactions within the painted UI budget', async
   };
   const samples = [];
   samples.push(await timing('project-change', () => page.getByRole('tab', { name: 'demo' }).click()));
+  for (let index = 0; index < 2; index += 1) {
+    await page.getByRole('tab', { name: 'other' }).click();
+    await page.getByRole('tab', { name: 'demo' }).click();
+  }
+  await page.getByRole('button', { name: 'Search tickets' }).click();
+  await page.getByRole('searchbox', { name: 'Search tickets' }).fill('PERF000');
+  await expect(page.locator('[data-ticket-slug="HS2-PERF000"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   samples.push(await timing('ticket-view-change', () => page.getByRole('button', { name: /Backlog/ }).click()));
   samples.push(await timing('ticket-view-change', () => page.getByRole('button', { name: /Queue/ }).click()));
   samples.push(await timing('workspace-mode-change', () => page.getByRole('button', { name: 'Columns view' }).click()));
