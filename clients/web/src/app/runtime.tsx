@@ -517,6 +517,7 @@ export async function startHotSheetWebClient() {
     if (target) void loadConfidenceReport(target);
   });
   const terminalRailScreen = signal<'root' | 'ticket'>('root');
+  const terminalGridFullscreen = signal(false);
   const terminalGroups = signal<TerminalDashboardGroup[]>([]),
     terminalDashboardLoading = signal(false),
     terminalDashboardMessage = signal('');
@@ -2023,6 +2024,7 @@ export async function startHotSheetWebClient() {
       terminalPreviewClickTimer = undefined;
     }
     if (mode !== 'stats') statsProjectId.value = undefined;
+    if (mode !== 'terminals') terminalGridFullscreen.value = false;
     if (mode === 'terminals' && shellMode.value !== 'terminals') {
       terminalRailScreen.value = 'root';
     }
@@ -4855,6 +4857,7 @@ export async function startHotSheetWebClient() {
       canGiveFeedback: () => Boolean(selectedTicket.value && noteCapabilities()?.ai_feedback),
       terminals: {
         terminalGroups,
+        terminalGridFullscreen,
         drawerTabOrder,
         terminalDashboardSize,
         terminalFitAcross,
@@ -5048,6 +5051,7 @@ export async function startHotSheetWebClient() {
         <MainShell
           tabs={tabs}
           mode={shellMode.value}
+          gridFullscreen={shellMode.value === 'terminals' && terminalGridFullscreen.value}
           mobile={viewportMobile.value}
           sidebar={
             shellMode.value === 'terminals'
@@ -5719,7 +5723,7 @@ export async function startHotSheetWebClient() {
     initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,
     changeEvidenceReader, selectedTicket, codeReviewMessage, openProject, currentRememberedProjectRoots, persistDrawerTabOrder, currentDrawerTabIds, focusDrawerTab,
     revealCorruptTicket, queueCorruptTicketRepair, corruptTickets, selectedCorruptKey, selectedTicketSlugs, setInspectorVisible, statsProjectId, setShellMode,
-    selectTerminalRailProject, selectTicketView, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize,
+    selectTerminalRailProject, selectTicketView, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize, terminalGridFullscreen,
     terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, clearTerminalHalt, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
     terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
     setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, terminalCopy, terminalPaste, terminalEditMenu, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,

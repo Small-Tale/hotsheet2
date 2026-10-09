@@ -18,7 +18,9 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Maximize2,
   MessageSquare,
+  Minimize2,
   Minus,
   Plug,
   Plus,
@@ -105,6 +107,7 @@ export interface TerminalDashboardProps {
   height: number;
   fitAcross: number;
   fitHigh: number;
+  fullscreen?: boolean;
   grouping?: 'project' | 'flow';
   layoutMode?: 'responsive' | 'drawer';
   visibilityGroups?: readonly TerminalVisibilityGroup[];
@@ -645,6 +648,7 @@ export function TerminalDashboard({
   height,
   fitAcross,
   fitHigh,
+  fullscreen = false,
   grouping = 'flow',
   layoutMode = 'responsive',
   magnifiedKey,
@@ -731,7 +735,23 @@ export function TerminalDashboard({
         )}
       </div>
       <div class="terminal-dashboard__zoom">
-        <FloatingToolbar label="Workspace tile zoom" position="bottom-end">
+        <FloatingToolbar
+          label={layoutMode === 'drawer' ? 'Workspace tile zoom' : 'Workspace grid controls'}
+          position="bottom-end"
+        >
+          {layoutMode !== 'drawer' && (
+            <ToolbarControlGroup single>
+              <button
+                type="button"
+                {...TERMINALS_ACTIONS.toggleTerminalGridFullscreen.attrs}
+                aria-label={fullscreen ? 'Exit workspace grid full screen' : 'Enter workspace grid full screen'}
+                aria-pressed={String(fullscreen)}
+                title={fullscreen ? 'Exit full screen' : 'Full screen'}
+              >
+                <LucideIcon icon={fullscreen ? Minimize2 : Maximize2} name={fullscreen ? 'minimize-2' : 'maximize-2'} />
+              </button>
+            </ToolbarControlGroup>
+          )}
           <ToolbarControlGroup>
             <button
               type="button"

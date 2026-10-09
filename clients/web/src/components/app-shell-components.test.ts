@@ -146,6 +146,27 @@ describe('application shell components', () => {
       expect(strip('stats', mobile)).toContain('data-surface="default" data-divider="false"');
     }
   });
+  it('keeps project navigation while the grid fills the shell without rails or its main toolbar (HS2-6P63KW)', () => {
+    const props = {
+      tabs: [],
+      mode: 'terminals' as const,
+      sidebar: sidebarParts('operations'),
+      inspector: inspectorParts('tickets', 'ticket rail'),
+      header: 'Workspace grid' as never,
+      workspace: 'grid' as never,
+    };
+    const normal = String(AppShell(props)),
+      fullscreen = String(AppShell({ ...props, gridFullscreen: true }));
+    expect(normal).toContain('id="app-left-rail"');
+    expect(normal).toContain('id="app-right-rail"');
+    expect(normal).toContain('aria-label="Workspace toolbar"');
+    expect(fullscreen).toContain('data-grid-fullscreen="true"');
+    expect(fullscreen).not.toContain('id="app-left-rail"');
+    expect(fullscreen).not.toContain('id="app-right-rail"');
+    expect(fullscreen).not.toContain('aria-label="Workspace toolbar"');
+    expect(fullscreen).toContain('data-component="project-tab-bar"');
+    expect(fullscreen).toContain('grid');
+  });
   it('renders the phone view-switcher page header in place of pageHeader (HS2-T35VN7)', () => {
     const render = (props: Partial<Parameters<typeof AppShell>[0]>) =>
       String(AppShell({ tabs: [], header: 'head' as never, workspace: 'work' as never, ...props }));

@@ -9,6 +9,7 @@ import { action } from 'kerfjs/actions';
 export const TERMINALS_ACTIONS = {
   exitTerminalFocusMode: action('exit-terminal-focus-mode'),
   zoomTerminalGrid: action('zoom-terminal-grid'),
+  toggleTerminalGridFullscreen: action('toggle-terminal-grid-fullscreen'),
   previewTerminal: action('preview-terminal'),
   openTerminalContextMenu: action('open-terminal-context-menu'),
   dismissMagnifiedTerminal: action('dismiss-magnified-terminal'),

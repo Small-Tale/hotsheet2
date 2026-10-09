@@ -67,6 +67,7 @@ navigation-and-tabs	delegate	document.body	'change'	'wa-select[name="mobile-proj
 navigation-and-tabs	delegate	document.body	'click'	'[data-action="retry-project-restore"]'
 terminals	delegate	document.body	'focusin'	'.terminal-session:not([hidden]) .xterm-helper-textarea'
 terminals	delegate	document.body	'click'	'[data-action="exit-terminal-focus-mode"]'
+terminals	delegate	document.body	'click'	'[data-action="toggle-terminal-grid-fullscreen"]'
 terminals	delegate	document.body	'click'	'[data-action="zoom-terminal-grid"]'
 terminals	delegate	document.body	'click'	'[data-action="preview-terminal"]'
 terminals	delegate	document.body	'keydown'	'[data-action="preview-terminal"]'

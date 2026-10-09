@@ -32,6 +32,7 @@ export interface TerminalPresentationDependencies {
   canGiveFeedback: () => boolean;
   terminals: {
     terminalGroups: Signal<TerminalDashboardGroup[]>;
+    terminalGridFullscreen: Signal<boolean>;
     drawerTabOrder: (projectId: string) => string[];
     terminalDashboardSize: Signal<{ width: number; height: number }>;
     terminalFitAcross: Signal<number>;
@@ -77,6 +78,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
   const { projects, project, shellMode, statsProjectId, confidenceReportByProject, canGiveFeedback } = dependencies;
   const {
     terminalGroups,
+    terminalGridFullscreen,
     drawerTabOrder,
     terminalDashboardSize,
     terminalFitAcross,
@@ -139,6 +141,7 @@ export function createTerminalPresentation(dependencies: TerminalPresentationDep
         kind: 'terminals',
         dashboard: {
           groups,
+          fullscreen: terminalGridFullscreen.value,
           width: terminalDashboardSize.value.width,
           height: terminalDashboardSize.value.height,
           fitAcross: terminalFitAcross.value,

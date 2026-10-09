@@ -3840,6 +3840,54 @@ test('adds a second git ticket store and connects its remote from one guided for
   await expect(page.getByText('Hot Sheet git · /picked/project', { exact: true })).toBeVisible();
 });
 
+test('expands the workspace grid and exits full screen on project navigation (HS2-6P63KW)', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  const shell = page.locator('[data-component="app-shell"]');
+  const dashboard = page.getByRole('region', { name: 'Workspace grid' });
+  const enter = dashboard.getByRole('button', { name: 'Enter workspace grid full screen' });
+  await expect(enter).toHaveAttribute('aria-pressed', 'false');
+  await enter.click();
+  await expect(shell).toHaveAttribute('data-grid-fullscreen', 'true');
+  await expect(shell.locator('#app-left-rail')).toHaveCount(0);
+  await expect(shell.locator('#app-right-rail')).toHaveCount(0);
+  await expect(page.locator('[data-component="terminal-ticket-rail-list"]')).toHaveCount(0);
+  await expect(shell.getByRole('toolbar', { name: 'Workspace toolbar' })).toHaveCount(0);
+  await expect(dashboard.getByRole('button', { name: 'Exit workspace grid full screen' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-6p63kw-grid-fullscreen-wide.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+  await dashboard.getByRole('button', { name: 'Exit workspace grid full screen' }).click();
+  await expect(shell).toHaveAttribute('data-grid-fullscreen', 'false');
+  await expect(shell.locator('#app-left-rail')).toHaveCount(1);
+  await enter.click();
+  await page.getByRole('tab', { name: /^demo/ }).click();
+  await expect(shell).toHaveAttribute('data-mode', 'project');
+  await page.getByRole('button', { name: 'Workspace grid' }).click();
+  await expect(dashboard.getByRole('button', { name: 'Enter workspace grid full screen' })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await page.setViewportSize({ width: 560, height: 720 });
+  await dashboard.getByRole('button', { name: 'Enter workspace grid full screen' }).click();
+  await expect(shell).toHaveAttribute('data-grid-fullscreen', 'true');
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-6p63kw-grid-fullscreen-phone.png',
+    fullPage: true,
+    animations: 'disabled',
+  });
+});
+
 test('uses independent width and height terminal dashboard zoom scales', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1100 });
   await installFakeTerminalSockets(page, true);
@@ -3851,10 +3899,14 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   const dashboard = page.getByRole('region', { name: 'Workspace grid' }),
     operations = page.getByRole('region', { name: 'Terminal operations sidebar' });
   await expect(dashboard).toBeVisible();
-  const zoomToolbar = dashboard.getByRole('toolbar', { name: 'Workspace tile zoom' });
+  const zoomToolbar = dashboard.getByRole('toolbar', { name: 'Workspace grid controls' });
   await expect(zoomToolbar).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(zoomToolbar).toHaveAttribute('data-position', 'bottom-end');
-  await expect(zoomToolbar.locator('[data-component="toolbar-control-group"]')).toHaveAttribute('data-tone', 'default');
+  await expect(zoomToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
+  await expect(zoomToolbar.locator('[data-component="toolbar-control-group"]').last()).toHaveAttribute(
+    'data-tone',
+    'default',
+  );
   await expect(operations).toBeVisible();
   await expect(operations.getByText('demo', { exact: true })).toBeVisible();
   await expect(operations.locator('[data-component="project-summary"]')).toHaveCount(1);
@@ -4115,7 +4167,7 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   page,
 }, testInfo) => {
   const expectDarkChildren = async (toolbar: Locator, name: string) => {
-    const group = toolbar.locator('[data-component="toolbar-control-group"]');
+    const group = toolbar.locator('[data-component="toolbar-control-group"]').last();
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
       await expect(group).toHaveAttribute('data-tone', 'default');
@@ -4135,10 +4187,11 @@ test('uses Kerf floating toolbars for workspace zoom and collapsed drawer restor
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Workspace grid' }).click();
   const workspace = page.getByRole('region', { name: 'Workspace grid' }),
-    workspaceZoom = workspace.getByRole('toolbar', { name: 'Workspace tile zoom' });
+    workspaceZoom = workspace.getByRole('toolbar', { name: 'Workspace grid controls' });
   await expect(workspaceZoom).toHaveAttribute('data-component', 'floating-toolbar');
   await expect(workspaceZoom).toHaveAttribute('data-position', 'bottom-end');
-  await expect(workspaceZoom.locator('[data-component="toolbar-control-group"]')).toHaveAttribute(
+  await expect(workspaceZoom.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
+  await expect(workspaceZoom.locator('[data-component="toolbar-control-group"]').last()).toHaveAttribute(
     'data-tone',
     'default',
   );

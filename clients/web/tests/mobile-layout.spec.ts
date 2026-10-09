@@ -231,7 +231,7 @@ test('mobile floating controls stay inside the dynamic viewport and safe area (H
   expect(restoreBottom).toBeCloseTo(64, 0);
   await page.screenshot({ path: 'target/visual-captures/hs2-43n9zb-mobile-drawer-restore.png', fullPage: true });
   await page.getByRole('button', { name: 'Workspace grid' }).click();
-  const zoom = page.getByRole('toolbar', { name: 'Workspace tile zoom' });
+  const zoom = page.getByRole('toolbar', { name: 'Workspace grid controls' });
   await expect(zoom).toBeVisible();
   // `.terminal-dashboard__zoom` is the zero-size safe-area anchor; measure the floating toolbar itself.
   const zoomBottom = await zoom.evaluate((node) => innerHeight - node.getBoundingClientRect().bottom);

@@ -89,11 +89,21 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain('data-action="preview-terminal"');
     expect(markup).toContain('<div class="terminal-dashboard__zoom"><div class="kui-floating-toolbar"');
     expect(markup).toContain(
-      'data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Workspace tile zoom"',
+      'data-component="floating-toolbar" data-position="bottom-end" data-placement="floating" role="toolbar" aria-label="Workspace grid controls"',
     );
     expect(markup).toContain('data-component="toolbar-control-group"');
     expect(markup).toContain('data-tone="default"');
     expect(markup).toContain('data-action="zoom-terminal-grid"');
+    expect(markup).toContain('data-action="toggle-terminal-grid-fullscreen"');
+    expect(markup).toContain('aria-label="Enter workspace grid full screen" aria-pressed="false"');
+    const expanded = String(
+      TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2, fullscreen: true }),
+    );
+    expect(expanded).toContain('aria-label="Exit workspace grid full screen" aria-pressed="true"');
+    const drawer = String(
+      TerminalDashboard({ groups, width: 1200, height: 700, fitAcross: 4, fitHigh: 2, layoutMode: 'drawer' }),
+    );
+    expect(drawer).not.toContain('data-action="toggle-terminal-grid-fullscreen"');
     for (const action of ['magnify-terminal', 'dedicate-terminal'])
       expect(markup).not.toContain(`data-action="${action}"`);
   });

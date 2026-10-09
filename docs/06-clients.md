@@ -2267,6 +2267,10 @@ destroying sessions. The compact selector's open menu sizes to its option conten
 the narrow closed control, so checkmarks and complete group names remain visible.
 The eye and selector align with the Workspace grid toolbar's trailing inset, even when
 their nested toolbar reserves room for a longer visibility-group name.
+The grid's floating controls place a full-screen button immediately before the zoom pair.
+Full-screen mode removes the operations and ticket rails and the main toolbar while
+retaining project tabs; its button switches to Exit full screen, and selecting a project
+tab restores the normal shell (HS2-6P63KW).
 Production imports the canonical `@kerfjs/ui/select/register` boundary at boot.
 The contract for that shared lifecycle keeps the latest open/close request authoritative
 across interrupted animations and viewport changes; a previous close cannot hide a

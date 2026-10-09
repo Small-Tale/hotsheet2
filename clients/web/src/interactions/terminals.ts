@@ -65,6 +65,7 @@ export function allowInterruptedDrawerPopupShow(menu: { open: boolean; popup?: {
 export interface TerminalInteractionsDependencies {
   readonly terminalDrawerBounds: Signal<{ width: number; height: number }>;
   readonly terminalDashboardSize: Signal<{ width: number; height: number }>;
+  readonly terminalGridFullscreen: Signal<boolean>;
   readonly terminalDrawerFitHigh: Signal<number>;
   readonly terminalFitAcross: Signal<number>;
   readonly terminalFitHigh: Signal<number>;
@@ -153,6 +154,7 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
   const {
     terminalDrawerBounds,
     terminalDashboardSize,
+    terminalGridFullscreen,
     terminalDrawerFitHigh,
     terminalFitAcross,
     terminalFitHigh,
@@ -226,6 +228,11 @@ export function wireTerminalInteractions(dependencies: TerminalInteractionsDepen
           .terminalId;
       exitMobileTerminalFocus();
       if (current && drawer?.dataset.mode === 'dedicated' && terminalId) focusDrawerTab(current.id, terminalId);
+    }),
+  );
+  lifetime.add(
+    delegate(document.body, 'click', TERMINALS_ACTIONS.toggleTerminalGridFullscreen.selector, () => {
+      terminalGridFullscreen.value = !terminalGridFullscreen.value;
     }),
   );
   lifetime.add(

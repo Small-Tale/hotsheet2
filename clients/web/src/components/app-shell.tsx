@@ -59,6 +59,8 @@ export interface AppShellProps {
   sidebarSize?: number;
   inspectorSize?: number;
   mode?: ProjectTabBarMode;
+  /** Expand the workspace grid by removing the surrounding rails and main toolbar. */
+  gridFullscreen?: boolean;
   sidebarVisible?: boolean;
   /** Mobile single-column layout: sidebar/inspector overlay the main column and a click-away
    * scrim dismisses whichever one is open (only one is ever open at a time — HS2-ZK51WP). */
@@ -114,6 +116,7 @@ export function AppShell({
   sidebarSize = APP_REGION_BOUNDS['app-left-rail'].fallback,
   inspectorSize = APP_REGION_BOUNDS['app-right-rail'].fallback,
   mode = 'project',
+  gridFullscreen = false,
   sidebarVisible = true,
   mobile = false,
   workspacePresentation = 'inset',
@@ -134,7 +137,7 @@ export function AppShell({
   const sidePanelPresentation = mobile ? 'overlay' : 'inline';
   const terminalDrawerExpanded = mode === 'project' && Boolean(terminalDrawer) && terminalDrawerVisible;
   const leftRail: WorkbenchStaticPanel | undefined =
-    mode !== 'stats' && sidebar
+    !gridFullscreen && mode !== 'stats' && sidebar
       ? {
           ...workbenchSidebarPanel(sidebar),
           // Rail names stay distinct from the landmarks inside them (the panel's content, the inspector).
@@ -149,7 +152,7 @@ export function AppShell({
         }
       : undefined;
   const rightRail: WorkbenchPanel | undefined =
-    mode !== 'stats' && inspector
+    !gridFullscreen && mode !== 'stats' && inspector
       ? {
           // Every right-rail surface exposes panel parts (HS2-QQW6CT): the Workbench composes the
           // toolbar, the fixed header, and the scrolling content in one Pane, which takes the
@@ -206,6 +209,7 @@ export function AppShell({
       data-component="app-shell"
       data-presentation={presentation}
       data-mode={mode}
+      data-grid-fullscreen={String(gridFullscreen)}
       data-mobile={String(mobile)}
       data-workspace-search-open={String(workspaceSearchOpen)}
       data-sidebar-visible={String(sidebarVisible)}
@@ -236,18 +240,22 @@ export function AppShell({
           safeAreaEdges: ['block-start', 'inline-start', 'inline-end'],
           contentLabel: 'Workspace',
         }}
-        mainToolbar={{
-          label: 'Workspace toolbar',
-          dividerSides: '',
-          // Search stays in this row; width-aware controls yield space to it.
-          responsive: workspaceSearchOpen ? 'none' : 'trailing-priority',
-          responsiveAt: 'narrow',
-          safeAreaEdges: mobile ? ['block-start', 'inline-start', 'inline-end'] : undefined,
-          // The collapsed left rail's toggle leads this zone and the collapsed right rail's toggle
-          // trails it; the Workbench relocates both here.
-          leading: header,
-          trailing: headerActions,
-        }}
+        mainToolbar={
+          gridFullscreen
+            ? undefined
+            : {
+                label: 'Workspace toolbar',
+                dividerSides: '',
+                // Search stays in this row; width-aware controls yield space to it.
+                responsive: workspaceSearchOpen ? 'none' : 'trailing-priority',
+                responsiveAt: 'narrow',
+                safeAreaEdges: mobile ? ['block-start', 'inline-start', 'inline-end'] : undefined,
+                // The collapsed left rail's toggle leads this zone and the collapsed right rail's toggle
+                // trails it; the Workbench relocates both here.
+                leading: header,
+                trailing: headerActions,
+              }
+        }
         main={
           <main class="app-shell__main" data-work-area-focus-owner tabIndex={-1}>
             {/* The tab strip shares the main column's surface; in terminals mode no page header sits

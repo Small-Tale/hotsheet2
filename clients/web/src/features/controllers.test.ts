@@ -1177,6 +1177,7 @@ it('projects terminal/chat replacement, project switches and empty/refill withou
     permissions,
     terminals: {
       terminalGroups: groups,
+      terminalGridFullscreen: signal(false),
       drawerTabOrder: () => ['ai-chat:chat-a'],
       terminalDashboardSize: dimensions,
       terminalFitAcross: signal(2),
