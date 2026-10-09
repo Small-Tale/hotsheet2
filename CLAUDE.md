@@ -89,6 +89,13 @@ On git-backed Started tickets, set `started_phase` as work moves through analyzi
 planning, working, initial testing, integrating, and final testing. The phase is
 durable progress; it does not signal a live worker without a claim.
 
+For a claim ETA, estimate the time until the ticket can actually be completed, including
+local checks and likely CI or handoff waits. Base it on the work in this ticket rather
+than a habitual 60-, 90-, or 120-minute allowance; completed single-claim tickets have
+usually taken much less than those allowances. If work is released and later reclaimed,
+estimate the remaining work afresh, including any external wait. Renew the ETA when
+new scope or a delayed gate changes the expected finish time.
+
 ## Client UI stack
 
 Use **Kerf (`kerfjs`) + Web Awesome Core** for the Tauri web UI. Kerf owns
