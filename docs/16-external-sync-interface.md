@@ -185,7 +185,15 @@ hold it; a source that fails to answer (auth, rate limit, network) only surfaces
 when no other source owns the id. Id-shape errors name the provider that raised them
 (HS2-GKERTK).
 Checkout lists tolerate an unavailable external source: they return available tickets
-with a partial-data warning instead of failing the entire collection. The live GitHub
+with a partial-data warning instead of failing the entire collection. The web client
+begins a mixed-source project's first ticket load with a `source=git` checkout
+page alongside the full page. That local-only read skips provider construction and
+keychain access, so local tickets and partial counts can appear while the OS waits for
+an external credential; the full page replaces them when it resolves. The local cursor
+only pages local sources and is not reused for the full merge. Startup restores the
+saved workspace session before exposing the partial view and does not replay it over
+subsequent user changes when the full page arrives.
+The live GitHub
 adapter shares a ten-second issue-list snapshot across summary and board reads. Later
 refreshes request only issues updated since the prior GitHub response's `Date` (overlapping
 the last second), then merge them by issue number. If that header is absent, the newest

@@ -52,12 +52,13 @@ export interface ProjectLifecycleDependencies {
   setPermissionAutomation: (projectId: string, automation: PermissionAutomation) => void;
   startPermissionUpdates: () => void;
   syncProjectChangeStreams: () => void;
-  refreshProject: (options?: { refreshRepository?: boolean }) => Promise<unknown>;
+  refreshProject: (options?: { refreshRepository?: boolean; onAvailable?: () => void }) => Promise<unknown>;
   refreshCommands: (project: Project) => Promise<unknown>;
   refreshCustomViews: (project: Project) => Promise<unknown>;
   refreshDriveConnections: (project: Project, restoreDrawerTabs: boolean) => Promise<unknown>;
   refreshTerminalDashboard: () => Promise<unknown>;
   restoreProjectSession: (project: Project) => Promise<unknown>;
+  projectSessionInteractionVersion: () => number;
   customViewFor: (view: TicketView, projectId: string) => CustomView | undefined;
   restoreCustomView: (view: CustomView) => void;
   observeTerminalDrawer: () => void;
@@ -262,18 +263,43 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         localStorage.getItem(`hotsheet.project.${value.id}.terminal-drawer-selection`) || 'grid';
     }
     presentOpenedProjectSetup(value);
-    await Promise.all([
-      dependencies.refreshProject({ refreshRepository: true }),
+    let available!: () => void;
+    const firstTickets = new Promise<void>((resolve) => {
+      available = resolve;
+    });
+    let earlyRestore: Promise<unknown> | undefined;
+    let earlyInteractionVersion = 0;
+    const finishing = Promise.all([
+      dependencies.refreshProject({ refreshRepository: true, onAvailable: available }),
       dependencies.refreshCommands(value),
       dependencies.refreshCustomViews(value),
       dependencies.refreshDriveConnections(value, true),
       ...(terminalDrawerVisible.value ? [dependencies.refreshTerminalDashboard()] : []),
+    ]).then(async () => {
+      if (earlyRestore) await earlyRestore;
+      if (selectedProjectId.value !== value.id) return;
+      // A saved external selection can be restored once the full page arrives.
+      // Do not replay the saved session over anything the user changed meanwhile.
+      if (!earlyRestore || dependencies.projectSessionInteractionVersion() === earlyInteractionVersion)
+        await dependencies.restoreProjectSession(value);
+      if (selectedProjectId.value !== value.id) return;
+      const restored = dependencies.customViewFor(selectedView.value, value.id);
+      if (restored) dependencies.restoreCustomView(restored);
+      else if (customTicketViewKey(selectedView.value)) selectedView.value = 'all';
+      if (terminalDrawerVisible.value) dependencies.observeTerminalDrawer();
+    });
+    // Startup can reveal local tickets before an external credential prompt resolves.
+    // Keep the full refresh and session reconciliation running after that first paint.
+    const first = await Promise.race([
+      firstTickets.then(() => 'available' as const),
+      finishing.then(() => 'complete' as const),
     ]);
-    await dependencies.restoreProjectSession(value);
-    const restored = dependencies.customViewFor(selectedView.value, value.id);
-    if (restored) dependencies.restoreCustomView(restored);
-    else if (customTicketViewKey(selectedView.value)) selectedView.value = 'all';
-    if (terminalDrawerVisible.value) dependencies.observeTerminalDrawer();
+    if (first === 'available' && selectedProjectId.value === value.id) {
+      earlyRestore = dependencies.restoreProjectSession(value);
+      await earlyRestore;
+      earlyInteractionVersion = dependencies.projectSessionInteractionVersion();
+    }
+    void finishing.catch(() => undefined);
   }
 
   async function openProject(

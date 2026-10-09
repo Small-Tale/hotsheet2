@@ -241,7 +241,11 @@ signals; `main.tsx` registers successful projects serially, then activates/resto
 selected project. Explicit project opens reuse the same fetch and registration boundaries.
 The startup unit matrix controls completion ordering and retry transitions, and the
 production-browser suite checks request overlap, active-only loading, saved drafts,
-onboarding, failure identities, and empty/refilled sessions.
+onboarding, failure identities, and empty/refilled sessions. A mixed-source startup
+scenario holds the full provider page while the local page renders, then releases it
+and checks that both sources appear and a user's intervening view choice survives.
+The server HTTP suite checks that `source=git`
+pages and cursors never call an external provider.
 
 ### 12.6.4 Web feature state and presentation owners
 

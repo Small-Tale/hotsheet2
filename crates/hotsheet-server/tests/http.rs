@@ -14488,7 +14488,7 @@ async fn checkout_pages_globally_merge_local_and_provider_sources_across_continu
         .with_checkout_registry(registry.path().join("checkouts.json"))
         .with_ticket_provider(Arc::new(GitHubProvider::new(
             GitHubConfig::new("github-mixed", "acme/repo", "fixture-token"),
-            transport,
+            transport.clone(),
         ))));
     let connection = serde_json::json!({
         "id":"github-mixed","provider":"github","locator":"acme/repo",
@@ -14539,6 +14539,40 @@ async fn checkout_pages_globally_merge_local_and_provider_sources_across_continu
         .await
         .unwrap();
     assert_eq!(source.status(), StatusCode::OK);
+
+    let local = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=1&sort=title&source=git"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(local["items"][0]["title"], "Bravo local");
+    assert_eq!(local["counts"]["total"], 2);
+    assert!(transport.requests.lock().unwrap().is_empty());
+    let cursor = local["next_cursor"].as_str().unwrap();
+    let local_next = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!(
+                    "/checkouts/{checkout_id}/tickets?page_size=1&sort=title&source=git&cursor={cursor}"
+                ),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(local_next["items"][0]["title"], "Delta local");
+    assert!(local_next["next_cursor"].is_null());
+    assert!(transport.requests.lock().unwrap().is_empty());
 
     // The unpaged array shares the page merge order; `limit` caps the checkout-wide
     // result, and a `fields` projection keeps order and the source `store` (HS2-M0YTB6).

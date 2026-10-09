@@ -383,6 +383,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 
 ## Data / formats
 
+- **Checkout ticket page:** `GET /checkouts/{id}/tickets?page_size=...` merges all
+  sources; `source=git` returns only local git rows and counts without constructing
+  external providers. Each page's cursor is bound to its source set.
 - **Ticket file:** `tickets/<final 2 ULID characters>/<ULID>.md` — YAML frontmatter + explicitly
   bounded, collision-escaped Markdown body (`details`) and notes. Notes have stable
   ULIDs, five kinds, and `created_at`/`edited_at`; legacy one-sided note files remain

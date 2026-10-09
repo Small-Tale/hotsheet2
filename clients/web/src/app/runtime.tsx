@@ -791,7 +791,8 @@ export async function startHotSheetWebClient() {
     composerScreening = signal(false),
     composerSubmitting = signal(false);
   let projectSessionTimer: number | undefined,
-    restoringProjectSession = false;
+    restoringProjectSession = false,
+    projectSessionInteractionVersion = 0;
   const sidebarSize = signal(loadAppRegionSize(localStorage, 'app-left-rail')),
     inspectorSize = signal(loadAppRegionSize(localStorage, 'app-right-rail'));
   const detailsMode = signal<MarkdownEditorMode>('preview'),
@@ -1115,6 +1116,7 @@ export async function startHotSheetWebClient() {
     refreshDriveConnections,
     refreshTerminalDashboard,
     restoreProjectSession,
+    projectSessionInteractionVersion: () => projectSessionInteractionVersion,
     customViewFor,
     restoreCustomView,
     observeTerminalDrawer,
@@ -2360,6 +2362,7 @@ export async function startHotSheetWebClient() {
   }
   function scheduleProjectSessionPersistence() {
     if (restoringProjectSession) return;
+    projectSessionInteractionVersion += 1;
     if (projectSessionTimer !== undefined) window.clearTimeout(projectSessionTimer);
     projectSessionTimer = window.setTimeout(() => {
       projectSessionTimer = undefined;
@@ -3366,7 +3369,8 @@ export async function startHotSheetWebClient() {
     showLoading = true,
     quiet = false,
     refreshRepository = false,
-  }: { showLoading?: boolean; quiet?: boolean; refreshRepository?: boolean } = {}) {
+    onAvailable,
+  }: { showLoading?: boolean; quiet?: boolean; refreshRepository?: boolean; onAvailable?: () => void } = {}) {
     const current = project(),
       generation = ++projectRefreshGeneration;
     if (!current) return;
@@ -3383,8 +3387,50 @@ export async function startHotSheetWebClient() {
         view = selectedView.value,
         query = sortedTicketQuery(ticketViewQuery(view)),
         board = boardRefreshSpec(view, current.id, { rows: tickets.value, pages: boardColumnPages.value });
+      let fullSettled = false;
+      const fullRefresh = loadProjectTicketRefresh(client, current.id, query, board);
+      void fullRefresh.then(
+        () => {
+          fullSettled = true;
+        },
+        () => {
+          fullSettled = true;
+        },
+      );
+      // The complete merge can wait on an OS keychain prompt. Let the local git
+      // source make the workspace useful first, then replace this partial view with
+      // the authoritative mixed-source result when access is granted.
+      const hasExternalSource =
+        defaultProviders.value[current.id]?.sources.some((source) => source.provider !== 'git') ?? true;
+      if (showLoading && hasExternalSource && !Object.hasOwn(ticketRowsByProject.value, current.id)) {
+        void loadProjectTicketRefresh(client, current.id, { ...query, source: 'git' }, board)
+          .then((local) => {
+            if (!active() || fullSettled) return;
+            if (!local.tickets || selectedView.value !== view || workspaceSearchActive()) {
+              onAvailable?.();
+              return;
+            }
+            markProjectWarm(current.id);
+            const rows = mergeRetainedCreatedRows(
+              local.tickets,
+              pendingCreatedTickets.retain(current.id, local.tickets),
+            );
+            tickets.value = rows;
+            ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: rows };
+            ticketNextCursor.value = undefined;
+            boardColumnPages.value = {};
+            if (local.ticketCounts)
+              ticketCountsByProject.value = { ...ticketCountsByProject.value, [current.id]: local.ticketCounts };
+            partialSourcesByProject.value = { ...partialSourcesByProject.value, [current.id]: true };
+            loading.value = false;
+            onAvailable?.();
+          })
+          .catch(() => {
+            /* The complete refresh still reports the authoritative error. */
+          });
+      }
       const [index, repositoryResult] = await Promise.all([
-        loadProjectTicketRefresh(client, current.id, query, board),
+        fullRefresh,
         refreshRepository
           ? client
               .repositoryStatus(current.id)

@@ -5283,12 +5283,17 @@ fn merge_checkout_page(
     let contexts = auto_context::effective(&checkout.settings())
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let entries = checkout_entries(state, reference)?;
+    if let Some(source) = params.source.as_deref() {
+        if source != "git" {
+            return Err(ApiError::new(StatusCode::BAD_REQUEST, "source must be git"));
+        }
+    }
     // A disabled source is left out of the merged view rather than failing it (HS2-SF6W34).
     let mut external_sources = Vec::new();
     for source in checkout
         .sources
         .iter()
-        .filter(|source| source.provider != "git")
+        .filter(|source| source.provider != "git" && params.source.is_none())
     {
         if !connection_disabled(state, &source.connection_id)? {
             external_sources.push(source);
@@ -11941,6 +11946,8 @@ async fn poll_events(
 
 #[derive(Debug, Clone, Default, Deserialize)]
 struct ListParams {
+    /// Checkout page only: read local git sources without touching external credentials.
+    source: Option<String>,
     status: Option<String>,
     /// Built-in multi-status client collection (`queue`, `archive`, or `trash`).
     collection: Option<String>,

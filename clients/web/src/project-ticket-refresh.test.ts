@@ -51,6 +51,22 @@ describe('loadProjectTicketRefresh', () => {
     expect(checkoutTicketPage).toHaveBeenCalledWith('checkout', 200, undefined, { collection: 'queue' });
   });
 
+  it('preserves a local-only source query and its partial counts', async () => {
+    const ticket = { id: '01', slug: 'HS2-LOCAL', title: 'Local', tags: [] };
+    const checkoutTicketPage = vi.fn().mockResolvedValue({ items: [ticket], counts });
+    const result = await loadProjectTicketRefresh(
+      { checkoutTicketPage, checkoutCorruptTickets: vi.fn().mockResolvedValue([]) },
+      'checkout',
+      { collection: 'queue', source: 'git' },
+    );
+    expect(checkoutTicketPage).toHaveBeenCalledWith('checkout', 200, undefined, {
+      collection: 'queue',
+      source: 'git',
+    });
+    expect(result.tickets).toEqual([ticket]);
+    expect(result.ticketCounts).toEqual(counts);
+  });
+
   it('keeps local rows and reports a partial checkout page when GitHub is rate limited', async () => {
     const ticket = { id: '01', slug: 'HS2-OK', title: 'Local ticket', tags: [] };
     const result = await loadProjectTicketRefresh(

@@ -62,13 +62,14 @@ function gate() {
   });
   return { promise, release };
 }
-async function startupFixture(page: Page, roots: string[], active: string | undefined) {
+async function startupFixture(page: Page, roots: string[], active: string | undefined, composerOpen = true) {
   const attempts = new Map<string, number>(),
     calls: string[] = [],
     pending = new Map<string, ReturnType<typeof gate>>();
   const unavailable = new Map<string, { pid?: number; attempts?: number }>();
   const projects = new Map(['alpha', 'beta', 'gamma'].map((name) => [name, projectFor(name)]));
   const ticketGates = new Map<string, ReturnType<typeof gate>>();
+  const fullTicketGates = new Map<string, ReturnType<typeof gate>>();
   await page.addInitScript(
     ({ roots, active, sessions }) => {
       if (!localStorage.getItem('startup-test-seeded')) {
@@ -82,9 +83,11 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
     {
       roots: roots.map(rootFor),
       active: active ? rootFor(active) : undefined,
-      sessions: ['alpha', 'beta', 'gamma'].map(
-        (name) => [name, sessionFor(name, name === 'beta' ? 'backlog' : 'all')] as const,
-      ),
+      sessions: ['alpha', 'beta', 'gamma'].map((name) => {
+        const session = sessionFor(name, name === 'beta' ? 'backlog' : 'all');
+        session.composer.open = composerOpen;
+        return [name, session] as const;
+      }),
     },
   );
   await page.routeWebSocket(/\/__hotsheet\/project-api\/[^/]+\/ws\/sync(?:\?.*)?$/, () => undefined);
@@ -133,11 +136,24 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
             default: true,
             capabilities,
           },
+          ...(fullTicketGates.has(path.split('/')[3])
+            ? [
+                {
+                  connection_id: 'github-main',
+                  provider: 'github',
+                  display_name: 'GitHub',
+                  locator: 'acme/repo',
+                  default: false,
+                  capabilities,
+                },
+              ]
+            : []),
         ],
       });
     if (path.endsWith('/tickets')) {
       const name = path.split('/')[3];
       await ticketGates.get(name)?.promise;
+      if (url.searchParams.get('source') !== 'git') await fullTicketGates.get(name)?.promise;
       const row = {
         id: `${name}-ticket`,
         native_id: `${name}-ticket`,
@@ -154,9 +170,24 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
       };
       return route.fulfill({
         json: {
-          items: [row],
+          items: [
+            row,
+            ...(fullTicketGates.has(name) && url.searchParams.get('source') !== 'git'
+              ? [
+                  {
+                    ...row,
+                    id: `${name}-remote`,
+                    native_id: '42',
+                    connection_id: 'github-main',
+                    qualified_id: 'github-main:42',
+                    slug: 'GH-42',
+                    title: `${name} remote work`,
+                  },
+                ]
+              : []),
+          ],
           counts: {
-            total: 1,
+            total: fullTicketGates.has(name) && url.searchParams.get('source') !== 'git' ? 2 : 1,
             queued: name === 'beta' ? 0 : 1,
             backlog: name === 'beta' ? 1 : 0,
             archive: 0,
@@ -199,7 +230,7 @@ async function startupFixture(page: Page, roots: string[], active: string | unde
       return route.fulfill({ json: [] });
     return route.fulfill({ status: 404, json: { error: `No fixture for ${path}` } });
   });
-  return { attempts, calls, pending, unavailable, projects, ticketGates };
+  return { attempts, calls, pending, unavailable, projects, ticketGates, fullTicketGates };
 }
 const heavyCalls = (calls: string[]) =>
   calls.filter((path) => /\/(tickets|commands|command-runs|views)(\?|$)/.test(path));
@@ -209,6 +240,44 @@ const draft = (page: Page, name: string) =>
       JSON.parse(localStorage.getItem(`hotsheet.workspace.project-session.v1.${id}`) ?? '{}').composer.title as string,
     name,
   );
+
+test('shows local tickets while a mixed-source page waits for credential access', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fixture = await startupFixture(page, ['alpha'], 'alpha', false);
+  const full = gate();
+  fixture.fullTicketGates.set('alpha', full);
+  await page.goto('/?dev-review=false');
+  await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+  await expect(page.getByText('alpha remote work', { exact: true })).toHaveCount(0);
+  expect(fixture.calls.some((path) => path.includes('/tickets?') && path.includes('source=git'))).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('local-while-credential-pending-wide.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: testInfo.outputPath('local-while-credential-pending-phone.png') });
+  full.release();
+  await expect(page.getByText('alpha remote work', { exact: true })).toBeVisible();
+  await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('both-sources-after-credential-phone.png') });
+});
+
+test('does not replay a saved view over a choice made during credential wait', async ({ page }) => {
+  const fixture = await startupFixture(page, ['alpha'], 'alpha', false);
+  const full = gate();
+  fixture.fullTicketGates.set('alpha', full);
+  await page.goto('/?dev-review=false');
+  await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /Backlog/ }).click();
+  await expect(page.locator('.kui-toolbar-text', { hasText: 'Backlog' })).toBeVisible();
+  const fullPage = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.endsWith('/tickets') && !url.searchParams.has('source');
+  });
+  full.release();
+  await fullPage;
+  await page.waitForTimeout(300);
+  await expect(page.locator('.kui-toolbar-text', { hasText: 'Backlog' })).toBeVisible();
+});
 
 test('opens remembered projects concurrently, wires original order, and restores only the middle active project', async ({
   page,

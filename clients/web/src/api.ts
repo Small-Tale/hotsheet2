@@ -310,6 +310,8 @@ export interface ClaimEvent {
   worker_label?: string;
 }
 export interface CheckoutTicketQuery {
+  /** A local-first checkout read that avoids external credential access. */
+  source?: 'git';
   text?: string;
   status?: string;
   collection?: 'queue' | 'archive' | 'trash';
