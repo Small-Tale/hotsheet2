@@ -17059,6 +17059,122 @@ async fn reopening_a_project_after_server_restart_keeps_its_github_source() {
 }
 
 #[tokio::test]
+async fn replaced_linked_git_store_is_rejected_on_checkout_reads_after_restart() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let root = tempfile::tempdir().unwrap();
+    let first = root.path().join("first");
+    let second = root.path().join("second");
+    let linked = root.path().join("linked");
+    let original = root.path().join("original");
+    let registry_path = root.path().join("checkouts.json");
+    std::fs::create_dir(&first).unwrap();
+    std::fs::create_dir(&second).unwrap();
+    let store = FsStore::init(&linked, &StoreMetadata::new("HS")).unwrap();
+    let ticket = ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-10-09T00:00:00Z"),
+        NewTicket {
+            title: "Original store ticket".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let (_primary, initial_state) = state();
+    let initial_app = app(initial_state.with_checkout_registry(&registry_path));
+    for (checkout, alias, stores) in [
+        (&first, "first", vec![linked.clone()]),
+        (&second, "second", Vec::new()),
+    ] {
+        let body = serde_json::json!({"root":checkout,"alias":alias,"stores":stores});
+        assert_eq!(
+            initial_app
+                .clone()
+                .oneshot(authed("POST", "/checkouts", Some(&body.to_string())))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CREATED
+        );
+    }
+    std::fs::rename(&linked, &original).unwrap();
+    FsStore::init(&linked, &StoreMetadata::new("HS")).unwrap();
+
+    let store_id = hotsheet_ticketing::checkouts::TicketSource::git(&linked).connection_id;
+    assert_ne!(
+        initial_app
+            .clone()
+            .oneshot(authed("GET", &format!("/stores/{store_id}/tickets"), None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK,
+        "an already hosted store must not route to replacement data"
+    );
+
+    assert_eq!(
+        initial_app
+            .clone()
+            .oneshot(authed("GET", "/checkouts/first/tickets", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT,
+        "an already hosted store must not bypass the identity check"
+    );
+
+    let (_primary_after_restart, restarted_state) = state();
+    let restarted = app(restarted_state.with_checkout_registry(&registry_path));
+    for path in [
+        "/checkouts/first",
+        "/checkouts/first/tickets",
+        &format!("/checkouts/first/tickets/{}", ticket.id),
+    ] {
+        let response = restarted
+            .clone()
+            .oneshot(authed("GET", path, None))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT, "{path}");
+        assert!(
+            body_json(response)
+                .await
+                .to_string()
+                .contains("different identity")
+        );
+    }
+    assert_eq!(
+        restarted
+            .clone()
+            .oneshot(authed("GET", "/checkouts/second/tickets", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+
+    std::fs::rename(&linked, root.path().join("replacement")).unwrap();
+    std::fs::rename(&original, &linked).unwrap();
+    assert_eq!(
+        restarted
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/first/tickets/{}", ticket.id),
+                None
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
 async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};

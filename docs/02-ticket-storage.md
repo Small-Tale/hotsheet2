@@ -165,6 +165,11 @@ path when automatic commits are enabled.
 Checkout links record that identity in their machine-local registry and use
 it to verify a later relink. The instance id identifies the store lineage:
 a copy of the repository and metadata intentionally carries the same id.
+Ordinary checkout and ticket reads recheck a recorded identity against the store
+currently at the linked path. If another valid store replaces it in place, the
+server refuses that checkout's route until the original is restored or the source
+is removed and the replacement added explicitly; unrelated checkouts remain
+usable. These reads do not assign an identity to a legacy store.
 
 **Sharding uses the final two ULID characters.** ULID prefixes encode time, so active
 stores otherwise concentrate nearly every ticket in the same `01/` directory. The

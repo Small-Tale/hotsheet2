@@ -16,6 +16,12 @@ collision, migration before/after a move). The real HTTP relink flow in
 without changing either checkout, then routes both through the moved store.
 `clients/web/tests/providers.spec.ts` shows the different-store error in the
 source dialog at narrow and wide sizes before a successful relink.
+HS2-BGTDQ1 adds a registry transition test for same-path replacement,
+restart, unrelated-project access, and restoration in `checkouts.rs`; the
+real HTTP test in `crates/hotsheet-server/tests/http.rs` checks both an
+already hosted store and a restarted server return a conflict on checkout
+and ticket reads, while a direct store route does not serve replacement data
+and another project remains available.
 
 HS2-6DHS8B covers cropped-rendition cache recency, byte and entry eviction,
 in-progress file preservation, concurrent publication, and oversized bypass in

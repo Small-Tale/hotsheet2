@@ -619,6 +619,13 @@ store and its links migrate while its old path is still reachable; after a
 pre-identity store has already moved, no recorded evidence can prove the
 destination, so relink returns a verification error (HS2-EFBAPC). The
 explicit recovery path for that exceptional case is tracked in `HS2-RAQSX7`.
+Checkout and ticket reads also compare the recorded identity with the current
+store at a linked path. A mismatch returns a conflict with restore/replacement guidance,
+including when that path was already hosted before replacement. Other projects
+continue to route normally (HS2-BGTDQ1).
+Store-scoped and provider-scoped routes also stop using a hosted entry when its
+recorded instance identity no longer matches the path; checkout routes provide
+the restore/replacement guidance.
 
 `github-sign-in` works without a running server. It prints GitHub's verification URL and
 one-time code, waits for approval, and then prints a `github-app-*` credential reference;

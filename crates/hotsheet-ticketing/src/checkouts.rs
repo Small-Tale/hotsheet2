@@ -174,6 +174,43 @@ fn git_store_instance_id(source: &TicketSource) -> Result<Option<String>, Checko
     ))
 }
 
+fn validate_linked_store_identity(
+    checkout: &Checkout,
+    source: &TicketSource,
+) -> Result<(), CheckoutError> {
+    if source.provider != "git" {
+        return Ok(());
+    }
+    let Some(expected) = checkout.store_instance_ids.get(&source.connection_id) else {
+        // Old links without a recorded identity require explicit recovery; there is no
+        // trustworthy identity to compare during an ordinary read.
+        return Ok(());
+    };
+    let actual = FsStore::open_without_maintenance(&source.locator)
+        .and_then(|store| store.metadata())
+        .map_err(|error| {
+            CheckoutError::Invalid(format!(
+                "linked Git store at {} cannot be verified: {error}; restore it or remove and add the replacement source",
+                source.locator
+            ))
+        })?
+        .instance_id;
+    if actual.as_deref() != Some(expected) {
+        return Err(CheckoutError::Invalid(format!(
+            "linked Git store at {} has a different identity; restore the original store or remove and add the replacement source",
+            source.locator
+        )));
+    }
+    Ok(())
+}
+
+fn validate_linked_store_identities(checkout: &Checkout) -> Result<(), CheckoutError> {
+    for source in &checkout.sources {
+        validate_linked_store_identity(checkout, source)?;
+    }
+    Ok(())
+}
+
 /// Discover conventional git-backed ticket stores for a checkout. The first convention
 /// is a sibling whose path is the checkout path plus `.hs2` (for example `app` and
 /// `app.hs2`). Discovery is deliberately conservative: it never creates a store and never
@@ -680,7 +717,9 @@ impl CheckoutRegistry {
     }
 
     pub fn resolve(&self, reference: &str) -> Result<Checkout, CheckoutError> {
-        resolve_checkout(self.list()?, reference)
+        let checkout = resolve_checkout(self.list()?, reference)?;
+        validate_linked_store_identities(&checkout)?;
+        Ok(checkout)
     }
 
     /// Move a registered checkout to a new working-tree path while preserving the id used
@@ -751,6 +790,7 @@ impl CheckoutRegistry {
                 checkout.id
             ))
         })?;
+        validate_linked_store_identity(&checkout, &source)?;
         Ok((checkout, source))
     }
 
@@ -2050,6 +2090,67 @@ mod tests {
             "ordinary reopen keeps the migrated id"
         );
         assert_eq!(registry.list().unwrap(), vec![reopened]);
+    }
+
+    #[test]
+    fn ordinary_reads_reject_a_replaced_linked_store_without_blocking_other_projects() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        let linked = temp.path().join("linked");
+        let original = temp.path().join("original");
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(&second).unwrap();
+        FsStore::init(&linked, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let registry_path = temp.path().join("checkouts.json");
+        let registry = CheckoutRegistry::new(&registry_path);
+        let source = TicketSource::git(&linked);
+        let first_checkout = registry
+            .register_sources(&first, None, None, vec![source.clone()], None)
+            .unwrap();
+        let second_checkout = registry
+            .register_sources(&second, None, None, Vec::new(), None)
+            .unwrap();
+        assert!(
+            first_checkout
+                .store_instance_ids
+                .contains_key(&source.connection_id)
+        );
+
+        std::fs::rename(&linked, &original).unwrap();
+        FsStore::init(&linked, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let restarted = CheckoutRegistry::new(&registry_path);
+        let error = restarted
+            .resolve(&first_checkout.id)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("different identity"), "{error}");
+        let error = restarted
+            .resolve_source(&first_checkout.id, &source.connection_id)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("different identity"), "{error}");
+        assert_eq!(
+            restarted.resolve(&second_checkout.id).unwrap(),
+            second_checkout
+        );
+
+        std::fs::rename(&linked, temp.path().join("replacement")).unwrap();
+        std::fs::rename(&original, &linked).unwrap();
+        assert_eq!(
+            restarted
+                .resolve(&first_checkout.id)
+                .unwrap()
+                .store_instance_ids,
+            first_checkout.store_instance_ids
+        );
+        assert_eq!(
+            restarted
+                .resolve_source(&first_checkout.id, &source.connection_id)
+                .unwrap()
+                .1,
+            source
+        );
     }
 
     #[test]

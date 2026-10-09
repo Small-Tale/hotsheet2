@@ -21,6 +21,9 @@ use serde::Serialize;
 #[derive(Clone)]
 pub struct StoreEntry {
     pub store: FsStore,
+    /// Identity observed when this path was hosted; a path replacement must not reuse
+    /// its index or routes before an explicit source change.
+    pub instance_id: Option<String>,
     pub index: Arc<Mutex<Index>>,
     /// Stat-validated memo of the store's corrupt ticket files (HS2-KYSBT2).
     pub corrupt: Arc<Mutex<hotsheet_ticketing::CorruptTicketCache>>,
@@ -190,7 +193,16 @@ impl StoreHost {
 
     /// The entry for a URL id, if hosted.
     pub fn get(&self, id: &str) -> Option<StoreEntry> {
-        self.stores.lock().ok()?.get(id).cloned()
+        let entry = self.stores.lock().ok()?.get(id).cloned()?;
+        let current_id = entry.store.metadata().ok()?.instance_id;
+        if entry
+            .instance_id
+            .as_ref()
+            .is_some_and(|expected| Some(expected) != current_id.as_ref())
+        {
+            return None;
+        }
+        Some(entry)
     }
 
     /// Whether a store with this canonical root is already hosted.
@@ -313,6 +325,10 @@ mod tests {
     fn entry_for(store: FsStore) -> StoreEntry {
         let index = Index::open_in_memory(store.root().display().to_string()).unwrap();
         StoreEntry {
+            instance_id: store
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.instance_id),
             store,
             index: Arc::new(Mutex::new(index)),
             corrupt: Arc::default(),

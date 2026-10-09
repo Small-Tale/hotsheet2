@@ -272,6 +272,10 @@ impl AppState {
         // The primary store is the default hosted entry (shares the same index Arc, so
         // the unprefixed routes and /stores/{default}/… see one index).
         let primary = StoreEntry {
+            instance_id: store
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.instance_id),
             store: store.clone(),
             index: index.clone(),
             corrupt: Arc::clone(&corrupt),
@@ -906,6 +910,10 @@ impl AppState {
             ix
         };
         let entry = StoreEntry {
+            instance_id: store
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.instance_id),
             store: store.clone(),
             index: Arc::new(Mutex::new(index)),
             corrupt: Arc::default(),
@@ -1188,6 +1196,11 @@ impl AppState {
     /// operate on.
     fn default_entry(&self) -> StoreEntry {
         StoreEntry {
+            instance_id: self
+                .store
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.instance_id),
             store: self.store.clone(),
             index: self.index.clone(),
             corrupt: self.corrupt.clone(),
@@ -4573,14 +4586,7 @@ async fn resolve_checkout(
         .checkout_registry
         .resolve(&reference)
         .map(Json)
-        .map_err(|e| {
-            let status = match e {
-                hotsheet_ticketing::checkouts::CheckoutError::NotFound(_) => StatusCode::NOT_FOUND,
-                hotsheet_ticketing::checkouts::CheckoutError::Ambiguous(_) => StatusCode::CONFLICT,
-                _ => StatusCode::BAD_REQUEST,
-            };
-            ApiError::new(status, e.to_string())
-        })
+        .map_err(checkout_lookup_error)
 }
 
 #[derive(Deserialize)]
@@ -5043,6 +5049,16 @@ fn code_review_api_error(error: code_review::CodeReviewError) -> ApiError {
     ApiError::new(status, error.to_string())
 }
 
+fn checkout_lookup_error(error: hotsheet_ticketing::checkouts::CheckoutError) -> ApiError {
+    use hotsheet_ticketing::checkouts::CheckoutError;
+    let status = match error {
+        CheckoutError::NotFound(_) => StatusCode::NOT_FOUND,
+        CheckoutError::Invalid(_) | CheckoutError::Ambiguous(_) => StatusCode::CONFLICT,
+        _ => StatusCode::BAD_REQUEST,
+    };
+    ApiError::new(status, error.to_string())
+}
+
 fn checkout_entries(
     state: &AppState,
     reference: &str,
@@ -5050,7 +5066,7 @@ fn checkout_entries(
     let checkout = state
         .checkout_registry
         .resolve(reference)
-        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+        .map_err(checkout_lookup_error)?;
     let mut entries = Vec::new();
     for source in checkout
         .sources
@@ -5285,7 +5301,7 @@ fn merge_checkout_page(
     let checkout = state
         .checkout_registry
         .resolve(reference)
-        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+        .map_err(checkout_lookup_error)?;
     let contexts = auto_context::effective(&checkout.settings())
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let entries = checkout_entries(state, reference)?;
@@ -5703,7 +5719,7 @@ fn checkout_source_for_create(
     let checkout = state
         .checkout_registry
         .resolve(reference)
-        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+        .map_err(checkout_lookup_error)?;
     let requested = requested.or(checkout.default_source.as_deref());
     if let Some(id) = requested {
         return checkout
@@ -5731,7 +5747,7 @@ fn checkout_ticket_owner(
     let checkout = state
         .checkout_registry
         .resolve(reference)
-        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+        .map_err(checkout_lookup_error)?;
     if let Some((connection_id, native_id)) = id.split_once(':') {
         match state
             .checkout_registry
@@ -5786,7 +5802,7 @@ fn resolve_project_ticket_ref(
     let (checkout, source) = state
         .checkout_registry
         .resolve_source(&reference.project_id, &reference.connection_id)
-        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+        .map_err(checkout_lookup_error)?;
     let native_id = if source.provider == "git" {
         let entry = state.hosted_source(&source).ok_or_else(|| {
             ApiError::new(
@@ -7311,14 +7327,7 @@ fn checkout_settings(
     let checkout = state
         .checkout_registry
         .resolve(reference)
-        .map_err(|error| {
-            let status = match error {
-                hotsheet_ticketing::checkouts::CheckoutError::NotFound(_) => StatusCode::NOT_FOUND,
-                hotsheet_ticketing::checkouts::CheckoutError::Ambiguous(_) => StatusCode::CONFLICT,
-                _ => StatusCode::BAD_REQUEST,
-            };
-            ApiError::new(status, error.to_string())
-        })?;
+        .map_err(checkout_lookup_error)?;
     let settings = checkout.settings();
     Ok((checkout, settings))
 }
