@@ -6627,7 +6627,7 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
         } else if filename == "moving.avif" {
             assert_eq!(&bytes[8..12], b"avis");
             assert_ne!(bytes.as_ref(), original);
-            let too_small = app
+            let small_crop = app
                 .clone()
                 .oneshot(authed(
                     "PUT",
@@ -6636,8 +6636,8 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
                 ))
                 .await
                 .unwrap();
-            assert_eq!(too_small.status(), StatusCode::BAD_REQUEST);
-            let after_rejection = app
+            assert_eq!(small_crop.status(), StatusCode::OK);
+            let small_rendition = app
                 .clone()
                 .oneshot(authed("GET", &url, None))
                 .await
@@ -6647,7 +6647,15 @@ async fn animated_vector_and_avif_crops_round_trip_through_attachment_routes() {
                 .await
                 .unwrap()
                 .to_bytes();
-            assert_eq!(after_rejection, bytes);
+            assert_eq!(
+                hotsheet_ticketing::image_crop::original_dimensions(
+                    "moving.avif",
+                    &small_rendition
+                )
+                .unwrap(),
+                (8, 8)
+            );
+            assert_ne!(small_rendition, bytes);
         }
         let original_response = app
             .clone()

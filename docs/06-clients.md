@@ -1718,8 +1718,9 @@ and identity-less legacy entries remain conservatively blocking.
   together with one activity note. The explicit `/original` attachment route serves the raw
   bytes for editing. Animated PNG, GIF, WebP, and AVIF, plus SVG with explicit dimensions
   and a viewBox, can be cropped while retaining animation and vector behavior. Animated AVIF
-  crops require at least 16 pixels per side (HS2-QRHB5F). Video and unsupported files do not
-  offer Crop, nor do append-only provider attachments.
+  crops can be as small as 8 × 8 pixels; small AVIF frames use a clean aperture for their
+  displayed size (HS2-QRHB5F). Video and unsupported files do not offer Crop, nor do
+  append-only provider attachments.
   The server keeps derived image renditions in a disposable cache capped at 128 entries
   and 256 MiB. Cache hits refresh recency; older completed renditions are evicted after
   a new one is published, while the active response retains its bytes. Large renditions

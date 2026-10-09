@@ -32,8 +32,6 @@ pub enum ImageCropError {
     UnsupportedFormat,
     #[error("this image animation cannot be cropped without losing frames")]
     UnsupportedAnimation,
-    #[error("animated AVIF crops must be at least 16 × 16 pixels")]
-    AvifCropTooSmall,
     #[error("image is too large to crop")]
     TooLarge,
     #[error("a crop must be at least 8 × 8 pixels and inside the original image")]

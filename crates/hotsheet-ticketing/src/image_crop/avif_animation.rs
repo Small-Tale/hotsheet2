@@ -119,7 +119,18 @@ impl Encoder {
         if duration == 0 {
             return Err(ImageCropError::UnsupportedAnimation);
         }
-        let (width, height) = pixels.dimensions();
+        let (display_width, display_height) = pixels.dimensions();
+        // rav1e requires at least 16 pixels per axis. Keep the requested size in the
+        // clean aperture track property so AVIF players display the cropped area.
+        let width = display_width.max(16);
+        let height = display_height.max(16);
+        let mut padded = if (width, height) != (display_width, display_height) {
+            let mut canvas = RgbaImage::new(width, height);
+            imageops::replace(&mut canvas, pixels, 0, 0);
+            Some(canvas)
+        } else {
+            None
+        };
         // SAFETY: the image is owned for this call and destroyed below on every path.
         let image = NonNull::new(unsafe {
             avif::avifImageCreate(width, height, 8, avif::AVIF_PIXEL_FORMAT_YUV444)
@@ -131,6 +142,27 @@ impl Encoder {
                 (*image.as_ptr()).colorPrimaries = source.colorPrimaries;
                 (*image.as_ptr()).transferCharacteristics = source.transferCharacteristics;
                 (*image.as_ptr()).matrixCoefficients = source.matrixCoefficients;
+                if (width, height) != (display_width, display_height) {
+                    let crop = avif::avifCropRect {
+                        x: 0,
+                        y: 0,
+                        width: display_width,
+                        height: display_height,
+                    };
+                    let mut diagnostics = avif::avifDiagnostics::default();
+                    if avif::avifCleanApertureBoxConvertCropRect(
+                        &mut (*image.as_ptr()).clap,
+                        &crop,
+                        width,
+                        height,
+                        avif::AVIF_PIXEL_FORMAT_YUV444,
+                        &mut diagnostics,
+                    ) == 0
+                    {
+                        return Err(ImageCropError::UnsupportedAnimation);
+                    }
+                    (*image.as_ptr()).transformFlags |= avif::AVIF_TRANSFORM_CLAP;
+                }
                 check(avif::avifImageAllocatePlanes(
                     image.as_ptr(),
                     avif::AVIF_PLANES_YUV,
@@ -139,7 +171,11 @@ impl Encoder {
                 avif::avifRGBImageSetDefaults(&mut rgb, image.as_ptr());
                 rgb.format = avif::AVIF_RGB_FORMAT_RGBA;
                 rgb.depth = 8;
-                rgb.pixels = pixels.as_raw().as_ptr() as *mut u8;
+                rgb.pixels = padded
+                    .as_mut()
+                    .map_or(pixels.as_raw().as_ptr() as *mut u8, |canvas| {
+                        canvas.as_mut_ptr()
+                    });
                 rgb.rowBytes = width * 4;
                 check(avif::avifImageRGBToYUV(image.as_ptr(), &rgb))?;
                 check(avif::avifEncoderAddImage(
@@ -183,7 +219,27 @@ pub(super) fn dimensions(bytes: &[u8]) -> Result<(u32, u32), ImageCropError> {
     let mut decoder = Decoder::new(bytes)?;
     decoder.next()?;
     let image = decoder.image()?;
-    let dimensions = (image.width, image.height);
+    let dimensions = if image.transformFlags & avif::AVIF_TRANSFORM_CLAP != 0 {
+        let mut crop = avif::avifCropRect::default();
+        let mut diagnostics = avif::avifDiagnostics::default();
+        // SAFETY: decoder owns the image; both output structs are initialized.
+        let valid = unsafe {
+            avif::avifCropRectConvertCleanApertureBox(
+                &mut crop,
+                &image.clap,
+                image.width,
+                image.height,
+                image.yuvFormat,
+                &mut diagnostics,
+            )
+        };
+        if valid == 0 {
+            return Err(ImageCropError::UnsupportedFormat);
+        }
+        (crop.width, crop.height)
+    } else {
+        (image.width, image.height)
+    };
     if u64::from(dimensions.0) * u64::from(dimensions.1) > MAX_PIXELS {
         return Err(ImageCropError::TooLarge);
     }
@@ -191,9 +247,6 @@ pub(super) fn dimensions(bytes: &[u8]) -> Result<(u32, u32), ImageCropError> {
 }
 
 pub(super) fn crop(bytes: &[u8], crop: ImageCrop) -> Result<Vec<u8>, ImageCropError> {
-    if crop.width < 16 || crop.height < 16 {
-        return Err(ImageCropError::AvifCropTooSmall);
-    }
     let mut decoder = Decoder::new(bytes)?;
     let mut encoder = Encoder::new(decoder.timescale(), decoder.repetition_count())?;
     let mut total_pixels = 0u64;
@@ -258,17 +311,40 @@ mod tests {
         let mut truncated = original.clone();
         truncated.truncate(original.len() / 2);
         assert!(crop(&truncated, selection).is_err());
-        assert!(matches!(
-            crop(
+        for (width, height) in [(8, 8), (8, 15), (15, 8)] {
+            let small = crop(
                 &original,
                 ImageCrop {
-                    width: 8,
-                    height: 8,
+                    width,
+                    height,
                     ..selection
-                }
-            ),
-            Err(ImageCropError::AvifCropTooSmall)
-        ));
+                },
+            )
+            .unwrap();
+            assert_eq!(dimensions(&small).unwrap(), (width, height));
+            assert!(
+                super::super::validate_rendition(
+                    "moving.avif",
+                    &original,
+                    ImageCrop {
+                        width,
+                        height,
+                        ..selection
+                    },
+                )
+                .is_ok()
+            );
+            let mut small_decoder = Decoder::new(&small).unwrap();
+            assert_eq!(small_decoder.count(), 2);
+            assert_eq!(small_decoder.repetition_count(), 2);
+            for expected_duration in [100, 230] {
+                small_decoder.next().unwrap();
+                assert_eq!(small_decoder.duration(), expected_duration);
+                let image = small_decoder.image().unwrap();
+                assert_eq!((image.width, image.height), (16, 16));
+                assert_ne!(image.transformFlags & avif::AVIF_TRANSFORM_CLAP, 0);
+            }
+        }
         assert_eq!(dimensions(&rendition).unwrap(), (20, 16));
         let mut decoder = Decoder::new(&rendition).unwrap();
         assert_eq!(decoder.count(), 2);
