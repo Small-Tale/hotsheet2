@@ -317,9 +317,6 @@ export function TerminalDrawer({
               // Keep arrow-key navigation focus-only; Enter/Space performs the explicit activation.
               activation="manual"
               trailingPlacement="adjacent"
-              // The pinned Project grid tab overlaps the scrolling peers; settle the strip at whole-tab
-              // starts so a reveal or swipe never leaves a peer as a sliver beside it (HS2-6Y8HSH).
-              snapTabs
               trailing={
                 <ToolbarControlGroup size="compact" appearance="borderless" single nestedDropdown>
                   <PopupMenu
@@ -397,14 +394,7 @@ export function TerminalDrawer({
         {selectedChat ? (
           selectedChat.content
         ) : selectedSession ? (
-          sessions.map((session) => (
-            <TerminalSession
-              session={session}
-              active={session.id === selectedSession.id}
-              mobile={mobile}
-              focus={focusMode}
-            />
-          ))
+          <TerminalSession session={selectedSession} mobile={mobile} focus={focusMode} />
         ) : (
           <TerminalDashboard
             groups={[{ projectId, projectName, sessions, chats: gridChats, itemOrder: orderedIds }]}

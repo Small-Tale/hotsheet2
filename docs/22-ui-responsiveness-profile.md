@@ -69,6 +69,16 @@ also produced long main-thread tasks. These results point first to DOM and
 style invalidation in terminal and ticket views. Workers cannot perform DOM
 layout or paint.
 
+Dedicated terminal views now render only the selected session; the existing
+keep-alive controller parks inactive viewports and restores their live DOM on
+return (`HS2-9B8QHF`). In three repeated 12-session Chromium profiles,
+terminal-tab style work fell from 402–467 ms to 153–167 ms on desktop and
+from 396–440 ms to 136–143 ms at the narrow viewport. Paint stayed within
+3–4 ms in the after runs. Kerf beta.88's whole-tab snapping added roughly
+909px of end padding at this tab count, pushing the creation action under the
+inspector rail; terminal tab snapping is disabled until `HS2-3P7TZV` can
+restore it with a bounded Kerf strip.
+
 Thirty AI output events over roughly 770 ms accumulated 413–494 ms of
 renderer-main task time and 149–192 ms of style updates, but no single
 task in that stream exceeded 50 ms. The message path deserves a bounded

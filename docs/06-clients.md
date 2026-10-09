@@ -2487,15 +2487,16 @@ open/closed drawer preference is preserved so it returns unchanged on the next t
 and fading its fixed-size content on the compositor. Its 40 px restore action uses the
 region's safe-area-aware bottom-end placement (HS2-4Y6SM9). Its compact rail switches between the decorated
 grid, one undecorated interactive xterm session, or one embedded AI conversation that fills
-the content area. While switching directly among terminal tabs, the drawer keeps every
-dedicated session element that belongs to that presentation mounted and hides the inactive
-ones. Returning to a terminal therefore preserves its xterm, WebSocket, fitted grid, scroll
-position, and input state instead of constructing a fresh 80×24 xterm (HS2-V93PYF). Its grid tab
+the content area. The drawer renders only the selected dedicated session. On a tab switch,
+the viewport controller parks the previous live xterm outside the page and restores it on
+return while it remains in the bounded warm cache; the terminal connection and its scroll,
+fit, and input state survive that cycle (HS2-V93PYF, HS2-9B8QHF). Its grid tab
 never shrinks when terminal tabs consume the available width. The shared Kerf tab strip sizes to
 its tabs until the rail is exhausted, then scrolls horizontally; its growing trailing slot keeps
 the explicit quiet pill-shaped plus action immediately after the last tab and the drawer action
-at the far edge. A newly created selected tab is revealed without stealing the dedicated xterm's
-one-shot input focus; plus
+at the far edge. Terminal whole-tab snapping is temporarily disabled because Kerf beta.88
+can expand a 12-tab strip beyond the rail (`HS2-3P7TZV`). A newly created selected tab is
+revealed without stealing the dedicated xterm's one-shot input focus; plus
 opens Kerf PopupMenu choices for Terminal (the default shell, renamed by HS2-92C6AR), AI shell, AI chat, and saved conversations.
 The AI shell entry follows the installed providers (HS2-3HT4PA): with one it is named for that
 provider ("Claude shell"); with several it opens a submenu of "Default (<provider>)" (the project

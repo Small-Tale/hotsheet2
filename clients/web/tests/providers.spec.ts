@@ -7800,6 +7800,72 @@ test('focuses a newly created terminal as soon as its viewport starts', async ({
   await page.screenshot({ path: 'target/visual-captures/hs2-h2m7sp-new-terminal-focus.png', fullPage: true });
 });
 
+test('parks inactive dedicated terminal viewports and restores their live DOM on return (HS2-9B8QHF)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installFakeTerminalSockets(page, true);
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]').click();
+  const first = drawer.locator('[data-component="terminal-viewport"][data-terminal-id="codex-main"]');
+  await expect(first).toHaveAttribute('data-connection', 'connected');
+  await first.evaluate((element) => {
+    element.dataset.keepAliveProbe = 'original';
+  });
+
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="tests"]').click();
+  await expect(drawer.locator('[data-component="terminal-session"]')).toHaveCount(1);
+  await expect(drawer.locator('[data-component="terminal-viewport"][data-terminal-id="tests"]')).toHaveAttribute(
+    'data-connection',
+    'connected',
+  );
+  await expect(page.locator('[data-terminal-viewport-parking] [data-terminal-id="codex-main"]')).toHaveAttribute(
+    'data-parked',
+    'true',
+  );
+
+  await drawer.locator('[data-tab-kind="terminal"][data-terminal-id="codex-main"]').click();
+  await expect(drawer.locator('[data-component="terminal-session"]')).toHaveCount(1);
+  await expect(first).toHaveAttribute('data-keep-alive-probe', 'original');
+  await expect(first).toHaveAttribute('data-connection', 'connected');
+});
+
+test('keeps drawer creation and hide actions reachable with twelve terminal tabs (HS2-9B8QHF)', async ({ page }) => {
+  await mockProject(page, true, false, 0, 0, 0, false, 12);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-tab-kind="terminal"]').first().click();
+  for (const width of [1440, 760]) {
+    await page.setViewportSize({ width, height: 900 });
+    const geometry = await drawer.evaluate((element) => {
+      const strip = element.querySelector('[data-kui-tab-list]');
+      const create = element.querySelector('[data-terminal-drawer-create]');
+      const hide = element.querySelector('[data-action="toggle-terminal-drawer"]');
+      return {
+        drawerRight: element.getBoundingClientRect().right,
+        stripRight: strip?.getBoundingClientRect().right ?? Infinity,
+        createRight: create?.getBoundingClientRect().right ?? Infinity,
+        hideRight: hide?.getBoundingClientRect().right ?? Infinity,
+      };
+    });
+    expect(geometry.stripRight).toBeLessThanOrEqual(geometry.drawerRight);
+    expect(geometry.createRight).toBeLessThanOrEqual(geometry.drawerRight);
+    expect(geometry.hideRight).toBeLessThanOrEqual(geometry.drawerRight);
+    await drawer.getByRole('button', { name: 'New drawer item' }).click();
+    await expect(drawer.locator('[data-terminal-drawer-create]')).toHaveAttribute('open');
+    await page.keyboard.press('Escape');
+  }
+});
+
 test('renames a terminal from its tab menu, saves it on the server, and keeps it after reload (HS2-89FPV1)', async ({
   page,
 }) => {

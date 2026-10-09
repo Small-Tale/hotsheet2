@@ -94,10 +94,8 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('data-tab-bar-id="terminal-drawer"');
     expect(markup).toContain('data-tab-activation="manual"');
     expect(markup).toContain('data-trailing-placement="adjacent"');
-    // Peers settle at whole-tab starts beside the pinned grid tab, never as a sliver (HS2-6Y8HSH).
-    expect(markup).toMatch(
-      /class="kui-tab-bar__tabs"[^>]*data-snap-tabs="true"|data-snap-tabs="true"[^>]*class="kui-tab-bar__tabs"/,
-    );
+    // Kerf beta.88 snap padding can push drawer actions under the inspector with 12 tabs (HS2-3P7TZV).
+    expect(markup).not.toContain('data-snap-tabs="true"');
     expect(markup).toContain('>Project grid</span>');
     expect(markup).toContain('data-lucide="layout-grid"');
     expect(markup).not.toContain('data-lucide="grid-3x3"');
@@ -283,13 +281,13 @@ describe('TerminalDrawer', () => {
     expect(markup).toContain('data-maximized="true"');
     expect(markup).toContain('Double-click to restore terminal drawer');
   });
-  it('retains dedicated terminal sessions while presenting one without grid chrome or zoom', () => {
+  it('renders only the selected dedicated session for keep-alive parking', () => {
     const markup = render('one');
     expect(markup).toContain('data-mode="dedicated"');
     expect(markup).toContain('data-component="terminal-session"');
     expect(markup.match(/data-terminal-id="one"/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(markup.match(/data-component="terminal-viewport"/g)).toHaveLength(2);
-    expect(markup.match(/class="terminal-session"[^>]*hidden/g)).toHaveLength(1);
+    expect(markup.match(/data-component="terminal-viewport"/g)).toHaveLength(1);
+    expect(markup).not.toMatch(/class="terminal-session"[^>]*hidden/);
     expect(markup).not.toContain('data-component="terminal-tile"');
     expect(markup).not.toContain('Workspace tile zoom');
   });
