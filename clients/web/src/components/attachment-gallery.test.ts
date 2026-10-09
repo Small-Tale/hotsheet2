@@ -486,12 +486,43 @@ describe('AttachmentGallery', () => {
         activeUrl: '/walkthrough.mp4',
       }),
     );
-    const stageEnd = markup.indexOf('</div><footer class="attachment-gallery__footer">');
+    const stageEnd = markup.indexOf('</div></div><footer class="attachment-gallery__footer">');
     expect(stageEnd).toBeGreaterThan(markup.indexOf('data-gallery-zoom-stage="true"'));
     expect(markup.indexOf('name="gallery-playhead"')).toBeGreaterThan(stageEnd);
     const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
     expect(css).toContainSource('grid-template-rows: auto minmax(0,1fr) auto');
     expect(css).not.toContain('position:fixed; z-index:2; right:20%');
+  });
+  it('keeps annotation notes in a persistent panel outside the media stage and footer', () => {
+    const annotation: MediaAnnotation = {
+      id: 'mark',
+      x: 100,
+      y: 100,
+      width: 1000,
+      height: 1000,
+      text: 'Check **this**',
+    };
+    for (const selectedAnnotation of [undefined, 'mark']) {
+      const markup = String(
+        AttachmentGallery({ images, activeUrl: '/a.png', markup: true, annotations: [annotation], selectedAnnotation }),
+      );
+      const panel = markup.indexOf('<aside class="attachment-gallery__notes"');
+      const footer = markup.indexOf('<footer class="attachment-gallery__footer">');
+      expect(panel).toBeGreaterThan(markup.indexOf('data-gallery-zoom-stage="true"'));
+      expect(panel).toBeLessThan(footer);
+      expect(markup).toContain('aria-label="Annotations"');
+      expect(markup).toContain('data-annotation-id="mark"');
+      expect(markup).toContain('Check **this**');
+      if (selectedAnnotation) {
+        expect(markup.indexOf('aria-label="Annotation note"')).toBeLessThan(footer);
+        expect(markup.indexOf('aria-label="Annotation 1 note"')).toBeLessThan(footer);
+      }
+    }
+    const css = readFileSync(new URL('./attachment-gallery.css', import.meta.url), 'utf8');
+    expect(css).toContainSource(
+      ".attachment-gallery__workspace[data-markup='true'] { grid-template-columns:minmax(0,1fr) clamp(remify(280px),28vw,remify(380px))",
+    );
+    expect(css).toContain('grid-template-rows: minmax(0, 1fr) min(remify(220px), 28dvh)');
   });
   it.each([
     [{ naturalWidth: 2000, naturalHeight: 1000, availableWidth: 1000, availableHeight: 800 }, [0.5, 0.8, 1]],

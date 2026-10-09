@@ -17237,6 +17237,13 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await expect(gallery.getByRole('button', { name: 'Zoom in' })).toBeInViewport({ ratio: 1 });
   await gallery.screenshot({ path: 'target/visual-captures/hs2-kb5yy6-gallery-phone.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
+  const stage = gallery.locator('.attachment-gallery__stage'),
+    media = gallery.locator('.attachment-gallery__media-wrap'),
+    notes = gallery.getByRole('complementary', { name: 'Annotation notes' });
+  await expect(notes).toBeVisible();
+  await expect.poll(async () => (await stage.boundingBox())?.width).toBeGreaterThan(900);
+  const stageBeforeSelection = (await stage.boundingBox())!,
+    mediaBeforeSelection = (await media.boundingBox())!;
   await gallery.getByRole('button', { name: 'Add rectangle' }).click();
   const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
     box = (await surface.boundingBox())!;
@@ -17245,6 +17252,19 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.55);
   await page.mouse.up();
   await gallery.getByRole('textbox', { name: 'Annotation note' }).fill('Check the selected region');
+  await expect(notes.getByRole('button', { name: /Annotation 1.*Check the selected region/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  expect((await stage.boundingBox())!).toEqual(stageBeforeSelection);
+  expect((await media.boundingBox())!).toEqual(mediaBeforeSelection);
+  await surface.click({ position: { x: 5, y: 5 } });
+  await expect(gallery.getByRole('textbox', { name: 'Annotation note' })).toBeHidden();
+  expect((await media.boundingBox())!).toEqual(mediaBeforeSelection);
+  await notes.getByRole('button', { name: /Annotation 1.*Check the selected region/ }).click();
+  await expect(gallery.getByRole('textbox', { name: 'Annotation note' })).toBeVisible();
+  expect((await media.boundingBox())!).toEqual(mediaBeforeSelection);
+  await gallery.screenshot({ path: test.info().outputPath('hs2-xrzmcp-notes-wide.png') });
   const annotation = gallery.getByRole('button', { name: /Annotation 1, rect, comment: Check the selected region/ });
   await expect(annotation).toBeVisible();
   await expect.poll(() => writes.length).toBe(0);
@@ -17260,6 +17280,18 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
   expect(after!.width).toBeGreaterThan(before!.width);
   await annotation.locator('.attachment-gallery__annotation-label').dblclick();
   await gallery.getByRole('textbox', { name: 'Annotation note' }).fill('Updated annotation');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await stage.boundingBox())?.width).toBe(390);
+  const phoneStage = (await stage.boundingBox())!,
+    phoneMedia = (await media.boundingBox())!;
+  await gallery
+    .getByRole('textbox', { name: 'Annotation note' })
+    .fill('A longer note\nwith another line\nand another line');
+  expect((await stage.boundingBox())!).toEqual(phoneStage);
+  expect((await media.boundingBox())!).toEqual(phoneMedia);
+  await gallery.screenshot({ path: test.info().outputPath('hs2-xrzmcp-notes-phone.png') });
+  await gallery.getByRole('textbox', { name: 'Annotation note' }).fill('Updated annotation');
+  await page.setViewportSize({ width: 1280, height: 720 });
   const updatedAnnotation = gallery.getByRole('button', { name: /Annotation 1, rect, comment: Updated annotation/ });
   await expect(updatedAnnotation).toBeVisible();
   await expect.poll(() => writes.length).toBe(0);

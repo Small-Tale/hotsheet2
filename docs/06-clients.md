@@ -1672,8 +1672,12 @@ and identity-less legacy entries remain conservatively blocking.
   freehand outlines from edge/corner handles, and moves individual arrow vertices.
   Picking uses the rendered stroke within seven screen points or the filled area;
   overlapping marks choose the closest stroke, then smaller area, then newest mark.
-  The selected annotation has a Markdown note field and effective-intent chips, including
-  a hint when its shape default is implicit. Duplicate (Command/Ctrl+D) copies the note
+  Markup mode keeps an annotation-notes panel beside the media on wider screens and in a
+  fixed-height row below it on narrow screens. The panel lists every annotation and holds
+  the selected Markdown note field, effective-intent chips, and rendered note preview.
+  Selecting or editing a note only scrolls panel content; it does not change the media
+  stage or its fit scale. An implicit shape-default intent is labelled in the chips.
+  Duplicate (Command/Ctrl+D) copies the note
   and intents. Tab cycles annotations; Delete removes the selection; arrows nudge it
   by one screen point or ten with Shift; Escape cancels a gesture, tool, then selection.
   A drawing tool plus Enter inserts its default shape at the visible media center;
@@ -1696,7 +1700,7 @@ and identity-less legacy entries remain conservatively blocking.
   number badges sit by each shape anchor, stay inside the media edge at every
   zoom level, and count across attachments in the ticket. Each shape's accessible
   label includes its number, shape, intents, and note. The selected note appears
-  as sanitized Markdown below the media. Shape-specific drawing and editing are
+  as sanitized Markdown in the notes panel. Shape-specific drawing and editing are
   covered by `HS2-C46J3X`.
   The gallery annotation action carries the current annotation-count badge, and media-grid
   cards with annotations carry a lower-right annotation marker so review work is visible

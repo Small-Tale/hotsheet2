@@ -49,6 +49,10 @@ tool/keyboard/undo transitions, inline Markdown notes and intent controls, and
 one-batch persistence. Geometry unit tests include point-bound validation and
 overlap picking; production browser tests exercise image and timed video gestures,
 keyboard creation and undo/redo, plus wide and phone captures.
+HS2-XRZMCP covers the persistent annotation-notes panel in component rendering
+and a production browser sequence across empty, selected, edited, and long-note
+states at desktop and phone widths. The browser checks that the media stage and
+image bounds remain unchanged as notes appear and grow.
 HS2-DE781D runs that video scrub browser case with a checked-in four-second H.264
 fixture in Chromium CI. It checks final decoded frames after both paused seeks and
 held-pointer drags; intermediate drag frames are allowed while the pointer is moving.

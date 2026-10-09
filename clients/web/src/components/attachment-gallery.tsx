@@ -498,192 +498,217 @@ export function AttachmentGallery({
           }
         />
       </div>
-      <div
-        class="attachment-gallery__stage"
-        data-gallery-zoom-stage="true"
-        tabindex={video || markup ? '0' : undefined}
-        role={markup ? 'group' : undefined}
-        aria-label={
-          video
-            ? `Video canvas. Space or K plays and pauses; arrow keys step frames; Shift plus arrow, J, or L seeks one second.${markup ? ' V, R, F, A, I, and S choose annotation tools; Tab cycles marks; Enter edits the selected note; Escape cancels.' : ''}`
-            : markup
-              ? 'Image annotation canvas. V, R, F, A, I, and S choose tools; Tab cycles marks; Enter edits the selected note; Escape cancels.'
-              : undefined
-        }
-      >
-        <div class="attachment-gallery__canvas">
-          <div
-            class="attachment-gallery__media-wrap"
-            {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryAnnotationSurface.attrs}
-            data-draw-mode={String(drawMode || cropMode)}
-            {...(cropMode ? ATTACHMENTS_AND_GALLERY_TARGETS.galleryCropSurface.attrs : {})}
-            style={
-              validDimension(geometry.naturalWidth) && validDimension(geometry.naturalHeight)
-                ? `width:${geometry.naturalWidth * zoom.scale}px;height:${geometry.naturalHeight * zoom.scale}px`
+      <div class="attachment-gallery__workspace" data-markup={String(markup)}>
+        <div
+          class="attachment-gallery__stage"
+          data-gallery-zoom-stage="true"
+          tabindex={video || markup ? '0' : undefined}
+          role={markup ? 'group' : undefined}
+          aria-label={
+            video
+              ? `Video canvas. Space or K plays and pauses; arrow keys step frames; Shift plus arrow, J, or L seeks one second.${markup ? ' V, R, F, A, I, and S choose annotation tools; Tab cycles marks; Enter edits the selected note; Escape cancels.' : ''}`
+              : markup
+                ? 'Image annotation canvas. V, R, F, A, I, and S choose tools; Tab cycles marks; Enter edits the selected note; Escape cancels.'
                 : undefined
-            }
-          >
-            {video ? (
-              <video
-                class="attachment-gallery__video"
-                {...imageData}
-                {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryMedia.attrs}
-                src={image.url}
-                aria-label={image.name}
-                playsInline
-                preload="auto"
-              />
-            ) : (
-              <img
-                {...imageData}
-                {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryMedia.attrs}
-                {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryImage.attrs}
-                src={imageUrl ?? image.url}
-                alt={image.name}
-              />
-            )}{' '}
-            {cropMode && crop && originalWidth > 0 && originalHeight > 0 && (
-              <div
-                class="attachment-gallery__crop-selection"
-                style={`left:${(crop.x / originalWidth) * 100}%;top:${(crop.y / originalHeight) * 100}%;width:${(crop.width / originalWidth) * 100}%;height:${(crop.height / originalHeight) * 100}%`}
-                aria-label="Crop selection"
-              />
-            )}
-            {!cropMode && annotations.length > 0 && (
-              <div class="attachment-gallery__annotations" data-markup={String(markup)}>
-                {annotations.map((annotation, annotationIndex) => {
-                  const number = annotationNumberOffset + annotationIndex + 1,
-                    shape = annotationShapeType(annotation),
-                    intents = annotation.intents?.length ? annotation.intents : [annotationDefaultIntent(annotation)],
-                    visible = attachmentGalleryAnnotationVisible(annotation, playheadMs, durationMs),
-                    color = annotationIntentColor(annotation);
-                  return (
-                    <>
-                      <button
-                        type="button"
-                        disabled={!markup}
-                        class="attachment-gallery__annotation"
-                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.attrs}
-                        data-annotation-id={annotation.id}
-                        data-annotation-start={annotation.start_ms}
-                        data-annotation-end={annotation.end_ms}
-                        data-selected={String(annotation.id === selectedAnnotation)}
-                        data-shape={shape}
-                        data-intent-color={color}
-                        hidden={!visible}
-                        style={annotationStyle(annotation)}
-                        aria-label={`Annotation ${number}, ${shape}, ${intents.join(', ')}${annotation.text ? `: ${annotation.text}` : ''}`}
-                      >
-                        <AnnotationShape
-                          annotation={annotation}
-                          mediaWidth={geometry.naturalWidth * zoom.scale || geometry.availableWidth || 1000}
-                          mediaHeight={geometry.naturalHeight * zoom.scale || geometry.availableHeight || 1000}
-                        />
-                        <span
-                          class="attachment-gallery__annotation-label"
-                          {...ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryAnnotation.attrs}
+          }
+        >
+          <div class="attachment-gallery__canvas">
+            <div
+              class="attachment-gallery__media-wrap"
+              {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryAnnotationSurface.attrs}
+              data-draw-mode={String(drawMode || cropMode)}
+              {...(cropMode ? ATTACHMENTS_AND_GALLERY_TARGETS.galleryCropSurface.attrs : {})}
+              style={
+                validDimension(geometry.naturalWidth) && validDimension(geometry.naturalHeight)
+                  ? `width:${geometry.naturalWidth * zoom.scale}px;height:${geometry.naturalHeight * zoom.scale}px`
+                  : undefined
+              }
+            >
+              {video ? (
+                <video
+                  class="attachment-gallery__video"
+                  {...imageData}
+                  {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryMedia.attrs}
+                  src={image.url}
+                  aria-label={image.name}
+                  playsInline
+                  preload="auto"
+                />
+              ) : (
+                <img
+                  {...imageData}
+                  {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryMedia.attrs}
+                  {...ATTACHMENTS_AND_GALLERY_TARGETS.galleryImage.attrs}
+                  src={imageUrl ?? image.url}
+                  alt={image.name}
+                />
+              )}{' '}
+              {cropMode && crop && originalWidth > 0 && originalHeight > 0 && (
+                <div
+                  class="attachment-gallery__crop-selection"
+                  style={`left:${(crop.x / originalWidth) * 100}%;top:${(crop.y / originalHeight) * 100}%;width:${(crop.width / originalWidth) * 100}%;height:${(crop.height / originalHeight) * 100}%`}
+                  aria-label="Crop selection"
+                />
+              )}
+              {!cropMode && annotations.length > 0 && (
+                <div class="attachment-gallery__annotations" data-markup={String(markup)}>
+                  {annotations.map((annotation, annotationIndex) => {
+                    const number = annotationNumberOffset + annotationIndex + 1,
+                      shape = annotationShapeType(annotation),
+                      intents = annotation.intents?.length ? annotation.intents : [annotationDefaultIntent(annotation)],
+                      visible = attachmentGalleryAnnotationVisible(annotation, playheadMs, durationMs),
+                      color = annotationIntentColor(annotation);
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          disabled={!markup}
+                          class="attachment-gallery__annotation"
+                          {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.attrs}
                           data-annotation-id={annotation.id}
+                          data-annotation-start={annotation.start_ms}
+                          data-annotation-end={annotation.end_ms}
+                          data-selected={String(annotation.id === selectedAnnotation)}
+                          data-shape={shape}
+                          data-intent-color={color}
+                          hidden={!visible}
+                          style={annotationStyle(annotation)}
+                          aria-label={`Annotation ${number}, ${shape}, ${intents.join(', ')}${annotation.text ? `: ${annotation.text}` : ''}`}
+                        >
+                          <AnnotationShape
+                            annotation={annotation}
+                            mediaWidth={geometry.naturalWidth * zoom.scale || geometry.availableWidth || 1000}
+                            mediaHeight={geometry.naturalHeight * zoom.scale || geometry.availableHeight || 1000}
+                          />
+                          <span
+                            class="attachment-gallery__annotation-label"
+                            {...ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryAnnotation.attrs}
+                            data-annotation-id={annotation.id}
+                            aria-hidden="true"
+                          >
+                            {annotation.text}
+                          </span>
+                          {markup &&
+                            annotation.id === selectedAnnotation &&
+                            shape === 'arrow' &&
+                            annotation.shape?.type === 'arrow' &&
+                            annotation.shape.points.map((point, index) => (
+                              <i
+                                data-annotation-handle={`point-${index}`}
+                                style={`left:${((point.x - annotation.x) / annotation.width) * 100}%;top:${((point.y - annotation.y) / annotation.height) * 100}%`}
+                              />
+                            ))}
+                          {markup &&
+                            annotation.id === selectedAnnotation &&
+                            shape !== 'insertion' &&
+                            shape !== 'arrow' &&
+                            ((annotation.width *
+                              (geometry.naturalWidth * zoom.scale || geometry.availableWidth || 1000)) /
+                              10_000 <
+                              36 ||
+                            (annotation.height *
+                              (geometry.naturalHeight * zoom.scale || geometry.availableHeight || 1000)) /
+                              10_000 <
+                              36
+                              ? ['nw', 'ne', 'se', 'sw']
+                              : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
+                            ).map((handle) => <i data-annotation-handle={handle} />)}
+                        </button>
+                        <span
+                          class="attachment-gallery__annotation-badge"
+                          data-intent-color={color}
+                          data-annotation-id={annotation.id}
+                          style={attachmentGalleryBadgeStyle(annotation)}
+                          hidden={!visible}
                           aria-hidden="true"
                         >
-                          {annotation.text}
+                          {number}
                         </span>
-                        {markup &&
-                          annotation.id === selectedAnnotation &&
-                          shape === 'arrow' &&
-                          annotation.shape?.type === 'arrow' &&
-                          annotation.shape.points.map((point, index) => (
-                            <i
-                              data-annotation-handle={`point-${index}`}
-                              style={`left:${((point.x - annotation.x) / annotation.width) * 100}%;top:${((point.y - annotation.y) / annotation.height) * 100}%`}
-                            />
-                          ))}
-                        {markup &&
-                          annotation.id === selectedAnnotation &&
-                          shape !== 'insertion' &&
-                          shape !== 'arrow' &&
-                          ((annotation.width *
-                            (geometry.naturalWidth * zoom.scale || geometry.availableWidth || 1000)) /
-                            10_000 <
-                            36 ||
-                          (annotation.height *
-                            (geometry.naturalHeight * zoom.scale || geometry.availableHeight || 1000)) /
-                            10_000 <
-                            36
-                            ? ['nw', 'ne', 'se', 'sw']
-                            : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
-                          ).map((handle) => <i data-annotation-handle={handle} />)}
-                      </button>
-                      <span
-                        class="attachment-gallery__annotation-badge"
-                        data-intent-color={color}
-                        data-annotation-id={annotation.id}
-                        style={attachmentGalleryBadgeStyle(annotation)}
-                        hidden={!visible}
-                        aria-hidden="true"
-                      >
-                        {number}
-                      </span>
-                    </>
-                  );
-                })}
-              </div>
-            )}
+                      </>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
+        {markup && (
+          <aside class="attachment-gallery__notes" aria-label="Annotation notes">
+            <div class="attachment-gallery__notes-list" role="group" aria-label="Annotations">
+              {annotations.length === 0 && <p>No annotations yet. Draw a mark to add a note.</p>}
+              {annotations.map((annotation, annotationIndex) => (
+                <button
+                  type="button"
+                  {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryAnnotation.attrs}
+                  data-annotation-id={annotation.id}
+                  aria-pressed={String(annotation.id === selectedAnnotation)}
+                >
+                  <span>Annotation {annotationNumberOffset + annotationIndex + 1}</span>
+                  <span>{annotation.text || 'No note'}</span>
+                </button>
+              ))}
+            </div>
+            {!selectedEditableAnnotation && annotations.length > 0 && <p>Select an annotation to edit its note.</p>}
+            {selectedEditableAnnotation && (
+              <section class="attachment-gallery__editor" aria-label="Selected annotation editor">
+                <label>
+                  Note (Markdown)
+                  <textarea
+                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryNote.attrs}
+                    aria-label="Annotation note"
+                    rows={4}
+                  >
+                    {selectedEditableAnnotation.text}
+                  </textarea>
+                </label>
+                <div class="attachment-gallery__intent-list" role="group" aria-label="Annotation intents">
+                  {(['comment', 'bug', 'change', 'insert', 'remove', 'move', 'question'] as const).map((intent) => {
+                    const fallback = annotationDefaultIntent(selectedEditableAnnotation),
+                      chosen = selectedEditableAnnotation.intents?.length
+                        ? selectedEditableAnnotation.intents
+                        : [fallback];
+                    return (
+                      <button
+                        type="button"
+                        {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.attrs}
+                        data-intent={intent}
+                        aria-pressed={String(chosen.includes(intent))}
+                        title={
+                          intent === fallback && !selectedEditableAnnotation.intents?.length
+                            ? 'Default intent'
+                            : undefined
+                        }
+                      >
+                        {intent}
+                        {intent === fallback && !selectedEditableAnnotation.intents?.length ? ' (default)' : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedEditableAnnotation.shape?.type === 'freehand' && (
+                  <label class="attachment-gallery__closed-toggle">
+                    <input
+                      type="checkbox"
+                      {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryClosed.attrs}
+                      checked={selectedEditableAnnotation.shape.closed !== false}
+                    />
+                    Closed outline
+                  </label>
+                )}
+              </section>
+            )}
+            {selectedAnnotationNote?.text && (
+              <section
+                class="attachment-gallery__selected-note"
+                aria-label={`Annotation ${annotationNumberOffset + annotations.indexOf(selectedAnnotationNote) + 1} note`}
+              >
+                <MarkdownPreview source={selectedAnnotationNote.text} tone="inverse" size="small" density="compact" />
+              </section>
+            )}
+          </aside>
+        )}
       </div>
       <footer class="attachment-gallery__footer">
-        {selectedEditableAnnotation && (
-          <section class="attachment-gallery__editor" aria-label="Selected annotation editor">
-            <label>
-              Note (Markdown)
-              <textarea
-                {...ATTACHMENTS_AND_GALLERY_ACTIONS.editGalleryNote.attrs}
-                aria-label="Annotation note"
-                rows={2}
-              >
-                {selectedEditableAnnotation.text}
-              </textarea>
-            </label>
-            <div class="attachment-gallery__intent-list" role="group" aria-label="Annotation intents">
-              {(['comment', 'bug', 'change', 'insert', 'remove', 'move', 'question'] as const).map((intent) => {
-                const fallback = annotationDefaultIntent(selectedEditableAnnotation),
-                  chosen = selectedEditableAnnotation.intents?.length ? selectedEditableAnnotation.intents : [fallback];
-                return (
-                  <button
-                    type="button"
-                    {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryIntent.attrs}
-                    data-intent={intent}
-                    aria-pressed={String(chosen.includes(intent))}
-                    title={
-                      intent === fallback && !selectedEditableAnnotation.intents?.length ? 'Default intent' : undefined
-                    }
-                  >
-                    {intent}
-                    {intent === fallback && !selectedEditableAnnotation.intents?.length ? ' (default)' : ''}
-                  </button>
-                );
-              })}
-            </div>
-            {selectedEditableAnnotation.shape?.type === 'freehand' && (
-              <label class="attachment-gallery__closed-toggle">
-                <input
-                  type="checkbox"
-                  {...ATTACHMENTS_AND_GALLERY_ACTIONS.toggleGalleryClosed.attrs}
-                  checked={selectedEditableAnnotation.shape.closed !== false}
-                />
-                Closed outline
-              </label>
-            )}
-          </section>
-        )}
-        {selectedAnnotationNote?.text && (
-          <section
-            class="attachment-gallery__selected-note"
-            aria-label={`Annotation ${annotationNumberOffset + annotations.indexOf(selectedAnnotationNote) + 1} note`}
-          >
-            <MarkdownPreview source={selectedAnnotationNote.text} tone="inverse" size="small" density="compact" />
-          </section>
-        )}
         {timed && (
           <div class="attachment-gallery__timeline">
             <button
