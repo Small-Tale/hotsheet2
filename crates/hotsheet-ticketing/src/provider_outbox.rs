@@ -6,11 +6,12 @@
 //! processes. The database is separate from the disposable ticket search index.
 
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{ApiTicket, ProviderPatch};
@@ -27,6 +28,8 @@ pub enum OutboxError {
     EmptyIdentity,
     #[error("operation {0} was retried with a different mutation")]
     ChangedPayload(String),
+    #[error("operation {0} already settled; its retained audit payload has expired")]
+    ExpiredOperation(String),
     #[error(
         "outbox has {pending} pending operations; admitting {requested} would exceed its limit of {max}"
     )]
@@ -258,6 +261,21 @@ pub struct ProviderOutbox {
     max_pending: usize,
 }
 
+/// Full settled payloads remain available for diagnostics and exact retry responses for 30 days.
+/// Compact rows keep the operation id and digest indefinitely so a delayed retry cannot dispatch.
+const SETTLED_PAYLOAD_RETENTION: i64 = 30 * 24 * 60 * 60;
+
+fn unix_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
+}
+
+fn payload_digest(payload: &str) -> String {
+    format!("{:x}", Sha256::digest(payload.as_bytes()))
+}
+
 impl ProviderOutbox {
     pub fn open(path: impl AsRef<Path>, max_pending: usize) -> Result<Self, OutboxError> {
         if max_pending == 0 {
@@ -286,6 +304,9 @@ impl ProviderOutbox {
                 next_attempt_at INTEGER NOT NULL DEFAULT 0,
                 last_error TEXT,
                 conflict_json TEXT,
+                settled_at INTEGER,
+                payload_digest TEXT,
+                compacted INTEGER NOT NULL DEFAULT 0,
                 UNIQUE (connection_id, native_id, sequence)
             );
             CREATE INDEX IF NOT EXISTS provider_outbox_pending
@@ -297,6 +318,9 @@ impl ProviderOutbox {
             ("next_attempt_at", "INTEGER NOT NULL DEFAULT 0"),
             ("last_error", "TEXT"),
             ("conflict_json", "TEXT"),
+            ("settled_at", "INTEGER"),
+            ("payload_digest", "TEXT"),
+            ("compacted", "INTEGER NOT NULL DEFAULT 0"),
         ] {
             let present: bool = db.query_row(
                 "SELECT EXISTS(SELECT 1 FROM pragma_table_info('provider_outbox') WHERE name = ?1)",
@@ -315,7 +339,18 @@ impl ProviderOutbox {
              UPDATE provider_outbox SET dispatch_state = 'queued'
              WHERE state = 'queued' AND dispatch_state = 'sending';",
         )?;
-        Ok(Self { db, max_pending })
+        db.execute(
+            "UPDATE provider_outbox SET settled_at = ?1
+             WHERE state = 'confirmed' AND settled_at IS NULL",
+            [unix_now()],
+        )?;
+        db.execute_batch(
+            "CREATE INDEX IF NOT EXISTS provider_outbox_compaction
+             ON provider_outbox (state, compacted, settled_at);",
+        )?;
+        let mut outbox = Self { db, max_pending };
+        outbox.compact_terminal_before(unix_now() - SETTLED_PAYLOAD_RETENTION)?;
+        Ok(outbox)
     }
 
     /// Atomically admit a batch. An identical operation id returns its existing row;
@@ -324,6 +359,7 @@ impl ProviderOutbox {
         &mut self,
         admissions: &[OutboxAdmission],
     ) -> Result<Vec<OutboxOperation>, OutboxError> {
+        self.compact_terminal_before(unix_now() - SETTLED_PAYLOAD_RETENTION)?;
         let tx = self
             .db
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -339,12 +375,27 @@ impl ProviderOutbox {
             let payload = admission.payload_json()?;
             let existing = tx
                 .query_row(
-                    "SELECT payload_json FROM provider_outbox WHERE operation_id = ?1",
+                    "SELECT payload_json, payload_digest, compacted
+                     FROM provider_outbox WHERE operation_id = ?1",
                     [&admission.operation_id],
-                    |row| row.get::<_, String>(0),
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Option<String>>(1)?,
+                            row.get::<_, bool>(2)?,
+                        ))
+                    },
                 )
                 .optional()?;
-            if let Some(existing) = existing {
+            if let Some((existing, digest, compacted)) = existing {
+                if compacted {
+                    if digest.as_deref() != Some(payload_digest(&payload).as_str()) {
+                        return Err(OutboxError::ChangedPayload(admission.operation_id.clone()));
+                    }
+                    return Err(OutboxError::ExpiredOperation(
+                        admission.operation_id.clone(),
+                    ));
+                }
                 if existing != payload {
                     return Err(OutboxError::ChangedPayload(admission.operation_id.clone()));
                 }
@@ -391,6 +442,36 @@ impl ProviderOutbox {
         get_in(&self.db, operation_id)
     }
 
+    /// Replace old terminal snapshots with a permanent compact retry fence. Pending rows are
+    /// never touched; `sequence` and the operation id remain, including through restarts.
+    pub fn compact_terminal_before(&mut self, cutoff: i64) -> Result<usize, OutboxError> {
+        let tx = self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let rows = {
+            let mut statement = tx.prepare(
+                "SELECT operation_id, payload_json FROM provider_outbox
+                 WHERE state = 'confirmed' AND compacted = 0 AND settled_at <= ?1",
+            )?;
+            statement
+                .query_map([cutoff], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        for (id, payload) in &rows {
+            tx.execute(
+                "UPDATE provider_outbox SET base_token = NULL, base_ticket_json = 'null',
+                 patch_json = 'null', payload_json = '', payload_digest = ?2,
+                 last_error = NULL, conflict_json = NULL, compacted = 1
+                 WHERE operation_id = ?1",
+                params![id, payload_digest(payload)],
+            )?;
+        }
+        tx.commit()?;
+        Ok(rows.len())
+    }
+
     pub fn pending_count(&self) -> Result<usize, OutboxError> {
         Ok(self.db.query_row(
             "SELECT COUNT(*) FROM provider_outbox WHERE state = 'queued'",
@@ -434,7 +515,7 @@ impl ProviderOutbox {
              WHERE connection_id = ?1 AND (
                state = 'queued' OR rowid IN (
                  SELECT rowid FROM provider_outbox
-                 WHERE connection_id = ?1 AND state = 'confirmed'
+                 WHERE connection_id = ?1 AND state = 'confirmed' AND compacted = 0
                  ORDER BY rowid DESC LIMIT ?2
                )
              ) ORDER BY rowid DESC",
@@ -447,9 +528,9 @@ impl ProviderOutbox {
     pub fn confirm(&mut self, operation_id: &str) -> Result<bool, OutboxError> {
         let changed = self.db.execute(
             "UPDATE provider_outbox SET state = 'confirmed', dispatch_state = 'confirmed',
-             next_attempt_at = 0, last_error = NULL
+             next_attempt_at = 0, last_error = NULL, settled_at = ?2
              WHERE operation_id = ?1 AND state = 'queued' AND dispatch_state = 'sending'",
-            [operation_id],
+            params![operation_id, unix_now()],
         )?;
         Ok(changed > 0)
     }
@@ -458,9 +539,9 @@ impl ProviderOutbox {
     pub fn settle_applied(&mut self, operation_id: &str) -> Result<bool, OutboxError> {
         let changed = self.db.execute(
             "UPDATE provider_outbox SET state = 'confirmed', dispatch_state = 'confirmed',
-             next_attempt_at = 0, last_error = NULL
+             next_attempt_at = 0, last_error = NULL, settled_at = ?2
              WHERE operation_id = ?1 AND state = 'queued' AND dispatch_state != 'sending'",
-            [operation_id],
+            params![operation_id, unix_now()],
         )?;
         Ok(changed > 0)
     }
@@ -564,10 +645,11 @@ impl ProviderOutbox {
 
     pub fn discard(&mut self, operation_id: &str) -> Result<(), OutboxError> {
         let changed = self.db.execute(
-            "UPDATE provider_outbox SET state = 'confirmed', dispatch_state = 'discarded'
+            "UPDATE provider_outbox SET state = 'confirmed', dispatch_state = 'discarded',
+             settled_at = ?2
              WHERE operation_id = ?1 AND state = 'queued'
              AND dispatch_state IN ('queued', 'rate_limited', 'needs_attention')",
-            [operation_id],
+            params![operation_id, unix_now()],
         )?;
         if changed == 0 {
             return Err(OutboxError::InvalidTransition(operation_id.into()));
@@ -607,7 +689,7 @@ fn get_in(db: &Connection, operation_id: &str) -> Result<Option<OutboxOperation>
         .query_row(
             "SELECT operation_id, connection_id, native_id, sequence, base_token,
                     base_ticket_json, patch_json, state, dispatch_state, attempts,
-                    next_attempt_at, last_error, conflict_json
+                    next_attempt_at, last_error, conflict_json, compacted
              FROM provider_outbox WHERE operation_id = ?1",
             [operation_id],
             |row| {
@@ -625,6 +707,7 @@ fn get_in(db: &Connection, operation_id: &str) -> Result<Option<OutboxOperation>
                     row.get::<_, i64>(10)?,
                     row.get::<_, Option<String>>(11)?,
                     row.get::<_, Option<String>>(12)?,
+                    row.get::<_, bool>(13)?,
                 ))
             },
         )
@@ -643,10 +726,14 @@ fn get_in(db: &Connection, operation_id: &str) -> Result<Option<OutboxOperation>
         next_attempt_at,
         last_error,
         conflict_json,
+        compacted,
     )) = row
     else {
         return Ok(None);
     };
+    if compacted {
+        return Ok(None);
+    }
     Ok(Some(OutboxOperation {
         operation_id,
         connection_id,
@@ -792,6 +879,79 @@ mod tests {
                 .sequence,
             3
         );
+    }
+
+    #[test]
+    fn compacted_terminal_rows_fence_late_retries_and_preserve_sequence_after_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.sqlite");
+        let mut outbox = ProviderOutbox::open(&path, 4).unwrap();
+        let settled = admission("settled", "42", "First");
+        let discarded = admission("discarded", "42", "Second");
+        let pending = admission("pending", "42", "Third");
+        outbox
+            .admit_batch(&[settled.clone(), discarded.clone(), pending.clone()])
+            .unwrap();
+        assert_eq!(outbox.claim_ready(0, 1).unwrap().len(), 1);
+        assert!(outbox.confirm("settled").unwrap());
+        outbox.discard("discarded").unwrap();
+        assert_eq!(outbox.compact_terminal_before(unix_now() - 1).unwrap(), 0);
+        assert_eq!(outbox.compact_terminal_before(unix_now() + 1).unwrap(), 2);
+        assert_eq!(outbox.compact_terminal_before(unix_now() + 1).unwrap(), 0);
+        assert!(outbox.get("settled").unwrap().is_none());
+        assert!(outbox.get("discarded").unwrap().is_none());
+        assert_eq!(
+            outbox
+                .recent_for_connection("github-main", 10)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(outbox.list_pending().unwrap()[0].operation_id, "pending");
+        let (base, patch, payload, digest): (String, String, String, String) = outbox
+            .db
+            .query_row(
+                "SELECT base_ticket_json, patch_json, payload_json, payload_digest
+                 FROM provider_outbox WHERE operation_id = 'settled'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (base.as_str(), patch.as_str(), payload.as_str()),
+            ("null", "null", "")
+        );
+        assert_eq!(digest.len(), 64);
+        drop(outbox);
+
+        let mut reopened = ProviderOutbox::open(&path, 4).unwrap();
+        for prior in [settled, discarded] {
+            assert!(matches!(
+                reopened.admit_batch(std::slice::from_ref(&prior)),
+                Err(OutboxError::ExpiredOperation(id)) if id == prior.operation_id
+            ));
+        }
+        assert!(matches!(
+            reopened.admit_batch(&[admission("settled", "42", "Changed")]),
+            Err(OutboxError::ChangedPayload(id)) if id == "settled"
+        ));
+        assert!(matches!(
+            reopened.admit_batch(&[
+                admission("never-admitted", "43", "New"),
+                admission("settled", "42", "First"),
+            ]),
+            Err(OutboxError::ExpiredOperation(id)) if id == "settled"
+        ));
+        assert!(reopened.get("never-admitted").unwrap().is_none());
+        assert_eq!(reopened.pending_count().unwrap(), 1);
+        assert_eq!(
+            reopened
+                .admit_batch(&[admission("new", "42", "Fourth")])
+                .unwrap()[0]
+                .sequence,
+            4
+        );
+        assert_eq!(reopened.list_pending().unwrap().len(), 2);
     }
 
     #[test]

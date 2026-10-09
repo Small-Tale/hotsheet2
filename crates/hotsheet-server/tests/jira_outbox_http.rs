@@ -4,7 +4,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use hotsheet_extsync::{GitHubTransport, HttpResponse, JiraConfig, JiraProvider};
 use hotsheet_server::{AppState, app, provider_write_behind::dispatch_jira_at};
-use hotsheet_ticketing::{FsStore, StoreMetadata};
+use hotsheet_ticketing::{FsStore, StoreMetadata, provider_outbox::ProviderOutbox};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -503,6 +503,63 @@ async fn dispatch_rebases_remote_edit_and_confirms_in_ticket_order_for_two_clien
     .await;
     assert_eq!(authoritative["title"], "Latest local");
     assert!(authoritative.get("pending_operation_ids").is_none());
+}
+
+#[tokio::test]
+async fn compacted_jira_operation_rejects_a_late_http_retry_after_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("outbox.sqlite");
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_ticket_provider(Arc::new(provider(fake.clone())))
+        .with_jira_outbox(&path, 2)
+        .unwrap();
+    let server = app(state.clone());
+    let uri = format!("/providers/{CONNECTION}/tickets/queued");
+    let operation = json!({"operations":[edit("settled-http", "Once only")]});
+    assert_eq!(
+        server
+            .oneshot(request("POST", &uri, Some(operation.clone())))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(dispatch_jira_at(&state, 100).await.unwrap(), 1);
+    drop(state);
+    let mut outbox = ProviderOutbox::open(&path, 2).unwrap();
+    assert_eq!(outbox.compact_terminal_before(i64::MAX).unwrap(), 1);
+    drop(outbox);
+    let restarted = app(
+        AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+            .unwrap()
+            .with_ticket_provider(Arc::new(provider(fake.clone())))
+            .with_jira_outbox(&path, 2)
+            .unwrap(),
+    );
+    let writes_before = fake
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(method, _)| method == "PUT")
+        .count();
+    let retry = restarted
+        .oneshot(request("POST", &uri, Some(operation)))
+        .await
+        .unwrap();
+    assert_eq!(retry.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        fake.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(method, _)| method == "PUT")
+            .count(),
+        writes_before
+    );
 }
 
 #[tokio::test]

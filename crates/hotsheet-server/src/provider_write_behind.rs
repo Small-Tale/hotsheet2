@@ -499,7 +499,9 @@ fn validate_edit(edit: &QueuedProviderEdit) -> Result<(), ApiError> {
 fn outbox_error(error: OutboxError) -> ApiError {
     let status = match error {
         OutboxError::Backpressure { .. } => StatusCode::TOO_MANY_REQUESTS,
-        OutboxError::ChangedPayload(_) | OutboxError::MismatchedBase => StatusCode::CONFLICT,
+        OutboxError::ChangedPayload(_)
+        | OutboxError::ExpiredOperation(_)
+        | OutboxError::MismatchedBase => StatusCode::CONFLICT,
         OutboxError::EmptyIdentity
         | OutboxError::InvalidProjectionOrder(_)
         | OutboxError::UnsupportedProjectionField { .. }

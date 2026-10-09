@@ -182,3 +182,20 @@ operation IDs, keeps the provisional ticket visible, and shows pending counts an
 states in ticket rows and the inspector. The inspector offers retry and discard
 when those transitions are available. Other providers and non-field Jira edits
 remain synchronous.
+
+### Settled outbox retention (HS2-X5AJ7M)
+
+Confirmed and discarded operations keep their full snapshots and exact retry
+responses for 30 days. After that, the outbox replaces ticket, patch, error, and
+conflict payloads with a compact row retaining the operation ID, payload digest,
+provider identity, and per-ticket sequence. A late reuse of a compacted operation
+ID receives a conflict, whether the caller resends the original intent or changes
+it; the payload digest distinguishes those cases when the original base snapshot
+is available. Neither can create another Jira write. Pending operations are never
+compacted. Compacted rows leave recent-status and operation-detail responses; their
+IDs remain reserved for admission. Legacy settled rows begin the
+30-day window on the first upgraded open because their original settlement time
+was not recorded. Compaction runs on startup and admission; SQLite can reuse the
+released pages, though the database file need not shrink immediately.
+HS2-QZ46NP tracks bounding the compact ID metadata without allowing arbitrarily
+late retries to be dispatched again.
