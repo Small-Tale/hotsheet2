@@ -33,6 +33,19 @@ import { type ClipboardTicket, type TicketHistory } from '../ticket-operations';
 import { data } from './dom';
 import { type AttachmentMenu, type Project } from './types';
 
+/** Let the focused editor own its keys while the media gallery is open. */
+export function galleryKeyTargetsTextField(event: Event): boolean {
+  return event
+    .composedPath()
+    .some(
+      (target) =>
+        target instanceof HTMLElement &&
+        target.matches(
+          'input, textarea, select, wa-input, wa-textarea, wa-select, [role="textbox"], [contenteditable]:not([contenteditable="false"])',
+        ),
+    );
+}
+
 /** Live application bindings used by this handler group. */
 export interface ShellAndGlobalInteractionsDependencies {
   readonly viewportMobile: Signal<boolean>;
@@ -687,6 +700,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
   document.addEventListener(
     'keydown',
     (event) => {
+      if (attachmentGalleryUrl.value && galleryKeyTargetsTextField(event)) return;
       if (
         !event.defaultPrevented &&
         attachmentGalleryUrl.value &&

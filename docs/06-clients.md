@@ -1679,6 +1679,9 @@ and identity-less legacy entries remain conservatively blocking.
   the selected Markdown note field, effective-intent chips, and rendered note preview.
   Selecting or editing a note only scrolls panel content; it does not change the media
   stage or its fit scale. An implicit shape-default intent is labelled in the chips.
+  While the annotation note has focus, its text-editing keys, including arrows and Escape,
+  stay with the field and do not navigate or close the gallery. After markup finishes,
+  gallery arrow navigation resumes when focus moves to the media stage.
   Duplicate (Command/Ctrl+D) copies the note
   and intents. Tab cycles annotations; Delete removes the selection; arrows nudge it
   by one screen point or ten with Shift; Escape cancels a gesture, tool, then selection.

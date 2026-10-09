@@ -17560,6 +17560,50 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
   await expect(gallery.locator('.attachment-gallery__annotation')).toHaveCount(2);
 });
 
+test('keeps gallery shortcuts out of a focused annotation note (HS2-V14PVP)', async ({ page }) => {
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.getByRole('tab', { name: /Attachments/ }).click();
+  await page.getByLabel('Browse and add attachments').setInputFiles({
+    name: 'second.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+  });
+  await expect(page.getByRole('button', { name: 'Open second.svg in media gallery' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+  const gallery = page.locator('[data-component="attachment-gallery"]');
+  await expect(gallery).toHaveAccessibleName(/Image 1 of 2: proof.png/);
+  await gallery.getByRole('button', { name: 'Annotate media' }).click();
+  await gallery.getByRole('button', { name: 'Add rectangle' }).click();
+  const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
+    box = (await surface.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.5);
+  await page.mouse.up();
+  const note = gallery.getByRole('textbox', { name: 'Annotation note' });
+  await expect(note).toBeFocused();
+  await note.fill('ab');
+  await note.press('Home');
+  await note.press('ArrowRight');
+  await note.press('X');
+  await expect(note).toHaveValue('aXb');
+  await expect(gallery).toHaveAccessibleName(/Image 1 of 2: proof.png/);
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-v14pvp-annotation-note-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await gallery.screenshot({ path: 'target/visual-captures/hs2-v14pvp-annotation-note-phone.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await note.press('Escape');
+  await expect(gallery).toHaveAccessibleName(/Image 1 of 2: proof.png/);
+  await gallery.getByRole('button', { name: 'Finish markup' }).click();
+  await gallery.locator('[data-gallery-zoom-stage="true"]').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(gallery).toHaveAccessibleName(/Image 2 of 2: second.svg/);
+});
+
 test('draws, edits, resizes, and deletes durable image annotations in the full-screen gallery', async ({ page }) => {
   const writes: unknown[] = [];
   await mockProject(page);
