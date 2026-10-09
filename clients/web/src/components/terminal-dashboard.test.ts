@@ -293,6 +293,7 @@ describe('TerminalDashboard', () => {
     expect(markup).toContain(
       '<div class="terminal-dashboard-controls__visibility-group" data-visibility-scope="dashboard"><header class="kui-toolbar"',
     );
+    expect(markup).toMatch(/<div class="kui-toolbar__trailing"><div class="kui-toolbar-control-group"/);
     expect(markup).not.toContain('visibility-toolbar');
     // The group Select is wrapped by the app; its root carries no app class (KUI-L022).
     expect(markup).toContain('<div class="terminal-dashboard-controls__visibility-select"><wa-select');

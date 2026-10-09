@@ -7642,6 +7642,13 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await expect(visibilityToolbar.locator('[data-component="toolbar-control-group"]')).toHaveCount(2);
   await expect(manage).toBeInViewport({ ratio: 1 });
   await expect(selector).toBeInViewport({ ratio: 1 });
+  const gridToolbarGap = await page.locator('[aria-label="Workspace toolbar"]').evaluate((toolbar) => {
+    const trailing = toolbar.querySelector('.kui-toolbar__trailing'),
+      selector = toolbar.querySelector('wa-select[name="terminal-visibility-group"]');
+    if (!trailing || !selector) throw new Error('Grid toolbar visibility selector is missing');
+    return trailing.getBoundingClientRect().right - selector.getBoundingClientRect().right;
+  });
+  expect(gridToolbarGap).toBeLessThan(20);
   await page.screenshot({ path: 'target/visual-captures/hs2-kb5yy6-visibility-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect

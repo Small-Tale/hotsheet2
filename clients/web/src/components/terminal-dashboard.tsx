@@ -149,7 +149,7 @@ export function TerminalVisibilityControls({
   return (
     <div class="terminal-dashboard-controls__visibility-group" data-visibility-scope={scope}>
       <Toolbar
-        leading={
+        trailing={
           <>
             <ToolbarControlGroup single>
               <button

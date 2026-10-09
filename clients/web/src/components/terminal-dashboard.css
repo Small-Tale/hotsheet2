@@ -13,8 +13,8 @@
   gap: var(--wa-space-xs);
 }
 /* App-owned wrapper around the nested Kerf Toolbar: the toolbar keeps its 8px zone gap with no inset of
-   its own (Kerf beta.62 `--kui-toolbar-inset`, HS2-3J2PX3) and its 44px control band; the wrapper owns
-   the controls' minimum width. */
+   its own (Kerf beta.62 `--kui-toolbar-inset`, HS2-3J2PX3) and its 44px control band. The minimum
+   accommodates longer group names; its trailing zone keeps spare width before the controls. */
 .terminal-dashboard-controls__visibility-group {
   --kui-toolbar-gap: var(--wa-space-xs);
   --kui-toolbar-inset: 0px;

@@ -2256,6 +2256,8 @@ adjacent Select switches among device-local named groups. Default is permanent; 
 can be created, renamed, and removed, and each group records workspace-item inclusion without
 destroying sessions. The compact selector's open menu sizes to its option content instead of
 the narrow closed control, so checkmarks and complete group names remain visible.
+The eye and selector align with the Workspace grid toolbar's trailing inset, even when
+their nested toolbar reserves room for a longer visibility-group name.
 Production imports the canonical `@kerfjs/ui/select/register` boundary at boot.
 The contract for that shared lifecycle keeps the latest open/close request authoritative
 across interrupted animations and viewport changes; a previous close cannot hide a
