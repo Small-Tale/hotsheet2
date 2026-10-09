@@ -1369,9 +1369,20 @@ test('keeps expanded rail search inline and yields controls only when space runs
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
   const stage = page.locator('.terminal-ticket-rail-demo');
-  const wideRailStyle = await page.addStyleTag({ content: '.terminal-ticket-rail-demo { width: 700px !important; }' });
   const toolbar = stage.locator('.terminal-ticket-rail__controls');
+  const closedGroupMargins = () =>
+    toolbar.evaluate((node) => {
+      const toolbarBox = node.getBoundingClientRect();
+      const viewBox = node.querySelector('.view-mode-switcher')!.getBoundingClientRect();
+      const sortBox = node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect();
+      return [viewBox.left - toolbarBox.left, sortBox.left - toolbarBox.left, toolbarBox.right - viewBox.right];
+    });
+  await stage.screenshot({ path: 'target/visual-captures/hs2-jj6ze1-rail-closed-narrow.png', animations: 'disabled' });
+  await expect.poll(async () => Math.max(...(await closedGroupMargins()))).toBeLessThan(40);
+  const wideRailStyle = await page.addStyleTag({ content: '.terminal-ticket-rail-demo { width: 700px !important; }' });
   await expect.poll(() => toolbar.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(650);
+  await expect.poll(async () => Math.max(...(await closedGroupMargins()))).toBeLessThan(40);
+  await stage.screenshot({ path: 'target/visual-captures/hs2-jj6ze1-rail-closed-wide.png', animations: 'disabled' });
   await toolbar.getByRole('button', { name: 'Search tickets' }).click();
   await expect(toolbar.locator('.view-mode-switcher')).toBeVisible();
   await expect(toolbar.locator('.workspace-header__sort-group')).toBeVisible();

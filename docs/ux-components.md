@@ -1964,8 +1964,10 @@ Its inspector route is one toolbar row: Kerf's back control, the ticket number, 
 and the rail toggle; the catalog demo pushes a ticket on a plain row click and pops on Back.
 The rail remains independently resizable and hideable beside the terminal grid and is represented
 directly in the UX catalog. It already composes Kerf `Toolbar`, `ToolbarControlGroup`, `ToolbarText`,
-`SegmentedControl`, and `Select` primitives. Its shared `WorkspaceControls` groups are the
-trailing zone of a cataloged `Toolbar`. With search closed, the full-width view switcher has
+`SegmentedControl`, and `Select` primitives. Its shared `WorkspaceControls` groups fill
+the center zone of a cataloged `Toolbar` through `centerAlign="stretch"` and an app-owned
+wrapping container. This keeps the rail controls aligned with its left inset at wide and
+narrow widths (HS2-JJ6ZE1). With search closed, the full-width view switcher has
 its own row and sort, selection actions, and the search button share the next. Expanded search
 stays on one row. The rail measures its controls and fills the available search slot; when they
 cannot fit, view, sort, and selection actions yield to search plus More. More preserves the

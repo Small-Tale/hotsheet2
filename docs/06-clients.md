@@ -1077,7 +1077,8 @@ and identity-less legacy entries remain conservatively blocking.
   (HS2-3WQ9A1).
   In the workspace grid's ticket rail, expanded search also stays on one controls row;
   view, sort, and selection actions move into More only when the rail is too narrow to fit them
-  beside a usable search field (HS2-HH1F6P).
+  beside a usable search field (HS2-HH1F6P). Closed rail controls fill their toolbar row
+  from the left inset at both narrow and wide widths (HS2-JJ6ZE1).
   A disabled collapsible search renders closed even with a nonempty query. Switching to
   Notifications or Settings collapses the workspace search without clearing its query;
   returning to a ticket view restores that active query (HS2-6ZK9KF).

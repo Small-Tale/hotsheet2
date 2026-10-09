@@ -163,15 +163,19 @@ export function wireWorkspaceToolbarVisibility(
       const trailing = header.querySelector<HTMLElement>('.kui-toolbar__trailing');
       const gap = Number.parseFloat(getComputedStyle(trailing ?? header).columnGap) || 8;
       const leading = header.querySelector<HTMLElement>('.kui-toolbar__leading');
-      const extraWidth = [
-        ...(leading ? Array.from(leading.children).filter((item) => item !== identity) : []),
-        ...(trailing
-          ? Array.from(trailing.children).filter((item) => !groups.includes(item as HTMLElement) && item !== searchSlot)
-          : []),
-      ].reduce((sum, item) => {
-        const width = item.getBoundingClientRect().width;
-        return sum + (width > 0 ? width + gap : 0);
-      }, 0);
+      const extraWidth = rail
+        ? 0
+        : [
+            ...(leading ? Array.from(leading.children).filter((item) => item !== identity) : []),
+            ...(trailing
+              ? Array.from(trailing.children).filter(
+                  (item) => !groups.includes(item as HTMLElement) && item !== searchSlot,
+                )
+              : []),
+          ].reduce((sum, item) => {
+            const width = item.getBoundingClientRect().width;
+            return sum + (width > 0 ? width + gap : 0);
+          }, 0);
       const fitWidth = Math.max(0, contentWidth - extraWidth);
       const groupWidths = groups.map((item) => itemWidth(item!));
       const moreWidth = itemWidth(more!);

@@ -22,6 +22,13 @@
   display: grid;
   border-bottom: 1px solid var(--wa-color-surface-border);
 }
+.terminal-ticket-rail__groups {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+  gap: var(--kui-toolbar-gap, 0.5rem);
+}
 .terminal-ticket-rail__view {
   --kui-select-selected-color: var(--wa-color-neutral-on-normal);
   --kui-select-selected-font-size: var(--wa-font-size-l);

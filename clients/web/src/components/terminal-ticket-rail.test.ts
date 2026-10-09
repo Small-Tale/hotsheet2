@@ -88,10 +88,10 @@ describe('TerminalTicketRail', () => {
   it('keeps open search in the controls row and centers the ticket header independently', () => {
     const css = readFileSync(new URL('./terminal-ticket-rail.css', import.meta.url), 'utf8'),
       source = readFileSync(new URL('./terminal-ticket-rail.tsx', import.meta.url), 'utf8');
-    // The controls are the trailing zone of a cataloged Toolbar; measured fit keeps open search
-    // inline and no app-owned grid places them (HS2-HH1F6P).
+    // The controls fill the Toolbar's center zone; a wrapper wraps the closed full-width view
+    // group without leaving a content-width control island at the right (HS2-JJ6ZE1).
     expect(source).toMatch(
-      /<Toolbar\s+className="terminal-ticket-rail__controls"[^>]*responsive="none"[^>]*trailing=\{controls\}/,
+      /<Toolbar\s+className="terminal-ticket-rail__controls"[^>]*responsive="none"[^>]*centerAlign="stretch"[^>]*center=\{<div class="terminal-ticket-rail__groups">\{controls\}<\/div>\}/,
     );
     expect(css).not.toMatch(/__controls \{/);
     expect(css).not.toMatch(/__controls[^{]*\{[^}]*grid-(?:column|row)/);

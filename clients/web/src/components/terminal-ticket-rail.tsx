@@ -109,14 +109,15 @@ export function terminalTicketRailPanel({
     },
     header: (
       <div class="terminal-ticket-rail__header" data-component="terminal-ticket-rail-header">
-        {/* The shared WorkspaceControls groups stay on one row while expanded search fits the
-            available rail width; lower-priority actions move into More when space runs out. */}
+        {/* The shared WorkspaceControls fill the rail's center zone. Its app-owned flex wrapper
+            wraps the closed full-width view group and keeps open search inline as space allows. */}
         <Toolbar
           className="terminal-ticket-rail__controls"
           label="Ticket rail controls"
           dividerSides=""
           responsive="none"
-          trailing={controls}
+          centerAlign="stretch"
+          center={<div class="terminal-ticket-rail__groups">{controls}</div>}
         />
         <div class="terminal-ticket-rail__heading">
           <Toolbar dividerSides="" leading={heading} trailing={action && <TicketViewAction action={action} />} />
