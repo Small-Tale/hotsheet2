@@ -14684,6 +14684,8 @@ for (const width of [1280, 390]) {
         detailsWidth: details.getBoundingClientRect().width,
         arrowWidth: getComputedStyle(summary, '::before').width,
         nativeArrow: getComputedStyle(summary, '::after').display,
+        detailsBorder: getComputedStyle(details).borderTopWidth,
+        detailsInset: getComputedStyle(details).paddingLeft,
         firstBorder: getComputedStyle(firstEntry).borderTopWidth,
         noteBorder: getComputedStyle(nestedNote).borderTopWidth,
         noteInset: getComputedStyle(nestedNote).paddingLeft,
@@ -14692,6 +14694,8 @@ for (const width of [1280, 390]) {
     expect(feedbackLayout.summaryWidth).toBeLessThan(feedbackLayout.detailsWidth * 0.75);
     expect(feedbackLayout.arrowWidth).not.toBe('auto');
     expect(feedbackLayout.nativeArrow).toBe('none');
+    expect(feedbackLayout.detailsBorder).toBe('0px');
+    expect(feedbackLayout.detailsInset).toBe('0px');
     expect(feedbackLayout.firstBorder).toBe('0px');
     expect(feedbackLayout.noteBorder).toBe('0px');
     expect(feedbackLayout.noteInset).toBe('0px');

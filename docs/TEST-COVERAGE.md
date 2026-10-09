@@ -113,8 +113,9 @@ HS2-JS82BZ covers the AI feedback modal in `ai-feedback-dialog.test.ts` and the 
 browser rating flow in `clients/web/tests/providers.spec.ts`: cancel creates no rating,
 then multiline Markdown is saved as the structured explanation.
 HS2-2V52Z6 uses the same browser flow at desktop and phone widths to assert the
-compact disclosure, adjacent chevron, no first separator, and borderless nested note,
-then captures the expanded presentation for visual review.
+compact disclosure, adjacent chevron, no first separator, and zero border/inset on
+both the disclosure container and nested note, then captures the expanded presentation
+for visual review.
 
 HS2-TPF3EB moves non-atomic provider update progress from toasts to the app-level loading
 indicator. `clients/web/src/bulk-update-progress.test.ts` covers start, advance, repeat,

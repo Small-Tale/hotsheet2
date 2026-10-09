@@ -3188,6 +3188,8 @@ and provider sync because the relationship is persisted. Git-backed
 note deletion removes a parent's associated ratings; external providers currently do
 not offer note deletion through Hot Sheet. A thumbs rating does not answer or reopen a
 separate `feedback_needed` exchange.
+The disclosure and its expanded notes sit directly in the parent note flow without a
+second outlined or padded container; only later feedback notes have separators.
 
 When a human changes the saved text of an AI-authored note, the note and reader keep
 the original AI attribution and add **edited by human** beside it. The label is read

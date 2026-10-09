@@ -285,6 +285,11 @@
 }
 .note-card__ai-feedback {
   margin-top: var(--kui-space-2xs);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .note-card__ai-feedback summary {
   display: inline-flex;
