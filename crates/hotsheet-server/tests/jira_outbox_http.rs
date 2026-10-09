@@ -163,6 +163,20 @@ async fn queued_jira_batch_reads_provisionally_and_survives_server_restart() {
         .unwrap();
     let server = app(state);
     let uri = format!("/providers/{CONNECTION}/tickets/queued");
+    let connection = server
+        .clone()
+        .oneshot(request(
+            "POST",
+            "/provider-connections",
+            Some(json!({
+                "id": CONNECTION, "provider":"jira", "locator":"ENG", "default":false,
+                "settings":{"base_url":"https://jira.test","email":"dev@example.com",
+                    "credential":{"secret":"fixture"}}
+            })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(connection.status(), StatusCode::CREATED);
     let registration = server
         .clone()
         .oneshot(request(

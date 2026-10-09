@@ -7578,6 +7578,14 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
         .with_checkout_registry(registry_path.clone())
         .with_ticket_provider(Arc::new(external))
         .with_ticket_provider(Arc::new(renamed_external)));
+    register_test_provider_records(
+        &app,
+        &[
+            ("github-target", "acme/target"),
+            ("github-renamed", "acme/target"),
+        ],
+    )
+    .await;
 
     let target_source = body_json(
         app.clone()
@@ -14197,6 +14205,7 @@ async fn linking_a_github_source_keeps_unqualified_git_ticket_ids_working() {
             GitHubConfig::new("github-mixed", "acme/repo", "fixture-token"),
             transport.clone(),
         ))));
+    register_test_provider_records(&router, &[("github-mixed", "acme/repo")]).await;
     let opened = body_json(
         router
             .clone()
