@@ -302,12 +302,12 @@ clearing the repository turns them off. The headless path is `github-connect
 reconnect without them keeps the repository. The provider reports `attachments: true` only
 when `attachment_repo` is set; otherwise an upload fails with an explicit capability error.
 The configured GitHub App also needs **Contents: read and write** permission on the assets
-repository, and its installation must include that repository. The first-party app currently
-does not grant Contents access, so selecting an assets repository alone does not make uploads
-work. An app owner must enable Contents permission in GitHub App settings, then each
-installation owner must approve the new permission. Until then, GitHub rejects the Contents
-API write with `Resource not accessible by integration`; the upload error explains this
-requirement and names the assets repository.
+repository, and its installation must include that repository. The first-party app
+requires both the app permission and installation access; selecting an assets repository alone
+does not establish either. If Contents permission is added to an app registration, each
+installation owner must approve the new permission. Without sufficient access, GitHub
+rejects the Contents API write with `Resource not accessible by integration`; the upload
+error explains this requirement and names the assets repository.
 
 - **Upload:** `PUT /repos/{assets}/contents/{folder}/{attachment-id}-{safe-name}` on the
   branch (the plugin's `[A-Za-z0-9._-]` sanitizer). The attachment id keeps the path unique
@@ -485,10 +485,9 @@ tracked `crates/hotsheet-server/github-app-client-id.txt` contains a valid GitHu
 ID, so an unconfigured release cannot silently ship.
 
 The first-party app is registered for any-account installation with Device Flow enabled,
-webhooks disabled, Metadata read-only, Issues read/write, and all other permissions disabled.
-Its missing Contents permission currently blocks assets-repository attachment uploads as
-described above; enabling it requires a GitHub App registration change and installation
-owner approval.
+webhooks disabled, Metadata read-only, and Issues read/write. Assets-repository uploads
+also require Contents read/write and installation access to the chosen repository, as
+described above. Permission changes require installation owner approval.
 GitHub Enterprise Server installations require a separately registered app and Client ID on
 each host. Operators configure those public IDs on the server as a JSON origin map, for
 example `HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS='{"https://github.example.com":"Iv…"}'`.
