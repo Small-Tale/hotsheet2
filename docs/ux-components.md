@@ -984,7 +984,8 @@ Every layout sets Kerf
 `expandedOverflow="visible"` (HS2-PV2AG1, KF-M8SV15), so the expanded search lets the app-owned
 date and syntax-help surfaces extend below its group while the collapsed animation stays clipped.
 The app styles the surfaces themselves, narrowing their floating width to 19rem below a 480px
-viewport so the right-anchored help and date panels remain inside a phone screen. Long help examples
+viewport and anchoring them to the search group's start edge so the help and date panels remain
+inside a phone screen (HS2-MFADY0). Long help examples
 wrap, the help panel scrolls within the phone viewport, and the date helper puts Apply on its own row.
 No height, position, or
 overflow override remains on the Kerf group.

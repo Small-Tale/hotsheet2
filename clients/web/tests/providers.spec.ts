@@ -19888,6 +19888,7 @@ test('edits inline filters and exposes attachment, lifecycle-date, and syntax he
       return box.left >= 0 && box.right <= innerWidth && node.scrollWidth <= node.clientWidth + 1;
     }),
   ).toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-mfady0-search-help-phone.png', fullPage: true });
   await help.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-production-help-panel-phone.png' });
   await page.getByRole('button', { name: 'Search syntax help' }).click();
   await query.fill('created-after:');

@@ -164,6 +164,8 @@
 @media (max-width: remify(480px)) {
   .ticket-search-field__date,
   .ticket-search-field__help {
+    right: auto;
+    left: 0;
     width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s)));
   }
   .ticket-search-field__date {

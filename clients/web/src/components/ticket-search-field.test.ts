@@ -277,7 +277,7 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
     );
     expect(css).toContain('@media (max-width: remify(480px))');
     expect(css).toContainSource(
-      '.ticket-search-field__date, .ticket-search-field__help { width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s))); }',
+      '.ticket-search-field__date, .ticket-search-field__help { right: auto; left: 0; width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s))); }',
     );
     expect(css).toContainSource('.ticket-search-field__date { grid-template-columns: repeat(2, minmax(0, 1fr)); }');
     expect(css).toContainSource('.ticket-search-field__date input { width: 100%; min-width: 0; }');
