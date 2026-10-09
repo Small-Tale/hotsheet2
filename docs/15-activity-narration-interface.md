@@ -120,7 +120,9 @@ provenance produces both an embedded marker and the caller-generated note ULID p
 through the provider-neutral `TicketProvider` boundary. Retries find the marker/id;
 concurrent git clients converge through the existing note-by-ULID semantic merge.
 Provider adapters whose remote service chooses note ids must persist/recognize the
-caller-generated id as their idempotency key.
+caller-generated id as their idempotency key. The client keeps the marker in stored note
+text for idempotency and editing, but omits the trailing marker from rendered activity
+prose (HS2-2V52Z6).
 
 Distilled notes persist the adapter result as both their complete note text and optional
 durable Timeline summary. AI-authored activity notes outside distillation likewise send

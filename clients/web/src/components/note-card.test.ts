@@ -21,6 +21,22 @@ describe('NoteCard', () => {
     expect(markup).toContain('Body');
   });
 
+  it('hides only the stored activity-distillation provenance from the reading view', () => {
+    const body = 'Connected the client\nLoaded tickets.\n\n<!-- hotsheet:activity-distillation:v1:demo -->';
+    const note = { id: 'summary', kind: 'activity' as const, author: 'Hot Sheet AI', time: 'Now', body };
+    const markup = String(NoteCard(note));
+    expect(markup).toContain('Connected the client');
+    expect(markup).toContain('Loaded tickets.');
+    expect(markup).not.toContain('activity-distillation');
+
+    const editing = String(NoteCard({ ...note, editing: true }));
+    expect(editing).toContain('activity-distillation');
+    const ordinary = String(NoteCard({ ...note, kind: 'regular' }));
+    expect(ordinary).toContain('activity-distillation');
+    const embedded = String(NoteCard({ ...note, body: `${body}\nMore prose.` }));
+    expect(embedded).toContain('activity-distillation');
+  });
+
   it('renders a banded confidence badge only for scored notes (HS2-DWTJ43)', () => {
     const unscored = String(NoteCard({ id: 'plain', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body' }));
     expect(unscored).not.toContain('confidence-badge');

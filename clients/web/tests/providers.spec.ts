@@ -15059,7 +15059,10 @@ for (const width of [1280, 390]) {
     expect(feedbackLayout.noteBorder).toBe('0px');
     expect(feedbackLayout.noteInset).toBe('0px');
     await disclosure.blur();
+    await expect(reloaded).toContainText('Loaded checkout-scoped tickets.');
+    await expect(reloaded.locator('.note-card__body').first()).not.toContainText('activity-distillation');
     await reloaded.screenshot({ path: `target/visual-captures/hs2-9r3xy0-feedback-${width}.png` });
+    await reloaded.screenshot({ path: `target/visual-captures/hs2-2v52z6-feedback-${width}.png` });
     await reloaded.getByRole('button', { name: 'Not helpful — stop suggestions like this' }).click();
     await feedbackDialog.getByLabel('What should Hot Sheet change or stop doing?').fill('Avoid the long summary.');
     await feedbackDialog.getByRole('button', { name: 'Update feedback' }).click();

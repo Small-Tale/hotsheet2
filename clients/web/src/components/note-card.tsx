@@ -63,6 +63,12 @@ function hasAiAuthoredText(kind: NoteKind, body: string): boolean {
   return true;
 }
 
+/** Provenance is stored in the note for idempotency, but is not part of its prose. */
+function visibleNoteBody(kind: NoteKind, body: string): string {
+  if (kind !== 'activity') return body;
+  return body.replace(/\r?\n\r?\n<!-- hotsheet:activity-distillation:v1:[A-Za-z0-9_-]+ -->\s*$/u, '');
+}
+
 function FeedbackBlocks({
   source,
   sourceStart,
@@ -384,7 +390,7 @@ export function NoteCard({
         />
       ) : (
         <div class="note-card__body" {...editAttributes}>
-          <MarkdownPreview source={body} attachmentContext={attachmentContext} size="inherit" />
+          <MarkdownPreview source={visibleNoteBody(kind, body)} attachmentContext={attachmentContext} size="inherit" />
         </div>
       )}
       {respondToFeedback && !readerMode && <RespondToFeedbackButton id={id} />}
