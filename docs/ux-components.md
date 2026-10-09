@@ -2441,6 +2441,10 @@ rounds inspector TabBar strips and tabs, fixes the Catalog filter placeholder af
 rerenders, and clarifies translucent sunken theme guidance. Hot Sheet matches its
 icon-only inspector tabs to the inset rounded track and verifies inspector tabs and
 Catalog filtering against the updated packages.
+HS2-309T7K advances the web client and compatibility spike to 5.0.0-beta.88. This release adds controlled
+Contrast, Reduce motion, and Background settings to Kerf's Catalog and updates its UI
+composition guidance. Hot Sheet's existing toolbar and search contracts continue to use
+the same component API.
 
 Beta.80's component-style doctor checks recognize explicit classes matching five application
 component roots: AppLoadingIndicator, SettingsWorkspace, TicketRowContextMenu,
