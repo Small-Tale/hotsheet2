@@ -1030,6 +1030,7 @@ impl UdsWsTransport {
     /// upgrade before returning so a bad socket / failed handshake surfaces here (not as a
     /// later `initialize` timeout). Live-only; unit tests point it at a scripted WebSocket
     /// daemon over a temp UDS.
+    #[cfg(unix)]
     pub fn connect(socket_path: &Path) -> std::io::Result<Box<Self>> {
         use std::sync::mpsc::channel as std_channel;
 
@@ -1111,6 +1112,14 @@ impl UdsWsTransport {
                 "websocket thread exited before the handshake completed",
             )),
         }
+    }
+
+    #[cfg(not(unix))]
+    pub fn connect(_socket_path: &Path) -> std::io::Result<Box<Self>> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Codex shared-daemon Unix sockets are unavailable on this platform",
+        ))
     }
 }
 
