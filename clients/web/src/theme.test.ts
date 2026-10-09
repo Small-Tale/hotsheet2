@@ -79,7 +79,7 @@ describe('shared client theme', () => {
     }
   });
 
-  it('defines every required and referenced Hot Sheet semantic alias exactly once', () => {
+  it('defines every required and referenced Hot Sheet semantic alias at its intended scope', () => {
     const allCss = [tokenPath, ...clientCss].map(css).join('\n');
     const definitions = [...allCss.matchAll(/(--hs-[\w-]+)\s*:/g)].map((match) => match[1]);
     const references = [...allCss.matchAll(/var\((--hs-[\w-]+)\)/g)].map((match) => match[1]);
@@ -135,7 +135,13 @@ describe('shared client theme', () => {
     );
 
     expect(new Set(definitions)).toEqual(new Set(required));
-    expect(definitions).toHaveLength(required.length);
+    // Board rows and Blink list rows opt into containment in separate scopes.
+    const scopedRowTokens = ['--hs-ticket-row-content-visibility', '--hs-ticket-row-intrinsic-size'];
+    for (const token of required) {
+      expect(definitions.filter((definition) => definition === token)).toHaveLength(
+        scopedRowTokens.includes(token) ? 2 : 1,
+      );
+    }
     expect(new Set(references)).toEqual(new Set(cssReferences));
     expect(allCss).toContain('var(--hs-ticket-row-content-visibility,');
     expect(allCss).toContain('var(--hs-ticket-row-intrinsic-size,');
