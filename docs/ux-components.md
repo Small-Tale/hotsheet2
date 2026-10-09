@@ -2471,6 +2471,10 @@ pixel thresholds are wired by `wireWorkspaceToolbarVisibility`, which watches on
 workspace toolbar's width and relevant markup. It preserves Kerf's visibility marker and
 avoids the document-wide CSS probe that remeasured every control during terminal output
 and ordinary typing (HS2-TC93GZ).
+The open search slot also watches its inline style so measured width is restored after a
+reactive rerender. It defers that repair to the next animation frame and compares widths
+within CSSOM pixel precision; repeated fractional writes otherwise stall search
+interactions (HS2-J9NJN3).
 The rail keeps its wrapping controls and omits its formerly hidden overflow menu. The
 `KF-MXE9YV` suppression is removed; `src/kerf-ui-profile.test.ts` pins the remaining app
 wrapper exceptions so they can change only deliberately.

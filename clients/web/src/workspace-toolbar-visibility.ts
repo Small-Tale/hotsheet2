@@ -14,6 +14,12 @@ export function workspaceToolbarHidden(width: number, hide?: number, show?: numb
   return (hide !== undefined && width < hide) || (show !== undefined && width >= show);
 }
 
+/** CSSOM rounds inline pixel widths, so compare rendered precision before writing again. */
+export function workspaceSlotWidthChanged(current: string, target: number): boolean {
+  const value = Number.parseFloat(current);
+  return !Number.isFinite(value) || Math.abs(value - target) > 0.01;
+}
+
 /** Keep the editor usable while retaining every action that fits at its rendered width. */
 export function workspaceSearchFit(
   width: number,
@@ -50,12 +56,17 @@ export function wireWorkspaceToolbarVisibility(
 ): () => void {
   let header: HTMLElement | null = null;
   let observedSearchSlot: HTMLElement | null = null;
+  let styleRefreshFrame = 0;
   const measuredWidths = new WeakMap<HTMLElement, { width: number; sizing: string | null }>();
   const resize = new ResizeObserver(() => {
     refresh();
   });
   const slotStyles = new MutationObserver(() => {
-    refresh();
+    if (styleRefreshFrame) return;
+    styleRefreshFrame = requestAnimationFrame(() => {
+      styleRefreshFrame = 0;
+      refresh();
+    });
   });
 
   function setHidden(item: HTMLElement, hidden: boolean) {
@@ -187,10 +198,10 @@ export function wireWorkspaceToolbarVisibility(
         groupWidths.reduce((sum, width, index) => sum + (visible[index + 1] ? width + gap : 0), 0) -
         (visible.every(Boolean) ? 0 : moreWidth + gap);
       const expandedWidth = `${Math.max(0, availableSearch - 8)}px`;
-      const slotWidth = `${Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : moreWidth + gap))}px`;
+      const slotWidth = Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : moreWidth + gap));
       if (searchSlot!.style.getPropertyValue('--kui-token-search-expanded-width') !== expandedWidth)
         searchSlot!.style.setProperty('--kui-token-search-expanded-width', expandedWidth);
-      if (searchSlot!.style.width !== slotWidth) searchSlot!.style.width = slotWidth;
+      if (workspaceSlotWidthChanged(searchSlot!.style.width, slotWidth)) searchSlot!.style.width = `${slotWidth}px`;
       if (searchSlot!.style.flex !== '0 0 auto') searchSlot!.style.flex = '0 0 auto';
       if (identity) {
         identity.setAttribute('data-hide-below', `${visible[0] ? 0 : contentWidth + 1}px`);
@@ -246,6 +257,7 @@ export function wireWorkspaceToolbarVisibility(
   return () => {
     mutations.disconnect();
     slotStyles.disconnect();
+    if (styleRefreshFrame) cancelAnimationFrame(styleRefreshFrame);
     resize.disconnect();
   };
 }

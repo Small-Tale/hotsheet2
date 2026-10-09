@@ -19035,6 +19035,24 @@ test('keeps managed workspace search open and focused through repeated controlle
       await expect(
         field.locator('[data-component="token-search-token"][data-token-value="has:attachment"]'),
       ).toBeVisible();
+      if (width === 1280 && attempt === 1) {
+        const slot = page.locator('.workspace-header__search-actions[data-search-open="true"]');
+        await expect
+          .poll(() => slot.evaluate((node) => Number.parseFloat((node as HTMLElement).style.width)))
+          .toBeGreaterThan(200);
+        const styleMutations = await slot.evaluate(async (node) => {
+          let count = 0;
+          const observer = new MutationObserver(() => {
+            count += 1;
+          });
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          observer.observe(node, { attributes: true, attributeFilter: ['style'] });
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          observer.disconnect();
+          return count;
+        });
+        expect(styleMutations).toBeLessThan(5);
+      }
       await page.getByRole('button', { name: 'Clear search', exact: true }).click();
       await page.keyboard.type('continued');
       await expect(editor).toBeFocused();
