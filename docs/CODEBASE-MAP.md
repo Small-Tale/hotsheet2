@@ -194,7 +194,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts plus pixel-verified dev-review draw/resize/scrolled-capture/review/submit flow
   crates/
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
-      src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, crop manifest Contents-SHA CAS and comment repair, fake + opt-in live tests (HS2-JAXS4Z/HS2-X09EJ1)
+      src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, 25-alias GraphQL crop-manifest detail batches with REST fallback, Contents-SHA CAS and comment repair, fake + opt-in live tests (HS2-JAXS4Z/HS2-X09EJ1/HS2-5MFV7Q)
       src/gitlab.rs            #   GitLab Issues mapping, native IDs/URLs, pagination/incremental reads, typed errors/concurrency, fake + opt-in live drift tests (HS2-0RK4YC)
       src/jira.rs              #   Jira Cloud issue/ADF mapping, token pagination/incremental JQL, honest workflow capabilities, fake + opt-in live drift tests (HS2-0RK4YC)
       src/github_attachments.rs #   GitHub assets-repository attachments: HS1 setting keys/defaults, evidence and per-attachment revision-manifest paths, raw link URL, marked link comment write/parse (HS2-HSA64D/HS2-X09EJ1)

@@ -2201,6 +2201,35 @@ impl GitHubTransport for FakeGitHub {
     }
 }
 
+struct BatchGitHub {
+    responses: Mutex<VecDeque<HttpResponse>>,
+    requests: Mutex<Vec<(String, String)>>,
+}
+
+impl GitHubTransport for BatchGitHub {
+    fn supports_manifest_batching(&self) -> bool {
+        true
+    }
+
+    fn request(
+        &self,
+        method: &str,
+        url: &str,
+        _: &[(&str, String)],
+        _: Option<&serde_json::Value>,
+    ) -> Result<HttpResponse, String> {
+        self.requests
+            .lock()
+            .unwrap()
+            .push((method.into(), url.into()));
+        self.responses
+            .lock()
+            .unwrap()
+            .pop_front()
+            .ok_or_else(|| "unexpected GitHub request".into())
+    }
+}
+
 fn github_issue(number: u64, title: &str) -> serde_json::Value {
     serde_json::json!({
         "number":number,"title":title,"body":"body","state":"open","state_reason":null,
@@ -18663,6 +18692,111 @@ async fn github_checkout_attachments_upload_to_the_assets_repository_and_read_ba
     );
     assert_eq!(denied_transport.requests.lock().unwrap().len(), 1);
     assert!(transport.responses.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn github_checkout_detail_batches_manifests_and_uses_the_winning_revision() {
+    let (_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let mut comments = Vec::new();
+    let mut winner = String::new();
+    for index in 0..10 {
+        let id = format!("01K6SERVERBATCH{index:011}");
+        let mut marker = hotsheet_extsync::github_attachments::AttachmentMarker {
+            filename: "proof.png".into(),
+            path: format!("hotsheet-attachments/{id}-proof.png"),
+            repository: "acme/assets".into(),
+            branch: "main".into(),
+            sha: Some(format!("blob-{index}")),
+            rendition_sha: None,
+            rendition_path: None,
+            crop: None,
+            annotations: vec![],
+            batch_id: None,
+            batch_label: None,
+            actor: None,
+            purpose: None,
+        };
+        let stale =
+            hotsheet_extsync::github_attachments::compose_comment(&id, "https://x/y", &marker);
+        if index == 0 {
+            marker.batch_label = Some("winning revision".into());
+            winner =
+                hotsheet_extsync::github_attachments::compose_comment(&id, "https://x/y", &marker);
+        }
+        comments.push(
+            serde_json::json!({"id":index + 1,"body":stale,"created_at":"2026-10-01T00:00:05Z"}),
+        );
+    }
+    let mut aliases = serde_json::Map::new();
+    for index in 0..10 {
+        aliases.insert(format!("m{index}"), serde_json::Value::Null);
+    }
+    aliases.insert(
+        "m0".into(),
+        serde_json::json!({
+            "text":serde_json::json!({"base_comment_revision":"prior","body":winner.clone()}).to_string(),
+            "isTruncated":false,
+        }),
+    );
+    let transport = Arc::new(BatchGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, github_issue(42, "with evidence")),
+                github_response(200, serde_json::json!(comments)),
+                github_response(200, serde_json::json!({"data":{"repository":aliases}})),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-assets", "acme/repo", "fixture-token").with_attachments(
+            hotsheet_extsync::GitHubAttachmentRepository::new("acme/assets", None, None).unwrap(),
+        ),
+        transport.clone(),
+    );
+    let app = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(provider)));
+    register_test_provider_records(&app, &[("github-assets", "acme/repo")]).await;
+    let registered = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(
+                &serde_json::json!({
+                    "root":checkout.path(), "alias":"external-batch",
+                    "sources":[{"connection_id":"github-assets","provider":"github","locator":"acme/repo"}],
+                    "default_source":"github-assets"
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+    let response = app
+        .oneshot(authed(
+            "GET",
+            "/checkouts/external-batch/tickets/github-assets:42",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let detail = body_json(response).await;
+    assert_eq!(detail["attachments"].as_array().unwrap().len(), 10);
+    assert_eq!(
+        detail["attachments"][0]["revision"],
+        format!("{:x}", sha2::Sha256::digest(winner.as_bytes()))
+    );
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[2].0, "POST");
+    assert!(requests[2].1.ends_with("/graphql"));
 }
 
 #[tokio::test]

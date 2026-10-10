@@ -347,8 +347,8 @@ error explains this requirement and names the assets repository.
   use the manifest when the comment projection is delayed; the next markup operation
   repairs an interrupted comment PATCH. A direct GitHub edit to a comment that diverges
   from both the prior and intended body is rejected rather than overwritten. Detail reads
-  currently check a manifest per attachment; HS2-3KA0QG tracks measuring and bounding
-  that added request cost without losing concurrent-edit correctness.
+  batch exact manifest paths on detail reads (HS2-5MFV7Q), while writes retain
+  the per-manifest Contents-SHA conflict check.
 
 **GitHub attachment detail read budget (HS2-3KA0QG).** A controlled transport with
 2 ms of delay per request measured the current `get` path. These are local adapter
@@ -356,27 +356,29 @@ measurements, not live GitHub latency; each row includes the issue and comment-p
 requests. The fixture uses legacy comment-only attachments, so every manifest lookup
 returns 404. A present manifest has the same request count.
 
-| Attachments | Issue + comment requests | Manifest requests | Total requests | Measured elapsed |
-| ----------: | -----------------------: | ----------------: | -------------: | ---------------: |
-|           1 |                        2 |                 1 |              3 |             9 ms |
-|          10 |                        2 |                10 |             12 |            32 ms |
-|         100 |                        3 |               100 |            103 |           280 ms |
+| Attachments | Issue + comment requests | Previous manifest requests | Previous total | Batched total | Previous elapsed |
+| ----------: | -----------------------: | -------------------------: | -------------: | ------------: | ---------------: |
+|           1 |                        2 |                          1 |              3 |             3 |             9 ms |
+|          10 |                        2 |                         10 |             12 |             3 |            32 ms |
+|         100 |                        3 |                        100 |            103 |             7 |           280 ms |
 
-The proposed read path (HS2-5MFV7Q) requests the exact manifest paths in bounded
+The shipped read path (HS2-5MFV7Q) requests the exact manifest paths in bounded
 chunks of at most 25 GraphQL `repository.object(expression:)` aliases, reading each
 `Blob.text` and rejecting `isTruncated` results. GitHub documents the
 [`object` expression](https://docs.github.com/en/graphql/reference/repos),
 [`Blob` fields](https://docs.github.com/en/graphql/reference/git), and
 [GraphQL query limits](https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api).
-This would reduce 10 manifest reads to one batch and 100 to four, yielding an
-expected total of 3 and 7 requests respectively before fallback. Keep the existing
-per-attachment manifest as the revision winner; the batch is only a transport change.
-For a missing alias, use the legacy comment. For a malformed, truncated, denied, or
-partial result, read that manifest through the existing REST path or fail explicitly
-if correctness cannot be established. A delayed comment PATCH still reads the winning
+The existing per-attachment manifest remains the revision winner; batching changes
+only the read transport. A missing alias uses the legacy comment. An incomplete,
+truncated, denied, or partial GraphQL result falls back to the existing REST reads
+for that chunk; invalid manifest JSON remains a conflict. A delayed comment PATCH
+still reads the winning
 manifest body; a later direct comment edit still receives the existing conflict check.
 Chunking bounds query size and avoids listing every other ticket's marker in an assets
-repository. Measure real GraphQL latency and rate cost before shipping the batch path.
+repository. A read-only GitHub.com query against a public repository returned 25 Blob
+aliases in one response at a reported cost of one GraphQL point; a missing path returned
+`null` without an error. Latency and fallback frequency against a designated assets
+repository remain to be measured in HS2-QB6XJ4.
 
 - **Other edits:** `attachment_edit` remains `false`. Renaming, deleting,
   re-labelling, video posters, and local file actions stay git-only and are refused

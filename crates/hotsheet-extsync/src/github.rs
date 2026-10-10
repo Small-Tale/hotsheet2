@@ -104,6 +104,11 @@ pub struct HttpResponse {
 }
 
 pub trait GitHubTransport: Send + Sync {
+    /// Test transports can opt in after implementing GraphQL response fixtures.
+    fn supports_manifest_batching(&self) -> bool {
+        false
+    }
+
     fn request(
         &self,
         method: &str,
@@ -153,6 +158,10 @@ pub fn parse_webhook(event: &str, payload: &[u8]) -> Result<Option<GitHubWebhook
 pub struct UreqGitHubTransport;
 
 impl GitHubTransport for UreqGitHubTransport {
+    fn supports_manifest_batching(&self) -> bool {
+        true
+    }
+
     fn request(
         &self,
         method: &str,
@@ -295,7 +304,7 @@ impl GitHubProvider {
                         .contains("rate limit")));
         match response.status {
             200..=299 => {
-                if method != "GET" {
+                if method != "GET" && !url.ends_with("/graphql") {
                     if let Some(cache) = &self.issues_cache {
                         if let Ok(mut cached) = cache.lock() {
                             *cached = None;
@@ -921,8 +930,14 @@ impl TicketProvider for GitHubProvider {
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
         let mut ticket = self.api_ticket(self.issue(native_id)?, self.comments(native_id)?);
         if let Some(assets) = &self.config.attachments {
-            for attachment in &mut ticket.attachments {
-                if let Some((manifest, _)) = self.attachment_manifest(assets, &attachment.id)? {
+            let ids = ticket
+                .attachments
+                .iter()
+                .map(|attachment| attachment.id.clone())
+                .collect::<Vec<_>>();
+            let manifests = self.attachment_manifests_for_detail(assets, &ids)?;
+            for (attachment, manifest) in ticket.attachments.iter_mut().zip(manifests) {
+                if let Some(manifest) = manifest {
                     let marker = self.manifest_marker(assets, &attachment.id, &manifest)?;
                     attachment.crop = marker.crop;
                     attachment.annotations = marker.annotations;
@@ -1395,6 +1410,94 @@ impl GitHubProvider {
             message: format!("invalid attachment revision manifest: {error}"),
         })?;
         Ok(Some((manifest, file.sha)))
+    }
+
+    fn attachment_manifests_for_detail(
+        &self,
+        assets: &GitHubAttachmentRepository,
+        ids: &[String],
+    ) -> Result<Vec<Option<AttachmentRevisionManifest>>, ProviderError> {
+        const CHUNK: usize = 25;
+        let mut manifests = Vec::with_capacity(ids.len());
+        for chunk in ids.chunks(CHUNK) {
+            if self.transport.supports_manifest_batching()
+                && let Some(batch) = self.graphql_attachment_manifests(assets, chunk)?
+            {
+                manifests.extend(batch);
+            } else {
+                for id in chunk {
+                    manifests.push(self.attachment_manifest(assets, id)?.map(|(body, _)| body));
+                }
+            }
+        }
+        Ok(manifests)
+    }
+
+    /// `None` means the GraphQL response cannot prove which manifests are absent. The caller
+    /// then uses the existing REST path for the entire chunk, including partial responses.
+    fn graphql_attachment_manifests(
+        &self,
+        assets: &GitHubAttachmentRepository,
+        ids: &[String],
+    ) -> Result<Option<Vec<Option<AttachmentRevisionManifest>>>, ProviderError> {
+        let (owner, name) = assets
+            .repository
+            .split_once('/')
+            .expect("validated assets repository");
+        let mut query = format!(
+            "query {{ repository(owner: {}, name: {}) {{",
+            serde_json::to_string(owner).expect("owner serializes"),
+            serde_json::to_string(name).expect("name serializes")
+        );
+        for (index, id) in ids.iter().enumerate() {
+            let expression = format!("{}:{}", assets.branch, assets.marker_manifest_path(id));
+            query.push_str(&format!(
+                " m{index}: object(expression: {}) {{ ... on Blob {{ text isTruncated }} }}",
+                serde_json::to_string(&expression).expect("expression serializes")
+            ));
+        }
+        query.push_str(" } }");
+        let base = self.config.api_base.trim_end_matches('/');
+        let endpoint = if let Some(root) = base.strip_suffix("/api/v3") {
+            format!("{root}/api/graphql")
+        } else {
+            format!("{base}/graphql")
+        };
+        let response = match self.request("POST", &endpoint, Some(&json!({"query": query}))) {
+            Ok(response) => response,
+            Err(_) => return Ok(None),
+        };
+        let Ok(value) = serde_json::from_str::<Value>(&response.body) else {
+            return Ok(None);
+        };
+        if value.get("errors").is_some() {
+            return Ok(None);
+        }
+        let Some(repository) = value.pointer("/data/repository").and_then(Value::as_object) else {
+            return Ok(None);
+        };
+        let mut manifests = Vec::with_capacity(ids.len());
+        for (index, id) in ids.iter().enumerate() {
+            let Some(object) = repository.get(&format!("m{index}")) else {
+                return Ok(None);
+            };
+            if object.is_null() {
+                manifests.push(None);
+                continue;
+            }
+            let Some(text) = object.get("text").and_then(Value::as_str) else {
+                return Ok(None);
+            };
+            if object.get("isTruncated") != Some(&Value::Bool(false)) {
+                return Ok(None);
+            }
+            let manifest = serde_json::from_str(text).map_err(|error| ProviderError::Conflict {
+                ticket: id.clone(),
+                message: format!("invalid attachment revision manifest: {error}"),
+            })?;
+            manifests.push(Some(manifest));
+        }
+        Ok(Some(manifests))
     }
 
     fn manifest_marker(
@@ -2071,6 +2174,24 @@ mod tests {
                 .unwrap()
                 .pop_front()
                 .ok_or_else(|| "unexpected request".into())
+        }
+    }
+
+    struct BatchTransport(Arc<FakeTransport>);
+
+    impl GitHubTransport for BatchTransport {
+        fn supports_manifest_batching(&self) -> bool {
+            true
+        }
+
+        fn request(
+            &self,
+            method: &str,
+            url: &str,
+            headers: &[(&str, String)],
+            body: Option<&Value>,
+        ) -> Result<HttpResponse, String> {
+            self.0.request(method, url, headers, body)
         }
     }
 
@@ -3683,6 +3804,170 @@ mod tests {
                 requests.len()
             );
         }
+    }
+
+    #[test]
+    fn github_detail_batches_exact_manifest_paths_and_keeps_legacy_comments() {
+        for count in [1_usize, 10, 100] {
+            let comments = (0..count)
+                .map(|index| {
+                    uploaded_comment(
+                        index as u64 + 1,
+                        &format!("01K6ATTACHMENT{index:010}"),
+                        "proof.png",
+                    )
+                })
+                .collect::<Vec<_>>();
+            let mut responses = vec![response(200, issue(42, "broken widget", "details"))];
+            responses.push(response(200, json!(comments)));
+            if count == 100 {
+                responses.push(response(200, json!([])));
+            }
+            for chunk in (0..count).collect::<Vec<_>>().chunks(25) {
+                let entries = chunk
+                    .iter()
+                    .enumerate()
+                    .map(|(index, _)| (format!("m{index}"), Value::Null))
+                    .collect::<serde_json::Map<_, _>>();
+                responses.push(response(200, json!({"data":{"repository":entries}})));
+            }
+            let inner = FakeTransport::with(responses);
+            let github = assets_provider(Arc::new(BatchTransport(inner.clone())));
+            let ticket = github.get("42").unwrap();
+            assert_eq!(ticket.attachments.len(), count);
+            let requests = inner.requests.lock().unwrap();
+            assert_eq!(requests.len(), if count == 100 { 7 } else { 3 });
+            let batches = requests
+                .iter()
+                .filter(|(method, url, _, _)| method == "POST" && url.ends_with("/graphql"))
+                .collect::<Vec<_>>();
+            assert_eq!(batches.len(), count.div_ceil(25));
+            assert!(
+                requests
+                    .iter()
+                    .all(|(_, url, _, _)| !url.contains("/contents/"))
+            );
+            for (chunk_index, request) in batches.iter().enumerate() {
+                let query = request.3.as_ref().unwrap()["query"].as_str().unwrap();
+                for index in chunk_index * 25..((chunk_index + 1) * 25).min(count) {
+                    assert!(query.contains(&format!("01K6ATTACHMENT{index:010}.json")));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn github_detail_batch_uses_manifest_winner_and_rest_fallback_for_partial_result() {
+        let stale = uploaded_comment(9, ATTACHMENT_ID, "proof.png");
+        let stale_body = stale["body"].as_str().unwrap();
+        let (id, mut marker) = github_attachments::parse_comment(stale_body).unwrap();
+        marker.batch_label = Some("winning revision".into());
+        let winner = github_attachments::compose_comment(&id, "https://x/y", &marker);
+        let manifest = AttachmentRevisionManifest {
+            base_comment_revision: attachment_comment_revision(stale_body),
+            body: winner.clone(),
+        };
+        let inner = FakeTransport::with(vec![
+            response(200, issue(42, "broken widget", "details")),
+            response(200, json!([stale])),
+            response(
+                200,
+                json!({"data":{"repository":{"m0":{"text":serde_json::to_string(&manifest).unwrap(),"isTruncated":false}}}}),
+            ),
+        ]);
+        let ticket = assets_provider(Arc::new(BatchTransport(inner.clone())))
+            .get("42")
+            .unwrap();
+        assert_eq!(
+            ticket.attachments[0].revision,
+            Some(attachment_comment_revision(&winner))
+        );
+        assert_eq!(inner.requests.lock().unwrap().len(), 3);
+
+        let inner = FakeTransport::with(vec![
+            response(200, issue(42, "broken widget", "details")),
+            response(
+                200,
+                json!([uploaded_comment(9, ATTACHMENT_ID, "proof.png")]),
+            ),
+            response(
+                200,
+                json!({"data":{"repository":{"m0":{"text":"{}","isTruncated":true}}}}),
+            ),
+            response(
+                200,
+                json!({"path":"manifest","sha":"sha1","content":BASE64.encode(serde_json::to_vec(&manifest).unwrap())}),
+            ),
+        ]);
+        let ticket = assets_provider(Arc::new(BatchTransport(inner.clone())))
+            .get("42")
+            .unwrap();
+        assert_eq!(
+            ticket.attachments[0].revision,
+            Some(attachment_comment_revision(&winner))
+        );
+        assert_eq!(inner.requests.lock().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn github_detail_batch_refills_after_legacy_read_and_falls_back_on_graphql_errors() {
+        let stale = uploaded_comment(9, ATTACHMENT_ID, "proof.png");
+        let stale_body = stale["body"].as_str().unwrap();
+        let (id, mut marker) = github_attachments::parse_comment(stale_body).unwrap();
+        marker.batch_label = Some("winning revision".into());
+        let winner = github_attachments::compose_comment(&id, "https://x/y", &marker);
+        let manifest = AttachmentRevisionManifest {
+            base_comment_revision: attachment_comment_revision(stale_body),
+            body: winner.clone(),
+        };
+        let comment_page = json!([stale]);
+        let inner = FakeTransport::with(vec![
+            response(200, issue(42, "broken widget", "details")),
+            response(200, comment_page.clone()),
+            response(200, json!({"data":{"repository":{"m0":null}}})),
+            response(200, issue(42, "broken widget", "details")),
+            response(200, comment_page.clone()),
+            response(
+                200,
+                json!({"data":{"repository":{"m0":{"text":serde_json::to_string(&manifest).unwrap(),"isTruncated":false}}}}),
+            ),
+            response(200, issue(42, "broken widget", "details")),
+            response(200, comment_page),
+            response(
+                200,
+                json!({"data":{"repository":{"m0":null}},"errors":[{"message":"partial result"}]}),
+            ),
+            response(
+                200,
+                json!({"path":"manifest","sha":"sha1","content":BASE64.encode(serde_json::to_vec(&manifest).unwrap())}),
+            ),
+        ]);
+        let github = assets_provider(Arc::new(BatchTransport(inner.clone())));
+        let legacy = github.get("42").unwrap();
+        let recovered = github.get("42").unwrap();
+        let fallback = github.get("42").unwrap();
+        let winning_revision = Some(attachment_comment_revision(&winner));
+        assert_ne!(legacy.attachments[0].revision, winning_revision);
+        assert_eq!(recovered.attachments[0].revision, winning_revision);
+        assert_eq!(fallback.attachments[0].revision, winning_revision);
+        assert_eq!(inner.requests.lock().unwrap().len(), 10);
+    }
+
+    #[test]
+    fn github_enterprise_manifest_batch_uses_its_graphql_endpoint() {
+        let inner = FakeTransport::with(vec![
+            response(200, issue(42, "broken widget", "details")),
+            response(
+                200,
+                json!([uploaded_comment(9, ATTACHMENT_ID, "proof.png")]),
+            ),
+            response(200, json!({"data":{"repository":{"m0":null}}})),
+        ]);
+        let mut github = assets_provider(Arc::new(BatchTransport(inner.clone())));
+        github.config.api_base = "https://ghe.test/api/v3".into();
+        github.get("42").unwrap();
+        let requests = inner.requests.lock().unwrap();
+        assert_eq!(requests[2].1, "https://ghe.test/api/graphql");
     }
 
     struct CropTransport {
