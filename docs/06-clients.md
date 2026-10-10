@@ -667,6 +667,10 @@ and identity-less legacy entries remain conservatively blocking.
   same color grid. The Git dialog lets users replace a moved or renamed ticket repository
   path; Save location validates the destination, updates every linked project, and shows
   an actionable error when the selected folder is not a Hot Sheet store (HS2-8BG4W9).
+  A moved legacy store whose old identity was never recorded requires an unchecked-by-default
+  review choice in that dialog. After recovery, Ticket sources keeps an **Unverified recovery**
+  marker and explains that continuity with the former repository could not be proved
+  (HS2-RAQSX7). A known identity mismatch cannot use this override.
   Icon color belongs to the project and defaults to Gray (`#6b7280`); there is no
   Transparent source-color option (HS2-XKEHAK, HS2-H1FZNV).
   The trailing **Remove from this project** action opens the connection editor at an

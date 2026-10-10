@@ -617,8 +617,13 @@ the store's durable `instanceId` from `hotsheet-store.json` in
 any shared checkout. New stores receive the id at initialization. A legacy
 store and its links migrate while its old path is still reachable; after a
 pre-identity store has already moved, no recorded evidence can prove the
-destination, so relink returns a verification error (HS2-EFBAPC). The
-explicit recovery path for that exceptional case is tracked in `HS2-RAQSX7`.
+destination, so ordinary relink returns a verification error (HS2-EFBAPC).
+For this exceptional case, `PATCH /checkouts/{reference}/sources/{connection_id}/relink`
+accepts `review_unverified_recovery: true` only after the caller explicitly reviews the
+destination. It never overrides a known identity mismatch. The updated checkout records
+the old locator in `unverified_store_sources` under the new connection id; the checkout
+provider descriptor exposes `unverified_recovery: true`, and the marker survives later
+verified moves and restart (HS2-RAQSX7).
 Checkout and ticket reads also compare the recorded identity with the current
 store at a linked path. A mismatch returns a conflict with restore/replacement guidance,
 including when that path was already hosted before replacement. Other projects

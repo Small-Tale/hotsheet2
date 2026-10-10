@@ -178,6 +178,11 @@ store is restored or the server restarts to select the replacement; other
 hosted stores remain accessible.
 The shared server health probe remains live and reports the primary conflict
 without reading replacement tickets.
+If a pre-identity store moved before its link could record an id, a reviewed
+recovery may point the link at a valid destination without claiming proof of
+continuity. The checkout registry stores its former locator in
+`unverified_store_sources`, keyed by the current connection id. Shared links and
+later verified moves retain that warning; removing the source removes it.
 
 **Sharding uses the final two ULID characters.** ULID prefixes encode time, so active
 stores otherwise concentrate nearly every ticket in the same `01/` directory. The

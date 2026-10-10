@@ -581,6 +581,7 @@ mod tests {
             ],
             sources: Vec::new(),
             store_instance_ids: Default::default(),
+            unverified_store_sources: Default::default(),
             source_colors: Default::default(),
             default_source: None,
             default_source_cleared: false,

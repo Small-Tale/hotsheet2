@@ -275,6 +275,10 @@ export function TicketSourceSetupDialog({
           <input name="git-store-path" type="text" value={editingGit.locator} required disabled={providerBusy} />
         </label>
         <small>If the ticket repository moved, enter its new folder path.</small>
+        <wa-checkbox name="review-unverified-recovery" value="on">
+          If the old repository is gone and had no recorded identity, I reviewed this destination and accept that Hot
+          Sheet cannot verify it is the same repository.
+        </wa-checkbox>
       </form>
       <TicketSourceColorPicker
         source={{ provider: 'git', name: editingGit.name, color: editingGit.color }}

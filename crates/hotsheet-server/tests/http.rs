@@ -17465,6 +17465,108 @@ async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
     }
 }
 
+#[tokio::test]
+async fn reviewed_legacy_git_recovery_is_explicit_and_visible_after_restart() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    let old_store = root.path().join("old-store");
+    let new_store = root.path().join("new-store");
+    let registry_path = root.path().join("checkouts.json");
+    std::fs::create_dir(&project).unwrap();
+    let store = FsStore::init(&old_store, &StoreMetadata::new("HS")).unwrap();
+    let (_primary, initial_state) = state();
+    let initial = app(initial_state.with_checkout_registry(&registry_path));
+    let registered = initial
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&serde_json::json!({"root": project, "stores": [old_store]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+    let checkout = body_json(registered).await;
+    let id = checkout["id"].as_str().unwrap();
+    let old_id = checkout["sources"][0]["connection_id"].as_str().unwrap();
+    let old_locator = checkout["sources"][0]["locator"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let mut legacy = store.metadata().unwrap();
+    legacy.instance_id = None;
+    std::fs::write(
+        old_store.join("hotsheet-store.json"),
+        serde_json::to_vec_pretty(&legacy).unwrap(),
+    )
+    .unwrap();
+    let mut registry: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&registry_path).unwrap()).unwrap();
+    registry["checkouts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("store_instance_ids");
+    std::fs::write(
+        &registry_path,
+        serde_json::to_vec_pretty(&registry).unwrap(),
+    )
+    .unwrap();
+    std::fs::rename(&old_store, &new_store).unwrap();
+    let path = format!("/checkouts/{id}/sources/{old_id}/relink");
+    let ordinary = initial
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &path,
+            Some(&serde_json::json!({"path": new_store}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ordinary.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        body_json(ordinary)
+            .await
+            .to_string()
+            .contains("cannot verify")
+    );
+    let reviewed = initial
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &path,
+            Some(
+                &serde_json::json!({"path": new_store, "review_unverified_recovery": true})
+                    .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(reviewed.status(), StatusCode::OK);
+    let result = body_json(reviewed).await;
+    let new_id = result["connection_id"].as_str().unwrap();
+    assert_eq!(
+        result["checkouts"][0]["unverified_store_sources"][new_id],
+        old_locator
+    );
+    let (_new_primary, restarted_state) = state();
+    let restarted = app(restarted_state.with_checkout_registry(&registry_path));
+    let providers = restarted
+        .clone()
+        .oneshot(authed("GET", &format!("/checkouts/{id}/providers"), None))
+        .await
+        .unwrap();
+    assert_eq!(providers.status(), StatusCode::OK);
+    assert_eq!(body_json(providers).await[0]["unverified_recovery"], true);
+    let checkout = body_json(
+        restarted
+            .oneshot(authed("GET", &format!("/checkouts/{id}"), None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(checkout["unverified_store_sources"][new_id], old_locator);
+}
+
 /// HS2-3SCH1K: a checkout's provider list holds only the sources it links, marked default by
 /// the checkout's own default source, even though the connection catalog is machine-wide.
 #[tokio::test]

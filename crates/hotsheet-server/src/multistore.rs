@@ -141,6 +141,7 @@ impl HostedStore {
     pub fn provider_descriptor(&self, is_default: bool) -> hotsheet_ticketing::ProviderDescriptor {
         hotsheet_ticketing::ProviderDescriptor {
             color: None,
+            unverified_recovery: false,
             connection_id: self.id.clone(),
             provider: "git".into(),
             display_name: if self.prefix.is_empty() {

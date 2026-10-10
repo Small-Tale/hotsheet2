@@ -44,6 +44,8 @@ export interface ProviderDescriptor {
   default: boolean;
   /** Project-local icon background from the shared customization palette. */
   color?: string;
+  /** A reviewed legacy recovery whose former store identity could not be proved. */
+  unverified_recovery?: boolean;
   capabilities: Capabilities;
 }
 export interface ProviderConnection {
@@ -256,6 +258,8 @@ export interface Checkout {
   repository?: string;
   stores: string[];
   sources?: CheckoutSource[];
+  /** Current Git source id to former path for a reviewed, unverified legacy recovery. */
+  unverified_store_sources?: Record<string, string>;
   default_source?: string;
 }
 export type { TicketCloseReason } from './ticket-close';
@@ -911,10 +915,10 @@ export class Api {
       `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/color`,
       { method: 'PATCH', body: JSON.stringify({ color }) },
     );
-  relinkCheckoutGitSource = (checkout: string, connectionId: string, path: string) =>
+  relinkCheckoutGitSource = (checkout: string, connectionId: string, path: string, reviewUnverifiedRecovery = false) =>
     this.request<{ checkouts: Checkout[]; connection_id: string }>(
       `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/relink`,
-      { method: 'PATCH', body: JSON.stringify({ path }) },
+      { method: 'PATCH', body: JSON.stringify({ path, review_unverified_recovery: reviewUnverifiedRecovery }) },
     );
   transfer = (kind: 'copy' | 'move', source: Ticket, destination_connection: string) =>
     this.request(`/provider-transfers/${kind}`, {

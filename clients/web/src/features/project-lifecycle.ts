@@ -740,6 +740,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     const current = ticketSourceSetupProject.value ?? dependencies.project(),
       id = providerEditingId.value,
       rawPath = new FormData(form).get('git-store-path'),
+      reviewUnverifiedRecovery = new FormData(form).get('review-unverified-recovery') === 'on',
       path = typeof rawPath === 'string' ? rawPath.trim() : '';
     if (!current || !id || providerSettingsBusy.value) return;
     if (!path) {
@@ -750,7 +751,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     providerSettingsError.value = '';
     try {
       const client = new Api(current.apiPath);
-      const result = await client.relinkCheckoutGitSource(current.id, id, path);
+      const result = await client.relinkCheckoutGitSource(current.id, id, path, reviewUnverifiedRecovery);
       projects.value = projects.value.map((project) => {
         const checkout = result.checkouts.find((entry) => entry.id === project.id);
         return checkout ? { ...project, stores: checkout.stores } : project;

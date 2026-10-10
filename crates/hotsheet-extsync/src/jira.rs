@@ -391,6 +391,7 @@ impl TicketProvider for JiraProvider {
     fn descriptor(&self) -> ProviderDescriptor {
         ProviderDescriptor {
             color: None,
+            unverified_recovery: false,
             connection_id: self.config.connection_id.clone(),
             provider: "jira".into(),
             display_name: format!("Jira {}", self.config.project_key),

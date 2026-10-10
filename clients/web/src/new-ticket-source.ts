@@ -10,6 +10,7 @@ export interface TicketSourceChoice {
   capabilities: Capabilities;
   default: boolean;
   color?: string;
+  unverifiedRecovery?: boolean;
 }
 
 /**
@@ -40,6 +41,7 @@ export function projectTicketSources(descriptors: readonly ProviderDescriptor[])
       capabilities: item.capabilities,
       default: item === selected,
       color: item.color,
+      unverifiedRecovery: item.unverified_recovery,
     })),
   };
 }

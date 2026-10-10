@@ -34,6 +34,11 @@ HS2-34XE8B adds a real HTTP transition for the primary store: legacy startup
 identity migration, same-path replacement, unscoped read/write conflicts,
 health liveness without replacement ticket data, unrelated hosted-store access,
 deliberate restart, and original-store restoration.
+HS2-RAQSX7 covers reviewed recovery of an already-moved pre-identity Git store:
+registry unit tests pin shared-link and later-move marker transitions and refuse a
+known mismatch even with review; real HTTP tests require explicit review and expose
+the durable marker after restart; browser tests exercise the review control and
+persistent Ticket sources warning at wide and narrow viewports.
 
 HS2-6DHS8B covers cropped-rendition cache recency, byte and entry eviction,
 in-progress file preservation, concurrent publication, and oversized bypass in

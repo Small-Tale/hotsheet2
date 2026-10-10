@@ -46,11 +46,13 @@ while presenting newer tickets accurately.
 
 Git store metadata now includes an optional durable `instanceId`; existing schema-3
 stores remain readable, and a linked legacy store receives the field while its old
-path is available. Checkout registry schema 3 adds optional
-`store_instance_ids` entries keyed by Git connection id. Relink requires those
-identities to match, so a legacy link whose store moved before migration needs
-an explicit recovery path (HS2-EFBAPC, HS2-RAQSX7). Older writers should be
-stopped before a move so they cannot rewrite these optional identity fields.
+path is available. Checkout registry schema 4 retains optional
+`store_instance_ids` entries keyed by Git connection id and adds
+`unverified_store_sources` for explicitly reviewed legacy recoveries. Relink
+requires known identities to match; a legacy link moved before migration may
+be recovered only through that reviewed path, and retains a visible unverified
+marker across later moves (HS2-EFBAPC, HS2-RAQSX7). Older writers must not
+rewrite this registry because they cannot preserve the recovery marker.
 
 Store-schema compatibility is checked before a store is attached to a server, not on its
 first ticket mutation. `hotsheet-cli compatibility --json` exposes the schema the current

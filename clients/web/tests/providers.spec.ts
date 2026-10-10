@@ -981,6 +981,7 @@ async function mockProject(
   let ticketSourceConfigured = !emptyAtFirst;
   let gitStores = ticketSourceConfigured ? [...project.stores] : [];
   let gitStoreIds = gitStores.map((_, index) => (index === 0 ? 'git-local' : `git-${index + 1}`));
+  let unverifiedGitSourceId: string | undefined;
   let providerConnectionRecords: Array<{
     id: string;
     provider: string;
@@ -1079,6 +1080,7 @@ async function mockProject(
     ],
     default_source: checkoutDefaultSource,
     ...(Object.keys(sourceColors).length ? { source_colors: sourceColors } : {}),
+    ...(unverifiedGitSourceId ? { unverified_store_sources: { [unverifiedGitSourceId]: '/work/demo.hs2' } } : {}),
   });
   await page.route('**/*', async (route) => {
     const request = route.request(),
@@ -1241,24 +1243,34 @@ async function mockProject(
     if (sourceRelink && request.method() === 'PATCH') {
       const oldId = decodeURIComponent(sourceRelink[1]),
         index = gitStoreIds.indexOf(oldId),
-        newPath = request.postDataJSON().path;
+        newPath = request.postDataJSON().path,
+        reviewed = request.postDataJSON().review_unverified_recovery === true;
       if (newPath === '/work/unrelated.hs2')
         return route.fulfill({
           status: 400,
           json: { error: 'This location contains a different Hot Sheet ticket repository.' },
         });
-      if (index < 0 || newPath !== '/work/renamed.hs2')
+      if (newPath === '/work/recovered.hs2' && !reviewed)
+        return route.fulfill({
+          status: 400,
+          json: {
+            error:
+              'original Git store identity was never recorded; relink cannot verify this destination without reviewed unverified recovery',
+          },
+        });
+      if (index < 0 || !['/work/renamed.hs2', '/work/recovered.hs2'].includes(newPath))
         return route.fulfill({ status: 400, json: { error: 'Choose a Hot Sheet ticket repository.' } });
       if (gitStores[index] === newPath)
         return route.fulfill({ json: { checkouts: [], connection_id: gitStoreIds[index] } });
       gitStores[index] = newPath;
-      gitStoreIds[index] = 'git-moved';
-      if (checkoutDefaultSource === oldId) checkoutDefaultSource = 'git-moved';
+      gitStoreIds[index] = newPath === '/work/recovered.hs2' ? 'git-recovered' : 'git-moved';
+      if (newPath === '/work/recovered.hs2') unverifiedGitSourceId = gitStoreIds[index];
+      if (checkoutDefaultSource === oldId) checkoutDefaultSource = gitStoreIds[index];
       if (sourceColors[oldId]) {
-        sourceColors['git-moved'] = sourceColors[oldId];
+        sourceColors[gitStoreIds[index]] = sourceColors[oldId];
         Reflect.deleteProperty(sourceColors, oldId);
       }
-      return route.fulfill({ json: { checkouts: [checkoutRecord()], connection_id: 'git-moved' } });
+      return route.fulfill({ json: { checkouts: [checkoutRecord()], connection_id: gitStoreIds[index] } });
     }
     if (path.includes('/sources/') && request.method() === 'PUT') {
       const body = request.postDataJSON(),
@@ -1330,6 +1342,7 @@ async function mockProject(
             display_name: 'Hot Sheet git',
             locator,
             color: sourceColors[gitSourceId(index)],
+            ...(unverifiedGitSourceId === gitSourceId(index) ? { unverified_recovery: true } : {}),
             default: checkoutDefaultSource ? checkoutDefaultSource === gitSourceId(index) : index === 0,
             capabilities,
           })),
@@ -2852,6 +2865,34 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, 
   await expect(page.locator('.app-toast')).toContainText('Location is unchanged.');
   await dialog.getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.ticket-provider-settings__source-row[data-source-id="git-moved"]')).toBeVisible();
+});
+
+test('requires review and keeps an unverified recovery visible for a moved legacy store (HS2-RAQSX7)', async ({
+  page,
+}) => {
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Settings view').click();
+  await page
+    .locator(
+      '.ticket-provider-settings__source-row[data-source-id="git-local"] [data-action="edit-provider-connection"]',
+    )
+    .click();
+  const dialog = page.locator('[data-ticket-source-setup-dialog]');
+  await dialog.locator('input[name="git-store-path"]').fill('/work/recovered.hs2');
+  await dialog.getByRole('button', { name: 'Save location' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('cannot verify this destination');
+  await dialog.locator('wa-checkbox[name="review-unverified-recovery"]').click();
+  await dialog.getByRole('button', { name: 'Save location' }).click();
+  await expect(page.locator('.app-toast')).toContainText('Ticket repository location updated.');
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  const recovered = page.locator('.ticket-provider-settings__source-row[data-source-id="git-recovered"]');
+  await expect(recovered).toContainText('Unverified recovery');
+  await page.screenshot({ path: 'target/visual-captures/hs2-raqsx7-recovery-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-raqsx7-recovery-narrow.png', animations: 'disabled' });
 });
 
 test('centers the compact source mark with the type icon and ticket number in columns (HS2-XTF923) @ci-smoke', async ({

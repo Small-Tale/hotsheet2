@@ -724,6 +724,7 @@ impl TicketProvider for GitHubProvider {
     fn descriptor(&self) -> ProviderDescriptor {
         ProviderDescriptor {
             color: None,
+            unverified_recovery: false,
             connection_id: self.config.connection_id.clone(),
             provider: "github".into(),
             display_name: format!("GitHub {}", self.config.repository),

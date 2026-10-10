@@ -26,6 +26,7 @@ export interface ProjectTicketSource {
   default: boolean;
   color?: string;
   disabled?: boolean;
+  unverifiedRecovery?: boolean;
   /** Other projects that share this source (attached headlessly with `checkout add-source`). */
   sharedWith?: readonly string[];
 }
@@ -46,6 +47,7 @@ function ConnectionCopy({
   locator,
   isDefault = false,
   disabled = false,
+  unverifiedRecovery = false,
   sharedWith = [],
 }: {
   name: string;
@@ -53,6 +55,7 @@ function ConnectionCopy({
   locator: string;
   isDefault?: boolean;
   disabled?: boolean;
+  unverifiedRecovery?: boolean;
   sharedWith?: readonly string[];
 }) {
   return (
@@ -62,10 +65,16 @@ function ConnectionCopy({
         {isDefault && <small>Default</small>}
         {disabled && <small data-state="disabled">Disabled</small>}
       </strong>
+      {unverifiedRecovery && (
+        <small class="ticket-provider-settings__recovery-badge" data-state="unverified-recovery">
+          Unverified recovery
+        </small>
+      )}
       <small>
         {sourceKind(provider)} · {locator}
       </small>
       {sharedWith.length > 0 && <small>Also used by {sharedWith.join(', ')}</small>}
+      {unverifiedRecovery && <small>The former repository identity could not be verified.</small>}
     </span>
   );
 }
@@ -134,6 +143,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                     locator={source.locator}
                     isDefault={source.connectionId === defaultSource?.connectionId}
                     disabled={source.disabled}
+                    unverifiedRecovery={source.unverifiedRecovery}
                     sharedWith={source.sharedWith}
                   />
                 );

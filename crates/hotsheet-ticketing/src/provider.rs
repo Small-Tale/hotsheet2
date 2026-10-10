@@ -88,6 +88,9 @@ pub struct ProviderDescriptor {
     pub default: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// This Git source was recovered without proof that its moved predecessor was the same store.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unverified_recovery: bool,
     pub capabilities: ProviderCapabilities,
 }
 
@@ -1219,6 +1222,7 @@ impl TicketProvider for GitProvider {
     fn descriptor(&self) -> ProviderDescriptor {
         ProviderDescriptor {
             color: None,
+            unverified_recovery: false,
             connection_id: self.connection_id.clone(),
             provider: "git".into(),
             display_name: self.display_name.clone(),
@@ -2573,6 +2577,7 @@ mod tests {
             fn descriptor(&self) -> ProviderDescriptor {
                 ProviderDescriptor {
                     color: None,
+                    unverified_recovery: false,
                     connection_id: "down".into(),
                     provider: "fake".into(),
                     display_name: "Down".into(),

@@ -456,12 +456,17 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('<span>HS2 git tickets</span>');
     expect(markup).toContain('<strong>Location</strong>');
     expect(markup).toContain('name="git-store-path" type="text" value="/work/demo.hs2"');
+    expect(markup).toContain('name="review-unverified-recovery" value="on"');
+    expect(markup).toContain('cannot verify it is the same repository');
     expect(markup).toContain('data-action="relink-git-source"');
     expect(markup).toContain('data-action="submit-git-source-relink"');
     expect(markup).toContain('>Save location</wa-button>');
     expect(markup).toContain('name="project-source-color" value="#3b82f6" data-source-id="git-local" checked');
     expect(markup).toContain('>Done</wa-button>');
     expect(markup).not.toContain('Remove from this project…');
+    const recovered = String(TicketSourcesSettings({ sources: [{ ...source, unverifiedRecovery: true }] }));
+    expect(recovered).toContain('data-state="unverified-recovery"');
+    expect(recovered).toContain('The former repository identity could not be verified.');
   });
 
   it('lists machine-wide accounts with their sources and projects under App Settings → Accounts (HS2-SM9PM8)', () => {

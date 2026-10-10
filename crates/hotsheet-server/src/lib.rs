@@ -3193,6 +3193,9 @@ async fn list_checkout_providers(
         };
         if let Some(mut descriptor) = descriptor {
             descriptor.default = is_default;
+            descriptor.unverified_recovery = checkout
+                .unverified_store_sources
+                .contains_key(&source.connection_id);
             descriptor.color = Some(
                 hotsheet_ticketing::checkouts::effective_source_color(
                     checkout
@@ -4785,6 +4788,8 @@ struct CheckoutSourceColorBody {
 #[derive(Deserialize)]
 struct RelinkGitSourceBody {
     path: String,
+    #[serde(default)]
+    review_unverified_recovery: bool,
 }
 
 #[derive(Serialize)]
@@ -4800,6 +4805,7 @@ async fn relink_checkout_git_source(
 ) -> Result<Json<RelinkGitSourceResponse>, ApiError> {
     let hosting_state = state.clone();
     let path = body.path;
+    let reviewed = body.review_unverified_recovery;
     let old_id = connection_id.clone();
     let (updated, new_id) = tokio::task::spawn_blocking(move || {
         let store = FsStore::open(&path).map_err(|error| {
@@ -4810,11 +4816,21 @@ async fn relink_checkout_git_source(
         })?;
         let replacement = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
         let added = hosting_state.host_project_store(store)?;
-        let result = hosting_state.checkout_registry.relink_git_source(
-            &reference,
-            &old_id,
-            std::path::Path::new(&replacement.locator),
-        );
+        let result = if reviewed {
+            hosting_state
+                .checkout_registry
+                .recover_unverified_git_source(
+                    &reference,
+                    &old_id,
+                    std::path::Path::new(&replacement.locator),
+                )
+        } else {
+            hosting_state.checkout_registry.relink_git_source(
+                &reference,
+                &old_id,
+                std::path::Path::new(&replacement.locator),
+            )
+        };
         let updated = match result {
             Ok(updated) => updated,
             Err(error) => {

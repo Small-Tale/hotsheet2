@@ -48,6 +48,10 @@ pub struct Checkout {
     /// links omit entries until their still-present stores can be migrated.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub store_instance_ids: BTreeMap<String, String>,
+    /// A reviewed recovery that could not prove the moved store's old identity.
+    /// Keyed by current Git connection id; value is the unverified former locator.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub unverified_store_sources: BTreeMap<String, String>,
     /// Project-local source accent colors keyed by connection id; omitted entries use Gray.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub source_colors: BTreeMap<String, String>,
@@ -129,7 +133,7 @@ struct RegistryFile {
     source_aliases: BTreeMap<String, BTreeMap<String, String>>,
 }
 
-const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 3;
+const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 4;
 const fn registry_schema_version() -> u64 {
     CHECKOUT_REGISTRY_SCHEMA_VERSION
 }
@@ -695,6 +699,23 @@ impl CheckoutRegistry {
                     .collect()
             })
             .unwrap_or_default();
+        let unverified_store_sources = file
+            .checkouts
+            .iter()
+            .find(|checkout| checkout.id == id)
+            .map(|checkout| {
+                checkout
+                    .unverified_store_sources
+                    .iter()
+                    .filter(|(source_id, _)| {
+                        sources
+                            .iter()
+                            .any(|source| &source.connection_id == *source_id)
+                    })
+                    .map(|(source_id, former)| (source_id.clone(), former.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
         let entry = Checkout {
             id: id.clone(),
             root: root.to_string_lossy().into_owned(),
@@ -703,6 +724,7 @@ impl CheckoutRegistry {
             stores: store_strings,
             sources,
             store_instance_ids,
+            unverified_store_sources,
             source_colors,
             default_source,
             default_source_cleared,
@@ -1023,6 +1045,27 @@ impl CheckoutRegistry {
         connection_id: &str,
         new_path: &Path,
     ) -> Result<Vec<Checkout>, CheckoutError> {
+        self.relink_git_source_inner(checkout_reference, connection_id, new_path, false)
+    }
+
+    /// Recover a moved pre-identity link after an explicit user review. The destination
+    /// remains durably marked unverified; this never overrides a known identity mismatch.
+    pub fn recover_unverified_git_source(
+        &self,
+        checkout_reference: &str,
+        connection_id: &str,
+        new_path: &Path,
+    ) -> Result<Vec<Checkout>, CheckoutError> {
+        self.relink_git_source_inner(checkout_reference, connection_id, new_path, true)
+    }
+
+    fn relink_git_source_inner(
+        &self,
+        checkout_reference: &str,
+        connection_id: &str,
+        new_path: &Path,
+        reviewed_unverified_recovery: bool,
+    ) -> Result<Vec<Checkout>, CheckoutError> {
         let canonical = new_path
             .canonicalize()
             .map_err(|_| CheckoutError::Missing(new_path.display().to_string()))?;
@@ -1041,17 +1084,36 @@ impl CheckoutRegistry {
             .filter(|source| source.provider == "git")
             .ok_or_else(|| CheckoutError::NotFound(connection_id.to_string()))?;
         let recorded = selected.store_instance_ids.get(connection_id);
-        let original_instance_id = git_store_instance_id(original)?.or_else(|| recorded.cloned());
-        let original_instance_id = original_instance_id.ok_or_else(|| {
-            CheckoutError::Invalid(
-                "original Git store identity was never recorded and its old path is unavailable; relink cannot verify this destination".into(),
-            )
-        })?;
-        if recorded.is_some_and(|recorded| recorded != &original_instance_id)
-            || original_instance_id != replacement_instance_id
+        let shared_recorded = file
+            .checkouts
+            .iter()
+            .filter(|checkout| checkout.source(connection_id).is_some())
+            .filter_map(|checkout| checkout.store_instance_ids.get(connection_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        if shared_recorded
+            .iter()
+            .any(|recorded| recorded != &replacement_instance_id)
         {
             return Err(CheckoutError::Invalid(
                 "This location contains a different Hot Sheet ticket repository.".into(),
+            ));
+        }
+        let original_instance_id = git_store_instance_id(original)?
+            .or_else(|| recorded.cloned())
+            .or_else(|| shared_recorded.first().cloned());
+        if original_instance_id
+            .as_ref()
+            .is_some_and(|id| id != &replacement_instance_id)
+        {
+            return Err(CheckoutError::Invalid(
+                "This location contains a different Hot Sheet ticket repository.".into(),
+            ));
+        }
+        let unverified = original_instance_id.is_none();
+        if unverified && !reviewed_unverified_recovery {
+            return Err(CheckoutError::Invalid(
+                "original Git store identity was never recorded and its old path is unavailable; relink cannot verify this destination without reviewed unverified recovery".into(),
             ));
         }
         if replacement.connection_id == original.connection_id {
@@ -1071,16 +1133,7 @@ impl CheckoutRegistry {
                     checkout.id
                 )));
             }
-            if checkout
-                .store_instance_ids
-                .get(connection_id)
-                .is_some_and(|id| id != &original_instance_id)
-            {
-                return Err(CheckoutError::Invalid(format!(
-                    "shared checkout {} records a different Git store identity",
-                    checkout.id
-                )));
-            }
+            // Every shared recorded identity was checked against the destination above.
             let aliases = file.source_aliases.entry(checkout.id.clone()).or_default();
             if aliases
                 .get(&replacement.connection_id)
@@ -1109,6 +1162,16 @@ impl CheckoutRegistry {
                 replacement.connection_id.clone(),
                 replacement_instance_id.clone(),
             );
+            let former = checkout.unverified_store_sources.remove(connection_id);
+            if unverified {
+                checkout
+                    .unverified_store_sources
+                    .insert(replacement.connection_id.clone(), original.locator.clone());
+            } else if let Some(former) = former {
+                checkout
+                    .unverified_store_sources
+                    .insert(replacement.connection_id.clone(), former);
+            }
             checkout.stores = checkout
                 .sources
                 .iter()
@@ -2386,6 +2449,77 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_legacy_recovery_marks_shared_links_and_keeps_the_warning_on_later_moves() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        let old_path = temp.path().join("old-store");
+        let new_path = temp.path().join("new-store");
+        let later_path = temp.path().join("later-store");
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(&second).unwrap();
+        let store = FsStore::init(&old_path, &crate::store::StoreMetadata::new("HS")).unwrap();
+        let registry_path = temp.path().join("checkouts.json");
+        let registry = CheckoutRegistry::new(&registry_path);
+        let a = registry
+            .register(&first, None, None, vec![old_path.clone()])
+            .unwrap();
+        registry
+            .register(&second, None, None, vec![old_path.clone()])
+            .unwrap();
+        let old_id = a.sources[0].connection_id.clone();
+        let old_locator = a.sources[0].locator.clone();
+        let mut legacy = store.metadata().unwrap();
+        legacy.instance_id = None;
+        std::fs::write(
+            old_path.join(STORE_METADATA_FILE),
+            serde_json::to_vec_pretty(&legacy).unwrap(),
+        )
+        .unwrap();
+        let mut file: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&registry_path).unwrap()).unwrap();
+        for checkout in file["checkouts"].as_array_mut().unwrap() {
+            checkout
+                .as_object_mut()
+                .unwrap()
+                .remove("store_instance_ids");
+        }
+        std::fs::write(&registry_path, serde_json::to_vec_pretty(&file).unwrap()).unwrap();
+        std::fs::rename(&old_path, &new_path).unwrap();
+
+        let recovered = registry
+            .recover_unverified_git_source(&a.id, &old_id, &new_path)
+            .unwrap();
+        assert_eq!(recovered.len(), 2);
+        let new_id = TicketSource::git(&new_path).connection_id;
+        for checkout in &recovered {
+            assert_eq!(checkout.unverified_store_sources[&new_id], old_locator);
+            assert!(checkout.store_instance_ids.contains_key(&new_id));
+        }
+        assert_eq!(
+            CheckoutRegistry::new(&registry_path).list().unwrap(),
+            registry.list().unwrap()
+        );
+        assert!(
+            registry
+                .register(&first, None, None, vec![new_path.clone()])
+                .unwrap()
+                .unverified_store_sources
+                .contains_key(&new_id),
+            "reopening a project preserves the review warning"
+        );
+        std::fs::rename(&new_path, &later_path).unwrap();
+        let moved = registry
+            .relink_git_source(&a.id, &new_id, &later_path)
+            .unwrap();
+        let later_id = TicketSource::git(&later_path).connection_id;
+        assert_eq!(moved.len(), 2);
+        assert!(moved.iter().all(|checkout| {
+            checkout.unverified_store_sources.get(&later_id) == Some(&old_locator)
+        }));
+    }
+
+    #[test]
     fn reused_store_path_cannot_hide_an_identity_change() {
         let temp = tempfile::tempdir().unwrap();
         let checkout = temp.path().join("project");
@@ -2411,6 +2545,14 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("different Hot Sheet ticket repository")
+        );
+        assert!(
+            registry
+                .recover_unverified_git_source(&linked.id, source_id, &store_path)
+                .unwrap_err()
+                .to_string()
+                .contains("different Hot Sheet ticket repository"),
+            "reviewed recovery cannot override an actual recorded mismatch"
         );
         assert!(
             registry
