@@ -121,13 +121,15 @@ HS2-587N4D — run `npm run prod:rebuild-lan` in `clients/web`, then open
 terminal attaches and streams, and live ticket changes arrive. Stop the host with Ctrl-C and
 confirm the machine server keeps running. Automated coverage runs the real host on loopback only.
 
-HS2-EFEWSC — after an explicit production rebuild and relaunch, keep the host and server
-running while editing a Rust source file in the disposable checkout where its binaries
-were built.
+HS2-EFEWSC / HS2-6VQ5RV — after an explicit production rebuild and relaunch, keep the
+host and server running while editing a Rust source file in the disposable checkout
+where its binaries were built. Rebuild the web client and Rust executables in that
+checkout without relaunching the host.
 Refresh one client and open the project in a second browser. Both should remain connected
-without a false build-mismatch banner. Restore the source file, then deliberately rebuild
-and relaunch; confirm the new build is selected. The isolated browser flow covers normal
-host and server startup, while this source-edit sequence remains a manual LAN check.
+without a false build-mismatch banner, and the second browser should still receive the
+original client bundle. Restore the source file, then deliberately rebuild and relaunch;
+confirm the new build is selected. Automated snapshot tests cover overwritten and
+deleted working artifacts; the real LAN transition remains a manual check.
 
 ### Browser identities on ordinary LAN HTTP
 

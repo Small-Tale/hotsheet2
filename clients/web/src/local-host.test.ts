@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 import { Hono } from 'hono';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createLocalHostApp, releaseBinaryEnvironment } from './local-host';
+import { createLocalHostApp, releaseBinaryEnvironment, snapshotLocalHostArtifacts } from './local-host';
 
 describe('local production host (HS2-587N4D)', () => {
   let dist: string;
@@ -157,5 +158,47 @@ describe('release binaries for the production host (HS2-D2JQ9A)', () => {
       HOTSHEET_MIGRATE_BIN: release('hotsheet-migrate'),
       HOT_SHEET_BUILD_REVISION: 'source-sha256:current',
     });
+  });
+});
+
+describe('pinned production artifacts (HS2-6VQ5RV)', () => {
+  it('serves and launches the selected build after working outputs change or disappear', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'hs-local-host-source-'));
+    const dist = resolve(root, 'dist');
+    const server = resolve(root, 'hotsheet-server');
+    let snapshot: ReturnType<typeof snapshotLocalHostArtifacts> | undefined;
+    try {
+      await mkdir(resolve(dist, 'assets'), { recursive: true });
+      await writeFile(resolve(dist, 'index.html'), '<title>selected</title>');
+      await writeFile(resolve(dist, 'assets', 'app.js'), 'selected build');
+      await writeFile(server, 'selected server');
+      await chmod(server, 0o755);
+      snapshot = snapshotLocalHostArtifacts(dist, {
+        HOTSHEET_SERVER_BIN: server,
+        HOT_SHEET_BUILD_REVISION: 'selected',
+      });
+      const pinnedServer = snapshot.environment.HOTSHEET_SERVER_BIN;
+      const host = createLocalHostApp(snapshot.distRoot, new Hono());
+
+      await writeFile(resolve(dist, 'index.html'), '<title>new build</title>');
+      await writeFile(resolve(dist, 'assets', 'app.js'), 'new build');
+      await writeFile(server, 'new server');
+      expect(await (await host.request('/')).text()).toContain('selected');
+      expect(await (await host.request('/assets/app.js')).text()).toBe('selected build');
+      expect(readFileSync(pinnedServer, 'utf8')).toBe('selected server');
+      expect(statSync(pinnedServer).mode & 0o111).toBeTruthy();
+      expect(snapshot.environment.HOT_SHEET_BUILD_REVISION).toBe('selected');
+
+      await rm(dist, { recursive: true });
+      await rm(server);
+      expect(await (await host.request('/')).text()).toContain('selected');
+      expect(await (await host.request('/assets/app.js')).text()).toBe('selected build');
+      expect(readFileSync(pinnedServer, 'utf8')).toBe('selected server');
+    } finally {
+      const pinnedRoot = snapshot?.distRoot;
+      snapshot?.dispose();
+      if (pinnedRoot) expect(existsSync(pinnedRoot)).toBe(false);
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

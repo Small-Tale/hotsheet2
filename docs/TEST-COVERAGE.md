@@ -7,6 +7,12 @@ different server build still does. The browser flow in
 `clients/web/tests/compatibility.spec.ts` keeps project data visible without a
 false build-mismatch banner; the local production-host
 integration flow remains in `clients/web/scripts/local-host.e2e.test.mjs`.
+HS2-6VQ5RV also pins the production bundle and executables at host startup;
+`clients/web/src/local-host.test.ts` overwrites and deletes the working outputs,
+then checks that the pinned document, asset, and executable stay available. The
+isolated production-host browser flow in `clients/web/scripts/local-host.e2e.test.mjs`
+removes its original bundle and candidate binaries before opening a project at
+desktop and phone widths.
 
 HS2-K7FJVK adds opt-in desktop/narrow Chromium PTY load coverage in
 `clients/web/tests/providers.spec.ts` (`npm run profile:pty`). It exercises the

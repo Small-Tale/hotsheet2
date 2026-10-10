@@ -7,9 +7,10 @@
  * `npm run dev`. The development-only surfaces, Dev Review, the `/ux-demo` catalog, and its
  * modification feed, are not served; the production bundle already omits their client code.
  */
-import { existsSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getRequestListener } from '@hono/node-server';
@@ -97,6 +98,35 @@ export function releaseBinaryEnvironment(
   return chosen;
 }
 
+/** Keep a production host on the artifacts it selected at launch while working builds replace dist/ and target/. */
+export function snapshotLocalHostArtifacts(
+  distRoot: string,
+  binaryEnvironment: Record<string, string>,
+): { distRoot: string; environment: Record<string, string>; dispose: () => void } {
+  const snapshotRoot = mkdtempSync(resolve(tmpdir(), 'hotsheet-local-host-')),
+    environment = { ...binaryEnvironment },
+    dispose = () => {
+      rmSync(snapshotRoot, { recursive: true, force: true });
+    };
+  try {
+    const pinnedDistRoot = resolve(snapshotRoot, 'dist');
+    cpSync(distRoot, pinnedDistRoot, { recursive: true, dereference: true });
+    mkdirSync(resolve(snapshotRoot, 'bin'));
+    for (const [variable, name] of Object.entries(HOST_BINARIES)) {
+      const source = environment[variable];
+      if (!source || !isAbsolute(source)) continue;
+      const pinned = resolve(snapshotRoot, 'bin', name);
+      copyFileSync(source, pinned);
+      chmodSync(pinned, statSync(source).mode & 0o777);
+      environment[variable] = pinned;
+    }
+    return { distRoot: pinnedDistRoot, environment, dispose };
+  } catch (error) {
+    dispose();
+    throw error;
+  }
+}
+
 /** Set `Cache-Control` on a successful response produced by the handlers after this middleware. */
 function cacheControl(value: string): MiddlewareHandler {
   return async (context, next) => {
@@ -168,18 +198,33 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const host = argument('host') ?? '127.0.0.1',
     port = Number(argument('port') ?? LOCAL_HOST_DEFAULT_PORT);
   const release = releaseBinaryEnvironment(developmentRepositoryRoot());
-  Object.assign(process.env, release);
+  const selected = { ...release };
+  for (const variable of Object.keys(HOST_BINARIES)) {
+    if (process.env[variable]) selected[variable] = process.env[variable];
+  }
+  const snapshot = snapshotLocalHostArtifacts(fileURLToPath(new URL('../dist', import.meta.url)), selected);
+  Object.assign(process.env, snapshot.environment);
   console.log(
     'HOTSHEET_SERVER_BIN' in release && release.HOTSHEET_SERVER_BIN.includes('/target/release/')
       ? `Using release Hot Sheet binaries (${release.HOTSHEET_SERVER_BIN}).`
       : 'Using debug Hot Sheet binaries; run `npm run server:rebuild:release` for a faster server.',
   );
-  const server = await startLocalHost({ host, port });
+  let server: Server;
+  try {
+    server = await startLocalHost({ host, port, distRoot: snapshot.distRoot });
+  } catch (error) {
+    snapshot.dispose();
+    throw error;
+  }
+  server.once('close', snapshot.dispose);
   const address = server.address(),
     listening = typeof address === 'object' && address ? address.port : port;
   console.log(`Hot Sheet production client on http://${host}:${listening}/`);
   const stop = () => {
-    server.close(() => process.exit(0));
+    server.close(() => {
+      snapshot.dispose();
+      process.exit(0);
+    });
     server.closeAllConnections();
   };
   process.once('SIGINT', stop);

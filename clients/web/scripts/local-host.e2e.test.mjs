@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { chromium } from '@playwright/test';
-import { beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 
 // HS2-587N4D: `npm run prod` serves the built client through the same local bridge without Vite.
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
@@ -59,7 +59,7 @@ async function stopMachineServer(home) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
 }
 
-// Build as `npm run prod` does: without the test runner's environment, which would change Vite's mode.
+// Build the production bundles in an isolated directory without the test runner's Vite mode.
 const productionEnvironment = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !name.startsWith('VITEST') && name !== 'NODE_ENV' && name !== 'TEST'),
 );
@@ -71,10 +71,26 @@ const workingTreeBinaries = {
   HOTSHEET_MIGRATE_BIN: resolve(repoRoot, 'target/debug/hotsheet-migrate'),
 };
 
+let buildRoot;
 beforeAll(async () => {
-  await run('npm', ['run', 'build'], { cwd: webRoot, env: productionEnvironment });
-  await run('npm', ['run', 'build:host'], { cwd: webRoot, env: productionEnvironment });
+  await mkdir(resolve(webRoot, 'target'), { recursive: true });
+  buildRoot = await mkdtemp(resolve(webRoot, 'target/local-host-e2e-'));
+  await run('npx', ['vite', 'build', '--outDir', resolve(buildRoot, 'dist'), '--emptyOutDir'], {
+    cwd: webRoot,
+    env: productionEnvironment,
+  });
+  await run(
+    'npx',
+    ['vite', 'build', '--ssr', 'src/local-host.ts', '--outDir', resolve(buildRoot, 'dist-host'), '--emptyOutDir'],
+    {
+      cwd: webRoot,
+      env: productionEnvironment,
+    },
+  );
 }, 180_000);
+afterAll(async () => {
+  if (buildRoot) await rm(buildRoot, { recursive: true, force: true });
+});
 
 it('serves the production client and the local bridge without Vite', async () => {
   const home = await mkdtemp(resolve(tmpdir(), 'hotsheet-local-host-home-')),
@@ -86,9 +102,24 @@ it('serves the production client and the local bridge without Vite', async () =>
   // Everything that can fail runs inside the try, so the host and its machine server are always
   // stopped: a browser that failed to launch used to leave both running (HS2-WQ65KT).
   try {
-    child = spawn(process.execPath, ['dist-host/local-host.js', '--port', String(port)], {
+    const candidateBin = resolve(home, 'candidate-bin');
+    await mkdir(candidateBin);
+    const candidates = Object.fromEntries(
+      await Promise.all(
+        Object.entries(workingTreeBinaries).map(async ([variable, source]) => {
+          const destination = resolve(candidateBin, variable.toLowerCase());
+          await copyFile(source, destination);
+          await chmod(destination, (await stat(source)).mode & 0o777);
+          return [variable, destination];
+        }),
+      ),
+    );
+    const revision = JSON.parse(
+      (await run(workingTreeBinaries.HOTSHEET_SERVER_BIN, ['--revision-status'])).stdout,
+    ).build_revision;
+    child = spawn(process.execPath, [resolve(buildRoot, 'dist-host/local-host.js'), '--port', String(port)], {
       cwd: webRoot,
-      env: { ...productionEnvironment, ...workingTreeBinaries, HOTSHEET_HOME: home },
+      env: { ...productionEnvironment, ...candidates, HOT_SHEET_BUILD_REVISION: revision, HOTSHEET_HOME: home },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stdout.on('data', (chunk) => (log += chunk));
@@ -99,6 +130,9 @@ it('serves the production client and the local bridge without Vite', async () =>
     await expect.poll(() => log).toContain(`Hot Sheet production client on ${origin}/`);
     // HS2-D2JQ9A: the host says which server build it launches (release when one is built).
     await expect.poll(() => log).toMatch(/Using (release|debug) Hot Sheet binaries/);
+    // Working builds can replace or delete their outputs while this host stays on its launch snapshot.
+    await rm(resolve(buildRoot, 'dist'), { recursive: true });
+    for (const candidate of Object.values(candidates)) await rm(candidate);
     const page = await browser.newPage(),
       requests = [],
       pageErrors = [];

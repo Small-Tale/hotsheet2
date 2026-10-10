@@ -412,10 +412,12 @@ and identity-less legacy entries remain conservatively blocking.
   build, startup requests a rebuild before project setup or migration can run.
   The host compares an already running server with its selected build before opening a project;
   it uses a supported quiescent restart for a mismatch or stops with a rebuild/reopen instruction.
-  That selected revision stays pinned for the host's lifetime: later edits to workspace
-  source do not disconnect its existing clients or block another client from reopening a
-  project while the running server still matches the host's selected binary. An explicit
-  rebuild/relaunch selects the new source revision (HS2-EFEWSC).
+  That selected revision stays pinned for the host's lifetime: at startup the host copies
+  its client bundle and selected local executables into a private temporary snapshot, then
+  serves and launches from that snapshot. Later source edits and working builds cannot
+  change a fresh browser's client bundle or the binary used for a server restart. The
+  snapshot is removed when the host stops. An explicit rebuild/relaunch selects the new
+  source revision (HS2-EFEWSC, HS2-6VQ5RV).
   Explicit binary overrides remain authoritative. `server:rebuild:release` builds the release set
   and stops the running machine server, and
   `prod:rebuild-lan` runs it before serving the production client on `0.0.0.0`.
