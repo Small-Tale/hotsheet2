@@ -681,6 +681,10 @@ and identity-less legacy entries remain conservatively blocking.
   store or remove and add the replacement. Settings inspect identity metadata without
   hosting or reading replacement tickets. Checkout ticket reads and new-ticket actions
   remain unavailable until the link is repaired (HS2-AGC4ZT).
+  A missing or unreadable Git store is labeled **Store unavailable**. Its editor
+  explains restoration or removal and keeps the remove action available; the
+  unverified-legacy review choice is hidden while the store cannot be verified
+  (HS2-N4X1WG).
   Icon color belongs to the project and defaults to Gray (`#6b7280`); there is no
   Transparent source-color option (HS2-XKEHAK, HS2-H1FZNV).
   The trailing **Remove from this project** action opens the connection editor at an

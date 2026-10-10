@@ -29,6 +29,7 @@ export interface ProjectTicketSource {
   unverifiedRecovery?: boolean;
   identityReviewRequired?: boolean;
   identityMismatch?: boolean;
+  storeUnavailable?: boolean;
   /** Other projects that share this source (attached headlessly with `checkout add-source`). */
   sharedWith?: readonly string[];
 }
@@ -52,6 +53,7 @@ function ConnectionCopy({
   unverifiedRecovery = false,
   identityReviewRequired = false,
   identityMismatch = false,
+  storeUnavailable = false,
   sharedWith = [],
 }: {
   name: string;
@@ -62,6 +64,7 @@ function ConnectionCopy({
   unverifiedRecovery?: boolean;
   identityReviewRequired?: boolean;
   identityMismatch?: boolean;
+  storeUnavailable?: boolean;
   sharedWith?: readonly string[];
 }) {
   return (
@@ -86,6 +89,11 @@ function ConnectionCopy({
           Identity mismatch
         </small>
       )}
+      {storeUnavailable && (
+        <small class="ticket-provider-settings__recovery-badge" data-state="store-unavailable">
+          Store unavailable
+        </small>
+      )}
       <small>
         {sourceKind(provider)} · {locator}
       </small>
@@ -97,6 +105,7 @@ function ConnectionCopy({
           This path contains a different Git store. Restore the original, or remove and add this source again.
         </small>
       )}
+      {storeUnavailable && <small>This Git store cannot be opened. Restore its location, or remove this source.</small>}
     </span>
   );
 }
@@ -168,6 +177,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                     unverifiedRecovery={source.unverifiedRecovery}
                     identityReviewRequired={source.identityReviewRequired}
                     identityMismatch={source.identityMismatch}
+                    storeUnavailable={source.storeUnavailable}
                     sharedWith={source.sharedWith}
                   />
                 );

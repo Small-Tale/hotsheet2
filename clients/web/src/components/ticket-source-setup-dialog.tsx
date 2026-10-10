@@ -280,6 +280,10 @@ export function TicketSourceSetupDialog({
             This path contains a different Git store. Restore the original, or remove this source and add the
             replacement.
           </p>
+        ) : editingGit.storeUnavailable ? (
+          <p class="ticket-source-setup__error" role="alert">
+            This Git store cannot be opened. Restore its location, or remove this source.
+          </p>
         ) : (
           <wa-checkbox name="review-unverified-recovery" value="on">
             If the old repository identity was never recorded, I reviewed this folder and accept that Hot Sheet cannot

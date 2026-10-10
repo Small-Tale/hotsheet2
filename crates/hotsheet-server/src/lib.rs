@@ -3170,23 +3170,31 @@ async fn list_checkout_providers(
                 .store_instance_ids
                 .contains_key(&source.connection_id)
     });
-    // Settings must remain reachable when the link points at a different store. Inspect only
-    // identity metadata here; checkout_entries would reject the whole checkout (and may host a
-    // store), leaving no way to remove the stale link through the UI.
-    let identity_mismatches = checkout
+    // Settings inspect only identity metadata. Checkout resolution would reject the whole
+    // checkout for a changed, missing, or unreadable store, leaving no repair controls.
+    let mut identity_mismatches = std::collections::HashSet::new();
+    let mut unavailable_stores = std::collections::HashSet::new();
+    for source in checkout
         .sources
         .iter()
         .filter(|source| source.provider == "git")
-        .filter_map(|source| {
-            let expected = checkout.store_instance_ids.get(&source.connection_id)?;
-            let actual = FsStore::open_without_maintenance(&source.locator)
-                .and_then(|store| store.metadata())
-                .ok()?
-                .instance_id;
-            (actual.as_deref() != Some(expected)).then(|| source.connection_id.clone())
-        })
-        .collect::<std::collections::HashSet<_>>();
-    let metadata_only = has_unreviewed || !identity_mismatches.is_empty();
+    {
+        let Some(expected) = checkout.store_instance_ids.get(&source.connection_id) else {
+            continue;
+        };
+        match FsStore::open_without_maintenance(&source.locator).and_then(|store| store.metadata())
+        {
+            Ok(metadata) if metadata.instance_id.as_deref() != Some(expected) => {
+                identity_mismatches.insert(source.connection_id.clone());
+            }
+            Err(_) => {
+                unavailable_stores.insert(source.connection_id.clone());
+            }
+            _ => {}
+        }
+    }
+    let metadata_only =
+        has_unreviewed || !identity_mismatches.is_empty() || !unavailable_stores.is_empty();
     let hosted = if metadata_only {
         std::collections::HashSet::new()
     } else {
@@ -3219,6 +3227,7 @@ async fn list_checkout_providers(
                         unverified_recovery: false,
                         identity_review_required: false,
                         identity_mismatch: false,
+                        store_unavailable: false,
                         capabilities: hotsheet_ticketing::ProviderCapabilities::git(),
                     })
                 })
@@ -3243,6 +3252,7 @@ async fn list_checkout_providers(
                     .store_instance_ids
                     .contains_key(&source.connection_id);
             descriptor.identity_mismatch = identity_mismatches.contains(&source.connection_id);
+            descriptor.store_unavailable = unavailable_stores.contains(&source.connection_id);
             descriptor.color = Some(
                 hotsheet_ticketing::checkouts::effective_source_color(
                     checkout

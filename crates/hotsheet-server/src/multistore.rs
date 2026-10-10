@@ -144,6 +144,7 @@ impl HostedStore {
             unverified_recovery: false,
             identity_review_required: false,
             identity_mismatch: false,
+            store_unavailable: false,
             connection_id: self.id.clone(),
             provider: "git".into(),
             display_name: if self.prefix.is_empty() {

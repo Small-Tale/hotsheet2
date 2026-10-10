@@ -177,6 +177,10 @@ Checkout metadata and Ticket sources settings remain accessible for a mismatched
 link. The provider list reads only identity metadata, labels the mismatch, and
 keeps remove/add controls available without hosting or reading replacement tickets
 (HS2-AGC4ZT).
+If the recorded source path is missing or its store metadata cannot be read, the
+settings route likewise reports **Store unavailable** and keeps repair controls
+available. Restoring the original path clears that state without a relink;
+ordinary checkout ticket reads remain blocked until then (HS2-N4X1WG).
 The server checks its pinned primary identity before unscoped primary-store
 reads and writes. Replacing that path yields a conflict until the original
 store is restored or the server restarts to select the replacement; other

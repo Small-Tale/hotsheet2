@@ -4623,6 +4623,7 @@ export async function startHotSheetWebClient() {
           unverifiedRecovery: source.unverifiedRecovery,
           identityReviewRequired: source.identityReviewRequired,
           identityMismatch: source.identityMismatch,
+          storeUnavailable: source.storeUnavailable,
           sharedWith: (connection?.projects ?? [])
             .filter((project) => project.id !== current.id)
             .map((project) => project.alias),

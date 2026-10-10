@@ -25,6 +25,31 @@ const project = {
   apiPath: '/__hotsheet/project-api/demo-checkout',
 };
 
+const gitProviderCapabilities = {
+  create: true,
+  update: true,
+  close: true,
+  notes: true,
+  ai_feedback: true,
+  note_edit: true,
+  note_delete: true,
+  attachments: true,
+  attachment_crop: false,
+  assignment: true,
+  review_requests: true,
+  dependencies: true,
+  up_next: true,
+  close_reasons: true,
+  claims: true,
+  atomic_batch: true,
+  not_working_report: true,
+  offline_mutation: true,
+  history: true,
+  watch: true,
+  provider_idempotency: true,
+  query_fields: [],
+};
+
 test('opens a checkout and its exact ticket from a deep link @ci-smoke', async ({ page }) => {
   await mockProject(page);
   await page.route('**/__hotsheet/checkouts', (route) =>
@@ -64,30 +89,7 @@ test('keeps Git source repair controls visible after an identity mismatch (HS2-A
             locator: '/work/demo.hs2',
             default: true,
             identity_mismatch: true,
-            capabilities: {
-              create: true,
-              update: true,
-              close: true,
-              notes: true,
-              ai_feedback: true,
-              note_edit: true,
-              note_delete: true,
-              attachments: true,
-              attachment_crop: false,
-              assignment: true,
-              review_requests: true,
-              dependencies: true,
-              up_next: true,
-              close_reasons: true,
-              claims: true,
-              atomic_batch: true,
-              not_working_report: true,
-              offline_mutation: true,
-              history: true,
-              watch: true,
-              provider_idempotency: true,
-              query_fields: [],
-            },
+            capabilities: gitProviderCapabilities,
           },
         ];
   await page.route('**/__hotsheet/project-api/*/providers', (route) => route.fulfill({ json: descriptors() }));
@@ -144,6 +146,53 @@ test('keeps Git source repair controls visible after an identity mismatch (HS2-A
   );
   await page.getByRole('group', { name: 'Confirm removal' }).getByRole('button', { name: 'Remove' }).click();
   await expect(sources).toContainText('This project uses 0 ticket sources.');
+});
+
+test('shows repair controls when the linked Git store is unavailable (HS2-N4X1WG)', async ({ page, browser }) => {
+  const enterSettings = async (surface: Page, url: string) => {
+    await mockProject(surface);
+    await surface.route('**/__hotsheet/project-api/*/providers', (route) =>
+      route.fulfill({
+        json: [
+          {
+            connection_id: 'git-local',
+            provider: 'git',
+            display_name: 'HS git tickets',
+            locator: '/work/missing.hs2',
+            default: true,
+            store_unavailable: true,
+            capabilities: gitProviderCapabilities,
+          },
+        ],
+      }),
+    );
+    await surface.route('**/__hotsheet/project-api/*/tickets*', (route) =>
+      route.fulfill({ status: 409, json: { error: 'linked Git store cannot be verified' } }),
+    );
+    await surface.goto(url);
+    await surface.getByRole('button', { name: 'Open project' }).click();
+    await surface.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await surface.getByLabel('Settings view').click();
+    const sources = surface.locator('[data-component="ticket-sources-settings"]');
+    await expect(sources.getByText('Store unavailable')).toBeVisible();
+    await surface.waitForTimeout(600);
+    return sources;
+  };
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const sources = await enterSettings(page, '/?dev-review=false');
+  await page.screenshot({ path: 'target/visual-captures/hs2-n4x1wg-unavailable-wide.png', fullPage: true });
+  await sources.getByRole('button', { name: 'Edit HS git tickets' }).click();
+  const editor = page.locator('[data-component="git-source-editor"]');
+  await expect(editor.getByRole('alert')).toContainText('This Git store cannot be opened.');
+  await expect(editor.locator('wa-checkbox[name="review-unverified-recovery"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
+
+  const narrowContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const narrow = await narrowContext.newPage();
+  await enterSettings(narrow, new URL('/?dev-review=false', page.url()).toString());
+  await narrow.screenshot({ path: 'target/visual-captures/hs2-n4x1wg-unavailable-narrow.png', fullPage: true });
+  await narrowContext.close();
 });
 
 const emptyCheckoutTicketPage = (url: URL) => ({

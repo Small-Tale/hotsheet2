@@ -420,6 +420,33 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('data-source-id="git-old"');
   });
 
+  it('shows an unavailable Git store while keeping its editor available (HS2-N4X1WG)', () => {
+    const source = {
+      connectionId: 'git-missing',
+      name: 'HS git tickets',
+      provider: 'git',
+      locator: '/work/missing.hs2',
+      default: true,
+      storeUnavailable: true,
+    };
+    const markup = String(TicketSourcesSettings({ sources: [source] }));
+    expect(markup).toContain('data-state="store-unavailable"');
+    expect(markup).toContain('This Git store cannot be opened.');
+    expect(markup).toContain('data-action="edit-provider-connection"');
+    const editor = String(
+      TicketSourceSetupDialog({
+        project: { root: '/work/demo', name: 'Demo', stores: ['/work/missing.hs2'] },
+        providerConnections: [],
+        editingProviderId: source.connectionId,
+        editingGitSource: source,
+        navigation: 'none',
+      }),
+    );
+    expect(editor).toContain('This Git store cannot be opened.');
+    expect(editor).not.toContain('name="review-unverified-recovery"');
+    expect(editor).toContain('Remove from this project…');
+  });
+
   it('offers project-local source colors and warns when provider and color repeat', () => {
     const sources = [
       { connectionId: 'gh-a', name: 'Alpha', provider: 'github', locator: 'a', default: true, color: '#3b82f6' },

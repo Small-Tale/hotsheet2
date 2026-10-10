@@ -17693,6 +17693,95 @@ async fn checkout_sources_remain_editable_after_same_path_store_identity_mismatc
 }
 
 #[tokio::test]
+async fn checkout_source_controls_survive_missing_invalid_and_restored_store_paths() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    let store_path = root.path().join("store");
+    let moved_path = root.path().join("moved");
+    std::fs::create_dir(&project).unwrap();
+    FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    let (_primary, state) = state();
+    let app = app(state.with_checkout_registry(root.path().join("checkouts.json")));
+    let registered = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&serde_json::json!({"root":project,"stores":[store_path]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+    let checkout = body_json(registered).await;
+    let id = checkout["id"].as_str().unwrap();
+    let source_id = checkout["sources"][0]["connection_id"].as_str().unwrap();
+    let providers_path = format!("/checkouts/{id}/providers");
+    let tickets_path = format!("/checkouts/{id}/tickets?limit=1");
+
+    std::fs::rename(&store_path, &moved_path).unwrap();
+    for invalid_directory in [false, true] {
+        if invalid_directory {
+            std::fs::create_dir(&store_path).unwrap();
+        }
+        let providers = app
+            .clone()
+            .oneshot(authed("GET", &providers_path, None))
+            .await
+            .unwrap();
+        assert_eq!(providers.status(), StatusCode::OK);
+        let descriptors = body_json(providers).await;
+        assert_eq!(descriptors[0]["connection_id"], source_id);
+        assert_eq!(descriptors[0]["store_unavailable"], true);
+        assert_eq!(descriptors[0]["identity_mismatch"], serde_json::Value::Null);
+        let tickets = app
+            .clone()
+            .oneshot(authed("GET", &tickets_path, None))
+            .await
+            .unwrap();
+        assert_ne!(tickets.status(), StatusCode::OK);
+    }
+
+    std::fs::remove_dir(&store_path).unwrap();
+    std::fs::rename(&moved_path, &store_path).unwrap();
+    let restored = app
+        .clone()
+        .oneshot(authed("GET", &providers_path, None))
+        .await
+        .unwrap();
+    assert_eq!(restored.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(restored).await[0]["store_unavailable"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("GET", &tickets_path, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+
+    std::fs::rename(&store_path, &moved_path).unwrap();
+    let removed = app
+        .clone()
+        .oneshot(authed(
+            "DELETE",
+            &format!("/checkouts/{id}/sources/{source_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(removed.status(), StatusCode::OK);
+    let providers = app
+        .oneshot(authed("GET", &providers_path, None))
+        .await
+        .unwrap();
+    assert_eq!(providers.status(), StatusCode::OK);
+    assert_eq!(body_json(providers).await, serde_json::json!([]));
+}
+
+#[tokio::test]
 async fn same_path_legacy_replacement_needs_review_before_checkout_reads() {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};

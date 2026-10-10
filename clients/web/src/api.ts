@@ -50,6 +50,8 @@ export interface ProviderDescriptor {
   identity_review_required?: boolean;
   /** The linked path holds a different Git store than the recorded source. */
   identity_mismatch?: boolean;
+  /** The linked Git store path is missing or its metadata cannot be read. */
+  store_unavailable?: boolean;
   capabilities: Capabilities;
 }
 export interface ProviderConnection {
