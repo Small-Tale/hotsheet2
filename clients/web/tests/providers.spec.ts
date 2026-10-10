@@ -10369,7 +10369,7 @@ test('routes mixed git and external ticket reads and edits by qualified id', asy
   ).toBe(false);
 });
 
-test('shows Jira outbox attention and lets a user retry then discard an edit (HS2-YSF8TV) @ci-smoke', async ({
+test('shows Jira outbox attention, retry, discard, and a fresh v2 queued edit (HS2-YSF8TV, HS2-QA1VEF) @ci-smoke', async ({
   page,
 }) => {
   await mockProject(page);
@@ -10385,8 +10385,9 @@ test('shows Jira outbox attention and lets a user retry then discard an edit (HS
   };
   const externalFull = { ...full, ...external, details: 'Local draft' };
   let state = 'needs_attention';
+  let queuedId: string | undefined;
   const operation = () => ({
-    operation_id: 'op-attention',
+    operation_id: queuedId ?? 'op-attention',
     connection_id: 'jira-1',
     native_id: 'PROJ-7',
     state,
@@ -10424,6 +10425,21 @@ test('shows Jira outbox attention and lets a user retry then discard an edit (HS
     if (method === 'DELETE') state = 'discarded';
     return route.fulfill({ json: operation() });
   });
+  await page.route('**/providers/jira-1/tickets/queued', (route) => {
+    const request = route.request().postDataJSON() as { operations: { operation_id: string }[] };
+    queuedId = request.operations[0]?.operation_id;
+    state = 'queued';
+    return route.fulfill({
+      status: 202,
+      json: [
+        {
+          operation_id: queuedId,
+          state,
+          ticket: { ...externalFull, title: 'Queued from browser', pending_operation_ids: [queuedId] },
+        },
+      ],
+    });
+  });
   await page.route(/\/checkouts\/demo-checkout\/tickets(?:\/|\?|$)/, (route) => {
     const path = decodeURIComponent(new URL(route.request().url()).pathname);
     if (path.endsWith('/tickets'))
@@ -10448,6 +10464,12 @@ test('shows Jira outbox attention and lets a user retry then discard an edit (HS
   await expect(sync).toContainText('Queued locally');
   await sync.getByRole('button', { name: 'Discard local edit' }).click();
   await expect.poll(() => state).toBe('discarded');
+  const inspector = page.locator('#app-right-rail');
+  await inspector.getByRole('heading', { name: 'Pending Jira edit' }).dblclick();
+  const titleInput = inspector.getByRole('textbox', { name: 'Ticket title' });
+  await titleInput.fill('Queued from browser');
+  await titleInput.blur();
+  await expect.poll(() => queuedId).toMatch(/^v2:\d{13}:[a-z0-9-]{16,80}$/);
   await expect(sync).toContainText('Local edit discarded');
 });
 
