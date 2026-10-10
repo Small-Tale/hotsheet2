@@ -622,6 +622,10 @@ Checkout metadata remains readable when a link cannot be verified, and provider
 descriptors remain readable for identity-less legacy links in the recovery UI;
 unreviewed Git descriptors carry `identity_review_required`, and project opening
 does not host or project tickets from those links.
+The CLI's `checkout resolve`, `checkout register`, and `checkout source-color`
+inspect configuration without opening ticket data, so they remain usable for
+recovery. Interactive launch discovery rejects an unverified registered source
+instead of falling back to a same-path replacement.
 For this case, `PATCH /checkouts/{reference}/sources/{connection_id}/relink`
 accepts `review_unverified_recovery: true` only after the caller explicitly reviews the
 destination, including when the path is unchanged. It never overrides a known identity
@@ -629,7 +633,7 @@ mismatch. The updated checkout records
 the old locator in `unverified_store_sources` under the new connection id; the checkout
 provider descriptor exposes `unverified_recovery: true`, and the marker survives later
 verified moves and restart (HS2-RAQSX7).
-Checkout and ticket reads also compare the recorded identity with the current
+Checkout ticket and data reads also compare the recorded identity with the current
 store at a linked path. A mismatch returns a conflict with restore/replacement guidance,
 including when that path was already hosted before replacement. Other projects
 continue to route normally (HS2-BGTDQ1).

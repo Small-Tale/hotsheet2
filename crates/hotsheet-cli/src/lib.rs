@@ -126,7 +126,12 @@ pub fn discover_launch_sources(
     let project = project
         .canonicalize()
         .with_context(|| format!("project path does not exist: {}", project.display()))?;
-    if let Ok(checkout) = registry.resolve(project.to_string_lossy().as_ref()) {
+    let registered = match registry.resolve(project.to_string_lossy().as_ref()) {
+        Ok(checkout) => Some(checkout),
+        Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => None,
+        Err(error) => return Err(error.into()),
+    };
+    if let Some(checkout) = registered.as_ref() {
         if let Some(default) = checkout.default_source.as_deref()
             && let Some(source) = checkout.source(default)
         {
@@ -152,9 +157,7 @@ pub fn discover_launch_sources(
             candidates: Vec::new(),
         });
     }
-    let mut candidates = registry
-        .resolve(project.to_string_lossy().as_ref())
-        .ok()
+    let mut candidates = registered
         .into_iter()
         .flat_map(|checkout| checkout.sources)
         .filter(|source| source.provider == "git")
@@ -663,6 +666,40 @@ mod store_link_tests {
                 .selected,
             Some(other.canonicalize().unwrap())
         );
+    }
+
+    #[test]
+    fn launch_discovery_rejects_a_same_path_replacement_for_an_unreviewed_legacy_link() {
+        if std::env::var_os("HOTSHEET_STORE").is_some() {
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("app");
+        let linked = root.path().join("app.hs2");
+        std::fs::create_dir(&project).unwrap();
+        FsStore::init(&linked, &StoreMetadata::new("HS")).unwrap();
+        let path = root.path().join("checkouts.json");
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&path);
+        registry
+            .register(&project, None, None, vec![linked.clone()])
+            .unwrap();
+        let mut file: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        file["checkouts"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("store_instance_ids");
+        std::fs::write(&path, serde_json::to_vec_pretty(&file).unwrap()).unwrap();
+        std::fs::rename(&linked, root.path().join("original.hs2")).unwrap();
+        FsStore::init(&linked, &StoreMetadata::new("HS")).unwrap();
+
+        assert!(
+            discover_launch_sources(&project, &registry)
+                .unwrap_err()
+                .to_string()
+                .contains("no recorded identity")
+        );
+        assert!(registry.list().unwrap()[0].store_instance_ids.is_empty());
     }
 }
 

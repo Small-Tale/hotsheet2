@@ -6470,7 +6470,7 @@ fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
                     .map(|v| v.trim().to_owned())
                     .filter(|v| !v.is_empty())
             });
-            let entry = match registry.resolve(root.to_string_lossy().as_ref()) {
+            let entry = match registry.describe(root.to_string_lossy().as_ref()) {
                 Ok(_) => registry.open_sources(
                     &root,
                     alias.as_deref(),
@@ -6493,7 +6493,7 @@ fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
         CheckoutCmd::Resolve { reference } => {
             println!(
                 "{}",
-                serde_json::to_string_pretty(&registry.resolve(&reference)?)?
+                serde_json::to_string_pretty(&registry.describe(&reference)?)?
             );
         }
         CheckoutCmd::Relocate {
@@ -6589,7 +6589,7 @@ fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
         CheckoutCmd::SourceColor {
             reference,
             connection_id,
-        } => print_checkout_source_color(&registry.resolve(&reference)?, &connection_id)?,
+        } => print_checkout_source_color(&registry.describe(&reference)?, &connection_id)?,
         CheckoutCmd::SetSourceColor {
             reference,
             connection_id,
