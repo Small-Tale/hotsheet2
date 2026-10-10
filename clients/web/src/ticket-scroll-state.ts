@@ -37,6 +37,15 @@ function clampPosition(position: TicketScrollPosition, element: HTMLElement): Ti
   };
 }
 
+function wouldClampPosition(state: TicketScrollState, root: ParentNode): boolean {
+  return scrollOwners(root).some((element) => {
+    const desired = state.get(element.dataset.ticketScrollOwner ?? '');
+    if (!desired) return false;
+    const available = clampPosition(desired, element);
+    return available.top !== desired.top || available.left !== desired.left;
+  });
+}
+
 export interface TicketScrollScope {
   project: string;
   mode: string;
@@ -78,8 +87,14 @@ export class TicketScrollMemory {
     return ++this.generation;
   }
 
-  afterRender(generation: number, root: ParentNode, settled: boolean): void {
+  afterRender(generation: number, root: ParentNode, settled: boolean, deferUntilSettled = false): void {
     if (generation !== this.generation || !this.pending) return;
+    if (deferUntilSettled && !settled && wouldClampPosition(this.pending.state, root)) {
+      // Do not apply a shortened-list clamp as WebKit can then shift that anchor
+      // again while rows grow. An in-range user scroll still restores on mutation.
+      this.pending.applied = captureTicketScrollState(root);
+      return;
+    }
     restoreTicketScrollState(this.pending.state, root);
     this.pending.applied = captureTicketScrollState(root);
     if (settled) this.pending = undefined;

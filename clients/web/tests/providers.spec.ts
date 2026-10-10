@@ -24441,8 +24441,9 @@ test('remembers scroll per project, mode and view through delayed loading and sh
     };
   });
   expect(rowLayout.listDisplay).toBe('block');
-  expect(rowLayout.contentVisibility).toBe(browserName === 'chromium' ? 'auto' : 'visible');
-  if (browserName === 'chromium') expect(rowLayout.intrinsicSize).toBe('auto 72px');
+  // WebKit restores the deep destination only after progressive contained rows settle.
+  expect(rowLayout.contentVisibility).toBe(browserName === 'chromium' || browserName === 'webkit' ? 'auto' : 'visible');
+  if (browserName === 'chromium' || browserName === 'webkit') expect(rowLayout.intrinsicSize).toBe('auto 72px');
   const queueTop = await setScroll(4500);
   expect(queueTop).toBe(4500);
   await selectView('backlog');
@@ -24661,6 +24662,9 @@ test('preserves list and every board-column scroll position across ticket mutati
   const workspace = page.locator('.app-shell__workspace');
   const listTarget = page.locator('[data-component="ticket-list-row"][data-status="completed"]').nth(8),
     listSlug = await listTarget.getAttribute('data-ticket-slug');
+  await workspace.evaluate((node) => {
+    node.scrollTop = 2000;
+  });
   await listTarget.scrollIntoViewIfNeeded();
   await page.evaluate(
     () =>

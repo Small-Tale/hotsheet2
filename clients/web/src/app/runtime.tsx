@@ -347,7 +347,7 @@ import {
   ticketReaderEditState,
   type TicketReaderFrame,
 } from '../ticket-reader-stack';
-import { supportsTicketRowContainment } from '../ticket-row-containment';
+import { defersContainedListScrollRestore, supportsTicketRowContainment } from '../ticket-row-containment';
 import { TicketScrollMemory } from '../ticket-scroll-state';
 import { createTicketSearchModel, inlineSearchTokens, replaceTicketSearch } from '../ticket-search-model';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
@@ -396,6 +396,7 @@ import { wireHotSheetInteractions } from './wire-interactions';
  * removes every delegated and native interaction listener the runtime registered.
  */
 export async function startHotSheetWebClient() {
+  const deferContainedListScrollRestore = defersContainedListScrollRestore(navigator.userAgent);
   document.documentElement.toggleAttribute(
     'data-hs-ticket-row-containment',
     supportsTicketRowContainment(navigator.userAgent),
@@ -5443,6 +5444,7 @@ export async function startHotSheetWebClient() {
           !ticketCollectionPending &&
           !ticketRenderScheduled &&
           (shellMode.value !== 'terminals' || !terminalDashboardLoading.value),
+        deferContainedListScrollRestore && shellMode.value === 'project' && viewMode.value === 'list',
       );
       animateTicketMotion(ticketMotion, appRoot, undefined, activeTicketCollectionKey());
       syncTerminalViewportMounts();

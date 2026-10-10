@@ -114,6 +114,56 @@ describe('ticket scroll state', () => {
     expect(owner.scrollTop).toBe(300);
   });
 
+  it('defers a contained list destination until progressive rows settle', () => {
+    const memory = new TicketScrollMemory(),
+      owner = scroller(),
+      root = rootFor(owner),
+      list = { project: 'one', mode: 'list', view: 'queue' },
+      board = { ...list, mode: 'board' };
+    memory.afterRender(memory.beforeRender(list, root), root, true);
+    owner.scrollTop = 900;
+    memory.afterRender(memory.beforeRender(board, root), root, true);
+    owner.scrollTop = 0;
+    owner.scrollHeight = 600;
+    memory.afterRender(memory.beforeRender(list, root), root, false, true);
+    expect(owner.scrollTop).toBe(0);
+    owner.scrollHeight = 2000;
+    memory.afterRender(memory.beforeRender(list, root), root, true, true);
+    expect(owner.scrollTop).toBe(900);
+  });
+
+  it('keeps a user scroll made before a contained list settles', () => {
+    const memory = new TicketScrollMemory(),
+      owner = scroller(),
+      root = rootFor(owner),
+      list = { project: 'one', mode: 'list', view: 'queue' },
+      board = { ...list, mode: 'board' };
+    memory.afterRender(memory.beforeRender(list, root), root, true);
+    owner.scrollTop = 900;
+    memory.afterRender(memory.beforeRender(board, root), root, true);
+    owner.scrollTop = 0;
+    owner.scrollHeight = 600;
+    memory.afterRender(memory.beforeRender(list, root), root, false, true);
+    owner.scrollTop = 260;
+    owner.scrollHeight = 2000;
+    memory.afterRender(memory.beforeRender(list, root), root, true, true);
+    expect(owner.scrollTop).toBe(260);
+  });
+
+  it('restores an in-range scroll during a contained list mutation before settling', () => {
+    const memory = new TicketScrollMemory(),
+      owner = scroller(),
+      root = rootFor(owner),
+      list = { project: 'one', mode: 'list', view: 'queue' };
+    memory.afterRender(memory.beforeRender(list, root), root, false, true);
+    owner.scrollTop = 200;
+    const generation = memory.beforeRender(list, root);
+    owner.scrollTop = 0; // The row mutation morph resets the viewport.
+    owner.scrollHeight = 600;
+    memory.afterRender(generation, root, false, true);
+    expect(owner.scrollTop).toBe(200);
+  });
+
   it('ignores out-of-order restore callbacks and keeps each independent board column', () => {
     const memory = new TicketScrollMemory(),
       first = scroller('column:started'),
