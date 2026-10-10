@@ -139,6 +139,18 @@ are local development-build samples, not a universal latency guarantee.
 The bare-socket metrics, DOM comparison trace, post-change metrics, and
 wide/narrow rendered terminal screenshots are attached to `HS2-36P1NP`.
 
+`npm run profile:pty:firefox` uses the same isolated local server and
+600-write OS PTY load in headless Firefox. The dedicated desktop and narrow
+viewports selected WebGL and measured process-write to browser arrival p95
+of 3 ms and 22 ms; a DOM-forced desktop viewport measured 5 ms. None of
+the three runs recorded a frame gap over 50 ms. Park/resume switched each
+WebGL viewport through DOM and back without losing its connection or
+painted glyphs. This local result supports retaining Firefox WebGL; it
+does not establish hardware-accelerated Firefox performance on other
+machines. Metrics and before/after-resume screenshots are attached to
+`HS2-527G7P`. The narrow profile mounts a standalone dedicated viewport;
+the phone drawer's 80xM grid policy can still select DOM in the full app.
+
 ## Baseline observations
 
 The warm main project costs much more to reveal than the one-ticket project.

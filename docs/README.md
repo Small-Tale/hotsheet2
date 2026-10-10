@@ -75,14 +75,14 @@ and don't imply reading order — read by group.
 
 **B · Architecture & decisions**
 
-| Doc                                                                | Topic                                                                                                    | Status                                        |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| [01-architecture.md](01-architecture.md)                           | Component map: core / server / CLI / clients / plugins                                                   | Decided                                       |
-| [09-technology-decisions.md](09-technology-decisions.md)           | Consolidated ADR-style decision log (the "what + why")                                                   | Decided                                       |
-| [20-monorepo-work-scopes.md](20-monorepo-work-scopes.md)           | Monorepo project boundaries, work-scope model, rollout, and tradeoffs                                    | Proposed (HS2-D1XNTE)                         |
-| [21-scale-stress-testing.md](21-scale-stress-testing.md)           | Disposable 10K/100K/1M CLI, server, and Chromium capacity harness                                        | Implemented (HS2-QDAJ5A)                      |
-| [22-ui-responsiveness-profile.md](22-ui-responsiveness-profile.md) | Wide/narrow browser CPU, synthetic PTY, and real local-server PTY traces with staged worker architecture | Profiled (HS2-WDTN3W, HS2-K7FJVK, HS2-E035F5) |
-| [23-ai-feedback-synthesis.md](23-ai-feedback-synthesis.md)         | Review process for AI note ratings and concise, approved project guidance                                | Proposed (HS2-355565)                         |
+| Doc                                                                | Topic                                                                                                    | Status                                                    |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| [01-architecture.md](01-architecture.md)                           | Component map: core / server / CLI / clients / plugins                                                   | Decided                                                   |
+| [09-technology-decisions.md](09-technology-decisions.md)           | Consolidated ADR-style decision log (the "what + why")                                                   | Decided                                                   |
+| [20-monorepo-work-scopes.md](20-monorepo-work-scopes.md)           | Monorepo project boundaries, work-scope model, rollout, and tradeoffs                                    | Proposed (HS2-D1XNTE)                                     |
+| [21-scale-stress-testing.md](21-scale-stress-testing.md)           | Disposable 10K/100K/1M CLI, server, and Chromium capacity harness                                        | Implemented (HS2-QDAJ5A)                                  |
+| [22-ui-responsiveness-profile.md](22-ui-responsiveness-profile.md) | Wide/narrow browser CPU, synthetic PTY, and real local-server PTY traces with staged worker architecture | Profiled (HS2-WDTN3W, HS2-K7FJVK, HS2-E035F5, HS2-527G7P) |
+| [23-ai-feedback-synthesis.md](23-ai-feedback-synthesis.md)         | Review process for AI note ratings and concise, approved project guidance                                | Proposed (HS2-355565)                                     |
 
 **C · Data & storage**
 

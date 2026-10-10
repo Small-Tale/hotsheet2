@@ -2713,7 +2713,8 @@ grid, while the application continues to own visibility, actions, and safe-area-
 (HS2-W3GPHW). Dedicated Chromium sessions use xterm's DOM renderer because
 real PTY profiling found WebGL could delay incoming output under sustained load
 (HS2-36P1NP). Apple WebKit also uses DOM for glyph compatibility. Firefox
-retains WebGL and falls back to DOM if it is unavailable. Sessions refit only
+retains WebGL, verified by a real local PTY profile (HS2-527G7P), and falls
+back to DOM if it is unavailable. Sessions refit only
 after a drawer resize gesture settles. While
 the splitter is held, neither dedicated xterms nor grid-tile geometry is recomputed and no
 intermediate PTY size claims are sent; this avoids the old debounce behavior that still fired
