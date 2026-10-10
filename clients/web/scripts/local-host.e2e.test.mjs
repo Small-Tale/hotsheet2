@@ -193,7 +193,9 @@ it('serves the production client and the local bridge without Vite', async () =>
     const narrowLink = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await narrowLink.goto(`${origin}/?project=${encodeURIComponent(project)}`);
     await narrowLink.getByRole('combobox', { name: 'Ticket view' }).waitFor({ state: 'visible' });
-    await narrowLink.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-r4209f-project-link-narrow.png') });
+    await narrowLink.screenshot({
+      path: resolve(webRoot, 'target/visual-captures/hs2-r4209f-project-link-narrow.png'),
+    });
     await narrowLink.close();
     await linked.goto(`${origin}/?project=${encodeURIComponent(project)}&ticket=${slug}`);
     await linked.locator('[data-component="ticket-reader"][data-reader-active="true"]').waitFor({ state: 'visible' });
