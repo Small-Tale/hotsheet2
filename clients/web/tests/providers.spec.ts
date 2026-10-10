@@ -6443,6 +6443,54 @@ for (const width of [2048, 760]) {
   });
 }
 
+test('remeasures a reopened search after a closed resize without restyling the app root (HS2-KCXMAT)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 2048, height: 900 });
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]'),
+    slot = toolbar.locator('.workspace-header__search-actions'),
+    field = toolbar.locator('.ticket-search-field'),
+    rootSizing = () =>
+      page
+        .locator('main#app')
+        .evaluate((root) =>
+          ['--hs-workspace-search-expanded-width', '--hs-workspace-search-slot-width'].map((name) =>
+            root.style.getPropertyValue(name),
+          ),
+        );
+  const openAndMeasure = async () => {
+    await toolbar.getByRole('button', { name: 'Search tickets' }).click();
+    await expect(field).toHaveAttribute('data-expanded', 'true');
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    return slot.evaluate((element) => {
+      const header = element.closest<HTMLElement>('[data-component="toolbar"]')!.getBoundingClientRect();
+      const box = element.getBoundingClientRect();
+      return { width: box.width, right: box.right, headerRight: header.right };
+    });
+  };
+  const wide = await openAndMeasure();
+  expect(wide.width).toBeGreaterThan(240);
+  expect(await rootSizing()).toEqual(['', '']);
+  // Collapse the empty search by moving focus away, then shrink the window while it is closed.
+  await page.getByRole('button', { name: 'Show terminal drawer' }).focus();
+  await expect(field).toHaveAttribute('data-expanded', 'false');
+  await page.setViewportSize({ width: 900, height: 900 });
+  const narrow = await openAndMeasure();
+  // The reopened slot uses the new measurement, never the stale wide width, and stays in the header.
+  expect(narrow.width).toBeLessThan(wide.width);
+  expect(narrow.right).toBeLessThanOrEqual(narrow.headerRight + 1);
+  expect(await rootSizing()).toEqual(['', '']);
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-kcxmat-search-reopened-900.png',
+    clip: { x: 0, y: 0, width: 900, height: 240 },
+    animations: 'disabled',
+  });
+});
+
 test('keeps a scrolled-back transcript in place while selecting a message range', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);

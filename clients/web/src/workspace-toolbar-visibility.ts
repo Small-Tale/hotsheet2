@@ -19,7 +19,7 @@ interface WorkspaceSearchSizing {
   expandedWidth: string;
 }
 
-/** Keep measured widths on the stable mount root so a Kerf morph cannot reset the slot. */
+/** Keep measured widths outside the morphed slot so a Kerf morph cannot reset them. */
 export function applyWorkspaceSearchSizing(
   style: Pick<CSSStyleDeclaration, 'getPropertyValue' | 'setProperty'>,
   sizing: WorkspaceSearchSizing,
@@ -67,12 +67,31 @@ export function workspaceSearchFit(
   return visible;
 }
 
+/**
+ * Measured search widths live in one adopted rule scoped to this toolbar's search slot. Like the
+ * mount root, a stylesheet survives Kerf morphs; unlike inherited properties on the root, a rule
+ * change restyles only the slot instead of every descendant of the app (HS2-KCXMAT).
+ */
+function searchSizingStyle(root: HTMLElement, selector: string): { style: CSSStyleDeclaration; dispose(): void } {
+  const document = root.ownerDocument;
+  const sheet = new (document.defaultView ?? window).CSSStyleSheet();
+  sheet.replaceSync(`:is(${selector}) .workspace-header__search-actions[data-search-open='true'] {}`);
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  return {
+    style: (sheet.cssRules[0] as CSSStyleRule).style,
+    dispose() {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((item) => item !== sheet);
+    },
+  };
+}
+
 export function wireWorkspaceToolbarVisibility(
   root: HTMLElement,
   selector = '.workspace-header[data-component="toolbar"], [data-component="toolbar"][aria-label="Workspace toolbar"]',
 ): () => void {
   let header: HTMLElement | null = null;
   let observedSearchSlot: HTMLElement | null = null;
+  const sizingStyle = searchSizingStyle(root, selector);
   const measuredWidths = new WeakMap<HTMLElement, { width: number; sizing: string | null }>();
   const resize = new ResizeObserver(() => {
     refresh();
@@ -216,7 +235,7 @@ export function wireWorkspaceToolbarVisibility(
         (visible.every(Boolean) ? 0 : moreWidth + gap);
       const expandedWidth = `${Math.max(0, availableSearch - 8)}px`;
       const slotWidth = Math.max(0, availableSearch - 8 + (visible.every(Boolean) ? 0 : moreWidth + gap));
-      applyWorkspaceSearchSizing(root.style, { width: slotWidth, expandedWidth });
+      applyWorkspaceSearchSizing(sizingStyle.style, { width: slotWidth, expandedWidth });
       if (identity) {
         identity.setAttribute('data-hide-below', `${visible[0] ? 0 : contentWidth + 1}px`);
         setHidden(identity, !visible[0]);
@@ -227,10 +246,9 @@ export function wireWorkspaceToolbarVisibility(
       });
       more!.setAttribute('data-show-below', `${visible.every(Boolean) ? 0 : contentWidth + 1}px`);
       setHidden(more!, visible.every(Boolean));
-    } else {
-      root.style.removeProperty('--hs-workspace-search-expanded-width');
-      root.style.removeProperty('--hs-workspace-search-slot-width');
     }
+    // A closed search keeps its last measured widths: the rule matches only an open slot, and the
+    // next open remeasures before paint, so closing writes no style at all (HS2-KCXMAT).
   }
 
   function findHeader(): boolean {
@@ -268,8 +286,7 @@ export function wireWorkspaceToolbarVisibility(
   return () => {
     mutations.disconnect();
     resize.disconnect();
-    root.style.removeProperty('--hs-workspace-search-expanded-width');
-    root.style.removeProperty('--hs-workspace-search-slot-width');
+    sizingStyle.dispose();
   };
 }
 

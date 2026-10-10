@@ -188,6 +188,14 @@ describe('ticket motion', () => {
       expect(overlay.animate).not.toHaveBeenCalled();
       expect(item.container.style.visibility).not.toBe('hidden');
     }
+    // The bulk exit counts arrivals by slug before any row is measured (HS2-KCXMAT).
+    const measured = bulk.map(({ item }) => vi.spyOn(item.container, 'getBoundingClientRect'));
+    animateTicketMotion(
+      { scope: 'edge-to-edge:ticket-board', rows: new Map() },
+      root(bulk.map(({ item }) => item)),
+      false,
+    );
+    for (const spy of measured) expect(spy).not.toHaveBeenCalled();
     // A handful of arrivals is ordinary ticket work and still fades in.
     const few = arrive(3);
     animateTicketMotion(
@@ -196,6 +204,19 @@ describe('ticket motion', () => {
       false,
     );
     for (const { overlay } of few) expect(overlay.animate).toHaveBeenCalled();
+  });
+
+  it('still measures and animates retained rows when a bulk of them stays put (HS2-KCXMAT)', () => {
+    // Thirteen retained rows plus one arrival is not a bulk arrival: only arrivals count.
+    const retained = Array.from({ length: 13 }, (_, index) =>
+        row(`HS2-KEEP${index}`, 'ticket-list', rect(10, 20 + index * 72)),
+      ),
+      before = snapshot(retained.map((item, index) => [`HS2-KEEP${index}`, item, 'ticket-list'])),
+      moved = retained.map((item, index) => row(`HS2-KEEP${index}`, 'ticket-list', rect(10, 92 + index * 72))),
+      arrival = row('HS2-NEW', 'ticket-list', rect(10, 20));
+    (arrival.container as unknown as { cloneNode: () => HTMLElement }).cloneNode = () => ghost('HS2-NEW');
+    animateTicketMotion(before, root([arrival, ...moved]), false);
+    for (const item of moved) expect(item.animate).toHaveBeenCalled();
   });
 
   it('does not clone or animate rows when the ticket collection view changes', () => {

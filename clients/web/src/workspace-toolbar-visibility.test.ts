@@ -22,7 +22,7 @@ it('uses the rendered title width and retains controls until the search needs th
   expect(workspaceSearchFit(370, 0, [88, 96], 44, 8)).toEqual([true, false, false]);
 });
 
-it('keeps search sizing on the stable root without redundant style writes', () => {
+it('writes search sizing to its morph-stable rule without redundant style writes', () => {
   const properties = new Map<string, string>();
   let writes = 0;
   const style = {

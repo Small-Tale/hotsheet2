@@ -186,6 +186,20 @@ layout to about 19–22 ms. All rows still mount through the existing progressiv
 render path; deep scroll, project/view restoration, and mutation flows remain
 covered by Chromium and WebKit browser tests. Ticket selection still exceeds
 the painted budget in some runs and remains in `HS2-KCXMAT`.
+`HS2-KCXMAT` then removed two whole-app style invalidations. First, the
+measured workspace-search widths were inherited custom properties on the app
+root, so every search open, close, or remeasure restyled about 5,000 elements.
+They now live in one adopted stylesheet rule per toolbar, scoped to that
+toolbar's open search slot, which survives Kerf morphs just as the root did.
+Second, ticket motion now counts a bulk arrival from row slugs before measuring
+any row. In three repeated runs each, ticket selection fell from 105–110 ms
+(desktop) and 125–130 ms (narrow) to 86–94 ms at both widths. Large-project
+returns with activity measured 93–102 ms, and search-clear JavaScript fell from
+about 131–135 ms to 79–83 ms. What remains per click is Kerf's separate
+pointer-blur collapse render pass, full-list JSX attribute serialization
+(including Lucide path data), and scroll-divider remeasurement, all tracked
+as upstream Kerf tickets.
+
 The app's measured project click-to-next-paint ranged roughly 52–92 ms
 before terminal and AI activity. Returning to the large project with
 activity present took 103 ms on desktop and 100 ms on narrow screens.

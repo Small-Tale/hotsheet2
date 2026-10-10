@@ -97,8 +97,15 @@ export function animateTicketMotion(
   collectionKey = '',
 ) {
   if (reduceMotion || before.scope !== scopedMotionScope(root, collectionKey)) return;
+  const containers = motionContainers(root);
+  // Count a bulk arrival from slugs alone: measuring every row first forced a style read per row
+  // on warm project returns only to discard the result (HS2-KCXMAT).
+  let arriving = 0;
+  for (const container of containers)
+    if (!before.rows.has(ticketVisual(container)?.dataset.ticketSlug ?? '')) arriving += 1;
+  if (arriving > MAX_INCOMING_ANIMATIONS) return;
   const after = new Map<string, TicketMotionRow>();
-  for (const container of motionContainers(root)) {
+  for (const container of containers) {
     const row = currentRow(container),
       slug = row?.visual.dataset.ticketSlug;
     if (row && slug) after.set(slug, row);
@@ -106,7 +113,6 @@ export function animateTicketMotion(
   const removed = [...before.rows].filter(([slug]) => !after.has(slug)),
     incoming = [...after].filter(([slug]) => !before.rows.has(slug)),
     removedParents = new Set(removed.map(([, row]) => row.parent));
-  if (incoming.length > MAX_INCOMING_ANIMATIONS) return;
   const layoutMotion = new Map<
     string,
     { current: TicketMotionRow; previous: TicketMotionRow; x: number; y: number; movedColumn: boolean }

@@ -67,8 +67,9 @@ wa-button.workspace-header__text-action::part(base) {
   margin-left: auto;
   flex: 0 1 auto;
 }
-/* Measured widths live on the stable app root. Kerf may morph this slot during typing without
-   dropping either width for a frame (HS2-3WQ9A1, HS2-7DHRH4). */
+/* Measured widths live in an adopted rule scoped to this slot (workspace-toolbar-visibility.ts),
+   so a Kerf morph during typing cannot drop either width for a frame (HS2-3WQ9A1, HS2-7DHRH4)
+   and a remeasure restyles only the slot rather than the whole app (HS2-KCXMAT). */
 .workspace-header__search-actions[data-search-open='true'] {
   --kui-token-search-expanded-width: var(--hs-workspace-search-expanded-width, 30rem);
   width: var(--hs-workspace-search-slot-width, auto);
