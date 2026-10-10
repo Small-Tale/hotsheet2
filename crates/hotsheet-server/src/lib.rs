@@ -9991,6 +9991,10 @@ fn terminal_permission_route_env(
     let mut env = vec![
         ("HOTSHEET_SECRET".to_string(), state.secret.clone()),
         ("HOTSHEET_PROJECT".to_string(), project),
+        (
+            "HOTSHEET_HOME".to_string(),
+            state.machine_home().display().to_string(),
+        ),
         // Lets a tool's hook adapter report a halted session against this tab (HS2-HJ4D1H).
         ("HOTSHEET_TERMINAL_ID".to_string(), terminal_id.to_string()),
     ];
@@ -14156,7 +14160,10 @@ mod terminal_permission_route_tests {
     fn every_terminal_route_carries_the_secret_project_and_server_once_known() {
         let root = tempfile::tempdir().unwrap();
         let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
-        let state = AppState::new(store.clone(), "secret".into()).unwrap();
+        let machine_home = root.path().join("isolated-machine-home");
+        let state = AppState::new(store.clone(), "secret".into())
+            .unwrap()
+            .with_machine_home(&machine_home);
         let value = |env: &[(String, String)], key: &str| {
             env.iter()
                 .find(|(name, _)| name == key)
@@ -14174,10 +14181,18 @@ mod terminal_permission_route_tests {
             value(&env, "HOTSHEET_PROJECT"),
             Some(store.root().display().to_string())
         );
+        assert_eq!(
+            value(&env, "HOTSHEET_HOME"),
+            Some(machine_home.display().to_string())
+        );
         assert_eq!(value(&env, "HOTSHEET_SERVER"), None);
 
         state.set_terminal_server_url("http://127.0.0.1:4175".into());
         let env = terminal_permission_route_env(&state, &request(None), "term-1");
+        assert_eq!(
+            value(&env, "HOTSHEET_HOME"),
+            Some(machine_home.display().to_string())
+        );
         assert_eq!(
             value(&env, "HOTSHEET_SERVER").as_deref(),
             Some("http://127.0.0.1:4175")

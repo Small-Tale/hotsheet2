@@ -799,8 +799,12 @@ environment. Codex permissions also remain supported through Hot Sheet's app-ser
 
 **Hot Sheet's own shell terminals.** Every shell and command terminal that the server
 hosts carries the same route-back as a Connect launch: `HOTSHEET_SECRET`,
-`HOTSHEET_PROJECT` (the terminal checkout's linked git store) and, once the listener URL is known,
-`HOTSHEET_SERVER` (HS2-HE4AVD). The installed permission hook identifies its own agent,
+`HOTSHEET_PROJECT` (the terminal checkout's linked git store), the server's
+`HOTSHEET_HOME`, and, once the listener URL is known, `HOTSHEET_SERVER`
+(HS2-HE4AVD, HS2-Q9BP1S). Passing the machine home explicitly matters because
+terminal environment scrubbing removes ambient `HOTSHEET_*` values; hooks use
+that home to find the replacement server after a restart. The installed permission
+hook identifies its own agent,
 so a Codex request for `Bash` appears as Codex rather than being inferred as Claude.
 Running `claude` or `codex` by hand in an app shell therefore raises its permission
 prompts in the app, as long as the project's setup has installed the tool's
@@ -895,10 +899,11 @@ clear stale questions.
 In the isolated live Claude check (HS2-5CX10W), a server-launched terminal delivered
 two choices, a multi-select answer, and free text to Claude. Native fallback and
 stale-answer rejection after session replacement also worked. A browser-created
-Claude shell in the same scratch checkout did not register its hook connection;
-Claude showed its native question prompt and no Hot Sheet notice appeared.
-`HS2-Q9BP1S` tracks that browser launch path. The notice flow remains supported
-by simulated browser coverage until that live shell path is repaired and retested.
+Claude shell initially missed its hook connection because terminal launch omitted
+the server's machine home. After supplying that home (HS2-Q9BP1S), a live
+browser-created Claude 2.1.296 shell displayed the Hot Sheet notice at desktop and
+phone widths. Answering Blue and Circle/Triangle through the browser returned both
+answers to Claude, which repeated them in its terminal.
 
 The plugin hook manifest can override `matcher` per event through `event_matchers`; events
 without an override keep the shared matcher. Claude installs `AskUserQuestion` for the two
