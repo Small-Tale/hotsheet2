@@ -15,7 +15,7 @@ import {
 import { describeUnreadableAttachments, screenAttachmentFiles } from '../attachment-files';
 import { attachmentUploadBatchId } from '../attachment-grouping';
 import { type AttachmentReferenceContext, isVideoAttachment } from '../attachment-references';
-import { browserRandomId } from '../browser-id';
+import { browserOutboxId, browserRandomId } from '../browser-id';
 import type { BulkUpdateHandle } from '../bulk-update-progress';
 import type { BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
@@ -526,7 +526,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
         let pending = rebased.patch,
           recorded = rebased.recorded,
           updated: FullTicket | undefined;
-        const operationId = browserRandomId();
+        const operationId = browserOutboxId();
         // Token drift from unrelated writes (an AI's notes, lease renewals) can land between a refetch and the
         // retry; rebase and retry a bounded number of times instead of failing the edit (HS2-A4XCXE).
         for (let attempt = 0; !updated; attempt += 1) {
@@ -1010,7 +1010,7 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
           const patch = Object.fromEntries(
             Object.entries(operation.patch).filter(([field]) => field !== 'expected_token'),
           );
-          return { operation_id: browserRandomId(), native_id: ticket.native_id, patch };
+          return { operation_id: browserOutboxId(), native_id: ticket.native_id, patch };
         });
         try {
           const result = await client.queueProviderUpdates(queueConnection, queuedOperations);

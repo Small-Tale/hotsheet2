@@ -19,3 +19,8 @@ export function browserRandomId(
   // mounts distinct within one page even when its clock/random source repeat.
   return `client-${Date.now().toString(36)}-${(++fallbackSequence).toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
+
+/** Stable retry key for the bounded provider outbox. Create once per user edit. */
+export function browserOutboxId(now = Date.now()): string {
+  return `v2:${now.toString().padStart(13, '0')}:${browserRandomId()}`;
+}

@@ -28,8 +28,10 @@ pub enum OutboxError {
     EmptyIdentity,
     #[error("operation {0} was retried with a different mutation")]
     ChangedPayload(String),
-    #[error("operation {0} already settled; its retained audit payload has expired")]
+    #[error("operation {0} is older than the outbox retry window")]
     ExpiredOperation(String),
+    #[error("operation {0} has an invalid or future-dated v2 id")]
+    InvalidOperationId(String),
     #[error(
         "outbox has {pending} pending operations; admitting {requested} would exceed its limit of {max}"
     )]
@@ -262,8 +264,25 @@ pub struct ProviderOutbox {
 }
 
 /// Full settled payloads remain available for diagnostics and exact retry responses for 30 days.
-/// Compact rows keep the operation id and digest indefinitely so a delayed retry cannot dispatch.
+/// Compact rows retain exact retry evidence until a durable admission floor fences them.
 const SETTLED_PAYLOAD_RETENTION: i64 = 30 * 24 * 60 * 60;
+const LEGACY_ADMISSION_GRACE: i64 = 30 * 24 * 60 * 60;
+const FUTURE_ID_SKEW_MS: i64 = 5 * 60 * 1000;
+
+fn operation_timestamp_ms(id: &str) -> Option<i64> {
+    let (timestamp, random) = id.strip_prefix("v2:")?.split_once(':')?;
+    if timestamp.len() != 13 || !timestamp.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    if !(16..=80).contains(&random.len())
+        || !random
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return None;
+    }
+    timestamp.parse().ok()
+}
 
 fn unix_now() -> i64 {
     SystemTime::now()
@@ -307,10 +326,37 @@ impl ProviderOutbox {
                 settled_at INTEGER,
                 payload_digest TEXT,
                 compacted INTEGER NOT NULL DEFAULT 0,
+                id_version INTEGER NOT NULL DEFAULT 1,
                 UNIQUE (connection_id, native_id, sequence)
             );
             CREATE INDEX IF NOT EXISTS provider_outbox_pending
-                ON provider_outbox (state, connection_id, native_id, sequence);",
+                ON provider_outbox (state, connection_id, native_id, sequence);
+            CREATE TABLE IF NOT EXISTS provider_outbox_sequence (
+                connection_id TEXT NOT NULL,
+                native_id TEXT NOT NULL,
+                last_sequence INTEGER NOT NULL,
+                PRIMARY KEY (connection_id, native_id)
+            );
+            CREATE TABLE IF NOT EXISTS provider_outbox_retention (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                floor_ms INTEGER NOT NULL,
+                legacy_cutoff_ms INTEGER NOT NULL
+            );",
+        )?;
+        db.execute(
+            "INSERT INTO provider_outbox_sequence (connection_id, native_id, last_sequence)
+             SELECT connection_id, native_id, MAX(sequence) FROM provider_outbox
+             GROUP BY connection_id, native_id
+             ON CONFLICT (connection_id, native_id) DO UPDATE SET
+               last_sequence = MAX(last_sequence, excluded.last_sequence)",
+            [],
+        )?;
+        db.execute(
+            "INSERT OR IGNORE INTO provider_outbox_retention
+             (singleton, floor_ms, legacy_cutoff_ms) VALUES (1, 0, ?1)",
+            [unix_now()
+                .saturating_add(LEGACY_ADMISSION_GRACE)
+                .saturating_mul(1000)],
         )?;
         for (name, definition) in [
             ("dispatch_state", "TEXT NOT NULL DEFAULT 'queued'"),
@@ -321,6 +367,7 @@ impl ProviderOutbox {
             ("settled_at", "INTEGER"),
             ("payload_digest", "TEXT"),
             ("compacted", "INTEGER NOT NULL DEFAULT 0"),
+            ("id_version", "INTEGER NOT NULL DEFAULT 1"),
         ] {
             let present: bool = db.query_row(
                 "SELECT EXISTS(SELECT 1 FROM pragma_table_info('provider_outbox') WHERE name = ?1)",
@@ -350,6 +397,7 @@ impl ProviderOutbox {
         )?;
         let mut outbox = Self { db, max_pending };
         outbox.compact_terminal_before(unix_now() - SETTLED_PAYLOAD_RETENTION)?;
+        outbox.prune_terminal_rows()?;
         Ok(outbox)
     }
 
@@ -360,6 +408,7 @@ impl ProviderOutbox {
         admissions: &[OutboxAdmission],
     ) -> Result<Vec<OutboxOperation>, OutboxError> {
         self.compact_terminal_before(unix_now() - SETTLED_PAYLOAD_RETENTION)?;
+        self.prune_terminal_rows()?;
         let tx = self
             .db
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -402,6 +451,32 @@ impl ProviderOutbox {
                 accepted.push(get_in(&tx, &admission.operation_id)?.expect("row just read"));
                 continue;
             }
+            let (floor_ms, legacy_cutoff_ms): (i64, i64) = tx.query_row(
+                "SELECT floor_ms, legacy_cutoff_ms FROM provider_outbox_retention WHERE singleton = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            let now_ms = unix_now().saturating_mul(1000);
+            if admission.operation_id.starts_with("v2:") {
+                let timestamp =
+                    operation_timestamp_ms(&admission.operation_id).ok_or_else(|| {
+                        OutboxError::InvalidOperationId(admission.operation_id.clone())
+                    })?;
+                if timestamp > now_ms.saturating_add(FUTURE_ID_SKEW_MS) {
+                    return Err(OutboxError::InvalidOperationId(
+                        admission.operation_id.clone(),
+                    ));
+                }
+                if timestamp < floor_ms {
+                    return Err(OutboxError::ExpiredOperation(
+                        admission.operation_id.clone(),
+                    ));
+                }
+            } else if now_ms >= legacy_cutoff_ms {
+                return Err(OutboxError::ExpiredOperation(
+                    admission.operation_id.clone(),
+                ));
+            }
             if pending + added >= self.max_pending {
                 return Err(OutboxError::Backpressure {
                     max: self.max_pending,
@@ -409,17 +484,31 @@ impl ProviderOutbox {
                     requested: added + 1,
                 });
             }
-            let sequence: i64 = tx.query_row(
-                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM provider_outbox
+            let sequence: i64 = tx
+                .query_row(
+                    "SELECT COALESCE(last_sequence, 0) + 1 FROM provider_outbox_sequence
                  WHERE connection_id = ?1 AND native_id = ?2",
-                params![admission.connection_id, admission.native_id],
-                |row| row.get(0),
+                    params![admission.connection_id, admission.native_id],
+                    |row| row.get(0),
+                )
+                .optional()?
+                .unwrap_or(1);
+            tx.execute(
+                "INSERT INTO provider_outbox_sequence (connection_id, native_id, last_sequence)
+                 VALUES (?1, ?2, ?3) ON CONFLICT (connection_id, native_id)
+                 DO UPDATE SET last_sequence = excluded.last_sequence",
+                params![admission.connection_id, admission.native_id, sequence],
             )?;
+            let id_version = if admission.operation_id.starts_with("v2:") {
+                2
+            } else {
+                1
+            };
             tx.execute(
                 "INSERT INTO provider_outbox
                  (operation_id, connection_id, native_id, sequence, base_token,
-                  base_ticket_json, patch_json, payload_json, state)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued')",
+                  base_ticket_json, patch_json, payload_json, state, id_version)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued', ?9)",
                 params![
                     admission.operation_id,
                     admission.connection_id,
@@ -429,6 +518,7 @@ impl ProviderOutbox {
                     serde_json::to_string(&admission.base_ticket)?,
                     serde_json::to_string(&admission.patch)?,
                     payload,
+                    id_version,
                 ],
             )?;
             accepted.push(get_in(&tx, &admission.operation_id)?.expect("row just inserted"));
@@ -470,6 +560,43 @@ impl ProviderOutbox {
         }
         tx.commit()?;
         Ok(rows.len())
+    }
+
+    /// Advance the durable admission floor before removing old settled rows. Existing
+    /// queued IDs remain addressable even if their timestamps are below the floor.
+    pub fn prune_terminal_rows(&mut self) -> Result<usize, OutboxError> {
+        let now = unix_now();
+        let floor = now
+            .saturating_sub(SETTLED_PAYLOAD_RETENTION)
+            .saturating_mul(1000);
+        let tx = self
+            .db
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        tx.execute(
+            "UPDATE provider_outbox_retention SET floor_ms = MAX(floor_ms, ?1)
+             WHERE singleton = 1",
+            [floor],
+        )?;
+        let (saved_floor, legacy_cutoff): (i64, i64) = tx.query_row(
+            "SELECT floor_ms, legacy_cutoff_ms FROM provider_outbox_retention WHERE singleton = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let count = tx.execute(
+            "DELETE FROM provider_outbox WHERE state = 'confirmed' AND compacted = 1
+             AND settled_at <= ?1 AND
+             (CASE WHEN id_version = 2 THEN
+                CAST(substr(operation_id, 4, 13) AS INTEGER) < ?2
+              ELSE ?3 >= ?4 END)",
+            params![
+                now.saturating_sub(SETTLED_PAYLOAD_RETENTION),
+                saved_floor,
+                now.saturating_mul(1000),
+                legacy_cutoff
+            ],
+        )?;
+        tx.commit()?;
+        Ok(count)
     }
 
     pub fn pending_count(&self) -> Result<usize, OutboxError> {
@@ -952,6 +1079,120 @@ mod tests {
             4
         );
         assert_eq!(reopened.list_pending().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn timestamp_floor_prunes_settled_ids_but_preserves_pending_and_sequence_after_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.sqlite");
+        let mut outbox = ProviderOutbox::open(&path, 4).unwrap();
+        let old_ms = (unix_now() - 20 * 24 * 60 * 60) * 1000;
+        let old = admission(
+            &format!("v2:{old_ms}:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            "42",
+            "Old",
+        );
+        let pending = admission(
+            &format!("v2:{old_ms}:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            "42",
+            "Pending",
+        );
+        outbox.admit_batch(&[old.clone(), pending.clone()]).unwrap();
+        outbox.claim_ready(0, 1).unwrap();
+        outbox.confirm(&old.operation_id).unwrap();
+        outbox.compact_terminal_before(i64::MAX).unwrap();
+        outbox
+            .db
+            .execute(
+                "UPDATE provider_outbox SET settled_at = ?1 WHERE operation_id = ?2",
+                params![unix_now() - 31 * 24 * 60 * 60, old.operation_id],
+            )
+            .unwrap();
+        outbox
+            .db
+            .execute(
+                "UPDATE provider_outbox_retention SET floor_ms = ?1, legacy_cutoff_ms = 0",
+                [(unix_now() - 19 * 24 * 60 * 60) * 1000],
+            )
+            .unwrap();
+        assert_eq!(outbox.prune_terminal_rows().unwrap(), 1);
+        drop(outbox);
+
+        let mut reopened = ProviderOutbox::open(&path, 4).unwrap();
+        assert!(matches!(
+            reopened.admit_batch(std::slice::from_ref(&old)),
+            Err(OutboxError::ExpiredOperation(id)) if id == old.operation_id
+        ));
+        assert_eq!(
+            reopened
+                .admit_batch(std::slice::from_ref(&pending))
+                .unwrap()[0]
+                .sequence,
+            2
+        );
+        assert!(matches!(
+            reopened.admit_batch(&[admission("legacy-new", "42", "Legacy")]),
+            Err(OutboxError::ExpiredOperation(_))
+        ));
+        assert!(matches!(
+            reopened.admit_batch(&[admission(
+                "v2:9999999999999:cccccccccccccccc",
+                "42",
+                "Future"
+            )]),
+            Err(OutboxError::InvalidOperationId(_))
+        ));
+        let fresh_ms = unix_now() * 1000;
+        let fresh = admission(&format!("v2:{fresh_ms}:dddddddddddddddd"), "42", "Fresh");
+        assert_eq!(reopened.admit_batch(&[fresh]).unwrap()[0].sequence, 3);
+    }
+
+    #[test]
+    fn legacy_cutoff_prunes_old_rows_and_rejects_unknown_legacy_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("outbox.sqlite");
+        let mut outbox = ProviderOutbox::open(&path, 2).unwrap();
+        let legacy = admission("opaque-legacy", "42", "Original");
+        outbox.admit_batch(std::slice::from_ref(&legacy)).unwrap();
+        outbox.discard(&legacy.operation_id).unwrap();
+        outbox.compact_terminal_before(i64::MAX).unwrap();
+        let prefixed_legacy = "v2:9999999999999:old-opaque-client-id";
+        outbox
+            .db
+            .execute(
+                "UPDATE provider_outbox SET operation_id = ?1, settled_at = ?2 WHERE operation_id = ?3",
+                params![prefixed_legacy, unix_now() - 31 * 24 * 60 * 60, legacy.operation_id],
+            )
+            .unwrap();
+        outbox
+            .db
+            .execute(
+                "UPDATE provider_outbox_retention SET legacy_cutoff_ms = 0",
+                [],
+            )
+            .unwrap();
+        assert_eq!(outbox.prune_terminal_rows().unwrap(), 1);
+        assert!(outbox.get(prefixed_legacy).unwrap().is_none());
+        drop(outbox);
+        let mut reopened = ProviderOutbox::open(&path, 2).unwrap();
+        for id in ["opaque-legacy", "unseen-legacy"] {
+            assert!(matches!(
+                reopened.admit_batch(&[admission(id, "42", "Changed")]),
+                Err(OutboxError::ExpiredOperation(_))
+            ));
+        }
+        let current_ms = unix_now() * 1000;
+        assert_eq!(
+            reopened
+                .admit_batch(&[admission(
+                    &format!("v2:{current_ms}:eeeeeeeeeeeeeeee"),
+                    "42",
+                    "New"
+                )])
+                .unwrap()[0]
+                .sequence,
+            2
+        );
     }
 
     #[test]

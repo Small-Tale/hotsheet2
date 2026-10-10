@@ -88,7 +88,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-timeline-data.ts # Timeline entries from activity notes + lifecycle backfill; appends each completion cycle's confidence to its Completed headline
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, shell/AI/chat type filtering and scoped bulk inclusion rules
     src/terminal-visibility-filter.ts # Controlled native multi-select array binding that preserves its open popup through list rerenders
-    src/browser-id.ts       #   Secure/ordinary-LAN browser identities using UUID/getRandomValues, legacy no-Crypto fallback
+    src/browser-id.ts       #   Secure/ordinary-LAN browser identities plus time-sortable Jira outbox retry IDs (HS2-QA1VEF)
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and guarded lazy runtime loader with visible startup errors
     src/terminal-viewport-error.css # The loader's own initialization-error message block (HS2-WP69TD)
     src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
@@ -214,7 +214,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/actor.rs           #   MutationActor (human|ai|system + id) and role-specific rules: the AI completion confidence rule with its AI-actionable `confidence_required` refusal (HS2-RD4M29)
       src/ops.rs             #   query/create/update/close/restore/purge_trash/claim-next/exact-claim/renew/release/copy_ticket/move_ticket/assign/add_note_with_metadata/edit_note_with_metadata (set/keep/clear confidence, HS2-CY4CWC)/latest_confidence — the one op impl (CLI+server+MCP); Started phases and final-testing claim-next exclusion; TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
       src/provider.rs        #   provider-neutral identity/capabilities/errors/CRUD+claim contract; registry + GitProvider; idempotent cross-provider copy/move coordinator and provenance (HS2-ZVZP80/HS2-A90JRH)
-      src/provider_outbox.rs #   durable Jira write-behind admission, dispatch state, provisional projection, and 30-day settled payload compaction with permanent retry digests (HS2-056R8P/HS2-X5AJ7M)
+      src/provider_outbox.rs #   durable Jira write-behind admission, dispatch state, provisional projection, 30-day payload compaction, and v2 retry-floor pruning (HS2-056R8P/HS2-X5AJ7M/HS2-QA1VEF)
       src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/activity.rs        #   cross-tool activity events (docs/15, HS2-KP31ZE/4C68Y8/26M48F): ActivityEvent/Kind/Importance + deterministic per-session volume admission/coalescing + bounded rolling store/timeline + mappers; server persists then broadcasts the same admitted payloads on WS/poll
       src/roster.rs          #   Roster/Person: committed people.json (git email → name/github); display_name; docs/10 §10.2 (HS2-20)

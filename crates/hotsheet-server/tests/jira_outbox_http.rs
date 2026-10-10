@@ -563,6 +563,81 @@ async fn compacted_jira_operation_rejects_a_late_http_retry_after_restart() {
 }
 
 #[tokio::test]
+async fn pruned_v2_jira_operation_rejects_a_late_http_retry_after_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("outbox.sqlite");
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_ticket_provider(Arc::new(provider(fake.clone())))
+        .with_jira_outbox(&path, 2)
+        .unwrap();
+    let server = app(state.clone());
+    let uri = format!("/providers/{CONNECTION}/tickets/queued");
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let id = format!("v2:{}:aaaaaaaaaaaaaaaa", (now - 20 * 24 * 60 * 60) * 1000);
+    let operation = json!({"operations":[edit(&id, "Once only")]});
+    assert_eq!(
+        server
+            .oneshot(request("POST", &uri, Some(operation.clone())))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(dispatch_jira_at(&state, 100).await.unwrap(), 1);
+    drop(state);
+    let mut outbox = ProviderOutbox::open(&path, 2).unwrap();
+    assert_eq!(outbox.compact_terminal_before(i64::MAX).unwrap(), 1);
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute(
+        "UPDATE provider_outbox SET settled_at = ?1 WHERE operation_id = ?2",
+        rusqlite::params![now - 31 * 24 * 60 * 60, id],
+    )
+    .unwrap();
+    db.execute(
+        "UPDATE provider_outbox_retention SET floor_ms = ?1",
+        [(now - 19 * 24 * 60 * 60) * 1000],
+    )
+    .unwrap();
+    drop(db);
+    assert_eq!(outbox.prune_terminal_rows().unwrap(), 1);
+    drop(outbox);
+    let restarted = app(
+        AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into())
+            .unwrap()
+            .with_ticket_provider(Arc::new(provider(fake.clone())))
+            .with_jira_outbox(&path, 2)
+            .unwrap(),
+    );
+    let writes_before = fake
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(method, _)| method == "PUT")
+        .count();
+    let retry = restarted
+        .oneshot(request("POST", &uri, Some(operation)))
+        .await
+        .unwrap();
+    assert_eq!(retry.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        fake.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(method, _)| method == "PUT")
+            .count(),
+        writes_before
+    );
+}
+
+#[tokio::test]
 async fn timeout_after_success_and_rate_limit_reconcile_without_duplicate_write() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();

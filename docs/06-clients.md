@@ -693,7 +693,9 @@ and identity-less legacy entries remain conservatively blocking.
   provisional pending count on the ticket row. The inspector shows queued,
   sending, rate-limited, attention, confirmed, and discarded operations; it offers
   retry or discard when no write is in flight. The local field value remains
-  visible until Jira confirms it or the user discards it.
+  visible until Jira confirms it or the user discards it. Each queued edit keeps
+  one time-sortable operation ID across transport retries; an expired ID is a
+  terminal conflict and never starts another Jira write (HS2-QA1VEF).
   When adding a provider source, **Use as this project's default ticket source** starts
   checked only if the project has no default source. The user can change that choice before
   connecting; editing a source shows whether that source is the current default (HS2-VM6YG9).

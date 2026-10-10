@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { browserRandomId } from './browser-id';
+import { browserOutboxId, browserRandomId } from './browser-id';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -8,6 +8,15 @@ afterEach(() => {
 });
 
 describe('browser identities across secure and LAN origins (HS2-3ZBQDG)', () => {
+  it('gives queued edits sortable, distinct retry keys without requiring randomUUID', () => {
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+    const first = browserOutboxId(1_760_000_000_001),
+      second = browserOutboxId(1_760_000_000_002);
+    expect(first).toMatch(/^v2:1760000000001:[a-z0-9-]{36}$/);
+    expect(second).toMatch(/^v2:1760000000002:[a-z0-9-]{36}$/);
+    expect(first < second).toBe(true);
+  });
+
   it('uses native UUIDs when available and preserves their receiver', () => {
     const id = '12345678-1234-4234-9234-123456789abc',
       source = {

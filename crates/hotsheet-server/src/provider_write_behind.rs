@@ -503,6 +503,7 @@ fn outbox_error(error: OutboxError) -> ApiError {
         | OutboxError::ExpiredOperation(_)
         | OutboxError::MismatchedBase => StatusCode::CONFLICT,
         OutboxError::EmptyIdentity
+        | OutboxError::InvalidOperationId(_)
         | OutboxError::InvalidProjectionOrder(_)
         | OutboxError::UnsupportedProjectionField { .. }
         | OutboxError::InvalidProjectionTicket
