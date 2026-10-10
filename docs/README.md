@@ -83,6 +83,8 @@ and don't imply reading order — read by group.
 | [21-scale-stress-testing.md](21-scale-stress-testing.md)           | Disposable 10K/100K/1M CLI, server, and Chromium capacity harness                                        | Implemented (HS2-QDAJ5A)                                  |
 | [22-ui-responsiveness-profile.md](22-ui-responsiveness-profile.md) | Wide/narrow browser CPU, synthetic PTY, and real local-server PTY traces with staged worker architecture | Profiled (HS2-WDTN3W, HS2-K7FJVK, HS2-E035F5, HS2-527G7P) |
 | [23-ai-feedback-synthesis.md](23-ai-feedback-synthesis.md)         | Review process for AI note ratings and concise, approved project guidance                                | Proposed (HS2-355565)                                     |
+| [19-format-compatibility.md](19-format-compatibility.md)           | Persisted-format and unsynchronized-rollout compatibility policy and guards                              | Implemented (pre-release baseline)                        |
+| [24-cli-service-parity-audit.md](24-cli-service-parity-audit.md)   | Point-in-time audit of CLI commands vs MCP tools vs HTTP routes (2026-10-08)                             | Audit                                                     |
 
 **C · Data & storage**
 
