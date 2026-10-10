@@ -336,7 +336,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       )
         presentOpenedProjectSetup(opened.project);
       else await activateOpenedProject(opened.project);
-      return true;
+      return opened.project;
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       if (retainFailure) retainProjectRestoreFailure(root, message, unhealthyServerRecovery.value?.expected.pid);

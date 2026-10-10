@@ -174,6 +174,31 @@ it('serves the production client and the local bridge without Vite', async () =>
       fullPage: true,
     });
     await phone.close();
+
+    // A fresh browser has no remembered tabs; the server registry must supply the URL's project.
+    const created = await run(
+      workingTreeBinaries.HOTSHEET_CLI_BIN,
+      ['-C', ticketStore, 'new', 'Linked ticket', '--category', 'task'],
+      {
+        env: { ...process.env, HOTSHEET_HOME: home },
+      },
+    );
+    const slug = created.stdout.match(/LH-[A-Z0-9]+/)?.[0];
+    expect(slug).toBeTruthy();
+    const fresh = await browser.newContext();
+    const linked = await fresh.newPage();
+    await linked.goto(`${origin}/?project=${encodeURIComponent(project)}`);
+    await linked.getByRole('heading', { name: 'Queue', level: 1 }).waitFor({ state: 'visible' });
+    await linked.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-r4209f-project-link.png') });
+    const narrowLink = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await narrowLink.goto(`${origin}/?project=${encodeURIComponent(project)}`);
+    await narrowLink.getByRole('combobox', { name: 'Ticket view' }).waitFor({ state: 'visible' });
+    await narrowLink.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-r4209f-project-link-narrow.png') });
+    await narrowLink.close();
+    await linked.goto(`${origin}/?project=${encodeURIComponent(project)}&ticket=${slug}`);
+    await linked.locator('[data-component="ticket-reader"][data-reader-active="true"]').waitFor({ state: 'visible' });
+    await linked.screenshot({ path: resolve(webRoot, 'target/visual-captures/hs2-r4209f-ticket-link.png') });
+    await fresh.close();
   } finally {
     await browser?.close();
     if (child) {

@@ -420,13 +420,15 @@ and identity-less legacy entries remain conservatively blocking.
   and stops the running machine server, and
   `prod:rebuild-lan` runs it before serving the production client on `0.0.0.0`.
 
-- **Ticket deep links (HS2-RVSPQ9, HS2-BQ0ECV).** The local client accepts
-  `/?project=<registered-checkout-id|alias|absolute-project-path|ticket-store-path>&ticket=<slug|qualified-id>`.
+- **Project and ticket deep links (HS2-RVSPQ9, HS2-BQ0ECV, HS2-R4209F).** The local client accepts
+  `/?project=<registered-checkout-id|alias|absolute-project-path|ticket-store-path>` with an optional
+  `&ticket=<slug|qualified-id>`.
   URL-encode each value; for example, `?project=ux-review&ticket=HS2-ZEF6XD`. The old
   `store=` key remains an alias; when both keys have values, `project=` takes precedence.
-  After remembered projects settle, it opens and selects the requested project, fetches the
-  exact ticket from that checkout, and opens the workspace reader. Invalid or inaccessible
-  targets show an error toast. The URL can be loaded in a fresh tab with no saved project
+  After remembered projects settle, it opens and selects the requested project, including when
+  the browser has no saved project session but another client registered it on the server. When
+  a ticket is supplied, it fetches the exact ticket and opens the workspace reader. Invalid or
+  inaccessible targets show an error toast. The URL can be loaded in a fresh tab with no saved project
   session. The running dev or production host writes its loopback origin to
   `${HOTSHEET_HOME:-~/.hotsheet2}/client.json` as `url`, with `pid`, `started_at`, and `id`.
   Local tools should check that the PID is live and the URL responds before using the record;

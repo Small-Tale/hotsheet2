@@ -50,7 +50,7 @@ export interface RepositoryInteractionsDependencies {
     remember?: boolean,
     reportError?: boolean,
     retainFailure?: boolean,
-  ) => Promise<boolean>;
+  ) => Promise<boolean | Project>;
 }
 
 /** Register this group only when the application wiring owner invokes it. */

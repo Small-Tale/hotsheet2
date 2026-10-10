@@ -6006,22 +6006,25 @@ export async function startHotSheetWebClient() {
         if (!root) throw new Error(`No registered project matches ${link.project}.`);
         target = projects.value.find((item) => item.root === root);
         if (!target) {
-          if (!(await openProject(root, undefined, true, false))) throw new Error(`Could not open project ${root}.`);
-          target = projects.value.find((item) => item.root === root);
+          const opened = await openProject(root, undefined, true, false);
+          if (!opened) throw new Error(`Could not open project ${root}.`);
+          target = projects.value.find((item) => item.id === opened.id);
         }
       }
       if (!target) throw new Error(`Could not open project ${link.project}.`);
       if (selectedProjectId.value !== target.id) await activateOpenedProject(target);
       setShellMode('project');
-      const ticket = (await new Api(target.apiPath).checkoutTicket(target.id, link.ticket)).ticket;
-      selectedTicketSlugs.value = [ticket.slug];
-      presentTicket(ticket);
       scheduleProjectSessionPersistence();
-      presentTicketReaderDialog('workspace-reader', undefined, () => {
-        readerOpen.value = true;
-      });
+      if (link.ticket) {
+        const ticket = (await new Api(target.apiPath).checkoutTicket(target.id, link.ticket)).ticket;
+        selectedTicketSlugs.value = [ticket.slug];
+        presentTicket(ticket);
+        presentTicketReaderDialog('workspace-reader', undefined, () => {
+          readerOpen.value = true;
+        });
+      }
     } catch (reason) {
-      showToast(`Could not open ticket link: ${reason instanceof Error ? reason.message : String(reason)}`);
+      showToast(`Could not open project link: ${reason instanceof Error ? reason.message : String(reason)}`);
     }
   }
   const startupTicketDeepLink = parseTicketDeepLink(window.location.search);
