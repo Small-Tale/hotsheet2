@@ -2832,6 +2832,12 @@ test('explains changed Codex hooks without a setup-failure warning and dismisses
     await expect(banner).toContainText('Review updated Codex hooks');
     await expect(banner).toContainText('Run /hooks in Codex for this checkout');
     await expect(banner).toContainText('.codex/hooks.json');
+    // The rounded banner sits on the header surface, not the pane's sunken tint (HS2-0YPWH8).
+    const backgrounds = await page.evaluate(() => ({
+      host: getComputedStyle(document.querySelector('[data-component="codex-hooks-notice-banner"]')!).backgroundColor,
+      shell: getComputedStyle(document.querySelector('.app-shell')!).backgroundColor,
+    }));
+    expect(backgrounds.host).toBe(backgrounds.shell);
     await expect(page.getByText('Use real project tickets').first()).toBeVisible();
     await expect(page.locator('[data-component="project-setup-warning-banner"]')).toHaveCount(0);
     const bounds = await banner.boundingBox();

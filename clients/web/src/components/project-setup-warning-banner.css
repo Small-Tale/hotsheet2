@@ -1,5 +1,4 @@
-/* A full-width warning strip above the workspace, matching the HS1 banners (HS2-0TXM8S).
- * Also hosts the Codex hooks notice (HS2-0YPWH8). */
+/* A full-width warning strip above the workspace, matching the HS1 banners (HS2-0TXM8S). */
 .project-setup-warning-banner {
   --kui-layout-inline-margin: 0;
   --kui-layout-item-gap: var(--kui-space-m);

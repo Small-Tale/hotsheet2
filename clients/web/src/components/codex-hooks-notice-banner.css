@@ -1,0 +1,5 @@
+/* App-owned host: paint the header surface behind the rounded banner so the pane's sunken
+ * content tint does not show through the list insets (HS2-0YPWH8). */
+.codex-hooks-notice-banner {
+  background: var(--kui-color-surface);
+}
