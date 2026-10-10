@@ -231,5 +231,15 @@ export function createTerminalViewportsController(dependencies: TerminalViewport
     }
   }
 
-  return { syncTerminalViewportMounts };
+  function parkProjectViewports(projectId: string) {
+    for (const [element, dispose] of terminalViewportMounts) {
+      if (element.dataset.projectId !== projectId || element.dataset.mountPolicy !== 'keep-alive') continue;
+      const identity = terminalViewportIdentity(element);
+      if (!identity) continue;
+      terminalViewportMounts.delete(element);
+      parkTerminalViewport(identity, element, dispose);
+    }
+  }
+
+  return { syncTerminalViewportMounts, parkProjectViewports };
 }

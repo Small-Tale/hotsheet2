@@ -53,7 +53,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       project-lifecycle.ts    # Project open/restore, HS1 migration, source/provider setup, and lifecycle dialog state
       ticket-workflows.ts     # Ticket mutation/autosave, selection, bulk/clipboard, reader, attachment, creation, close, and Not Working workflows
       ai-configuration.tsx    # Project AI defaults, tool/model/effort and manual-model lifecycle
-      terminal-viewports.ts   # Observed viewport identity, progressive mount/disposal, pending focus, and kept-alive parking across project switches (HS2-WGTQ6X)
+      terminal-viewports.ts   # Observed viewport identity, progressive mount/disposal, pending focus, and early kept-alive parking across project switches (HS2-WGTQ6X, HS2-DM2SK3)
       terminal-presentation.tsx # Live workspace/drawer/conversation props projected during root render
       controllers.test.ts     # Project replacement, delayed response, rollback, reset/refill transition matrix
       terminal-viewports.test.ts # Viewport focus, mount/disposal, cancellation, refill, and park/restore/evict transitions

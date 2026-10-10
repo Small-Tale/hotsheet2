@@ -2824,7 +2824,10 @@ out of the page. Its viewport (`data-mount-policy="keep-alive"`) is parked inste
 the live element, with its xterm emulator, scrollback and attach socket, moves into a hidden
 holding area. When the same project terminal renders again, the parked element replaces the
 fresh placeholder, so its content appears on the first frame with no reconnect or scrollback
-replay.
+replay. Project activation parks the outgoing project's keep-alive viewports
+before changing the selected project signal, so pending xterm rendering in
+the old project cannot hold the destination's first frame during PTY output
+(HS2-DM2SK3).
 
 - **Sizing:** a parked viewport keeps its lease with `visible:false` heartbeats, so it never
   drives the PTY size.

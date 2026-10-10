@@ -90,6 +90,23 @@ the same build and machine before drawing a performance conclusion.
 The real local-server profile below measures transport and echo outside
 the fixture.
 
+### Project switching during PTY output
+
+`HS2-DM2SK3` parks the outgoing project's keep-alive terminal viewports
+before the selected project changes. In the same synthetic profile, the
+desktop switch from the 138-ticket project to the small project fell from
+1,786 ms to 266 and 297 ms in two runs. The reverse switch fell from
+630 ms to 417 and 433 ms. The first after trace reduced desktop switch
+renderer task time from 1,758 to 232 ms, style updates from 1,384 to
+70 ms, and its longest task from 819 to 98 ms. A second after trace found
+271 ms renderer task time, 76 ms style work, and a 102 ms longest task.
+Narrow switch windows stayed near their prior 204 and 335 ms.
+
+The PTY burst as a whole can still drop frames; this change bounds the
+project transition under that load. The before/after interaction windows,
+wide/narrow traces, and live-terminal return screenshots are attached to
+`HS2-DM2SK3`. Trace categories are inclusive and should not be summed.
+
 ## Real local-server PTY transport
 
 `npm run profile:pty:real` builds the local CLI and server binaries, starts

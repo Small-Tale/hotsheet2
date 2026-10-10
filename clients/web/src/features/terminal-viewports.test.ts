@@ -246,6 +246,7 @@ describe('kept-alive terminal viewports across project switches (HS2-WGTQ6X)', (
       restored,
       disposals,
       show,
+      parkProjectViewports: owner.parkProjectViewports,
       focus: (request: TerminalFocusRequest | undefined) => (pending = request),
       pending: () => pending,
     };
@@ -283,6 +284,33 @@ describe('kept-alive terminal viewports across project switches (HS2-WGTQ6X)', (
     expect(parked.at(-1)).toBe(a1);
     await paint();
     for (const dispose of disposals.values()) expect(dispose).not.toHaveBeenCalled();
+  });
+
+  it('parks outgoing live viewports before a project change, once per transition', () => {
+    const { parked, restored, disposals, show, parkProjectViewports } = setup();
+    const a1 = keepAlive('a', 'one'),
+      a2 = keepAlive('a', 'two'),
+      b1 = keepAlive('b', 'one');
+    show(a1, a2);
+    parkProjectViewports('b');
+    expect(parked).toEqual([]);
+    parkProjectViewports('a');
+    parkProjectViewports('a');
+    expect(parked).toEqual([a1, a2]);
+    expect(a1.events).toEqual([TERMINAL_VIEWPORT_PARK_EVENT]);
+    expect(a2.events).toEqual([TERMINAL_VIEWPORT_PARK_EVENT]);
+    show(b1);
+    expect(parked).toEqual([a1, a2]);
+    expect(disposals.get(a1)).not.toHaveBeenCalled();
+    expect(disposals.get(a2)).not.toHaveBeenCalled();
+
+    const replacement = keepAlive('a', 'one');
+    show(replacement);
+    expect(restored).toContainEqual([replacement, a1]);
+    expect(a1.events.at(-1)).toBe(TERMINAL_VIEWPORT_RESUME_EVENT);
+    parkProjectViewports('a');
+    expect(parked).toEqual([a1, a2, b1, a1]);
+    expect(disposals.get(a1)).not.toHaveBeenCalled();
   });
 
   it('asks a restored viewport for focus only when a pending request names it', () => {
