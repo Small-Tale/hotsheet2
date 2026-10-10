@@ -892,6 +892,14 @@ clear of the exact tool and session. `PostToolUse` or `PostToolUseFailure` clear
 an older completion cannot clear a newer question. Session start/end and terminal removal
 clear stale questions.
 
+In the isolated live Claude check (HS2-5CX10W), a server-launched terminal delivered
+two choices, a multi-select answer, and free text to Claude. Native fallback and
+stale-answer rejection after session replacement also worked. A browser-created
+Claude shell in the same scratch checkout did not register its hook connection;
+Claude showed its native question prompt and no Hot Sheet notice appeared.
+`HS2-Q9BP1S` tracks that browser launch path. The notice flow remains supported
+by simulated browser coverage until that live shell path is repaired and retested.
+
 The plugin hook manifest can override `matcher` per event through `event_matchers`; events
 without an override keep the shared matcher. Claude installs `AskUserQuestion` for the two
 post-tool events, so unrelated tool completions do not launch the hook adapter. Its
