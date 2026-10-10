@@ -3,7 +3,7 @@
 //! A pending field edit can change search membership and sort order. Apply it to the
 //! complete native result before filtering, limiting, or choosing a keyset page.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 use hotsheet_ticketing::SortKey;
 use hotsheet_ticketing::checkout_order::{self, MergeKey};
@@ -219,33 +219,70 @@ fn pending_for_connection(
 fn projected_rows(
     provider: &dyn TicketProvider,
     query: &TicketQuery,
+    pending: BTreeMap<String, Vec<OutboxOperation>>,
+) -> Result<Vec<ApiTicket>, OverlayReadError> {
+    projected_rows_with_limit(provider, query, pending, MAX_PENDING_NATIVE_SCAN)
+}
+
+fn projected_rows_with_limit(
+    provider: &dyn TicketProvider,
+    query: &TicketQuery,
     mut pending: BTreeMap<String, Vec<OutboxOperation>>,
+    max_native_scan: usize,
 ) -> Result<Vec<ApiTicket>, OverlayReadError> {
     // Jira rejects these filters before contacting its native search endpoint.
     // Preserve that contract when pending rows require an unfiltered native scan.
     if requires_jira_filter_validation(query) {
         let _ = provider.query(query)?;
     }
-    let remote = provider.query(&TicketQuery::default())?;
-    let mut seen = HashSet::new();
-    let mut rows = Vec::with_capacity(remote.len() + pending.len());
-    for ticket in remote {
-        seen.insert(ticket.native_id.clone());
-        if let Some(operations) = pending.remove(&ticket.native_id) {
-            let value = project_pending_ticket(&serde_json::to_value(ticket)?, &operations)?;
-            rows.push(serde_json::from_value(value)?);
-        } else {
-            rows.push(ticket);
+    let scan_query = TicketQuery::default();
+    let filter_query = unbounded_query(query);
+    let mut rows = Vec::new();
+    let mut cursor = None;
+    let mut scanned = 0usize;
+    loop {
+        let page = provider.query_page(&scan_query, cursor.as_deref(), NATIVE_SCAN_PAGE)?;
+        scanned = scanned.saturating_add(page.items.len());
+        if scanned > max_native_scan {
+            return Err(ProviderError::Conflict {
+                ticket: provider.descriptor().connection_id,
+                message: format!(
+                    "pending Jira overlay scan exceeded {max_native_scan} issues; wait for pending edits to settle"
+                ),
+            }
+            .into());
         }
+        let mut projected_page = Vec::with_capacity(page.items.len());
+        for ticket in page.items {
+            let projected = if let Some(operations) = pending.remove(&ticket.native_id) {
+                serde_json::from_value(project_pending_ticket(
+                    &serde_json::to_value(ticket)?,
+                    &operations,
+                )?)?
+            } else {
+                ticket
+            };
+            projected_page.push(projected);
+        }
+        rows.extend(filter_provider_ticket_page(projected_page, &filter_query));
+        let Some(next) = page.next_cursor else { break };
+        if cursor.as_deref() == Some(next.as_str()) {
+            return Err(ProviderError::Conflict {
+                ticket: provider.descriptor().connection_id,
+                message: "pending Jira overlay scan did not advance".into(),
+            }
+            .into());
+        }
+        cursor = Some(next);
     }
     // A native list can lag admission or omit an issue temporarily. The admission
     // snapshot is durable, so its pending projection still participates in search.
-    for (native_id, operations) in pending {
-        if seen.contains(&native_id) {
-            continue;
-        }
+    for operations in pending.into_values() {
         let value = project_pending_ticket(&operations[0].base_ticket, &operations)?;
-        rows.push(serde_json::from_value(value)?);
+        rows.extend(filter_provider_ticket_page(
+            vec![serde_json::from_value(value)?],
+            &filter_query,
+        ));
     }
     Ok(filter_provider_ticket_page(rows, query))
 }
@@ -579,6 +616,85 @@ mod tests {
             Err(OverlayReadError::Provider(ProviderError::Conflict { .. }))
         ));
         assert_eq!(transport.search_calls.load(Ordering::Relaxed), 15);
+    }
+
+    #[test]
+    fn unpaged_overlay_filters_each_native_page_and_keeps_missing_pending_rows() {
+        let (provider, transport) = generated_jira(250);
+        let dir = tempfile::tempdir().unwrap();
+        let mut outbox = ProviderOutbox::open(dir.path().join("outbox.sqlite"), 10).unwrap();
+        let native = provider.get("ENG-000249").unwrap();
+        let missing = provider.get("ENG-000300").unwrap();
+        outbox
+            .admit_batch(&[
+                OutboxAdmission::new(
+                    "native-enters",
+                    &native,
+                    ProviderPatch {
+                        title: Some("Matching native".into()),
+                        ..ProviderPatch::default()
+                    },
+                )
+                .unwrap(),
+                OutboxAdmission::new(
+                    "missing-enters",
+                    &missing,
+                    ProviderPatch {
+                        title: Some("Matching missing".into()),
+                        ..ProviderPatch::default()
+                    },
+                )
+                .unwrap(),
+            ])
+            .unwrap();
+
+        let rows = query(
+            &provider,
+            &outbox,
+            "jira-test",
+            &TicketQuery {
+                text: Some("Matching".into()),
+                sort: SortKey::Title,
+                ..TicketQuery::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            rows.iter()
+                .map(|row| row.native_id.as_str())
+                .collect::<Vec<_>>(),
+            ["ENG-000300", "ENG-000249"]
+        );
+        assert_eq!(transport.search_calls.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn unpaged_overlay_rejects_a_native_scan_over_the_limit() {
+        let (provider, transport) = generated_jira(250);
+        let dir = tempfile::tempdir().unwrap();
+        let mut outbox = ProviderOutbox::open(dir.path().join("outbox.sqlite"), 10).unwrap();
+        let native = provider.get("ENG-000249").unwrap();
+        outbox
+            .admit_batch(&[OutboxAdmission::new(
+                "bounded-unpaged",
+                &native,
+                ProviderPatch {
+                    title: Some("Matching native".into()),
+                    ..ProviderPatch::default()
+                },
+            )
+            .unwrap()])
+            .unwrap();
+
+        let error = projected_rows_with_limit(
+            &provider,
+            &TicketQuery::default(),
+            pending_for_connection(&outbox, "jira-test").unwrap(),
+            200,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("exceeded 200 issues"));
+        assert_eq!(transport.search_calls.load(Ordering::Relaxed), 3);
     }
 
     /// Run with HOTSHEET_JIRA_OVERLAY_PROFILE_COUNT=1000|10000|100000 and

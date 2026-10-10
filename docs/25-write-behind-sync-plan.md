@@ -159,9 +159,13 @@ the best `limit + 1` projected candidates plus pending operations (HS2-93Y887).
 It applies pending edits before search, sort, and keyset comparison, including a
 pending ticket omitted from a stale native page. A read over more than 100,000
 native issues fails explicitly instead of allocating an unbounded ticket list.
-Unpaged reads still return all matching tickets and retain their full-list cost.
-HS2-5XXM4P tracks an indexed or selective-native-query path to reduce the 1,000
-network pages at 100,000 issues before wider rollout.
+Unpaged reads still return all matching tickets. They now filter each 100-issue
+native page after applying pending edits, so a selective query retains only its
+matching output rows rather than materializing every issue at once. An unfiltered
+read remains proportional to the entire source and both read shapes still fetch
+1,000 network pages at 100,000 issues. A durable index or exact native JQL
+pushdown, together with live Jira latency profiling, remains necessary before
+broader rollout (HS2-E7GMSR, HS2-5XXM4P).
 
 Opt-in synthetic Jira transport profile, 50-row title-sorted page, one pending
 title edit, separate processes per sample. Times exclude real network latency;
