@@ -217,5 +217,48 @@ IDs remain reserved for admission. Legacy settled rows begin the
 30-day window on the first upgraded open because their original settlement time
 was not recorded. Compaction runs on startup and admission; SQLite can reuse the
 released pages, though the database file need not shrink immediately.
-HS2-QZ46NP tracks bounding the compact ID metadata without allowing arbitrarily
-late retries to be dispatched again.
+
+### Bounded retry fence design (HS2-QZ46NP)
+
+The current API accepts opaque caller-generated operation IDs. Once a settled
+row for such an ID is deleted, an arbitrarily late retry is indistinguishable
+from a new edit. A finite cache, digest, or Bloom filter cannot give an exact
+rejection proof for every old opaque ID. The outbox therefore must retain
+legacy ID rows while new legacy admissions remain possible.
+
+The proposed v2 admission contract uses a canonical time-sortable ID (for
+example, a versioned UUIDv7) generated once per edit and reused for every
+retry. The server validates the format, rejects IDs too far in the future,
+and persists a monotonic minimum admissible ID timestamp in the same SQLite
+database. Admission looks up the exact ID first so queued and recent operations
+can return their existing result. An unknown ID older than the floor receives
+an expired-operation conflict, regardless of whether it was ever admitted.
+The floor advances transactionally and never retreats on restart or wall-clock
+rollback. An unknown stale ID is deliberately rejected even if its first
+request arrived only after the floor passed it.
+The web client must distinguish this terminal expiry from a transient failure
+and generate a fresh ID only for a genuinely new user edit, never an automatic
+retry of the expired intent.
+
+After the 30-day exact-response window, settled v2 rows below the floor can
+be deleted. Queued rows stay until settled even if their ID ages past the
+floor; exact-ID lookup still finds them. Store a per-connection, per-native-ID
+sequence high-water mark before deleting rows so `MAX(sequence) + 1` never
+reuses an old sequence. This leaves metadata proportional to pending and
+recent edits plus the number of edited provider tickets, rather than all
+historical edits. Index the timestamp/floor cleanup path and test page reuse
+and SQLite restart behavior.
+
+Migration needs a deliberate legacy admission cutoff: while an old client may
+submit a previously unseen opaque ID, its rows still need a permanent fence.
+At cutoff, reject *all* new legacy IDs, including a retry whose row was
+already removed; only then can settled legacy rows age out after their 30-day
+response window. Preserve exact lookup for pending and recent legacy IDs
+during the transition. A compatibility window can advertise v2 support and
+upgrade the web client first; the server must not silently turn an opaque retry
+into a fresh v2 operation. `HS2-QA1VEF` implements the protocol and migration.
+
+Verification must walk a repeated/reordered batch, a lost response followed
+by a retry before and after pruning, a pending ID older than the floor, a
+future-dated ID, clock rollback, restart, and a mixed legacy/v2 store. The
+HTTP test must prove that a pruned retry does not cause a second Jira write.
