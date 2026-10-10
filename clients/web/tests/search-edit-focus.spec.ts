@@ -140,12 +140,17 @@ test('keeps a search-selected ticket selected through a background refresh (HS2-
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-BASE1"]')).toBeVisible();
 
+  const viewTitle = (await page.locator('#workspace-page-title').textContent())!.trim();
   // Run a search and select the search-only match.
   await page.getByRole('button', { name: 'Search tickets' }).click();
   const search = page.getByRole('searchbox', { name: 'Search tickets' });
   await search.fill('parser ');
   await expect(page.locator('[data-ticket-slug="HS2-MATCH"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-BASE1"]')).toHaveCount(0);
+  // Searching filters the selected view without renaming the heading (HS2-18Y67S).
+  await expect(page.locator('#workspace-page-title')).not.toContainText('Search results');
+  await expect(page.locator('#workspace-page-title')).toHaveText(viewTitle);
+  await page.screenshot({ path: 'target/visual-captures/hs2-18y67s-search-heading.png' });
   await page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-MATCH"]').click();
   const inspector = page.locator('#app-right-rail');
   await expect(inspector).toBeVisible();

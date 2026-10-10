@@ -295,7 +295,9 @@ and identity-less legacy entries remain conservatively blocking.
   views — both reusing the workspace-grid rail's Select controls and wiring (HS2-4C5RM7). The view
   Select mirrors the sidebar's views: Trash while it holds tickets or is open, custom views, and
   Ticket errors while diagnostics found corrupt tickets or that view is open, and it always names
-  the visible view (HS2-0VPMFS). To compact
+  the visible view (HS2-0VPMFS). A workspace search filters the selected view without renaming
+  it: the page heading keeps the selected view's title while search text or tokens are active
+  (HS2-18Y67S). To compact
   the mobile toolbar (HS2-0SARDD): the redundant project name is dropped from the main toolbar (the
   project Select already carries it), both the project and view Selects are borderless and sized to
   their selected label rather than stretching, and while search is open the view-mode segmented

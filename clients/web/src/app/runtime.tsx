@@ -5180,10 +5180,8 @@ export async function startHotSheetWebClient() {
           return settingsCategoryTitle(settingsCategory());
         case 'board':
         case 'list':
-          if (customTicketViewKey(selectedView.value)) return ticketViewTitle(selectedView.value);
-          return searchQuery.value.trim() || searchTokens.value.length
-            ? 'Search results'
-            : ticketViewTitle(selectedView.value);
+          // Searching filters the selected view; the heading keeps that view's title (HS2-18Y67S).
+          return ticketViewTitle(selectedView.value);
         default:
           return viewMode.value satisfies never;
       }
