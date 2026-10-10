@@ -28,6 +28,7 @@
     "test:real-world-performance": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins && HOTSHEET_REAL_WORLD_PERFORMANCE=1 playwright test tests/providers.spec.ts --workers=1 -g 'real local Git board performance'",
     "profile:ui": "HOTSHEET_UI_PROFILE=1 playwright test tests/providers.spec.ts --workers=1 -g 'profiles mixed project'",
     "profile:pty": "HOTSHEET_UI_PROFILE=1 HOTSHEET_PTY_PROFILE=1 playwright test tests/providers.spec.ts --workers=1 -g 'profiles mixed project'",
+    "profile:pty:real": "cargo build --manifest-path ../../Cargo.toml -p hotsheet-cli -p hotsheet-server --bins && HOTSHEET_REAL_PTY_PROFILE=1 playwright test tests/real-pty-profile.spec.ts --workers=1",
     "stress:scale": "node scripts/scale-stress.mjs"
   },
   "dependencies": {

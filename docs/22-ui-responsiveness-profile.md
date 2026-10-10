@@ -15,6 +15,8 @@ stream, and switches with activity present. It runs at 1440 × 900 and
 WebSocket, and terminal data are deterministic, contract-shaped fixtures.
 Run `npm run profile:pty` from the same directory for the `HS2-K7FJVK`
 load scenario described below.
+Run `npm run profile:pty:real` for the isolated local-server and OS PTY
+scenario described below.
 The 200-ticket real Git/server board test remains available through
 `npm run test:real-world-performance` for storage and transport timing.
 
@@ -85,8 +87,47 @@ compares `Runtime.getHeapUsage` after garbage collection before and after
 the burst; it is a single-run retained-heap observation, not a leak rate.
 These development-build traces include CDP tracing overhead. Repeat on
 the same build and machine before drawing a performance conclusion.
-`HS2-E035F5` tracks a real local-server PTY profile to measure transport
-and echo outside the fixture.
+The real local-server profile below measures transport and echo outside
+the fixture.
+
+## Real local-server PTY transport
+
+`npm run profile:pty:real` builds the local CLI and server binaries, starts
+an isolated store and server for each viewport, and mounts the shipped
+terminal viewport on its real terminal attach socket. An unbuffered Python
+PTY process writes 600 timestamped output blocks with terminal line breaks.
+The browser records binary WebSocket arrivals and bytes, input echo, frame
+gaps, long tasks, garbage-collected heap, and a DevTools trace at 1440 × 900
+and 390 × 844. The command writes
+`target/performance-traces/hs2-e035f5-<viewport>-metrics.json` and
+`-chromium-trace.json` under `clients/web`. It is opt-in because it runs
+local binaries and a real PTY. The baseline metrics and compressed traces
+are attached to `HS2-E035F5`.
+
+| Single Chromium run                               |                           Desktop |                            Narrow |
+| ------------------------------------------------- | --------------------------------: | --------------------------------: |
+| Browser WebSocket data                            | 1,087,804 bytes in 1,201 messages | 1,087,804 bytes in 1,201 messages |
+| Browser receive rate                              |                          354 KB/s |                          368 KB/s |
+| Process write to browser arrival, p50 / p95       |                      179 / 243 ms |                        49 / 70 ms |
+| Synchronous WebSocket message handling, p50 / p95 |                        0 / 0.1 ms |                        0 / 0.1 ms |
+| Input to echoed WebSocket message                 |                            2.3 ms |                            2.2 ms |
+| Echo paint upper bound                            |                            246 ms |                            244 ms |
+| First output paint upper bound                    |                            923 ms |                            421 ms |
+| Frame gaps over 50 ms                             |                                25 |                                 4 |
+| Longest observed main-thread task                 |                            134 ms |                              0 ms |
+| Garbage-collected retained JS heap delta          |                          +1.50 MB |                          +1.49 MB |
+
+These are one-run development-build measurements with tracing and
+screenshot-polling overhead. Process and browser timestamps share the
+local machine clock. The process-to-browser interval includes PTY, server,
+socket, and browser scheduling; it does not isolate network transit.
+The synchronous message measure brackets terminal viewport WebSocket
+listeners, not later rendering. Paint bounds include Playwright screenshot
+polling, so they are deliberately conservative. The synthetic profile
+uses a different output shape (1,161,600 bytes) and concurrent workspace
+activity; its paint and frame-gap numbers above are context, not a direct
+regression comparison. `HS2-36P1NP` tracks repeated measurement and
+attribution of the desktop arrival backlog.
 
 ## Baseline observations
 

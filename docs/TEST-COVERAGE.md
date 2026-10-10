@@ -14,7 +14,12 @@ real web UI and terminal WebSocket contract with binary output, input echo,
 search/update, project switching, and concurrent AI events, then records
 frame gaps, retained heap, interaction windows, and raw traces. The narrow
 drawer covers workspace controls, so covered actions use DOM events in
-the load window. Real PTY/server/network timing remains in `HS2-E035F5`.
+the load window. `HS2-E035F5` adds opt-in isolated local-server and OS PTY
+browser coverage in `clients/web/tests/real-pty-profile.spec.ts`
+(`npm run profile:pty:real`): desktop and narrow real attach, input echo,
+600 timestamped writes, WebSocket arrival and synchronous processing,
+paint bounds, frame gaps, retained heap, and DevTools traces. Repeatability
+and attribution of the desktop arrival backlog remain in `HS2-36P1NP`.
 
 HS2-EFBAPC covers durable Git store identity in
 `crates/hotsheet-ticketing/src/store.rs` (new, reinitialized, and legacy
