@@ -626,6 +626,14 @@ continue to route normally (HS2-BGTDQ1).
 Store-scoped and provider-scoped routes also stop using a hosted entry when its
 recorded instance identity no longer matches the path; checkout routes provide
 the restore/replacement guidance.
+The primary store is pinned when the server starts; a legacy primary receives an
+identity then. Unscoped primary-store reads and writes return an actionable
+conflict if another store replaces its path. `/health` stays a successful
+machine-liveness probe for unrelated projects, but reports the primary conflict
+without reading replacement ticket data. Restore the original
+store to recover the running server, or restart deliberately to select the new
+store. Checkout and hosted-store routes for unrelated projects remain available
+(HS2-34XE8B).
 
 `github-sign-in` works without a running server. It prints GitHub's verification URL and
 one-time code, waits for approval, and then prints a `github-app-*` credential reference;

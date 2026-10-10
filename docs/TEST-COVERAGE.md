@@ -30,6 +30,10 @@ real HTTP test in `crates/hotsheet-server/tests/http.rs` checks both an
 already hosted store and a restarted server return a conflict on checkout
 and ticket reads, while a direct store route does not serve replacement data
 and another project remains available.
+HS2-34XE8B adds a real HTTP transition for the primary store: legacy startup
+identity migration, same-path replacement, unscoped read/write conflicts,
+health liveness without replacement ticket data, unrelated hosted-store access,
+deliberate restart, and original-store restoration.
 
 HS2-6DHS8B covers cropped-rendition cache recency, byte and entry eviction,
 in-progress file preservation, concurrent publication, and oversized bypass in

@@ -17175,6 +17175,145 @@ async fn replaced_linked_git_store_is_rejected_on_checkout_reads_after_restart()
 }
 
 #[tokio::test]
+async fn primary_store_replacement_conflicts_on_unscoped_routes_and_preserves_other_stores() {
+    let root = tempfile::tempdir().unwrap();
+    let primary_path = root.path().join("primary");
+    let original_path = root.path().join("original");
+    let secondary_path = root.path().join("secondary");
+    let primary = FsStore::init(&primary_path, &StoreMetadata::new("PR")).unwrap();
+    FsStore::init(&secondary_path, &StoreMetadata::new("SC")).unwrap();
+    // A legacy primary has no recorded identity until the server pins one at startup.
+    let mut legacy = primary.metadata().unwrap();
+    legacy.instance_id = None;
+    std::fs::write(
+        primary_path.join("hotsheet-store.json"),
+        format!("{}\n", serde_json::to_string_pretty(&legacy).unwrap()),
+    )
+    .unwrap();
+    let router = app(AppState::new(primary.clone(), SECRET.into()).unwrap());
+    let pinned = primary.metadata().unwrap().instance_id;
+    assert!(
+        pinned.is_some(),
+        "server startup migrates the legacy identity"
+    );
+    let secondary_id =
+        hotsheet_ticketing::checkouts::TicketSource::git(&secondary_path).connection_id;
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/stores",
+                Some(&serde_json::json!({"path": secondary_path}).to_string()),
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(r#"{"title":"Before swap"}"#)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    std::fs::rename(&primary_path, &original_path).unwrap();
+    let replacement = FsStore::init(&primary_path, &StoreMetadata::new("PR")).unwrap();
+    assert_ne!(replacement.metadata().unwrap().instance_id, pinned);
+
+    let health = router
+        .clone()
+        .oneshot(authed("GET", "/health", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        health.status(),
+        StatusCode::OK,
+        "machine liveness serves other stores"
+    );
+    let health = body_json(health).await;
+    assert_eq!(health["primary_store"]["status"], "conflict");
+    assert!(
+        health["primary_store"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("different identity")
+    );
+    assert!(
+        health.get("tickets").is_none(),
+        "replacement tickets are never counted"
+    );
+
+    for (method, path, body) in [
+        ("GET", "/tickets", None),
+        ("POST", "/tickets", Some(r#"{"title":"Wrong store"}"#)),
+        ("GET", "/commands", None),
+        ("GET", "/activity", None),
+    ] {
+        let response = router
+            .clone()
+            .oneshot(authed(method, path, body))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT, "{method} {path}");
+        assert!(
+            body_json(response)
+                .await
+                .to_string()
+                .contains("different identity")
+        );
+    }
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/stores/{secondary_id}/tickets"),
+                None,
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK,
+        "an unrelated hosted store remains readable"
+    );
+    let restarted =
+        app(AppState::new(FsStore::open(&primary_path).unwrap(), SECRET.into()).unwrap());
+    assert_eq!(
+        restarted
+            .oneshot(authed("GET", "/tickets", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK,
+        "restart intentionally selects the replacement"
+    );
+    std::fs::rename(&primary_path, root.path().join("replacement")).unwrap();
+    std::fs::rename(&original_path, &primary_path).unwrap();
+    let recovered = router
+        .oneshot(authed("GET", "/tickets", None))
+        .await
+        .unwrap();
+    assert_eq!(recovered.status(), StatusCode::OK);
+    let recovered = body_json(recovered).await.to_string();
+    assert!(
+        recovered.contains("Before swap"),
+        "original tickets return after restoration"
+    );
+    assert!(
+        !recovered.contains("Wrong store"),
+        "rejected writes never reached the replacement"
+    );
+}
+
+#[tokio::test]
 async fn moved_git_source_relinks_shared_checkouts_and_routes_to_new_store() {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};

@@ -88,6 +88,9 @@ type LiveProviderCache = Arc<
 #[derive(Clone)]
 pub struct AppState {
     store: FsStore,
+    /// Identity of the primary store at startup. An unscoped route must never silently
+    /// switch to a different store placed at the same path (HS2-34XE8B).
+    primary_instance_id: Result<String, String>,
     secret: String,
     events: broadcast::Sender<ChangeEvent>,
     index: Arc<Mutex<Index>>,
@@ -264,6 +267,13 @@ impl AppState {
     /// whether the index is in-memory or file-backed (`Index::open_reconciled`).
     pub fn with_index(store: FsStore, secret: String, index: Index) -> Self {
         let store = store.with_deferred_push();
+        let primary_instance_id = store
+            .metadata()
+            .and_then(|metadata| match metadata.instance_id {
+                Some(id) => Ok(id),
+                None => store.ensure_instance_id(),
+            })
+            .map_err(|error| error.to_string());
         let machine_home = hotsheet_plugins::hotsheet_home();
         let (events, _) = broadcast::channel(256);
         let index = Arc::new(Mutex::new(index));
@@ -272,10 +282,7 @@ impl AppState {
         // The primary store is the default hosted entry (shares the same index Arc, so
         // the unprefixed routes and /stores/{default}/… see one index).
         let primary = StoreEntry {
-            instance_id: store
-                .metadata()
-                .ok()
-                .and_then(|metadata| metadata.instance_id),
+            instance_id: primary_instance_id.as_ref().ok().cloned(),
             store: store.clone(),
             index: index.clone(),
             corrupt: Arc::clone(&corrupt),
@@ -350,6 +357,7 @@ impl AppState {
             }));
         Self {
             store,
+            primary_instance_id,
             secret,
             events,
             index,
@@ -1196,15 +1204,33 @@ impl AppState {
     /// operate on.
     fn default_entry(&self) -> StoreEntry {
         StoreEntry {
-            instance_id: self
-                .store
-                .metadata()
-                .ok()
-                .and_then(|metadata| metadata.instance_id),
+            instance_id: self.primary_instance_id.as_ref().ok().cloned(),
             store: self.store.clone(),
             index: self.index.clone(),
             corrupt: self.corrupt.clone(),
         }
+    }
+
+    fn require_primary_store_identity(&self) -> Result<(), ApiError> {
+        let expected = self.primary_instance_id.as_ref().map_err(|error| {
+            ApiError::new(
+                StatusCode::CONFLICT,
+                format!("primary ticket store identity was unavailable at startup: {error}"),
+            )
+        })?;
+        let current = self.store.metadata().map_err(|error| {
+            ApiError::new(
+                StatusCode::CONFLICT,
+                format!("primary ticket store cannot be verified: {error}"),
+            )
+        })?;
+        if current.instance_id.as_ref() != Some(expected) {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "primary ticket store has a different identity at its startup path; restore the original store or restart the server to select the replacement",
+            ));
+        }
+        Ok(())
     }
 
     /// Reindex a ticket the server just wrote into `entry`'s index, then broadcast a
@@ -2085,6 +2111,69 @@ pub fn app(state: AppState) -> Router {
 
 // ---- auth ------------------------------------------------------------------------
 
+/// Routes that read or write the primary store without a checkout or hosted-store id.
+/// Keep project/store-scoped routes available when only the primary path was replaced.
+fn primary_store_route(path: &str) -> bool {
+    const PREFIXES: &[&str] = &[
+        "/tickets",
+        "/claim-next",
+        "/batch",
+        "/setup",
+        "/analytics",
+        "/confidence-report",
+        "/commands",
+        "/command-groups",
+        "/command-runs",
+        "/views",
+        "/activity",
+        "/ai-settings",
+        "/terminal-settings",
+        "/provider-connections",
+    ];
+    path == "/providers"
+        || PREFIXES.iter().any(|prefix| {
+            path == *prefix
+                || path
+                    .strip_prefix(prefix)
+                    .is_some_and(|rest| rest.starts_with('/'))
+        })
+}
+
+#[cfg(test)]
+mod primary_store_route_tests {
+    use super::primary_store_route;
+
+    #[test]
+    fn guards_primary_data_without_capturing_scoped_or_machine_routes() {
+        for path in [
+            "/tickets",
+            "/tickets/HS-123/close",
+            "/claim-next",
+            "/batch",
+            "/providers",
+            "/provider-connections/github",
+            "/analytics/tickets",
+            "/commands/one/run",
+            "/activity",
+            "/terminal-settings",
+        ] {
+            assert!(primary_store_route(path), "{path}");
+        }
+        for path in [
+            "/checkouts/project/tickets",
+            "/stores/store/tickets",
+            "/providers/github/tickets",
+            "/projects/open",
+            "/compatibility",
+            "/permissions",
+            "/terminals",
+            "/tickets-extra",
+        ] {
+            assert!(!primary_store_route(path), "{path}");
+        }
+    }
+}
+
 async fn require_secret(
     State(state): State<AppState>,
     req: Request,
@@ -2099,6 +2188,9 @@ async fn require_secret(
             StatusCode::UNAUTHORIZED,
             "missing or invalid secret",
         ));
+    }
+    if primary_store_route(req.uri().path()) {
+        state.require_primary_store_identity()?;
     }
     let is_mutation = matches!(
         *req.method(),
@@ -2121,6 +2213,16 @@ async fn require_secret(
 // ---- handlers --------------------------------------------------------------------
 
 async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
+    if let Err(error) = state.require_primary_store_identity() {
+        // `/health` is the machine server's liveness probe for *every* hosted project.
+        // Keep it healthy without reading ticket data from the replacement primary.
+        return Ok(Json(serde_json::json!({
+            "status": "ok",
+            "generation": "hs2",
+            "api_version": 1,
+            "primary_store": { "status": "conflict", "error": error.message },
+        })));
+    }
     let metadata = state.store.metadata()?;
     let (listing, source) = state.health_listing().await?;
     Ok(Json(serde_json::json!({

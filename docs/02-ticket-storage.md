@@ -162,6 +162,8 @@ the existing value. A legacy store without one receives an identity when a
 linked checkout is opened or listed while the old store path is still
 reachable; the metadata change uses the store's normal automatic Git commit
 path when automatic commits are enabled.
+The primary store also receives a legacy identity when its server starts, so
+unscoped routes can pin it for that process lifetime (HS2-34XE8B).
 Checkout links record that identity in their machine-local registry and use
 it to verify a later relink. The instance id identifies the store lineage:
 a copy of the repository and metadata intentionally carries the same id.
@@ -170,6 +172,12 @@ currently at the linked path. If another valid store replaces it in place, the
 server refuses that checkout's route until the original is restored or the source
 is removed and the replacement added explicitly; unrelated checkouts remain
 usable. These reads do not assign an identity to a legacy store.
+The server checks its pinned primary identity before unscoped primary-store
+reads and writes. Replacing that path yields a conflict until the original
+store is restored or the server restarts to select the replacement; other
+hosted stores remain accessible.
+The shared server health probe remains live and reports the primary conflict
+without reading replacement tickets.
 
 **Sharding uses the final two ULID characters.** ULID prefixes encode time, so active
 stores otherwise concentrate nearly every ticket in the same `01/` directory. The
