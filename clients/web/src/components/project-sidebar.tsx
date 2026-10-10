@@ -67,15 +67,18 @@ export function projectSidebarPanel(props: ProjectSidebarProps): SidebarPanelPar
       <p
         class="project-sidebar__work-summary"
         data-component="project-work-summary"
+        title={
+          props.countsPartial
+            ? `At least ${props.openCount} open, ${props.upNextCount} up next, and ${props.activeCount} active`
+            : undefined
+        }
         aria-label={
           props.countsPartial
             ? `At least ${props.openCount} open, ${props.upNextCount} up next, and ${props.activeCount} active`
             : undefined
         }
       >
-        {props.countsPartial
-          ? `≥${props.openCount} open · ≥${props.upNextCount} up next · ≥${props.activeCount} active`
-          : `${props.openCount} open, ${props.upNextCount} up next, ${props.activeCount} active`}
+        {`${props.openCount} open, ${props.upNextCount} up next, ${props.activeCount} active`}
       </p>
       <div class="project-sidebar__drive-row">
         <DriveControl

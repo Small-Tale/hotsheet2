@@ -116,7 +116,6 @@ export function ProjectTab({
     >
       {normalizedActiveTicketCount > 0 && <ProjectTabActivityRing count={normalizedActiveTicketCount} />}
       <span class="project-tab__work-count" aria-hidden="true">
-        {countsPartial ? '≥' : ''}
         {projectTabUpNextLabel(normalizedUpNextCount)}
       </span>
     </span>

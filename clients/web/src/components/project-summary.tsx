@@ -91,14 +91,8 @@ export function ProjectSummary({
           })}
         </span>
         <span class="project-summary__counts">
-          <strong>
-            {partial ? '≥' : ''}
-            {completedToday} completed today
-          </strong>
-          <span>
-            {partial ? '≥' : ''}
-            {inProgress} in progress
-          </span>
+          <strong>{completedToday} completed today</strong>
+          <span>{inProgress} in progress</span>
         </span>
       </span>
     </button>

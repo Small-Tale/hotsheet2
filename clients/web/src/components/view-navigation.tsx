@@ -93,10 +93,8 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
                           {item.searchCount ? (
                             <span class="view-navigation__search-count">
                               <LucideIcon size={9.92} icon={Search} name="search" />
-                              <span>{item.countPartial ? `≥${item.count}` : String(item.count)}</span>
+                              <span>{String(item.count)}</span>
                             </span>
-                          ) : item.countPartial ? (
-                            `≥${item.count}`
                           ) : (
                             String(item.count)
                           )}

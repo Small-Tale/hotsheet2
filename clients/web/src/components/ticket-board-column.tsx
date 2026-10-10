@@ -46,8 +46,11 @@ export function TicketBoardColumn({
             aria-label={`Select all ${title} tickets`}
           >
             <span class="ticket-board-column__title">{title}</span>
-            <span aria-label={`${countPartial ? 'At least ' : ''}${totalCount} tickets`}>
-              {countPartial ? `≥${totalCount}` : totalCount}
+            <span
+              aria-label={`${countPartial ? 'At least ' : ''}${totalCount} tickets`}
+              title={countPartial ? `At least ${totalCount} tickets` : undefined}
+            >
+              {totalCount}
             </span>
           </button>
         </h2>

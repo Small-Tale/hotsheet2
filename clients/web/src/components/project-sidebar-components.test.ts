@@ -79,8 +79,9 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('aria-label="Open project statistics: 8 completed today, 2 in progress"');
     expect(markup.match(/data-bar=/g)).toHaveLength(2);
     const partial = String(ProjectSummary({ completedToday: 8, inProgress: 2, trend: [1, 4], partial: true }));
-    expect(partial).toContain('≥8 completed today');
-    expect(partial).toContain('≥2 in progress');
+    // Lower bounds stay in the accessible name only; the visible counts carry no glyph (HS2-521WNH).
+    expect(partial).toContain('>8 completed today');
+    expect(partial).not.toContain('≥');
     expect(partial).toContain('at least 8 completed today');
   });
 

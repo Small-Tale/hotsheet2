@@ -319,8 +319,10 @@ query(filter, sort, text?, paging) -> TicketRow[]
   The web client carries partial status through checkout search, sidebar search counts,
   continuation pages, and bounded title/lookup reads. It keeps healthy search rows visible,
   warns when a source failed, and omits incomplete search counts. Project, view, board,
-  tab, and operations-sidebar totals are marked as lower bounds until a fresh healthy read
-  clears the partial state. Its unpaged client method retains the partial and truncated
+  tab, and operations-sidebar totals are lower bounds until a fresh healthy read
+  clears the partial state; the visible counts stay plain numbers and the lower bound is
+  carried by their tooltips and accessible names ("At least N …"), not a `≥` glyph
+  (HS2-521WNH). Its unpaged client method retains the partial and truncated
   headers alongside the row array; title deduplication refuses an incomplete destination
   read because it cannot guarantee a unique title (HS2-NX6JQJ).
   The unpaged array is **bounded** by `CHECKOUT_READ_MAX_ROWS` (500), the same ceiling as a

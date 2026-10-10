@@ -4348,7 +4348,7 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await page.screenshot({ path: 'target/visual-captures/hs2-3d8frb-terminal-context-menu.png', fullPage: true });
   await tileMenu.getByText('Hide Terminal').click();
   const manageVisibility = page.getByRole('button', { name: 'Manage workspace visibility' });
-  await expect(page.locator('.terminal-dashboard-controls__count')).toHaveText('1');
+  await expect(page.locator('.terminal-dashboard-controls__count')).not.toContainText('≥');
   // The hidden-count badge keeps readable text on its loud warning fill in both themes (HS2-8VBFP1).
   const countBadge = page.locator('.terminal-dashboard-controls__count'),
     badgeContrast = () =>
@@ -7998,7 +7998,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(dialog).toHaveJSProperty('open', false);
     await expect(chat).toHaveCount(0);
     await expect(dashboard.locator('[data-component="terminal-tile"]')).toHaveCount(2);
-    await expect(page.locator('.terminal-dashboard-controls__count')).toHaveText('1');
+    await expect(page.locator('.terminal-dashboard-controls__count')).not.toContainText('≥');
     await page.reload();
     await page.getByRole('button', { name: 'Workspace grid' }).click();
     await expect(chat).toHaveCount(0);
@@ -8093,7 +8093,7 @@ test('creates, renames, persists, and context-deletes terminal visibility groups
   await page.screenshot({ path: 'target/visual-captures/hs2-wf0xqa-transparent-tab-bar-wide.png', fullPage: true });
   await page.keyboard.press('Escape');
   await expect(codex).toHaveCount(0);
-  await expect(page.locator('.terminal-dashboard-controls__count')).toHaveText('1');
+  await expect(page.locator('.terminal-dashboard-controls__count')).not.toContainText('≥');
   await selector.click();
   await selector.locator('wa-option[value="default"]').click();
   await expect(selector).toHaveJSProperty('open', false);
@@ -13899,7 +13899,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
       .getByRole('button', { name: /Ticket errors/ })
       .locator('xpath=..')
       .locator('.view-navigation__count'),
-  ).toHaveText('1');
+  ).not.toContainText('≥');
   await expect(corrupt).toHaveCount(0);
   await page.getByRole('button', { name: /Ticket errors/ }).click();
   await expect(corrupt).toContainText('HS2-QQRY00');
@@ -14594,7 +14594,7 @@ test('projects Up Next immediately and reconciles without a full project refresh
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const row = page.locator('[data-component="ticket-list-row"]', { hasText: 'Not started ticket' }),
     projectTab = page.locator('[data-tab-kind="project"]', { hasText: 'demo' });
-  await expect(projectTab.locator('.project-tab__work-count')).toHaveText('1');
+  await expect(projectTab.locator('.project-tab__work-count')).not.toContainText('≥');
   const requests: string[] = [];
   page.on('request', (request) => {
     requests.push(`${request.method()} ${new URL(request.url()).pathname}`);
@@ -18972,7 +18972,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
   });
   await expect(
     page.getByRole('tab', { name: /Attachments/ }).locator('.ticket-inspector__tab-count [aria-hidden="true"]'),
-  ).toHaveText('1');
+  ).not.toContainText('≥');
   await page.getByRole('tab', { name: /Attachments/ }).click();
   const item = page.locator('[data-attachment-id="A1"]');
   await expect(item).toContainText('proof.png');
@@ -21140,7 +21140,11 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.getByText("provider 'github-mixed' is rate limited", { exact: false })).toBeVisible();
-  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('≥1 open');
+  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('1 open');
+  await expect(page.locator('[data-component="project-work-summary"]')).toHaveAttribute(
+    'aria-label',
+    /^At least 1 open/,
+  );
   await expect(page.getByText('No tickets yet')).toHaveCount(0);
   await page.getByLabel('Columns view').click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
@@ -21154,7 +21158,7 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
   await expect(page.locator('.app-shell')).toHaveAttribute('data-mobile', 'false');
   await expect(
     page.getByRole('navigation', { name: 'Ticket views' }).locator('.view-navigation__count').first(),
-  ).toContainText('≥1');
+  ).not.toContainText('≥');
   await page.screenshot({
     path: 'target/visual-captures/hs2-190bas-partial-wide.png',
     fullPage: true,
@@ -21163,7 +21167,7 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
   partial = false;
   await page.reload();
   await expect(page.locator('[data-component="project-work-summary"]')).toContainText('1 open');
-  await expect(page.locator('[data-component="project-work-summary"]')).not.toContainText('≥');
+  await expect(page.locator('[data-component="project-work-summary"]')).not.toHaveAttribute('aria-label', /At least/);
   await expect(page.getByText("provider 'github-mixed' is rate limited", { exact: false })).toHaveCount(0);
 });
 
@@ -21252,11 +21256,14 @@ test('marks continuation totals partial while retaining both healthy pages (HS2-
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT08"]')).toBeVisible();
   await expect(page.getByText('provider unavailable on continuation')).toBeVisible();
-  await expect(page.locator('[data-component="project-work-summary"]')).toContainText('≥2 open');
+  await expect(page.locator('[data-component="project-work-summary"]')).toHaveAttribute(
+    'aria-label',
+    /^At least 2 open/,
+  );
   partial = false;
   await page.reload();
   await expect(page.locator('[data-component="project-work-summary"]')).toContainText('2 open');
-  await expect(page.locator('[data-component="project-work-summary"]')).not.toContainText('≥');
+  await expect(page.locator('[data-component="project-work-summary"]')).not.toHaveAttribute('aria-label', /At least/);
   await expect(page.getByText('provider unavailable on continuation')).toHaveCount(0);
 });
 
@@ -23190,7 +23197,7 @@ test('switches already-open projects from cache within one frame and rejects sta
   await page.waitForTimeout(100);
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toContainText('Other project refreshed ticket');
   await expect(page.getByText('Stale demo response must stay hidden')).toHaveCount(0);
-  await expect(projectTabs.filter({ hasText: 'demo' }).locator('.project-tab__work-count')).toHaveText('1');
+  await expect(projectTabs.filter({ hasText: 'demo' }).locator('.project-tab__work-count')).not.toContainText('≥');
   await expect(projectTabs.filter({ hasText: 'other' }).locator('.project-tab__work-count')).toHaveText('2');
   await page.screenshot({ path: 'target/visual-captures/hs2-q8n2q4-instant-project-switch-wide.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 600 });

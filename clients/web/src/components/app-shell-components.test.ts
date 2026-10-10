@@ -361,7 +361,8 @@ describe('application shell components', () => {
       ProjectTab({ id: 'partial', name: 'Partial', location: 'local', upNextCount: 2, countsPartial: true }),
     );
     expect(partialMarkup).toContain('aria-label="At least 2 Up Next tickets"');
-    expect(partialMarkup).toContain('>≥2</span>');
+    expect(partialMarkup).toContain('>2</span>');
+    expect(partialMarkup).not.toContain('≥');
     const cappedActiveMarkup = String(
       ProjectTab({
         id: 'active',
