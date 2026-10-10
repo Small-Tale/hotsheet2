@@ -17158,8 +17158,17 @@ async fn replaced_linked_git_store_is_rejected_on_checkout_reads_after_restart()
 
     let (_primary_after_restart, restarted_state) = state();
     let restarted = app(restarted_state.with_checkout_registry(&registry_path));
+    assert_eq!(
+        restarted
+            .clone()
+            .oneshot(authed("GET", "/checkouts/first", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK,
+        "checkout metadata remains available for recovery"
+    );
     for path in [
-        "/checkouts/first",
         "/checkouts/first/tickets",
         &format!("/checkouts/first/tickets/{}", ticket.id),
     ] {
@@ -17594,6 +17603,163 @@ async fn reviewed_legacy_git_recovery_is_explicit_and_visible_after_restart() {
     )
     .await;
     assert_eq!(checkout["unverified_store_sources"][new_id], old_locator);
+}
+
+#[tokio::test]
+async fn same_path_legacy_replacement_needs_review_before_checkout_reads() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    let store_path = root.path().join("store");
+    let original_path = root.path().join("original");
+    let registry_path = root.path().join("checkouts.json");
+    std::fs::create_dir(&project).unwrap();
+    FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    let (_primary, state) = state();
+    let app = app(state.with_checkout_registry(&registry_path));
+    let registered = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&serde_json::json!({"root":project,"stores":[store_path]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+    let checkout = body_json(registered).await;
+    let id = checkout["id"].as_str().unwrap();
+    let source_id = checkout["sources"][0]["connection_id"].as_str().unwrap();
+    let mut file: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&registry_path).unwrap()).unwrap();
+    file["checkouts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("store_instance_ids");
+    std::fs::write(&registry_path, serde_json::to_vec_pretty(&file).unwrap()).unwrap();
+    std::fs::rename(&store_path, &original_path).unwrap();
+    let replacement = FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    let ticket = ops::create(
+        &replacement,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-10-09T00:00:00Z"),
+        NewTicket {
+            title: "Replacement ticket".into(),
+            category: "task".into(),
+            up_next: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let ticket_path = format!("/checkouts/{id}/tickets/{source_id}:{}", ticket.id);
+    let reopened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&serde_json::json!({"root":project,"stores":[store_path]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(reopened.status(), StatusCode::CREATED);
+    assert!(
+        !std::fs::read_to_string(project.join(".hotsheet2/worklist.md"))
+            .unwrap()
+            .contains("Replacement ticket")
+    );
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root":project,"stores":[store_path]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    assert!(
+        body_json(opened).await["checkout"]["store_instance_ids"]
+            .as_object()
+            .is_none_or(serde_json::Map::is_empty)
+    );
+    let metadata = app
+        .clone()
+        .oneshot(authed("GET", &format!("/checkouts/{id}"), None))
+        .await
+        .unwrap();
+    assert_eq!(metadata.status(), StatusCode::OK);
+    let providers_before = app
+        .clone()
+        .oneshot(authed("GET", &format!("/checkouts/{id}/providers"), None))
+        .await
+        .unwrap();
+    assert_eq!(providers_before.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(providers_before).await[0]["identity_review_required"],
+        true
+    );
+    let unreadable = app
+        .clone()
+        .oneshot(authed("GET", &ticket_path, None))
+        .await
+        .unwrap();
+    assert_ne!(unreadable.status(), StatusCode::OK);
+    assert!(
+        body_json(unreadable)
+            .await
+            .to_string()
+            .contains("no recorded identity")
+    );
+    let relink_path = format!("/checkouts/{id}/sources/{source_id}/relink");
+    let ordinary = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &relink_path,
+            Some(&serde_json::json!({"path":store_path}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ordinary.status(), StatusCode::BAD_REQUEST);
+    let reviewed = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &relink_path,
+            Some(
+                &serde_json::json!({"path":store_path,"review_unverified_recovery":true})
+                    .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(reviewed.status(), StatusCode::OK);
+    let updated = body_json(reviewed).await;
+    assert_eq!(updated["connection_id"], source_id);
+    assert_eq!(
+        updated["checkouts"][0]["unverified_store_sources"][source_id],
+        checkout["sources"][0]["locator"]
+    );
+    let readable = app
+        .clone()
+        .oneshot(authed("GET", &ticket_path, None))
+        .await
+        .unwrap();
+    assert_eq!(readable.status(), StatusCode::OK);
+    assert_eq!(body_json(readable).await["title"], "Replacement ticket");
+    let providers = app
+        .oneshot(authed("GET", &format!("/checkouts/{id}/providers"), None))
+        .await
+        .unwrap();
+    let providers = body_json(providers).await;
+    assert_eq!(providers[0]["unverified_recovery"], true);
+    assert_eq!(
+        providers[0]["identity_review_required"],
+        serde_json::Value::Null
+    );
 }
 
 /// HS2-3SCH1K: a checkout's provider list holds only the sources it links, marked default by

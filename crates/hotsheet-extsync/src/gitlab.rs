@@ -392,6 +392,7 @@ impl TicketProvider for GitLabProvider {
         ProviderDescriptor {
             color: None,
             unverified_recovery: false,
+            identity_review_required: false,
             connection_id: self.config.connection_id.clone(),
             provider: "gitlab".into(),
             display_name: format!("GitLab {}", self.config.project),

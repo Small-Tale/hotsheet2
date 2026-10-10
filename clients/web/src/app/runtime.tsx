@@ -4621,6 +4621,7 @@ export async function startHotSheetWebClient() {
           color: source.color,
           disabled: Boolean(connection?.disabled),
           unverifiedRecovery: source.unverifiedRecovery,
+          identityReviewRequired: source.identityReviewRequired,
           sharedWith: (connection?.projects ?? [])
             .filter((project) => project.id !== current.id)
             .map((project) => project.alias),

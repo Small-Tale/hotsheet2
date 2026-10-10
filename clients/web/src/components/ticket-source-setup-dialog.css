@@ -115,7 +115,11 @@ wa-dialog.ticket-source-setup-dialog {
   overflow-wrap: anywhere;
 }
 .ticket-source-setup__error {
+  min-width: 0;
+  max-width: 100%;
   color: var(--wa-color-danger-on-quiet);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 /* Which projects an edit affects (HS2-3SCH1K). */
 .ticket-source-setup__scope-hint {

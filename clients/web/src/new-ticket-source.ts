@@ -11,6 +11,7 @@ export interface TicketSourceChoice {
   default: boolean;
   color?: string;
   unverifiedRecovery?: boolean;
+  identityReviewRequired?: boolean;
 }
 
 /**
@@ -29,26 +30,30 @@ export interface ProjectTicketSources {
 export function projectTicketSources(descriptors: readonly ProviderDescriptor[]): ProjectTicketSources | undefined {
   const selected = descriptors.find((item) => item.default) ?? descriptors.at(0);
   if (!selected) return undefined;
+  const checkoutReviewRequired = descriptors.some((item) => item.identity_review_required);
+  const effectiveCapabilities = (item: ProviderDescriptor) =>
+    checkoutReviewRequired ? { ...item.capabilities, create: false } : item.capabilities;
   return {
     name: selected.display_name,
-    capabilities: selected.capabilities,
+    capabilities: effectiveCapabilities(selected),
     connectionId: selected.connection_id,
     sources: descriptors.map((item) => ({
       connectionId: item.connection_id,
       name: item.display_name,
       provider: item.provider,
       locator: item.locator,
-      capabilities: item.capabilities,
+      capabilities: effectiveCapabilities(item),
       default: item === selected,
       color: item.color,
       unverifiedRecovery: item.unverified_recovery,
+      identityReviewRequired: item.identity_review_required,
     })),
   };
 }
 
 /** Sources that accept new tickets, in descriptor order. */
 export function writableTicketSources(project: ProjectTicketSources | undefined): TicketSourceChoice[] {
-  return (project?.sources ?? []).filter((source) => source.capabilities.create);
+  return (project?.sources ?? []).filter((source) => source.capabilities.create && !source.identityReviewRequired);
 }
 
 /**

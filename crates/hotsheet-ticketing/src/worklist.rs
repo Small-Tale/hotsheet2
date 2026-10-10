@@ -232,8 +232,13 @@ fn regenerate_tickets_with_settings(
 /// machine-local and lives under the code checkout.
 pub fn regenerate_checkout(checkout: &Checkout) -> Result<usize, StoreError> {
     let mut by_id: BTreeMap<hotsheet_model::Ulid, Ticket> = BTreeMap::new();
-    for root in &checkout.stores {
-        let store = FsStore::open(root)?;
+    for source in checkout.sources.iter().filter(|source| {
+        source.provider == "git"
+            && checkout
+                .store_instance_ids
+                .contains_key(&source.connection_id)
+    }) {
+        let store = FsStore::open(&source.locator)?;
         for ticket in store.list_tickets()? {
             match by_id.get(&ticket.id) {
                 Some(existing) if existing.status != Status::Moved => {}
@@ -570,6 +575,19 @@ mod tests {
             )
             .unwrap();
         }
+        let sources = vec![
+            crate::checkouts::TicketSource::git(first.root()),
+            crate::checkouts::TicketSource::git(second.root()),
+        ];
+        let store_instance_ids = [(&sources[0], &first), (&sources[1], &second)]
+            .into_iter()
+            .map(|(source, store)| {
+                (
+                    source.connection_id.clone(),
+                    store.metadata().unwrap().instance_id.unwrap(),
+                )
+            })
+            .collect();
         let checkout = Checkout {
             id: "project-test".into(),
             root: project.to_string_lossy().into_owned(),
@@ -579,8 +597,8 @@ mod tests {
                 first.root().to_string_lossy().into_owned(),
                 second.root().to_string_lossy().into_owned(),
             ],
-            sources: Vec::new(),
-            store_instance_ids: Default::default(),
+            sources,
+            store_instance_ids,
             unverified_store_sources: Default::default(),
             source_colors: Default::default(),
             default_source: None,

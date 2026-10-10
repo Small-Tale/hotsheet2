@@ -86,17 +86,18 @@ and don't imply reading order — read by group.
 
 **C · Data & storage**
 
-| Doc                                                  | Topic                                                                                                                                                                                                                                                                                                                                            | Status                  |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| [02-ticket-storage.md](02-ticket-storage.md)         | Default git-provider format, activity history, AI completion confidence (HS2-DWTJ43; indexed filters/sort, list/board pill, actor-role completion rule, and calibration report HS2-RD4M29/HS2-A0Q6G6), durable attachment metadata, multi-store IDs with reviewed legacy recovery, auto-merge, copy/move, Trash restore + 30-day retention purge | Shipped core/server/web |
-| [03-indexing-and-query.md](03-indexing-and-query.md) | SQLite+FTS5 index, file watching, reindex, query surface                                                                                                                                                                                                                                                                                         | Confirmed               |
-| [17-ticket-file-format.md](17-ticket-file-format.md) | Canonical frontmatter plus bounded notes with created/edited timestamps (parser SSOT; legacy reader retained)                                                                                                                                                                                                                                    | Shipped                 |
+| Doc                                                  | Topic                                                                                                                                                                                                                                                                                                                                                                        | Status                  |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| [02-ticket-storage.md](02-ticket-storage.md)         | Default git-provider format, activity history, AI completion confidence (HS2-DWTJ43; indexed filters/sort, list/board pill, actor-role completion rule, and calibration report HS2-RD4M29/HS2-A0Q6G6), durable attachment metadata, multi-store IDs with reviewed legacy recovery at moved or unchanged paths, auto-merge, copy/move, Trash restore + 30-day retention purge | Shipped core/server/web |
+| [03-indexing-and-query.md](03-indexing-and-query.md) | SQLite+FTS5 index, file watching, reindex, query surface                                                                                                                                                                                                                                                                                                                     | Confirmed               |
+| [17-ticket-file-format.md](17-ticket-file-format.md) | Canonical frontmatter plus bounded notes with created/edited timestamps (parser SSOT; legacy reader retained)                                                                                                                                                                                                                                                                | Shipped                 |
 
 Store instance identity and moved-path relink verification in
 [02](02-ticket-storage.md) and [04](04-core-server-cli.md) are shipped
 (`HS2-EFBAPC`). Recovery for a legacy store already moved before identity
-migration is deferred to `HS2-RAQSX7`; ordinary same-path replacement checks
-are tracked in `HS2-BGTDQ1`.
+migration uses reviewed recovery (`HS2-RAQSX7`). Legacy links without a
+recorded identity also require review at an unchanged path (`HS2-RQXJQV`);
+ordinary known-identity replacement checks are covered by `HS2-BGTDQ1`.
 
 **D · Services & clients**
 

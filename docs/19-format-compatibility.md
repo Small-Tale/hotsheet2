@@ -45,13 +45,15 @@ future markers with upgrade guidance. Ticket diagnostics expose `error_code` as 
 while presenting newer tickets accurately.
 
 Git store metadata now includes an optional durable `instanceId`; existing schema-3
-stores remain readable, and a linked legacy store receives the field while its old
-path is available. Checkout registry schema 4 retains optional
+stores remain readable. A legacy linked store with no recorded identity remains
+visible but cannot be opened through that link until its location is explicitly
+reviewed, even if the original path still exists: a different valid store could
+have replaced it there (HS2-RQXJQV). Checkout registry schema 4 retains optional
 `store_instance_ids` entries keyed by Git connection id and adds
 `unverified_store_sources` for explicitly reviewed legacy recoveries. Relink
-requires known identities to match; a legacy link moved before migration may
-be recovered only through that reviewed path, and retains a visible unverified
-marker across later moves (HS2-EFBAPC, HS2-RAQSX7). Older writers must not
+requires known identities to match; any pre-identity link may be recovered only
+through that reviewed path, and retains a visible unverified marker across later
+moves (HS2-EFBAPC, HS2-RAQSX7, HS2-RQXJQV). Older writers must not
 rewrite this registry because they cannot preserve the recovery marker.
 
 Store-schema compatibility is checked before a store is attached to a server, not on its

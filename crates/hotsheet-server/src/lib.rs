@@ -3160,13 +3160,24 @@ async fn list_checkout_providers(
 ) -> Result<Json<Vec<hotsheet_ticketing::ProviderDescriptor>>, ApiError> {
     let checkout = state
         .checkout_registry
-        .resolve(&reference)
+        .describe(&reference)
         .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
-    // Hosting on demand keeps a linked git store listable after a sweep unhosted it.
-    let hosted = checkout_entries(&state, &reference)?
-        .into_iter()
-        .map(|(id, _)| id)
-        .collect::<std::collections::HashSet<_>>();
+    // A legacy source without a recorded identity must remain visible for review.
+    // Do not host it, or read any of its tickets, while constructing settings metadata.
+    let has_unreviewed = checkout.sources.iter().any(|source| {
+        source.provider == "git"
+            && !checkout
+                .store_instance_ids
+                .contains_key(&source.connection_id)
+    });
+    let hosted = if has_unreviewed {
+        std::collections::HashSet::new()
+    } else {
+        checkout_entries(&state, &reference)?
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect()
+    };
     let summaries = state.host.summaries();
     let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
         .load()
@@ -3180,6 +3191,19 @@ async fn list_checkout_providers(
                 .iter()
                 .find(|info| info.id == source.connection_id && hosted.contains(&info.id))
                 .map(|info| info.provider_descriptor(is_default))
+                .or_else(|| {
+                    has_unreviewed.then(|| hotsheet_ticketing::ProviderDescriptor {
+                        connection_id: source.connection_id.clone(),
+                        provider: "git".into(),
+                        display_name: "Git tickets".into(),
+                        locator: source.locator.clone(),
+                        default: is_default,
+                        color: None,
+                        unverified_recovery: false,
+                        identity_review_required: false,
+                        capabilities: hotsheet_ticketing::ProviderCapabilities::git(),
+                    })
+                })
         } else if let Some(connection) = connections
             .iter()
             .find(|connection| connection.id == source.connection_id)
@@ -3196,6 +3220,10 @@ async fn list_checkout_providers(
             descriptor.unverified_recovery = checkout
                 .unverified_store_sources
                 .contains_key(&source.connection_id);
+            descriptor.identity_review_required = source.provider == "git"
+                && !checkout
+                    .store_instance_ids
+                    .contains_key(&source.connection_id);
             descriptor.color = Some(
                 hotsheet_ticketing::checkouts::effective_source_color(
                     checkout
@@ -4461,12 +4489,19 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
         .default_source
         .as_deref()
         .and_then(|id| checkout.source(id))
-        .filter(|source| source.provider == "git")
+        .filter(|source| {
+            source.provider == "git"
+                && checkout
+                    .store_instance_ids
+                    .contains_key(&source.connection_id)
+        })
         .or_else(|| {
-            checkout
-                .sources
-                .iter()
-                .find(|source| source.provider == "git")
+            checkout.sources.iter().find(|source| {
+                source.provider == "git"
+                    && checkout
+                        .store_instance_ids
+                        .contains_key(&source.connection_id)
+            })
         });
     let Some(source) = source else {
         tokio::task::spawn_blocking(move || {
@@ -4517,11 +4552,12 @@ fn regenerate_checkout_worklist_indexed(
         ..TicketQuery::default()
     };
     let mut tickets = std::collections::BTreeMap::new();
-    for source in checkout
-        .sources
-        .iter()
-        .filter(|source| source.provider == "git")
-    {
+    for source in checkout.sources.iter().filter(|source| {
+        source.provider == "git"
+            && checkout
+                .store_instance_ids
+                .contains_key(&source.connection_id)
+    }) {
         let entry = host.get(&source.connection_id).ok_or_else(|| {
             anyhow::anyhow!("checkout links an unhosted store: {}", source.locator)
         })?;
@@ -4591,6 +4627,18 @@ async fn open_project(
     let discovery_root = body.root.clone();
     let explicit_stores = body.stores;
     let explicit_sources = body.sources;
+    let existing = state
+        .checkout_registry
+        .list()
+        .map_err(checkout_lookup_error)?
+        .into_iter()
+        .find(|checkout| {
+            checkout.root
+                == FsPath::new(&body.root)
+                    .canonicalize()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+        });
     let sources = tokio::task::spawn_blocking(move || {
         let stores = match explicit_stores {
             Some(paths) => paths.into_iter().map(std::path::PathBuf::from).collect(),
@@ -4608,6 +4656,14 @@ async fn open_project(
                 .map(hotsheet_ticketing::checkouts::TicketSource::git),
         );
         for source in sources.iter().filter(|source| source.provider == "git") {
+            if existing.as_ref().is_some_and(|checkout| {
+                checkout.source(&source.connection_id).is_some()
+                    && !checkout
+                        .store_instance_ids
+                        .contains_key(&source.connection_id)
+            }) {
+                continue;
+            }
             let store = FsStore::open(&source.locator)
                 .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
             hosting_state.host_project_store(store)?;
@@ -4689,7 +4745,7 @@ async fn resolve_checkout(
 ) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
     state
         .checkout_registry
-        .resolve(&reference)
+        .describe(&reference)
         .map(Json)
         .map_err(checkout_lookup_error)
 }
@@ -4808,7 +4864,7 @@ async fn relink_checkout_git_source(
     let reviewed = body.review_unverified_recovery;
     let old_id = connection_id.clone();
     let (updated, new_id) = tokio::task::spawn_blocking(move || {
-        let store = FsStore::open(&path).map_err(|error| {
+        let store = FsStore::open_without_maintenance(&path).map_err(|error| {
             ApiError::new(
                 StatusCode::BAD_REQUEST,
                 format!("Choose a Hot Sheet ticket repository: {error}"),
@@ -4848,7 +4904,7 @@ async fn relink_checkout_git_source(
         schedule_worklist_regeneration(&state, checkout);
         schedule_setup_freshness(&state, checkout);
     }
-    if !updated.is_empty() {
+    if !updated.is_empty() && new_id != connection_id {
         state.unhost_store(&connection_id);
     } else if new_id != connection_id {
         state.unhost_store(&new_id);

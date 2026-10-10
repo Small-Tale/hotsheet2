@@ -158,16 +158,17 @@ one **live** ticket (see the move tombstones in §2.13).
 ```
 
 New stores receive an `instanceId` at initialization. Reinitialization preserves
-the existing value. A legacy store without one receives an identity when a
-linked checkout is opened or listed while the old store path is still
-reachable; the metadata change uses the store's normal automatic Git commit
-path when automatic commits are enabled.
+the existing value. A legacy linked store without a recorded identity remains
+listed, but checkout reads cannot adopt it solely because its old path still
+contains a valid store. A reviewed recovery assigns an identity when necessary;
+the metadata change uses the store's normal automatic Git commit path when
+automatic commits are enabled (HS2-RQXJQV).
 The primary store also receives a legacy identity when its server starts, so
 unscoped routes can pin it for that process lifetime (HS2-34XE8B).
 Checkout links record that identity in their machine-local registry and use
 it to verify a later relink. The instance id identifies the store lineage:
 a copy of the repository and metadata intentionally carries the same id.
-Ordinary checkout and ticket reads recheck a recorded identity against the store
+Ordinary checkout ticket and data reads recheck a recorded identity against the store
 currently at the linked path. If another valid store replaces it in place, the
 server refuses that checkout's route until the original is restored or the source
 is removed and the replacement added explicitly; unrelated checkouts remain
@@ -178,9 +179,9 @@ store is restored or the server restarts to select the replacement; other
 hosted stores remain accessible.
 The shared server health probe remains live and reports the primary conflict
 without reading replacement tickets.
-If a pre-identity store moved before its link could record an id, a reviewed
-recovery may point the link at a valid destination without claiming proof of
-continuity. The checkout registry stores its former locator in
+If a pre-identity link has no recorded id, a reviewed recovery may keep its
+current path or point it at a moved store without claiming proof of continuity.
+The checkout registry stores its former locator in
 `unverified_store_sources`, keyed by the current connection id. Shared links and
 later verified moves retain that warning; removing the source removes it.
 

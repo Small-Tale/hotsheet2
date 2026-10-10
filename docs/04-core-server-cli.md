@@ -615,12 +615,17 @@ ready before the links switch (HS2-8BG4W9). Each Git checkout link records
 the store's durable `instanceId` from `hotsheet-store.json` in
 `store_instance_ids`; relink rejects a different valid store before changing
 any shared checkout. New stores receive the id at initialization. A legacy
-store and its links migrate while its old path is still reachable; after a
-pre-identity store has already moved, no recorded evidence can prove the
-destination, so ordinary relink returns a verification error (HS2-EFBAPC).
-For this exceptional case, `PATCH /checkouts/{reference}/sources/{connection_id}/relink`
+checkout link with no recorded identity cannot prove continuity from the path
+alone, even while that path remains reachable; ordinary reads and relink return
+verification guidance instead of adopting a replacement (HS2-EFBAPC, HS2-RQXJQV).
+Checkout metadata remains readable when a link cannot be verified, and provider
+descriptors remain readable for identity-less legacy links in the recovery UI;
+unreviewed Git descriptors carry `identity_review_required`, and project opening
+does not host or project tickets from those links.
+For this case, `PATCH /checkouts/{reference}/sources/{connection_id}/relink`
 accepts `review_unverified_recovery: true` only after the caller explicitly reviews the
-destination. It never overrides a known identity mismatch. The updated checkout records
+destination, including when the path is unchanged. It never overrides a known identity
+mismatch. The updated checkout records
 the old locator in `unverified_store_sources` under the new connection id; the checkout
 provider descriptor exposes `unverified_recovery: true`, and the marker survives later
 verified moves and restart (HS2-RAQSX7).

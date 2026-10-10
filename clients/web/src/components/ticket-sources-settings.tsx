@@ -27,6 +27,7 @@ export interface ProjectTicketSource {
   color?: string;
   disabled?: boolean;
   unverifiedRecovery?: boolean;
+  identityReviewRequired?: boolean;
   /** Other projects that share this source (attached headlessly with `checkout add-source`). */
   sharedWith?: readonly string[];
 }
@@ -48,6 +49,7 @@ function ConnectionCopy({
   isDefault = false,
   disabled = false,
   unverifiedRecovery = false,
+  identityReviewRequired = false,
   sharedWith = [],
 }: {
   name: string;
@@ -56,6 +58,7 @@ function ConnectionCopy({
   isDefault?: boolean;
   disabled?: boolean;
   unverifiedRecovery?: boolean;
+  identityReviewRequired?: boolean;
   sharedWith?: readonly string[];
 }) {
   return (
@@ -70,11 +73,17 @@ function ConnectionCopy({
           Unverified recovery
         </small>
       )}
+      {identityReviewRequired && (
+        <small class="ticket-provider-settings__recovery-badge" data-state="identity-review-required">
+          Review required
+        </small>
+      )}
       <small>
         {sourceKind(provider)} · {locator}
       </small>
       {sharedWith.length > 0 && <small>Also used by {sharedWith.join(', ')}</small>}
       {unverifiedRecovery && <small>The former repository identity could not be verified.</small>}
+      {identityReviewRequired && <small>Review this source location before opening its tickets.</small>}
     </span>
   );
 }
@@ -144,6 +153,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                     isDefault={source.connectionId === defaultSource?.connectionId}
                     disabled={source.disabled}
                     unverifiedRecovery={source.unverifiedRecovery}
+                    identityReviewRequired={source.identityReviewRequired}
                     sharedWith={source.sharedWith}
                   />
                 );

@@ -276,20 +276,20 @@ export function TicketSourceSetupDialog({
         </label>
         <small>If the ticket repository moved, enter its new folder path.</small>
         <wa-checkbox name="review-unverified-recovery" value="on">
-          If the old repository is gone and had no recorded identity, I reviewed this destination and accept that Hot
-          Sheet cannot verify it is the same repository.
+          If the old repository identity was never recorded, I reviewed this folder and accept that Hot Sheet cannot
+          verify it is the same repository.
         </wa-checkbox>
       </form>
-      <TicketSourceColorPicker
-        source={{ provider: 'git', name: editingGit.name, color: editingGit.color }}
-        sourceId={editingGit.connectionId}
-      />
-      <small>Color changes save when selected.</small>
       {providerError && (
         <p class="ticket-source-setup__error" role="alert">
           {providerError}
         </p>
       )}
+      <TicketSourceColorPicker
+        source={{ provider: 'git', name: editingGit.name, color: editingGit.color }}
+        sourceId={editingGit.connectionId}
+      />
+      <small>Color changes save when selected.</small>
     </div>
   ) : kind ? (
     <>

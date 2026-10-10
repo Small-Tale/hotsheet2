@@ -142,6 +142,7 @@ impl HostedStore {
         hotsheet_ticketing::ProviderDescriptor {
             color: None,
             unverified_recovery: false,
+            identity_review_required: false,
             connection_id: self.id.clone(),
             provider: "git".into(),
             display_name: if self.prefix.is_empty() {

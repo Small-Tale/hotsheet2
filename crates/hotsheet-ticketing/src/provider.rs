@@ -91,6 +91,9 @@ pub struct ProviderDescriptor {
     /// This Git source was recovered without proof that its moved predecessor was the same store.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unverified_recovery: bool,
+    /// Legacy Git link has no recorded identity; review is required before ticket access.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub identity_review_required: bool,
     pub capabilities: ProviderCapabilities,
 }
 
@@ -1223,6 +1226,7 @@ impl TicketProvider for GitProvider {
         ProviderDescriptor {
             color: None,
             unverified_recovery: false,
+            identity_review_required: false,
             connection_id: self.connection_id.clone(),
             provider: "git".into(),
             display_name: self.display_name.clone(),
@@ -2578,6 +2582,7 @@ mod tests {
                 ProviderDescriptor {
                     color: None,
                     unverified_recovery: false,
+                    identity_review_required: false,
                     connection_id: "down".into(),
                     provider: "fake".into(),
                     display_name: "Down".into(),

@@ -46,6 +46,8 @@ export interface ProviderDescriptor {
   color?: string;
   /** A reviewed legacy recovery whose former store identity could not be proved. */
   unverified_recovery?: boolean;
+  /** A legacy Git link must be reviewed before its tickets can be used. */
+  identity_review_required?: boolean;
   capabilities: Capabilities;
 }
 export interface ProviderConnection {

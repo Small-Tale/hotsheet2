@@ -841,6 +841,7 @@ async function mockProject(
   cropEnabled = false,
   attachmentRevision = false,
   linkedSource = false,
+  legacyUnverifiedAtFirst = false,
 ) {
   let rows: TicketRow[] = [
     { ...row, feedback_needed: Boolean(primaryFeedbackNeeded) },
@@ -982,6 +983,7 @@ async function mockProject(
   let gitStores = ticketSourceConfigured ? [...project.stores] : [];
   let gitStoreIds = gitStores.map((_, index) => (index === 0 ? 'git-local' : `git-${index + 1}`));
   let unverifiedGitSourceId: string | undefined;
+  let legacyUnverified = legacyUnverifiedAtFirst;
   let providerConnectionRecords: Array<{
     id: string;
     provider: string;
@@ -1258,6 +1260,19 @@ async function mockProject(
               'original Git store identity was never recorded; relink cannot verify this destination without reviewed unverified recovery',
           },
         });
+      if (index >= 0 && newPath === gitStores[index] && legacyUnverified) {
+        if (!reviewed)
+          return route.fulfill({
+            status: 400,
+            json: {
+              error:
+                'original Git store identity was never recorded; relink cannot verify this destination without reviewed unverified recovery',
+            },
+          });
+        legacyUnverified = false;
+        unverifiedGitSourceId = oldId;
+        return route.fulfill({ json: { checkouts: [checkoutRecord()], connection_id: oldId } });
+      }
       if (index < 0 || !['/work/renamed.hs2', '/work/recovered.hs2'].includes(newPath))
         return route.fulfill({ status: 400, json: { error: 'Choose a Hot Sheet ticket repository.' } });
       if (gitStores[index] === newPath)
@@ -1343,6 +1358,7 @@ async function mockProject(
             locator,
             color: sourceColors[gitSourceId(index)],
             ...(unverifiedGitSourceId === gitSourceId(index) ? { unverified_recovery: true } : {}),
+            ...(legacyUnverified ? { identity_review_required: true } : {}),
             default: checkoutDefaultSource ? checkoutDefaultSource === gitSourceId(index) : index === 0,
             capabilities,
           })),
@@ -2893,6 +2909,47 @@ test('requires review and keeps an unverified recovery visible for a moved legac
   await page.screenshot({ path: 'target/visual-captures/hs2-raqsx7-recovery-wide.png', animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'target/visual-captures/hs2-raqsx7-recovery-narrow.png', animations: 'disabled' });
+});
+
+test('reviews a legacy store at its unchanged path before adopting it (HS2-RQXJQV)', async ({ page }) => {
+  await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, false, true);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Settings view').click();
+  await expect(page.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]')).toContainText(
+    'Review required',
+  );
+  await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-review-required-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: 'target/visual-captures/hs2-rqxjqv-review-required-narrow.png',
+    animations: 'disabled',
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page
+    .locator(
+      '.ticket-provider-settings__source-row[data-source-id="git-local"] [data-action="edit-provider-connection"]',
+    )
+    .click();
+  const dialog = page.locator('[data-ticket-source-setup-dialog]');
+  await expect(dialog.locator('input[name="git-store-path"]')).toHaveValue('/work/demo.hs2');
+  await dialog.getByRole('button', { name: 'Save location' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('identity was never recorded');
+  await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-review-dialog-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-review-dialog-narrow.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await dialog.locator('wa-checkbox[name="review-unverified-recovery"]').click();
+  await dialog.getByRole('button', { name: 'Save location' }).click();
+  await expect(page.locator('.app-toast')).toContainText('Ticket repository location updated.');
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]')).toContainText(
+    'Unverified recovery',
+  );
+  await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-same-path-wide.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-same-path-narrow.png', animations: 'disabled' });
 });
 
 test('centers the compact source mark with the type icon and ticket number in columns (HS2-XTF923) @ci-smoke', async ({
