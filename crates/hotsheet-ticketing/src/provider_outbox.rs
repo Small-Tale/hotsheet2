@@ -1022,9 +1022,10 @@ mod tests {
         assert_eq!(outbox.claim_ready(0, 1).unwrap().len(), 1);
         assert!(outbox.confirm("settled").unwrap());
         outbox.discard("discarded").unwrap();
-        assert_eq!(outbox.compact_terminal_before(unix_now() - 1).unwrap(), 0);
-        assert_eq!(outbox.compact_terminal_before(unix_now() + 1).unwrap(), 2);
-        assert_eq!(outbox.compact_terminal_before(unix_now() + 1).unwrap(), 0);
+        // A one-second margin races the clock when the setup crosses a second boundary.
+        assert_eq!(outbox.compact_terminal_before(unix_now() - 60).unwrap(), 0);
+        assert_eq!(outbox.compact_terminal_before(unix_now() + 60).unwrap(), 2);
+        assert_eq!(outbox.compact_terminal_before(unix_now() + 60).unwrap(), 0);
         assert!(outbox.get("settled").unwrap().is_none());
         assert!(outbox.get("discarded").unwrap().is_none());
         assert_eq!(
