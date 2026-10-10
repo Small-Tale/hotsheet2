@@ -349,6 +349,35 @@ error explains this requirement and names the assets repository.
   from both the prior and intended body is rejected rather than overwritten. Detail reads
   currently check a manifest per attachment; HS2-3KA0QG tracks measuring and bounding
   that added request cost without losing concurrent-edit correctness.
+
+**GitHub attachment detail read budget (HS2-3KA0QG).** A controlled transport with
+2 ms of delay per request measured the current `get` path. These are local adapter
+measurements, not live GitHub latency; each row includes the issue and comment-page
+requests. The fixture uses legacy comment-only attachments, so every manifest lookup
+returns 404. A present manifest has the same request count.
+
+| Attachments | Issue + comment requests | Manifest requests | Total requests | Measured elapsed |
+| ----------: | -----------------------: | ----------------: | -------------: | ---------------: |
+|           1 |                        2 |                 1 |              3 |             9 ms |
+|          10 |                        2 |                10 |             12 |            32 ms |
+|         100 |                        3 |               100 |            103 |           280 ms |
+
+The proposed read path (HS2-5MFV7Q) requests the exact manifest paths in bounded
+chunks of at most 25 GraphQL `repository.object(expression:)` aliases, reading each
+`Blob.text` and rejecting `isTruncated` results. GitHub documents the
+[`object` expression](https://docs.github.com/en/graphql/reference/repos),
+[`Blob` fields](https://docs.github.com/en/graphql/reference/git), and
+[GraphQL query limits](https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api).
+This would reduce 10 manifest reads to one batch and 100 to four, yielding an
+expected total of 3 and 7 requests respectively before fallback. Keep the existing
+per-attachment manifest as the revision winner; the batch is only a transport change.
+For a missing alias, use the legacy comment. For a malformed, truncated, denied, or
+partial result, read that manifest through the existing REST path or fail explicitly
+if correctness cannot be established. A delayed comment PATCH still reads the winning
+manifest body; a later direct comment edit still receives the existing conflict check.
+Chunking bounds query size and avoids listing every other ticket's marker in an assets
+repository. Measure real GraphQL latency and rate cost before shipping the batch path.
+
 - **Other edits:** `attachment_edit` remains `false`. Renaming, deleting,
   re-labelling, video posters, and local file actions stay git-only and are refused
   by name (`provider connection '…' (github) does not support this operation`).

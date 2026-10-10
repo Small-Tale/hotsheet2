@@ -3641,6 +3641,50 @@ mod tests {
         })
     }
 
+    #[test]
+    fn github_attachment_detail_read_cost_scales_with_manifest_count() {
+        for count in [1_usize, 10, 100] {
+            let comments = (0..count)
+                .map(|index| {
+                    uploaded_comment(
+                        index as u64 + 1,
+                        &format!("01K6ATTACHMENT{index:010}"),
+                        "proof.png",
+                    )
+                })
+                .collect::<Vec<_>>();
+            let mut responses = vec![response(200, issue(42, "broken widget", "details"))];
+            responses.push(response(200, json!(comments)));
+            if count == 100 {
+                responses.push(response(200, json!([])));
+            }
+            responses.extend((0..count).map(|_| response(404, json!({"message":"Not Found"}))));
+            let inner = FakeTransport::with(responses);
+            let github = assets_provider(Arc::new(DelayedTransport {
+                inner: inner.clone(),
+                read_delay: Duration::from_millis(2),
+                write_delay: Duration::ZERO,
+            }));
+            let started = std::time::Instant::now();
+            let ticket = github.get("42").unwrap();
+            let elapsed = started.elapsed();
+            assert_eq!(ticket.attachments.len(), count);
+            let requests = inner.requests.lock().unwrap();
+            assert_eq!(requests.len(), count + if count == 100 { 3 } else { 2 });
+            assert_eq!(
+                requests
+                    .iter()
+                    .filter(|(_, url, _, _)| url.contains("/.hotsheet-markers/"))
+                    .count(),
+                count
+            );
+            eprintln!(
+                "GitHub detail read: {count} attachments, {} requests, {elapsed:?} with 2ms/request",
+                requests.len()
+            );
+        }
+    }
+
     struct CropTransport {
         state: Mutex<CropState>,
         manifest_gate: Mutex<Option<Arc<std::sync::Barrier>>>,
