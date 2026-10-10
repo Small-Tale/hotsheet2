@@ -240,6 +240,7 @@ for (const viewport of [
       const processToBrowserMs = measurements.markers.map((marker) => marker.browserEpochMs - marker.processEpochMs);
       const summary = {
         viewport,
+        renderer: await surface.getAttribute('data-renderer'),
         realServer: true,
         pythonWrites: 600,
         browserWebSocketMessages: measurements.messages,
@@ -272,9 +273,91 @@ for (const viewport of [
         path: `${prefix}-metrics.json`,
         contentType: 'application/json',
       });
+      const screenshotPath = `target/performance-traces/hs2-36p1np-${viewport.name}-terminal-after.png`;
+      writeFileSync(screenshotPath, await surface.screenshot({ animations: 'disabled' }));
+      await testInfo.attach(`${viewport.name}-terminal-after.png`, {
+        path: screenshotPath,
+        contentType: 'image/png',
+      });
       expect(summary.browserBytes).toBeGreaterThan(1_000_000);
       expect(summary.browserWebSocketMessages).toBeGreaterThan(0);
       expect(summary.processToBrowserMs.p95).not.toBeNull();
+      expect(summary.renderer).toBe('dom');
+    } finally {
+      await server.stop();
+    }
+  });
+}
+
+for (const viewport of [
+  { name: 'desktop', width: 1440, height: 900 },
+  { name: 'narrow', width: 390, height: 844 },
+]) {
+  test(`profiles bare real PTY WebSocket transport at ${viewport.name} (HS2-36P1NP)`, async ({ page }, testInfo) => {
+    test.skip(process.env.HOTSHEET_REAL_PTY_PROFILE !== '1', 'Run npm run profile:pty:real.');
+    test.setTimeout(90_000);
+    const server = await realTicketServer();
+    try {
+      const terminal = await server.request<{ id: string }>('/terminals', 'POST', {
+        command: 'python3',
+        args: ['-u', '-c', PYTHON_PROFILE],
+        cwd: server.root,
+      });
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto('/?dev-review=false');
+      const socketUrl = `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(terminal.id)}/attach?secret=${encodeURIComponent(server.secret)}`;
+      const markers = await page.evaluate(async (url) => {
+        const socket = new WebSocket(url);
+        socket.binaryType = 'arraybuffer';
+        const seen = new Set<number>();
+        const arrivals: Marker[] = [];
+        let tail = '';
+        return await new Promise<Marker[]>((resolve, reject) => {
+          socket.addEventListener('open', () => {
+            socket.send('GO\n');
+          });
+          socket.addEventListener('error', () => {
+            reject(new Error('Bare PTY socket failed'));
+          });
+          socket.addEventListener('message', (event) => {
+            if (!(event.data instanceof ArrayBuffer)) return;
+            const now = performance.now();
+            const joined = tail + new TextDecoder().decode(event.data);
+            for (const match of joined.matchAll(/FRAME:(\d{4}):(\d{13})/g)) {
+              const index = Number(match[1]);
+              if (seen.has(index)) continue;
+              seen.add(index);
+              arrivals.push({
+                index,
+                processEpochMs: Number(match[2]),
+                browserEpochMs: Date.now(),
+                browserPerfMs: now,
+              });
+            }
+            tail = joined.slice(-48);
+            if (arrivals.length === 600) {
+              socket.close();
+              resolve(arrivals);
+            }
+          });
+        });
+      }, socketUrl);
+      const lag = markers.map((marker) => marker.browserEpochMs - marker.processEpochMs);
+      const summary = {
+        viewport,
+        terminalRendererMounted: false,
+        markerCount: markers.length,
+        processToBrowserMs: { p50: percentile(lag, 0.5), p95: percentile(lag, 0.95) },
+        markers,
+      };
+      mkdirSync('target/performance-traces', { recursive: true });
+      const path = `target/performance-traces/hs2-36p1np-${viewport.name}-bare-metrics.json`;
+      writeFileSync(path, JSON.stringify(summary, null, 2));
+      await testInfo.attach(`${viewport.name}-bare-pty-metrics.json`, {
+        path,
+        contentType: 'application/json',
+      });
+      expect(markers).toHaveLength(600);
     } finally {
       await server.stop();
     }

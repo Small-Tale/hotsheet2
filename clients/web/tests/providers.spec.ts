@@ -5283,7 +5283,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect(drawer.getByRole('toolbar', { name: 'Workspace tile zoom' })).toHaveCount(0);
   const viewport = dedicated.locator('[data-component="terminal-viewport"]');
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
-  await expect(viewport).toHaveAttribute('data-renderer', 'webgl');
+  await expect(viewport).toHaveAttribute('data-renderer', 'dom');
   const dedicatedSurface = await dedicated.evaluate((element) => {
     const viewportElement = element.querySelector<HTMLElement>('[data-component="terminal-viewport"]')!,
       terminalElement = viewportElement.querySelector<HTMLElement>('.terminal')!;
@@ -5305,7 +5305,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   expect(dedicatedSurface.viewport).toBe(dedicatedSurface.session);
   expect(dedicatedSurface.terminal).toBe(dedicatedSurface.session);
   expect(dedicatedSurface.padding).toBe(dedicatedSurface.expectedPadding);
-  await expect(viewport.locator('.xterm-screen canvas').first()).toBeVisible();
+  await expect(viewport.locator('.xterm-screen .xterm-rows')).toBeVisible();
   await viewport.click();
   await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();
   await page.keyboard.type('drawer input');
@@ -5354,7 +5354,7 @@ test('opens, navigates, resizes, zooms, creates, hides, and restores the project
   await expect.poll(latestRows).toBeGreaterThan(pointerRows);
   await expect.poll(socketCount).toBe(initialSocketCount);
   await expect(viewport).toHaveAttribute('data-connection', 'connected');
-  await expect(viewport).toHaveAttribute('data-renderer', 'webgl');
+  await expect(viewport).toHaveAttribute('data-renderer', 'dom');
   const lastTab = drawer.getByRole('tab', { name: /Terminal New/ }),
     create = drawer.getByRole('button', { name: 'New drawer item' }),
     tabBox = (await lastTab.boundingBox())!,

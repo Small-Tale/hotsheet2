@@ -104,7 +104,7 @@ and 390 × 844. The command writes
 local binaries and a real PTY. The baseline metrics and compressed traces
 are attached to `HS2-E035F5`.
 
-| Single Chromium run                               |                           Desktop |                            Narrow |
+| Baseline Chromium run, before HS2-36P1NP          |                           Desktop |                            Narrow |
 | ------------------------------------------------- | --------------------------------: | --------------------------------: |
 | Browser WebSocket data                            | 1,087,804 bytes in 1,201 messages | 1,087,804 bytes in 1,201 messages |
 | Browser receive rate                              |                          354 KB/s |                          368 KB/s |
@@ -126,8 +126,18 @@ listeners, not later rendering. Paint bounds include Playwright screenshot
 polling, so they are deliberately conservative. The synthetic profile
 uses a different output shape (1,161,600 bytes) and concurrent workspace
 activity; its paint and frame-gap numbers above are context, not a direct
-regression comparison. `HS2-36P1NP` tracks repeated measurement and
-attribution of the desktop arrival backlog.
+regression comparison.
+
+`HS2-36P1NP` repeated the desktop Chromium WebGL profile: process-to-browser
+arrival p95 was 227 ms, close to the 243 ms baseline. A bare WebSocket on the
+same server and PTY had p95 1 ms at both widths. Switching only the desktop
+viewport to xterm's DOM renderer reduced p95 to 5 ms with no frame gaps over
+50 ms. Chromium dedicated terminals now use DOM; Firefox retains WebGL.
+After that change, the full real PTY profile measured p95 5 ms desktop and
+3 ms narrow, with zero frame gaps over 50 ms at both widths. These results
+are local development-build samples, not a universal latency guarantee.
+The bare-socket metrics, DOM comparison trace, post-change metrics, and
+wide/narrow rendered terminal screenshots are attached to `HS2-36P1NP`.
 
 ## Baseline observations
 

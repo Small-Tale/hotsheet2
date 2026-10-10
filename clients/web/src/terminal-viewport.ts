@@ -63,13 +63,13 @@ export const TERMINAL_PREVIEW_SCROLLBACK = 0;
 export const TERMINAL_MAGNIFIED_SCROLLBACK = 1_000;
 export const TERMINAL_DEDICATED_SCROLLBACK = 5_000;
 
-/** Keep the conservative DOM renderer policy on Apple WebKit; desktop
- * Chromium/Firefox can still use WebGL. Renderer selection alone does not prove
- * that initialization succeeded or that any terminal glyphs painted. */
+/** Chromium's WebGL renderer delayed real PTY delivery in the sustained-output profile;
+ * Apple WebKit also needs DOM for glyph compatibility. Firefox keeps WebGL.
+ * Renderer selection alone does not prove that glyphs painted. */
 export function terminalShouldUseWebgl(userAgent: string): boolean {
   const appleWebKit = /AppleWebKit/i.test(userAgent),
-    nonAppleWebKitDesktop = /(?:Chrome|Chromium|Edg|OPR)\//i.test(userAgent);
-  return !appleWebKit || nonAppleWebKitDesktop;
+    chromium = /(?:Chrome|Chromium|Edg|OPR)\//i.test(userAgent);
+  return !appleWebKit && !chromium;
 }
 
 export function terminalUsesMobile80xM(

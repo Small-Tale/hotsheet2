@@ -127,7 +127,7 @@ describe('terminal viewport protocol', () => {
     expect(terminalScrollbackLimit('interactive', true)).toBe(1_000);
     expect(terminalScrollbackLimit('interactive', false)).toBe(5_000);
   });
-  it('uses the DOM renderer on Apple WebKit where WebGL can paint a blank glyph layer', () => {
+  it('uses DOM on Apple WebKit and Chromium, retaining WebGL on Firefox', () => {
     expect(
       terminalShouldUseWebgl(
         'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
@@ -141,7 +141,9 @@ describe('terminal viewport protocol', () => {
     expect(terminalShouldUseWebgl('Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/27.0 Safari/605.1.15')).toBe(
       false,
     );
-    expect(terminalShouldUseWebgl('Mozilla/5.0 AppleWebKit/537.36 Chrome/150.0.0.0 Safari/537.36')).toBe(true);
+    expect(terminalShouldUseWebgl('Mozilla/5.0 AppleWebKit/537.36 Chrome/150.0.0.0 Safari/537.36')).toBe(false);
+    expect(terminalShouldUseWebgl('Mozilla/5.0 Edg/150.0.0.0')).toBe(false);
+    expect(terminalShouldUseWebgl('Mozilla/5.0 OPR/120.0.0.0')).toBe(false);
     expect(terminalShouldUseWebgl('Mozilla/5.0 Gecko/20100101 Firefox/150.0')).toBe(true);
   });
   it('uses 80xM for mobile interactive surfaces but keeps preview tiles at 80x24', () => {

@@ -229,7 +229,7 @@ for (const [width, height] of [
     expect(await attachSockets(page, 'b')).toEqual([expect.objectContaining({ readyState: 1, closed: false })]);
     await expect(dedicated(page, 'a')).toHaveAttribute('data-connection', 'connected');
     await expect(dedicated(page, 'a')).not.toHaveAttribute('data-parked', 'true');
-    if (width > 1024) await expect(dedicated(page, 'a')).toHaveAttribute('data-renderer', 'webgl');
+    if (width > 1024) await expect(dedicated(page, 'a')).toHaveAttribute('data-renderer', 'dom');
 
     // Typing still reaches the kept-alive terminal after the round trip.
     await dedicated(page, 'a').click();

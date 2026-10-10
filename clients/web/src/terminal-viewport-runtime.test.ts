@@ -520,7 +520,7 @@ describe('parked terminal viewports (HS2-WGTQ6X)', () => {
   it('releases WebGL while parked, restores it after the first resumed frame, and stops at a closed socket', () => {
     webglAddons.length = 0;
     windowMock.innerWidth = 1440;
-    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Chrome/140.0' });
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Gecko/20100101 Firefox/150.0' });
     const frames: Array<() => void> = [];
     windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
       frames.push(callback);

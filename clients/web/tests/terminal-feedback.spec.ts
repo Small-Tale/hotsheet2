@@ -376,9 +376,8 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   await expect(drawer.getByRole('button', { name: 'Manage workspace visibility' })).toHaveCount(0);
   const dedicatedViewport = drawer.locator('[data-display-mode="interactive"]'),
     initialGrid = await dedicatedViewport.getAttribute('data-grid-size');
-  await expect(dedicatedViewport).toHaveAttribute('data-renderer', 'webgl');
-  const webglCanvas = dedicatedViewport.locator('.xterm-screen canvas').first();
-  await expect(webglCanvas).toBeVisible();
+  await expect(dedicatedViewport).toHaveAttribute('data-renderer', 'dom');
+  await expect(dedicatedViewport.locator('.xterm-screen .xterm-rows')).toBeVisible();
   await doubleClickDrawerRail(page, drawer);
   await expect(drawer).toHaveAttribute('data-maximized', 'true');
   await page.evaluate(
@@ -405,19 +404,20 @@ test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicat
   const dedicatedEdges = await dedicatedViewport.evaluate((element) => {
     const box = element.getBoundingClientRect(),
       screen = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
-      canvas = element.querySelector<HTMLCanvasElement>('.xterm-screen canvas')!,
-      canvasBox = canvas.getBoundingClientRect();
+      rows = element.querySelector<HTMLElement>('.xterm-screen .xterm-rows')!.getBoundingClientRect();
     return {
       top: screen.top - box.top,
       bottom: box.bottom - screen.bottom,
-      canvasWidthError: Math.abs(canvas.width - canvasBox.width * devicePixelRatio),
-      canvasHeightError: Math.abs(canvas.height - canvasBox.height * devicePixelRatio),
+      rowsContained:
+        rows.left >= screen.left - 1 &&
+        rows.top >= screen.top - 1 &&
+        rows.right <= screen.right + 1 &&
+        rows.bottom <= screen.bottom + 1,
     };
   });
   expect(dedicatedEdges.top).toBeGreaterThanOrEqual(0);
   expect(dedicatedEdges.bottom).toBeGreaterThanOrEqual(0);
-  expect(dedicatedEdges.canvasWidthError).toBeLessThanOrEqual(2);
-  expect(dedicatedEdges.canvasHeightError).toBeLessThanOrEqual(2);
+  expect(dedicatedEdges.rowsContained).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-hpjb1k-maximize-immediate-after.png', fullPage: true });
   await drawer.getByRole('tab', { name: 'Project grid' }).click();
   await expect(drawer).toHaveAttribute('data-mode', 'grid');
@@ -666,14 +666,13 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
     await expect(viewport).toHaveAttribute('data-driving', 'true');
     await expect(viewport).toHaveAttribute('data-sizing-focus', 'true');
     await expect(viewport).toHaveAttribute('data-viewport-visible', 'true');
-    await expect(viewport).toHaveAttribute('data-renderer', mobile ? 'dom' : 'webgl');
+    await expect(viewport).toHaveAttribute('data-renderer', 'dom');
     await expect(viewport).toHaveAttribute('data-grid-size', mobile ? /^80x\d+$/ : /^\d+x\d+$/);
     await expect(viewport).toHaveAttribute('data-pty-size', /^\d+x\d+$/);
     const geometry = await viewport.evaluate((element) => {
       const box = element.getBoundingClientRect(),
         screen = element.querySelector<HTMLElement>('.xterm-screen')!.getBoundingClientRect(),
-        canvas = element.querySelector<HTMLCanvasElement>('.xterm-screen canvas'),
-        canvasBox = canvas?.getBoundingClientRect();
+        rows = element.querySelector<HTMLElement>('.xterm-screen .xterm-rows')!.getBoundingClientRect();
       return {
         contained:
           screen.left >= box.left - 1 &&
@@ -683,20 +682,16 @@ test('keeps current terminal geometry through the complete drawer dashboard roun
         grid: element.dataset.gridSize,
         pty: element.dataset.ptySize,
         bottom: box.bottom - screen.bottom,
-        canvasWidthError: canvas && canvasBox ? Math.abs(canvas.width - canvasBox.width * devicePixelRatio) : undefined,
-        canvasHeightError:
-          canvas && canvasBox ? Math.abs(canvas.height - canvasBox.height * devicePixelRatio) : undefined,
+        rowsContained:
+          rows.left >= screen.left - 1 &&
+          rows.top >= screen.top - 1 &&
+          rows.right <= screen.right + 1 &&
+          rows.bottom <= screen.bottom + 1,
       };
     });
     expect(geometry.contained).toBe(true);
     expect(geometry.bottom).toBeGreaterThanOrEqual(-1);
-    if (mobile) {
-      expect(geometry.canvasWidthError).toBeUndefined();
-      expect(geometry.canvasHeightError).toBeUndefined();
-    } else {
-      expect(geometry.canvasWidthError).toBeLessThanOrEqual(2);
-      expect(geometry.canvasHeightError).toBeLessThanOrEqual(2);
-    }
+    expect(geometry.rowsContained).toBe(true);
     await expect
       .poll(async () => {
         const claim = await latestClaim(),

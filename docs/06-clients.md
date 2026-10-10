@@ -2710,9 +2710,11 @@ positioned against the center main column rather than the whole viewport, so an 
 not displace the action into inspector content (HS2-3ZGWMN). The same Kerf floating-toolbar
 composition owns the bottom-end zoom pair in both the global workspace grid and the drawer's Project
 grid, while the application continues to own visibility, actions, and safe-area-adjusted positioning
-(HS2-W3GPHW). Dedicated sessions use xterm's WebGL renderer by default on
-non-Apple engines, fall back when WebGL is unavailable, and deliberately use xterm's DOM
-renderer on Apple WebKit as a conservative compatibility policy. They refit only after a drawer resize gesture settles. While
+(HS2-W3GPHW). Dedicated Chromium sessions use xterm's DOM renderer because
+real PTY profiling found WebGL could delay incoming output under sustained load
+(HS2-36P1NP). Apple WebKit also uses DOM for glyph compatibility. Firefox
+retains WebGL and falls back to DOM if it is unavailable. Sessions refit only
+after a drawer resize gesture settles. While
 the splitter is held, neither dedicated xterms nor grid-tile geometry is recomputed and no
 intermediate PTY size claims are sent; this avoids the old debounce behavior that still fired
 during a slow drag.
@@ -2825,9 +2827,9 @@ replay.
 
 - **Sizing:** a parked viewport keeps its lease with `visible:false` heartbeats, so it never
   drives the PTY size.
-- **Resources:** parking releases the WebGL context, since browsers cap live contexts per
-  page. The first resumed frame paints with the DOM renderer, and WebGL returns on the next
-  frame.
+- **Resources:** parking releases a Firefox WebGL context, since browsers cap live contexts
+  per page. The first resumed frame paints with the DOM renderer, and Firefox restores
+  WebGL on the next frame. Chromium and Apple WebKit already use DOM.
 - **Bounds:** at most `MAX_PARKED_TERMINAL_VIEWPORTS` (12) stay warm, and the oldest is
   evicted first. Closing a project evicts its parked terminals. A parked socket that closes is
   evicted rather than reconnected in the background, and the terminal mounts fresh if shown
@@ -2837,15 +2839,15 @@ replay.
   deferred input-focus frames, so the newly selected tab keeps focus through repeated Delete
   presses (HS2-DAXSH5).
 
-Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
-Full-size dedicated drawer terminals use xterm's WebGL addon on non-Apple engines (with DOM
-fallback after load failure or context loss). Apple WebKit uses the DOM renderer as a
-conservative compatibility policy; renderer selection alone is not proof of painted glyphs. The fixed 80×24 dashboard grid and magnified surfaces use xterm's
-DOM renderer. Read-only previews are uniformly CSS-scaled, while interactive magnified
-surfaces fit their row/column grid to available space; scaling a WebGL raster makes
-the terminal blurry and can produce misleading intermediate canvas geometry. Retina browser
-coverage therefore checks the dedicated WebGL canvas backing-store size separately from the
-scaled DOM surfaces instead of treating `.xterm-screen` bounds as proof of a completed paint.
+Renderer choice follows real PTY measurements and browser compatibility.
+Full-size dedicated drawer terminals use xterm's DOM renderer on Chromium
+and Apple WebKit. Firefox keeps WebGL, with DOM fallback after load failure
+or context loss. Renderer selection alone is not proof of painted glyphs.
+The fixed 80×24 dashboard grid and magnified surfaces also use DOM.
+Read-only previews are uniformly CSS-scaled, while interactive magnified
+surfaces fit their row/column grid to available space. Browser coverage
+checks DOM rows, screen containment, and rendered output; Firefox's WebGL
+parking and restore behavior has separate unit coverage.
 
 Terminal viewers must initialize on ordinary LAN HTTP origins as well as HTTPS/localhost.
 Viewer identities use native `crypto.randomUUID()` when exposed, otherwise a UUID built with
