@@ -48,6 +48,15 @@ const annotationToolIcons = {
   strike: { icon: SquareX, name: 'square-x' },
 } as const;
 
+// Sentence-case action labels matching "Add rectangle" (HS2-3GR1NT).
+const annotationToolLabels = {
+  select: 'Select annotation',
+  freehand: 'Draw freehand',
+  arrow: 'Add arrow',
+  insertion: 'Add insertion mark',
+  strike: 'Add strike-through',
+} as const;
+
 export interface AttachmentGalleryImage {
   id: string;
   name: string;
@@ -894,9 +903,9 @@ export function AttachmentGallery({
                         type="button"
                         {...ATTACHMENTS_AND_GALLERY_ACTIONS.selectGalleryTool.attrs}
                         data-tool={choice}
-                        aria-label={`${choice} tool`}
+                        aria-label={annotationToolLabels[choice]}
                         aria-pressed={String(tool === choice)}
-                        title={`${choice} tool`}
+                        title={annotationToolLabels[choice]}
                         class={tool === choice ? 'attachment-gallery__pressed' : undefined}
                       >
                         <LucideIcon icon={annotationToolIcons[choice].icon} name={annotationToolIcons[choice].name} />

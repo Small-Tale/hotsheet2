@@ -59,17 +59,17 @@ describe('AttachmentGallery', () => {
   });
   it('uses named Lucide tools while preserving each selected markup action', () => {
     const tools = {
-      select: 'mouse-pointer-2',
-      freehand: 'pencil-line',
-      arrow: 'move-up-right',
-      insertion: 'chevron-up',
-      strike: 'square-x',
+      select: ['mouse-pointer-2', 'Select annotation'],
+      freehand: ['pencil-line', 'Draw freehand'],
+      arrow: ['move-up-right', 'Add arrow'],
+      insertion: ['chevron-up', 'Add insertion mark'],
+      strike: ['square-x', 'Add strike-through'],
     } as const;
-    for (const [tool, icon] of Object.entries(tools)) {
+    for (const [tool, [icon, label]] of Object.entries(tools)) {
       const markup = String(
         AttachmentGallery({ images, activeUrl: '/a.png', markup: true, tool: tool as GalleryAnnotationTool }),
       );
-      expect(markup).toMatch(new RegExp(`data-tool="${tool}"[^>]*aria-label="${tool} tool"[^>]*aria-pressed="true"`));
+      expect(markup).toMatch(new RegExp(`data-tool="${tool}"[^>]*aria-label="${label}"[^>]*aria-pressed="true"`));
       expect(markup).toContain(`data-lucide="${icon}"`);
       expect(markup).not.toMatch(new RegExp(`data-tool="${tool}"[^>]*>[VFAIS]<`));
     }

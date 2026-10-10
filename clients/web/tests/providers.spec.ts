@@ -18398,6 +18398,13 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
   expect(attempts).toBe(2);
 });
 
+const markupToolLabels = {
+  select: 'Select annotation',
+  freehand: 'Draw freehand',
+  arrow: 'Add arrow',
+  insertion: 'Add insertion mark',
+  strike: 'Add strike-through',
+} as const;
 test('draws all annotation tools and keeps keyboard edits in one markup batch (HS2-C46J3X) @ci-smoke', async ({
   page,
 }) => {
@@ -18426,7 +18433,9 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
     strike: 'square-x',
   })) {
     await expect(
-      markupToolbar.getByRole('button', { name: `${tool} tool` }).locator(`[data-lucide="${icon}"]`),
+      markupToolbar
+        .getByRole('button', { name: markupToolLabels[tool as keyof typeof markupToolLabels] })
+        .locator(`[data-lucide="${icon}"]`),
     ).toBeVisible();
   }
   await markupToolbar.screenshot({
@@ -18442,14 +18451,16 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
     strike: 'square-x',
   }))
     await expect(
-      markupToolbar.getByRole('button', { name: `${tool} tool` }).locator(`[data-lucide="${icon}"]`),
+      markupToolbar
+        .getByRole('button', { name: markupToolLabels[tool as keyof typeof markupToolLabels] })
+        .locator(`[data-lucide="${icon}"]`),
     ).toBeVisible();
   await markupToolbar.screenshot({
     path: 'target/visual-captures/hs2-f4xjmw-toolbar-phone.png',
     animations: 'disabled',
   });
   await page.setViewportSize({ width: 1280, height: 900 });
-  const arrowTool = gallery.getByRole('button', { name: 'arrow tool' }),
+  const arrowTool = gallery.getByRole('button', { name: 'Add arrow' }),
     tinySurface = (await surface.boundingBox())!;
   await arrowTool.click();
   await page.mouse.click(tinySurface.x + tinySurface.width * 0.5, tinySurface.y + tinySurface.height * 0.5);
@@ -18468,7 +18479,7 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
   await expect(gallery.getByRole('button', { name: 'Add rectangle' })).toHaveClass(/attachment-gallery__pressed/);
   await page.keyboard.press('Escape'); // then return to Select
   const drag = async (tool: 'strike' | 'arrow' | 'freehand', start: [number, number], end: [number, number]) => {
-    await gallery.getByRole('button', { name: `${tool} tool` }).click();
+    await gallery.getByRole('button', { name: markupToolLabels[tool as keyof typeof markupToolLabels] }).click();
     const box = (await surface.boundingBox())!;
     await page.mouse.move(box.x + box.width * start[0], box.y + box.height * start[1]);
     await page.mouse.down();
@@ -18521,7 +18532,7 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
   const imageFreehandPath = await gallery
     .locator('.attachment-gallery__annotation[data-shape="freehand"] .attachment-gallery__annotation-ink')
     .getAttribute('d');
-  await gallery.getByRole('button', { name: 'insertion tool' }).click();
+  await gallery.getByRole('button', { name: 'Add insertion mark' }).click();
   const box = (await surface.boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.8, box.y + box.height * 0.18);
   await expect(gallery.locator('.attachment-gallery__annotation[data-shape="insertion"]')).toBeVisible();
@@ -18881,7 +18892,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   await gallery.screenshot({ path: test.info().outputPath('hs2-ewztq9-ppjape-regression-narrow.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
   const arrowPlayhead = Number(await scrubber.inputValue());
-  await gallery.getByRole('button', { name: 'arrow tool' }).click();
+  await gallery.getByRole('button', { name: 'Add arrow' }).click();
   const videoSurface = (await gallery.locator('[data-gallery-annotation-surface="true"]').boundingBox())!;
   await page.mouse.move(videoSurface.x + videoSurface.width * 0.18, videoSurface.y + videoSurface.height * 0.4);
   await page.mouse.down();
@@ -18894,7 +18905,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
   expect(Number(await videoArrow.getAttribute('data-annotation-start'))).toBeLessThanOrEqual(arrowPlayhead);
   expect(Number(await videoArrow.getAttribute('data-annotation-end'))).toBeGreaterThanOrEqual(arrowPlayhead);
   await gallery.screenshot({ path: test.info().outputPath('hs2-c46j3x-video-arrow.png'), animations: 'disabled' });
-  await gallery.getByRole('button', { name: 'freehand tool' }).click();
+  await gallery.getByRole('button', { name: 'Draw freehand' }).click();
   await page.mouse.move(videoSurface.x + videoSurface.width * 0.55, videoSurface.y + videoSurface.height * 0.72);
   await page.mouse.down();
   await page.mouse.move(videoSurface.x + videoSurface.width * 0.8, videoSurface.y + videoSurface.height * 0.82, {

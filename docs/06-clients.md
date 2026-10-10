@@ -1692,6 +1692,9 @@ and identity-less legacy entries remain conservatively blocking.
   therefore update the playhead and `currentTime` without resetting the media or annotations.
   Full-screen markup mode offers Select, Rectangle, Freehand, Arrow, Insertion, and Strike
   as named Lucide icon buttons in its floating toolbar, with the selected tool visibly pressed.
+  Their accessible names and tooltips are sentence-case actions ("Select annotation",
+  "Add rectangle", "Draw freehand", "Add arrow", "Add insertion mark", "Add strike-through")
+  (HS2-3GR1NT).
   Rectangles and strikes use drag boxes; freehand records
   a path with a closed-outline toggle; arrows run from tail to head; insertion marks a click.
   Freehand samples are merged within three rendered screen points, lightly averaged twice
