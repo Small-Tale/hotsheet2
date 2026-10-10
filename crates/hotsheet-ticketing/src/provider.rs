@@ -94,6 +94,9 @@ pub struct ProviderDescriptor {
     /// Legacy Git link has no recorded identity; review is required before ticket access.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub identity_review_required: bool,
+    /// The linked path holds a valid Git store with a different recorded identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub identity_mismatch: bool,
     pub capabilities: ProviderCapabilities,
 }
 
@@ -1227,6 +1230,7 @@ impl TicketProvider for GitProvider {
             color: None,
             unverified_recovery: false,
             identity_review_required: false,
+            identity_mismatch: false,
             connection_id: self.connection_id.clone(),
             provider: "git".into(),
             display_name: self.display_name.clone(),
@@ -2583,6 +2587,7 @@ mod tests {
                     color: None,
                     unverified_recovery: false,
                     identity_review_required: false,
+                    identity_mismatch: false,
                     connection_id: "down".into(),
                     provider: "fake".into(),
                     display_name: "Down".into(),

@@ -275,10 +275,17 @@ export function TicketSourceSetupDialog({
           <input name="git-store-path" type="text" value={editingGit.locator} required disabled={providerBusy} />
         </label>
         <small>If the ticket repository moved, enter its new folder path.</small>
-        <wa-checkbox name="review-unverified-recovery" value="on">
-          If the old repository identity was never recorded, I reviewed this folder and accept that Hot Sheet cannot
-          verify it is the same repository.
-        </wa-checkbox>
+        {editingGit.identityMismatch ? (
+          <p class="ticket-source-setup__error" role="alert">
+            This path contains a different Git store. Restore the original, or remove this source and add the
+            replacement.
+          </p>
+        ) : (
+          <wa-checkbox name="review-unverified-recovery" value="on">
+            If the old repository identity was never recorded, I reviewed this folder and accept that Hot Sheet cannot
+            verify it is the same repository.
+          </wa-checkbox>
+        )}
       </form>
       {providerError && (
         <p class="ticket-source-setup__error" role="alert">
@@ -336,8 +343,40 @@ export function TicketSourceSetupDialog({
           {remoteBusy ? 'Connecting…' : 'Connect & push'}
         </wa-button>
       </>
+    ) : editingGit && removingProviderId === editingGit.connectionId ? (
+      <div class="ticket-source-setup__removal" role="group" aria-label="Confirm removal">
+        <p class="ticket-source-setup__removal-prompt" role="alert">
+          <strong>
+            Remove {editingGit.name} from {target?.name ?? 'this project'}?
+          </strong>{' '}
+          Tickets stay in the Git repository. You can add that repository again later.
+        </p>
+        <wa-button appearance="plain" type="button" {...COMMANDS_AND_AI_ACTIONS.cancelProviderRemoval.attrs}>
+          Keep
+        </wa-button>
+        <wa-button
+          variant="danger"
+          appearance="accent"
+          type="button"
+          {...COMMANDS_AND_AI_ACTIONS.confirmProviderRemoval.attrs}
+          disabled={providerBusy}
+        >
+          {providerBusy ? 'Removing…' : 'Remove'}
+        </wa-button>
+      </div>
     ) : editingGit ? (
       <>
+        <wa-button
+          class="ticket-source-setup__remove"
+          variant="danger"
+          appearance="plain"
+          type="button"
+          {...COMMANDS_AND_AI_ACTIONS.requestProviderRemoval.attrs}
+          disabled={providerBusy}
+        >
+          <LucideIcon slot="start" icon={Trash2} name="trash-2" />
+          Remove from this project…
+        </wa-button>
         <wa-button appearance="plain" type="button" {...PROJECT_LIFECYCLE_ACTIONS.dismissTicketSourceSetup.attrs}>
           Done
         </wa-button>

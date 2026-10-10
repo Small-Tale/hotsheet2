@@ -53,6 +53,15 @@ describe('new ticket source selection (HS2-NZMJBJ)', () => {
     expect(resolveNewTicketSource(sources)?.capabilities.create).toBe(false);
   });
 
+  it('keeps a mismatched Git source visible for repair but blocks creation across its checkout', () => {
+    const sources = projectTicketSources([
+      { ...descriptor('git-a', true, true), identity_mismatch: true },
+      descriptor('github-b', true),
+    ]);
+    expect(sources?.sources[0]).toMatchObject({ identityMismatch: true, capabilities: { create: false } });
+    expect(writableTicketSources(sources)).toEqual([]);
+  });
+
   it('prefers the last-used writable source, then the default, then the first writable one', () => {
     const sources = projectTicketSources([
       descriptor('git-a', true, true),

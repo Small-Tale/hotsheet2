@@ -17606,6 +17606,93 @@ async fn reviewed_legacy_git_recovery_is_explicit_and_visible_after_restart() {
 }
 
 #[tokio::test]
+async fn checkout_sources_remain_editable_after_same_path_store_identity_mismatch() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    let store_path = root.path().join("store");
+    let original_path = root.path().join("original");
+    std::fs::create_dir(&project).unwrap();
+    FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    let (_primary, state) = state();
+    let app = app(state.with_checkout_registry(root.path().join("checkouts.json")));
+    let registered = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts",
+            Some(&serde_json::json!({"root":project,"stores":[store_path]}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+    let checkout = body_json(registered).await;
+    let id = checkout["id"].as_str().unwrap();
+    let source_id = checkout["sources"][0]["connection_id"].as_str().unwrap();
+
+    std::fs::rename(&store_path, &original_path).unwrap();
+    let replacement = FsStore::init(&store_path, &StoreMetadata::new("HS")).unwrap();
+    let ticket = ops::create(
+        &replacement,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-10-09T00:00:00Z"),
+        NewTicket {
+            title: "Replacement ticket".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let ticket_path = format!("/checkouts/{id}/tickets/{source_id}:{}", ticket.id);
+    let unreadable = app
+        .clone()
+        .oneshot(authed("GET", &ticket_path, None))
+        .await
+        .unwrap();
+    assert_ne!(unreadable.status(), StatusCode::OK);
+    assert!(
+        body_json(unreadable)
+            .await
+            .to_string()
+            .contains("different identity")
+    );
+
+    let providers = app
+        .clone()
+        .oneshot(authed("GET", &format!("/checkouts/{id}/providers"), None))
+        .await
+        .unwrap();
+    assert_eq!(providers.status(), StatusCode::OK);
+    let descriptors = body_json(providers).await;
+    assert_eq!(descriptors[0]["connection_id"], source_id);
+    assert_eq!(descriptors[0]["identity_mismatch"], true);
+    assert_eq!(
+        descriptors[0]["identity_review_required"],
+        serde_json::Value::Null
+    );
+
+    let removed = app
+        .clone()
+        .oneshot(authed(
+            "DELETE",
+            &format!("/checkouts/{id}/sources/{source_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(removed.status(), StatusCode::OK);
+    let providers = app
+        .oneshot(authed("GET", &format!("/checkouts/{id}/providers"), None))
+        .await
+        .unwrap();
+    assert_eq!(providers.status(), StatusCode::OK);
+    assert_eq!(body_json(providers).await, serde_json::json!([]));
+}
+
+#[tokio::test]
 async fn same_path_legacy_replacement_needs_review_before_checkout_reads() {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};

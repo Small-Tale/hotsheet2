@@ -665,8 +665,9 @@ and identity-less legacy entries remain conservatively blocking.
   own default (HS2-3SCH1K). Every source row, including a default Git source, opens an
   edit/view dialog. External source dialogs provide details, this project's default,
   **Disable / Enable**, and a visual icon color grid that previews the mark on subtly
-  tinted tiles. The Git dialog shows its name and location for reference and offers the
-  same color grid. The Git dialog lets users replace a moved or renamed ticket repository
+  tinted tiles. The Git dialog shows its name and location for reference, offers the
+  same color grid, and can remove the source from this project after confirmation.
+  The Git dialog lets users replace a moved or renamed ticket repository
   path; Save location validates the destination, updates every linked project, and shows
   an actionable error when the selected folder is not a Hot Sheet store (HS2-8BG4W9).
   A legacy link whose old identity was never recorded requires an unchecked-by-default
@@ -675,8 +676,11 @@ and identity-less legacy entries remain conservatively blocking.
   (HS2-RAQSX7, HS2-RQXJQV). This also applies when the location is unchanged,
   because another repository could have replaced the original at that path. A known
   identity mismatch cannot use this override. Project metadata and Ticket sources remain
-  available before review; the affected source displays **Review required**, while its
-  checkout tickets and new-ticket actions are unavailable until review succeeds.
+  available in both cases. An unrecorded legacy identity displays **Review required**;
+  a known mismatch displays **Identity mismatch** with instructions to restore the original
+  store or remove and add the replacement. Settings inspect identity metadata without
+  hosting or reading replacement tickets. Checkout ticket reads and new-ticket actions
+  remain unavailable until the link is repaired (HS2-AGC4ZT).
   Icon color belongs to the project and defaults to Gray (`#6b7280`); there is no
   Transparent source-color option (HS2-XKEHAK, HS2-H1FZNV).
   The trailing **Remove from this project** action opens the connection editor at an

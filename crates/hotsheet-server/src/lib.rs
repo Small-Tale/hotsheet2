@@ -3170,7 +3170,24 @@ async fn list_checkout_providers(
                 .store_instance_ids
                 .contains_key(&source.connection_id)
     });
-    let hosted = if has_unreviewed {
+    // Settings must remain reachable when the link points at a different store. Inspect only
+    // identity metadata here; checkout_entries would reject the whole checkout (and may host a
+    // store), leaving no way to remove the stale link through the UI.
+    let identity_mismatches = checkout
+        .sources
+        .iter()
+        .filter(|source| source.provider == "git")
+        .filter_map(|source| {
+            let expected = checkout.store_instance_ids.get(&source.connection_id)?;
+            let actual = FsStore::open_without_maintenance(&source.locator)
+                .and_then(|store| store.metadata())
+                .ok()?
+                .instance_id;
+            (actual.as_deref() != Some(expected)).then(|| source.connection_id.clone())
+        })
+        .collect::<std::collections::HashSet<_>>();
+    let metadata_only = has_unreviewed || !identity_mismatches.is_empty();
+    let hosted = if metadata_only {
         std::collections::HashSet::new()
     } else {
         checkout_entries(&state, &reference)?
@@ -3192,7 +3209,7 @@ async fn list_checkout_providers(
                 .find(|info| info.id == source.connection_id && hosted.contains(&info.id))
                 .map(|info| info.provider_descriptor(is_default))
                 .or_else(|| {
-                    has_unreviewed.then(|| hotsheet_ticketing::ProviderDescriptor {
+                    metadata_only.then(|| hotsheet_ticketing::ProviderDescriptor {
                         connection_id: source.connection_id.clone(),
                         provider: "git".into(),
                         display_name: "Git tickets".into(),
@@ -3201,6 +3218,7 @@ async fn list_checkout_providers(
                         color: None,
                         unverified_recovery: false,
                         identity_review_required: false,
+                        identity_mismatch: false,
                         capabilities: hotsheet_ticketing::ProviderCapabilities::git(),
                     })
                 })
@@ -3224,6 +3242,7 @@ async fn list_checkout_providers(
                 && !checkout
                     .store_instance_ids
                     .contains_key(&source.connection_id);
+            descriptor.identity_mismatch = identity_mismatches.contains(&source.connection_id);
             descriptor.color = Some(
                 hotsheet_ticketing::checkouts::effective_source_color(
                     checkout

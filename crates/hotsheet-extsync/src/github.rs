@@ -735,6 +735,7 @@ impl TicketProvider for GitHubProvider {
             color: None,
             unverified_recovery: false,
             identity_review_required: false,
+            identity_mismatch: false,
             connection_id: self.config.connection_id.clone(),
             provider: "github".into(),
             display_name: format!("GitHub {}", self.config.repository),

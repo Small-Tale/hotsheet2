@@ -173,6 +173,10 @@ currently at the linked path. If another valid store replaces it in place, the
 server refuses that checkout's route until the original is restored or the source
 is removed and the replacement added explicitly; unrelated checkouts remain
 usable. These reads do not assign an identity to a legacy store.
+Checkout metadata and Ticket sources settings remain accessible for a mismatched
+link. The provider list reads only identity metadata, labels the mismatch, and
+keeps remove/add controls available without hosting or reading replacement tickets
+(HS2-AGC4ZT).
 The server checks its pinned primary identity before unscoped primary-store
 reads and writes. Replacing that path yields a conflict until the original
 store is restored or the server restarts to select the replacement; other

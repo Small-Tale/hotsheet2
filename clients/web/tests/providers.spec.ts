@@ -50,6 +50,102 @@ test('opens a ticket from the project= deep-link key and a project path (HS2-BQ0
   await expect(page.getByRole('tab', { name: /^demo/ })).toHaveAttribute('aria-selected', 'true');
 });
 
+test('keeps Git source repair controls visible after an identity mismatch (HS2-AGC4ZT)', async ({ page, browser }) => {
+  await mockProject(page);
+  let removed = false;
+  const descriptors = () =>
+    removed
+      ? []
+      : [
+          {
+            connection_id: 'git-local',
+            provider: 'git',
+            display_name: 'HS git tickets',
+            locator: '/work/demo.hs2',
+            default: true,
+            identity_mismatch: true,
+            capabilities: {
+              create: true,
+              update: true,
+              close: true,
+              notes: true,
+              ai_feedback: true,
+              note_edit: true,
+              note_delete: true,
+              attachments: true,
+              attachment_crop: false,
+              assignment: true,
+              review_requests: true,
+              dependencies: true,
+              up_next: true,
+              close_reasons: true,
+              claims: true,
+              atomic_batch: true,
+              not_working_report: true,
+              offline_mutation: true,
+              history: true,
+              watch: true,
+              provider_idempotency: true,
+              query_fields: [],
+            },
+          },
+        ];
+  await page.route('**/__hotsheet/project-api/*/providers', (route) => route.fulfill({ json: descriptors() }));
+  await page.route('**/__hotsheet/project-api/*/checkouts/*/sources/git-local', (route) => {
+    if (route.request().method() !== 'DELETE') return route.fallback();
+    removed = true;
+    return route.fulfill({
+      json: {
+        checkout_id: 'demo-checkout',
+        connection_id: 'git-local',
+        unlinked: true,
+        removed_connection: false,
+        still_used_by: [],
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByLabel('Settings view').click();
+  const sources = page.locator('[data-component="ticket-sources-settings"]');
+  await expect(sources.getByText('Identity mismatch')).toBeVisible();
+  await expect(sources).toContainText('Restore the original, or remove and add this source again.');
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: 'target/visual-captures/hs2-agc4zt-list-wide.png', fullPage: true });
+  const narrowContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const narrow = await narrowContext.newPage();
+  await mockProject(narrow);
+  await narrow.route('**/__hotsheet/project-api/*/providers', (route) => route.fulfill({ json: descriptors() }));
+  await narrow.goto(new URL('/?dev-review=false', page.url()).toString());
+  await narrow.getByRole('button', { name: 'Open project' }).click();
+  await narrow.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await narrow.getByLabel('Settings view').click();
+  const narrowSources = narrow.locator('[data-component="ticket-sources-settings"]');
+  await expect(narrowSources.getByText('Identity mismatch')).toBeVisible();
+  await narrow.waitForTimeout(600);
+  await narrow.screenshot({ path: 'target/visual-captures/hs2-agc4zt-list-narrow.png', fullPage: true });
+  await sources.getByRole('button', { name: 'Edit HS git tickets' }).click();
+  await expect(page.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
+  const editor = page.locator('[data-component="git-source-editor"]');
+  await expect(editor.getByRole('alert')).toContainText('This path contains a different Git store.');
+  await expect(editor.locator('wa-checkbox[name="review-unverified-recovery"]')).toHaveCount(0);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: 'target/visual-captures/hs2-agc4zt-mismatch-wide.png', fullPage: true });
+  await narrowSources.getByRole('button', { name: 'Edit HS git tickets' }).click();
+  await expect(narrow.getByRole('button', { name: 'Remove from this project…' })).toBeVisible();
+  await narrow.waitForTimeout(500);
+  await narrow.screenshot({ path: 'target/visual-captures/hs2-agc4zt-mismatch-narrow.png', fullPage: true });
+  await narrowContext.close();
+  await page.getByRole('button', { name: 'Remove from this project…' }).click();
+  await expect(page.getByRole('group', { name: 'Confirm removal' })).toContainText(
+    'Tickets stay in the Git repository.',
+  );
+  await page.getByRole('group', { name: 'Confirm removal' }).getByRole('button', { name: 'Remove' }).click();
+  await expect(sources).toContainText('This project uses 0 ticket sources.');
+});
+
 const emptyCheckoutTicketPage = (url: URL) => ({
   items: [],
   counts:

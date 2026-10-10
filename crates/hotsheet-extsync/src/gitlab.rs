@@ -393,6 +393,7 @@ impl TicketProvider for GitLabProvider {
             color: None,
             unverified_recovery: false,
             identity_review_required: false,
+            identity_mismatch: false,
             connection_id: self.config.connection_id.clone(),
             provider: "gitlab".into(),
             display_name: format!("GitLab {}", self.config.project),

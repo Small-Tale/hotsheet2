@@ -421,7 +421,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   for moved-path verification (HS2-EFBAPC). Schema 4 records reviewed but unproved
   legacy recoveries in `unverified_store_sources` and projects that marker through the
   checkout provider descriptor; unrecorded legacy links require review before
-  same-path adoption (HS2-RAQSX7, HS2-RQXJQV). It never contains authentication
+  same-path adoption (HS2-RAQSX7, HS2-RQXJQV). A recorded link whose path holds a
+  different store projects `identity_mismatch` without hosting it (HS2-AGC4ZT).
+  It never contains authentication
   material; use `checkout register|list|resolve`.
 - **People roster:** `people.json` (shared, committed) — `{people:[{email,name?,github?}]}`
   mapping git identity → display name for assignment. See `roster.rs::Roster` (HS2-20).

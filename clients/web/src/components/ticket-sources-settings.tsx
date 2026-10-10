@@ -28,6 +28,7 @@ export interface ProjectTicketSource {
   disabled?: boolean;
   unverifiedRecovery?: boolean;
   identityReviewRequired?: boolean;
+  identityMismatch?: boolean;
   /** Other projects that share this source (attached headlessly with `checkout add-source`). */
   sharedWith?: readonly string[];
 }
@@ -50,6 +51,7 @@ function ConnectionCopy({
   disabled = false,
   unverifiedRecovery = false,
   identityReviewRequired = false,
+  identityMismatch = false,
   sharedWith = [],
 }: {
   name: string;
@@ -59,6 +61,7 @@ function ConnectionCopy({
   disabled?: boolean;
   unverifiedRecovery?: boolean;
   identityReviewRequired?: boolean;
+  identityMismatch?: boolean;
   sharedWith?: readonly string[];
 }) {
   return (
@@ -78,12 +81,22 @@ function ConnectionCopy({
           Review required
         </small>
       )}
+      {identityMismatch && (
+        <small class="ticket-provider-settings__recovery-badge" data-state="identity-mismatch">
+          Identity mismatch
+        </small>
+      )}
       <small>
         {sourceKind(provider)} · {locator}
       </small>
       {sharedWith.length > 0 && <small>Also used by {sharedWith.join(', ')}</small>}
       {unverifiedRecovery && <small>The former repository identity could not be verified.</small>}
       {identityReviewRequired && <small>Review this source location before opening its tickets.</small>}
+      {identityMismatch && (
+        <small>
+          This path contains a different Git store. Restore the original, or remove and add this source again.
+        </small>
+      )}
     </span>
   );
 }
@@ -154,6 +167,7 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                     disabled={source.disabled}
                     unverifiedRecovery={source.unverifiedRecovery}
                     identityReviewRequired={source.identityReviewRequired}
+                    identityMismatch={source.identityMismatch}
                     sharedWith={source.sharedWith}
                   />
                 );

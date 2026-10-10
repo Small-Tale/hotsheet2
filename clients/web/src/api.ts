@@ -48,6 +48,8 @@ export interface ProviderDescriptor {
   unverified_recovery?: boolean;
   /** A legacy Git link must be reviewed before its tickets can be used. */
   identity_review_required?: boolean;
+  /** The linked path holds a different Git store than the recorded source. */
+  identity_mismatch?: boolean;
   capabilities: Capabilities;
 }
 export interface ProviderConnection {

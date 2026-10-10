@@ -838,12 +838,13 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
   function cancelProviderRemoval() {
     providerRemovingId.value = undefined;
   }
-  /** Remove the confirmed connection and every local reference to it, then close the dialog. */
+  /** Remove the confirmed Git or external source from this project, then close the dialog. */
   async function removeExternalProvider() {
     const current = ticketSourceSetupProject.value ?? dependencies.project(),
       id = providerRemovingId.value;
     if (!current || !id || id !== providerEditingId.value || providerSettingsBusy.value) return;
     const connection = providerConnections.value.find((item) => item.id === id);
+    const sourceName = defaultProviders.value[current.id]?.sources.find((source) => source.connectionId === id)?.name;
     providerSettingsBusy.value = true;
     providerSettingsError.value = '';
     try {
@@ -859,8 +860,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       await dependencies.refreshProject();
       dependencies.showToast(
         result.removed_connection || !others.length
-          ? `${connection?.name ?? id} removed from this project.`
-          : `${connection?.name ?? id} removed from this project; ${others.map((item) => item.alias).join(', ')} still use it.`,
+          ? `${connection?.name ?? sourceName ?? id} removed from this project.`
+          : `${connection?.name ?? sourceName ?? id} removed from this project; ${others.map((item) => item.alias).join(', ')} still use it.`,
       );
     } catch (reason) {
       providerSettingsError.value = reason instanceof Error ? reason.message : String(reason);

@@ -399,6 +399,27 @@ describe('ticket source surfaces', () => {
     expect(single.match(/<small>Default<\/small>/g)).toHaveLength(1);
   });
 
+  it('shows a Git identity mismatch while keeping source editing available (HS2-AGC4ZT)', () => {
+    const markup = String(
+      TicketSourcesSettings({
+        sources: [
+          {
+            connectionId: 'git-old',
+            name: 'HS git tickets',
+            provider: 'git',
+            locator: '/work/demo.hs2',
+            default: true,
+            identityMismatch: true,
+          },
+        ],
+      }),
+    );
+    expect(markup).toContain('data-state="identity-mismatch"');
+    expect(markup).toContain('This path contains a different Git store.');
+    expect(markup).toContain('data-action="edit-provider-connection"');
+    expect(markup).toContain('data-source-id="git-old"');
+  });
+
   it('offers project-local source colors and warns when provider and color repeat', () => {
     const sources = [
       { connectionId: 'gh-a', name: 'Alpha', provider: 'github', locator: 'a', default: true, color: '#3b82f6' },
@@ -463,7 +484,31 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('>Save location</wa-button>');
     expect(markup).toContain('name="project-source-color" value="#3b82f6" data-source-id="git-local" checked');
     expect(markup).toContain('>Done</wa-button>');
-    expect(markup).not.toContain('Remove from this project…');
+    expect(markup).toContain('Remove from this project…');
+    const removing = String(
+      TicketSourceSetupDialog({
+        project: { root: '/work/demo', name: 'Demo', stores: ['/work/demo.hs2'] },
+        providerConnections: [],
+        editingProviderId: source.connectionId,
+        editingGitSource: source,
+        removingProviderId: source.connectionId,
+        navigation: 'none',
+      }),
+    );
+    expect(removing).toContain('Remove HS2 git tickets from Demo?');
+    expect(removing).toContain('Tickets stay in the Git repository.');
+    expect(removing).toContain('data-action="confirm-provider-removal"');
+    const mismatched = String(
+      TicketSourceSetupDialog({
+        project: { root: '/work/demo', name: 'Demo', stores: ['/work/demo.hs2'] },
+        providerConnections: [],
+        editingProviderId: source.connectionId,
+        editingGitSource: { ...source, identityMismatch: true },
+        navigation: 'none',
+      }),
+    );
+    expect(mismatched).toContain('This path contains a different Git store.');
+    expect(mismatched).not.toContain('name="review-unverified-recovery"');
     const recovered = String(TicketSourcesSettings({ sources: [{ ...source, unverifiedRecovery: true }] }));
     expect(recovered).toContain('data-state="unverified-recovery"');
     expect(recovered).toContain('The former repository identity could not be verified.');
