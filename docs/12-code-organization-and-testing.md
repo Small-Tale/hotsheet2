@@ -252,7 +252,7 @@ pages and cursors never call an external provider.
 
 ### 12.6.4 Web feature state and presentation owners
 
-Eleven factories under `clients/web/src/features/` own cohesive state/controllers and
+Fifteen factories under `clients/web/src/features/` own cohesive state/controllers and
 render projections extracted from the root (HS2-DHYGXJ):
 
 - `commands.tsx`: project command drafts, selection anchors, autosave, icon search,
@@ -274,6 +274,19 @@ render projections extracted from the root (HS2-DHYGXJ):
 - `terminal-viewports.ts`: DOM mount identity, intersection observation, progressive
   setup/teardown, and focus-request consumption.
 - `terminal-presentation.tsx`: live workspace, drawer, and conversation surface props.
+
+HS2-K7SYHQ continued the split with four more owners lifted verbatim out of
+`app/runtime.tsx`:
+
+- `drive-conversations.ts`: per-project tool connections, persisted transcripts, drafts,
+  the start generation guard, and drive / sidebar-chat start, send, stop, and refresh.
+- `claim-clock.ts`: the local ETA countdown tick and lease-expiry wake-up timers.
+- `corrupt-ticket-recovery.ts`: per-file recovery state and reveal / queue-repair actions.
+- `terminal-names.ts`: browser-local in-flight names, serialized server writes, resets,
+  reconciliation, and live `terminal_renamed` events.
+
+Owners created before the AI configuration owner read it through a lazy accessor so no
+binding is touched before its declaration.
 
 Factories have explicit typed ports and no import-time listeners, observers, polling,
 or imports of `main.tsx`. The runtime creates each owner before mount or startup can use it,

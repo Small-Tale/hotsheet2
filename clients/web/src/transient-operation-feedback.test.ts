@@ -9,6 +9,7 @@ describe('transient operation feedback', () => {
       './interactions/repository.ts',
       './interactions/attachments-and-gallery.ts',
       './interactions/inspector-and-editor.ts',
+      './features/corrupt-ticket-recovery.ts',
     ]
       .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
       .join('\n');

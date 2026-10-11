@@ -9,15 +9,7 @@ import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
 
-import {
-  applyKnownActiveTicketExpiries,
-  claimEtaPresentation,
-  claimExpiryWakeDelay,
-  isTicketActivelyWorkedOn,
-  nextActiveTicketExpiry,
-  nextClaimEtaTick,
-  projectTabTicketState,
-} from '../active-ticket-work';
+import { claimEtaPresentation, isTicketActivelyWorkedOn, projectTabTicketState } from '../active-ticket-work';
 import {
   collectMatchingSearchPages,
   filterAdvancedSearchResults,
@@ -27,12 +19,9 @@ import {
 import {
   applyConversationActivity,
   applyConversationEvent,
-  beginConversationTurn,
   conversationError,
-  type ConversationState,
   conversationUsage,
   EMPTY_CONVERSATION,
-  reconcileConversationConnection,
 } from '../ai-conversation';
 import {
   type AiToolDefaults,
@@ -49,10 +38,7 @@ import {
   type PollResponse,
   type ProviderOutboxOperation,
   type RepositoryStatus,
-  revealCorruptTicketFile,
-  type TerminalInfo,
   type TicketRow as WireTicketRow,
-  type ToolConnection,
   TurnStreamReplayGuard,
 } from '../api';
 import {
@@ -81,7 +67,6 @@ import {
 } from '../board-pagination';
 import { browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
-import type { LiveClaimNoticeProps } from '../components/active-claim';
 import { AiFeedbackDialog, type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
 import { AppError } from '../components/app-error';
@@ -91,7 +76,7 @@ import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
 import { ConversationExportDialog } from '../components/conversation-export-dialog';
-import { corruptTicketKey, type CorruptTicketRecoveryState } from '../components/corrupt-ticket-row';
+import { corruptTicketKey } from '../components/corrupt-ticket-row';
 import {
   Hs1CleanupBanner,
   Hs1JobBanner,
@@ -195,12 +180,6 @@ import {
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { withControlledOpen } from '../controlled-open';
-import {
-  createConversationPersistence,
-  loadConversationStates,
-  saveConversationStates,
-} from '../conversation-persistence';
-import { createConversationRenderScheduler } from '../conversation-render-scheduler';
 import { syncConversationScroll } from '../conversation-scroll';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import {
@@ -213,14 +192,18 @@ import {
   selectedDrawerInput,
 } from '../drawer-tab-order';
 import { createAiConfigurationController } from '../features/ai-configuration';
+import { createClaimClockController } from '../features/claim-clock';
 import { createCommandsController } from '../features/commands';
 import { createConversationArchiveController } from '../features/conversation-archive';
+import { createCorruptTicketRecoveryController } from '../features/corrupt-ticket-recovery';
+import { createDriveConversationsController } from '../features/drive-conversations';
 import { createGalleryController } from '../features/gallery';
 import { createHaltedSessionsController } from '../features/halted-sessions';
 import { createPermissionsController } from '../features/permissions';
 import { createProjectLifecycleController } from '../features/project-lifecycle';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
+import { createTerminalNamesController } from '../features/terminal-names';
 import { createTerminalPresentation } from '../features/terminal-presentation';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
 import { createTicketWorkflows } from '../features/ticket-workflows';
@@ -269,17 +252,7 @@ import { parsePermissionResolution, PERMISSION_DELAYS } from '../permission-noti
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
 import { containsRepositoryChange, containsTicketChange, startProjectChangeStream } from '../project-change-poll';
-import {
-  type DrawerAIChat,
-  prepareProjectConversation,
-  projectChatConnectionId,
-  projectDriveControlState,
-  recoverProjectConnections,
-  restoreDrawerAIChats,
-  runProjectDrive,
-  SIDEBAR_DRIVE_PROMPT,
-  sidebarDriveConnectionId,
-} from '../project-drive';
+import { type DrawerAIChat, projectChatConnectionId, projectDriveControlState } from '../project-drive';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import {
@@ -298,17 +271,7 @@ import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
 import { deriveAiConnectionStates } from '../terminal-ai-connection';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
-import {
-  createTerminalNameWriteQueue,
-  defaultTerminalNames,
-  parseTerminalNames,
-  reconcileLocalTerminalNames,
-  restoreDefaultTerminalTitle,
-  retitleTerminal,
-  terminalNameKey,
-  terminalTitle,
-  withoutTerminalName,
-} from '../terminal-names';
+import { defaultTerminalNames, parseTerminalNames, terminalNameKey, terminalTitle } from '../terminal-names';
 import { terminalDrawerActivation, terminalProjectOwner } from '../terminal-project-scope';
 import { sameTerminalDashboardSnapshot, TerminalSnapshotRefresh } from '../terminal-snapshot-refresh';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT, type TerminalFocusRequest } from '../terminal-viewport';
@@ -419,6 +382,14 @@ export async function startHotSheetWebClient() {
     providerOutboxOperations = signal<Record<string, ProviderOutboxOperation | undefined>>({}),
     corruptTickets = signal<CorruptTicket[]>([]),
     selectedTicket = signal<FullTicket | null>(null);
+  const { corruptRecovery, revealCorruptTicket, queueCorruptTicketRepair } = createCorruptTicketRecoveryController({
+    project: () => project(),
+    corruptTickets,
+    showToast: (message) => {
+      showToast(message);
+    },
+    refreshProject: () => refreshProject({ showLoading: false }),
+  });
   const aiFeedbackDialog = signal<AiFeedbackDialogState | undefined>(undefined);
   const ticketCountsByProject = signal<Record<string, CheckoutTicketCounts>>({});
   const partialSourcesByProject = signal<Record<string, boolean>>({});
@@ -572,9 +543,17 @@ export async function startHotSheetWebClient() {
     terminalPaste = signal<TerminalPasteState | undefined>(undefined),
     // Long-press terminal edit menu (HS2-KKP8YJ).
     terminalEditMenu = signal<TerminalEditMenuState | undefined>(undefined);
-  /** Project-scoped keys of renames whose server write is still in flight (HS2-89FPV1). */
-  // Serializes each terminal's name writes so the last rename or reset always lands last (HS2-0E7Q6E).
-  const pendingTerminalRenames = createTerminalNameWriteQueue();
+  const { saveTerminalName, resetTerminalName, reconcileTerminalNames, applyTerminalRenamed } =
+    createTerminalNamesController({
+      projects,
+      terminalNames,
+      terminalGroups,
+      showToast: (message) => {
+        showToast(message);
+      },
+      terminalGroupLoaded: (projectId) => terminalGroupLoaded(projectId),
+      refreshTerminalDashboard: () => refreshTerminalDashboard(),
+    });
   let terminalDashboardGeneration = 0,
     terminalCreateChain: Promise<unknown> = Promise.resolve();
   const terminalSnapshotRefresh = new TerminalSnapshotRefresh();
@@ -601,7 +580,6 @@ export async function startHotSheetWebClient() {
       void selectLinkedTicket(slug, projectId, preferredProject);
     },
   });
-  const corruptRecovery = signal<Record<string, CorruptTicketRecoveryState>>({});
   const selectedCorruptKey = signal<string | undefined>(undefined);
   const selectedTicketSlugs = signal<string[]>([]);
   const ticketContextMenu = signal<{ x: number; y: number; ticketSlug: string; hideUpNext?: boolean } | undefined>(
@@ -645,8 +623,6 @@ export async function startHotSheetWebClient() {
   let clipboard: { tickets: ClipboardTicket[]; cut: boolean; source: Project } | undefined;
   const projectChangeStreams = new Map<string, () => void>();
   const repositoryRefreshTimers = new Map<string, number>();
-  let claimLeaseExpiryTimer: number | undefined;
-  let claimEtaTimer: number | undefined;
   const storedWorkspacePreferences = loadWorkspacePreferences(localStorage);
   const loading = signal(false),
     bulkUpdateProgress = signal<BulkUpdateProgress | undefined>(undefined),
@@ -765,6 +741,17 @@ export async function startHotSheetWebClient() {
     projectTabClaimClock = signal(Date.now()),
     // Local render clock for ETA countdowns (HS2-XQMDQB); its timer never makes network requests.
     claimEtaClock = signal(Date.now());
+  const { liveClaimNotice, scheduleClaimLeaseExpiry } = createClaimClockController({
+    projects,
+    selectedProjectId,
+    ticketCountsByProject,
+    activeTicketCount,
+    projectTabClaimClock,
+    claimEtaClock,
+    projectTabTicketRows,
+    projectTicketCounts,
+    refreshProjectTab: (current) => projectTabRefresh.request(current),
+  });
   // The selected settings view is shared across projects: switching project keeps the same
   // settings view rather than resetting per-project (HS2-4J50K3).
   const selectedSettingsCategory = signal<SettingsCategory>('sources');
@@ -929,27 +916,36 @@ export async function startHotSheetWebClient() {
     commandIcon,
     commandDialogSurface,
   } = createCommandsController({ projects, selectedProjectId, storedWorkspacePreferences });
-  const driveConnectionsByProject = signal<Record<string, ToolConnection[]>>({}),
-    drivePendingByProject = signal<Record<string, boolean>>({});
-
-  let conversationStartGeneration = 0;
-  const pendingConversationStarts = new Set<string>();
-  const conversationStates = signal<Record<string, ConversationState>>(loadConversationStates(localStorage)),
-    conversationDrafts = signal<Record<string, string>>({}),
-    conversationSelections = signal<Record<string, { model?: string; effort?: string }>>({}),
-    conversationConnectionId = signal<string | undefined>(undefined),
-    conversationOpen = signal(false);
-  const conversationRenderRevision = signal(0);
-  const conversationRenderScheduler = createConversationRenderScheduler(() => {
-    conversationRenderRevision.value += 1;
+  const driveConversations = createDriveConversationsController({
+    projects,
+    project: () => project(),
+    error,
+    terminalDrawerChatsByProject,
+    createDrawerAIChat,
+    selectDrawerItem,
+    setTerminalDrawerVisible,
+    aiConfiguration: () => aiConfigurationController,
   });
-  const conversationPersistence = createConversationPersistence(() => {
-    try {
-      saveConversationStates(localStorage, conversationStates.peek());
-    } catch {
-      /* storage quota/privacy mode must not interrupt a live turn */
-    }
-  });
+  const {
+    driveConnectionsByProject,
+    drivePendingByProject,
+    conversationStates,
+    conversationDrafts,
+    conversationSelections,
+    conversationConnectionId,
+    conversationOpen,
+    conversationRenderRevision,
+    conversationPersistence,
+    replaceConversationStates,
+    updateConversation,
+    conversationForActivity,
+    beginConversation,
+    refreshDriveConnections,
+    toggleSidebarDrive,
+    openSidebarConversation,
+    sendConversationTurn,
+    stopConversation,
+  } = driveConversations;
 
   const aiConfigurationController = createAiConfigurationController({
     selectedProjectId,
@@ -1716,92 +1712,6 @@ export async function startHotSheetWebClient() {
     setTerminalDrawerVisible(true);
     if (activated) void refreshActivatedProject(activated, false);
     else void Promise.all([refreshProject({ showLoading: false }), refreshCommands()]);
-  }
-  function persistLocalTerminalNames(names: Record<string, string>) {
-    terminalNames.value = names;
-    localStorage.setItem('hotsheet.terminals.names', JSON.stringify(names));
-  }
-  /**
-   * Save a terminal's tab name on the project's server so it survives reloads and restores and
-   * reaches every other client (HS2-89FPV1). The browser-local copy covers the request in flight
-   * (and a reload during it) and is dropped once the server has the name; a failed write stays
-   * local and is retried by the next terminal refresh.
-   */
-  function saveTerminalName(projectId: string, terminalId: string, name: string) {
-    const trimmed = name.trim(),
-      key = terminalNameKey(projectId, terminalId);
-    if (!trimmed) return;
-    persistLocalTerminalNames({ ...terminalNames.value, [key]: trimmed });
-    terminalGroups.value = retitleTerminal(terminalGroups.value, projectId, terminalId, trimmed);
-    uploadTerminalName(projectId, terminalId, trimmed);
-  }
-  function uploadTerminalName(projectId: string, terminalId: string, name: string) {
-    const target = projects.value.find((item) => item.id === projectId),
-      key = terminalNameKey(projectId, terminalId);
-    if (!target) return;
-    void pendingTerminalRenames.enqueue(key, () =>
-      new Api(target.apiPath).renameTerminal(terminalId, name).then(
-        () => {
-          if (terminalNames.value[key] === name)
-            persistLocalTerminalNames(withoutTerminalName(terminalNames.value, key));
-        },
-        (reason: unknown) => {
-          showToast(
-            `The terminal name could not be saved: ${reason instanceof Error ? reason.message : String(reason)}`,
-          );
-        },
-      ),
-    );
-  }
-  /**
-   * Return a renamed terminal to its derived default name (HS2-2Q7KTX): retitle the tab at once,
-   * forget any browser-local copy (an in-flight or legacy rename), and clear the server's saved
-   * name so every client follows through the `terminal_renamed` event.
-   */
-  function resetTerminalName(projectId: string, terminalId: string) {
-    const target = projects.value.find((item) => item.id === projectId),
-      key = terminalNameKey(projectId, terminalId);
-    if (!target) return;
-    if (Object.hasOwn(terminalNames.value, key))
-      persistLocalTerminalNames(withoutTerminalName(terminalNames.value, key));
-    terminalGroups.value = restoreDefaultTerminalTitle(terminalGroups.value, projectId, terminalId);
-    void pendingTerminalRenames.enqueue(key, () =>
-      new Api(target.apiPath).renameTerminal(terminalId, null).catch((reason: unknown) => {
-        showToast(`The terminal name could not be reset: ${reason instanceof Error ? reason.message : String(reason)}`);
-        if (terminalGroupLoaded(projectId)) void refreshTerminalDashboard();
-      }),
-    );
-  }
-  /** Upload settled browser-local names the server lacks and drop ones it supersedes. */
-  function reconcileTerminalNames(current: Project, sessions: readonly TerminalInfo[]) {
-    const { upload, drop } = reconcileLocalTerminalNames(
-      current.id,
-      sessions,
-      terminalNames.value,
-      pendingTerminalRenames,
-    );
-    if (drop.length)
-      persistLocalTerminalNames(drop.reduce((names, key) => withoutTerminalName(names, key), terminalNames.value));
-    for (const item of upload) uploadTerminalName(current.id, item.terminalId, item.name);
-  }
-  /** Another client (or this one) renamed a terminal on the server: retitle the tab live. */
-  function applyTerminalRenamed(current: Project, terminalId: string, name: string | undefined) {
-    const key = terminalNameKey(current.id, terminalId);
-    if (pendingTerminalRenames.has(key)) return;
-    if (Object.hasOwn(terminalNames.value, key))
-      persistLocalTerminalNames(withoutTerminalName(terminalNames.value, key));
-    if (name) {
-      terminalGroups.value = retitleTerminal(terminalGroups.value, current.id, terminalId, name);
-      return;
-    }
-    // A cleared name returns the tab to the default this client already derived (HS2-2Q7KTX);
-    // only a terminal it has not listed yet needs the list refetched.
-    const known = terminalGroups.value
-      .find((group) => group.projectId === current.id)
-      ?.sessions.find((session) => session.id === terminalId);
-    if (known?.defaultTitle)
-      terminalGroups.value = restoreDefaultTerminalTitle(terminalGroups.value, current.id, terminalId);
-    else if (terminalGroupLoaded(current.id)) void refreshTerminalDashboard();
   }
   // Serialize terminal creation so a create in flight (including its dashboard refresh) never *drops* a
   // later request — each click still opens its own terminal instead of being silently swallowed, which
@@ -2873,73 +2783,6 @@ export async function startHotSheetWebClient() {
     ticketCountsByProject.value = Object.fromEntries(
       Object.entries(ticketCountsByProject.value).filter(([id]) => id !== projectId),
     );
-  }
-  /** The inspector/reader header's live-claim notice, on the same local ETA clock as rows (HS2-QKNQXC). */
-  function liveClaimNotice(ticket: WireTicketRow): LiveClaimNoticeProps | undefined {
-    const now = claimEtaClock.value;
-    if (!isTicketActivelyWorkedOn(ticket, now)) return undefined;
-    return {
-      agentName: ticket.worker_label || ticket.claimed_by || 'AI',
-      eta: claimEtaPresentation(ticket, now),
-    };
-  }
-  /** Re-render ETA countdowns while a live claim has a future ETA; a local timer only (HS2-XQMDQB). */
-  function scheduleClaimEtaTick() {
-    if (claimEtaTimer !== undefined) window.clearTimeout(claimEtaTimer);
-    claimEtaTimer = undefined;
-    const now = Date.now(),
-      delay = nextClaimEtaTick(
-        projects.value.flatMap((item) => projectTabTicketRows(item.id)),
-        now,
-      );
-    claimEtaClock.value = now;
-    if (delay === undefined) return;
-    claimEtaTimer = window.setTimeout(() => {
-      claimEtaTimer = undefined;
-      scheduleClaimEtaTick();
-    }, delay);
-  }
-  function scheduleClaimLeaseExpiry() {
-    scheduleClaimEtaTick();
-    if (claimLeaseExpiryTimer !== undefined) window.clearTimeout(claimLeaseExpiryTimer);
-    claimLeaseExpiryTimer = undefined;
-    const now = Date.now(),
-      openProjectRows = projects.value.flatMap((item) => projectTabTicketRows(item.id));
-    projectTabClaimClock.value = now;
-    activeTicketCount.value = projectTicketCounts(selectedProjectId.value).active;
-    const next = nextActiveTicketExpiry(openProjectRows, now);
-    if (next !== undefined) {
-      const expiringProjects = projects.value.filter(
-        (item) => nextActiveTicketExpiry(projectTabTicketRows(item.id), now) === next,
-      );
-      claimLeaseExpiryTimer = window.setTimeout(
-        () => {
-          claimLeaseExpiryTimer = undefined;
-          const expiredAt = Date.now();
-          // A clamped wake-up (far-future lease) arrives before anything expired: reschedule without refreshing.
-          if (expiredAt < next) {
-            scheduleClaimLeaseExpiry();
-            return;
-          }
-          const adjusted = { ...ticketCountsByProject.value };
-          for (const current of expiringProjects) {
-            if (!Object.hasOwn(adjusted, current.id)) continue;
-            adjusted[current.id] = applyKnownActiveTicketExpiries(
-              adjusted[current.id],
-              projectTabTicketRows(current.id),
-              now,
-              expiredAt,
-            );
-          }
-          ticketCountsByProject.value = adjusted;
-          projectTabClaimClock.value = expiredAt;
-          void Promise.allSettled(expiringProjects.map((current) => projectTabRefresh.request(current))).finally(
-            scheduleClaimLeaseExpiry,
-          );
-        },
-        claimExpiryWakeDelay(next, now),
-      );
-    }
   }
 
   function visibleTickets() {
@@ -4036,38 +3879,6 @@ export async function startHotSheetWebClient() {
       scheduleClaimLeaseExpiry();
     },
   });
-  function setCorruptRecovery(key: string, value: CorruptTicketRecoveryState) {
-    corruptRecovery.value = { ...corruptRecovery.value, [key]: value };
-  }
-  async function revealCorruptTicket(key: string) {
-    const current = project(),
-      ticket = corruptTickets.value.find((item) => corruptTicketKey(item) === key);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-    if (!current || !ticket || corruptRecovery.value[key]?.pending) return;
-    setCorruptRecovery(key, { pending: 'reveal' });
-    try {
-      await revealCorruptTicketFile(current.id, ticket.path);
-      setCorruptRecovery(key, {});
-      showToast('Opened the file location.');
-    } catch (reason) {
-      setCorruptRecovery(key, { message: reason instanceof Error ? reason.message : String(reason), failed: true });
-    }
-  }
-  async function queueCorruptTicketRepair(key: string) {
-    const current = project(),
-      ticket = corruptTickets.value.find((item) => corruptTicketKey(item) === key);
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-    if (!current || !ticket || ticket.error_code === 'upgrade_required' || corruptRecovery.value[key]?.pending) return;
-    setCorruptRecovery(key, { pending: 'repair' });
-    try {
-      const created = await new Api(current.apiPath).createCorruptTicketRepair(current.id, ticket.path);
-      setCorruptRecovery(key, {});
-      showToast(`Queued ${created.slug} for AI repair.`);
-      if (project()?.id === current.id) await refreshProject({ showLoading: false });
-    } catch (reason) {
-      setCorruptRecovery(key, { message: reason instanceof Error ? reason.message : String(reason), failed: true });
-    }
-  }
   async function refreshCommands(current = project(), quiet = false) {
     const generation = ++commandRefreshGeneration;
     if (!current) return;
@@ -4123,248 +3934,6 @@ export async function startHotSheetWebClient() {
       else selectTicketView('all');
     } catch {
       /* older or temporarily unavailable servers simply keep their last known shared view list */
-    }
-  }
-  async function refreshDriveConnections(current = project(), restoreDrawerTabs = false, quiet = false) {
-    if (!current) return;
-    if (project()?.id === current.id && !aiConfigurationController.restoreAiConfiguration(current))
-      void refreshAiConfiguration(current);
-    try {
-      const startGeneration = conversationStartGeneration,
-        pendingAtRequest = new Set(pendingConversationStarts),
-        client = new Api(current.apiPath, '', { trackBusy: !quiet }),
-        [active, sessions] = await Promise.all([client.activeToolConnections(), client.toolSessions().catch(() => [])]),
-        activeIds = new Set(active.map((connection) => connection.id)),
-        connections = await recoverProjectConnections(client, active, sessions, current.id, current.root);
-      if (startGeneration === conversationStartGeneration && projects.value.some((item) => item.id === current.id)) {
-        for (const connection of connections)
-          if (
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary.
-            conversationStates.peek()[connection.id]?.activeAssistantId &&
-            !pendingAtRequest.has(connection.id) &&
-            !pendingConversationStarts.has(connection.id)
-          )
-            updateConversation(connection.id, (state) =>
-              !state.activeAssistantId
-                ? state
-                : !activeIds.has(connection.id)
-                  ? applyConversationEvent(state, { type: 'done', reason: 'interrupted' })
-                  : reconcileConversationConnection(state, connection),
-            );
-        driveConnectionsByProject.value = { ...driveConnectionsByProject.value, [current.id]: connections };
-        if (restoreDrawerTabs)
-          terminalDrawerChatsByProject.value = {
-            ...terminalDrawerChatsByProject.value,
-            [current.id]: restoreDrawerAIChats(
-              connections,
-              current.id,
-              terminalDrawerChatsByProject.value[current.id],
-              aiToolLabel,
-            ),
-          };
-      }
-    } catch {
-      /* retain the last event-projected state while a project server reconnects */
-    }
-  }
-  function replaceConversationStates(states: Record<string, ConversationState>, streamed = false) {
-    conversationStates.value = states;
-    conversationPersistence.schedule();
-    if (streamed) conversationRenderScheduler.schedule();
-    else conversationRenderScheduler.immediate();
-  }
-  function updateConversation(
-    connectionId: string,
-    update: (state: ConversationState) => ConversationState,
-    streamed = false,
-  ) {
-    const conversations = conversationStates.peek();
-    replaceConversationStates(
-      {
-        ...conversations,
-        [connectionId]: update(conversations[connectionId] ?? EMPTY_CONVERSATION),
-      },
-      streamed,
-    );
-  }
-  function conversationForActivity(current: Project, tool: string, session?: string) {
-    const conversations = conversationStates.peek(),
-      connections = (driveConnectionsByProject.value[current.id] ?? []).filter(
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-        (item) => item.tool.toLowerCase() === tool.toLowerCase() && conversations[item.id],
-      );
-    return (
-      connections.find((item) => session && (item.session_id === session || item.id === session)) ??
-      (connections.length === 1 ? connections[0] : undefined)
-    );
-  }
-  function beginConversation(connectionId: string, content: string) {
-    conversationStartGeneration += 1;
-    pendingConversationStarts.add(connectionId);
-    updateConversation(connectionId, (state) => beginConversationTurn(state, browserRandomId(), content));
-    return () => {
-      pendingConversationStarts.delete(connectionId);
-    };
-  }
-  async function toggleSidebarDrive() {
-    const current = project();
-    if (!current || drivePendingByProject.value[current.id]) return;
-    const selection = effectiveDriveSelection(current.id),
-      tool = selection.tool,
-      connectionId = sidebarDriveConnectionId(current.id, tool),
-      existing = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId);
-    if (existing?.busy) return;
-    let tab = (terminalDrawerChatsByProject.value[current.id] ?? []).find((item) => item.connectionId === connectionId);
-    if (!tab) tab = await createDrawerAIChat(selection, { connectionId, drive: true });
-    if (!tab || project()?.id !== current.id) return;
-    selectDrawerItem(tab.id);
-    setTerminalDrawerVisible(true);
-    const connections = driveConnectionsByProject.value[current.id] ?? [];
-    drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: true };
-    conversationConnectionId.value = connectionId;
-    const finishStart = beginConversation(connectionId, SIDEBAR_DRIVE_PROMPT);
-    try {
-      const updated = await runProjectDrive(new Api(current.apiPath), connections, current.id, tool, {
-        model: selection.model,
-        effort: selection.effort,
-      });
-      if (project()?.id === current.id)
-        driveConnectionsByProject.value = {
-          ...driveConnectionsByProject.value,
-          [current.id]: connections.filter((item) => item.id !== updated.id).concat(updated),
-        };
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : String(reason);
-      updateConversation(connectionId, (value) => ({
-        ...value,
-        activeAssistantId: undefined,
-        progress: undefined,
-        error: message,
-        messages: value.messages.map((item) =>
-          item.id === value.activeAssistantId
-            ? { ...item, status: 'failed', content: item.content || 'The workflow turn could not be started.' }
-            : item,
-        ),
-      }));
-      if (project()?.id === current.id) error.value = message;
-    } finally {
-      finishStart();
-      drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
-    }
-  }
-  async function openSidebarConversation() {
-    const current = project();
-    if (!current || drivePendingByProject.value[current.id]) return;
-    const selection = normalizedAiSelection(),
-      tool = selection.tool,
-      connections = driveConnectionsByProject.value[current.id] ?? [],
-      connectionId = projectChatConnectionId(current.id, tool);
-    drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: true };
-    try {
-      const prepared = await prepareProjectConversation(new Api(current.apiPath), connections, current.id, tool, {
-        connectionId,
-        model: selection.model,
-        effort: selection.effort,
-      });
-      if (project()?.id !== current.id) return;
-      driveConnectionsByProject.value = {
-        ...driveConnectionsByProject.value,
-        [current.id]: connections.filter((item) => item.id !== prepared.id).concat(prepared),
-      };
-      conversationConnectionId.value = prepared.id;
-      conversationOpen.value = true;
-      queueMicrotask(() => {
-        document.querySelector<Control>('[data-component="ai-conversation"]')?.show?.();
-        syncConversationScroll(document, true);
-        document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]')?.focus();
-      });
-    } catch (reason) {
-      if (project()?.id === current.id) error.value = reason instanceof Error ? reason.message : String(reason);
-    } finally {
-      drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
-    }
-  }
-  async function sendConversationTurn() {
-    const current = project(),
-      connectionId = conversationConnectionId.value,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      draft = connectionId ? conversationDrafts.value[connectionId]?.trim() : '';
-    if (!current || !connectionId || !draft) return;
-    const connection = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId),
-      selection = conversationAiSelection(connectionId),
-      turnSelection = {
-        ...(selection.descriptor?.actions?.includes('change_model') && selection.model
-          ? { model: selection.model }
-          : {}),
-        ...(selection.descriptor?.actions?.includes('change_effort') && selection.effort
-          ? { effort: selection.effort }
-          : {}),
-      };
-    if (!connection?.actions?.includes('send_turn') || connection.busy) return;
-    const finishStart = beginConversation(connectionId, draft);
-    conversationDrafts.value = { ...conversationDrafts.value, [connectionId]: '' };
-    const composer = document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]');
-    if (composer) composer.value = '';
-    requestAnimationFrame(() => {
-      syncConversationScroll(document, true);
-    });
-    try {
-      const updated = await new Api(current.apiPath).sendToolTurn(
-        connectionId,
-        draft,
-        connection.session_id,
-        turnSelection,
-      );
-      if (project()?.id === current.id)
-        driveConnectionsByProject.value = {
-          ...driveConnectionsByProject.value,
-          [current.id]: (driveConnectionsByProject.value[current.id] ?? [])
-            .filter((item) => item.id !== updated.id)
-            .concat(updated),
-        };
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : String(reason);
-      updateConversation(connectionId, (state) => ({
-        ...state,
-        activeAssistantId: undefined,
-        progress: undefined,
-        error: message,
-        messages: state.messages.map((item) =>
-          item.id === state.activeAssistantId
-            ? { ...item, status: 'failed', content: item.content || 'The message could not be sent.' }
-            : item,
-        ),
-      }));
-    } finally {
-      finishStart();
-    }
-  }
-  async function stopConversation() {
-    const current = project(),
-      connectionId = conversationConnectionId.value;
-    if (!current || !connectionId) return;
-    const connection = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId),
-      tool = connection?.tool === 'claude' ? 'Claude' : 'Codex';
-    if (
-      !connection?.busy ||
-      !connection.actions?.includes('interrupt') ||
-      !window.confirm(`Stop the active ${tool} turn?`)
-    )
-      return;
-    try {
-      const updated = await new Api(current.apiPath).interruptToolTurn(connectionId);
-      if (project()?.id === current.id)
-        driveConnectionsByProject.value = {
-          ...driveConnectionsByProject.value,
-          [current.id]: (driveConnectionsByProject.value[current.id] ?? [])
-            .filter((item) => item.id !== updated.id)
-            .concat(updated),
-        };
-    } catch (reason) {
-      updateConversation(connectionId, (state) => ({
-        ...state,
-        error: reason instanceof Error ? reason.message : String(reason),
-      }));
     }
   }
   async function refreshTerminalSettings(current = project(), quiet = false) {
