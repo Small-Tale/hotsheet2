@@ -2486,7 +2486,12 @@ viewport behind the focused terminal is blacked out with the terminal background
 shows in the gap around it — e.g. below the terminal and above the iOS keyboard (HS2-JQPRXV). Exit
 restores focus to the selected drawer tab; a later terminal focus may re-enter. A new terminal's
 initial auto-focus retries stop once that focus has landed, so tapping Exit right after opening a
-terminal cannot be undone by a pending retry reclaiming focus (HS2-Y9VK3C). Drawer hiding,
+terminal cannot be undone by a pending retry reclaiming focus (HS2-Y9VK3C). On a larger
+device, a terminal created from the drawer's New drawer item menu deterministically takes input
+focus: its retries treat focus still held by the creating menu or dropdown as yielding, and for a
+bounded second after mount it reclaims focus a closing dropdown restores to its trigger. A real
+field the user moved to keeps focus, and the user's first press or keystroke ends that window
+(HS2-FB4DKM). Drawer hiding,
 tab/project replacement, and crossing to desktop invalidate stale focus-mode ownership
 (HS2-GMTQZM).
 The browser regression follows the complete user path with a newly created terminal: enter

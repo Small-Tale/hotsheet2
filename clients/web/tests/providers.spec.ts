@@ -27087,3 +27087,46 @@ test('keeps an accepted new conversation turn streaming after an older idle conn
     await page.unrouteAll({ behavior: 'ignoreErrors' });
   }
 });
+
+test('a terminal created from the desktop drawer menu takes input focus even under CPU load (HS2-FB4DKM)', async ({
+  page,
+  browserName,
+}) => {
+  await mockProject(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]'),
+    menu = drawer.locator('[data-terminal-drawer-create]');
+  if (browserName === 'chromium') {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+  }
+  // The mock server answers every create with the same terminal, so one creation per page.
+  const before = await drawer.locator('[role="tab"]').count();
+  // Reproduce the loaded-machine ordering: the closing dropdown restores focus to its trigger only
+  // after the new terminal's own focus retries have run.
+  await page.evaluate(() => {
+    const steal = (event: FocusEvent) => {
+      if (!(event.target instanceof HTMLElement) || !event.target.classList.contains('xterm-helper-textarea')) return;
+      document.removeEventListener('focusin', steal, true);
+      window.setTimeout(() => {
+        const dropdown = document.querySelector('[data-terminal-drawer-create]');
+        (
+          dropdown?.querySelector<HTMLElement>('[slot="trigger"]') ?? dropdown?.querySelector<HTMLElement>('button')
+        )?.focus();
+      }, 400);
+    };
+    document.addEventListener('focusin', steal, true);
+  });
+  await drawer.getByRole('button', { name: 'New drawer item' }).click();
+  await menu.locator('[data-action="create-terminal-drawer-item"][data-item-id="default-shell"]').click();
+  await expect(drawer.locator('[role="tab"]')).toHaveCount(before + 1);
+  // The new, selected session's xterm input owns focus, not the menu or its trigger.
+  await expect(drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea')).toBeFocused();
+  // It keeps focus once the closing menu has settled.
+  await page.waitForTimeout(1_200);
+  await expect(drawer.locator('.terminal-session:not([hidden]) .xterm-helper-textarea')).toBeFocused();
+});

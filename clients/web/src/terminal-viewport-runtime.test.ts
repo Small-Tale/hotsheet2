@@ -458,7 +458,17 @@ describe('initial terminal auto-focus retries (HS2-Y9VK3C)', () => {
     allocated.openElement = true;
     const frames: Array<() => void> = [],
       body = {},
-      doc = { activeElement: body as unknown, body };
+      documentListeners = new Map<string, (event: { target: unknown }) => void>(),
+      doc = {
+        activeElement: body as unknown,
+        body,
+        addEventListener: (type: string, handler: (event: { target: unknown }) => void) => {
+          documentListeners.set(type, handler);
+        },
+        removeEventListener: (type: string) => {
+          documentListeners.delete(type);
+        },
+      };
     windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
       frames.push(callback);
       return frames.length;
@@ -513,6 +523,101 @@ describe('initial terminal auto-focus retries (HS2-Y9VK3C)', () => {
     runRetries();
     expect(terminal.focus.mock.calls.length).toBeGreaterThan(1);
     dispose();
+  });
+});
+
+describe('newly created terminal focus versus its creating menu (HS2-FB4DKM)', () => {
+  function mount() {
+    windowMock.innerWidth = 1440;
+    allocated.openElement = true;
+    const frames: Array<() => void> = [],
+      documentListeners = new Map<string, (event: { target: unknown }) => void>(),
+      body = {},
+      doc = {
+        activeElement: body as unknown,
+        body,
+        addEventListener: (type: string, handler: (event: { target: unknown }) => void) => {
+          documentListeners.set(type, handler);
+        },
+        removeEventListener: (type: string) => {
+          documentListeners.delete(type);
+        },
+      };
+    windowMock.requestAnimationFrame.mockImplementation(((callback: () => void) => {
+      frames.push(callback);
+      return frames.length;
+    }) as never);
+    vi.stubGlobal('document', doc);
+    class FakeElement {
+      readonly fake = true;
+    }
+    vi.stubGlobal('Element', FakeElement);
+    const { viewport, listeners } = element();
+    Object.assign(viewport, { contains: () => false });
+    const dispose = mountTerminalViewportRuntime(viewport, {
+        url: 'ws://lan/terminal',
+        viewerId: 'viewer',
+        autoFocus: true,
+      }),
+      terminal = allocated.terminals[0],
+      // A fake focus holder inside `ancestor` (a menu item, a dropdown) or inside nothing at all.
+      holder = (ancestor?: { selector: string; value: object }) =>
+        Object.assign(new FakeElement(), {
+          isConnected: true,
+          closest: (selector: string) => (ancestor && selector.includes(ancestor.selector) ? ancestor.value : null),
+        }),
+      runFrames = () => {
+        for (const frame of frames.splice(0)) frame();
+      },
+      focusLanded = () => {
+        for (const [type, handler] of listeners.mock.calls as Array<[string, () => void]>)
+          if (type === 'focusin') handler();
+      };
+    return { terminal, doc, body, holder, runFrames, focusLanded, documentListeners, dispose };
+  }
+
+  it('retries focus while a menu item of the creating menu still holds it', () => {
+    const { terminal, doc, holder, runFrames, dispose } = mount();
+    expect(terminal.focus).toHaveBeenCalledTimes(1);
+    doc.activeElement = holder({ selector: '[role="menuitem"]', value: {} });
+    runFrames();
+    expect(terminal.focus).toHaveBeenCalledTimes(2);
+    dispose();
+  });
+
+  it('never steals focus from a real field the user moved to', () => {
+    const { terminal, doc, holder, runFrames, dispose } = mount();
+    doc.activeElement = holder();
+    runFrames();
+    expect(terminal.focus).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it('reclaims focus a closed dropdown restores to its trigger after focus landed, but not for an open menu', () => {
+    const { terminal, holder, focusLanded, documentListeners, dispose } = mount();
+    focusLanded();
+    const reclaim = documentListeners.get('focusin');
+    expect(reclaim).toBeDefined();
+    reclaim?.({ target: holder({ selector: 'wa-dropdown', value: { open: true } }) });
+    expect(terminal.focus).toHaveBeenCalledTimes(1);
+    reclaim?.({ target: holder({ selector: 'wa-dropdown', value: { open: false } }) });
+    expect(terminal.focus).toHaveBeenCalledTimes(2);
+    reclaim?.({ target: holder() });
+    expect(terminal.focus).toHaveBeenCalledTimes(2);
+    dispose();
+    expect(documentListeners.has('focusin')).toBe(false);
+  });
+
+  it('ends the reclaim window at the first user press or keystroke', () => {
+    for (const type of ['pointerdown', 'keydown']) {
+      const { terminal, holder, focusLanded, documentListeners, dispose } = mount();
+      focusLanded();
+      documentListeners.get(type)?.({ target: holder() });
+      expect(documentListeners.has('focusin')).toBe(false);
+      expect(terminal.focus).toHaveBeenCalledTimes(1);
+      dispose();
+      allocated.terminals.length = 0;
+    }
   });
 });
 

@@ -62,6 +62,22 @@ export const TERMINAL_VIEWPORT_RESUME_EVENT = 'hs-terminal-viewport-resume';
 export const TERMINAL_VIEWPORT_PARKED_CLOSED_EVENT = 'hs-terminal-viewport-parked-closed';
 /** How long an automatic initial focus waits for a second attempt, after layout and mounts settle. */
 export const TERMINAL_FOCUS_RETRY_MS = 120;
+/**
+ * How long after mount a newly created terminal may reclaim its requested focus from the transient
+ * menu that created it (Web Awesome returns focus to the dropdown trigger as it closes — HS2-FB4DKM).
+ */
+export const TERMINAL_INITIAL_FOCUS_WINDOW_MS = 1_000;
+const TRANSIENT_FOCUS_OWNERS = 'wa-dropdown, wa-dropdown-item, [role="menu"], [role="menuitem"]';
+
+/**
+ * Whether the element holding focus may yield it to a terminal that requested initial focus: nothing
+ * (or `<body>`) is focused, the holder already left the page, or it is the menu/dropdown that created
+ * the terminal. A real field the user moved to keeps focus (HS2-FB4DKM).
+ */
+export function focusYieldsToNewTerminal(active: Element | null, documentValue: Document = document): boolean {
+  if (active === null || active === documentValue.body || !active.isConnected) return true;
+  return active.closest(TRANSIENT_FOCUS_OWNERS) !== null;
+}
 export const TERMINAL_DRAWER_RESIZE_END_EVENT = 'hotsheet-terminal-drawer-resize-end';
 export const TERMINAL_DASHBOARD_COLS = 80;
 export const TERMINAL_DASHBOARD_ROWS = 24;

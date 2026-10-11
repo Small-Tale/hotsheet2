@@ -33,6 +33,7 @@ import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
 import { createTouchSelectionController } from './terminal-touch-selection';
 import {
+  focusYieldsToNewTerminal,
   isTerminalReplacementReplay,
   parseTerminalSizeMessage,
   stripLeadingZshPromptEolMark,
@@ -42,6 +43,7 @@ import {
   TERMINAL_DASHBOARD_ROWS,
   TERMINAL_DRAWER_RESIZE_END_EVENT,
   TERMINAL_FOCUS_RETRY_MS,
+  TERMINAL_INITIAL_FOCUS_WINDOW_MS,
   TERMINAL_PREVIEW_NATURAL_HEIGHT,
   TERMINAL_PREVIEW_NATURAL_WIDTH,
   TERMINAL_VIEWPORT_PARK_EVENT,
@@ -240,7 +242,7 @@ function initializeStaticTerminalViewport(
       element.dataset.geometryReady = 'true';
       if (initialFocusPending) {
         initialFocusPending = false;
-        if (document.activeElement === document.body || document.activeElement === null) terminal.focus();
+        if (focusYieldsToNewTerminal(document.activeElement)) terminal.focus();
       }
       return;
     }
@@ -270,7 +272,7 @@ function initializeStaticTerminalViewport(
     element.dataset.geometryReady = 'true';
     if (initialFocusPending) {
       initialFocusPending = false;
-      if (document.activeElement === document.body || document.activeElement === null) terminal.focus();
+      if (focusYieldsToNewTerminal(document.activeElement)) terminal.focus();
     }
   };
   const schedule = () => {
@@ -1044,7 +1046,7 @@ function initializeTerminalViewport(
           activeTile?.dataset.terminalKey === `${element.dataset.projectId}:${element.dataset.terminalId}`;
       if (
         !force &&
-        active !== document.body &&
+        !focusYieldsToNewTerminal(active) &&
         !element.contains(active) &&
         !element.closest('[data-magnified="true"]')?.contains(active) &&
         !sameTerminalCard
@@ -1058,5 +1060,24 @@ function initializeTerminalViewport(
       focusIfCurrent();
       window.setTimeout(focusIfCurrent, TERMINAL_FOCUS_RETRY_MS);
     });
+    // The creating menu may hand focus back to its trigger after these retries (a closing dropdown
+    // restores focus late under load); reclaim it within a bounded window (HS2-FB4DKM). Any user
+    // press or keystroke ends the window, so focus the user moves on purpose is never taken back.
+    const reclaim = (event: FocusEvent) => {
+        // Only a closed dropdown's restored trigger yields: a menu the user reopens keeps its focus.
+        const dropdown = event.target instanceof Element ? event.target.closest('wa-dropdown') : null;
+        if (dropdown && !(dropdown as Element & { open?: boolean }).open) focusIfCurrent(true);
+      },
+      stopReclaim = () => {
+        document.removeEventListener('focusin', reclaim, true);
+        document.removeEventListener('pointerdown', stopReclaim, true);
+        document.removeEventListener('keydown', stopReclaim, true);
+        window.clearTimeout(reclaimWindow);
+      },
+      reclaimWindow = window.setTimeout(stopReclaim, TERMINAL_INITIAL_FOCUS_WINDOW_MS);
+    document.addEventListener('focusin', reclaim, true);
+    document.addEventListener('pointerdown', stopReclaim, true);
+    document.addEventListener('keydown', stopReclaim, true);
+    own(stopReclaim);
   }
 }
