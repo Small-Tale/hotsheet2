@@ -122,7 +122,10 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
   (HS2-W3RDCB). Childless JSX elements, native and custom alike, use the self-closing form
   (`<wa-input … />`, not `<wa-input …></wa-input>`); `@stylistic/jsx-self-closing-comp`
   enforces it in `clients/web` and `spikes/kerf-webawesome`, and `--fix` rewrites violations
-  (HS2-G5WBZ5, HS2-AHS3BV).
+  (HS2-G5WBZ5, HS2-AHS3BV). Prettier owns web source layout: `// prettier-ignore` is a lint
+  error (`no-warning-comments`), and `@stylistic/max-len` rejects code lines over 200
+  characters outside strings, templates, regexes, URLs, and comments, so minified one-line
+  blocks cannot return (HS2-PR1BST).
 - Repository formatting uses Prettier for supported JavaScript, TypeScript, JSON, CSS,
   HTML, Markdown, and YAML plus `cargo fmt` for Rust. `clients/web` owns the pinned
   Prettier toolchain and exposes `npm run format` / `npm run format:check`; its lint command

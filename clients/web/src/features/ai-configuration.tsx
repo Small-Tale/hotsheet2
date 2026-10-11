@@ -294,9 +294,15 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
         .querySelectorAll<Control>('.command-settings-editor__ai-selection wa-dropdown[open]')
         .forEach((menu) => menu.hide?.());
     manualModelDialogShown = false;
-    // prettier-ignore
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-    manualModelDialog.value={target,providerName:descriptor?.display_name??selection.tool??'this provider',value:custom??'',...(commandId?{commandId}:{}),...(target==='settings'&&providerId?{providerId}:{})};
+    manualModelDialog.value = {
+      target,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      providerName: descriptor?.display_name ?? selection.tool ?? 'this provider',
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      value: custom ?? '',
+      ...(commandId ? { commandId } : {}),
+      ...(target === 'settings' && providerId ? { providerId } : {}),
+    };
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const dialog = document.querySelector<Control>('[data-component="manual-model-dialog"]');
@@ -306,9 +312,16 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     );
   }
 
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function restoreCommandEditorAfterManualModel(state:ManualModelDialogState|undefined){if(state?.target!=='command'||!state.commandId)return;commandSettingsEditingId.value=state.commandId;requestAnimationFrame(()=>requestAnimationFrame(()=>{(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control)?.showPopover?.()}))}
+  function restoreCommandEditorAfterManualModel(state: ManualModelDialogState | undefined) {
+    if (state?.target !== 'command' || !state.commandId) return;
+    commandSettingsEditingId.value = state.commandId;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control)?.showPopover?.();
+      }),
+    );
+  }
 
   /**
    * The AI selection for a new drawer AI shell or chat: the named provider with its own saved model
@@ -425,9 +438,31 @@ export function createAiConfigurationController(dependencies: AiConfigurationDep
     }
   }
 
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function conversationAiSelection(connectionId:string){const current=project(),connection=current?(driveConnectionsByProject.value[current.id]??[]).find(item=>item.id===connectionId):undefined,chat=current?(terminalDrawerChatsByProject.value[current.id]??[]).find(item=>item.connectionId===connectionId):undefined,override=conversationSelections.value[connectionId],tool=chat?.tool??connection?.tool??aiDefaults.value.tool,descriptor=aiTools.value.find(item=>item.id===tool),model=override?.model??chat?.model??connection?.model??descriptor?.default_model,modelDescriptor=descriptor?.models.find(item=>item.id===model),efforts=modelDescriptor?.effort_levels??[],effort=compatibleAiEffort(efforts,override?.effort,chat?.effort,connection?.effort,descriptor?.default_effort);return{tool,descriptor,model,effort,efforts}}
+  function conversationAiSelection(connectionId: string) {
+    const current = project(),
+      connection = current
+        ? (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId)
+        : undefined,
+      chat = current
+        ? (terminalDrawerChatsByProject.value[current.id] ?? []).find((item) => item.connectionId === connectionId)
+        : undefined,
+      override = conversationSelections.value[connectionId],
+      tool = chat?.tool ?? connection?.tool ?? aiDefaults.value.tool,
+      descriptor = aiTools.value.find((item) => item.id === tool),
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      model = override?.model ?? chat?.model ?? connection?.model ?? descriptor?.default_model,
+      modelDescriptor = descriptor?.models.find((item) => item.id === model),
+      efforts = modelDescriptor?.effort_levels ?? [],
+      effort = compatibleAiEffort(
+        efforts,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        override?.effort,
+        chat?.effort,
+        connection?.effort,
+        descriptor?.default_effort,
+      );
+    return { tool, descriptor, model, effort, efforts };
+  }
 
   return {
     aiTools,

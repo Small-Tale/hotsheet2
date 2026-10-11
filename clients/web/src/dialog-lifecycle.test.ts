@@ -60,8 +60,8 @@ describe('dialog lifecycle event contracts', () => {
       /delegateCapture\(document\.body,'wa-after-hide',SEARCH_AND_COMPOSER_TARGETS\.quickTicketComposer\.selector[^\n]*resetTicketComposer\(\)/,
     );
     expect(source).not.toMatch(/if\(composerExpanded\.value\)resetTicketComposer\(\).*ticketContextMenu/);
-    expect(source).toMatch(/function closeProjectIds\([^\n]*resetTicketComposer\(\)/);
-    expect(source).toMatch(/function activateOpenProject\([^\n]*resetTicketComposer\(false\)/);
+    expect(source).toMatchSource(/function closeProjectIds\([^\n]*resetTicketComposer\(\)/);
+    expect(source).toMatchSource(/function activateOpenProject\([^\n]*resetTicketComposer\(false\)/);
   });
 
   it('synchronously resets the saved-view live name before leaving opening focus to native autofocus', () => {

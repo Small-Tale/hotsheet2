@@ -1248,9 +1248,9 @@ export async function startHotSheetWebClient() {
     selectedSettingsCategory.value = category;
   }
   const hideVerifiedColumn = () => hideVerifiedByProject.value[selectedProjectId.value] ?? false;
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  const canUpdateSelected = () => selectedTicket.value ? (providerCapabilities.value[selectedTicket.value.connection_id]?.update ?? true) : false;
+  const canUpdateSelected = () =>
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    selectedTicket.value ? (providerCapabilities.value[selectedTicket.value.connection_id]?.update ?? true) : false;
   const canEditStartedPhaseSelected = () => {
     const ticket = selectedTicket.value;
     const current = project();
@@ -1268,9 +1268,11 @@ export async function startHotSheetWebClient() {
   const canAddNotes = () => noteCapabilities()?.notes ?? true;
   const canEditNotes = () => noteCapabilities()?.note_edit ?? canUpdateSelected();
   const canDeleteNotes = () => noteCapabilities()?.note_delete ?? canUpdateSelected();
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  const canUseAttachments = () => selectedTicket.value ? (providerCapabilities.value[selectedTicket.value.connection_id]?.attachments ?? true) : false;
+  const canUseAttachments = () =>
+    selectedTicket.value
+      ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        (providerCapabilities.value[selectedTicket.value.connection_id]?.attachments ?? true)
+      : false;
   // An append-only provider (GitHub's assets repository) adds and serves files but cannot edit
   // existing ones; servers that predate the capability edit whatever they can attach (HS2-HSA64D).
   const attachmentsEditableFor = (connectionId: string) => {
@@ -1644,12 +1646,52 @@ export async function startHotSheetWebClient() {
     if (!chat) pendingTerminalFocus = { projectId, terminalId: id };
     focusDrawerInput(projectId);
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function setTerminalDrawerVisible(visible:boolean,refresh=true){if(!visible)exitMobileTerminalFocus();if(visible===terminalDrawerVisible.value){if(visible){terminalDrawerMounted.value=true;if(refresh)void refreshTerminalDashboard();observeTerminalDrawer();settleTerminalDrawerGeometry()}return}if(terminalDrawerTransitionTimer!==undefined)window.clearTimeout(terminalDrawerTransitionTimer);if(visible){const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===terminalDrawerSelected.value):undefined;if(current)requestDrawerInputFocus(current.id,terminalDrawerSelected.value,chat);terminalDrawerMounted.value=true}terminalDrawerTransitioning.value=true;terminalDrawerVisible.value=visible;localStorage.setItem('hotsheet.terminals.drawer-open',String(visible));terminalDrawerTransitionTimer=window.setTimeout(()=>{terminalDrawerTransitionTimer=undefined;terminalDrawerTransitioning.value=false;if(!terminalDrawerVisible.value)terminalDrawerMounted.value=false},220);if(visible){if(refresh)void refreshTerminalDashboard();observeTerminalDrawer()}else terminalDrawerSizeObserver.disconnect()}
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function selectDrawerItem(id:string,focusInput=true){if(id!==terminalDrawerSelected.value)exitMobileTerminalFocus();const current=project(),chat=current?terminalDrawerChatsByProject.value[current.id]?.find(item=>item.id===id):undefined;if(chat)conversationConnectionId.value=chat.connectionId;terminalDrawerSelected.value=id;if(current){localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`,id);if(focusInput)requestDrawerInputFocus(current.id,id,chat)}}
+  function setTerminalDrawerVisible(visible: boolean, refresh = true) {
+    if (!visible) exitMobileTerminalFocus();
+    if (visible === terminalDrawerVisible.value) {
+      if (visible) {
+        terminalDrawerMounted.value = true;
+        if (refresh) void refreshTerminalDashboard();
+        observeTerminalDrawer();
+        settleTerminalDrawerGeometry();
+      }
+      return;
+    }
+    if (terminalDrawerTransitionTimer !== undefined) window.clearTimeout(terminalDrawerTransitionTimer);
+    if (visible) {
+      const current = project(),
+        chat = current
+          ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+            terminalDrawerChatsByProject.value[current.id]?.find((item) => item.id === terminalDrawerSelected.value)
+          : undefined;
+      if (current) requestDrawerInputFocus(current.id, terminalDrawerSelected.value, chat);
+      terminalDrawerMounted.value = true;
+    }
+    terminalDrawerTransitioning.value = true;
+    terminalDrawerVisible.value = visible;
+    localStorage.setItem('hotsheet.terminals.drawer-open', String(visible));
+    terminalDrawerTransitionTimer = window.setTimeout(() => {
+      terminalDrawerTransitionTimer = undefined;
+      terminalDrawerTransitioning.value = false;
+      if (!terminalDrawerVisible.value) terminalDrawerMounted.value = false;
+    }, 220);
+    if (visible) {
+      if (refresh) void refreshTerminalDashboard();
+      observeTerminalDrawer();
+    } else terminalDrawerSizeObserver.disconnect();
+  }
+  function selectDrawerItem(id: string, focusInput = true) {
+    if (id !== terminalDrawerSelected.value) exitMobileTerminalFocus();
+    const current = project(),
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      chat = current ? terminalDrawerChatsByProject.value[current.id]?.find((item) => item.id === id) : undefined;
+    if (chat) conversationConnectionId.value = chat.connectionId;
+    terminalDrawerSelected.value = id;
+    if (current) {
+      localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`, id);
+      if (focusInput) requestDrawerInputFocus(current.id, id, chat);
+    }
+  }
   function openTerminalInProject(key: string) {
     const session = terminalSession(key);
     if (!session) return;
@@ -1663,9 +1705,18 @@ export async function startHotSheetWebClient() {
     if (activated) void refreshActivatedProject(activated, false);
     else void Promise.all([refreshProject({ showLoading: false }), refreshCommands()]);
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function openGridAIChat(projectId:string,chatId:string){const target=projects.value.find(item=>item.id===projectId),chat=terminalDrawerChatsByProject.value[projectId]?.find(item=>item.id===chatId);if(!target||!chat)return;const activated=projectId===selectedProjectId.value?undefined:activateOpenProject(projectId);setShellMode('project');selectDrawerItem(chat.id);setTerminalDrawerVisible(true);if(activated)void refreshActivatedProject(activated,false);else void Promise.all([refreshProject({showLoading:false}),refreshCommands()])}
+  function openGridAIChat(projectId: string, chatId: string) {
+    const target = projects.value.find((item) => item.id === projectId),
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      chat = terminalDrawerChatsByProject.value[projectId]?.find((item) => item.id === chatId);
+    if (!target || !chat) return;
+    const activated = projectId === selectedProjectId.value ? undefined : activateOpenProject(projectId);
+    setShellMode('project');
+    selectDrawerItem(chat.id);
+    setTerminalDrawerVisible(true);
+    if (activated) void refreshActivatedProject(activated, false);
+    else void Promise.all([refreshProject({ showLoading: false }), refreshCommands()]);
+  }
   function persistLocalTerminalNames(names: Record<string, string>) {
     terminalNames.value = names;
     localStorage.setItem('hotsheet.terminals.names', JSON.stringify(names));
@@ -1892,9 +1943,93 @@ export async function startHotSheetWebClient() {
       readerApprovedClose.delete('workspace-reader');
     }
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function closeProjectIds(ids:readonly string[]){disposeProjectTicketReaders(ids);for(const item of projects.value)if(ids.includes(item.id))void new Api(item.apiPath).closeProjectSession().catch(()=>undefined);/* Lets the server stop hosting what no open project needs (HS2-ARJ9J1). */const closing=new Set(ids),before=projects.value,selectedIndex=before.findIndex(item=>item.id===selectedProjectId.value);let activation:ReturnType<typeof activateOpenProject>;for(const id of ids){projectTabRefresh.cancel(id);pendingCreatedTickets.forgetProject(id);projectsPendingActivation.delete(id);warmProjects.forget(id);aiConfigurationController.forgetAiConfiguration(id)}projects.value=before.filter(item=>!closing.has(item.id));ticketRowsByProject.value=Object.fromEntries(Object.entries(ticketRowsByProject.value).filter(([id])=>!closing.has(id)));ticketCursorsByProject.value=Object.fromEntries(Object.entries(ticketCursorsByProject.value).filter(([id])=>!closing.has(id)));boardPagesByProject.value=Object.fromEntries(Object.entries(boardPagesByProject.value).filter(([id])=>!closing.has(id)));ticketCountsByProject.value=Object.fromEntries(Object.entries(ticketCountsByProject.value).filter(([id])=>!closing.has(id)));ticketTrendByProject.value=Object.fromEntries(Object.entries(ticketTrendByProject.value).filter(([id])=>!closing.has(id)));projectProjectionById.value=Object.fromEntries(Object.entries(projectProjectionById.value).filter(([id])=>!closing.has(id)));customViewsByProject.value=Object.fromEntries(Object.entries(customViewsByProject.value).filter(([id])=>!closing.has(id)));terminalDrawerChatsByProject.value=Object.fromEntries(Object.entries(terminalDrawerChatsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsDraftsByProject.value=Object.fromEntries(Object.entries(commandSettingsDraftsByProject.value).filter(([id])=>!closing.has(id)));commandSettingsMessagesByProject.value=Object.fromEntries(Object.entries(commandSettingsMessagesByProject.value).filter(([id])=>!closing.has(id)));commandSettingsSelectedByProject.value=Object.fromEntries(Object.entries(commandSettingsSelectedByProject.value).filter(([id])=>!closing.has(id)));commandSettingsExtraGroupsByProject.value=Object.fromEntries(Object.entries(commandSettingsExtraGroupsByProject.value).filter(([id])=>!closing.has(id)));if(statsProjectId.value&&closing.has(statsProjectId.value))statsProjectId.value=undefined;if(closing.has(selectedProjectId.value)){resetTicketComposer();const next=projects.value.find(item=>before.indexOf(item)>selectedIndex)?.id??[...projects.value].reverse().find(item=>before.indexOf(item)<selectedIndex)?.id??projects.value[0]?.id??'';if(next)activation=activateOpenProject(next);else selectedProjectId.value='';if(!selectedProjectId.value&&projectRestoreFailures.value.length)selectedProjectRestoreRoot.value=projectRestoreFailures.value[0].root}defaultProviders.value=Object.fromEntries(Object.entries(defaultProviders.value).filter(([id])=>!closing.has(id)));driveConnectionsByProject.value=Object.fromEntries(Object.entries(driveConnectionsByProject.value).filter(([id])=>!closing.has(id)));drivePendingByProject.value=Object.fromEntries(Object.entries(drivePendingByProject.value).filter(([id])=>!closing.has(id)));localStorage.setItem('hotsheet.open-projects',JSON.stringify(currentRememberedProjectRoots()));syncProjectChangeStreams();commandDialogId.value=undefined;commandSettingsEditingId.value=undefined;if(activation)void refreshActivatedProject(activation,terminalDrawerVisible.value);else if(project())void Promise.all([refreshProject(),refreshCommands(),refreshCustomViews(),refreshDriveConnections()]);else{commandDefinitions.value=[];commandRuns.value=[]}}
+  function closeProjectIds(ids: readonly string[]) {
+    disposeProjectTicketReaders(ids);
+    for (const item of projects.value)
+      if (ids.includes(item.id)) void new Api(item.apiPath).closeProjectSession().catch(() => undefined);
+    /* Lets the server stop hosting what no open project needs (HS2-ARJ9J1). */ const closing = new Set(ids),
+      before = projects.value,
+      selectedIndex = before.findIndex((item) => item.id === selectedProjectId.value);
+    let activation: ReturnType<typeof activateOpenProject>;
+    for (const id of ids) {
+      projectTabRefresh.cancel(id);
+      pendingCreatedTickets.forgetProject(id);
+      projectsPendingActivation.delete(id);
+      warmProjects.forget(id);
+      aiConfigurationController.forgetAiConfiguration(id);
+    }
+    projects.value = before.filter((item) => !closing.has(item.id));
+    ticketRowsByProject.value = Object.fromEntries(
+      Object.entries(ticketRowsByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    ticketCursorsByProject.value = Object.fromEntries(
+      Object.entries(ticketCursorsByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    boardPagesByProject.value = Object.fromEntries(
+      Object.entries(boardPagesByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    ticketCountsByProject.value = Object.fromEntries(
+      Object.entries(ticketCountsByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    ticketTrendByProject.value = Object.fromEntries(
+      Object.entries(ticketTrendByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    projectProjectionById.value = Object.fromEntries(
+      Object.entries(projectProjectionById.value).filter(([id]) => !closing.has(id)),
+    );
+    customViewsByProject.value = Object.fromEntries(
+      Object.entries(customViewsByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    terminalDrawerChatsByProject.value = Object.fromEntries(
+      Object.entries(terminalDrawerChatsByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    commandSettingsDraftsByProject.value = Object.fromEntries(
+      Object.entries(commandSettingsDraftsByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    commandSettingsMessagesByProject.value = Object.fromEntries(
+      Object.entries(commandSettingsMessagesByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    commandSettingsSelectedByProject.value = Object.fromEntries(
+      Object.entries(commandSettingsSelectedByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    commandSettingsExtraGroupsByProject.value = Object.fromEntries(
+      Object.entries(commandSettingsExtraGroupsByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    if (statsProjectId.value && closing.has(statsProjectId.value)) statsProjectId.value = undefined;
+    if (closing.has(selectedProjectId.value)) {
+      resetTicketComposer();
+      const next =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        projects.value.find((item) => before.indexOf(item) > selectedIndex)?.id ??
+        [...projects.value].reverse().find((item) => before.indexOf(item) < selectedIndex)?.id ??
+        projects.value[0]?.id ??
+        '';
+      if (next) activation = activateOpenProject(next);
+      else selectedProjectId.value = '';
+      if (!selectedProjectId.value && projectRestoreFailures.value.length)
+        selectedProjectRestoreRoot.value = projectRestoreFailures.value[0].root;
+    }
+    defaultProviders.value = Object.fromEntries(
+      Object.entries(defaultProviders.value).filter(([id]) => !closing.has(id)),
+    );
+    driveConnectionsByProject.value = Object.fromEntries(
+      Object.entries(driveConnectionsByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    drivePendingByProject.value = Object.fromEntries(
+      Object.entries(drivePendingByProject.value).filter(([id]) => !closing.has(id)),
+    );
+    localStorage.setItem('hotsheet.open-projects', JSON.stringify(currentRememberedProjectRoots()));
+    syncProjectChangeStreams();
+    commandDialogId.value = undefined;
+    commandSettingsEditingId.value = undefined;
+    if (activation) void refreshActivatedProject(activation, terminalDrawerVisible.value);
+    else if (project())
+      void Promise.all([refreshProject(), refreshCommands(), refreshCustomViews(), refreshDriveConnections()]);
+    else {
+      commandDefinitions.value = [];
+      commandRuns.value = [];
+    }
+  }
   function projectCloseResources(projectId: string): ProjectCloseResource[] {
     const terminals = (terminalGroups.value.find((group) => group.projectId === projectId)?.sessions ?? [])
       .filter((session) => session.alive)
@@ -1964,9 +2099,30 @@ export async function startHotSheetWebClient() {
     projectCloseDialog.value = undefined;
     queueMicrotask(presentNextProjectClose);
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function closeAllProjectResources(){const state=projectCloseDialog.value,target=state&&projects.value.find(item=>item.id===state.projectId);if(!state||!target||state.operation)return;projectCloseDialog.value={...state,operation:'closing-all',error:''};try{await Promise.all(state.resources.map(resource=>resource.kind==='terminal'?new Api(target.apiPath).deleteTerminal(resource.id):new Api(target.apiPath).deleteToolConnection(target.id,resource.id)));if(projectCloseDialog.value?.projectId!==state.projectId)return;closeProjectIds([state.projectId]);pendingProjectCloseIds=pendingProjectCloseIds.filter(id=>id!==state.projectId);projectCloseDialog.value=undefined;queueMicrotask(presentNextProjectClose)}catch(reason){if(projectCloseDialog.value?.projectId===state.projectId)projectCloseDialog.value={...state,error:reason instanceof Error?reason.message:String(reason)}}}
+  async function closeAllProjectResources() {
+    const state = projectCloseDialog.value,
+      target = state && projects.value.find((item) => item.id === state.projectId);
+    if (!state || !target || state.operation) return;
+    projectCloseDialog.value = { ...state, operation: 'closing-all', error: '' };
+    try {
+      await Promise.all(
+        state.resources.map((resource) =>
+          resource.kind === 'terminal'
+            ? new Api(target.apiPath).deleteTerminal(resource.id)
+            : new Api(target.apiPath).deleteToolConnection(target.id, resource.id),
+        ),
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      if (projectCloseDialog.value?.projectId !== state.projectId) return;
+      closeProjectIds([state.projectId]);
+      pendingProjectCloseIds = pendingProjectCloseIds.filter((id) => id !== state.projectId);
+      projectCloseDialog.value = undefined;
+      queueMicrotask(presentNextProjectClose);
+    } catch (reason) {
+      if (projectCloseDialog.value?.projectId === state.projectId)
+        projectCloseDialog.value = { ...state, error: reason instanceof Error ? reason.message : String(reason) };
+    }
+  }
   function restoreBorrowedProjectCloseTerminal(state: ProjectCloseDialogState | undefined) {
     if (selectedProjectCloseResource(state?.resources ?? [], state?.selectedKey)?.kind !== 'terminal') return;
     requestAnimationFrame(() => window.dispatchEvent(new CustomEvent(TERMINAL_DRAWER_RESIZE_END_EVENT)));
@@ -2293,9 +2449,70 @@ export async function startHotSheetWebClient() {
       },
     };
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function activateOpenProject(next:string):{project:Project;generation:number;cached:boolean}|undefined{const nextProject=projects.value.find(item=>item.id===next);if(!nextProject)return;if(next!==selectedProjectId.value)parkProjectViewports(selectedProjectId.value);projectTabRefresh.activate(next);const finishTiming=beginInteractionTiming('project-change',{project:next});persistProjectSessionNow();cacheActiveProjectProjection();resetTicketComposer(false);resetProgressiveTicketRendering();resetBoardColumnPages();const rows=ticketRowsByProject.value[next],cached=rows!==undefined,projection=projectProjectionById.value[next],stored=loadProjectWorkspaceSession(localStorage,next),generation=++projectActivationGeneration,live=new Set(rows?.map(ticket=>ticket.slug)??[]),selection=stored?.selectedTicketSlugs.filter(slug=>live.has(slug))??[],drawerActivation=terminalDrawerActivation(localStorage,next);batch(()=>{selectedProjectRestoreRoot.value='';selectedProjectId.value=drawerActivation.projectId;terminalDrawerSelected.value=drawerActivation.selectedId;tickets.value=rows??[];ticketNextCursor.value=ticketCursorsByProject.value[next];boardColumnPages.value=boardPagesByProject.value[next]??{};ticketCollectionState.value=undefined;corruptTickets.value=projection?.corruptTickets??[];repository.value=projection?.repository??null;repositoryError.value=projection?.repositoryError??'';commandDefinitions.value=projection?.commandDefinitions??[];commandRuns.value=projection?.commandRuns??[];commandSettingsEditingId.value=undefined;selectedView.value=stored?.selectedView==='errors'&&!projection?.corruptTickets.length?'all':stored?.selectedView??'all';searchOpen.value=stored?.searchOpen??false;searchQuery.value=stored?.searchQuery??'';searchMatchKeys.value=projection?.searchMatchKeys;selectedCorruptKey.value=undefined;selectedTicket.value=null;selectedTicketSlugs.value=selection;ticketSelectionAnchor=selection[0];error.value='';loading.value=!cached});markProjectWarm(next);aiConfigurationController.restoreAiConfiguration(nextProject);scheduleClaimLeaseExpiry();saveActiveProjectRoot(localStorage,nextProject.root);finishTiming();return{project:nextProject,generation,cached}}
+  function activateOpenProject(next: string): { project: Project; generation: number; cached: boolean } | undefined {
+    const nextProject = projects.value.find((item) => item.id === next);
+    if (!nextProject) return;
+    if (next !== selectedProjectId.value) parkProjectViewports(selectedProjectId.value);
+    projectTabRefresh.activate(next);
+    const finishTiming = beginInteractionTiming('project-change', { project: next });
+    persistProjectSessionNow();
+    cacheActiveProjectProjection();
+    resetTicketComposer(false);
+    resetProgressiveTicketRendering();
+    resetBoardColumnPages();
+    const rows = ticketRowsByProject.value[next],
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      cached = rows !== undefined,
+      projection = projectProjectionById.value[next],
+      stored = loadProjectWorkspaceSession(localStorage, next),
+      generation = ++projectActivationGeneration,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      live = new Set(rows?.map((ticket) => ticket.slug) ?? []),
+      selection = stored?.selectedTicketSlugs.filter((slug) => live.has(slug)) ?? [],
+      drawerActivation = terminalDrawerActivation(localStorage, next);
+    batch(() => {
+      selectedProjectRestoreRoot.value = '';
+      selectedProjectId.value = drawerActivation.projectId;
+      terminalDrawerSelected.value = drawerActivation.selectedId;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      tickets.value = rows ?? [];
+      ticketNextCursor.value = ticketCursorsByProject.value[next];
+      boardColumnPages.value = boardPagesByProject.value[next] ?? {};
+      ticketCollectionState.value = undefined;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      corruptTickets.value = projection?.corruptTickets ?? [];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      repository.value = projection?.repository ?? null;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      repositoryError.value = projection?.repositoryError ?? '';
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      commandDefinitions.value = projection?.commandDefinitions ?? [];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      commandRuns.value = projection?.commandRuns ?? [];
+      commandSettingsEditingId.value = undefined;
+      selectedView.value =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        stored?.selectedView === 'errors' && !projection?.corruptTickets.length
+          ? 'all'
+          : (stored?.selectedView ?? 'all');
+      searchOpen.value = stored?.searchOpen ?? false;
+      searchQuery.value = stored?.searchQuery ?? '';
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      searchMatchKeys.value = projection?.searchMatchKeys;
+      selectedCorruptKey.value = undefined;
+      selectedTicket.value = null;
+      selectedTicketSlugs.value = selection;
+      ticketSelectionAnchor = selection[0];
+      error.value = '';
+      loading.value = !cached;
+    });
+    markProjectWarm(next);
+    aiConfigurationController.restoreAiConfiguration(nextProject);
+    scheduleClaimLeaseExpiry();
+    saveActiveProjectRoot(localStorage, nextProject.root);
+    finishTiming();
+    return { project: nextProject, generation, cached };
+  }
   /** Mark a project most recently used and drop the resident projection of any LRU-evicted project. */
   function markProjectWarm(id: string) {
     const evicted = warmProjects.touch(id).filter((item) => item !== selectedProjectId.value);
@@ -2627,9 +2844,30 @@ export async function startHotSheetWebClient() {
   function projectTabTicketRows(projectId: string) {
     return projectId === selectedProjectId.value ? tickets.value : (ticketRowsByProject.value[projectId] ?? []);
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function projectTicketCounts(projectId:string){const exact=ticketCountsByProject.value[projectId];if(exact)return exact;const rows=projectTabTicketRows(projectId),work=projectTabTicketState(rows),carry=ticketTrendByProject.value[projectId],completionTrend=carry?[...carry.trend]:ticketCompletionTrend(rows);return{total:rows.length,queued:rows.filter(isQueuedTicket).length,backlog:rows.filter(ticket=>ticket.status==='backlog').length,archive:rows.filter(isArchivedTicket).length,trash:rows.filter(isTrashedTicket).length,open:rows.filter(isOpenTicket).length,up_next:work.upNextCount,active:work.activeTicketCount,started:rows.filter(ticket=>ticket.status==='started').length,completed_today:carry?carry.completedToday:(completionTrend.at(-1)??0),completion_trend:completionTrend}}
+  function projectTicketCounts(projectId: string) {
+    const exact = ticketCountsByProject.value[projectId];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    if (exact) return exact;
+    const rows = projectTabTicketRows(projectId),
+      work = projectTabTicketState(rows),
+      carry = ticketTrendByProject.value[projectId],
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      completionTrend = carry ? [...carry.trend] : ticketCompletionTrend(rows);
+    return {
+      total: rows.length,
+      queued: rows.filter(isQueuedTicket).length,
+      backlog: rows.filter((ticket) => ticket.status === 'backlog').length,
+      archive: rows.filter(isArchivedTicket).length,
+      trash: rows.filter(isTrashedTicket).length,
+      open: rows.filter(isOpenTicket).length,
+      up_next: work.upNextCount,
+      active: work.activeTicketCount,
+      started: rows.filter((ticket) => ticket.status === 'started').length,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      completed_today: carry ? carry.completedToday : (completionTrend.at(-1) ?? 0),
+      completion_trend: completionTrend,
+    };
+  }
   function publishOptimisticTicketRows(projectId: string) {
     ticketRowsByProject.value = { ...ticketRowsByProject.value, [projectId]: tickets.value };
     ticketCountsByProject.value = Object.fromEntries(
@@ -3075,9 +3313,43 @@ export async function startHotSheetWebClient() {
       document.querySelector<HTMLElement>('[data-work-area-focus-owner]')?.focus({ preventScroll: true });
     }, 0);
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function openTicketLinkMatch(match:TicketLinkMatch){const target=projects.value.find(item=>item.id===match.projectId);if(!target){showToast(`No open project matches ${match.projectId}.`);return}ticketLinkChoice.value=undefined;const cached=ticketRowsByProject.value[target.id]??[],row=cached.find(item=>item.qualified_id===match.qualifiedId);if(row)ticketRowsByProject.value={...ticketRowsByProject.value,[target.id]:mergeTicketLinkRows(cached,[row])};try{const ticket=(await new Api(target.apiPath).checkoutTicket(target.id,match.qualifiedId)).ticket,capabilities=capabilitiesFor(ticket.connection_id);if(!capabilities)throw new Error(`Capabilities unavailable for ${ticket.connection_id}.`);const id=browserRandomId(),trigger=ticketLinkReturnFocus;ticketLinkReturnFocus=undefined;linkedReaderStack.value=pushTicketReaderFrame(linkedReaderStack.value,{id,open:false,projectId:target.id,projectName:target.name,apiPath:target.apiPath,ticket,activeTab:'info',capabilities,edit:ticketReaderEditState(ticket)});presentTicketReaderDialog(id,trigger,()=>{replaceLinkedReaderFrame(id,frame=>({...frame,open:true}))})}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
+  async function openTicketLinkMatch(match: TicketLinkMatch) {
+    const target = projects.value.find((item) => item.id === match.projectId);
+    if (!target) {
+      showToast(`No open project matches ${match.projectId}.`);
+      return;
+    }
+    ticketLinkChoice.value = undefined;
+    const cached = ticketRowsByProject.value[target.id] ?? [],
+      row = cached.find((item) => item.qualified_id === match.qualifiedId);
+    if (row)
+      ticketRowsByProject.value = { ...ticketRowsByProject.value, [target.id]: mergeTicketLinkRows(cached, [row]) };
+    try {
+      const ticket = (await new Api(target.apiPath).checkoutTicket(target.id, match.qualifiedId)).ticket,
+        capabilities = capabilitiesFor(ticket.connection_id);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      if (!capabilities) throw new Error(`Capabilities unavailable for ${ticket.connection_id}.`);
+      const id = browserRandomId(),
+        trigger = ticketLinkReturnFocus;
+      ticketLinkReturnFocus = undefined;
+      linkedReaderStack.value = pushTicketReaderFrame(linkedReaderStack.value, {
+        id,
+        open: false,
+        projectId: target.id,
+        projectName: target.name,
+        apiPath: target.apiPath,
+        ticket,
+        activeTab: 'info',
+        capabilities,
+        edit: ticketReaderEditState(ticket),
+      });
+      presentTicketReaderDialog(id, trigger, () => {
+        replaceLinkedReaderFrame(id, (frame) => ({ ...frame, open: true }));
+      });
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
   async function selectLinkedTicket(
     slug: string,
     projectId?: string,
@@ -3767,15 +4039,76 @@ export async function startHotSheetWebClient() {
   function setCorruptRecovery(key: string, value: CorruptTicketRecoveryState) {
     corruptRecovery.value = { ...corruptRecovery.value, [key]: value };
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function revealCorruptTicket(key:string){const current=project(),ticket=corruptTickets.value.find(item=>corruptTicketKey(item)===key);if(!current||!ticket||corruptRecovery.value[key]?.pending)return;setCorruptRecovery(key,{pending:'reveal'});try{await revealCorruptTicketFile(current.id,ticket.path);setCorruptRecovery(key,{});showToast('Opened the file location.')}catch(reason){setCorruptRecovery(key,{message:reason instanceof Error?reason.message:String(reason),failed:true})}}
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function queueCorruptTicketRepair(key:string){const current=project(),ticket=corruptTickets.value.find(item=>corruptTicketKey(item)===key);if(!current||!ticket||ticket.error_code==='upgrade_required'||corruptRecovery.value[key]?.pending)return;setCorruptRecovery(key,{pending:'repair'});try{const created=await new Api(current.apiPath).createCorruptTicketRepair(current.id,ticket.path);setCorruptRecovery(key,{});showToast(`Queued ${created.slug} for AI repair.`);if(project()?.id===current.id)await refreshProject({showLoading:false})}catch(reason){setCorruptRecovery(key,{message:reason instanceof Error?reason.message:String(reason),failed:true})}}
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function refreshCommands(current=project(),quiet=false){const generation=++commandRefreshGeneration;if(!current)return;const active=()=>generation===commandRefreshGeneration&&project()?.id===current.id;try{const client=new Api(current.apiPath,'',{trackBusy:!quiet}),previous=JSON.stringify(commandDefinitions.value,null,2),[definitions,runs,groups]=await Promise.all([client.commands(),client.commandRuns(),/* An older server without kept command groups (HS2-EZ5KMC) must not block commands. */client.commandGroups().catch(()=>undefined)]);if(!active())return;commandDefinitions.value=definitions;commandRuns.value=runs;if(groups)loadCommandGroups(current.id,groups);const projection=projectProjectionById.value[current.id];projectProjectionById.value={...projectProjectionById.value,[current.id]:{corruptTickets:projection?.corruptTickets??corruptTickets.value,repository:projection?.repository??repository.value,repositoryError:projection?.repositoryError??repositoryError.value,commandDefinitions:definitions,commandRuns:runs}};const draft=commandSettingsDraftsByProject.value[current.id];if(viewMode.value!=='settings'||draft===undefined||draft===previous)setCommandSettingsDraft(current.id,JSON.stringify(definitions,null,2));setCommandSettingsMessage(current.id,'')}catch(reason){if(active())setCommandSettingsMessage(current.id,reason instanceof Error?reason.message:String(reason))}}
+  async function revealCorruptTicket(key: string) {
+    const current = project(),
+      ticket = corruptTickets.value.find((item) => corruptTicketKey(item) === key);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    if (!current || !ticket || corruptRecovery.value[key]?.pending) return;
+    setCorruptRecovery(key, { pending: 'reveal' });
+    try {
+      await revealCorruptTicketFile(current.id, ticket.path);
+      setCorruptRecovery(key, {});
+      showToast('Opened the file location.');
+    } catch (reason) {
+      setCorruptRecovery(key, { message: reason instanceof Error ? reason.message : String(reason), failed: true });
+    }
+  }
+  async function queueCorruptTicketRepair(key: string) {
+    const current = project(),
+      ticket = corruptTickets.value.find((item) => corruptTicketKey(item) === key);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    if (!current || !ticket || ticket.error_code === 'upgrade_required' || corruptRecovery.value[key]?.pending) return;
+    setCorruptRecovery(key, { pending: 'repair' });
+    try {
+      const created = await new Api(current.apiPath).createCorruptTicketRepair(current.id, ticket.path);
+      setCorruptRecovery(key, {});
+      showToast(`Queued ${created.slug} for AI repair.`);
+      if (project()?.id === current.id) await refreshProject({ showLoading: false });
+    } catch (reason) {
+      setCorruptRecovery(key, { message: reason instanceof Error ? reason.message : String(reason), failed: true });
+    }
+  }
+  async function refreshCommands(current = project(), quiet = false) {
+    const generation = ++commandRefreshGeneration;
+    if (!current) return;
+    const active = () => generation === commandRefreshGeneration && project()?.id === current.id;
+    try {
+      const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
+        previous = JSON.stringify(commandDefinitions.value, null, 2),
+        [definitions, runs, groups] = await Promise.all([
+          client.commands(),
+          client.commandRuns(),
+          /* An older server without kept command groups (HS2-EZ5KMC) must not block commands. */ client
+            .commandGroups()
+            .catch(() => undefined),
+        ]);
+      if (!active()) return;
+      commandDefinitions.value = definitions;
+      commandRuns.value = runs;
+      if (groups) loadCommandGroups(current.id, groups);
+      const projection = projectProjectionById.value[current.id];
+      projectProjectionById.value = {
+        ...projectProjectionById.value,
+        [current.id]: {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+          corruptTickets: projection?.corruptTickets ?? corruptTickets.value,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+          repository: projection?.repository ?? repository.value,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+          repositoryError: projection?.repositoryError ?? repositoryError.value,
+          commandDefinitions: definitions,
+          commandRuns: runs,
+        },
+      };
+      const draft = commandSettingsDraftsByProject.value[current.id];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      if (viewMode.value !== 'settings' || draft === undefined || draft === previous)
+        setCommandSettingsDraft(current.id, JSON.stringify(definitions, null, 2));
+      setCommandSettingsMessage(current.id, '');
+    } catch (reason) {
+      if (active()) setCommandSettingsMessage(current.id, reason instanceof Error ? reason.message : String(reason));
+    }
+  }
   async function refreshCustomViews(current = project(), quiet = false) {
     if (!current) return;
     try {
@@ -3792,9 +4125,48 @@ export async function startHotSheetWebClient() {
       /* older or temporarily unavailable servers simply keep their last known shared view list */
     }
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary.
-  async function refreshDriveConnections(current=project(),restoreDrawerTabs=false,quiet=false){if(!current)return;if(project()?.id===current.id&&!aiConfigurationController.restoreAiConfiguration(current))void refreshAiConfiguration(current);try{const startGeneration=conversationStartGeneration,pendingAtRequest=new Set(pendingConversationStarts),client=new Api(current.apiPath,'',{trackBusy:!quiet}),[active,sessions]=await Promise.all([client.activeToolConnections(),client.toolSessions().catch(()=>[])]),activeIds=new Set(active.map(connection=>connection.id)),connections=await recoverProjectConnections(client,active,sessions,current.id,current.root);if(startGeneration===conversationStartGeneration&&projects.value.some(item=>item.id===current.id)){for(const connection of connections)if(conversationStates.peek()[connection.id]?.activeAssistantId&&!pendingAtRequest.has(connection.id)&&!pendingConversationStarts.has(connection.id))updateConversation(connection.id,state=>!state.activeAssistantId?state:!activeIds.has(connection.id)?applyConversationEvent(state,{type:'done',reason:'interrupted'}):reconcileConversationConnection(state,connection));driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:connections};if(restoreDrawerTabs)terminalDrawerChatsByProject.value={...terminalDrawerChatsByProject.value,[current.id]:restoreDrawerAIChats(connections,current.id,terminalDrawerChatsByProject.value[current.id],aiToolLabel)}}}catch{/* retain the last event-projected state while a project server reconnects */}}
+  async function refreshDriveConnections(current = project(), restoreDrawerTabs = false, quiet = false) {
+    if (!current) return;
+    if (project()?.id === current.id && !aiConfigurationController.restoreAiConfiguration(current))
+      void refreshAiConfiguration(current);
+    try {
+      const startGeneration = conversationStartGeneration,
+        pendingAtRequest = new Set(pendingConversationStarts),
+        client = new Api(current.apiPath, '', { trackBusy: !quiet }),
+        [active, sessions] = await Promise.all([client.activeToolConnections(), client.toolSessions().catch(() => [])]),
+        activeIds = new Set(active.map((connection) => connection.id)),
+        connections = await recoverProjectConnections(client, active, sessions, current.id, current.root);
+      if (startGeneration === conversationStartGeneration && projects.value.some((item) => item.id === current.id)) {
+        for (const connection of connections)
+          if (
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted per-connection state may be missing at this runtime boundary.
+            conversationStates.peek()[connection.id]?.activeAssistantId &&
+            !pendingAtRequest.has(connection.id) &&
+            !pendingConversationStarts.has(connection.id)
+          )
+            updateConversation(connection.id, (state) =>
+              !state.activeAssistantId
+                ? state
+                : !activeIds.has(connection.id)
+                  ? applyConversationEvent(state, { type: 'done', reason: 'interrupted' })
+                  : reconcileConversationConnection(state, connection),
+            );
+        driveConnectionsByProject.value = { ...driveConnectionsByProject.value, [current.id]: connections };
+        if (restoreDrawerTabs)
+          terminalDrawerChatsByProject.value = {
+            ...terminalDrawerChatsByProject.value,
+            [current.id]: restoreDrawerAIChats(
+              connections,
+              current.id,
+              terminalDrawerChatsByProject.value[current.id],
+              aiToolLabel,
+            ),
+          };
+      }
+    } catch {
+      /* retain the last event-projected state while a project server reconnects */
+    }
+  }
   function replaceConversationStates(states: Record<string, ConversationState>, streamed = false) {
     conversationStates.value = states;
     conversationPersistence.schedule();
@@ -3815,9 +4187,17 @@ export async function startHotSheetWebClient() {
       streamed,
     );
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function conversationForActivity(current:Project,tool:string,session?:string){const conversations=conversationStates.peek(),connections=(driveConnectionsByProject.value[current.id]??[]).filter(item=>item.tool.toLowerCase()===tool.toLowerCase()&&conversations[item.id]);return connections.find(item=>session&&(item.session_id===session||item.id===session))??(connections.length===1?connections[0]:undefined)}
+  function conversationForActivity(current: Project, tool: string, session?: string) {
+    const conversations = conversationStates.peek(),
+      connections = (driveConnectionsByProject.value[current.id] ?? []).filter(
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        (item) => item.tool.toLowerCase() === tool.toLowerCase() && conversations[item.id],
+      );
+    return (
+      connections.find((item) => session && (item.session_id === session || item.id === session)) ??
+      (connections.length === 1 ? connections[0] : undefined)
+    );
+  }
   function beginConversation(connectionId: string, content: string) {
     conversationStartGeneration += 1;
     pendingConversationStarts.add(connectionId);
@@ -3904,9 +4284,61 @@ export async function startHotSheetWebClient() {
       drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
     }
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function sendConversationTurn(){const current=project(),connectionId=conversationConnectionId.value,draft=connectionId?conversationDrafts.value[connectionId]?.trim():'';if(!current||!connectionId||!draft)return;const connection=(driveConnectionsByProject.value[current.id]??[]).find(item=>item.id===connectionId),selection=conversationAiSelection(connectionId),turnSelection={...(selection.descriptor?.actions?.includes('change_model')&&selection.model?{model:selection.model}:{}),...(selection.descriptor?.actions?.includes('change_effort')&&selection.effort?{effort:selection.effort}:{})};if(!connection?.actions?.includes('send_turn')||connection.busy)return;const finishStart=beginConversation(connectionId,draft);conversationDrafts.value={...conversationDrafts.value,[connectionId]:''};const composer=document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]');if(composer)composer.value='';requestAnimationFrame(()=>{syncConversationScroll(document,true)});try{const updated=await new Api(current.apiPath).sendToolTurn(connectionId,draft,connection.session_id,turnSelection);if(project()?.id===current.id)driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:(driveConnectionsByProject.value[current.id]??[]).filter(item=>item.id!==updated.id).concat(updated)}}catch(reason){const message=reason instanceof Error?reason.message:String(reason);updateConversation(connectionId,state=>({...state,activeAssistantId:undefined,progress:undefined,error:message,messages:state.messages.map(item=>item.id===state.activeAssistantId?{...item,status:'failed',content:item.content||'The message could not be sent.'}:item)}))}finally{finishStart()}}
+  async function sendConversationTurn() {
+    const current = project(),
+      connectionId = conversationConnectionId.value,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      draft = connectionId ? conversationDrafts.value[connectionId]?.trim() : '';
+    if (!current || !connectionId || !draft) return;
+    const connection = (driveConnectionsByProject.value[current.id] ?? []).find((item) => item.id === connectionId),
+      selection = conversationAiSelection(connectionId),
+      turnSelection = {
+        ...(selection.descriptor?.actions?.includes('change_model') && selection.model
+          ? { model: selection.model }
+          : {}),
+        ...(selection.descriptor?.actions?.includes('change_effort') && selection.effort
+          ? { effort: selection.effort }
+          : {}),
+      };
+    if (!connection?.actions?.includes('send_turn') || connection.busy) return;
+    const finishStart = beginConversation(connectionId, draft);
+    conversationDrafts.value = { ...conversationDrafts.value, [connectionId]: '' };
+    const composer = document.querySelector<HTMLTextAreaElement>('[name="conversation-draft"]');
+    if (composer) composer.value = '';
+    requestAnimationFrame(() => {
+      syncConversationScroll(document, true);
+    });
+    try {
+      const updated = await new Api(current.apiPath).sendToolTurn(
+        connectionId,
+        draft,
+        connection.session_id,
+        turnSelection,
+      );
+      if (project()?.id === current.id)
+        driveConnectionsByProject.value = {
+          ...driveConnectionsByProject.value,
+          [current.id]: (driveConnectionsByProject.value[current.id] ?? [])
+            .filter((item) => item.id !== updated.id)
+            .concat(updated),
+        };
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      updateConversation(connectionId, (state) => ({
+        ...state,
+        activeAssistantId: undefined,
+        progress: undefined,
+        error: message,
+        messages: state.messages.map((item) =>
+          item.id === state.activeAssistantId
+            ? { ...item, status: 'failed', content: item.content || 'The message could not be sent.' }
+            : item,
+        ),
+      }));
+    } finally {
+      finishStart();
+    }
+  }
   async function stopConversation() {
     const current = project(),
       connectionId = conversationConnectionId.value;
@@ -4096,8 +4528,244 @@ export async function startHotSheetWebClient() {
         projectChangeStreams.set(current.id, stop);
       }
   }
-  // prettier-ignore
-  const { restoreTicketDraft, flushTicketDrafts, updateSelected, history, updateSelectedTracked, detailsAutosave, readerDetailsAutosave, noteAutosave, readerNoteAutosave, blockedReasonAutosave, readerBlockedReasonAutosave, titleAutosave, tagsAutosave, linkedReaderFrame, linkedReaderAutosaves, replaceLinkedReaderFrame, linkedReaderSaves, flushLinkedReader, selectedRows, restoreTrashedTickets, executeBulkTicketAction, openEmptyTrash, emptyTrash, openBulkTicketDialog, copySelection, pasteSelection, copyDraggedTickets, isEditableEvent, ticketWorkAreaFocused, ordinaryTextSelected, timeline, notes, attachmentContext: ticketAttachmentContext, duplicateTargetFor, addAttachments, selectionOrder, presentTicket, cancelTicketDrafts, selectTickets, openTicketReader, closeNotWorking, presentNotWorkingDialog, openNotWorking, closeTicketCloseDialog, openTicketClose, setTicketCloseReason, searchTicketCloseTargets, submitTicketClose, openDuplicateTarget, addNotWorkingFiles, openTicketComposer, resetTicketComposer, addNewTicketFiles, submitNewTicket, submitNotWorking, } = createTicketWorkflows({ state: { get blockedReasonDraftBase() { return blockedReasonDraftBase; }, set blockedReasonDraftBase(value) { blockedReasonDraftBase = value; }, get bulkTicketSlugs() { return bulkTicketSlugs; }, set bulkTicketSlugs(value) { bulkTicketSlugs = value; }, get clipboard() { return clipboard; }, set clipboard(value) { clipboard = value; }, get detailsDraftBase() { return detailsDraftBase; }, set detailsDraftBase(value) { detailsDraftBase = value; }, get detailsEditGeneration() { return detailsEditGeneration; }, set detailsEditGeneration(value) { detailsEditGeneration = value; }, get noteDraftBase() { return noteDraftBase; }, set noteDraftBase(value) { noteDraftBase = value; }, get readerBlockedReasonDraftBase() { return readerBlockedReasonDraftBase; }, set readerBlockedReasonDraftBase(value) { readerBlockedReasonDraftBase = value; }, get readerDetailsDraftBase() { return readerDetailsDraftBase; }, set readerDetailsDraftBase(value) { readerDetailsDraftBase = value; }, get readerDetailsEditGeneration() { return readerDetailsEditGeneration; }, set readerDetailsEditGeneration(value) { readerDetailsEditGeneration = value; }, get readerNoteDraftBase() { return readerNoteDraftBase; }, set readerNoteDraftBase(value) { readerNoteDraftBase = value; }, get ticketSelectionAnchor() { return ticketSelectionAnchor; }, set ticketSelectionAnchor(value) { ticketSelectionAnchor = value; }, get titleDraftBase() { return titleDraftBase; }, set titleDraftBase(value) { titleDraftBase = value; }, }, CLOSED_NOT_WORKING_TARGET, projects, selectedProjectId, tickets, ticketRowsByProject, ticketCountsByProject, selectedTicket, selectedTicketSlugs, selectedCorruptKey, selectedView, ticketCollectionState, loading, error, attachmentMessage, inspectorTab, inspectorVisible, readerTab, readerOpen, linkedReaderStack, detailsMode, detailsDraft, readerDetailsMode, readerDetailsDraft, titleEditingSurface, titleDraft, blockedReasonEditing, blockedReasonDraft, readerBlockedReasonEditing, readerBlockedReasonDraft, editingNoteId, readerEditingNoteId, noteDraft, readerNoteDraft, fieldConflict, fieldConflictResolution, readerInlineFeedbackReplies, readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, codeReview, codeReviewLoading, codeReviewMessage, expandedCodeReviewCommits, duplicateBacklinkState, resolvedDuplicateTargets, ticketCloseDialog, ticketLinkChoice, bulkTicketDialog, notWorkingTarget, notWorkingNote, notWorkingFiles, notWorkingSubmitting, notWorkingError, composerExpanded, composerTitle, composerDetails, composerCategory, composerUpNext, composerSource, lastTicketSourceByProject, composerAttachments, composerAttachmentMessage, composerAttachmentError, composerScreening, composerSubmitting, histories, mutationGenerations, committedTickets, singleTicketMutationSequencer, bulkTicketMutationSequencer, localTicketChangeAcknowledgements, pendingCreatedTickets, project, api, defaultProvider, newTicketSource, capabilitiesFor, canUseAttachments, canStageNewTicketAttachments, ticketSnapshot, visibleTickets, projectTabTicketRows, projectTicketCounts, suppressBulkTicketMotion, beginBulkBoardRefill, finishBulkBoardRefill, publishOptimisticTicketRows, beginLocalTicketMutation, beginLocalTicketCreation, refreshProject, refreshTicketCollection, refreshCodeReview, selectTicketView, scheduleClaimLeaseExpiry, scheduleProjectSessionPersistence, persistWorkspacePreferences, showToast, showFieldConflict, reconcileRefreshedSelected, openTicketLinkMatch, presentTicketReaderDialog, beginDetailsEdit, revealTicketInspector: revealInspectorOverlay, activeTicketSurface, draftScope, ago, beginBulkUpdateProgress: bulkUpdateActivities.begin, });
+  const {
+    restoreTicketDraft,
+    flushTicketDrafts,
+    updateSelected,
+    history,
+    updateSelectedTracked,
+    detailsAutosave,
+    readerDetailsAutosave,
+    noteAutosave,
+    readerNoteAutosave,
+    blockedReasonAutosave,
+    readerBlockedReasonAutosave,
+    titleAutosave,
+    tagsAutosave,
+    linkedReaderFrame,
+    linkedReaderAutosaves,
+    replaceLinkedReaderFrame,
+    linkedReaderSaves,
+    flushLinkedReader,
+    selectedRows,
+    restoreTrashedTickets,
+    executeBulkTicketAction,
+    openEmptyTrash,
+    emptyTrash,
+    openBulkTicketDialog,
+    copySelection,
+    pasteSelection,
+    copyDraggedTickets,
+    isEditableEvent,
+    ticketWorkAreaFocused,
+    ordinaryTextSelected,
+    timeline,
+    notes,
+    attachmentContext: ticketAttachmentContext,
+    duplicateTargetFor,
+    addAttachments,
+    selectionOrder,
+    presentTicket,
+    cancelTicketDrafts,
+    selectTickets,
+    openTicketReader,
+    closeNotWorking,
+    presentNotWorkingDialog,
+    openNotWorking,
+    closeTicketCloseDialog,
+    openTicketClose,
+    setTicketCloseReason,
+    searchTicketCloseTargets,
+    submitTicketClose,
+    openDuplicateTarget,
+    addNotWorkingFiles,
+    openTicketComposer,
+    resetTicketComposer,
+    addNewTicketFiles,
+    submitNewTicket,
+    submitNotWorking,
+  } = createTicketWorkflows({
+    state: {
+      get blockedReasonDraftBase() {
+        return blockedReasonDraftBase;
+      },
+      set blockedReasonDraftBase(value) {
+        blockedReasonDraftBase = value;
+      },
+      get bulkTicketSlugs() {
+        return bulkTicketSlugs;
+      },
+      set bulkTicketSlugs(value) {
+        bulkTicketSlugs = value;
+      },
+      get clipboard() {
+        return clipboard;
+      },
+      set clipboard(value) {
+        clipboard = value;
+      },
+      get detailsDraftBase() {
+        return detailsDraftBase;
+      },
+      set detailsDraftBase(value) {
+        detailsDraftBase = value;
+      },
+      get detailsEditGeneration() {
+        return detailsEditGeneration;
+      },
+      set detailsEditGeneration(value) {
+        detailsEditGeneration = value;
+      },
+      get noteDraftBase() {
+        return noteDraftBase;
+      },
+      set noteDraftBase(value) {
+        noteDraftBase = value;
+      },
+      get readerBlockedReasonDraftBase() {
+        return readerBlockedReasonDraftBase;
+      },
+      set readerBlockedReasonDraftBase(value) {
+        readerBlockedReasonDraftBase = value;
+      },
+      get readerDetailsDraftBase() {
+        return readerDetailsDraftBase;
+      },
+      set readerDetailsDraftBase(value) {
+        readerDetailsDraftBase = value;
+      },
+      get readerDetailsEditGeneration() {
+        return readerDetailsEditGeneration;
+      },
+      set readerDetailsEditGeneration(value) {
+        readerDetailsEditGeneration = value;
+      },
+      get readerNoteDraftBase() {
+        return readerNoteDraftBase;
+      },
+      set readerNoteDraftBase(value) {
+        readerNoteDraftBase = value;
+      },
+      get ticketSelectionAnchor() {
+        return ticketSelectionAnchor;
+      },
+      set ticketSelectionAnchor(value) {
+        ticketSelectionAnchor = value;
+      },
+      get titleDraftBase() {
+        return titleDraftBase;
+      },
+      set titleDraftBase(value) {
+        titleDraftBase = value;
+      },
+    },
+    CLOSED_NOT_WORKING_TARGET,
+    projects,
+    selectedProjectId,
+    tickets,
+    ticketRowsByProject,
+    ticketCountsByProject,
+    selectedTicket,
+    selectedTicketSlugs,
+    selectedCorruptKey,
+    selectedView,
+    ticketCollectionState,
+    loading,
+    error,
+    attachmentMessage,
+    inspectorTab,
+    inspectorVisible,
+    readerTab,
+    readerOpen,
+    linkedReaderStack,
+    detailsMode,
+    detailsDraft,
+    readerDetailsMode,
+    readerDetailsDraft,
+    titleEditingSurface,
+    titleDraft,
+    blockedReasonEditing,
+    blockedReasonDraft,
+    readerBlockedReasonEditing,
+    readerBlockedReasonDraft,
+    editingNoteId,
+    readerEditingNoteId,
+    noteDraft,
+    readerNoteDraft,
+    fieldConflict,
+    fieldConflictResolution,
+    readerInlineFeedbackReplies,
+    readerFeedbackChoiceSelections,
+    readerFeedbackChoiceAnchors,
+    codeReview,
+    codeReviewLoading,
+    codeReviewMessage,
+    expandedCodeReviewCommits,
+    duplicateBacklinkState,
+    resolvedDuplicateTargets,
+    ticketCloseDialog,
+    ticketLinkChoice,
+    bulkTicketDialog,
+    notWorkingTarget,
+    notWorkingNote,
+    notWorkingFiles,
+    notWorkingSubmitting,
+    notWorkingError,
+    composerExpanded,
+    composerTitle,
+    composerDetails,
+    composerCategory,
+    composerUpNext,
+    composerSource,
+    lastTicketSourceByProject,
+    composerAttachments,
+    composerAttachmentMessage,
+    composerAttachmentError,
+    composerScreening,
+    composerSubmitting,
+    histories,
+    mutationGenerations,
+    committedTickets,
+    singleTicketMutationSequencer,
+    bulkTicketMutationSequencer,
+    localTicketChangeAcknowledgements,
+    pendingCreatedTickets,
+    project,
+    api,
+    defaultProvider,
+    newTicketSource,
+    capabilitiesFor,
+    canUseAttachments,
+    canStageNewTicketAttachments,
+    ticketSnapshot,
+    visibleTickets,
+    projectTabTicketRows,
+    projectTicketCounts,
+    suppressBulkTicketMotion,
+    beginBulkBoardRefill,
+    finishBulkBoardRefill,
+    publishOptimisticTicketRows,
+    beginLocalTicketMutation,
+    beginLocalTicketCreation,
+    refreshProject,
+    refreshTicketCollection,
+    refreshCodeReview,
+    selectTicketView,
+    scheduleClaimLeaseExpiry,
+    scheduleProjectSessionPersistence,
+    persistWorkspacePreferences,
+    showToast,
+    showFieldConflict,
+    reconcileRefreshedSelected,
+    openTicketLinkMatch,
+    presentTicketReaderDialog,
+    beginDetailsEdit,
+    revealTicketInspector: revealInspectorOverlay,
+    activeTicketSurface,
+    draftScope,
+    ago,
+    beginBulkUpdateProgress: bulkUpdateActivities.begin,
+  });
 
   async function queueAiCommand(command: CommandDefinition, current: Project) {
     if (!(defaultProvider()?.capabilities.create ?? true)) {
@@ -5768,215 +6436,595 @@ export async function startHotSheetWebClient() {
     return (readerOpen.value ? document.querySelector('[data-component="ticket-reader"]') : null) ?? document;
   }
 
-  // prettier-ignore
   const interactionBindingsPort: InteractionBindingsPort = {
-    openProjectPicker, openRemoteProjectDialog, chooseAndOpenProject, unhealthyServerRecovery, projectDialogOpen, openRemoteCheckout, remoteProjectDialogOpen, importHs1Project,
-    chooseHs1TicketStore, hs1MigrationProject, hs1MigrationBusy, hs1SourceIdentity, project, migrationJobDetails, migrationJobs, migrationConnectionErrors,
-    migrationJobsByRoot, ticketSourceSetupProject, createdGitTicketStore, ticketSourceSetupNavigation, removeOldHs1Data, projects, providerSetupKind, providerEditingId, requestProjectSourceRemoval, refreshProviderAccounts, identifyGithubAccount, signOutProviderAccount, requestUnusedAccountSourceRemoval, cancelUnusedAccountSourceRemoval, removeUnusedAccountSource, useGithubAccount, providerAccountChoice, useProviderAccount, setProjectDefaultSource, setProjectSourceColor, relinkProjectGitSource, retryProviderOutbox, discardProviderOutbox,
-    providerSettingsError, ticketSourceRemoteError, connectCreatedGitRemote, createProjectGitSource, chooseProjectPath, recoverUnhealthyProjectServer, repository, repositoryView, repositoryDetailActive: repositoryController.repositoryDetailActive,
-    repositorySetupStep, repositorySetupError, repositoryFileMenu, repositorySelectedFiles, repositoryComparison, expandedCodeReviewCommits, loadRepositoryDetail, refreshRepositoryStatus,
-    initializeRepository, connectRepositoryRemote, skipRepositoryRemote, repositoryDetail, showToast, error, codeReview, changeEvidenceView,
-    changeEvidenceReader, selectedTicket, codeReviewMessage, openProject, currentRememberedProjectRoots, persistDrawerTabOrder, currentDrawerTabIds, focusDrawerTab,
-    revealCorruptTicket, queueCorruptTicketRepair, corruptTickets, selectedCorruptKey, selectedTicketSlugs, setInspectorVisible, statsProjectId, setShellMode,
-    selectTerminalRailProject, selectTicketView, terminalRailScreen, selectProjectTab, retryProjectRestore, terminalDrawerBounds, terminalDashboardSize, terminalGridFullscreen,
-    terminalDrawerFitHigh, terminalFitAcross, terminalFitHigh, terminalSession, clearTerminalHalt, magnifiedTerminalKey, openTerminalInProject, terminalContextMenu, terminalVisibilityScopeFor,
-    terminalVisibility, persistTerminalVisibility, terminalVisibilityFilter, terminalVisibilityContextMenu, terminalVisibilityDialogScope, terminalVisibilityNamePrompt, terminalKeysForVisibilityDialog, openGridAIChat,
-    setTerminalDrawerVisible, terminalDrawerVisible, toggleTerminalDrawerMaximized, selectDrawerItem, enterMobileTerminalFocus, exitMobileTerminalFocus, cycleMobileTerminalColumns, terminalModifiers, terminalFunctionRow, terminalCopy, terminalPaste, terminalEditMenu, createProjectTerminal, aiLaunchConfiguration, createDrawerAIChat,
-    openSavedConversation, requestProjectClose, projectCloseDialog, restoreBorrowedProjectCloseTerminal, cancelProjectClose, confirmProjectClose, closeAllProjectResources, closeTerminalIds,
-    closeDrawerAIChat, appTabContextMenu, terminalGroups, terminalRename, closeDrawerTabIds, saveTerminalName, resetTerminalName, viewportMobile, sidebarCollapsed, inspectorCollapsed, revealInspectorOverlay,
-    selectTickets, selectionOrder, visibleTickets, selectedView, cancelTicketDrafts, openTicketReader, ticketContextMenu,
-    selectedRows, executeBulkTicketAction, tickets, openNotWorking, openTicketClose, copySelection, pasteSelection, openBulkTicketDialog,
-    restoreTrashedTickets, bulkTicketDialog, openEmptyTrash, emptyTrash, setTicketCloseReason, searchTicketCloseTargets, ticketCloseDialog, submitTicketClose,
-    closeTicketCloseDialog, openDuplicateTarget, notWorkingNote, scheduleProjectSessionPersistence, presentNotWorkingDialog, addNotWorkingFiles, draftScope, notWorkingTarget,
-    notWorkingFiles, submitNotWorking, closeNotWorking, notWorkingSubmitting, keyboardShortcutOverrides, appleShortcutPlatform, isEditableEvent, openSavedViewDialog,
-    savedViewMenu, openSavedViewRename, openSavedViewDelete, savedViewName, savedViewError,
-    focusSavedViewQuery, savedViewSearchModel, savedViewSearchTokenOffset, saveSavedView, closeSavedViewDialog, savedViewBusy, deleteSavedView,
+    openProjectPicker,
+    openRemoteProjectDialog,
+    chooseAndOpenProject,
+    unhealthyServerRecovery,
+    projectDialogOpen,
+    openRemoteCheckout,
+    remoteProjectDialogOpen,
+    importHs1Project,
+    chooseHs1TicketStore,
+    hs1MigrationProject,
+    hs1MigrationBusy,
+    hs1SourceIdentity,
+    project,
+    migrationJobDetails,
+    migrationJobs,
+    migrationConnectionErrors,
+    migrationJobsByRoot,
+    ticketSourceSetupProject,
+    createdGitTicketStore,
+    ticketSourceSetupNavigation,
+    removeOldHs1Data,
+    projects,
+    providerSetupKind,
+    providerEditingId,
+    requestProjectSourceRemoval,
+    refreshProviderAccounts,
+    identifyGithubAccount,
+    signOutProviderAccount,
+    requestUnusedAccountSourceRemoval,
+    cancelUnusedAccountSourceRemoval,
+    removeUnusedAccountSource,
+    useGithubAccount,
+    providerAccountChoice,
+    useProviderAccount,
+    setProjectDefaultSource,
+    setProjectSourceColor,
+    relinkProjectGitSource,
+    retryProviderOutbox,
+    discardProviderOutbox,
+    providerSettingsError,
+    ticketSourceRemoteError,
+    connectCreatedGitRemote,
+    createProjectGitSource,
+    chooseProjectPath,
+    recoverUnhealthyProjectServer,
+    repository,
+    repositoryView,
+    repositoryDetailActive: repositoryController.repositoryDetailActive,
+    repositorySetupStep,
+    repositorySetupError,
+    repositoryFileMenu,
+    repositorySelectedFiles,
+    repositoryComparison,
+    expandedCodeReviewCommits,
+    loadRepositoryDetail,
+    refreshRepositoryStatus,
+    initializeRepository,
+    connectRepositoryRemote,
+    skipRepositoryRemote,
+    repositoryDetail,
+    showToast,
+    error,
+    codeReview,
+    changeEvidenceView,
+    changeEvidenceReader,
+    selectedTicket,
+    codeReviewMessage,
+    openProject,
+    currentRememberedProjectRoots,
+    persistDrawerTabOrder,
+    currentDrawerTabIds,
+    focusDrawerTab,
+    revealCorruptTicket,
+    queueCorruptTicketRepair,
+    corruptTickets,
+    selectedCorruptKey,
+    selectedTicketSlugs,
+    setInspectorVisible,
+    statsProjectId,
+    setShellMode,
+    selectTerminalRailProject,
+    selectTicketView,
+    terminalRailScreen,
+    selectProjectTab,
+    retryProjectRestore,
+    terminalDrawerBounds,
+    terminalDashboardSize,
+    terminalGridFullscreen,
+    terminalDrawerFitHigh,
+    terminalFitAcross,
+    terminalFitHigh,
+    terminalSession,
+    clearTerminalHalt,
+    magnifiedTerminalKey,
+    openTerminalInProject,
+    terminalContextMenu,
+    terminalVisibilityScopeFor,
+    terminalVisibility,
+    persistTerminalVisibility,
+    terminalVisibilityFilter,
+    terminalVisibilityContextMenu,
+    terminalVisibilityDialogScope,
+    terminalVisibilityNamePrompt,
+    terminalKeysForVisibilityDialog,
+    openGridAIChat,
+    setTerminalDrawerVisible,
+    terminalDrawerVisible,
+    toggleTerminalDrawerMaximized,
+    selectDrawerItem,
+    enterMobileTerminalFocus,
+    exitMobileTerminalFocus,
+    cycleMobileTerminalColumns,
+    terminalModifiers,
+    terminalFunctionRow,
+    terminalCopy,
+    terminalPaste,
+    terminalEditMenu,
+    createProjectTerminal,
+    aiLaunchConfiguration,
+    createDrawerAIChat,
+    openSavedConversation,
+    requestProjectClose,
+    projectCloseDialog,
+    restoreBorrowedProjectCloseTerminal,
+    cancelProjectClose,
+    confirmProjectClose,
+    closeAllProjectResources,
+    closeTerminalIds,
+    closeDrawerAIChat,
+    appTabContextMenu,
+    terminalGroups,
+    terminalRename,
+    closeDrawerTabIds,
+    saveTerminalName,
+    resetTerminalName,
+    viewportMobile,
+    sidebarCollapsed,
+    inspectorCollapsed,
+    revealInspectorOverlay,
+    selectTickets,
+    selectionOrder,
+    visibleTickets,
+    selectedView,
+    cancelTicketDrafts,
+    openTicketReader,
+    ticketContextMenu,
+    selectedRows,
+    executeBulkTicketAction,
+    tickets,
+    openNotWorking,
+    openTicketClose,
+    copySelection,
+    pasteSelection,
+    openBulkTicketDialog,
+    restoreTrashedTickets,
+    bulkTicketDialog,
+    openEmptyTrash,
+    emptyTrash,
+    setTicketCloseReason,
+    searchTicketCloseTargets,
+    ticketCloseDialog,
+    submitTicketClose,
+    closeTicketCloseDialog,
+    openDuplicateTarget,
+    notWorkingNote,
+    scheduleProjectSessionPersistence,
+    presentNotWorkingDialog,
+    addNotWorkingFiles,
+    draftScope,
+    notWorkingTarget,
+    notWorkingFiles,
+    submitNotWorking,
+    closeNotWorking,
+    notWorkingSubmitting,
+    keyboardShortcutOverrides,
+    appleShortcutPlatform,
+    isEditableEvent,
+    openSavedViewDialog,
+    savedViewMenu,
+    openSavedViewRename,
+    openSavedViewDelete,
+    savedViewName,
+    savedViewError,
+    focusSavedViewQuery,
+    savedViewSearchModel,
+    savedViewSearchTokenOffset,
+    saveSavedView,
+    closeSavedViewDialog,
+    savedViewBusy,
+    deleteSavedView,
     restoreTicketDraft,
     savedViewHelpOpen,
-    closeSavedViewDelete, savedViewDeleteBusy, commandGroupExpanded, persistWorkspacePreferences, commandGroupsCollapsed, toggleSidebarDrive, driveOptionsOpen, driveOptionsAnchor, aiTools,
-    aiSettingsLoading, refreshAiConfiguration, driveOverridesByProject, normalizedAiSelection, selectDriveModel, openManualModel, effectiveDriveSelection, openSidebarConversation,
-    conversationOpen, openConversationExport, pickConversationMessage, copyConversationSelection, clearConversationSelection, conversationExportDialog, finishConversationExport, updateConversationExportDraft,
-    conversationConnectionId, conversationDrafts, sendConversationTurn, stopConversation, selectConversationProvider, selectConversationModel, selectConversationEffort, canAddNotes, canGiveFeedback: () => Boolean(noteCapabilities()?.ai_feedback), aiFeedbackDialog,
-    updateSelected, runCommand, commandDialogId, commandStopConfirmation, commandRuns, commandSettingsEditingId, commandIconSearch, addCommandSetting,
-    manualModelDialog, deleteCommandSetting, addCommandGroup, deleteCommandGroup, selectCommandRow, commandSelection, commandSettingsDefinitions, selectCommandSetting,
-    reorderCommandSettings, updateCommandSetting, updateCommandAiSelection, effectiveCommandAiSelection, showLoadingActivity, inheritGlobalShellHistory, terminalSettingsMessage, trashSettingsMessagesByProject,
-    trashCleanupDaysByProject, resetProgressiveTicketRendering, viewMode, setSettingsCategory, refreshProviderConnections, refreshTerminalSettings, refreshTrashSettings, capturingShortcutId,
-    saveAiDefaults, selectDefaultModel, selectDefaultEffort, selectDefaultProvider, restoreCommandEditorAfterManualModel, aiDefaults, providerConnections, githubAuth, cancelGitHubSignIn, startGitHubSignIn,
-    saveExternalProvider, providerRemovingId, requestProviderRemoval, cancelProviderRemoval, removeExternalProvider, toggleProviderDisabled, refreshGitHubRepositories, loadEditingGitHubRepositories, chooseGitHubEnterprise, copyGitHubCode, reopenGitHubSignIn, notificationView, permissionTimer, permissionAutomationByProject, updatePermissionTimer, permissionRevision, permissionInbox, pendingPermissions, setNotificationsPaused,
-    resolvePermission, selectedProjectId, hideVerifiedByProject, selectLinkedTicket, ticketLinkChoice, openTicketLinkMatch, cancelTicketLinkChoice, searchOpen,
-    workspaceSearchModel, workspaceSearchTokenOffset, searchHelpOpen,
-    focusWorkspaceSearch, searchQuery, searchTokens, scheduleTicketSearch, sort, sortDirection, openTicketComposer, composerSubmitting,
-    composerExpanded, resetTicketComposer, composerTitle, composerDetails, composerCategory, composerUpNext, composerSource, addNewTicketFiles, composerAttachments,
-    composerAttachmentMessage, composerAttachmentError, submitNewTicket, history, addAttachments, api, attachmentMessage, attachmentLabelEditing, refreshProject,
-    galleryImages, resetAttachmentGallery, gallerySourceFor, shiftGallery, attachmentGalleryGeometry, attachmentGalleryScale, attachmentGalleryUrl, attachmentMenu, syncAttachmentGalleryMeasurement,
-    activeAttachmentGalleryVideo, attachmentGalleryDuration, attachmentGalleryMarkup, attachmentGallerySaveState, finishGalleryAnnotationSession, discardGalleryAnnotationSession, beginGalleryAnnotationSession, attachmentGalleryDrawMode, attachmentGalleryTool, attachmentGallerySelectedAnnotation, attachmentGalleryAnnotations,
-    attachmentGalleryCropMode, attachmentGalleryCrop, attachmentGalleryOriginalSize, beginGalleryCrop, restoreGalleryCrop, finishGalleryCrop,
-    updateGalleryPlaybackPresentation, attachmentGalleryPlayhead, attachmentGalleryPlaying, gallerySvgClock, stopGallerySvgClock, attachmentGalleryVolumeOpen, attachmentGalleryMuted, attachmentGalleryVolume,
-    canUseAttachments, canEditAttachments, updateSelectedTracked, readerOpen, readerDetailsDraft, detailsDraft, titleDraft, readerBlockedReasonDraft, blockedReasonDraft,
-    readerNoteDraft, noteDraft, fieldConflictResolution, fieldConflict, canUpdateSelected, canEditStartedPhaseSelected, titleEditingSurface, activeTicketSurface, titleAutosave,
-    tagsAutosave, beginDetailsEdit, linkedReaderFrame, replaceLinkedReaderFrame, linkedReaderSaves, readerDetailsAutosave, detailsAutosave, beginDetailsFinish,
-    finishDetailsEdit, readerEditingNoteId, editingNoteId, composingNote, newNoteDraft, readerNoteAutosave, noteAutosave, readerInlineFeedbackReplies,
-    readerFeedbackChoiceSelections, readerFeedbackChoiceAnchors, canDeleteNotes, workspaceSearchActive, loadBoardColumnMore, loadNextTicketPage, readerBlockedReasonEditing, blockedReasonEditing,
-    readerBlockedReasonAutosave, blockedReasonAutosave, presentTicketReaderDialog, readerTab, codeReviewLoading, refreshCodeReview, readerDialog, readerApprovedClose,
-    approveTicketReaderClose, finishTicketReaderClose, readerLargeText, linkedReaderStack, inspectorTab, setSidebarVisible, sidebarVisible, appRegionSize,
-    setAppRegionSize, terminalDrawerMax, terminalDrawerMin, syncTerminalDrawerMaximum, updateTerminalDrawerBounds, copyDraggedTickets, inspectorVisible, switchWorkspaceView, shellMode,
-    terminalDrawerSelected, ticketWorkAreaFocused, ordinaryTextSelected, openCommandHistory, completePointerDetailsFinish, schedulePointerDetailsFinish,
+    closeSavedViewDelete,
+    savedViewDeleteBusy,
+    commandGroupExpanded,
+    persistWorkspacePreferences,
+    commandGroupsCollapsed,
+    toggleSidebarDrive,
+    driveOptionsOpen,
+    driveOptionsAnchor,
+    aiTools,
+    aiSettingsLoading,
+    refreshAiConfiguration,
+    driveOverridesByProject,
+    normalizedAiSelection,
+    selectDriveModel,
+    openManualModel,
+    effectiveDriveSelection,
+    openSidebarConversation,
+    conversationOpen,
+    openConversationExport,
+    pickConversationMessage,
+    copyConversationSelection,
+    clearConversationSelection,
+    conversationExportDialog,
+    finishConversationExport,
+    updateConversationExportDraft,
+    conversationConnectionId,
+    conversationDrafts,
+    sendConversationTurn,
+    stopConversation,
+    selectConversationProvider,
+    selectConversationModel,
+    selectConversationEffort,
+    canAddNotes,
+    canGiveFeedback: () => Boolean(noteCapabilities()?.ai_feedback),
+    aiFeedbackDialog,
+    updateSelected,
+    runCommand,
+    commandDialogId,
+    commandStopConfirmation,
+    commandRuns,
+    commandSettingsEditingId,
+    commandIconSearch,
+    addCommandSetting,
+    manualModelDialog,
+    deleteCommandSetting,
+    addCommandGroup,
+    deleteCommandGroup,
+    selectCommandRow,
+    commandSelection,
+    commandSettingsDefinitions,
+    selectCommandSetting,
+    reorderCommandSettings,
+    updateCommandSetting,
+    updateCommandAiSelection,
+    effectiveCommandAiSelection,
+    showLoadingActivity,
+    inheritGlobalShellHistory,
+    terminalSettingsMessage,
+    trashSettingsMessagesByProject,
+    trashCleanupDaysByProject,
+    resetProgressiveTicketRendering,
+    viewMode,
+    setSettingsCategory,
+    refreshProviderConnections,
+    refreshTerminalSettings,
+    refreshTrashSettings,
+    capturingShortcutId,
+    saveAiDefaults,
+    selectDefaultModel,
+    selectDefaultEffort,
+    selectDefaultProvider,
+    restoreCommandEditorAfterManualModel,
+    aiDefaults,
+    providerConnections,
+    githubAuth,
+    cancelGitHubSignIn,
+    startGitHubSignIn,
+    saveExternalProvider,
+    providerRemovingId,
+    requestProviderRemoval,
+    cancelProviderRemoval,
+    removeExternalProvider,
+    toggleProviderDisabled,
+    refreshGitHubRepositories,
+    loadEditingGitHubRepositories,
+    chooseGitHubEnterprise,
+    copyGitHubCode,
+    reopenGitHubSignIn,
+    notificationView,
+    permissionTimer,
+    permissionAutomationByProject,
+    updatePermissionTimer,
+    permissionRevision,
+    permissionInbox,
+    pendingPermissions,
+    setNotificationsPaused,
+    resolvePermission,
+    selectedProjectId,
+    hideVerifiedByProject,
+    selectLinkedTicket,
+    ticketLinkChoice,
+    openTicketLinkMatch,
+    cancelTicketLinkChoice,
+    searchOpen,
+    workspaceSearchModel,
+    workspaceSearchTokenOffset,
+    searchHelpOpen,
+    focusWorkspaceSearch,
+    searchQuery,
+    searchTokens,
+    scheduleTicketSearch,
+    sort,
+    sortDirection,
+    openTicketComposer,
+    composerSubmitting,
+    composerExpanded,
+    resetTicketComposer,
+    composerTitle,
+    composerDetails,
+    composerCategory,
+    composerUpNext,
+    composerSource,
+    addNewTicketFiles,
+    composerAttachments,
+    composerAttachmentMessage,
+    composerAttachmentError,
+    submitNewTicket,
+    history,
+    addAttachments,
+    api,
+    attachmentMessage,
+    attachmentLabelEditing,
+    refreshProject,
+    galleryImages,
+    resetAttachmentGallery,
+    gallerySourceFor,
+    shiftGallery,
+    attachmentGalleryGeometry,
+    attachmentGalleryScale,
+    attachmentGalleryUrl,
+    attachmentMenu,
+    syncAttachmentGalleryMeasurement,
+    activeAttachmentGalleryVideo,
+    attachmentGalleryDuration,
+    attachmentGalleryMarkup,
+    attachmentGallerySaveState,
+    finishGalleryAnnotationSession,
+    discardGalleryAnnotationSession,
+    beginGalleryAnnotationSession,
+    attachmentGalleryDrawMode,
+    attachmentGalleryTool,
+    attachmentGallerySelectedAnnotation,
+    attachmentGalleryAnnotations,
+    attachmentGalleryCropMode,
+    attachmentGalleryCrop,
+    attachmentGalleryOriginalSize,
+    beginGalleryCrop,
+    restoreGalleryCrop,
+    finishGalleryCrop,
+    updateGalleryPlaybackPresentation,
+    attachmentGalleryPlayhead,
+    attachmentGalleryPlaying,
+    gallerySvgClock,
+    stopGallerySvgClock,
+    attachmentGalleryVolumeOpen,
+    attachmentGalleryMuted,
+    attachmentGalleryVolume,
+    canUseAttachments,
+    canEditAttachments,
+    updateSelectedTracked,
+    readerOpen,
+    readerDetailsDraft,
+    detailsDraft,
+    titleDraft,
+    readerBlockedReasonDraft,
+    blockedReasonDraft,
+    readerNoteDraft,
+    noteDraft,
+    fieldConflictResolution,
+    fieldConflict,
+    canUpdateSelected,
+    canEditStartedPhaseSelected,
+    titleEditingSurface,
+    activeTicketSurface,
+    titleAutosave,
+    tagsAutosave,
+    beginDetailsEdit,
+    linkedReaderFrame,
+    replaceLinkedReaderFrame,
+    linkedReaderSaves,
+    readerDetailsAutosave,
+    detailsAutosave,
+    beginDetailsFinish,
+    finishDetailsEdit,
+    readerEditingNoteId,
+    editingNoteId,
+    composingNote,
+    newNoteDraft,
+    readerNoteAutosave,
+    noteAutosave,
+    readerInlineFeedbackReplies,
+    readerFeedbackChoiceSelections,
+    readerFeedbackChoiceAnchors,
+    canDeleteNotes,
+    workspaceSearchActive,
+    loadBoardColumnMore,
+    loadNextTicketPage,
+    readerBlockedReasonEditing,
+    blockedReasonEditing,
+    readerBlockedReasonAutosave,
+    blockedReasonAutosave,
+    presentTicketReaderDialog,
+    readerTab,
+    codeReviewLoading,
+    refreshCodeReview,
+    readerDialog,
+    readerApprovedClose,
+    approveTicketReaderClose,
+    finishTicketReaderClose,
+    readerLargeText,
+    linkedReaderStack,
+    inspectorTab,
+    setSidebarVisible,
+    sidebarVisible,
+    appRegionSize,
+    setAppRegionSize,
+    terminalDrawerMax,
+    terminalDrawerMin,
+    syncTerminalDrawerMaximum,
+    updateTerminalDrawerBounds,
+    copyDraggedTickets,
+    inspectorVisible,
+    switchWorkspaceView,
+    shellMode,
+    terminalDrawerSelected,
+    ticketWorkAreaFocused,
+    ordinaryTextSelected,
+    openCommandHistory,
+    completePointerDetailsFinish,
+    schedulePointerDetailsFinish,
     get repositoryFileSelectionAnchor() {
-            return repositoryController.repositoryFileSelectionAnchor;
-          },
+      return repositoryController.repositoryFileSelectionAnchor;
+    },
     set repositoryFileSelectionAnchor(value) {
-            repositoryController.repositoryFileSelectionAnchor = value;
-          },
+      repositoryController.repositoryFileSelectionAnchor = value;
+    },
     get ticketSelectionAnchor() {
-            return ticketSelectionAnchor;
-          },
+      return ticketSelectionAnchor;
+    },
     set ticketSelectionAnchor(value) {
-            ticketSelectionAnchor = value;
-          },
+      ticketSelectionAnchor = value;
+    },
     get terminalPreviewClickTimer() {
-            return terminalPreviewClickTimer;
-          },
+      return terminalPreviewClickTimer;
+    },
     set terminalPreviewClickTimer(value) {
-            terminalPreviewClickTimer = value;
-          },
+      terminalPreviewClickTimer = value;
+    },
     get pendingTerminalFocus() {
-            return pendingTerminalFocus;
-          },
+      return pendingTerminalFocus;
+    },
     set pendingTerminalFocus(value) {
-            pendingTerminalFocus = value;
-          },
+      pendingTerminalFocus = value;
+    },
     get bulkTicketSlugs() {
-            return bulkTicketSlugs;
-          },
+      return bulkTicketSlugs;
+    },
     set bulkTicketSlugs(value) {
-            bulkTicketSlugs = value;
-          },
+      bulkTicketSlugs = value;
+    },
     get ticketLinkReturnFocus() {
-            return ticketLinkReturnFocus;
-          },
+      return ticketLinkReturnFocus;
+    },
     set ticketLinkReturnFocus(value) {
-            ticketLinkReturnFocus = value;
-          },
+      ticketLinkReturnFocus = value;
+    },
     get manualModelDialogShown() {
-            return aiConfigurationController.manualModelDialogShown;
-          },
+      return aiConfigurationController.manualModelDialogShown;
+    },
     set manualModelDialogShown(value) {
-            aiConfigurationController.manualModelDialogShown = value;
-          },
+      aiConfigurationController.manualModelDialogShown = value;
+    },
     get permissionCountdown() {
-            return permissionsController.permissionCountdown;
-          },
+      return permissionsController.permissionCountdown;
+    },
     set permissionCountdown(value) {
-            permissionsController.permissionCountdown = value;
-          },
+      permissionsController.permissionCountdown = value;
+    },
     get attachmentRangeGesture() {
-            return galleryController.attachmentRangeGesture;
-          },
+      return galleryController.attachmentRangeGesture;
+    },
     set attachmentRangeGesture(value) {
-            galleryController.attachmentRangeGesture = value;
-          },
+      galleryController.attachmentRangeGesture = value;
+    },
     get attachmentAnnotationGesture() {
-            return galleryController.attachmentAnnotationGesture;
-          },
+      return galleryController.attachmentAnnotationGesture;
+    },
     set attachmentAnnotationGesture(value) {
-            galleryController.attachmentAnnotationGesture = value;
-          },
+      galleryController.attachmentAnnotationGesture = value;
+    },
     get attachmentGalleryLivePlayhead() {
-            return galleryController.attachmentGalleryLivePlayhead;
-          },
+      return galleryController.attachmentGalleryLivePlayhead;
+    },
     set attachmentGalleryLivePlayhead(value) {
-            galleryController.attachmentGalleryLivePlayhead = value;
-          },
+      galleryController.attachmentGalleryLivePlayhead = value;
+    },
     get attachmentGallerySvgPreviousFrame() {
-            return galleryController.attachmentGallerySvgPreviousFrame;
-          },
+      return galleryController.attachmentGallerySvgPreviousFrame;
+    },
     set attachmentGallerySvgPreviousFrame(value) {
-            galleryController.attachmentGallerySvgPreviousFrame = value;
-          },
+      galleryController.attachmentGallerySvgPreviousFrame = value;
+    },
     get attachmentGallerySvgFrame() {
-            return galleryController.attachmentGallerySvgFrame;
-          },
+      return galleryController.attachmentGallerySvgFrame;
+    },
     set attachmentGallerySvgFrame(value) {
-            galleryController.attachmentGallerySvgFrame = value;
-          },
+      galleryController.attachmentGallerySvgFrame = value;
+    },
     get attachmentGalleryLiveVolume() {
-            return galleryController.attachmentGalleryLiveVolume;
-          },
+      return galleryController.attachmentGalleryLiveVolume;
+    },
     set attachmentGalleryLiveVolume(value) {
-            galleryController.attachmentGalleryLiveVolume = value;
-          },
+      galleryController.attachmentGalleryLiveVolume = value;
+    },
     get attachmentSwipeGesture() {
-            return galleryController.attachmentSwipeGesture;
-          },
+      return galleryController.attachmentSwipeGesture;
+    },
     set attachmentSwipeGesture(value) {
-            galleryController.attachmentSwipeGesture = value;
-          },
+      galleryController.attachmentSwipeGesture = value;
+    },
     get readerDetailsDraftBase() {
-            return readerDetailsDraftBase;
-          },
+      return readerDetailsDraftBase;
+    },
     set readerDetailsDraftBase(value) {
-            readerDetailsDraftBase = value;
-          },
+      readerDetailsDraftBase = value;
+    },
     get detailsDraftBase() {
-            return detailsDraftBase;
-          },
+      return detailsDraftBase;
+    },
     set detailsDraftBase(value) {
-            detailsDraftBase = value;
-          },
+      detailsDraftBase = value;
+    },
     get titleDraftBase() {
-            return titleDraftBase;
-          },
+      return titleDraftBase;
+    },
     set titleDraftBase(value) {
-            titleDraftBase = value;
-          },
+      titleDraftBase = value;
+    },
     get readerBlockedReasonDraftBase() {
-            return readerBlockedReasonDraftBase;
-          },
+      return readerBlockedReasonDraftBase;
+    },
     set readerBlockedReasonDraftBase(value) {
-            readerBlockedReasonDraftBase = value;
-          },
+      readerBlockedReasonDraftBase = value;
+    },
     get blockedReasonDraftBase() {
-            return blockedReasonDraftBase;
-          },
+      return blockedReasonDraftBase;
+    },
     set blockedReasonDraftBase(value) {
-            blockedReasonDraftBase = value;
-          },
+      blockedReasonDraftBase = value;
+    },
     get readerNoteDraftBase() {
-            return readerNoteDraftBase;
-          },
+      return readerNoteDraftBase;
+    },
     set readerNoteDraftBase(value) {
-            readerNoteDraftBase = value;
-          },
+      readerNoteDraftBase = value;
+    },
     get noteDraftBase() {
-            return noteDraftBase;
-          },
+      return noteDraftBase;
+    },
     set noteDraftBase(value) {
-            noteDraftBase = value;
-          },
+      noteDraftBase = value;
+    },
     get pointerDetailsReader() {
-            return pointerDetailsReader;
-          },
+      return pointerDetailsReader;
+    },
     set pointerDetailsReader(value) {
-            pointerDetailsReader = value;
-          },
+      pointerDetailsReader = value;
+    },
     get pointerDetailsFinish() {
-            return pointerDetailsFinish;
-          },
+      return pointerDetailsFinish;
+    },
     set pointerDetailsFinish(value) {
-            pointerDetailsFinish = value;
-          },
+      pointerDetailsFinish = value;
+    },
     get appRegionResizeDrag() {
-            return appRegionResizeDrag;
-          },
+      return appRegionResizeDrag;
+    },
     set appRegionResizeDrag(value) {
-            appRegionResizeDrag = value;
-          },
+      appRegionResizeDrag = value;
+    },
     get clipboard() {
-            return clipboard;
-          },
+      return clipboard;
+    },
     set clipboard(value) {
-            clipboard = value;
-          },
+      clipboard = value;
+    },
   };
   // One page-lifetime teardown for every delegated and native interaction listener (HS2-NZT3MT).
   const disposeInteractions = wireHotSheetInteractions(createHotSheetInteractionBindings(interactionBindingsPort));

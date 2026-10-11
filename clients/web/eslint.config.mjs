@@ -61,6 +61,21 @@ export default tseslint.config(
       'tsdoc/syntax': 'warn',
       // Childless JSX elements, native and custom, use the self-closing form (HS2-G5WBZ5).
       '@stylistic/jsx-self-closing-comp': ['error', { component: true, html: true }],
+      // Prettier owns layout: no `prettier-ignore` escapes, and no minified code lines that
+      // only an ignore could keep (HS2-PR1BST). Scope a lint exception with a block
+      // `eslint-disable`/`eslint-enable` pair and a `--` reason instead.
+      'no-warning-comments': ['error', { terms: ['prettier-ignore'], location: 'start' }],
+      '@stylistic/max-len': [
+        'error',
+        {
+          code: 200,
+          ignoreComments: true,
+          ignoreStrings: true,
+          ignoreTemplateLiterals: true,
+          ignoreRegExpLiterals: true,
+          ignoreUrls: true,
+        },
+      ],
     },
   },
   kerfjs.configs.recommended,

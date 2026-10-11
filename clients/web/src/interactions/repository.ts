@@ -82,9 +82,32 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
     codeReviewMessage,
     openProject,
   } = dependencies;
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click',REPOSITORY_ACTIONS.openRepositoryStatus.selector,()=>{const status=repository.value,view=status?.conflicted?'conflicted':status?.unstaged?'unstaged':status?.staged?'staged':status?.untracked?'untracked':'commits';repositoryView.value=view;repositoryDetailActive.value=false;repositorySetupStep.value=status?.initialized===false?'initialize':undefined;repositorySetupError.value='';repositoryFileMenu.value=undefined;repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;repositoryComparison.value={active:false,side:'a'};expandedCodeReviewCommits.value=[];(document.querySelector('#repository-status-popover') as Control).showPopover?.();if(status?.initialized!==false)void loadRepositoryDetail(view,true)}));
+  lifetime.add(
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.openRepositoryStatus.selector, () => {
+      const status = repository.value,
+        view = status?.conflicted
+          ? 'conflicted'
+          : status?.unstaged
+            ? 'unstaged'
+            : status?.staged
+              ? 'staged'
+              : status?.untracked
+                ? 'untracked'
+                : 'commits';
+      repositoryView.value = view;
+      repositoryDetailActive.value = false;
+      repositorySetupStep.value = status?.initialized === false ? 'initialize' : undefined;
+      repositorySetupError.value = '';
+      repositoryFileMenu.value = undefined;
+      repositorySelectedFiles.value = [];
+      dependencies.repositoryFileSelectionAnchor = undefined;
+      repositoryComparison.value = { active: false, side: 'a' };
+      expandedCodeReviewCommits.value = [];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      (document.querySelector('#repository-status-popover') as Control).showPopover?.();
+      if (status?.initialized !== false) void loadRepositoryDetail(view, true);
+    }),
+  );
   lifetime.add(
     delegate(document.body, 'click', REPOSITORY_ACTIONS.refreshRepositoryStatus.selector, () => {
       void refreshRepositoryStatus();
@@ -350,9 +373,24 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
         });
     }),
   );
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click',REPOSITORY_ACTIONS.openChangeEvidence.selector,(_event,target)=>{const review=codeReview.value;if(!review)return;changeEvidenceView.value=(['docs','tests','source','other'] as const).find(category=>review.files?.some(file=>file.category===category))??'docs';repositorySelectedFiles.value=[];dependencies.repositoryFileSelectionAnchor=undefined;changeEvidenceReader.value=target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId;requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelector<Control>('#change-evidence-dialog')?.showPopover?.()))}));
+  lifetime.add(
+    delegate(document.body, 'click', REPOSITORY_ACTIONS.openChangeEvidence.selector, (_event, target) => {
+      const review = codeReview.value;
+      if (!review) return;
+      changeEvidenceView.value =
+        (['docs', 'tests', 'source', 'other'] as const).find((category) =>
+          review.files?.some((file) => file.category === category),
+        ) ?? 'docs';
+      repositorySelectedFiles.value = [];
+      dependencies.repositoryFileSelectionAnchor = undefined;
+      changeEvidenceReader.value = target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset
+        .readerFrameId;
+      requestAnimationFrame(() =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        requestAnimationFrame(() => document.querySelector<Control>('#change-evidence-dialog')?.showPopover?.()),
+      );
+    }),
+  );
   lifetime.add(
     delegate(document.body, 'click', REPOSITORY_ACTIONS.selectChangeEvidenceView.selector, (_event, target) => {
       changeEvidenceView.value = data(target).itemId as ChangeEvidenceView;

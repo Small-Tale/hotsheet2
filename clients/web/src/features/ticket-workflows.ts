@@ -584,9 +584,18 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
             publishOptimisticTicketRows(current.id);
             if (selectedTicket.value?.slug === slug) reconcileRefreshedSelected(base, remote);
             const conflict = reconciled.conflicts[0];
-            // prettier-ignore
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-            if(conflict){showFieldConflict(conflict);reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,queue_ms:queueWait,outcome:'rolled_back'});return false}
+            if (conflict) {
+              showFieldConflict(conflict);
+              reportMutationTiming({
+                slug,
+                optimistic_ms: optimistic,
+                request_ms: performance.now() - started,
+                queue_ms: queueWait,
+                outcome: 'rolled_back',
+              });
+              return false;
+            }
             recorded = { ...recorded, ...adoptMergedDrafts(pending, reconciled.retry) };
             if (Object.keys(reconciled.retry).length === 0) updated = remote;
             else {
@@ -1263,9 +1272,46 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       attachments: full?.attachments.map((item) => ({ id: item.id, filename: item.filename })) ?? [],
     };
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function copySelection(cut:boolean){const current=project(),rows=selectedRows();if(!current||!rows.length)return;const snapshot={tickets:rows.map(ticket=>clipboardTicket(ticket,selectedTicket.value?.qualified_id===ticket.qualified_id?selectedTicket.value:undefined)),cut,source:current};state.clipboard=snapshot;selectedTicketSlugs.value=[...selectedTicketSlugs.value];void Promise.all(rows.map(ticket=>api().checkoutTicket(current.id,ticket.qualified_id).then(value=>value.ticket))).then(full=>{if(state.clipboard!==snapshot)return;snapshot.tickets=full.map(ticket=>clipboardTicket(ticket));const text=full.map(ticket=>[`${ticket.slug}: ${ticket.title}`,ticket.details,...ticket.notes.map(note=>`- ${note.text}`)].filter(Boolean).join('\n\n')).join('\n\n');void navigator.clipboard?.writeText(text).catch(()=>undefined)}).catch((reason:unknown)=>{error.value=reason instanceof Error?reason.message:String(reason)})}
+  function copySelection(cut: boolean) {
+    const current = project(),
+      rows = selectedRows();
+    if (!current || !rows.length) return;
+    const snapshot = {
+      tickets: rows.map((ticket) =>
+        clipboardTicket(
+          ticket,
+          selectedTicket.value?.qualified_id === ticket.qualified_id ? selectedTicket.value : undefined,
+        ),
+      ),
+      cut,
+      source: current,
+    };
+    state.clipboard = snapshot;
+    selectedTicketSlugs.value = [...selectedTicketSlugs.value];
+    void Promise.all(
+      rows.map((ticket) =>
+        api()
+          .checkoutTicket(current.id, ticket.qualified_id)
+          .then((value) => value.ticket),
+      ),
+    )
+      .then((full) => {
+        if (state.clipboard !== snapshot) return;
+        snapshot.tickets = full.map((ticket) => clipboardTicket(ticket));
+        const text = full
+          .map((ticket) =>
+            [`${ticket.slug}: ${ticket.title}`, ticket.details, ...ticket.notes.map((note) => `- ${note.text}`)]
+              .filter(Boolean)
+              .join('\n\n'),
+          )
+          .join('\n\n');
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        void navigator.clipboard?.writeText(text).catch(() => undefined);
+      })
+      .catch((reason: unknown) => {
+        error.value = reason instanceof Error ? reason.message : String(reason);
+      });
+  }
   async function patchTransferTickets(client: Api, checkout: string, changes: Array<{ id: string; status: string }>) {
     for (const change of changes) await client.updateCheckoutTicket(checkout, change.id, { status: change.status });
     return true;
@@ -1511,12 +1557,36 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       qualifiedId: ticket.qualified_id,
     };
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function duplicateTargetFor(ticket:FullTicket){if(!ticket.duplicate_of)return undefined;const reference=parseDuplicateReference(ticket.duplicate_of),projectRows=reference?projects.value.filter(item=>item.id===reference.project_id):projects.value,match=projectRows.flatMap(item=>(item.id===selectedProjectId.value?tickets.value:ticketRowsByProject.value[item.id]??[]).map(row=>({project:item,row}))).find(({row})=>reference?row.connection_id===reference.connection_id&&row.native_id===reference.native_id:row.id===ticket.duplicate_of||row.native_id===ticket.duplicate_of),target=match?duplicateTarget(match.project,match.row):resolvedDuplicateTargets.value[ticket.duplicate_of];return target?{id:ticket.duplicate_of,projectName:target.projectName,slug:target.slug,title:target.title}:undefined}
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function resolveDuplicateTargetFor(ticket:FullTicket){const value=ticket.duplicate_of;if(!value||resolvedDuplicateTargets.value[value])return;const target=await resolveDuplicateReferenceTarget(value,projects.value,(item,id)=>new Api((item as Project).apiPath).checkoutTicket(item.id,id).then(result=>result.ticket)).catch(()=>undefined);if(target)resolvedDuplicateTargets.value={...resolvedDuplicateTargets.value,[value]:target}}
+  function duplicateTargetFor(ticket: FullTicket) {
+    if (!ticket.duplicate_of) return undefined;
+    const reference = parseDuplicateReference(ticket.duplicate_of),
+      projectRows = reference ? projects.value.filter((item) => item.id === reference.project_id) : projects.value,
+      match = projectRows
+        .flatMap((item) =>
+          (item.id === selectedProjectId.value ? tickets.value : (ticketRowsByProject.value[item.id] ?? [])).map(
+            (row) => ({ project: item, row }),
+          ),
+        )
+        .find(({ row }) =>
+          reference
+            ? row.connection_id === reference.connection_id && row.native_id === reference.native_id
+            : row.id === ticket.duplicate_of || row.native_id === ticket.duplicate_of,
+        ),
+      target = match ? duplicateTarget(match.project, match.row) : resolvedDuplicateTargets.value[ticket.duplicate_of];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    return target
+      ? { id: ticket.duplicate_of, projectName: target.projectName, slug: target.slug, title: target.title }
+      : undefined;
+  }
+  async function resolveDuplicateTargetFor(ticket: FullTicket) {
+    const value = ticket.duplicate_of;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    if (!value || resolvedDuplicateTargets.value[value]) return;
+    const target = await resolveDuplicateReferenceTarget(value, projects.value, (item, id) =>
+      new Api((item as Project).apiPath).checkoutTicket(item.id, id).then((result) => result.ticket),
+    ).catch(() => undefined);
+    if (target) resolvedDuplicateTargets.value = { ...resolvedDuplicateTargets.value, [value]: target };
+  }
   async function uploadAttachmentWithPoster(
     client: Api,
     current: Project,
@@ -1836,9 +1906,43 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       });
     }, 150);
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function submitTicketClose(){const state=ticketCloseDialog.value,current=projects.value.find(item=>item.id===state?.source.projectId);if(!state||!current||state.submitting)return;const validation=validateTicketClose(state.reason,state.source,state.selected);if(validation){ticketCloseDialog.value={...state,error:validation};return}ticketCloseDialog.value={...state,submitting:true,error:''};try{const result=await new Api(current.apiPath).closeCheckoutTicket(current.id,state.source.qualifiedId,state.reason,state.selected?duplicateReference(state.selected):undefined);if(project()?.id!==current.id)return;await refreshProject();presentTicket(result.ticket);closeTicketCloseDialog();showToast(state.reason==='duplicate'?`${state.source.slug} marked as a duplicate of ${state.selected!.slug}.`:`${state.source.slug} closed as ${ticketCloseReasonLabel(state.reason)?.toLowerCase()??state.reason}.`)}catch(reason){const active=ticketCloseDialog.value;if(active)ticketCloseDialog.value={...active,submitting:false,error:reason instanceof Error?reason.message:String(reason)}}}
+  async function submitTicketClose() {
+    const state = ticketCloseDialog.value,
+      current = projects.value.find((item) => item.id === state?.source.projectId);
+    if (!state || !current || state.submitting) return;
+    const validation = validateTicketClose(state.reason, state.source, state.selected);
+    if (validation) {
+      ticketCloseDialog.value = { ...state, error: validation };
+      return;
+    }
+    ticketCloseDialog.value = { ...state, submitting: true, error: '' };
+    try {
+      const result = await new Api(current.apiPath).closeCheckoutTicket(
+        current.id,
+        state.source.qualifiedId,
+        state.reason,
+        state.selected ? duplicateReference(state.selected) : undefined,
+      );
+      if (project()?.id !== current.id) return;
+      await refreshProject();
+      presentTicket(result.ticket);
+      closeTicketCloseDialog();
+      showToast(
+        state.reason === 'duplicate'
+          ? `${state.source.slug} marked as a duplicate of ${state.selected!.slug}.`
+          : `${state.source.slug} closed as ${ticketCloseReasonLabel(state.reason)?.toLowerCase() ?? state.reason}.`,
+      );
+    } catch (reason) {
+      const active = ticketCloseDialog.value;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      if (active)
+        ticketCloseDialog.value = {
+          ...active,
+          submitting: false,
+          error: reason instanceof Error ? reason.message : String(reason),
+        };
+    }
+  }
   async function openDuplicateTarget(id: string) {
     const reference = parseDuplicateReference(id);
     if (reference) {
@@ -1900,9 +2004,20 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
     }
     await openTicketLinkMatch([...unique.values()][0]);
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function addNotWorkingFiles(files:FileList|File[]){const target=notWorkingTarget.value;if(!target||!(capabilitiesFor(target.connectionId)?.attachments??true))return;const screened=await screenAttachmentFiles(Array.from(files)),pending=screened.readable.map(file=>({id:browserRandomId(),name:file.name,file}));notWorkingFiles.value=[...notWorkingFiles.value,...pending];await Promise.all(pending.map(item=>saveDraftFile(draftScope('not-working',target.projectId),item.id,item.file))).catch(()=>undefined);notWorkingError.value=describeUnreadableAttachments(screened.unreadable);scheduleProjectSessionPersistence();presentNotWorkingDialog()}
+  async function addNotWorkingFiles(files: FileList | File[]) {
+    const target = notWorkingTarget.value;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    if (!target || !(capabilitiesFor(target.connectionId)?.attachments ?? true)) return;
+    const screened = await screenAttachmentFiles(Array.from(files)),
+      pending = screened.readable.map((file) => ({ id: browserRandomId(), name: file.name, file }));
+    notWorkingFiles.value = [...notWorkingFiles.value, ...pending];
+    await Promise.all(
+      pending.map((item) => saveDraftFile(draftScope('not-working', target.projectId), item.id, item.file)),
+    ).catch(() => undefined);
+    notWorkingError.value = describeUnreadableAttachments(screened.unreadable);
+    scheduleProjectSessionPersistence();
+    presentNotWorkingDialog();
+  }
   function openTicketComposer(trigger?: HTMLElement) {
     if (composerExpanded.value) return;
     if (trigger && document.activeElement !== trigger) trigger.focus({ preventScroll: true });
@@ -2084,9 +2199,68 @@ export function createTicketWorkflows(dependencies: TicketWorkflowDependencies) 
       await finishLocalCreation();
     }
   }
-  // prettier-ignore
 
-  async function submitNotWorking(){const target=notWorkingTarget.value;if(!target.slug||notWorkingSubmitting.value)return;const owning=projects.value.find(item=>item.id===target.projectId);if(!owning){notWorkingError.value='The project is no longer open.';return}const client=new Api(target.apiPath),capabilities=capabilitiesFor(target.connectionId),note=(capabilities?.notes??true)?notWorkingNote.value:'',files=[...notWorkingFiles.value],scope=draftScope('not-working',target.projectId);notWorkingSubmitting.value=true;notWorkingError.value='';notWorkingTarget.value=CLOSED_NOT_WORKING_TARGET;try{const current=(await client.checkoutTicket(target.projectId,`${target.connectionId}:${target.ticketId}`)).ticket;let full:FullTicket=current;await submitNotWorkingReport({note,files:files.map(item=>item.file)},{report:async(text,evidence)=>{full=await client.reportNotWorking(target.connectionId,target.ticketId,text,evidence,current.concurrency_token)}});if(project()?.id===owning.id){setProjectTicketRows(owning.id,projectTabTicketRows(owning.id).map(row=>row.id===full.id?ticketRowFromFull(row,full):row));selectedTicketSlugs.value=[target.slug];state.ticketSelectionAnchor=target.slug;presentTicket(full)}notWorkingNote.value='';notWorkingFiles.value=[];notWorkingSubmitting.value=false;void deleteDraftFiles(scope,files.map(item=>item.id));scheduleProjectSessionPersistence()}catch(reason){notWorkingTarget.value=target;notWorkingNote.value=note;notWorkingFiles.value=files;notWorkingError.value=reason instanceof Error?reason.message:String(reason);notWorkingSubmitting.value=false;scheduleProjectSessionPersistence();presentNotWorkingDialog()}}
+  async function submitNotWorking() {
+    const target = notWorkingTarget.value;
+    if (!target.slug || notWorkingSubmitting.value) return;
+    const owning = projects.value.find((item) => item.id === target.projectId);
+    if (!owning) {
+      notWorkingError.value = 'The project is no longer open.';
+      return;
+    }
+    const client = new Api(target.apiPath),
+      capabilities = capabilitiesFor(target.connectionId),
+      note = (capabilities?.notes ?? true) ? notWorkingNote.value : '',
+      files = [...notWorkingFiles.value],
+      scope = draftScope('not-working', target.projectId);
+    notWorkingSubmitting.value = true;
+    notWorkingError.value = '';
+    notWorkingTarget.value = CLOSED_NOT_WORKING_TARGET;
+    try {
+      const current = (await client.checkoutTicket(target.projectId, `${target.connectionId}:${target.ticketId}`))
+        .ticket;
+      let full: FullTicket = current;
+      await submitNotWorkingReport(
+        { note, files: files.map((item) => item.file) },
+        {
+          report: async (text, evidence) => {
+            full = await client.reportNotWorking(
+              target.connectionId,
+              target.ticketId,
+              text,
+              evidence,
+              current.concurrency_token,
+            );
+          },
+        },
+      );
+      if (project()?.id === owning.id) {
+        setProjectTicketRows(
+          owning.id,
+          projectTabTicketRows(owning.id).map((row) => (row.id === full.id ? ticketRowFromFull(row, full) : row)),
+        );
+        selectedTicketSlugs.value = [target.slug];
+        state.ticketSelectionAnchor = target.slug;
+        presentTicket(full);
+      }
+      notWorkingNote.value = '';
+      notWorkingFiles.value = [];
+      notWorkingSubmitting.value = false;
+      void deleteDraftFiles(
+        scope,
+        files.map((item) => item.id),
+      );
+      scheduleProjectSessionPersistence();
+    } catch (reason) {
+      notWorkingTarget.value = target;
+      notWorkingNote.value = note;
+      notWorkingFiles.value = files;
+      notWorkingError.value = reason instanceof Error ? reason.message : String(reason);
+      notWorkingSubmitting.value = false;
+      scheduleProjectSessionPersistence();
+      presentNotWorkingDialog();
+    }
+  }
 
   return {
     applyTicketPatch,

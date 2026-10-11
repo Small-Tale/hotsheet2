@@ -209,9 +209,20 @@ export function createCommandsController({
     scheduleCommandAutosave(projectId);
     return id;
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function deleteCommandSetting(projectId:string,id:string){const definitions=commandSettingsDefinitions(projectId),index=definitions.findIndex(command=>command.id===id),next=definitions.filter(command=>command.id!==id);setCommandSettingsDefinitions(projectId,next);keepEmptiedCommandGroups(projectId,definitions,next);selectCommandSetting(projectId,next[Math.min(Math.max(index,0),next.length-1)]?.id);scheduleCommandAutosave(projectId);if(commandSettingsEditingId.value===id){commandSettingsEditingId.value=undefined;(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.()}}
+  function deleteCommandSetting(projectId: string, id: string) {
+    const definitions = commandSettingsDefinitions(projectId),
+      index = definitions.findIndex((command) => command.id === id),
+      next = definitions.filter((command) => command.id !== id);
+    setCommandSettingsDefinitions(projectId, next);
+    keepEmptiedCommandGroups(projectId, definitions, next);
+    selectCommandSetting(projectId, next[Math.min(Math.max(index, 0), next.length - 1)]?.id);
+    scheduleCommandAutosave(projectId);
+    if (commandSettingsEditingId.value === id) {
+      commandSettingsEditingId.value = undefined;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();
+    }
+  }
   function commandSettingsExtraGroups(projectId = selectedProjectId.value) {
     return commandSettingsExtraGroupsByProject.value[projectId] ?? [];
   }

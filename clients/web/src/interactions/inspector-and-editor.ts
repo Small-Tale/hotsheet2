@@ -687,9 +687,23 @@ export function wireInspectorAndEditorInteractions(dependencies: InspectorAndEdi
       ? selectedTicket.value?.details
       : selectedTicket.value?.notes.find((item) => item.id === noteId)?.text;
   }
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function inlineFeedbackClickOffset(event:MouseEvent,target:Element){const start=Number(data(target).segmentStart),end=Number(data(target).segmentEnd),noteId=data(target).noteId!,source=feedbackSource(noteId)?.slice(start,end)??'',caretDocument=document as Document&{caretPositionFromPoint?:(x:number,y:number)=>{offsetNode:Node;offset:number}|null},position=caretDocument.caretPositionFromPoint?.(event.clientX,event.clientY);if(!position||!target.contains(position.offsetNode))return end;const range=document.createRange();range.selectNodeContents(target);range.setEnd(position.offsetNode,position.offset);return start+sourceOffsetForVisibleOffset(source,target.textContent??'',range.toString().length)}
+  function inlineFeedbackClickOffset(event: MouseEvent, target: Element) {
+    const start = Number(data(target).segmentStart),
+      end = Number(data(target).segmentEnd),
+      noteId = data(target).noteId!,
+      source = feedbackSource(noteId)?.slice(start, end) ?? '',
+      caretDocument = document as Document & {
+        caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+      },
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      position = caretDocument.caretPositionFromPoint?.(event.clientX, event.clientY);
+    if (!position || !target.contains(position.offsetNode)) return end;
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    range.setEnd(position.offsetNode, position.offset);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    return start + sourceOffsetForVisibleOffset(source, target.textContent ?? '', range.toString().length);
+  }
   lifetime.add(
     delegate(document.body, 'click', INSPECTOR_AND_EDITOR_ACTIONS.addInlineFeedbackReply.selector, (event, target) => {
       if ((event.target as Element).closest('a')) return;

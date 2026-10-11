@@ -665,9 +665,13 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
         });
     }),
   );
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function openCommandEditor(id:string){commandSettingsEditingId.value=id;commandIconSearch.value='';void loadLucideCatalog();(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).showPopover?.()}
+  function openCommandEditor(id: string) {
+    commandSettingsEditingId.value = id;
+    commandIconSearch.value = '';
+    void loadLucideCatalog();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).showPopover?.();
+  }
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.editCommandSetting.selector, (_event, target) => {
       const id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
@@ -680,9 +684,14 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       if (current) openCommandEditor(addCommandSetting(current.id));
     }),
   );
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click',COMMANDS_AND_AI_ACTIONS.closeCommandEditor.selector,()=>{(document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();commandSettingsEditingId.value=undefined;commandIconSearch.value=''}));
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.closeCommandEditor.selector, () => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();
+      commandSettingsEditingId.value = undefined;
+      commandIconSearch.value = '';
+    }),
+  );
   lifetime.add(
     delegateCapture(
       document.body,
@@ -1005,9 +1014,17 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
       setCapturingShortcut(undefined);
     }),
   );
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  lifetime.add(delegate(document.body,'click',COMMANDS_AND_AI_ACTIONS.resetShortcut.selector,(_event,target)=>{const id=data(target).shortcutId;if(!id||!keyboardShortcutOverrides.value[id])return;persistShortcutOverrides(Object.fromEntries(Object.entries(keyboardShortcutOverrides.value).filter(([entryId])=>entryId!==id)));if(capturingShortcutId.value===id)setCapturingShortcut(undefined)}));
+  lifetime.add(
+    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.resetShortcut.selector, (_event, target) => {
+      const id = data(target).shortcutId;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      if (!id || !keyboardShortcutOverrides.value[id]) return;
+      persistShortcutOverrides(
+        Object.fromEntries(Object.entries(keyboardShortcutOverrides.value).filter(([entryId]) => entryId !== id)),
+      );
+      if (capturingShortcutId.value === id) setCapturingShortcut(undefined);
+    }),
+  );
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.resetAllShortcuts.selector, () => {
       persistShortcutOverrides({});

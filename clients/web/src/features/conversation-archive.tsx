@@ -63,9 +63,13 @@ export function createConversationArchiveController(dependencies: ConversationAr
     return scope?.kind === 'range' ? [...selectedConversationMessages(messages, scope)] : [];
   }
 
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  function pickConversationMessage(connectionId:string,messageId:string){const messages=conversationStates.peek()[connectionId]?.messages??[],scope=conversationSelectionScopes.value[connectionId]??{kind:'all' as const},next=conversationExportScopeAfterMessagePick(messages,scope,messageId);conversationSelectionScopes.value={...conversationSelectionScopes.value,[connectionId]:next}}
+  function pickConversationMessage(connectionId: string, messageId: string) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+    const messages = conversationStates.peek()[connectionId]?.messages ?? [],
+      scope = conversationSelectionScopes.value[connectionId] ?? { kind: 'all' as const },
+      next = conversationExportScopeAfterMessagePick(messages, scope, messageId);
+    conversationSelectionScopes.value = { ...conversationSelectionScopes.value, [connectionId]: next };
+  }
 
   function clearConversationSelection(connectionId: string) {
     conversationSelectionScopes.value = Object.fromEntries(
@@ -73,9 +77,23 @@ export function createConversationArchiveController(dependencies: ConversationAr
     );
   }
 
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function copyConversationSelection(connectionId:string){const messages=conversationSelectedMessages(connectionId,conversationStates.peek()[connectionId]?.messages??[]);if(!messages.length)return;const tool=aiToolLabel(conversationAiSelection(connectionId).tool);try{await navigator.clipboard.writeText(conversationTranscriptMarkdown({conversationId:connectionId,tool},messages));showToast(`${messages.length} selected message${messages.length===1?'':'s'} copied to clipboard.`)}catch(reason){error.value=`Copy failed: ${reason instanceof Error?reason.message:String(reason)}`}}
+  async function copyConversationSelection(connectionId: string) {
+    const messages = conversationSelectedMessages(
+      connectionId,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      conversationStates.peek()[connectionId]?.messages ?? [],
+    );
+    if (!messages.length) return;
+    const tool = aiToolLabel(conversationAiSelection(connectionId).tool);
+    try {
+      await navigator.clipboard.writeText(
+        conversationTranscriptMarkdown({ conversationId: connectionId, tool }, messages),
+      );
+      showToast(`${messages.length} selected message${messages.length === 1 ? '' : 's'} copied to clipboard.`);
+    } catch (reason) {
+      error.value = `Copy failed: ${reason instanceof Error ? reason.message : String(reason)}`;
+    }
+  }
 
   function updateConversationExportDraft(update: (draft: ConversationExportDraft) => ConversationExportDraft) {
     const state = conversationExportDialog.value;
@@ -116,9 +134,37 @@ export function createConversationArchiveController(dependencies: ConversationAr
     };
   }
 
-  // prettier-ignore
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function pickConversationExportDestination(){const state=conversationExportDialog.value;if(!state||state.busy)return;conversationExportDialog.value={...state,busy:true,error:''};try{const result=await localBridge.chooseConversationExportDestination(suggestedConversationExportName(state.source.tool));if(conversationExportDialog.value){if(!result.destination){conversationExportDialog.value={...state,busy:false};return}conversationExportDialog.value={...state,busy:false,draft:{...state.draft,destination:result.destination,writeMode:'create'},error:''}}}catch(reason){if(conversationExportDialog.value)conversationExportDialog.value={...state,busy:false,error:reason instanceof Error?reason.message:String(reason)}}}
+  async function pickConversationExportDestination() {
+    const state = conversationExportDialog.value;
+    if (!state || state.busy) return;
+    conversationExportDialog.value = { ...state, busy: true, error: '' };
+    try {
+      const result = await localBridge.chooseConversationExportDestination(
+        suggestedConversationExportName(state.source.tool),
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      if (conversationExportDialog.value) {
+        if (!result.destination) {
+          conversationExportDialog.value = { ...state, busy: false };
+          return;
+        }
+        conversationExportDialog.value = {
+          ...state,
+          busy: false,
+          draft: { ...state.draft, destination: result.destination, writeMode: 'create' },
+          error: '',
+        };
+      }
+    } catch (reason) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+      if (conversationExportDialog.value)
+        conversationExportDialog.value = {
+          ...state,
+          busy: false,
+          error: reason instanceof Error ? reason.message : String(reason),
+        };
+    }
+  }
 
   async function saveConversationExport() {
     const state = conversationExportDialog.value;
