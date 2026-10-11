@@ -1962,7 +1962,9 @@ and identity-less legacy entries remain conservatively blocking.
   Fields the composed app renders only after an interaction (the project dialog, phone sidebar and
   inspector overlays, search, new ticket, add view, inspector note/tag/blocked-reason editors, the
   terminal drawer, and settings) are audited the same way on a touch phone and a touch tablet; the
-  terminal Paste sheet's editable field keeps 16 px on a touch tablet wider than 640 px (HS2-R2H1BA).
+  terminal Paste sheet's editable field keeps 16 px on a touch tablet wider than 640 px (HS2-R2H1BA). With saved commands and views, the populated command editor
+  (label, type, command, confirmation, and icon search), the git source connection form, and the
+  saved-view and terminal rename fields keep 16 px on a touch tablet too (HS2-NYGR2Q).
   The form uses 16 px between sibling regions, 8 px within metadata/evidence/action groups,
   and 4 px for connected labels and icon details (HS2-4Y6SM9).
   The footer names the ticket source the new ticket is created in. When the project has two

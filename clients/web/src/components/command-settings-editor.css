@@ -366,3 +366,9 @@ textarea.command-settings-editor__control {
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
 }
+/* iOS zooms into a focused field set below 16px, including on a touch tablet (HS2-NYGR2Q). */
+@media (pointer: coarse) {
+  .command-settings-editor__control {
+    font-size: max(var(--hs-touch-field-min-font-size), 1em);
+  }
+}

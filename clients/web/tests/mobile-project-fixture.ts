@@ -54,6 +54,8 @@ export async function openDemoProject(
   ticketCount = 1,
   terminals: Array<{ id: string; alive: boolean; busy: boolean; cwd: string }> = DEFAULT_TERMINALS,
   firstTicketTitle?: string,
+  /** Saved commands and custom views (HS2-NYGR2Q), shaped like `GET /commands` and `GET /views`. */
+  populated: { commands?: unknown[]; views?: unknown[] } = {},
 ) {
   await page.route('**/*', async (route) => {
     const request = route.request(),
@@ -124,6 +126,8 @@ export async function openDemoProject(
       return route.fulfill({
         json: withTerminal ? terminals : [],
       });
+    if (path.endsWith('/commands') && populated.commands) return route.fulfill({ json: populated.commands });
+    if (path.endsWith('/views') && populated.views) return route.fulfill({ json: populated.views });
     if (
       path.endsWith('/connections') ||
       path.endsWith('/commands') ||

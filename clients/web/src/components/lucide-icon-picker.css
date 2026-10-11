@@ -79,3 +79,9 @@
   font-size: var(--wa-font-size-s);
   list-style: none;
 }
+/* iOS zooms into a focused field set below 16px, including on a touch tablet (HS2-NYGR2Q). */
+@media (pointer: coarse) {
+  .lucide-icon-picker__search input {
+    font-size: max(var(--hs-touch-field-min-font-size), var(--wa-font-size-s));
+  }
+}

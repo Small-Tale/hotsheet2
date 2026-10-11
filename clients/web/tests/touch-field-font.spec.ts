@@ -195,6 +195,86 @@ test.describe('touch app interactions (HS2-R2H1BA)', () => {
     });
 });
 
+/** Saved commands and a custom view, in the `GET /commands` and `GET /views` response shapes. */
+const POPULATED = {
+  commands: [
+    { id: 'cmd-tests', title: 'Run tests', kind: 'shell', command: 'npm test', group: 'Build' },
+    { id: 'cmd-review', title: 'Review diff', kind: 'ai', prompt: 'Review the staged diff.', group: 'AI' },
+  ],
+  views: [{ id: 'view-mine', name: 'Mine', query: 'status:started' }],
+};
+
+/**
+ * Populated surfaces (HS2-NYGR2Q): every settings category with saved commands, the saved-view rename,
+ * and the terminal rename, each walked with the hidden-dialog-inclusive field audit.
+ */
+async function auditPopulatedSurfaces(page: Page) {
+  const small: string[] = [],
+    audit = async (step: string) => {
+      small.push(...(await smallEditableFields(page)).map((field) => `${step}: ${field}`));
+    };
+  await openDemoProject(page, true, 1, undefined, undefined, POPULATED);
+  await expect(page.locator('[data-component="app-shell"]')).toBeVisible();
+  await audit('populated project');
+  await page.getByRole('button', { name: 'More actions for Mine' }).click();
+  await page.getByRole('menu', { name: 'Mine view actions' }).getByText('Edit view…').click();
+  await expect(page.getByRole('textbox', { name: 'View name' })).toHaveValue('Mine');
+  await audit('saved view rename');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  const drawer = page.locator('[data-component="terminal-drawer"]');
+  await drawer.getByRole('tab', { name: /Codex Main/ }).click({ button: 'right' });
+  await page.getByRole('menu', { name: 'Terminal tab actions' }).getByText('Rename…').click();
+  const rename = page.locator('[data-terminal-rename-dialog]');
+  await expect(rename).toHaveJSProperty('open', true);
+  await audit('terminal rename');
+  await page.keyboard.press('Escape');
+  await expect(rename).toHaveJSProperty('open', false);
+  await page.getByLabel('Settings view').click();
+  const workspace = page.locator('[data-component="settings-workspace"]');
+  await expect(workspace).toBeVisible();
+  for (const category of [
+    'Ticket sources',
+    'AI tools',
+    'Commands',
+    'Lifecycle',
+    'Terminals',
+    'Permissions',
+    'Column view',
+    'General',
+    'Accounts',
+    'Keyboard',
+  ]) {
+    await page.getByRole('button', { name: category, exact: true }).first().click();
+    await audit(`settings ${category}`);
+    if (category === 'Ticket sources') {
+      await page.getByRole('button', { name: 'Edit Hot Sheet git' }).click();
+      await expect(page.getByRole('textbox', { name: 'Location' })).toHaveValue('/tickets');
+      await audit('ticket source form');
+      await page.keyboard.press('Escape');
+    }
+    if (category === 'Commands') {
+      await expect(page.getByRole('list', { name: 'Custom commands' })).toContainText('Run tests');
+      const row = page.locator('[data-component="command-settings-editor"] .command-settings-editor__row').first();
+      await row.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+      await row.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
+      await expect(page.locator('#command-editor-dialog').getByLabel('Button label')).toHaveValue('Run tests');
+      await audit('command editor');
+      await page.screenshot({ path: test.info().outputPath('hs2-nygr2q-command-editor-tablet.png') });
+      await page.keyboard.press('Escape');
+    }
+  }
+  return small;
+}
+
+test.describe('touch populated surfaces (HS2-NYGR2Q)', () => {
+  test.use({ viewport: { width: 1180, height: 820 }, hasTouch: true, isMobile: true });
+  test('keeps populated settings editors and rename fields at 16px or larger on a touch tablet', async ({ page }) => {
+    expect(await auditPopulatedSurfaces(page)).toEqual([]);
+    await page.screenshot({ path: test.info().outputPath('hs2-nygr2q-tablet.png') });
+  });
+});
+
 test.describe('desktop', () => {
   test.use({ viewport: { width: 1280, height: 900 }, hasTouch: false, isMobile: false });
   test('keeps the compact field type with a mouse', async ({ page }) => {
