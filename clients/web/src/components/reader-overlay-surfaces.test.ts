@@ -80,7 +80,9 @@ describe('reader and overlay composition surfaces', () => {
   });
 
   it('keeps legacy inline render surfaces out of the application root', () => {
-    const source = readFileSync(new URL('../app/runtime.tsx', import.meta.url), 'utf8');
+    const source = ['../app/runtime.tsx', '../features/hot-sheet-shell.tsx', '../features/hot-sheet-app.tsx']
+      .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
+      .join('\n');
     expect(source).not.toMatch(
       /function (Reader|ReaderLayers|VisiblePermissionPopup|AIConversationSurface|RepositoryStatusSurface|ChangeEvidenceSurface|TicketContextMenu|AttachmentMenuSurface|Gallery|CommandDialog|ConnectionDetailsSurface|CompatibilityBanner|AppTabMenuSurface|NotWorkingSurface)\(/,
     );

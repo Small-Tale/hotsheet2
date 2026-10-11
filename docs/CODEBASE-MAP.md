@@ -73,7 +73,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/controlled-open.ts   #   Post-render sync that drives marked (`data-controlled-open`) custom elements' live `open`, since Kerf beta.51 no longer removes it on re-render
     tests/project-startup.spec.ts # Production startup request/order/failure/session/onboarding transition coverage
     src/main.tsx             #   Bounded browser entry: global styles/Web Awesome registration and explicit runtime start
-    src/app/runtime.tsx      #   Application runtime composition: project/cache/ticket orchestration and feature-controller integration
+    src/app/runtime.tsx      #   Application runtime composition: state, project/cache/ticket orchestration, feature-controller and surface-factory wiring
     src/app/wire-interactions.ts # Behavior-sensitive ordering owner for the twelve interaction registration groups
     src/features/             # Typed state/controller factories plus reactive surface projections; no main imports or import-time effects
       commands.tsx            # Project command drafts, selection, autosave, kept (possibly empty) command groups, icons, and dialog composition
@@ -95,6 +95,14 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       terminal-drawer.ts # Terminal drawer visibility, selection, tab/input focus, serialized terminal/shell/AI-chat creation, closeDrawerTabIds (HS2-BSSWGV)
       settings-surface.tsx # Settings workspace projection, including shared ticket-source connections (HS2-BSSWGV)
       sidebar-surface.ts # Left sidebar projection: settings/notification navigation or project stats, views, commands, Drive (HS2-BSSWGV)
+      ticket-view-surface.tsx # Ticket view titles, view action spec, ticket context-menu surface (HS2-K0VC2C)
+      terminal-operations-surface.ts # Terminal operations dashboard per-project summary (HS2-K0VC2C)
+      inspector-surface.ts # Selected-ticket inspector props, not-working dialog props, attachment items (HS2-K0VC2C)
+      reader-layers-surface.tsx # Ticket reader stack: reader layer props, gallery source lookup (HS2-K0VC2C)
+      workspace-surface.tsx # Main workspace pane props and empty states (HS2-K0VC2C)
+      terminal-rail-surface.tsx # Terminal rail props, including the docked inspector (HS2-K0VC2C)
+      hot-sheet-shell.tsx # HotSheetShell: project tabs, sidebar, workspace, rail, drawer composed in the Workbench (HS2-K0VC2C)
+      hot-sheet-app.tsx # HotSheetApp root component: render pass, motion/scroll restore, dialogs, overlays (HS2-K0VC2C)
       terminal-drawer-geometry.ts # Terminal drawer min/max/maximize geometry and the phone terminal viewport: focus-mode transitions, keyboard geometry, magnified columns (HS2-T1DX2V)
       conversation-archive.tsx # Range selection, copy, export, and saved-chat opening
       saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion

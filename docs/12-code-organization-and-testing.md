@@ -362,10 +362,30 @@ HS2-BSSWGV lifted five more behavior-preserving owners:
   projections.
 
 `refreshProject` and `closeProjectIds` stay hoisted runtime functions that delegate to their
-owners, so the owners built earlier keep calling them. The remaining surface-prop builders
-(inspector, reader layers, workspace, terminal rail, terminal operations, ticket context
-menu) and `HotSheetShell` / `HotSheetApp` close over 37-139 runtime bindings each. Splitting
-them first needs domain context objects; that work is tracked as `HS2-K0VC2C`.
+owners, so the owners built earlier keep calling them.
+
+HS2-K0VC2C moved the remaining surface-prop builders and both root components into
+`features/` factories with the same `createSidebarSurface` shape: a typed
+`*Dependencies` port, and a returned object holding the original function names, so
+call sites are unchanged.
+
+- `ticket-view-surface.tsx`: view titles, the view action spec, and the ticket context menu.
+- `terminal-operations-surface.ts`: the terminal operations dashboard summary.
+- `inspector-surface.ts`: the selected-ticket inspector, the not-working dialog props,
+  and attachment items.
+- `reader-layers-surface.tsx`: reader layers, gallery source lookup, and the reader stack.
+- `workspace-surface.tsx`: the main workspace pane and its empty states.
+- `terminal-rail-surface.tsx`: the terminal rail, including its docked inspector.
+- `hot-sheet-shell.tsx` (`HotSheetShell`) and `hot-sheet-app.tsx` (`HotSheetApp`).
+
+The ports list exactly the runtime bindings each builder reads; their types come from the
+checker-inferred runtime declarations. The runtime calls each factory where the original
+declaration stood (builders just before `HotSheetShell`), so no dependency is read before
+its declaration. Mutable runtime `let` state crosses into `HotSheetApp` through getters
+(`backgroundProjectRefresh`, `initialProjectRestoreComplete`, `ticketRenderScheduled`)
+and `consumeSkipNextTicketMotion`. The render-only `renderedTicketCollectionKey` now lives
+in the app factory. `app/runtime.tsx` keeps the state, owners, actions, and the factory
+wiring.
 
 Owners created before these read them through lazy accessors (saved views read
 `availableSearchTags`, the project lifecycle reads `syncProjectChangeStreams`).

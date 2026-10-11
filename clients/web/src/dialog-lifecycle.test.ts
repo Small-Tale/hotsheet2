@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 describe('dialog lifecycle event contracts', () => {
   const source = [
     './app/runtime.tsx',
+    './features/hot-sheet-app.tsx',
+    './features/hot-sheet-shell.tsx',
     './interactions/terminals.ts',
     './interactions/ticket-selection.ts',
     './interactions/commands-and-ai.ts',

@@ -1,10 +1,6 @@
-// The shell renders the shared app-heading presentation (main.tsx loads it first).
-import '../components/heading.css';
 import '@awesome.me/webawesome/dist/components/toast/toast.js';
 
 import { type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
-import { Toolbar } from '@kerfjs/ui/toolbar';
-import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { wireNavStack } from '@kerfjs/ui/wire-nav-stack';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
@@ -33,122 +29,44 @@ import {
   saveAppRegionSize,
   terminalDrawerMinimum,
 } from '../app-region-resize';
-import { attachmentRoundNumbers } from '../attachment-grouping';
-import {
-  type AttachmentLabelEditing,
-  attachmentLabelEditingDraft,
-  attachmentLabelEditingKey,
-  INSPECTOR_ATTACHMENT_LABEL_SCOPE,
-} from '../attachment-label-editing';
-import { boardColumnHasMore, type BoardColumnPage, boardColumnStatus, isPerColumnBoardView } from '../board-pagination';
+import { type AttachmentLabelEditing } from '../attachment-label-editing';
+import { type BoardColumnPage, isPerColumnBoardView } from '../board-pagination';
 import { browserRandomId } from '../browser-id';
 import { type BulkUpdateProgress, createBulkUpdateProgress } from '../bulk-update-progress';
-import { AiFeedbackDialog, type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
-import { AppEmptyState, ProjectRestoreState } from '../components/app-empty-state';
-import { AppError } from '../components/app-error';
-import { AppLoadingIndicator } from '../components/app-loading-indicator';
-import { APP_WORKBENCH_ID, type AppShellMobileView } from '../components/app-shell';
-import { BulkTicketDialog, type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
-import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
+import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
+import { APP_WORKBENCH_ID } from '../components/app-shell';
+import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import type { ConfidenceCalibrationState } from '../components/confidence-calibration';
-import { ConversationExportDialog } from '../components/conversation-export-dialog';
-import { corruptTicketKey } from '../components/corrupt-ticket-row';
-import {
-  Hs1CleanupBanner,
-  Hs1JobBanner,
-  Hs1MigrationBanner,
-  Hs1MigrationDialog,
-  Hs1RegistrationRepairBanner,
-} from '../components/hs1-migration';
-import { MainShell } from '../components/main-shell';
-import { ManualModelDialog } from '../components/manual-model-dialog';
 import type { MarkdownEditorMode } from '../components/markdown-editor';
-import { NotificationCenter } from '../components/notification-center';
-import { type NotificationView, notificationViewTitle } from '../components/notification-navigation';
-import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
-import { ProjectCloseDialog, type ProjectCloseDialogState } from '../components/project-close-dialog';
-import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from '../components/project-dialog';
-import { ProjectRestoreError, projectRestoreTabId } from '../components/project-restore-error';
-import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
-import { type ProjectTabProps } from '../components/project-tab';
+import { type NotificationView } from '../components/notification-navigation';
+import { type ProjectCloseDialogState } from '../components/project-close-dialog';
+import { projectRestoreTabId } from '../components/project-restore-error';
 import { type ProjectTabBarMode } from '../components/project-tab-bar';
 import { type AppTabKind } from '../components/project-tab-context-menu';
-import {
-  focusQuickTicketComposerTitle,
-  QuickTicketComposer,
-  showQuickTicketComposer,
-} from '../components/quick-ticket-composer';
-import {
-  AppTabMenuSurface,
-  AttachmentContextMenuSurface,
-  CompatibilityBannerSurface,
-  ConnectionDetailsSurface,
-  NotWorkingSurface,
-  ReaderLayersSurface,
-  ReaderLayerSurface,
-  TicketContextMenuSurface,
-  type TicketContextMenuSurfaceProps,
-} from '../components/reader-overlay-surfaces';
-import { SavedViewDeleteDialog, SavedViewDialog } from '../components/saved-view-dialog';
+import { focusQuickTicketComposerTitle, showQuickTicketComposer } from '../components/quick-ticket-composer';
 import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bars';
-import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
+import { type SettingsCategory } from '../components/settings-navigation';
 import type { TicketStatus } from '../components/status-badge';
 import {
-  TerminalCopyDialog,
   type TerminalCopyState,
-  TerminalEditMenu,
   type TerminalEditMenuState,
-  TerminalPasteDialog,
   type TerminalPasteState,
 } from '../components/terminal-clipboard-dialogs';
-import { TerminalDashboardControls, type TerminalDashboardGroup } from '../components/terminal-dashboard';
-import { TerminalRenameDialog, type TerminalRenameTarget } from '../components/terminal-rename-dialog';
-import {
-  TerminalVisibilityDialog,
-  TerminalVisibilityNameDialog,
-  type TerminalVisibilityNamePrompt,
-} from '../components/terminal-visibility-dialog';
-import { TicketBoard } from '../components/ticket-board';
-import { TicketCloseDialog, type TicketCloseDialogState } from '../components/ticket-close-dialog';
-import type { TicketEmptyStateProps } from '../components/ticket-empty-state';
-import { type InspectorTab, ticketInspectorPanel, type TicketInspectorProps } from '../components/ticket-inspector';
-import {
-  corruptInspectorPanel,
-  inspectorPanel,
-  inspectorPlaceholderPanel,
-  inspectorSkeletonPanel,
-  notificationInspectorSurfacePanel,
-} from '../components/ticket-inspector-surface';
-import { type TicketLinkChoice, TicketLinkChoiceDialog } from '../components/ticket-link-choice-dialog';
-import { TicketList } from '../components/ticket-list';
-import { TicketPageMore } from '../components/ticket-page-more';
+import { type TerminalDashboardGroup } from '../components/terminal-dashboard';
+import { type TerminalRenameTarget } from '../components/terminal-rename-dialog';
+import { type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
+import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
+import { type InspectorTab } from '../components/ticket-inspector';
+import { type TicketLinkChoice } from '../components/ticket-link-choice-dialog';
 import { showTicketReaderDialog, type TicketReaderDialogElement } from '../components/ticket-reader';
 import type { TicketPriority, TicketRowProps } from '../components/ticket-row';
-import { TicketSourceSetupDialog } from '../components/ticket-source-setup-dialog';
 import { SavedViewContextMenu } from '../components/view-navigation';
 import {
-  GlobalWorkspaceSurface,
-  ProjectTerminalDrawerSurface,
-  sidebarSurfacePanel,
-  terminalOperationsSurfacePanel,
-  type TerminalOperationsSurfaceProps,
-  terminalRailSurfacePanel,
-  type TerminalRailSurfaceProps,
-  WorkspaceSurface,
-  type WorkspaceSurfaceProps,
-} from '../components/workspace-composition-surfaces';
-import {
-  TicketViewAction,
-  type TicketViewActionSpec,
-  WorkspaceControls,
-  WorkspaceIdentity,
   type WorkspaceSort,
   type WorkspaceSortDirection,
-  workspaceUpNextState,
   type WorkspaceViewMode,
 } from '../components/workspace-header';
 import { withControlledOpen } from '../controlled-open';
-import { syncConversationScroll } from '../conversation-scroll';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
 import { createAiConfigurationController } from '../features/ai-configuration';
 import { createBoardColumnPaging } from '../features/board-column-paging';
@@ -159,6 +77,9 @@ import { createCorruptTicketRecoveryController } from '../features/corrupt-ticke
 import { createDriveConversationsController } from '../features/drive-conversations';
 import { createGalleryController } from '../features/gallery';
 import { createHaltedSessionsController } from '../features/halted-sessions';
+import { createHotSheetApp } from '../features/hot-sheet-app';
+import { createHotSheetShell } from '../features/hot-sheet-shell';
+import { createInspectorSurface } from '../features/inspector-surface';
 import { createPermissionsController } from '../features/permissions';
 import { createProjectChangeStreamsController } from '../features/project-change-streams';
 import { createProjectCloseController } from '../features/project-close';
@@ -169,6 +90,7 @@ import {
   type ProjectRefreshOptions,
 } from '../features/project-refresh';
 import { createProjectTeardown } from '../features/project-teardown';
+import { createReaderLayersSurface } from '../features/reader-layers-surface';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
 import { createSettingsSurface } from '../features/settings-surface';
@@ -180,34 +102,28 @@ import {
   currentMobileViewportGeometry,
 } from '../features/terminal-drawer-geometry';
 import { createTerminalNamesController } from '../features/terminal-names';
+import { createTerminalOperationsSurface } from '../features/terminal-operations-surface';
 import { createTerminalPresentation } from '../features/terminal-presentation';
+import { createTerminalRailSurface } from '../features/terminal-rail-surface';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
+import { createTicketViewSurface } from '../features/ticket-view-surface';
 import { createTicketWorkflows } from '../features/ticket-workflows';
 import { createWorkspaceSearchController, type SidebarSearchCounts } from '../features/workspace-search';
-import { fullTicketFeedbackNeeded } from '../feedback-needed';
+import { createWorkspaceSurface } from '../features/workspace-surface';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
 import { projectHaltedSessions } from '../halted-sessions';
 import { effectiveSearch, type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { beginInteractionTiming } from '../interaction-performance';
-import type {
-  Control,
-  DetailsFinishTask,
-  GallerySource,
-  NotWorkingTarget,
-  PendingEvidence,
-  Project,
-} from '../interactions/types';
+import type { Control, DetailsFinishTask, NotWorkingTarget, PendingEvidence, Project } from '../interactions/types';
 import { stringArray, tryParseJson } from '../json-value';
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from '../keyboard-shortcuts';
 import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
-import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
 import { isMobileViewport, isSidePanelPortal } from '../mobile-layout';
 import { loadMobileTerminalColumns } from '../mobile-terminal-columns';
 import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
-import { mobileViewChoices } from '../mobile-view-choices';
-import { type ProjectTicketSources, resolveNewTicketSource, writableTicketSources } from '../new-ticket-source';
+import { type ProjectTicketSources, resolveNewTicketSource } from '../new-ticket-source';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
@@ -230,16 +146,13 @@ import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers
 import { parseTerminalNames } from '../terminal-names';
 import { terminalDrawerActivation } from '../terminal-project-scope';
 import {
-  activeTerminalVisibilityGroup,
   parseTerminalVisibilityState,
-  TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
   TERMINAL_VISIBILITY_STORAGE_KEY,
   TERMINAL_VISIBILITY_TYPES,
   type TerminalVisibilityType,
 } from '../terminal-visibility';
 import { hasUnresolvedBlocker } from '../ticket-blocking';
-import { ticketBoardGroups, ticketBoardGroupTotal } from '../ticket-board-layout';
-import { BulkTicketMutationSequencer, canBulkUpdate } from '../ticket-bulk-operations';
+import { BulkTicketMutationSequencer } from '../ticket-bulk-operations';
 import { loadLastTicketCategory } from '../ticket-category-preference';
 import { type DuplicateTarget } from '../ticket-close';
 import { ticketCompletionTrend } from '../ticket-completion-trend';
@@ -251,7 +164,7 @@ import {
   type TicketFieldConflict,
 } from '../ticket-field-reconciliation';
 import { parseTicketLinkReference, resolveTicketLink, type TicketLinkMatch } from '../ticket-link-resolution';
-import { animateTicketMotion, captureTicketMotion, waitForTicketMotionSettled } from '../ticket-motion';
+import { waitForTicketMotionSettled } from '../ticket-motion';
 import { type ClipboardTicket, type TicketHistory, type TicketSnapshot } from '../ticket-operations';
 import {
   activeTicketReaderProject,
@@ -265,8 +178,6 @@ import { TicketScrollMemory } from '../ticket-scroll-state';
 import { replaceTicketSearch } from '../ticket-search-model';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
 import {
-  canCreateTicketInView,
-  customTicketViewId,
   customTicketViewKey,
   isArchivedTicket,
   isOpenTicket,
@@ -281,8 +192,6 @@ import { createToastLifetime } from '../toast-lifetime';
 import { createToastPresentation } from '../toast-presentation';
 import { createTrackedSizeObserver } from '../tracked-size-observer';
 import { createTrailingTask } from '../trailing-task';
-import { renderStormSuppressionReason } from '../ui-stability-diagnostics';
-import { syncVideoPosters } from '../video-posters';
 import {
   loadWorkspacePreferences,
   saveWorkspacePreferences,
@@ -291,7 +200,6 @@ import {
 } from '../workspace-preferences';
 import {
   activeProjectRoot,
-  hs1CleanupPromptDismissed,
   loadDraftFiles,
   loadProjectWorkspaceSession,
   saveActiveProjectRoot,
@@ -3337,281 +3245,6 @@ export async function startHotSheetWebClient() {
     commandIcon,
     aiToolLabel,
   });
-  function notWorkingSurfaceProps(
-    target: NotWorkingTarget,
-    note: string,
-    files: PendingEvidence[],
-    submitting: boolean,
-    submissionError: string,
-  ): Parameters<typeof NotWorkingSurface>[0] {
-    const capabilities = target.slug ? capabilitiesFor(target.connectionId) : undefined;
-    return {
-      slug: target.slug || 'ticket',
-      mode: target.mode,
-      open: Boolean(target.slug),
-      note,
-      attachments: files,
-      notesEnabled: capabilities?.notes ?? true,
-      attachmentsEnabled: capabilities?.attachments ?? true,
-      submitting,
-      error: submissionError,
-    };
-  }
-  function attachmentItems(ticket: FullTicket, current: Project) {
-    const rounds = attachmentRoundNumbers(ticket.attachments, ticket.notes),
-      // Generated video posters are stored beside git attachments; a provider that cannot
-      // edit attachments has no poster to fetch or upload (HS2-HSA64D).
-      posters = attachmentsEditableFor(ticket.connection_id);
-    return ticket.attachments.map((item) => ({
-      id: item.id,
-      name: item.filename,
-      url: api().checkoutAttachmentUrl(current.id, ticket.qualified_id, item.id),
-      thumbnailUrl: posters
-        ? api().checkoutAttachmentThumbnailUrl(current.id, ticket.qualified_id, item.id)
-        : undefined,
-      manageVideoPoster: posters,
-      annotationCount: item.annotations?.length ?? 0,
-      round: rounds.get(item.id),
-      batch_id: item.batch_id,
-      batch_label: item.batch_label,
-      actor: item.actor,
-      purpose: item.purpose,
-    }));
-  }
-  function selectedInspectorProps(): TicketInspectorProps | undefined {
-    const ticket = selectedTicket.value,
-      current = project();
-    if (!ticket || !current) return;
-    const backlinks =
-      duplicateBacklinkState.value.key === `${current.id}:${ticket.qualified_id}`
-        ? duplicateBacklinkState.value
-        : undefined;
-    return {
-      slug: ticket.slug,
-      source: defaultProviders.value[current.id]?.sources.find(
-        (source) => source.connectionId === ticket.connection_id,
-      ),
-      title: ticket.title,
-      liveClaim: liveClaimNotice(ticket),
-      pendingOperations: Object.values(providerOutboxOperations.value)
-        .filter((operation): operation is ProviderOutboxOperation =>
-          Boolean(
-            operation && operation.connection_id === ticket.connection_id && operation.native_id === ticket.native_id,
-          ),
-        )
-        .slice(0, 5),
-      titleEditing: titleEditingSurface.value === 'inspector',
-      titleDraft: titleDraft.value,
-      canUpdate: canUpdateSelected(),
-      canEditStartedPhase: canEditStartedPhaseSelected(),
-      canAddNotes: canAddNotes(),
-      canEditNotes: canEditNotes(),
-      canDeleteNotes: canDeleteNotes(),
-      composingNote: composingNote.value,
-      composerDraft: newNoteDraft.value,
-      status: status(ticket.status),
-      startedPhase: ticket.started_phase,
-      priority: priority(ticket.priority),
-      category: ticket.category ?? 'issue',
-      tags: ticket.tags,
-      tagSuggestions: tagSuggestions(),
-      details: detailsMode.value === 'write' ? detailsDraft.value : ticket.details,
-      detailsMode: detailsMode.value,
-      detailsDirty: detailsDraft.value !== ticket.details,
-      notes: notes(ticket),
-      editingNoteId: editingNoteId.value,
-      noteDraft: noteDraft.value,
-      blockedReason: ticket.blocked_reason,
-      blockedReasonEditing: blockedReasonEditing.value,
-      blockedReasonDraft: blockedReasonDraft.value,
-      providerName: 'Hot Sheet git',
-      updatedLabel: `Updated ${ago(ticket.updated_at)}`,
-      activeTab: inspectorTab.value,
-      upNext: ticket.up_next,
-      upNextEligible: ticket.status === 'not_started' || ticket.status === 'started',
-      feedbackNeeded: fullTicketFeedbackNeeded(ticket),
-      closeReason: ticket.close_reason,
-      latestConfidence: ticket.latest_confidence,
-      duplicateTarget: duplicateTargetFor(ticket),
-      duplicateBacklinks: backlinks?.backlinks,
-      duplicateBacklinkInaccessibleProjects: backlinks?.inaccessibleProjects,
-      timelineEntries: timeline(ticket),
-      attachments: attachmentItems(ticket, current),
-      attachmentContext: attachmentContext(ticket),
-      codeReview: codeReview.value,
-      codeReviewLoading: codeReviewLoading.value,
-      codeReviewMessage: codeReviewMessage.value,
-      expandedCodeReviewCommits: expandedCodeReviewCommits.value,
-      attachmentsEnabled: canUseAttachments(),
-      attachmentsEditable: canEditAttachments(),
-      attachmentMessage: attachmentMessage.value,
-      attachmentLabelEditing: attachmentLabelEditingKey(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
-      attachmentLabelDraft: attachmentLabelEditingDraft(attachmentLabelEditing.value, INSPECTOR_ATTACHMENT_LABEL_SCOPE),
-      fieldConflict: readerOpen.value ? undefined : fieldConflict.value,
-      fieldConflictResolution: fieldConflictResolution.value,
-    };
-  }
-  function readerLayerSurface({
-    ticket,
-    current,
-    active,
-    open,
-    editable,
-    frame,
-    activeTab,
-    stackPosition,
-    stackSize,
-  }: {
-    ticket: FullTicket;
-    current: Project;
-    active: boolean;
-    open: boolean;
-    editable: boolean;
-    frame?: TicketReaderFrame;
-    activeTab: InspectorTab;
-    stackPosition: number;
-    stackSize: number;
-  }) {
-    const linked = frame?.edit,
-      capabilities = frame ? { ...frame.capabilities, notes: false, note_delete: false } : undefined,
-      canUpdate = editable && canUpdateSelected();
-    const readerScope = frame?.id ?? 'workspace-reader';
-    return (
-      <ReaderLayerSurface
-        slug={ticket.slug}
-        title={ticket.title}
-        titleEditing={editable && titleEditingSurface.value === 'reader'}
-        titleDraft={editable ? titleDraft.value : ticket.title}
-        canUpdate={canUpdate}
-        canEditText={frame ? capabilities!.update : canUpdate}
-        canAddNotes={frame ? capabilities!.notes : editable && canAddNotes()}
-        canEditNotes={frame ? capabilities!.note_edit : editable && canEditNotes()}
-        canDeleteNotes={frame ? capabilities!.note_delete : editable && canDeleteNotes()}
-        composingNote={editable && composingNote.value}
-        composerDraft={editable ? newNoteDraft.value : ''}
-        status={status(ticket.status)}
-        priority={priority(ticket.priority)}
-        category={ticket.category ?? 'issue'}
-        tags={ticket.tags}
-        tagSuggestions={editable ? tagSuggestions() : undefined}
-        details={
-          linked?.detailsMode === 'write'
-            ? linked.detailsDraft
-            : editable && readerDetailsMode.value === 'write'
-              ? readerDetailsDraft.value
-              : ticket.details
-        }
-        liveClaim={liveClaimNotice(ticket)}
-        detailsMode={linked?.detailsMode ?? (editable ? readerDetailsMode.value : 'preview')}
-        detailsDirty={
-          Boolean(linked && linked.detailsDraft !== ticket.details) ||
-          (editable && readerDetailsDraft.value !== ticket.details)
-        }
-        notes={notes(ticket)}
-        editingNoteId={linked?.editingNoteId ?? (editable ? readerEditingNoteId.value : undefined)}
-        noteDraft={linked?.noteDraft ?? (editable ? readerNoteDraft.value : '')}
-        inlineFeedbackReplies={editable ? readerInlineFeedbackReplies.value : {}}
-        feedbackChoiceSelections={editable ? readerFeedbackChoiceSelections.value : {}}
-        blockedReason={ticket.blocked_reason}
-        blockedReasonEditing={linked?.blockedReasonEditing ?? (editable && readerBlockedReasonEditing.value)}
-        blockedReasonDraft={
-          linked?.blockedReasonDraft ?? (editable ? readerBlockedReasonDraft.value : (ticket.blocked_reason ?? ''))
-        }
-        providerName="Hot Sheet git"
-        updatedLabel={`Updated ${ago(ticket.updated_at)}`}
-        activeTab={activeTab}
-        upNext={ticket.up_next}
-        upNextEligible={editable && (ticket.status === 'not_started' || ticket.status === 'started')}
-        feedbackNeeded={fullTicketFeedbackNeeded(ticket)}
-        closeReason={ticket.close_reason}
-        latestConfidence={ticket.latest_confidence}
-        duplicateTarget={duplicateTargetFor(ticket)}
-        timelineEntries={timeline(ticket)}
-        attachments={attachmentItems(ticket, current)}
-        attachmentContext={attachmentContext(ticket, current)}
-        codeReview={editable ? codeReview.value : undefined}
-        codeReviewLoading={editable && codeReviewLoading.value}
-        codeReviewMessage={editable ? codeReviewMessage.value : ''}
-        expandedCodeReviewCommits={editable ? expandedCodeReviewCommits.value : []}
-        attachmentsEnabled={editable && canUseAttachments()}
-        attachmentsEditable={editable && canEditAttachments()}
-        attachmentMessage={editable ? attachmentMessage.value : 'Attachments are view-only in linked ticket readers.'}
-        attachmentLabelEditing={attachmentLabelEditingKey(attachmentLabelEditing.value, readerScope)}
-        attachmentLabelDraft={attachmentLabelEditingDraft(attachmentLabelEditing.value, readerScope)}
-        largeText={readerLargeText.value}
-        fieldConflict={editable ? fieldConflict.value : undefined}
-        fieldConflictResolution={editable ? fieldConflictResolution.value : ''}
-        active={active}
-        frameId={readerScope}
-        open={open}
-        projectName={current.name}
-        stackPosition={stackPosition}
-        stackSize={stackSize}
-        style={stackPosition < stackSize ? `--ticket-reader-offset:${(stackSize - stackPosition) * -10}px` : undefined}
-        attachmentMenu={attachmentMenuSurfaceProps({ readerScope })}
-        evidence={changeEvidenceSurfaceProps(readerScope)}
-        readOnly={frame ? !capabilities!.update && !capabilities!.note_edit : !editable}
-      />
-    );
-  }
-  // Media opened from a stacked (linked) reader belongs to that reader's ticket and project (HS2-97E0QR).
-  function gallerySourceFor(target: Element): GallerySource | undefined {
-    const frameId = target.closest<HTMLElement>('[data-component="ticket-reader"]')?.dataset.readerFrameId,
-      frame = frameId ? linkedReaderStack.value.find((item) => item.id === frameId) : undefined,
-      owner = frame ? projects.value.find((item) => item.id === frame.projectId) : undefined;
-    if (!frame || !owner) return undefined;
-    return {
-      ticket: frame.ticket,
-      project: owner,
-      // Linked readers never manage attachments (only the workspace reader is editable).
-      readOnly: true,
-      update: (ticket) => {
-        linkedReaderStack.value = linkedReaderStack.value.map((item) =>
-          item.id === frame.id ? { ...item, ticket } : item,
-        );
-      },
-    };
-  }
-  function readerLayersSurfaceProps(): Parameters<typeof ReaderLayersSurface>[0] {
-    const current = project(),
-      base =
-        selectedTicket.value && current
-          ? {
-              id: 'workspace-reader',
-              open: readerOpen.value,
-              project: current,
-              ticket: selectedTicket.value,
-              activeTab: readerTab.value,
-              frame: undefined,
-            }
-          : undefined,
-      linked = linkedReaderStack.value.flatMap((frame) => {
-        const project = projects.value.find((item) => item.id === frame.projectId);
-        return project
-          ? [{ id: frame.id, open: frame.open, project, ticket: frame.ticket, activeTab: frame.activeTab, frame }]
-          : [];
-      }),
-      openLayers = [...(base?.open ? [base] : []), ...linked.filter((layer) => layer.open)],
-      top = openLayers.at(-1)?.id,
-      position = new Map(openLayers.map((layer, index) => [layer.id, index + 1]));
-    return {
-      layers: [...(base ? [base] : []), ...linked].map((layer) => {
-        const stackPosition = position.get(layer.id) ?? 1,
-          active = layer.id === top;
-        return readerLayerSurface({
-          ticket: layer.ticket,
-          current: layer.project,
-          active,
-          open: layer.open,
-          editable: active && layer.id === 'workspace-reader',
-          frame: layer.frame,
-          activeTab: layer.activeTab,
-          stackPosition,
-          stackSize: Math.max(1, openLayers.length),
-        });
-      }),
-    };
-  }
   /** This project's own ticket sources — never another project's (HS2-3SCH1K, HS2-SM9PM8). */
   const { settingsWorkspace } = createSettingsSurface({
     settingsCategory: () => settingsCategory(),
@@ -3645,228 +3278,6 @@ export async function startHotSheetWebClient() {
     capturingShortcutId,
     appleShortcutPlatform,
   });
-  function workspaceEmptyState(): TicketEmptyStateProps | undefined {
-    if (loading.value) return { kind: 'loading' };
-    const query = orderedSearchText(searchQuery.value, searchTokens.value, () => true);
-    if (query) return { kind: searchMatchKeys.value === undefined ? 'searching' : 'search', query };
-    const collection = ticketCollectionState.value;
-    if (collection?.projectId === selectedProjectId.value && collection.view === selectedView.value)
-      return {
-        kind: collection.status === 'loading' ? 'view-loading' : 'view-error',
-        viewLabel: ticketViewTitle(selectedView.value),
-      };
-    if (tickets.value.length === 0 && corruptTickets.value.length === 0) return { kind: 'project' };
-    return { kind: 'view', viewLabel: ticketViewTitle(selectedView.value) };
-  }
-  function workspaceSurfaceProps(): WorkspaceSurfaceProps {
-    const waitingForBoardPages =
-        viewMode.value === 'board' &&
-        isPerColumnBoardView(selectedView.value, workspaceSearchActive()) &&
-        Object.keys(boardColumnPages.value).length === 0 &&
-        tickets.value.length === 0,
-      shown = waitingForBoardPages ? [] : visibleTickets(),
-      current = project(),
-      emptyState: TicketEmptyStateProps | undefined = loading.value
-        ? { kind: 'loading' }
-        : waitingForBoardPages
-          ? { kind: error.value ? 'view-error' : 'view-loading', viewLabel: ticketViewTitle(selectedView.value) }
-          : workspaceEmptyState(),
-      collectionLoading = emptyState?.kind === 'view-loading',
-      hasMore = Boolean(ticketNextCursor.value) && !collectionLoading,
-      more = hasMore ? <TicketPageMore loading={ticketPageLoading.value} /> : undefined;
-    switch (viewMode.value) {
-      case 'notifications': {
-        const history = projectPermissionHistory(),
-          cutoff = Date.now() - 24 * 60 * 60 * 1000,
-          view = notificationView.value;
-        return {
-          kind: 'notifications',
-          notifications: {
-            title: notificationViewTitle(view),
-            pending: view === 'pending' ? projectPendingPermissions() : [],
-            history:
-              view === 'day' ? history.filter((item) => item.resolvedAt >= cutoff) : view === 'week' ? history : [],
-          },
-        };
-      }
-      case 'settings':
-        if (current) return { kind: 'settings', content: settingsWorkspace(current) };
-        break;
-      case 'board':
-      case 'list':
-        break;
-      default:
-        return viewMode.value satisfies never;
-    }
-    if (selectedView.value === 'errors')
-      return {
-        kind: 'errors',
-        list: {
-          tickets: [],
-          corruptTickets: corruptTickets.value,
-          corruptRecovery: corruptRecovery.value,
-          selectedCorruptKey: selectedCorruptKey.value,
-          label: 'Tickets with parsing errors',
-          emptyState,
-        },
-      };
-    continueProgressiveTicketRendering(shown.length);
-    if (viewMode.value === 'board') {
-      const counts =
-          workspaceSearchActive() || collectionLoading
-            ? undefined
-            : ticketCountsByProject.value[selectedProjectId.value],
-        hideVerified = hideVerifiedColumn(),
-        groups = ticketBoardGroups(shown, selectedView.value, hideVerified);
-      // Per-column pagination (HS2-8NBGBX): each status column gets its own continuation from its own
-      // cursor/loaded count, so a short column can load more independently of a long one. Single-column
-      // views (backlog/archive/trash) and search keep the global cursor pinned to their one column.
-      const perColumn = isPerColumnBoardView(selectedView.value, workspaceSearchActive()),
-        lastShown = shown.at(-1),
-        globalColumnId = perColumn
-          ? undefined
-          : (groups.find((group) => group.tickets.some((ticket) => ticket.id === lastShown?.id))?.id ??
-            [...groups].reverse().find((group) => group.tickets.length)?.id ??
-            groups[0]?.id);
-      const columns = groups.map((group) => {
-        const total = ticketBoardGroupTotal(group.id, group.tickets.length, selectedView.value, counts, hideVerified),
-          status = boardColumnStatus(group.id),
-          visible = Object.hasOwn(boardColumnPages.value, group.id)
-            ? (boardColumnPages.value[group.id].visible ?? BOARD_COLUMN_PAGE_SIZE)
-            : BOARD_COLUMN_PAGE_SIZE,
-          hasCachedRows = group.tickets.length > visible;
-        const continuation =
-          perColumn && status
-            ? hasCachedRows ||
-              (counts && boardColumnHasMore(total, group.tickets.length, boardColumnPages.value[group.id]))
-              ? { loading: boardColumnLoading.value[group.id] }
-              : undefined
-            : !collectionLoading && hasMore && globalColumnId === group.id
-              ? { loading: ticketPageLoading.value }
-              : undefined;
-        return {
-          ...group,
-          totalCount: total,
-          countPartial: partialSourcesByProject.value[selectedProjectId.value] ?? false,
-          tickets: group.tickets.slice(0, Math.min(renderedTicketLimit.value, perColumn ? visible : Infinity)).map(row),
-          continuation,
-        };
-      });
-      // Phones page through one snapped column at a time instead of shrinking the grid (HS2-ZYJMDP).
-      const layout = viewportMobile.value ? 'paged' : 'grid';
-      return { kind: 'board', board: { columns, label: 'Project board', emptyState, layout } };
-    }
-    return {
-      kind: 'list',
-      list: {
-        tickets: shown.slice(0, renderedTicketLimit.value).map(row),
-        totalCount: shown.length,
-        label: 'Project tickets',
-        emptyState,
-      },
-      more,
-    };
-  }
-  function terminalRailSurfaceProps(): TerminalRailSurfaceProps {
-    const current = project(),
-      mode = (() => {
-        switch (viewMode.value) {
-          case 'notifications':
-            return 'notifications';
-          case 'board':
-            return 'board';
-          case 'settings':
-          case 'list':
-            return 'list';
-          default:
-            return viewMode.value satisfies never;
-        }
-      })(),
-      railView = selectedView.value === 'errors' ? 'all' : selectedView.value,
-      selection = selectedRows(),
-      canCreate = canCreateTicketInView(railView),
-      effective = effectiveSearch(searchQuery.value, searchTokens.value),
-      matches = searchMatchKeys.value;
-    let shown = ticketsForView(tickets.value, railView);
-    if (effective.text || effective.tokens.length)
-      shown = matches ? shown.filter((ticket) => matches.has(ticketSearchKey(ticket))) : [];
-    const activeSort = activeWorkspaceSort();
-    shown = shown.slice().sort((a, b) => compareWorkspaceTickets(a, b, activeSort.sort, activeSort.sortDirection));
-    const pending = current ? pendingPermissions().filter((item) => item.projectId === current.id) : [],
-      history = current ? permissionHistory().filter((item) => item.projectId === current.id) : [];
-    // The rail's columns view pages one snapped column at a time, like the phone board (HS2-656Q43);
-    // it shows every filtered ticket, so columns carry no continuation.
-    const content = (() => {
-      switch (mode) {
-        case 'notifications':
-          return <NotificationCenter title="Notifications" pending={pending} history={history} inset="flush" />;
-        case 'board':
-          return (
-            <TicketBoard
-              columns={ticketBoardGroups(shown, railView, hideVerifiedColumn()).map((group) => ({
-                ...group,
-                totalCount: group.tickets.length,
-                tickets: group.tickets.map(row),
-              }))}
-              label="Project board"
-              layout="paged"
-            />
-          );
-        case 'list':
-          return <TicketList tickets={shown.map(row)} label="Project tickets" />;
-        default:
-          return mode satisfies never;
-      }
-    })();
-    // The pushed ticket detail is the rail NavStack's second view once its ticket is loaded
-    // (HS2-FY06N4); its key follows the ticket so a different ticket is a new push.
-    const ready =
-        terminalRailScreen.value === 'ticket' &&
-        selectedTicketSlugs.value.length === 1 &&
-        selectedTicket.value?.slug === selectedTicketSlugs.value[0],
-      railInspectorProps = ready ? selectedInspectorProps() : undefined;
-    return {
-      rail: {
-        projects: projects.value.map((item) => ({ id: item.id, name: item.name })),
-        selectedProjectId: current?.id ?? '',
-        views: [
-          { id: 'all', label: 'Queue' },
-          { id: 'backlog', label: 'Backlog' },
-          { id: 'archive', label: 'Archive' },
-          ...((current && (projectTicketCounts(current.id).trash ?? 0) > 0) || railView === 'trash'
-            ? [{ id: 'trash', label: 'Trash' }]
-            : []),
-          ...customViewsFor(current?.id).map((view) => ({ id: customTicketViewId(view.id), label: view.name })),
-        ],
-        selectedViewId: railView,
-        controls: (
-          <WorkspaceControls
-            mode={mode}
-            presentation="rail"
-            searchOpen={searchOpen.value}
-            searchModel={workspaceSearchModel}
-            searchHelpOpen={searchHelpOpen.value}
-            sort={sort.value}
-            sortDirection={sortDirection.value}
-            notificationCount={pending.length}
-            selectedTicketCount={selection.length}
-            selectedTicketsUpNext={workspaceUpNextState(selection.map((ticket) => ticket.up_next))}
-            selectedTicketsUpNextEligible={
-              selection.length > 0 &&
-              selection.every((ticket) => ticket.status === 'not_started' || ticket.status === 'started')
-            }
-            selectedTicketsMutable={canBulkUpdate(selection, capabilitiesFor)}
-          />
-        ),
-        content,
-        detail: railInspectorProps
-          ? { key: `ticket:${railInspectorProps.slug}`, parts: ticketInspectorPanel(railInspectorProps) }
-          : undefined,
-        title: mode === 'notifications' ? 'Notifications' : ticketViewTitle(railView),
-        action: mode === 'notifications' ? undefined : ticketViewActionSpec(railView, canCreate, 'Ticket…', 'compact'),
-      },
-    };
-  }
   const { workspaceTerminalGroups, globalWorkspaceSurfaceProps, projectTerminalDrawerProps, aiConversationSurface } =
     createTerminalPresentation({
       projects,
@@ -3909,407 +3320,253 @@ export async function startHotSheetWebClient() {
       ai: aiConfigurationController,
       permissions: permissionsController,
     });
-  function ticketViewTitle(view: TicketView) {
-    return view === 'archive'
-      ? 'Archive'
-      : view === 'trash'
-        ? 'Trash'
-        : view === 'backlog'
-          ? 'Backlog'
-          : view === 'errors'
-            ? 'Ticket errors'
-            : (customViewFor(view)?.name ?? 'Queue');
-  }
-  function ticketViewActionSpec(
-    view: TicketView,
-    canCreate: boolean,
-    label?: string,
-    size?: 'default' | 'compact',
-  ): TicketViewActionSpec | undefined {
-    return view === 'trash'
-      ? { kind: 'empty-trash' }
-      : canCreate
-        ? { kind: 'new-ticket', attachmentsEnabled: canStageNewTicketAttachments(), label, size }
-        : undefined;
-  }
-  function ticketContextMenuSurface() {
-    const menu = ticketContextMenu.value;
-    let props: TicketContextMenuSurfaceProps['menu'];
-    if (menu) {
-      const ticket = tickets.value.find((item) => item.slug === menu.ticketSlug),
-        slugs = selectedTicketSlugs.value.length ? selectedTicketSlugs.value : [menu.ticketSlug],
-        selected = tickets.value.filter((item) => slugs.includes(item.slug)),
-        onlyCompleted = slugs.length === 1 && ticket?.status === 'completed',
-        reopenable = slugs.length === 1 && (ticket?.status === 'verified' || ticket?.status === 'archive'),
-        allCompleted =
-          slugs.length > 0 &&
-          slugs.every((slug) => tickets.value.find((item) => item.slug === slug)?.status === 'completed'),
-        capabilities = ticket ? capabilitiesFor(ticket.connection_id) : undefined;
-      props = {
-        x: menu.x,
-        y: menu.y,
-        category: ticket?.category,
-        priority: priority(ticket?.priority),
-        status: status(ticket?.status),
-        upNextEligible: slugs.every((slug) => {
-          const value = tickets.value.find((item) => item.slug === slug)?.status;
-          return value === 'not_started' || value === 'started';
-        }),
-        hideUpNext: menu.hideUpNext,
-        verifyAction: allCompleted && (capabilities?.update ?? true),
-        notWorkingAction: onlyCompleted && (capabilities?.not_working_report ?? false),
-        reopenAction: reopenable && (capabilities?.not_working_report ?? false),
-        closeAction: slugs.length === 1 && Boolean(capabilities?.close && capabilities.close_reasons),
-        selectionCount: slugs.length,
-        canBulkUpdate: canBulkUpdate(selected, capabilitiesFor),
-        allInBacklog: selected.length > 0 && selected.every((item) => item.status === 'backlog'),
-        allInArchive: selected.length > 0 && selected.every(isArchivedTicket),
-        allInTrash: selected.length > 0 && selected.every(isTrashedTicket),
-      };
-    }
-    return <TicketContextMenuSurface menu={props} closeDialog={ticketCloseDialog.value} />;
-  }
-
-  function terminalOperationsSurfaceProps(): TerminalOperationsSurfaceProps {
-    return {
-      projects: projects.value.map((item) => {
-        const rows = item.id === selectedProjectId.value ? tickets.value : (ticketRowsByProject.value[item.id] ?? []),
-          counts = projectTicketCounts(item.id),
-          trend = counts.completion_trend ?? ticketCompletionTrend(rows);
-        return {
-          id: item.id,
-          name: item.name,
-          completedToday: counts.completed_today,
-          inProgress: counts.started,
-          trend,
-          partial: partialSourcesByProject.value[item.id] ?? false,
-        };
-      }),
-    };
-  }
-
-  function HotSheetShell() {
-    if (initialProjectRestorePending.value) return <ProjectRestoreState />;
-    const current = project(),
-      restoreFailure = projectRestoreFailures.value.find((item) => item.root === selectedProjectRestoreRoot.value);
-    if (!current && !restoreFailure) return <AppEmptyState />;
-    // The shell popup is a top-layer popover so the terminal drawer and the Workbench's main-pane clip
-    // can never cover it (HS2-ZESCM2); the conversation's foreground keeps its own inline copy.
-    const haltPopup = haltedSessionsController.popup(),
-      popup = (conversationOpen.value ? undefined : permissionPopupSurface('top')) ?? haltPopup,
-      currentJob = current && migrationJobsByRoot.value[current.root],
-      currentBackupUnverified = Boolean(
-        currentJob?.kind === 'backup' &&
-        currentJob.status === 'succeeded' &&
-        current?.hs1DatabasePath &&
-        !current.hs1CleanupEligible,
-      );
-    void projectTabClaimClock.value;
-    const projectTabs = projects.value.map((item) => {
-        const counts = projectTicketCounts(item.id),
-          job = migrationJobsByRoot.value[item.root],
-          backupUnverified = Boolean(
-            job?.kind === 'backup' && job.status === 'succeeded' && item.hs1DatabasePath && !item.hs1CleanupEligible,
-          );
-        return {
-          id: item.id,
-          name: item.name,
-          location: 'local' as const,
-          selected: !restoreFailure && item.id === selectedProjectId.value,
-          notificationCount: permissionCount(item.id),
-          // A halted session or unanswered AI question in this project's terminals needs the user.
-          ...(terminalGroups.value.some(
-            (group) =>
-              group.projectId === item.id &&
-              group.sessions.some((session) => Boolean(session.halt || session.question)),
-          )
-            ? { attention: true, attentionLabel: 'An AI session needs your attention' }
-            : {}),
-          upNextCount: counts.up_next,
-          activeTicketCount: counts.active,
-          countsPartial: partialSourcesByProject.value[item.id] ?? false,
-          operation:
-            job && (!(job.kind === 'backup' && job.status === 'succeeded') || backupUnverified)
-              ? {
-                  label: `${item.name}: ${job.status === 'running' ? migrationPhaseLabel(job.progress) : job.status === 'succeeded' && !backupUnverified ? 'Import complete; backup needed' : 'Migration needs attention'}`,
-                  state: backupUnverified ? ('failed' as const) : job.status,
-                  percent: job.status === 'running' ? migrationPercent(job.progress) : undefined,
-                }
-              : undefined,
-        };
-      }),
-      // Still-opening remembered projects sit at their remembered positions as dormant placeholders
-      // until they register or fail (HS2-2BEJXD).
-      rankedProjectTabs = interleaveByRank<{ tab: ProjectTabProps; rank?: number }>(
-        projectTabs.map((tab) => ({ tab, rank: projectRestoreRank(tab.id) })),
-        (entry) => entry.rank,
-        pendingRestoreEntries((root) => ({
-          tab: {
-            id: `pending:${root}`,
-            name: root.split('/').filter(Boolean).at(-1) ?? root,
-            location: 'local' as const,
-            pending: true,
-          },
-        })),
-      ).map((entry) => entry.tab);
-    const tabs = [
-      ...rankedProjectTabs,
-      ...projectRestoreFailures.value.map((item) => ({
-        id: projectRestoreTabId(item.root),
-        name: item.name,
-        location: 'local' as const,
-        selected: item.root === restoreFailure?.root,
-        attention: true,
-        restoreFailure: true,
-        closable: false,
-        draggable: false,
-      })),
-    ];
-    if (shellMode.value !== 'project') {
-      const active = activeTerminalVisibilityGroup(terminalVisibility.value, TERMINAL_DASHBOARD_VISIBILITY_SCOPE);
-      return (
-        <MainShell
-          tabs={tabs}
-          mode={shellMode.value}
-          gridFullscreen={shellMode.value === 'terminals' && terminalGridFullscreen.value}
-          mobile={viewportMobile.value}
-          sidebar={
-            shellMode.value === 'terminals'
-              ? terminalOperationsSurfacePanel(terminalOperationsSurfaceProps())
-              : undefined
-          }
-          sidebarVisible={!sidebarCollapsed.value}
-          sidebarSize={sidebarSize.value}
-          header={<WorkspaceIdentity projectName={shellMode.value === 'terminals' ? 'Workspace grid' : 'Stats'} />}
-          headerActions={
-            shellMode.value === 'terminals' ? (
-              <TerminalDashboardControls
-                hiddenCount={terminalHiddenCount(TERMINAL_DASHBOARD_VISIBILITY_SCOPE)}
-                visibilityGroups={terminalVisibility.value.groups}
-                activeVisibilityGroupId={active.id}
-                visibilityScope={TERMINAL_DASHBOARD_VISIBILITY_SCOPE}
-              />
-            ) : undefined
-          }
-          workspace={<GlobalWorkspaceSurface {...globalWorkspaceSurfaceProps()} />}
-          workspacePresentation="edge-to-edge"
-          inspector={shellMode.value === 'terminals' ? terminalRailSurfacePanel(terminalRailSurfaceProps()) : undefined}
-          inspectorVisible={!inspectorCollapsed.value}
-          inspectorSize={inspectorSize.value}
-          sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
-          workAreaFocusRing={!magnifiedTerminalKey.value}
-          overlay={viewportMobile.value ? undefined : popup}
-          viewportOverlay={viewportMobile.value ? popup : undefined}
-        />
-      );
-    }
-    if (restoreFailure)
-      return (
-        <MainShell
-          tabs={tabs}
-          mode="project"
-          header={<WorkspaceIdentity projectName="Project unavailable" id="workspace-page-title" headingLevel={1} />}
-          workspace={<ProjectRestoreError {...restoreFailure} />}
-          inspectorVisible={false}
-          overlay={viewportMobile.value ? undefined : popup}
-          viewportOverlay={viewportMobile.value ? popup : undefined}
-        />
-      );
-    if (!current) return <AppEmptyState />;
-    const selection = selectedRows(),
-      selectedSlug = selectedTicketSlugs.value.length === 1 ? selectedTicketSlugs.value[0] : undefined,
-      selectedReady = Boolean(selectedSlug && selectedTicket.value?.slug === selectedSlug),
-      selectedTransitioning = Boolean(selectedSlug && selectedTicket.value && !selectedReady),
-      inspectorProps = selectedReady ? selectedInspectorProps() : undefined,
-      corruptKey = selectedCorruptKey.value,
-      corruptTicket = corruptKey
-        ? corruptTickets.value.find((item) => corruptTicketKey(item) === corruptKey)
-        : undefined,
-      canCreate = !['settings', 'notifications'].includes(viewMode.value) && canCreateTicketInView(selectedView.value),
-      // The picker names the visible view, Ticket errors included, mirroring the sidebar (HS2-0VPMFS).
-      mobileChoices = mobileViewChoices({
-        selectedView: selectedView.value,
-        trashCount: projectTicketCounts(current.id).trash ?? 0,
-        corruptCount: corruptTickets.value.length,
-        customViews: customViewsFor(current.id).map((view) => ({
-          value: customTicketViewId(view.id),
-          label: view.name,
-        })),
-      });
-    const workspaceTitle = (() => {
-      switch (viewMode.value) {
-        case 'notifications':
-          return notificationViewTitle(notificationView.value);
-        case 'settings':
-          return settingsCategoryTitle(settingsCategory());
-        case 'board':
-        case 'list':
-          // Searching filters the selected view; the heading keeps that view's title (HS2-18Y67S).
-          return ticketViewTitle(selectedView.value);
-        default:
-          return viewMode.value satisfies never;
-      }
-    })();
-    const headingAction = !['settings', 'notifications'].includes(viewMode.value)
-      ? ticketViewActionSpec(selectedView.value, canCreate)
-      : undefined;
-    // Heading Toolbars render the view action as literal `trailing` content: Kerf Toolbar accepts one
-    // standalone primary wa-button there (KF-9N7K8S, HS2-F4P7ZA).
-    const secondaryPageHeader = (
-      <div class="app-heading" data-component="heading" data-has-icon="false">
-        <Toolbar
-          dividerSides=""
-          leading={<ToolbarText text={workspaceTitle} id="workspace-page-title" size="xlarge" headingLevel={1} />}
-          trailing={headingAction && <TicketViewAction action={headingAction} />}
-        />
-      </div>
-    );
-    const mobileView: AppShellMobileView | undefined =
-        viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value)
-          ? {
-              value: selectedView.value,
-              choices: mobileChoices,
-              action: ticketViewActionSpec(selectedView.value, canCreate),
-            }
-          : undefined,
-      pageHeader = viewportMobile.value && !mobileView ? secondaryPageHeader : undefined;
-    const drawerViewAllowed = !['settings', 'notifications'].includes(viewMode.value);
-    const inspectorContent = (() => {
-      switch (viewMode.value) {
-        case 'notifications':
-          return notificationInspectorSurfacePanel();
-        case 'settings':
-          return inspectorPlaceholderPanel({ selectionCount: 0 });
-        case 'board':
-        case 'list':
-          if (corruptKey)
-            return corruptInspectorPanel({
-              ticket: corruptTicket,
-              recovery: corruptRecovery.value[corruptKey],
-              selectionCount: selectedTicketSlugs.value.length,
-            });
-          if (inspectorProps) return inspectorPanel(inspectorProps);
-          if (selectedTransitioning) return inspectorSkeletonPanel({ slug: selectedSlug });
-          return inspectorPlaceholderPanel({ selectionCount: selectedTicketSlugs.value.length });
-        default:
-          return viewMode.value satisfies never;
-      }
-    })();
-    return (
-      <MainShell
-        tabs={tabs}
-        mode="project"
-        workspaceSearchOpen={searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')}
-        mobile={viewportMobile.value}
-        sidebar={sidebarSurfacePanel(sidebarSurfaceProps())}
-        sidebarVisible={!sidebarCollapsed.value}
-        sidebarSize={sidebarSize.value}
-        header={
-          viewportMobile.value ? (
-            <></>
-          ) : (
-            <WorkspaceIdentity projectName={workspaceTitle} id="workspace-page-title" headingLevel={1} />
-          )
-        }
-        headerActions={
-          <WorkspaceControls
-            mode={viewMode.value}
-            searchOpen={searchOpen.value && (viewMode.value === 'list' || viewMode.value === 'board')}
-            searchModel={workspaceSearchModel}
-            searchHelpOpen={searchHelpOpen.value}
-            sort={sort.value}
-            sortDirection={sortDirection.value}
-            notificationCount={permissionCount(current.id)}
-            selectedTicketCount={selection.length}
-            selectedTicketsUpNext={workspaceUpNextState(selection.map((ticket) => ticket.up_next))}
-            selectedTicketsUpNextEligible={
-              selection.length > 0 &&
-              selection.every((ticket) => ticket.status === 'not_started' || ticket.status === 'started')
-            }
-            selectedTicketsMutable={canBulkUpdate(selection, capabilitiesFor)}
-          />
-        }
-        projectTabAction={
-          !viewportMobile.value && !['settings', 'notifications'].includes(viewMode.value)
-            ? ticketViewActionSpec(selectedView.value, canCreate)
-            : undefined
-        }
-        banner={
-          <>
-            <CompatibilityBannerSurface assessment={current.compatibility} />
-            {currentJob &&
-              !(
-                currentJob.kind === 'backup' &&
-                currentJob.status === 'succeeded' &&
-                !currentBackupUnverified &&
-                !migrationConnectionErrors.value[current.root]
-              ) && (
-                <Hs1JobBanner
-                  job={currentJob}
-                  backupVerified={!currentBackupUnverified}
-                  details={migrationJobDetails.value[current.root]}
-                  connectionError={migrationConnectionErrors.value[current.root]}
-                />
-              )}
-            {current.needsHs1Migration && !currentJob && hs1MigrationProject.value?.id !== current.id && (
-              <Hs1MigrationBanner databasePath={current.hs1DatabasePath ?? `${current.root}/.hotsheet/db`} />
-            )}{' '}
-            {current.hs1CleanupEligible &&
-              !hs1CleanupPromptDismissed(localStorage, current.id, hs1SourceIdentity(current)) && <Hs1CleanupBanner />}
-            {current.hs1RegistrationRepairAvailable &&
-              !hs1CleanupPromptDismissed(localStorage, current.id, hs1SourceIdentity(current)) && (
-                <Hs1RegistrationRepairBanner />
-              )}
-            {current.setupWarning && <ProjectSetupWarningBanner detail={current.setupWarning} />}
-            {current.codexHooksChanged && <CodexHooksNoticeBanner path={current.codexHooksChanged} />}
-            {notificationsPaused.value && (
-              <NotificationsPausedBanner
-                waiting={pendingPermissions().length}
-                halted={haltedSessionsController.waiting()}
-              />
-            )}
-          </>
-        }
-        pageHeader={pageHeader}
-        mobileView={mobileView}
-        workspace={<WorkspaceSurface {...workspaceSurfaceProps()} />}
-        workspacePresentation={viewMode.value === 'board' && selectedView.value !== 'errors' ? 'edge-to-edge' : 'inset'}
-        terminalDrawer={
-          drawerViewAllowed ? (
-            terminalDrawerMounted.value ? (
-              <ProjectTerminalDrawerSurface drawer={projectTerminalDrawerProps()} />
-            ) : (
-              <></>
-            )
-          ) : undefined
-        }
-        terminalDrawerVisible={terminalDrawerVisible.value && drawerViewAllowed}
-        terminalDrawerSize={appRegionSize('app-bottom-drawer')}
-        terminalDrawerMax={terminalDrawerMax.value}
-        terminalDrawerMin={terminalDrawerMin.value}
-        terminalDrawerTransitioning={terminalDrawerTransitioning.value}
-        terminalFocusMode={
-          mobileTerminalFocus.value.active &&
-          mobileTerminalFocus.value.terminalId === terminalDrawerSelected.value &&
-          viewportMobile.value &&
-          terminalDrawerVisible.value &&
-          drawerViewAllowed
-        }
-        sidePanelSeparator={magnifiedTerminalKey.value ? 'hidden' : 'auto'}
-        workAreaFocusRing={!magnifiedTerminalKey.value}
-        inspector={inspectorContent}
-        inspectorVisible={!inspectorCollapsed.value}
-        inspectorSize={inspectorSize.value}
-        overlay={
-          <>
-            {!viewportMobile.value && popup}
-            {ticketContextMenuSurface()}
-          </>
-        }
-        viewportOverlay={viewportMobile.value ? popup : undefined}
-      />
-    );
-  }
+  const { ticketViewTitle, ticketViewActionSpec, ticketContextMenuSurface } = createTicketViewSurface({
+    canStageNewTicketAttachments,
+    capabilitiesFor,
+    customViewFor,
+    priority,
+    selectedTicketSlugs,
+    status,
+    ticketCloseDialog,
+    ticketContextMenu,
+    tickets,
+  });
+  const { terminalOperationsSurfaceProps } = createTerminalOperationsSurface({
+    partialSourcesByProject,
+    projects,
+    projectTicketCounts,
+    selectedProjectId,
+    ticketRowsByProject,
+    tickets,
+  });
+  const { notWorkingSurfaceProps, attachmentItems, selectedInspectorProps } = createInspectorSurface({
+    ago,
+    api,
+    attachmentContext,
+    attachmentLabelEditing,
+    attachmentMessage,
+    attachmentsEditableFor,
+    blockedReasonDraft,
+    blockedReasonEditing,
+    canAddNotes,
+    canDeleteNotes,
+    canEditAttachments,
+    canEditNotes,
+    canEditStartedPhaseSelected,
+    canUpdateSelected,
+    canUseAttachments,
+    capabilitiesFor,
+    codeReview,
+    codeReviewLoading,
+    codeReviewMessage,
+    composingNote,
+    defaultProviders,
+    detailsDraft,
+    detailsMode,
+    duplicateBacklinkState,
+    duplicateTargetFor,
+    editingNoteId,
+    expandedCodeReviewCommits,
+    fieldConflict,
+    fieldConflictResolution,
+    inspectorTab,
+    liveClaimNotice,
+    newNoteDraft,
+    noteDraft,
+    notes,
+    priority,
+    project,
+    providerOutboxOperations,
+    readerOpen,
+    selectedTicket,
+    status,
+    tagSuggestions,
+    timeline,
+    titleDraft,
+    titleEditingSurface,
+  });
+  const { gallerySourceFor, readerLayersSurfaceProps } = createReaderLayersSurface({
+    ago,
+    attachmentContext,
+    attachmentItems,
+    attachmentLabelEditing,
+    attachmentMenuSurfaceProps,
+    attachmentMessage,
+    canAddNotes,
+    canDeleteNotes,
+    canEditAttachments,
+    canEditNotes,
+    canUpdateSelected,
+    canUseAttachments,
+    changeEvidenceSurfaceProps,
+    codeReview,
+    codeReviewLoading,
+    codeReviewMessage,
+    composingNote,
+    duplicateTargetFor,
+    expandedCodeReviewCommits,
+    fieldConflict,
+    fieldConflictResolution,
+    linkedReaderStack,
+    liveClaimNotice,
+    newNoteDraft,
+    notes,
+    priority,
+    project,
+    projects,
+    readerBlockedReasonDraft,
+    readerBlockedReasonEditing,
+    readerDetailsDraft,
+    readerDetailsMode,
+    readerEditingNoteId,
+    readerFeedbackChoiceSelections,
+    readerInlineFeedbackReplies,
+    readerLargeText,
+    readerNoteDraft,
+    readerOpen,
+    readerTab,
+    selectedTicket,
+    status,
+    tagSuggestions,
+    timeline,
+    titleDraft,
+    titleEditingSurface,
+  });
+  const { workspaceSurfaceProps } = createWorkspaceSurface({
+    boardColumnLoading,
+    boardColumnPages,
+    continueProgressiveTicketRendering,
+    corruptRecovery,
+    corruptTickets,
+    error,
+    hideVerifiedColumn,
+    loading,
+    notificationView,
+    partialSourcesByProject,
+    project,
+    projectPendingPermissions,
+    projectPermissionHistory,
+    renderedTicketLimit,
+    row,
+    searchMatchKeys,
+    searchQuery,
+    searchTokens,
+    selectedCorruptKey,
+    selectedProjectId,
+    selectedView,
+    settingsWorkspace,
+    ticketCollectionState,
+    ticketCountsByProject,
+    ticketNextCursor,
+    ticketPageLoading,
+    tickets,
+    ticketViewTitle,
+    viewMode,
+    viewportMobile,
+    visibleTickets,
+    workspaceSearchActive,
+  });
+  const { terminalRailSurfaceProps } = createTerminalRailSurface({
+    activeWorkspaceSort,
+    capabilitiesFor,
+    customViewsFor,
+    hideVerifiedColumn,
+    pendingPermissions,
+    permissionHistory,
+    project,
+    projects,
+    projectTicketCounts,
+    row,
+    searchHelpOpen,
+    searchMatchKeys,
+    searchOpen,
+    searchQuery,
+    searchTokens,
+    selectedInspectorProps,
+    selectedRows,
+    selectedTicket,
+    selectedTicketSlugs,
+    selectedView,
+    sort,
+    sortDirection,
+    terminalRailScreen,
+    tickets,
+    ticketSearchKey,
+    ticketViewActionSpec,
+    ticketViewTitle,
+    viewMode,
+    workspaceSearchModel,
+  });
+  const { HotSheetShell } = createHotSheetShell({
+    appRegionSize,
+    capabilitiesFor,
+    conversationOpen,
+    corruptRecovery,
+    corruptTickets,
+    customViewsFor,
+    globalWorkspaceSurfaceProps,
+    haltedSessionsController,
+    hs1MigrationProject,
+    hs1SourceIdentity,
+    initialProjectRestorePending,
+    inspectorCollapsed,
+    inspectorSize,
+    magnifiedTerminalKey,
+    migrationConnectionErrors,
+    migrationJobDetails,
+    migrationJobsByRoot,
+    mobileTerminalFocus,
+    notificationsPaused,
+    notificationView,
+    partialSourcesByProject,
+    pendingPermissions,
+    pendingRestoreEntries,
+    permissionCount,
+    permissionPopupSurface,
+    project,
+    projectRestoreFailures,
+    projectRestoreRank,
+    projects,
+    projectTabClaimClock,
+    projectTerminalDrawerProps,
+    projectTicketCounts,
+    searchHelpOpen,
+    searchOpen,
+    selectedCorruptKey,
+    selectedInspectorProps,
+    selectedProjectId,
+    selectedProjectRestoreRoot,
+    selectedRows,
+    selectedTicket,
+    selectedTicketSlugs,
+    selectedView,
+    settingsCategory,
+    shellMode,
+    sidebarCollapsed,
+    sidebarSize,
+    sidebarSurfaceProps,
+    sort,
+    sortDirection,
+    terminalDrawerMax,
+    terminalDrawerMin,
+    terminalDrawerMounted,
+    terminalDrawerSelected,
+    terminalDrawerTransitioning,
+    terminalDrawerVisible,
+    terminalGridFullscreen,
+    terminalGroups,
+    terminalHiddenCount,
+    terminalOperationsSurfaceProps,
+    terminalRailSurfaceProps,
+    terminalVisibility,
+    ticketContextMenuSurface,
+    ticketViewActionSpec,
+    ticketViewTitle,
+    viewMode,
+    viewportMobile,
+    workspaceSearchModel,
+    workspaceSurfaceProps,
+  });
 
   const appRoot = document.querySelector<HTMLElement>('#app')!;
   // The workspace grid's ticket rail is a Workbench navigation panel (HS2-FY06N4): Kerf's
@@ -4362,219 +3619,139 @@ export async function startHotSheetWebClient() {
           ? settingsCategory()
           : selectedView.value,
   });
-  let renderedTicketCollectionKey = activeTicketCollectionKey();
+  const initialRenderedTicketCollectionKey = activeTicketCollectionKey();
   let initialProjectRestoreComplete = false;
   if (renderMetrics)
     (window as typeof window & { __hotsheetRenderMetrics?: typeof renderMetrics }).__hotsheetRenderMetrics =
       renderMetrics;
-  function HotSheetApp() {
-    void permissionRevision.value;
-    if (conversationOpen.value || terminalDrawerVisible.value || shellMode.value === 'terminals')
-      void conversationRenderRevision.value;
-    const ticketScrollGeneration = ticketScrollMemory.beforeRender(ticketScrollScope(), ticketScrollRoot()),
-      nextTicketCollectionKey = activeTicketCollectionKey(),
-      progressiveRenderPass = skipNextTicketMotion,
-      canAnimateTickets = !progressiveRenderPass && nextTicketCollectionKey === renderedTicketCollectionKey,
-      ticketMotion = canAnimateTickets
-        ? captureTicketMotion(appRoot, renderedTicketCollectionKey)
-        : { scope: '', rows: new Map() };
-    skipNextTicketMotion = false;
-    renderedTicketCollectionKey = nextTicketCollectionKey;
-    renderMetrics?.recordPass();
-    if (renderMetrics && uiStabilityDiagnostics) {
-      const suppression = renderStormSuppressionReason({
-        initialProjectRestoreComplete,
-        foregroundLoading: loading.value,
-        progressiveTicketRendering: progressiveRenderPass,
-        backgroundProjectRefresh,
-        activeToolTurn: Object.values(driveConnectionsByProject.value).some((connections) =>
-          connections.some((connection) => connection.busy),
-        ),
-      });
-      uiStabilityDiagnostics.recordRender(renderMetrics.snapshot(), suppression);
-    }
-    queueMicrotask(() => {
-      const ticketCollectionPending =
-        shellMode.value === 'project' &&
-        (viewMode.value === 'list' || viewMode.value === 'board') &&
-        (ticketCollectionState.value?.status === 'loading' ||
-          (workspaceSearchActive() && searchMatchKeys.value === undefined));
-      ticketScrollMemory.afterRender(
-        ticketScrollGeneration,
-        ticketScrollRoot(),
-        !loading.value &&
-          !ticketCollectionPending &&
-          !ticketRenderScheduled &&
-          (shellMode.value !== 'terminals' || !terminalDashboardLoading.value),
-        deferContainedListScrollRestore && shellMode.value === 'project' && viewMode.value === 'list',
-      );
-      animateTicketMotion(ticketMotion, appRoot, undefined, activeTicketCollectionKey());
-      syncTerminalViewportMounts();
-      syncTerminalRailNavStack();
-      syncRepositoryNavStack();
-      terminalDrawerSizeObserver.sync();
-      terminalDashboardSizeObserver.sync();
-      syncRepositoryPaginationObserver();
-      syncTerminalDrawerMaximum();
-      syncAttachmentGalleryMeasurement();
-      syncVideoPosters(appRoot);
-      syncConversationScroll(appRoot);
-    });
-    const target = notWorkingTarget.value,
-      provider = defaultProvider(),
-      composerTarget = newTicketSource(),
-      visibilityScope = terminalVisibilityDialogScope.value,
-      migration = hs1MigrationProject.value,
-      deleteTargetId = savedViewDeleteTargetId.value,
-      deleteView = deleteTargetId ? customViewsFor().find((item) => item.id === deleteTargetId) : undefined,
-      showCornerLoading =
-        bulkUpdateProgress.value !== undefined ||
-        (loading.value && (!project() || tickets.value.length > 0 || corruptTickets.value.length > 0));
-    return (
-      <>
-        <HotSheetShell />
-        {aiConversationSurface()}
-        <ProjectDialog
-          open={projectDialogOpen.value}
-          root={projectDialogRoot(project())}
-          error={projectDialogError.value}
-          recovery={unhealthyServerRecovery.value}
-          recoveryBusy={unhealthyServerRecoveryBusy.value}
-        />
-        <RemoteProjectDialog
-          open={remoteProjectDialogOpen.value}
-          checkouts={remoteProjectCheckouts.value}
-          loading={remoteProjectLoading.value}
-          error={remoteProjectError.value}
-        />
-        <ProjectCloseDialog state={projectCloseDialog.value} />
-        <ConversationExportDialog state={conversationExportDialog.value} />
-        <TicketLinkChoiceDialog choice={ticketLinkChoice.value} />
-        <SavedViewDialog
-          open={savedViewDialogOpen.value}
-          mode={savedViewDialogMode.value}
-          name={savedViewName.value}
-          searchModel={savedViewSearchModel}
-          helpOpen={savedViewHelpOpen.value}
-          busy={savedViewBusy.value}
-          error={savedViewError.value}
-          session={savedViewDialogSession.value}
-        />
-        <SavedViewDeleteDialog
-          open={Boolean(deleteView)}
-          name={deleteView?.name ?? 'this view'}
-          busy={savedViewDeleteBusy.value}
-          error={savedViewDeleteError.value}
-        />
-        <ManualModelDialog state={manualModelDialog.value} />
-        <AiFeedbackDialog state={aiFeedbackDialog.value} />
-        {migration && (
-          <Hs1MigrationDialog
-            projectName={migration.name}
-            projectRoot={migration.root}
-            sourcePath={migration.hs1SourcePath ?? `${migration.root}/.hotsheet`}
-            databasePath={migration.hs1DatabasePath ?? `${migration.root}/.hotsheet/db`}
-            postgresVersion={migration.hs1PostgresVersion}
-            defaultStore={`${migration.root}.hs2`}
-            open
-            busy={hs1MigrationBusy.value}
-            error={hs1MigrationError.value}
-          />
-        )}
-        <TicketSourceSetupDialog
-          project={ticketSourceSetupProject.value}
-          providerKind={providerSetupKind.value}
-          providerConnections={providerConnections.value}
-          editingProviderId={providerEditingId.value}
-          editingGitSource={defaultProviders.value[ticketSourceSetupProject.value?.id ?? '']?.sources.find(
-            (source) => source.connectionId === providerEditingId.value && source.provider === 'git',
-          )}
-          accounts={providerAccounts.value}
-          chosenAccount={providerAccountChoice.value}
-          projectDefault={Boolean(
-            defaultProviders.value[ticketSourceSetupProject.value?.id ?? '']?.sources.some(
-              (source) => source.connectionId === providerEditingId.value && source.default,
-            ),
-          )}
-          sourceColor={
-            defaultProviders.value[ticketSourceSetupProject.value?.id ?? '']?.sources.find(
-              (source) => source.connectionId === providerEditingId.value,
-            )?.color
-          }
-          hasProjectDefault={Boolean(
-            defaultProviders.value[ticketSourceSetupProject.value?.id ?? '']?.sources.some((source) => source.default),
-          )}
-          githubAuth={githubAuth.value}
-          navigation={ticketSourceSetupNavigation.value}
-          createdGitTicketStore={createdGitTicketStore.value}
-          setupError={ticketSourceSetupError.value}
-          remoteError={ticketSourceRemoteError.value}
-          remoteBusy={ticketSourceRemoteBusy.value}
-          providerBusy={providerSettingsBusy.value}
-          providerError={providerSettingsError.value}
-          removingProviderId={providerRemovingId.value}
-        />
-        <TerminalRenameDialog target={terminalRename.value} />
-        <TerminalCopyDialog state={terminalCopy.value} />
-        <TerminalPasteDialog state={terminalPaste.value} />
-        <TerminalEditMenu state={terminalEditMenu.value} />
-        <TerminalVisibilityDialog
-          open={Boolean(visibilityScope)}
-          state={terminalVisibility.value}
-          scope={visibilityScope ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE}
-          groups={workspaceTerminalGroups()}
-          types={terminalVisibilityFilter.value}
-          contextMenu={terminalVisibilityContextMenu.value}
-        />
-        <TerminalVisibilityNameDialog prompt={terminalVisibilityNamePrompt.value} />
-        {commandDialogSurface()}
-        <ConnectionDetailsSurface assessment={project()?.compatibility} />
-        {repositoryStatusSurface()}
-        {changeEvidenceSurface()}
-        <BulkTicketDialog state={bulkTicketDialog.value} />
-        <TicketCloseDialog state={ticketCloseDialog.value} />
-        <QuickTicketComposer
-          expanded={composerExpanded.value}
-          title={composerTitle.value}
-          details={composerDetails.value}
-          category={composerCategory.value}
-          upNext={composerUpNext.value}
-          providerName={composerTarget?.name ?? provider?.name ?? 'Hot Sheet git'}
-          defaultSourceName={provider?.name ?? 'Hot Sheet git'}
-          sourceIsDefault={composerTarget?.default ?? true}
-          sources={writableTicketSources(provider).map((source) => ({
-            value: source.connectionId,
-            label: source.name,
-          }))}
-          source={composerTarget?.connectionId}
-          canCreate={composerTarget?.capabilities.create ?? provider?.capabilities.create ?? true}
-          attachments={composerAttachments.value}
-          attachmentsEnabled={canStageNewTicketAttachments()}
-          attachmentMessage={composerAttachmentMessage.value}
-          attachmentError={composerAttachmentError.value}
-          busy={composerScreening.value}
-          submitting={composerSubmitting.value}
-        />
-        {target.slug && (
-          <NotWorkingSurface
-            {...notWorkingSurfaceProps(
-              target,
-              notWorkingNote.value,
-              notWorkingFiles.value,
-              notWorkingSubmitting.value,
-              notWorkingError.value,
-            )}
-          />
-        )}
-        <ReaderLayersSurface {...readerLayersSurfaceProps()} />
-        {gallerySurface()}
-        <AttachmentContextMenuSurface menu={attachmentMenuSurfaceProps()} />
-        <AppTabMenuSurface menu={appTabContextMenu.value} />
-        {showCornerLoading && <AppLoadingIndicator progress={bulkUpdateProgress.value} />}
-        {error.value && project() && <AppError message={error.value} />}
-      </>
-    );
-  }
+  const { HotSheetApp } = createHotSheetApp({
+    activeTicketCollectionKey,
+    aiConversationSurface,
+    aiFeedbackDialog,
+    appRoot,
+    appTabContextMenu,
+    attachmentMenuSurfaceProps,
+    backgroundProjectRefresh: () => backgroundProjectRefresh,
+    bulkTicketDialog,
+    bulkUpdateProgress,
+    canStageNewTicketAttachments,
+    changeEvidenceSurface,
+    commandDialogSurface,
+    composerAttachmentError,
+    composerAttachmentMessage,
+    composerAttachments,
+    composerCategory,
+    composerDetails,
+    composerExpanded,
+    composerScreening,
+    composerSubmitting,
+    composerTitle,
+    composerUpNext,
+    conversationExportDialog,
+    conversationOpen,
+    conversationRenderRevision,
+    corruptTickets,
+    createdGitTicketStore,
+    customViewsFor,
+    defaultProvider,
+    defaultProviders,
+    deferContainedListScrollRestore,
+    driveConnectionsByProject,
+    error,
+    gallerySurface,
+    githubAuth,
+    HotSheetShell,
+    hs1MigrationBusy,
+    hs1MigrationError,
+    hs1MigrationProject,
+    initialProjectRestoreComplete: () => initialProjectRestoreComplete,
+    loading,
+    manualModelDialog,
+    newTicketSource,
+    notWorkingError,
+    notWorkingFiles,
+    notWorkingNote,
+    notWorkingSubmitting,
+    notWorkingSurfaceProps,
+    notWorkingTarget,
+    permissionRevision,
+    project,
+    projectCloseDialog,
+    projectDialogError,
+    projectDialogOpen,
+    providerAccountChoice,
+    providerAccounts,
+    providerConnections,
+    providerEditingId,
+    providerRemovingId,
+    providerSettingsBusy,
+    providerSettingsError,
+    providerSetupKind,
+    readerLayersSurfaceProps,
+    remoteProjectCheckouts,
+    remoteProjectDialogOpen,
+    remoteProjectError,
+    remoteProjectLoading,
+    initialRenderedTicketCollectionKey,
+    renderMetrics,
+    repositoryStatusSurface,
+    savedViewBusy,
+    savedViewDeleteBusy,
+    savedViewDeleteError,
+    savedViewDeleteTargetId,
+    savedViewDialogMode,
+    savedViewDialogOpen,
+    savedViewDialogSession,
+    savedViewError,
+    savedViewHelpOpen,
+    savedViewName,
+    savedViewSearchModel,
+    searchMatchKeys,
+    shellMode,
+    consumeSkipNextTicketMotion: () => {
+      const skip = skipNextTicketMotion;
+      skipNextTicketMotion = false;
+      return skip;
+    },
+    syncAttachmentGalleryMeasurement,
+    syncRepositoryNavStack,
+    syncRepositoryPaginationObserver,
+    syncTerminalDrawerMaximum,
+    syncTerminalRailNavStack,
+    syncTerminalViewportMounts,
+    terminalCopy,
+    terminalDashboardLoading,
+    terminalDashboardSizeObserver,
+    terminalDrawerSizeObserver,
+    terminalDrawerVisible,
+    terminalEditMenu,
+    terminalPaste,
+    terminalRename,
+    terminalVisibility,
+    terminalVisibilityContextMenu,
+    terminalVisibilityDialogScope,
+    terminalVisibilityFilter,
+    terminalVisibilityNamePrompt,
+    ticketCloseDialog,
+    ticketCollectionState,
+    ticketLinkChoice,
+    ticketRenderScheduled: () => ticketRenderScheduled,
+    tickets,
+    ticketScrollMemory,
+    ticketScrollRoot,
+    ticketScrollScope,
+    ticketSourceRemoteBusy,
+    ticketSourceRemoteError,
+    ticketSourceSetupError,
+    ticketSourceSetupNavigation,
+    ticketSourceSetupProject,
+    uiStabilityDiagnostics,
+    unhealthyServerRecovery,
+    unhealthyServerRecoveryBusy,
+    viewMode,
+    workspaceSearchActive,
+    workspaceTerminalGroups,
+  });
   mount(appRoot, withControlledOpen(appRoot, HotSheetApp));
   toastHost.className = 'app-toast-stack';
   (toastHost as HTMLElement & { placement: string }).placement = 'bottom-end';

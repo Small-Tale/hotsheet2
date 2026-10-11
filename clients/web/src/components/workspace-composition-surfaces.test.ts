@@ -44,7 +44,9 @@ describe('workspace composition surfaces', () => {
   });
 
   it('keeps the application root focused on deriving typed surface props', () => {
-    const source = readFileSync(new URL('../app/runtime.tsx', import.meta.url), 'utf8');
+    const source = ['../app/runtime.tsx', '../features/hot-sheet-shell.tsx', '../features/hot-sheet-app.tsx']
+      .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
+      .join('\n');
     expect(source).not.toMatch(
       /function (Sidebar|Workspace|TerminalRail|GlobalWorkspace|ProjectTerminalDrawer|TerminalOperations)\(/,
     );
