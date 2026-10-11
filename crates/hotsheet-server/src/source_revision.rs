@@ -24,6 +24,9 @@ pub struct SourceRevisionStatus {
     pub build_revision: Option<String>,
     pub source_revision: Option<String>,
     pub source_stale: bool,
+    /// Why `source_revision` is unavailable (HS2-6C7NQ7): an explicitly revisioned build
+    /// monitors no source root, or the monitored root could not be read or hashed.
+    pub source_unavailable_reason: Option<String>,
 }
 
 /// Recomputes a local source revision only when the source file set, sizes, or mtimes change.
@@ -55,21 +58,26 @@ impl SourceRevisionMonitor {
     }
 
     pub fn status(&self) -> SourceRevisionStatus {
-        let source_revision = self.source_root.as_deref().and_then(|root| {
-            let (files, fingerprint) = source_fingerprint(root).ok()?;
-            if let Ok(cache) = self.cache.lock()
-                && cache.fingerprint.as_ref() == Some(&fingerprint)
-            {
-                return cache.revision.clone();
-            }
-
-            let revision = hash_source_files(root, &files).ok();
-            if let Ok(mut cache) = self.cache.lock() {
-                cache.fingerprint = Some(fingerprint);
-                cache.revision = revision.clone();
-            }
-            revision
-        });
+        let (source_revision, source_unavailable_reason) = match self.source_root.as_deref() {
+            None => (
+                None,
+                Some(
+                    "explicit build revision: HOT_SHEET_BUILD_REVISION was set when this binary \
+                     was built, so no source root is monitored"
+                        .to_owned(),
+                ),
+            ),
+            Some(root) => match self.source_revision(root) {
+                Ok(revision) => (Some(revision), None),
+                Err(error) => (
+                    None,
+                    Some(format!(
+                        "source root {} unreadable: {error}",
+                        root.display()
+                    )),
+                ),
+            },
+        };
         let source_stale = matches!(
             (&self.build_revision, &source_revision),
             (Some(build), Some(source)) if build != source
@@ -78,7 +86,24 @@ impl SourceRevisionMonitor {
             build_revision: self.build_revision.clone(),
             source_revision,
             source_stale,
+            source_unavailable_reason,
         }
+    }
+
+    fn source_revision(&self, root: &Path) -> io::Result<String> {
+        let (files, fingerprint) = source_fingerprint(root)?;
+        if let Ok(cache) = self.cache.lock()
+            && cache.fingerprint.as_ref() == Some(&fingerprint)
+            && let Some(revision) = cache.revision.clone()
+        {
+            return Ok(revision);
+        }
+        let revision = hash_source_files(root, &files);
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.fingerprint = Some(fingerprint);
+            cache.revision = revision.as_ref().ok().cloned();
+        }
+        revision
     }
 }
 
@@ -243,6 +268,7 @@ mod tests {
                 build_revision: Some(built.clone()),
                 source_revision: Some(built),
                 source_stale: false,
+                source_unavailable_reason: None,
             }
         );
 
@@ -259,6 +285,67 @@ mod tests {
             SourceRevisionMonitor::for_source_root("release-1", root.path().join("missing"));
         assert_eq!(unavailable.status().source_revision, None);
         assert!(!unavailable.status().source_stale);
+        let reason = unavailable.status().source_unavailable_reason.unwrap();
+        assert!(
+            reason.contains("unreadable") && reason.contains("missing"),
+            "{reason}"
+        );
+    }
+
+    /// HS2-6C7NQ7: a binary built with an inherited HOT_SHEET_BUILD_REVISION monitors no
+    /// source root; the status must say so instead of a silent null.
+    #[test]
+    fn explicit_revision_build_reports_why_source_revision_is_unavailable() {
+        let monitor = SourceRevisionMonitor {
+            build_revision: Some("release-1".into()),
+            source_root: None,
+            cache: Arc::new(Mutex::new(RevisionCache::default())),
+        };
+        let status = monitor.status();
+        assert_eq!(status.source_revision, None);
+        assert!(!status.source_stale);
+        assert!(
+            status
+                .source_unavailable_reason
+                .unwrap()
+                .contains("HOT_SHEET_BUILD_REVISION")
+        );
+    }
+
+    /// HS2-6C7NQ7: a linked git worktree (a `.git` file, not a directory) under a hidden
+    /// `.claude/worktrees/<name>` parent hashes exactly like the main checkout.
+    #[test]
+    fn linked_worktree_under_hidden_parent_hashes_like_its_main_checkout() {
+        let base = tempfile::tempdir().unwrap();
+        let write_workspace = |root: &Path| {
+            fs::create_dir_all(root.join("crates/hotsheet-server/src")).unwrap();
+            fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
+            fs::write(
+                root.join("crates/hotsheet-server/Cargo.toml"),
+                "[package]\n",
+            )
+            .unwrap();
+            fs::write(
+                root.join("crates/hotsheet-server/src/lib.rs"),
+                "pub fn f() {}\n",
+            )
+            .unwrap();
+        };
+        let main = base.path().join("main");
+        write_workspace(&main);
+        fs::create_dir_all(main.join(".git")).unwrap();
+        let worktree = main.join(".claude/worktrees/agent-1");
+        write_workspace(&worktree);
+        fs::write(
+            worktree.join(".git"),
+            "gitdir: ../../../.git/worktrees/agent-1\n",
+        )
+        .unwrap();
+        let built = revision_for_source_root(&main).unwrap();
+        assert_eq!(built, revision_for_source_root(&worktree).unwrap());
+        let status = SourceRevisionMonitor::for_source_root(&built, &worktree).status();
+        assert_eq!(status.source_revision.as_deref(), Some(built.as_str()));
+        assert_eq!(status.source_unavailable_reason, None);
     }
 
     #[test]

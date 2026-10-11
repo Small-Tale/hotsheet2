@@ -9,7 +9,10 @@
 //! run `git` against the hook's repository instead of that checkout.
 
 /// Prefixes of variables that shouldn't reach a spawned tool shell.
-const SCRUB_PREFIXES: &[&str] = &["TSX_", "npm_", "NODE_", "HOTSHEET_"];
+/// `HOT_SHEET_` covers the local host's selected-build pins (`HOT_SHEET_BUILD_REVISION`):
+/// inherited by a terminal, a `cargo build` there would bake that pin in as an explicit
+/// release revision and disable source-staleness detection (HS2-6C7NQ7).
+const SCRUB_PREFIXES: &[&str] = &["TSX_", "npm_", "NODE_", "HOTSHEET_", "HOT_SHEET_"];
 
 /// Exact names of the repository-locating git variables a terminal child must not inherit.
 /// This leaf crate keeps its own copy of `hotsheet_ticketing::git::REPOSITORY_ENV_VARS`; a
@@ -66,6 +69,7 @@ mod tests {
             ("npm_config_foo", "y"),
             ("NODE_OPTIONS", "z"),
             ("HOTSHEET_HOME", "~/.hotsheet2"),
+            ("HOT_SHEET_BUILD_REVISION", "source-sha256:pinned"),
             ("HOME", "/home/me"),
         ];
         let out: Vec<(String, String)> = scrub_env(base);
@@ -74,7 +78,8 @@ mod tests {
         assert!(!names.iter().any(|k| k.starts_with("TSX_")
             || k.starts_with("npm_")
             || k.starts_with("NODE_")
-            || k.starts_with("HOTSHEET_")));
+            || k.starts_with("HOTSHEET_")
+            || k.starts_with("HOT_SHEET_")));
     }
 
     #[test]

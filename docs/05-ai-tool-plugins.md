@@ -551,7 +551,7 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   serialize detached ownership, and shutdown removes only the socket inode it bound.
   Lock files remain in place to avoid unlink/recreate races; they hold no durable
   application data and the operating system releases their lock on process exit.
-- Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*` that leak into
+- Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*`, plus the host's `HOT_SHEET_*` build pins, that leak into
   child shells — HS1 §22.13.1). Every launched process also drops the inherited
   repository-locating git variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, …;
   HS2-J79CZF): PTY shells through `scrub_env`, and AI tools, configured commands, the

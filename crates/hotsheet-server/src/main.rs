@@ -122,6 +122,7 @@ async fn main() -> Result<()> {
                 "build_revision": status.build_revision,
                 "source_revision": status.source_revision,
                 "source_stale": status.source_stale,
+                "source_unavailable_reason": status.source_unavailable_reason,
             })
         );
         return Ok(());

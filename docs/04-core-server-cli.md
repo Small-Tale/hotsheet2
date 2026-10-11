@@ -489,7 +489,11 @@ handshake reports the built and current source revisions plus
 `source_stale`; the client can therefore detect a detached server built before a
 dependency change without treating unrelated Git commits as staleness. Explicitly
 revisioned release builds omit local source probing, and an
-unavailable source tree is not reported as stale. Missing or invalid metadata is an
+unavailable source tree is not reported as stale. The `--revision-status` probe also
+reports `source_unavailable_reason` whenever `source_revision` is null (an explicit
+build revision, or the source root's I/O error). A Hot Sheet terminal never inherits
+the host's `HOT_SHEET_*` build pins, so a `cargo build` inside one hashes its own
+checkout or worktree (HS2-6C7NQ7). Missing or invalid metadata is an
 explicit unknown state. The server advertises authenticated restart and quiescence only
 with its admission gate active. A restart first refuses new mutations/background passes,
 then proceeds only when mutations, sync/drive passes, commands, setup refreshes, AI turns,

@@ -43,6 +43,7 @@ pub fn print_revision_status_if_requested() -> bool {
             "build_revision": status.build_revision,
             "source_revision": status.source_revision,
             "source_stale": status.source_stale,
+                "source_unavailable_reason": status.source_unavailable_reason,
         })
     );
     true
