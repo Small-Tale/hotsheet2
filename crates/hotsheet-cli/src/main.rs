@@ -211,14 +211,14 @@ enum Cmd {
         #[command(subcommand)]
         command: FeedbackSynthesisCmd,
     },
-    /// Permanently remove an external provider connection and every local reference to it:
-    /// checkout links and defaults, its `providers.json` entry, and a credential Hot Sheet
-    /// minted for it (user-managed keys are kept). Safe to repeat.
     /// Temporarily disable an external provider connection: Hot Sheet stops reading from and
     /// writing to it, and its tickets are hidden until it is enabled again.
     ProviderDisable { connection: String },
     /// Re-enable a disabled provider connection.
     ProviderEnable { connection: String },
+    /// Permanently remove an external provider connection and every local reference to it:
+    /// checkout links and defaults, its `providers.json` entry, and a credential Hot Sheet
+    /// minted for it (user-managed keys are kept). Safe to repeat.
     ProviderRemove {
         connection: String,
         /// Emit the removal report as JSON.
@@ -6722,6 +6722,49 @@ fn lease_until(now: OffsetDateTime, minutes: i64) -> Timestamp {
 #[cfg(test)]
 mod server_wrapper_tests {
     use super::*;
+
+    /// HS2-V08DXW: every subcommand (recursively) has its own non-empty help, and the
+    /// provider disable/remove pair keeps distinct, correctly attached text.
+    #[test]
+    fn every_subcommand_has_non_empty_help() {
+        // The full clap tree is large; build it on a roomy stack so debug builds do not overflow.
+        std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(check_every_subcommand_help)
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    fn check_every_subcommand_help() {
+        use clap::CommandFactory;
+        fn walk(cmd: &clap::Command, path: &str, missing: &mut Vec<String>) {
+            for sub in cmd.get_subcommands() {
+                let name = format!("{path} {}", sub.get_name());
+                if sub.get_name() != "help"
+                    && sub
+                        .get_about()
+                        .is_none_or(|a| a.to_string().trim().is_empty())
+                {
+                    missing.push(name.clone());
+                }
+                walk(sub, &name, missing);
+            }
+        }
+        let cli = Cli::command();
+        let mut missing = Vec::new();
+        walk(&cli, "hotsheet-cli", &mut missing);
+        assert!(missing.is_empty(), "subcommands without help: {missing:?}");
+        let about = |n: &str| {
+            cli.find_subcommand(n)
+                .and_then(|c| c.get_long_about().or(c.get_about()))
+                .map(|a| a.to_string())
+                .unwrap_or_default()
+        };
+        assert!(about("provider-disable").contains("Temporarily disable"));
+        assert!(!about("provider-disable").contains("Permanently remove"));
+        assert!(about("provider-remove").contains("Permanently remove"));
+    }
 
     #[test]
     fn key_input_prompts_on_a_terminal_and_reads_pipes_without_prompting() {
