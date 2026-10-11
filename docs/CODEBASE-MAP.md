@@ -20,6 +20,39 @@ evidence in [TEST-COVERAGE.md](TEST-COVERAGE.md).
 > Tauri/native clients. Git-aware fast-path reindex, Tier-1
 > mTLS, and version-pinned/live AI-tool protocol verification are built.
 
+## Requirements docs
+
+The numbered requirements docs (source of truth for behavior; status in
+[README.md](README.md)):
+
+- [00-vision-and-principles.md](00-vision-and-principles.md) — Vision & Principles
+- [01-architecture.md](01-architecture.md) — Architecture Overview
+- [02-ticket-storage.md](02-ticket-storage.md) — Default Git Ticket Provider
+- [03-indexing-and-query.md](03-indexing-and-query.md) — Indexing & Query
+- [04-core-server-cli.md](04-core-server-cli.md) — Core, Server & CLI
+- [05-ai-tool-plugins.md](05-ai-tool-plugins.md) — AI-Tool Plugin Interface
+- [06-clients.md](06-clients.md) — Clients
+- [07-migration.md](07-migration.md) — Migration — PGLite → Git Repos
+- [08-distributed-and-remote.md](08-distributed-and-remote.md) — Distributed Execution & Remote Access
+- [09-technology-decisions.md](09-technology-decisions.md) — Technology Decisions (ADR log)
+- [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md) — Assignment & Human-in-the-Loop Collaboration
+- [11-hs1-feature-inventory.md](11-hs1-feature-inventory.md) — HS1 Feature Inventory → Rewrite Decisions
+- [12-code-organization-and-testing.md](12-code-organization-and-testing.md) — Code Organization & Testing
+- [13-drive-transport-interface.md](13-drive-transport-interface.md) — AI-Tool Drive / Transport Interface
+- [14-metrics-interface.md](14-metrics-interface.md) — Usage/Cost Metrics Interface
+- [15-activity-narration-interface.md](15-activity-narration-interface.md) — Cross-Tool Activity / Narration Interface
+- [16-external-sync-interface.md](16-external-sync-interface.md) — Pluggable Ticket-Provider Interface
+- [17-ticket-file-format.md](17-ticket-file-format.md) — Ticket File Format — canonical field schema
+- [18-dev-review-tool.md](18-dev-review-tool.md) — Dev Review Ticket Capture Tool
+- [19-format-compatibility.md](19-format-compatibility.md) — Format and rollout compatibility
+- [20-monorepo-work-scopes.md](20-monorepo-work-scopes.md) — Monorepo work scopes
+- [21-scale-stress-testing.md](21-scale-stress-testing.md) — Scale stress testing
+- [22-remote-testing.md](22-remote-testing.md) — Remote testing
+- [22-ui-responsiveness-profile.md](22-ui-responsiveness-profile.md) — Browser UI responsiveness profile
+- [23-ai-feedback-synthesis.md](23-ai-feedback-synthesis.md) — AI note feedback synthesis (HS2-355565)
+- [24-cli-service-parity-audit.md](24-cli-service-parity-audit.md) — CLI and service parity audit
+- [25-write-behind-sync-plan.md](25-write-behind-sync-plan.md) — Durable write-behind for ticket providers (HS2-BH3CSK)
+
 ## Directory tree
 
 ```
@@ -407,8 +440,13 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   `<project-root>/.hotsheet2/settings.local.json` (local, gitignored), plus **global**
   `${HOTSHEET_HOME}/settings.json` (machine-wide and project-independent) —
   version-guarded flat key→JSON maps (unversioned legacy remains readable), effective
-  precedence global<shared<local. Old `hotsheet-settings*.json` files beside linked git
-  stores are read-through migration inputs. See `settings.rs::Settings`.
+  precedence global<shared<local. The version guard is the `$hotsheetSchema` key. Old
+  `hotsheet-settings*.json` files beside linked git stores, and schema-marked
+  `<project-root>/.hotsheet/settings*.json` files (unmarked ones belong to HS1 and are
+  ignored), are read-through migration inputs. The core-validated key here is
+  `trash_cleanup_days` (Shared, positive whole days, default 30); other keys are owned by
+  their modules (for example `commands`, `views` in `custom_views.rs`, `terminal.names`). See
+  `settings.rs::Settings`.
 - **Provider keys:** `${HOTSHEET_HOME}/keys.json` contains non-secret provider metadata
   (name, env fallback, and a sign-in's optional `site` web origin, HS2-16MYXN);
   values live behind native macOS Security.framework, Linux Secret Service, or Windows
