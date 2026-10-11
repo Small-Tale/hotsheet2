@@ -162,3 +162,858 @@ fn accept_feedback_synthesis(
     println!("Marked feedback reviewed through {cursor}. Repository guidance was not published.");
     Ok(())
 }
+
+pub(crate) fn cmd_providers(path: &Path, json: bool) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let connections = ProviderConfigRegistry::new(store.root().join("providers.json")).load()?;
+    let external_default = connections.iter().any(|connection| connection.default);
+    let disabled: Vec<String> = connections
+        .iter()
+        .filter(|connection| connection.disabled)
+        .map(|connection| connection.id.clone())
+        .collect();
+    let descriptor = GitProvider::new(git_connection_id(&store), store.clone())
+        .with_default(!external_default)
+        .descriptor();
+    let mut descriptors = vec![descriptor];
+    for connection in connections {
+        if connection.provider != "git" {
+            descriptors.push(hotsheet_extsync::descriptor(&connection)?);
+        }
+    }
+    descriptors.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
+    if json {
+        println!("{}", serde_json::to_string_pretty(&descriptors)?);
+    } else {
+        for descriptor in descriptors {
+            println!(
+                "{}  {}  {}  {}{}",
+                descriptor.connection_id,
+                descriptor.provider,
+                if descriptor.default { "default" } else { "" },
+                descriptor.locator,
+                if disabled.contains(&descriptor.connection_id) {
+                    "  (disabled)"
+                } else {
+                    ""
+                }
+            );
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_github_sign_in(web_base: &str) -> Result<()> {
+    const BUNDLED_ID: &str = include_str!("../../../hotsheet-server/github-app-client-id.txt");
+    let client_id =
+        hotsheet_extsync::github_app_config::client_id_for_web_base(BUNDLED_ID, web_base)
+            .map_err(anyhow::Error::msg)?;
+    let web_base = web_base.trim_end_matches('/');
+    let client = hotsheet_extsync::GitHubDeviceClient::live(&client_id, web_base);
+    let authorization = client.start()?;
+    println!("Open: {}", authorization.verification_uri);
+    println!("Enter code: {}", authorization.user_code);
+    std::io::stdout().flush()?;
+    let deadline =
+        std::time::Instant::now() + std::time::Duration::from_secs(authorization.expires_in);
+    let mut interval = authorization.interval.max(1);
+    while let Some(remaining) = deadline.checked_duration_since(std::time::Instant::now()) {
+        if remaining.is_zero() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(interval).min(remaining));
+        match client.poll(&authorization.device_code)? {
+            hotsheet_extsync::DevicePoll::Pending => {}
+            hotsheet_extsync::DevicePoll::SlowDown => interval = interval.saturating_add(5),
+            hotsheet_extsync::DevicePoll::Expired => {
+                bail!("GitHub device code expired; run github-sign-in again")
+            }
+            hotsheet_extsync::DevicePoll::Denied => bail!("GitHub sign-in was denied"),
+            hotsheet_extsync::DevicePoll::Authorized(bundle) => {
+                let login = client.current_login(&bundle.access_token).ok();
+                let reference = format!(
+                    "github-app-{}",
+                    Ulid::new().to_string().to_ascii_lowercase()
+                );
+                let keys = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
+                hotsheet_extsync::store_device_authorization(
+                    &keys,
+                    &reference,
+                    &client_id,
+                    web_base,
+                    &bundle,
+                    OffsetDateTime::now_utc().unix_timestamp(),
+                )?;
+                if let Some(login) = login {
+                    let _ = keys.record_identity(&reference, &login);
+                }
+                println!("Credential reference: {reference}");
+                return Ok(());
+            }
+        }
+    }
+    bail!("GitHub device code expired; run github-sign-in again")
+}
+
+pub(crate) fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result<()> {
+    let GithubConnectArgs {
+        locator,
+        credential,
+        name,
+        id,
+        default: make_default,
+        checkout,
+        attachment_repo,
+        attachment_folder,
+        attachment_branch,
+        no_attachments,
+    } = args;
+    let (locator, credential) = (locator.as_str(), credential.as_str());
+    let attachments = GitHubAttachmentChange::from_flags(
+        attachment_repo,
+        attachment_folder,
+        attachment_branch,
+        no_attachments,
+    );
+    let store = FsStore::open(path)?;
+    let home = hotsheet_plugins::hotsheet_home();
+    let keys = KeyRegistry::new(&home, OsKeychain);
+    let raw = keys
+        .get(credential)
+        .with_context(|| format!("credential reference '{credential}' was not found"))?;
+    let checkout_registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    if let Some(reference) = &checkout {
+        checkout_registry.resolve(reference)?;
+    }
+    let registry = ProviderConfigRegistry::new(store.root().join("providers.json"));
+    let connections = registry.load()?;
+    let existing = match id.as_deref() {
+        Some(id) => connections.iter().find(|item| item.id == id),
+        None => connections
+            .iter()
+            .find(|item| item.provider == "github" && item.locator.eq_ignore_ascii_case(locator)),
+    };
+    if existing.is_some_and(|item| item.provider != "github") {
+        bail!("connection id is already used by another provider");
+    }
+    if existing.is_some_and(|item| !item.locator.eq_ignore_ascii_case(locator)) {
+        bail!(
+            "an existing connection id cannot be retargeted to another repository; create a new connection"
+        );
+    }
+    let connection_id = id.unwrap_or_else(|| {
+        existing.map(|item| item.id.clone()).unwrap_or_else(|| {
+            hotsheet_ticketing::generate_connection_id(&connections, "github", locator)
+        })
+    });
+    let web_base = serde_json::from_str::<serde_json::Value>(&raw)
+        .ok()
+        .filter(|value| value.get("kind").and_then(serde_json::Value::as_str) == Some("github_app"))
+        .and_then(|value| {
+            value
+                .get("web_base")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        });
+    let api_base = web_base
+        .as_deref()
+        .filter(|base| *base != "https://github.com")
+        .map(|base| format!("{base}/api/v3"))
+        .or_else(|| {
+            existing.and_then(|item| {
+                item.settings
+                    .get("api_base")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+        });
+    let mut settings = serde_json::json!({"credential":{"secret":credential}});
+    if let Some(api_base) = api_base {
+        settings["api_base"] = api_base.into();
+    }
+    // A reconnect keeps the existing assets repository unless the flags change it.
+    let attachment_repository = match attachments {
+        GitHubAttachmentChange::Set {
+            repository,
+            folder,
+            branch,
+        } => Some(
+            hotsheet_extsync::GitHubAttachmentRepository::new(
+                &repository,
+                folder.as_deref(),
+                branch.as_deref(),
+            )
+            .map_err(anyhow::Error::msg)?,
+        ),
+        GitHubAttachmentChange::Remove => None,
+        GitHubAttachmentChange::Keep => existing
+            .map(|item| hotsheet_extsync::GitHubAttachmentRepository::from_settings(&item.settings))
+            .transpose()
+            .map_err(anyhow::Error::msg)?
+            .flatten(),
+    };
+    if let Some(repository) = &attachment_repository {
+        repository.write_settings(&mut settings);
+    }
+    let connection = hotsheet_ticketing::ProviderConnection {
+        id: connection_id.clone(),
+        provider: "github".into(),
+        locator: locator.into(),
+        name: Some(name.unwrap_or_else(|| {
+            existing
+                .and_then(|item| item.name.clone())
+                .unwrap_or_else(|| "GitHub Issues".into())
+        })),
+        default: make_default || existing.is_some_and(|item| item.default),
+        settings,
+        disabled: existing.is_some_and(|item| item.disabled),
+    };
+    let replacing = existing.map(|item| item.id.clone());
+    let updated = hotsheet_extsync::updated_connections(
+        connections,
+        connection.clone(),
+        replacing.as_deref(),
+    )?;
+    registry.save(&updated)?;
+    if let Some(reference) = &checkout {
+        checkout_registry.add_registered_source(
+            &registry,
+            reference,
+            hotsheet_ticketing::checkouts::TicketSource {
+                connection_id: connection_id.clone(),
+                provider: "github".into(),
+                locator: locator.into(),
+            },
+            make_default,
+        )?;
+    }
+    println!("Connected GitHub Issues as '{connection_id}'.");
+    match attachment_repository {
+        Some(repository) => println!(
+            "Attachments: {} ({}/ on {})",
+            repository.repository,
+            if repository.folder.is_empty() {
+                "."
+            } else {
+                repository.folder.as_str()
+            },
+            repository.branch
+        ),
+        None => println!("Attachments: off (configure with --attachment-repo OWNER/REPO)"),
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_attach(
+    path: &Path,
+    connection: &str,
+    id: &str,
+    files: &[PathBuf],
+) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    if !provider.descriptor().capabilities.attachments {
+        bail!(
+            "provider connection '{connection}' does not support attachments{}",
+            if provider.descriptor().provider == "github" {
+                "; configure an assets repository with `github-connect --attachment-repo OWNER/REPO`"
+            } else {
+                ""
+            }
+        );
+    }
+    let batch_id = hotsheet_model::Ulid::new().to_string();
+    let mut ticket = None;
+    for file in files {
+        let bytes = std::fs::read(file).with_context(|| format!("reading {}", file.display()))?;
+        let filename = file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| anyhow::anyhow!("{} has no UTF-8 file name", file.display()))?
+            .to_string();
+        ticket = Some(
+            provider.add_attachment(
+                id,
+                hotsheet_ticketing::wire::ApiAttachment {
+                    id: hotsheet_model::Ulid::new().to_string(),
+                    filename,
+                    created_at: OffsetDateTime::now_utc()
+                        .format(&time::format_description::well_known::Rfc3339)?,
+                    batch_id: (files.len() > 1).then(|| batch_id.clone()),
+                    batch_label: None,
+                    actor: None,
+                    purpose: None,
+                    annotations: vec![],
+                    crop: None,
+                    revision: None,
+                },
+                bytes,
+            )?,
+        );
+    }
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_ls(path: &Path, connection: &str) -> Result<()> {
+    let tickets = configured_provider(path, connection)?.query(&TicketQuery::default())?;
+    println!("{}", serde_json::to_string_pretty(&tickets)?);
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_get(path: &Path, connection: &str, id: &str) -> Result<()> {
+    let ticket = configured_provider(path, connection)?.get(id)?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+pub(crate) fn cmd_feedback_synthesis_prepare(path: &Path, connections: &[String]) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let git_id = git_connection_id(&store);
+    let configs = ProviderConfigRegistry::new(store.root().join("providers.json")).load()?;
+    let mut selected = connections.to_vec();
+    selected.sort();
+    selected.dedup();
+    let mut rows = Vec::new();
+    let mut errors = Vec::new();
+    for connection in &selected {
+        let result = (|| -> Result<Vec<hotsheet_ticketing::AiFeedbackRecord>> {
+            if connection != &git_id {
+                let config = configs
+                    .iter()
+                    .find(|item| item.id == *connection)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("provider connection '{connection}' was not found")
+                    })?;
+                if config.disabled {
+                    bail!("provider connection '{connection}' is disabled");
+                }
+                if !hotsheet_extsync::descriptor(config)?
+                    .capabilities
+                    .ai_feedback
+                {
+                    bail!(
+                        "provider connection '{connection}' does not support AI feedback retrieval"
+                    );
+                }
+            }
+            Ok(configured_provider(store.root(), connection)?.ai_feedback_records()?)
+        })();
+        match result {
+            Ok(mut records) => rows.append(&mut records),
+            Err(error) => errors.push((connection.clone(), error.to_string())),
+        }
+    }
+    if errors.len() == selected.len() {
+        for (connection, error) in &errors {
+            eprintln!("{connection}: {error}");
+        }
+        bail!("no selected provider could supply AI feedback");
+    }
+    let dir = feedback_synthesis::state_dir(store.root())?;
+    match feedback_synthesis::prepare(&dir, &selected, rows, &errors)? {
+        Some(draft) => println!("Review draft: {}", draft.display()),
+        None if errors.is_empty() => println!("No new AI feedback for the selected providers."),
+        None => println!(
+            "No new readable AI feedback; {} provider(s) unavailable.",
+            errors.len()
+        ),
+    }
+    for (connection, error) in errors {
+        eprintln!("{connection}: {error}");
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_set_disabled(
+    path: &Path,
+    connection: &str,
+    disabled: bool,
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    ProviderConfigRegistry::new(store.root().join("providers.json"))
+        .set_disabled(connection, disabled)?
+        .ok_or_else(|| anyhow::anyhow!("provider connection '{connection}' was not found"))?;
+    println!(
+        "Provider connection '{connection}' is {}.",
+        if disabled { "disabled" } else { "enabled" }
+    );
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_remove(path: &Path, connection: &str, json: bool) -> Result<()> {
+    let store = FsStore::open(path)?;
+    if connection == git_connection_id(&store) {
+        anyhow::bail!(
+            "'{connection}' is this store's git ticket source, not an external provider connection"
+        );
+    }
+    let home = hotsheet_plugins::hotsheet_home();
+    let report = hotsheet_ticketing::connection_removal::remove_provider_connection(
+        &ProviderConfigRegistry::new(store.root().join("providers.json")),
+        &hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json")),
+        connection,
+    )?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+    if report.removed_connection {
+        println!("Removed provider connection '{connection}'.");
+    } else {
+        println!("Provider connection '{connection}' was already removed.");
+    }
+    for checkout in &report.unlinked_checkouts {
+        println!("Unlinked it from checkout {checkout}.");
+    }
+    if let Some(credential) = &report.kept_credential {
+        println!(
+            "Account '{credential}' stays signed in; sign out with `hotsheet account sign-out {credential}`."
+        );
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_new(
+    path: &Path,
+    connection: &str,
+    title: String,
+    category: String,
+    priority: &str,
+    details: String,
+    tags: Vec<String>,
+) -> Result<()> {
+    let priority = parse_priority(priority)?;
+    let ticket = configured_provider(path, connection)?.create(
+        MutationContext {
+            now: now_ts(),
+            generated_id: Ulid::new(),
+        },
+        ProviderDraft {
+            title,
+            category,
+            priority,
+            status: Status::NotStarted,
+            details,
+            tags,
+            up_next: false,
+            blocked_by: vec![],
+            transfer: None,
+        },
+    )?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_edit(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    path: &Path,
+    connection: &str,
+    id: &str,
+    input: ProviderEditInput,
+) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    if input.edit_note.is_some() && !provider.supports_note_edit() {
+        bail!("provider connection '{connection}' does not support note editing");
+    }
+    let status = input.status.as_deref().map(parse_status_str).transpose()?;
+    if actor.is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
+        && status == Some(hotsheet_model::Status::Completed)
+    {
+        let current = provider.get(id)?;
+        let scores_now = match &input.edit_note {
+            Some(_) => matches!(input.note_confidence, Some(Some(_))),
+            None => input.note.is_some() && input.note_confidence.flatten().is_some(),
+        };
+        hotsheet_ticketing::actor::check_completion(
+            actor,
+            &current.slug,
+            hotsheet_ticketing::actor::completes(current.status, status),
+            scores_now || hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
+        )?;
+    }
+    let now = now_ts();
+    let mut ticket = provider.update(
+        id,
+        now.clone(),
+        ProviderPatch {
+            expected_token: input.expected_token,
+            title: input.title,
+            details: input.details,
+            status,
+            actor: hotsheet_ticketing::actor::note_actor(actor),
+            ..Default::default()
+        },
+    )?;
+    if let Some(note_id) = input.edit_note {
+        let edit = ops::NoteEditInput {
+            text: input.note,
+            confidence: input.note_confidence,
+            actor: hotsheet_ticketing::actor::note_actor(actor),
+        };
+        if !edit.is_empty() {
+            ticket = provider.edit_note_with_metadata(id, &note_id, now, edit)?;
+        }
+    } else if let Some(note) = input.note {
+        ticket = provider.add_note_with_metadata(
+            id,
+            MutationContext {
+                now,
+                generated_id: Ulid::new(),
+            },
+            input.note_kind,
+            ops::NoteMetadataInput {
+                human_edited: false,
+                summary: input.note_summary,
+                confidence: input.note_confidence.flatten(),
+                actor: hotsheet_ticketing::actor::note_actor(actor),
+                ai_feedback: None,
+            },
+            note,
+        )?;
+    }
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_close(
+    path: &Path,
+    connection: &str,
+    id: &str,
+    reason: &str,
+) -> Result<()> {
+    let reason = parse_close_reason(reason)?;
+    let ticket = configured_provider(path, connection)?.close(id, now_ts(), reason, None)?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_assign(
+    path: &Path,
+    connection: &str,
+    id: &str,
+    to: Vec<String>,
+    clear: bool,
+    review: Vec<String>,
+) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    let capabilities = provider.descriptor().capabilities;
+    if !capabilities.assignment {
+        bail!("provider connection '{connection}' does not support assignment");
+    }
+    if !review.is_empty() && !capabilities.review_requests {
+        bail!("provider connection '{connection}' does not support review requests");
+    }
+    if !clear && to.is_empty() && review.is_empty() {
+        bail!("provide --to, --clear, or --review");
+    }
+    let assignees = if clear {
+        Some(Vec::new())
+    } else if to.is_empty() {
+        None
+    } else {
+        Some(to)
+    };
+    let at = now_ts();
+    let reviews = review
+        .iter()
+        .map(|spec| {
+            let (who, kind) = spec
+                .split_once(':')
+                .with_context(|| format!("--review expects email:kind, got '{spec}'"))?;
+            Ok(ReviewRequest {
+                who: who.to_owned(),
+                kind: parse_review_kind(kind)?,
+                by: Ulid::new(),
+                at: at.clone(),
+                requested_by: None,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let ticket = provider.assign(id, at, assignees, reviews)?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_restore(path: &Path, connection: &str, id: &str) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let git_id = git_connection_id(&store);
+    if connection != git_id {
+        let _ = configured_provider(path, connection)?;
+        bail!(
+            "provider connection '{connection}' does not support git-backed Hot Sheet Trash restore"
+        );
+    }
+    let ticket =
+        ops::resolve(&store, id)?.ok_or_else(|| anyhow::anyhow!("no ticket matching '{id}'"))?;
+    ops::restore(&store, &ticket.id, now_ts())?;
+    let restored = GitProvider::new(git_id, store).get(id)?;
+    println!("{}", serde_json::to_string_pretty(&restored)?);
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_report_not_working(
+    path: &Path,
+    connection: &str,
+    id: &str,
+    note: Option<String>,
+    note_file: Option<PathBuf>,
+    files: &[PathBuf],
+    expected_token: Option<String>,
+) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    if !provider.descriptor().capabilities.not_working_report {
+        bail!("provider connection '{connection}' does not support an atomic Not Working report");
+    }
+    let note = read_note_input(note, note_file, false)?
+        .and_then(|text| (!text.trim().is_empty()).then(|| (Ulid::new(), text)));
+    if note.is_none() && files.is_empty() {
+        bail!("a Not Working report requires a note or at least one evidence attachment");
+    }
+    let at = now_ts();
+    let evidence = files
+        .iter()
+        .map(|file| {
+            let filename = file
+                .file_name()
+                .and_then(|name| name.to_str())
+                .with_context(|| format!("invalid evidence filename {}", file.display()))?;
+            Ok(hotsheet_ticketing::ProviderEvidence {
+                id: Ulid::new(),
+                filename: filename.to_owned(),
+                created_at: at.clone(),
+                bytes: std::fs::read(file)
+                    .with_context(|| format!("reading evidence {}", file.display()))?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let ticket = provider.report_not_working(
+        id,
+        at,
+        hotsheet_ticketing::NotWorkingReport {
+            expected_token,
+            note,
+            evidence,
+        },
+    )?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_transfer(
+    src_path: &Path,
+    id: &str,
+    to: &Path,
+    operation_id: &str,
+    move_source: bool,
+) -> Result<()> {
+    let source_store = FsStore::open(src_path)?;
+    let destination_store =
+        FsStore::open(to).with_context(|| format!("opening destination store {}", to.display()))?;
+    let source_id = git_connection_id(&source_store);
+    let destination_id = git_connection_id(&destination_store);
+    let source_ticket = ops::resolve(&source_store, id)?
+        .ok_or_else(|| anyhow::anyhow!("no ticket matching '{id}'"))?;
+    let registry = ProviderRegistry::default();
+    registry.register(Arc::new(GitProvider::new(source_id.clone(), source_store)))?;
+    registry.register(Arc::new(GitProvider::new(
+        destination_id.clone(),
+        destination_store,
+    )))?;
+    let source = TicketRef {
+        connection_id: source_id,
+        native_id: source_ticket.id.to_string(),
+    };
+    let outcome = if move_source {
+        move_between(&registry, source, &destination_id, operation_id, now_ts())?
+    } else {
+        copy_between(&registry, source, &destination_id, operation_id, now_ts())?
+    };
+    println!(
+        "{} {} -> {} (operation {})",
+        if move_source { "Moved" } else { "Copied" },
+        outcome.source.qualified(),
+        outcome.destination.qualified(),
+        outcome.operation_id
+    );
+    Ok(())
+}
+
+pub(crate) fn cmd_provider_delete_note(
+    path: &Path,
+    connection: &str,
+    id: &str,
+    note_id: &str,
+) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    if !provider.supports_note_delete() {
+        bail!("provider connection '{connection}' does not support note deletion");
+    }
+    let ticket = provider.delete_note(id, note_id, now_ts())?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+/// `hotsheet account …` (HS2-SM9PM8): the same account listing and sign-out as App
+/// Settings → Accounts, over the -C store's providers.json and the machine checkout registry.
+pub(crate) fn cmd_account(cmd: AccountCmd, path: &Path) -> Result<()> {
+    use hotsheet_ticketing::accounts;
+    let home = hotsheet_plugins::hotsheet_home();
+    let keys = KeyRegistry::new(&home, OsKeychain);
+    let connections =
+        ProviderConfigRegistry::new(FsStore::open(path)?.root().join("providers.json")).load()?;
+    let checkouts =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json")).list()?;
+    match cmd {
+        AccountCmd::List { json } => {
+            // Records the site of sign-ins stored before keys.json kept one (HS2-16MYXN).
+            let credentials = hotsheet_extsync::credentials_with_sites(&keys)?;
+            let list = accounts::list_accounts(&connections, &checkouts, &credentials);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&list)?);
+                return Ok(());
+            }
+            if list.is_empty() {
+                println!("(no accounts)");
+            }
+            for account in list {
+                let host = if account.host.is_empty() {
+                    String::new()
+                } else {
+                    format!(" · {}", account.host)
+                };
+                println!("{} ({}{host})", account.id, account.provider);
+                // What a new source reusing this account needs besides its own locator.
+                if let Some(identity) = &account.identity {
+                    println!("  account: {identity}");
+                }
+                if let Some(base_url) = &account.base_url {
+                    println!("  endpoint: {base_url}");
+                }
+                if account.sources.is_empty() {
+                    println!("  not used by any ticket source");
+                }
+                for source in account.sources {
+                    let projects = source
+                        .projects
+                        .iter()
+                        .map(|project| project.alias.as_str())
+                        .collect::<Vec<_>>();
+                    println!(
+                        "  {} [{}] {} — {}",
+                        source.name,
+                        source.connection_id,
+                        source.locator,
+                        if projects.is_empty() {
+                            "used by no project".to_owned()
+                        } else {
+                            format!("used by {}", projects.join(", "))
+                        }
+                    );
+                }
+            }
+        }
+        AccountCmd::BackfillLogins { limit, after } => {
+            if !(1..=10).contains(&limit) {
+                bail!("--limit must be between 1 and 10");
+            }
+            let credentials = hotsheet_extsync::credentials_with_sites(&keys)?;
+            let missing = accounts::list_accounts(&connections, &checkouts, &credentials)
+                .into_iter()
+                .filter(|account| {
+                    account.provider == "github" && account.managed && account.identity.is_none()
+                })
+                .filter(|account| {
+                    after
+                        .as_ref()
+                        .is_none_or(|after| account.id.as_str() > after.as_str())
+                })
+                .take(limit)
+                .collect::<Vec<_>>();
+            if missing.is_empty() {
+                println!("No managed GitHub logins need backfilling.");
+            }
+            let mut failed = 0;
+            for account in &missing {
+                let result = (|| -> Result<String> {
+                    let raw = keys.get(&account.id)?;
+                    let stored: serde_json::Value = serde_json::from_str(&raw)
+                        .context("managed GitHub credential is not a token bundle")?;
+                    if stored.get("kind").and_then(serde_json::Value::as_str) != Some("github_app")
+                    {
+                        bail!("credential is not a managed GitHub App sign-in");
+                    }
+                    let client_id = stored
+                        .get("client_id")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default();
+                    let web_base = stored
+                        .get("web_base")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("https://github.com");
+                    let token = hotsheet_extsync::access_token_from_raw(
+                        &raw,
+                        &keys,
+                        &account.id,
+                        OffsetDateTime::now_utc().unix_timestamp(),
+                    )?;
+                    let login = hotsheet_extsync::GitHubDeviceClient::live(client_id, web_base)
+                        .current_login(&token)?;
+                    keys.record_identity(&account.id, &login)?;
+                    Ok(login)
+                })();
+                match result {
+                    Ok(login) => println!("{}: {login}", account.id),
+                    Err(error) => {
+                        failed += 1;
+                        eprintln!("{}: {error}", account.id);
+                    }
+                }
+            }
+            if failed > 0 {
+                bail!("{failed} of {} login backfills failed", missing.len());
+            }
+        }
+        AccountCmd::SignOut { account } => {
+            accounts::sign_out(&connections, &checkouts, &keys, &account)?;
+            println!("Signed out of {account}.");
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_key(cmd: KeyCmd) -> Result<()> {
+    use std::io::IsTerminal;
+
+    use hotsheet_ticketing::{KeyRegistry, OsKeychain};
+
+    let registry = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
+    match cmd {
+        KeyCmd::Set { provider } => {
+            let stdin = std::io::stdin();
+            let secret = read_key_secret(&provider, stdin.is_terminal(), stdin.lock(), |prompt| {
+                rpassword::prompt_password(prompt).map_err(Into::into)
+            })?;
+            registry.set(&provider, &secret)?;
+            println!("Stored key for {provider} in the OS credential store");
+        }
+        KeyCmd::Get { provider } => println!("{}", registry.get(&provider)?),
+        KeyCmd::List => {
+            let keys = registry.list()?;
+            if keys.is_empty() {
+                println!("(no registered keys)");
+            }
+            for key in keys {
+                println!("{} (fallback: {})", key.provider, key.env);
+            }
+        }
+        KeyCmd::Delete { provider } => {
+            if registry.delete(&provider)? {
+                println!("Deleted key for {provider}");
+            } else {
+                println!("No registered key for {provider}");
+            }
+        }
+    }
+    Ok(())
+}

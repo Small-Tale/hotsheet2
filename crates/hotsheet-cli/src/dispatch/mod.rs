@@ -5,12 +5,12 @@
 //! new subcommand fails to compile until it is routed; each group module then matches
 //! only its own variants.
 
-mod claims;
-mod providers;
-mod server;
-mod setup;
-mod store;
-mod tickets;
+pub(crate) mod claims;
+pub(crate) mod providers;
+pub(crate) mod server;
+pub(crate) mod setup;
+pub(crate) mod store;
+pub(crate) mod tickets;
 
 use std::path::PathBuf;
 

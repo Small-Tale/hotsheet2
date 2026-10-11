@@ -131,3 +131,677 @@ fn compatibility(path: &Path, json: bool) -> Result<()> {
     }
     Ok(())
 }
+
+pub(crate) fn cmd_bootstrap(
+    project_input: &Path,
+    store_input: Option<&Path>,
+    prefix: &str,
+    remote: Option<&str>,
+    tools: &[String],
+) -> Result<()> {
+    let project = project_input
+        .canonicalize()
+        .with_context(|| format!("project path does not exist: {}", project_input.display()))?;
+    let store_candidate = store_input.map_or_else(
+        || PathBuf::from(format!("{}.hs2", project.display())),
+        |path| {
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(path)
+            }
+        },
+    );
+    let created = !store_candidate.exists();
+    if created {
+        FsStore::init(&store_candidate, &StoreMetadata::new(prefix)).with_context(|| {
+            format!(
+                "initializing standalone store at {}",
+                store_candidate.display()
+            )
+        })?;
+        git_init(&store_candidate);
+    } else {
+        FsStore::open(&store_candidate).with_context(|| {
+            format!(
+                "existing bootstrap destination is not a Hot Sheet store: {}",
+                store_candidate.display()
+            )
+        })?;
+    }
+    hotsheet_cli::register_merge_driver(&store_candidate);
+    let store = hotsheet_cli::link_store(&store_candidate, &project)?;
+
+    // A newly initialized store contains its schema and merge attributes but no ticket
+    // mutation has occurred yet, so the normal autocommit path has not run. Remote setup
+    // immediately pushes HEAD; make that contract true before either the CLI or a client
+    // offers the remote step. This also repairs an older bootstrap-created empty repo.
+    let store_handle = FsStore::open(&store)?;
+    if store_handle.head_commit().is_none() {
+        store_handle
+            .autocommit("Initialize Hot Sheet ticket repository")
+            .context("creating the initial ticket-store commit")?;
+        if store_handle.head_commit().is_none() {
+            bail!("ticket repository setup did not create an initial Git commit");
+        }
+    }
+
+    let repository = hotsheet_ticketing::git::command()
+        .args([
+            "-C",
+            project.to_str().unwrap_or("."),
+            "config",
+            "--get",
+            "remote.origin.url",
+        ])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let checkout = registry.open_git_store(&project, None, repository, &store)?;
+    hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?;
+
+    let existing_remote = hotsheet_ticketing::git::command()
+        .args([
+            "-C",
+            store.to_str().unwrap_or("."),
+            "remote",
+            "get-url",
+            "origin",
+        ])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    if let Some(url) = remote {
+        if url.is_empty() || url.starts_with('-') || url.contains(['\r', '\n']) {
+            bail!("enter a valid existing Git remote URL");
+        }
+        match existing_remote.as_deref() {
+            Some(current) if current != url => bail!(
+                "origin is already configured as {current}; refusing to replace existing user configuration"
+            ),
+            Some(_) => {}
+            None => {
+                let status = hotsheet_ticketing::git::command()
+                    .args([
+                        "-C",
+                        store.to_str().unwrap_or("."),
+                        "remote",
+                        "add",
+                        "origin",
+                        url,
+                    ])
+                    .status()
+                    .context("running git remote add origin")?;
+                if !status.success() {
+                    bail!("git remote add origin exited with {status}");
+                }
+            }
+        }
+    }
+
+    let mut setup_reports = Vec::new();
+    if tools.is_empty() {
+        match hotsheet_cli::run_setup(&store, &project, None, true) {
+            Ok(reports) => setup_reports = reports,
+            Err(error)
+                if error
+                    .downcast_ref::<hotsheet_plugins::SetupError>()
+                    .is_some_and(|error| {
+                        matches!(
+                            error,
+                            hotsheet_plugins::SetupError::NoneDetected
+                                | hotsheet_plugins::SetupError::NoneEnabled
+                        )
+                    }) =>
+            {
+                if matches!(
+                    error.downcast_ref::<hotsheet_plugins::SetupError>(),
+                    Some(hotsheet_plugins::SetupError::NoneEnabled)
+                ) {
+                    println!(
+                        "No detected AI tool is enabled by this project's `enabled_plugins` setting; project/store setup is complete."
+                    );
+                } else {
+                    println!(
+                        "No supported AI tools were detected; project/store setup is complete."
+                    );
+                }
+                println!(
+                    "Run `hotsheet-cli bootstrap --project {} --store {} --tool <tool>` after installing Claude, Codex, OpenCode, or another registered tool.",
+                    shell_quote_path(&project),
+                    shell_quote_path(&store)
+                );
+            }
+            Err(error) => return Err(error),
+        }
+    } else {
+        let mut seen = HashSet::new();
+        for tool in tools.iter().filter(|tool| seen.insert((*tool).clone())) {
+            setup_reports.extend(hotsheet_cli::run_setup(
+                &store,
+                &project,
+                Some(tool),
+                false,
+            )?);
+        }
+    }
+    for report in &setup_reports {
+        println!("Set up {}:", report.tool);
+        for path in &report.wrote {
+            println!("  wrote {path}");
+        }
+    }
+
+    println!(
+        "{} standalone Hot Sheet store at {} and linked {} via {}.",
+        if created { "Initialized" } else { "Reused" },
+        store.display(),
+        project.display(),
+        hotsheet_cli::STORE_LINK
+    );
+    if remote.is_some() || existing_remote.is_some() {
+        println!("Ticket-store remote: origin is configured.");
+    } else {
+        println!("Ticket-store remote: not configured.");
+        println!("Connect an existing provider-neutral Git remote with:");
+        println!(
+            "  hotsheet-cli bootstrap --project {} --store {} --remote <url>",
+            shell_quote_path(&project),
+            shell_quote_path(&store)
+        );
+        println!("Then publish the first commit with:");
+        println!("  git -C {} push -u origin HEAD", shell_quote_path(&store));
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_init(
+    path: &PathBuf,
+    prefix: &str,
+    standalone: bool,
+    at: Option<&Path>,
+    remote: Option<&str>,
+) -> Result<()> {
+    if standalone {
+        let project = std::env::current_dir()?;
+        let name = project
+            .file_name()
+            .and_then(|n| n.to_str())
+            .filter(|n| !n.is_empty())
+            .context("current project directory has no usable name; pass --at <path>")?;
+        let destination = at
+            .map(PathBuf::from)
+            .unwrap_or_else(|| hotsheet_plugins::hotsheet_home().join("stores").join(name));
+        if destination.exists() {
+            bail!(
+                "standalone store destination already exists: {}; choose a new --at path or link the existing store",
+                destination.display()
+            );
+        }
+        FsStore::init(&destination, &StoreMetadata::new(prefix))
+            .with_context(|| format!("initializing store at {}", destination.display()))?;
+        git_init(&destination);
+        hotsheet_cli::register_merge_driver(&destination);
+        if let Some(url) = remote {
+            let status = hotsheet_ticketing::git::command()
+                .current_dir(&destination)
+                .args(["remote", "add", "origin", url])
+                .status()
+                .context("running git remote add origin")?;
+            if !status.success() {
+                bail!("git remote add origin exited with {status}");
+            }
+        }
+        let linked = hotsheet_cli::link_store(&destination, &project)?;
+        println!(
+            "Initialized standalone Hot Sheet store at {} and linked {} via {}",
+            linked.display(),
+            project.display(),
+            hotsheet_cli::STORE_LINK
+        );
+        print_onboarding_report(&destination, &project);
+        return Ok(());
+    }
+
+    FsStore::init(path, &StoreMetadata::new(prefix))
+        .with_context(|| format!("initializing store at {}", path.display()))?;
+    git_init(path);
+    hotsheet_cli::register_merge_driver(path);
+    println!("Initialized Hot Sheet store at {}", path.display());
+    print_onboarding_report(path, path);
+    Ok(())
+}
+
+/// Link the current directory to a standalone store (`hotsheet-cli link <store>`).
+pub(crate) fn cmd_link(store: &Path) -> Result<()> {
+    let cwd = std::env::current_dir()?;
+    let abs = hotsheet_cli::link_store(store, &cwd)?;
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let checkout = registry.open_git_store(&cwd, None, None, &abs)?;
+    hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?;
+    println!(
+        "Linked {} → {} (via {})",
+        cwd.display(),
+        abs.display(),
+        hotsheet_cli::STORE_LINK
+    );
+    Ok(())
+}
+
+pub(crate) fn cmd_sync(path: &Path) -> Result<()> {
+    use hotsheet_ticketing::SyncReport;
+    FsStore::open(path)?; // validate it's a store before touching git
+    match hotsheet_ticketing::sync_once(path) {
+        SyncReport::NoRemote => println!("Local-only store — no remote to sync."),
+        SyncReport::UpToDate => println!("Already up to date."),
+        SyncReport::Synced { pulled, pushed } => {
+            let mut parts = Vec::new();
+            if pulled {
+                parts.push("pulled remote changes");
+            }
+            if pushed {
+                parts.push("pushed local commits");
+            }
+            println!("Synced — {}.", parts.join(" + "));
+        }
+        SyncReport::Offline => {
+            println!("Remote unreachable — kept working locally; the next sync will retry.")
+        }
+        SyncReport::Conflict => bail!(
+            "a ticket had a body change on both sides that couldn't auto-merge — resolve it \
+             manually, then commit (the working tree was left clean; nothing was lost)"
+        ),
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let meta = store.metadata()?;
+    // Enumerate resiliently so a single unparseable file is reported as an issue rather
+    // than aborting doctor on the first one — doctor is a diagnostic meant to surface
+    // every problem, including corruption (HS2-9X9TZD / HS2-PRVPCQ).
+    let listing = store.list_tickets_resilient()?;
+    let tickets = listing.tickets;
+
+    println!(
+        "Store: {} (prefix {}, {} sharding)",
+        path.display(),
+        meta.ticket_prefix,
+        meta.shard
+    );
+    println!("Tickets: {}", tickets.len());
+
+    let mut issues = 0usize;
+
+    if !listing.corrupt.is_empty() {
+        println!("Corrupt: {}", listing.corrupt.len());
+        for c in &listing.corrupt {
+            let id =
+                c.id.map(|i| i.to_string())
+                    .unwrap_or_else(|| "unknown".into());
+            let slug = c.slug.as_deref().unwrap_or("unknown");
+            println!(
+                "  ! corrupt ticket {} (id {id}, slug {slug}): {}",
+                c.path.display(),
+                c.error
+            );
+            issues += 1;
+        }
+    }
+
+    let ids: HashSet<Ulid> = tickets.iter().map(|t| t.id).collect();
+
+    let mut slug_counts = std::collections::HashMap::<&str, usize>::new();
+    for t in &tickets {
+        *slug_counts.entry(t.slug.as_str()).or_default() += 1;
+    }
+    for (slug, n) in &slug_counts {
+        if *n > 1 {
+            println!("  ! duplicate slug {slug} ({n} tickets)");
+            issues += 1;
+        }
+    }
+
+    for t in &tickets {
+        for b in &t.blocked_by {
+            if !ids.contains(b) {
+                println!("  ! {} blocked_by unknown id {b}", t.slug);
+                issues += 1;
+            }
+        }
+        if let Some(d) = &t.duplicate_of {
+            if Ulid::from_string(d).is_ok_and(|id| !ids.contains(&id)) {
+                println!("  ! {} duplicate_of unknown id {d}", t.slug);
+                issues += 1;
+            }
+        }
+        if t.close_reason == Some(CloseReason::Duplicate) && t.duplicate_of.is_none() {
+            println!("  ! {} close_reason=duplicate but no duplicate_of", t.slug);
+            issues += 1;
+        }
+        if !t.created_at.is_valid() {
+            println!(
+                "  ! {} created_at not valid RFC3339: {}",
+                t.slug, t.created_at
+            );
+            issues += 1;
+        }
+    }
+
+    // The semantic merge driver must be registered, or git would text-merge ticket files
+    // and could dump conflict markers over structured data (HS2-18, docs/02 §2.7).
+    if !hotsheet_cli::merge_driver_registered(path) {
+        println!(
+            "  ! semantic merge driver not registered (missing .gitattributes \
+             `merge=hotsheet-ticket` or its git config) — re-run `hotsheet-cli init` here to \
+             register it, or git may text-merge ticket files"
+        );
+        issues += 1;
+    }
+
+    print_onboarding_report(path, project);
+    if issues == 0 {
+        println!("No issues found.");
+        Ok(())
+    } else {
+        bail!("{issues} issue(s) found")
+    }
+}
+
+/// Rebuild the disposable index from a full store walk (`hotsheet-cli reindex`).
+pub(crate) fn cmd_reindex(path: &Path, index: Option<PathBuf>) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let index_path = match index {
+        Some(p) => p,
+        None => default_index_path(&store)?,
+    };
+    // Same store_id derivation the server uses (the store root), so the rebuilt file is
+    // the one the server reconciles against.
+    let store_id = store
+        .root()
+        .canonicalize()
+        .unwrap_or_else(|_| store.root().to_path_buf())
+        .display()
+        .to_string();
+    let idx = hotsheet_index::Index::open(&index_path, store_id)?;
+    let n = idx.rebuild_from_store(&store)?;
+    println!("reindexed {n} ticket(s) → {}", index_path.display());
+    // Index maintenance also drops files older schema generations left behind, unless a
+    // running process (an older build's server) still holds them (HS2-Y0PAEM).
+    let report =
+        hotsheet_index::prune_stale_index_files(&hotsheet_plugins::hotsheet_home().join("index"))?;
+    if let Some(summary) = report.summary() {
+        println!("{summary}");
+    }
+    Ok(())
+}
+
+/// Regenerate the checkout-local worklist from all sources registered for this checkout.
+pub(crate) fn cmd_worklist(path: &Path, cwd: &Path) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let checkout_root = local_checkout_root(path, cwd);
+    let output = checkout_root.join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST);
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let registered = registry.list()?.into_iter().find(|checkout| {
+        Path::new(&checkout.root).canonicalize().ok().as_ref()
+            == checkout_root.canonicalize().ok().as_ref()
+    });
+    let n = if let Some(checkout) = registered {
+        hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?
+    } else {
+        hotsheet_ticketing::worklist::regenerate_for_project(&store, &checkout_root, &output)?
+    };
+    println!("wrote {} ({n} Up Next ticket(s))", output.display());
+    Ok(())
+}
+
+/// The `merge=hotsheet-ticket` git driver: read git's base/ours/theirs, merge semantically,
+/// write the result back to `ours` (git's `%A`). Exit 0 = clean, 1 = a body conflict git
+/// should surface. Parse failure falls back to git's text merge so data is never lost.
+pub(crate) fn cmd_merge_driver(base: &Path, ours: &Path, theirs: &Path) -> Result<()> {
+    let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_default();
+    let (base_txt, ours_txt, theirs_txt) = (read(base), read(ours), read(theirs));
+
+    let (b, o, t) = match (
+        parse_file(&base_txt),
+        parse_file(&ours_txt),
+        parse_file(&theirs_txt),
+    ) {
+        (Ok(b), Ok(o), Ok(t)) => (b, o, t),
+        _ => {
+            // Unparseable input → git's plain text 3-way merge (never silent data loss).
+            let (merged, clean) = git_merge_file(&ours_txt, &base_txt, &theirs_txt)?;
+            std::fs::write(ours, merged)?;
+            std::process::exit(if clean { 0 } else { 1 });
+        }
+    };
+
+    let outcome = hotsheet_ticketing::merge_tickets(&b, &o, &t);
+    let mut ticket = outcome.ticket;
+    let clean = match &outcome.body {
+        hotsheet_ticketing::BodyMerge::Resolved(_) => true,
+        hotsheet_ticketing::BodyMerge::Conflict {
+            base: bb,
+            ours: oo,
+            theirs: tt,
+        } => {
+            // Only the prose paragraph conflicts; frontmatter + notes stay cleanly merged.
+            let (body, clean) = git_merge_file(oo, bb, tt)?;
+            ticket.details = body;
+            clean
+        }
+    };
+    std::fs::write(ours, to_file_string(&ticket))?;
+    std::process::exit(if clean { 0 } else { 1 });
+}
+
+pub(crate) fn cmd_purge_trash(
+    path: &PathBuf,
+    cwd: &Path,
+    older_than_days: Option<u32>,
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let older_than_days = older_than_days
+        .map(Ok)
+        .unwrap_or_else(|| settings_for_cli(path, cwd).trash_cleanup_days())?;
+    let purged = ops::purge_trash(&store, &now_ts(), i64::from(older_than_days))?;
+    if purged.is_empty() {
+        println!("Trash has no tickets deleted {older_than_days}+ days ago");
+    }
+    for ticket in &purged {
+        println!("Purged {} {}", ticket.slug, ticket.title);
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
+    use hotsheet_ticketing::checkouts::CheckoutRegistry;
+    let registry = CheckoutRegistry::new(hotsheet_plugins::hotsheet_home().join("checkouts.json"));
+    match cmd {
+        CheckoutCmd::Register {
+            root,
+            alias,
+            stores,
+            repository,
+        } => {
+            let repository = repository.or_else(|| {
+                hotsheet_ticketing::git::command()
+                    .args(["-C", root.to_str()?, "config", "--get", "remote.origin.url"])
+                    .output()
+                    .ok()
+                    .filter(|o| o.status.success())
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .map(|v| v.trim().to_owned())
+                    .filter(|v| !v.is_empty())
+            });
+            let entry = match registry.describe(root.to_string_lossy().as_ref()) {
+                Ok(_) => registry.open_sources(
+                    &root,
+                    alias.as_deref(),
+                    repository,
+                    stores
+                        .into_iter()
+                        .map(hotsheet_ticketing::checkouts::TicketSource::git)
+                        .collect(),
+                    None,
+                    hotsheet_ticketing::checkouts::OpenSourceMode::Discovered,
+                )?,
+                Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => {
+                    registry.register(&root, alias.as_deref(), repository, stores)?
+                }
+                Err(error) => return Err(error.into()),
+            };
+            println!("{}", serde_json::to_string_pretty(&entry)?);
+        }
+        CheckoutCmd::List => println!("{}", serde_json::to_string_pretty(&registry.list()?)?),
+        CheckoutCmd::Resolve { reference } => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&registry.describe(&reference)?)?
+            );
+        }
+        CheckoutCmd::Relocate {
+            reference,
+            root,
+            alias,
+        } => println!(
+            "{}",
+            serde_json::to_string_pretty(&registry.relocate(
+                &reference,
+                &root,
+                alias.as_deref()
+            )?)?
+        ),
+        CheckoutCmd::AddSource {
+            reference,
+            connection_id,
+            provider,
+            locator,
+            default,
+        } => {
+            let source = if provider == "git" {
+                let source = hotsheet_ticketing::checkouts::TicketSource::git(&locator);
+                if source.connection_id != connection_id {
+                    bail!("git source id must be {}", source.connection_id);
+                }
+                source
+            } else {
+                hotsheet_ticketing::checkouts::TicketSource {
+                    connection_id,
+                    provider,
+                    locator,
+                }
+            };
+            let store_root = FsStore::open(store)
+                .map(|opened| opened.root().to_path_buf())
+                .unwrap_or_else(|_| store.to_path_buf());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&registry.add_registered_source(
+                    &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                    &reference,
+                    source,
+                    default,
+                )?)?
+            );
+        }
+        CheckoutCmd::RemoveSource {
+            reference,
+            connection_id,
+            json,
+        } => {
+            // The same workflow as Project Settings → Ticket sources → Remove (HS2-SM9PM8).
+            let store_root = FsStore::open(store)
+                .map(|opened| opened.root().to_path_buf())
+                .unwrap_or_else(|_| store.to_path_buf());
+            let report = hotsheet_ticketing::connection_removal::detach_source(
+                &ProviderConfigRegistry::new(store_root.join("providers.json")),
+                &registry,
+                &reference,
+                &connection_id,
+            )?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                if report.unlinked {
+                    println!(
+                        "Removed ticket source '{connection_id}' from checkout {}.",
+                        report.checkout_id
+                    );
+                }
+                if report.removed_connection {
+                    println!(
+                        "No other project uses '{connection_id}'; its connection was deleted (the account stays signed in)."
+                    );
+                } else if !report.still_used_by.is_empty() {
+                    println!("Still used by: {}.", report.still_used_by.join(", "));
+                }
+            }
+        }
+        CheckoutCmd::RenameSource {
+            reference,
+            connection_id,
+            new_connection_id,
+        } => println!(
+            "{}",
+            serde_json::to_string_pretty(&registry.rename_source(
+                &reference,
+                &connection_id,
+                &new_connection_id,
+            )?)?
+        ),
+        CheckoutCmd::SourceColor {
+            reference,
+            connection_id,
+        } => print_checkout_source_color(&registry.describe(&reference)?, &connection_id)?,
+        CheckoutCmd::SetSourceColor {
+            reference,
+            connection_id,
+            color,
+        } => print_checkout_source_color(
+            &registry.set_source_color(&reference, &connection_id, &color)?,
+            &connection_id,
+        )?,
+        CheckoutCmd::SetDefault {
+            reference,
+            connection_id,
+            clear,
+        } => {
+            let selected = if clear {
+                None
+            } else {
+                connection_id.as_deref()
+            };
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&registry.set_default_source(&reference, selected)?)?
+            );
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn cmd_import(path: &Path, file: &Path, prefix: &str) -> Result<()> {
+    let summary = run_import(path, file, prefix)?;
+    println!(
+        "Imported {} ticket(s) ({} attachment file(s)), skipped {} already present.",
+        summary.written, summary.attachments, summary.skipped
+    );
+    Ok(())
+}
