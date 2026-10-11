@@ -1513,9 +1513,49 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  // The server's `GET /checkouts/{id}/confidence-report` shape, with the user's report's band totals.
+  const band = (
+    name: string,
+    range: string,
+    completions: number,
+    verified: number,
+    reopened: number,
+    mean?: number,
+  ) => ({
+    band: name,
+    range,
+    completions,
+    verified,
+    reopened,
+    pending: completions - verified - reopened,
+    ...(verified + reopened ? { reopen_rate: reopened / (verified + reopened) } : {}),
+    ...(mean === undefined ? {} : { mean_confidence: mean }),
+  });
   await openDemoProject(page);
+  // Registered after the fixture's catch-all route so it takes precedence.
+  await page.route('**/checkouts/demo-checkout/confidence-report', (route) =>
+    route.fulfill({
+      json: {
+        completions: 1880,
+        scored: 559,
+        bands: [
+          band('verified', '90-100', 275, 254, 3, 94.1),
+          band('assumed', '70-89', 283, 242, 9, 81.6),
+          band('partial', '40-69', 1, 1, 0, 60),
+          band('unverified', '0-39', 0, 0, 0),
+          band('unscored', 'no score', 1321, 1170, 41),
+        ],
+        events: [
+          { slug: 'HS2-YMG48C', completed_at: '2026-10-11T06:00:00Z', confidence: 78, outcome: 'pending' },
+          { slug: 'HS2-79TVFH', completed_at: '2026-10-11T05:00:00Z', confidence: 78, outcome: 'pending' },
+          { slug: 'HS2-Q1WCCY', completed_at: '2026-10-10T05:00:00Z', confidence: 92, outcome: 'verified' },
+        ],
+      },
+    }),
+  );
   const shell = page.locator('[data-component="app-shell"]'),
-    scrim = page.locator('.app-shell__scrim');
+    scrim = page.locator('.app-shell__scrim'),
+    calibration = page.locator('[data-component="confidence-calibration"]');
   await expect(shell).toHaveAttribute('data-mobile', 'true');
   // Open stats from the open phone sidebar (its project summary) and from the strip's chart button.
   await page.getByRole('button', { name: 'Show project sidebar' }).click();
@@ -1533,10 +1573,24 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
     ),
   );
   expect(hit).toBe(true);
-  await page.screenshot({ path: 'target/visual-captures/hs2-s2xqp8-phone-stats.png' });
+  await expect(calibration).toHaveAttribute('data-state', 'ready');
+  await expect(calibration).toContainText('1880 completions, 559 scored');
+  await page.screenshot({ path: test.info().outputPath('hs2-s2xqp8-phone-stats.png') });
+  // The scrolled stats page stays interactive: its table can be scrolled and reached by touch.
+  await page.mouse.wheel(0, 400);
+  await expect(scrim).toHaveCount(0);
   // The project Select returns to the project, where the scrim follows the remembered rail again.
   const strip = page.locator('.project-tab-bar');
   await strip.getByRole('button', { name: 'Cross-project stats' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Cross-project stats' })).toBeVisible();
   await expect(scrim).toHaveCount(0);
+  // Back to project stats at a wide viewport, with the same loaded report and no scrim.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await strip.getByRole('tab', { name: 'demo' }).click();
+  await expect(shell).toHaveAttribute('data-mode', 'project');
+  await page.locator('[data-component="project-summary"]').click();
+  await expect(shell).toHaveAttribute('data-mode', 'stats');
+  await expect(calibration).toHaveAttribute('data-state', 'ready');
+  await expect(scrim).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('hs2-s2xqp8-wide-stats.png') });
 });
