@@ -1955,7 +1955,10 @@ and identity-less legacy entries remain conservatively blocking.
   set at 16 px or larger (`--hs-touch-field-min-font-size`), because iOS zooms the page into a
   focused field below that size: the Details textarea, the details editor source, the tag input,
   the attachment purpose select (whose pill then grows with its text), and the repository search
-  field. A mouse keeps the compact type (HS2-8JPRRC).
+  field. A mouse keeps the compact type (HS2-8JPRRC). The not-working note is floored the same
+  way, and a touch-phone browser test walks every UX demo to keep every editable text field at
+  16 px or larger; read-only fields (the terminal copy view) and Web Awesome's hidden form-value
+  mirrors never take keyboard focus and keep their compact size (HS2-JDXSND).
   The form uses 16 px between sibling regions, 8 px within metadata/evidence/action groups,
   and 4 px for connected labels and icon details (HS2-4Y6SM9).
   The footer names the ticket source the new ticket is created in. When the project has two

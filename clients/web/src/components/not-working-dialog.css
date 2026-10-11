@@ -25,6 +25,13 @@
   font: inherit;
   line-height: 1.45;
 }
+/* iOS zooms into a focused text field under 16px, so touch screens floor the note at the token
+   (HS2-JDXSND). */
+@media (pointer: coarse) {
+  .not-working-dialog__note textarea {
+    font-size: max(var(--hs-touch-field-min-font-size), 1em);
+  }
+}
 .not-working-dialog__note textarea:focus {
   border-color: var(--wa-color-focus);
   outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 20%, transparent);

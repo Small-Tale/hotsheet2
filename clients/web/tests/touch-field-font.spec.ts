@@ -58,6 +58,78 @@ test.describe('touch phone', () => {
   });
 });
 
+/**
+ * Every editable native text field in the page, including inside shadow roots, whose computed font
+ * size is under 16px. Read-only fields never raise the keyboard, and Web Awesome's hidden form-value
+ * mirrors (`aria-hidden`, `tabindex=-1`) never take focus, so neither can trigger iOS focus zoom.
+ */
+const smallEditableFields = (page: Page) =>
+  page.evaluate(() => {
+    const found: string[] = [];
+    const nonText = new Set([
+      'checkbox',
+      'radio',
+      'range',
+      'color',
+      'file',
+      'button',
+      'submit',
+      'reset',
+      'hidden',
+      'image',
+    ]);
+    const walk = (root: Document | ShadowRoot, host: string) => {
+      for (const element of root.querySelectorAll<HTMLElement>('*')) {
+        if (element.shadowRoot) walk(element.shadowRoot, element.localName);
+        const field = element as HTMLInputElement;
+        const editable =
+          element.isContentEditable ||
+          element.localName === 'textarea' ||
+          element.localName === 'select' ||
+          (element.localName === 'input' && !nonText.has(field.type));
+        if (!editable || field.readOnly || field.disabled) continue;
+        if (element.getAttribute('aria-hidden') === 'true' && element.tabIndex < 0) continue;
+        // xterm's input proxy is offscreen and sized by the terminal, not a typed text field.
+        if (element.classList.contains('xterm-helper-textarea')) continue;
+        const size = parseFloat(getComputedStyle(element).fontSize);
+        if (size < 16) found.push(`${host} ${element.localName}[name=${element.getAttribute('name') ?? ''}] ${size}px`);
+      }
+    };
+    walk(document, 'document');
+    return found;
+  });
+
+test.describe('touch phone audit (HS2-JDXSND)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  test('every UX demo keeps its editable text fields at 16px or larger', async ({ page }) => {
+    test.setTimeout(300_000);
+    const small: string[] = [];
+    await page.goto('/ux-demo');
+    // The Vite dev server serves the catalog module, so the walk always covers every listed demo.
+    const ids = await page.evaluate(async (module) => {
+      const catalog = (await import(module)) as { flattenCatalog: () => Array<{ id: string }> };
+      return catalog.flattenCatalog().map((demo) => demo.id);
+    }, '/src/ux-demo/catalog.ts');
+    expect(ids.length).toBeGreaterThan(50);
+    for (const id of ids) {
+      await page.goto(`/ux-demo?component=${id}`);
+      await expect(page.locator('#ux-demo-stage, main').first()).toBeAttached();
+      small.push(...(await smallEditableFields(page)).map((field) => `${id}: ${field}`));
+    }
+    expect(small).toEqual([]);
+  });
+
+  test('the Not working note stays at 16px when focused', async ({ page }) => {
+    await page.goto('/ux-demo?component=not-working-dialog');
+    const note = page.locator('textarea[name="not-working-note"]').first();
+    await page.locator('[data-action="open-not-working-demo"]').tap();
+    await expect(note).toBeVisible();
+    await note.tap();
+    expect(await note.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+    await page.screenshot({ path: test.info().outputPath('hs2-jdxsnd-not-working-390.png') });
+  });
+});
+
 test.describe('desktop', () => {
   test.use({ viewport: { width: 1280, height: 900 }, hasTouch: false, isMobile: false });
   test('keeps the compact field type with a mouse', async ({ page }) => {
@@ -67,5 +139,13 @@ test.describe('desktop', () => {
     expect(sizes.tag).toEqual([12]);
     expect(new Set(sizes.purpose)).toEqual(new Set([12]));
     expect(new Set(sizes.locator)).toEqual(new Set([12]));
+  });
+  test('keeps the compact Not working note with a mouse (HS2-JDXSND)', async ({ page }) => {
+    await page.goto('/ux-demo?component=not-working-dialog');
+    await page.locator('[data-action="open-not-working-demo"]').click();
+    const note = page.locator('textarea[name="not-working-note"]').first();
+    await expect(note).toBeVisible();
+    expect(await note.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBe(14);
+    await page.screenshot({ path: test.info().outputPath('hs2-jdxsnd-not-working-1280.png') });
   });
 });
