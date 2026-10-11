@@ -1,7 +1,11 @@
 //! Activity capture: persisting live activity events and the optional deterministic
 //! distillation into ticket notes (HS2-YMG48C split from lib.rs).
 
-use crate::*;
+use crate::events::ChangeEvent;
+use crate::{AppState, multistore};
+use hotsheet_model::Timestamp;
+use hotsheet_sync::LockExt;
+use hotsheet_ticketing::{FsStore, GitProvider, Settings};
 
 impl AppState {
     /// Persist one activity event and publish that exact event on the shared live bus.

@@ -1,6 +1,13 @@
 //! The live terminal attach WebSocket and its control-frame protocol.
 
-use crate::*;
+use crate::AppState;
+use crate::dto::WsParams;
+use crate::routes::terminals::{broker_err, term_key};
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use serde::{Deserialize, Serialize};
 
 /// `GET /terminals/{id}/attach?secret=…` — the **live** terminal attach (HS2-XTTTMV): a
 /// WebSocket that first replays the scrollback (one binary frame), then streams each new PTY

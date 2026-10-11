@@ -1,6 +1,25 @@
 //! Permission round-trip routes (HS2-9R9YZW).
 
-use crate::*;
+use crate::api_error::ApiError;
+use crate::events::ChangeEvent;
+use crate::routes::checkout_tickets::checkout_source_for_create;
+use crate::routes::project_tools::checkout_settings;
+use crate::routes::terminals::{
+    TerminalAiConnectionReq, TerminalHookSource, connect_terminal_ai, release_session_claims,
+    release_session_claims_blocking,
+};
+use crate::{AppState, ai_tool_discovery, client_drive, multistore, now, turn_stream};
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use hotsheet_model::Ulid;
+use hotsheet_sync::LockExt;
+use hotsheet_ticketing::{FsStore, Settings};
+use serde::{Deserialize, Serialize};
+use std::path::Path as FsPath;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 // ---- permission round-trip (HS2-9R9YZW) ------------------------------------------
 

@@ -1,6 +1,19 @@
 //! Filesystem watcher (HS2-6): store and repository change monitoring.
 
-use crate::*;
+use crate::events::{
+    ChangeEvent, EventLog, INDEX_REPAIR_RETRY_MIN, IndexRepairs, emit_change,
+    next_index_repair_delay,
+};
+use crate::multistore::{StoreEntry, StoreHost};
+use crate::routes::checkouts::regenerate_checkout_worklist_indexed;
+use crate::{AppState, LocalWriteHashes, multistore};
+use hotsheet_index::hash_bytes;
+use hotsheet_model::{Ulid, parse_file};
+use hotsheet_sync::LockExt;
+use std::path::Path as FsPath;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tokio::sync::broadcast;
 
 // ---- filesystem watcher (HS2-6) --------------------------------------------------
 

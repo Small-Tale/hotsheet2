@@ -1,6 +1,18 @@
 //! Hosted-store listing, GitHub device sign-in, and account routes.
 
-use crate::*;
+use crate::api_error::ApiError;
+use crate::multistore::StoreInfo;
+use crate::routes::providers::{connection_token, provider_transfer_error};
+use crate::{AppState, github_app_config};
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use hotsheet_sync::LockExt;
+use hotsheet_ticketing::{ProviderConfigRegistry, ProviderConnection};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::Duration;
+use time::OffsetDateTime;
 
 // ---- multi-store (HS2-87) --------------------------------------------------------
 

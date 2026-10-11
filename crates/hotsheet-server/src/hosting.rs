@@ -1,7 +1,21 @@
 //! Store hosting: index + watcher setup, project unhost sweeps, instance discovery
 //! registration, and configured-store startup (HS2-YMG48C split from lib.rs).
 
-use crate::*;
+use crate::api_error::ApiError;
+use crate::multistore::StoreEntry;
+use crate::routes::checkouts::prewarm_corrupt_tickets;
+use crate::routes::store_scoped::run_unhost_sweeper;
+use crate::watcher::{
+    WatchTarget, registered_watcher_backend, same_path, spawn_repository_watcher, spawn_watcher_for,
+};
+use crate::{AppState, InstanceMeta, lifecycle, multistore, presence};
+use axum::http::StatusCode;
+use hotsheet_index::Index;
+use hotsheet_sync::LockExt;
+use hotsheet_ticketing::FsStore;
+use std::path::Path as FsPath;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 impl AppState {
     /// Host a store: build its index (file-backed when persisting, else in-memory),

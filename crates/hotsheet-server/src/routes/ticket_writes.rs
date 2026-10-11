@@ -1,6 +1,23 @@
 //! Store-generic ticket write logic shared by unprefixed and store-scoped routes.
 
-use crate::*;
+use crate::api_error::{ApiError, parse_actor};
+use crate::dto::{
+    BatchError, BatchReq, BatchResult, CloseReq, CreateReq, DuplicateOfReq, ListParams, UpdateReq,
+};
+use crate::events::{AssignmentEvent, ChangeEvent};
+use crate::multistore::{StoreEntry, StoreInfo};
+use crate::routes::checkout_tickets::resolve_project_ticket_ref;
+use crate::routes::providers::do_rate_ai_feedback;
+use crate::routes::tickets::{api_ticket, list_entry_tickets};
+use crate::{AppState, initial_status, multistore, notifications, now, opt_parse};
+use axum::Json;
+use axum::body::Bytes;
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::Response;
+use hotsheet_model::{CloseReason, NoteKind, ReviewKind, ReviewRequest, Ticket, Ulid};
+use hotsheet_ticketing::{ApiTicket, FsStore, NewTicket, TicketPatch, ops};
+use serde::Deserialize;
 
 /// Body for `POST /stores`: register another local store by its path.
 #[derive(Deserialize)]

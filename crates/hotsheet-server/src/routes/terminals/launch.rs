@@ -1,6 +1,19 @@
 //! Terminal launch, shell history, session registration, and session cleanup.
 
-use crate::*;
+use crate::api_error::ApiError;
+use crate::routes::permissions::{discovered_ai_tools, now_ms};
+use crate::routes::terminals::{
+    OpenTerminalReq, TerminalInfo, broker_err, broker_info, read_terminal_settings, term_info,
+    term_key,
+};
+use crate::{AppState, multistore, now, terminal_broker, terminal_names};
+use axum::Json;
+use axum::extract::State;
+use axum::http::StatusCode;
+use hotsheet_model::Ulid;
+use hotsheet_sync::LockExt;
+use hotsheet_ticketing::{FsStore, Settings, ops};
+use std::path::Path as FsPath;
 
 /// `POST /terminals` `{command?, shell_command?, args?, cwd?, id?, connect?}` — open (or
 /// reattach to) a PTY. `shell_command` runs text through the user's default shell and then keeps the

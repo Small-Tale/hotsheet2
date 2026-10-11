@@ -1,6 +1,28 @@
 //! Checkout ticket attachment routes: upload, read, thumbnails, host actions, metadata, and markup (HS2-YMG48C).
 
-use crate::*;
+use crate::api_error::{ActorReq, ApiError, parse_actor};
+use crate::events::ChangeEvent;
+use crate::multistore::StoreEntry;
+use crate::routes::checkout_tickets::checkout_ticket_owner;
+use crate::routes::checkouts::repository_browser_api_error;
+use crate::routes::project_tools::checkout_settings;
+use crate::routes::providers::{provider_for, provider_transfer_error};
+use crate::routes::store_scoped::ResolvedTicket;
+use crate::routes::ticket_writes::{
+    attachment_filename, attachment_metadata, validate_attachment_metadata,
+};
+use crate::routes::tickets::{api_ticket, api_ticket_with_settings, contextualize_api_ticket};
+use crate::{AppState, image_crop_cache, media, multistore, now, repository_browser};
+use axum::Json;
+use axum::body::Bytes;
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::Response;
+use hotsheet_model::{Ticket, Ulid};
+use hotsheet_ticketing::wire::ApiAttachment;
+use hotsheet_ticketing::{ApiTicket, ops};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub(crate) async fn add_checkout_ticket_attachment(
     State(state): State<AppState>,

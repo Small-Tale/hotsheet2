@@ -1,6 +1,26 @@
 //! Provider ticket routes: read, create, update, feedback, not-working reports, close, assign, and copy/move (HS2-YMG48C).
 
-use crate::*;
+use crate::api_error::{ActorReq, ApiError, parse_actor};
+use crate::dto::{AiFeedbackReq, CloseReq, CreateReq, DuplicateOfReq, ListParams, UpdateReq};
+use crate::multistore::StoreEntry;
+use crate::routes::checkout_tickets::resolve_project_ticket_ref;
+use crate::routes::providers::{
+    ProviderTransferBody, hosted_provider_registry, provider_for, provider_read_get,
+    provider_read_query, provider_transfer_error,
+};
+use crate::routes::ticket_writes::AssignReq;
+use crate::routes::tickets::api_ticket;
+use crate::{AppState, initial_status, now, opt_parse};
+use axum::Json;
+use axum::extract::{Multipart, Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use hotsheet_model::{CloseReason, NoteKind, ReviewRequest, Status, Ticket, Ulid};
+use hotsheet_ticketing::{
+    ApiTicket, MutationContext, NewTicket, NotWorkingReport, ProviderDraft, ProviderEvidence,
+    ProviderMutationTiming, ProviderPatch, copy_between, move_between, ops,
+};
+use serde::Deserialize;
+use std::time::{Duration, Instant};
 
 pub(crate) async fn list_provider_tickets(
     State(state): State<AppState>,

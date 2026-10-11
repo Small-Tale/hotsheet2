@@ -1,7 +1,22 @@
 //! Change-event publication: the long-poll ring, live bus, and index-maintaining
 //! write notifications (`emit`, `changed_many_in`, `removed_in`).
 
-use crate::*;
+use crate::multistore::StoreEntry;
+use crate::routes::checkouts::regenerate_checkout_worklist_indexed;
+use crate::watcher::same_path;
+use crate::{AppState, client_drive, multistore, turn_stream};
+use hotsheet_index::{Index, IndexError, hash_bytes};
+use hotsheet_model::{Ticket, Ulid, parse_file, to_file_string};
+use hotsheet_sync::LockExt;
+use hotsheet_ticketing::FsStore;
+use serde::Serialize;
+use std::collections::HashSet;
+use std::path::Path as FsPath;
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tokio::sync::broadcast;
 
 /// The queue of tickets whose index write failed (HS2-JD7TK0), shared by the server's
 /// write path and every store watcher so either can retry it (HS2-5BAEX9).

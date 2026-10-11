@@ -1,7 +1,21 @@
 //! Terminal list/read/write/kill, questions, halts, AI connections, names, and
 //! permission resolution.
 
-use crate::*;
+use crate::api_error::ApiError;
+use crate::events::ChangeEvent;
+use crate::routes::terminals::{
+    TerminalAiConnection, TerminalHalt, TerminalHookSource, TerminalInfo, TerminalQuestion,
+    broker_err, broker_info, term_info, term_key,
+};
+use crate::{AppState, terminal_names};
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use hotsheet_sync::LockExt;
+use hotsheet_ticketing::Settings;
+use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 
 /// `GET /terminals` — the live terminals (id, alive, busy).
 pub(crate) async fn list_terminals(State(state): State<AppState>) -> Json<Vec<TerminalInfo>> {

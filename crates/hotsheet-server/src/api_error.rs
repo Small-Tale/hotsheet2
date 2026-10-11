@@ -1,6 +1,11 @@
 //! The `{ "error": ... }` API error type and its conversions.
 
-use crate::*;
+use axum::Json;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use hotsheet_index::IndexError;
+use hotsheet_ticketing::{OpError, StoreError};
+use serde::Deserialize;
 
 // ---- errors ----------------------------------------------------------------------
 

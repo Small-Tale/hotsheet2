@@ -39,54 +39,32 @@ pub mod turn_stream;
 mod watcher;
 
 use hotsheet_sync::LockExt;
-use std::collections::HashSet;
 use std::path::Path as FsPath;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use credential_cache::{CachedSecretStore, ManagedSecretCache};
-use multistore::{StoreEntry, StoreHost, StoreInfo};
+use multistore::{StoreEntry, StoreHost};
 
-use axum::body::Bytes;
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State};
-use axum::http::{HeaderMap, Method, StatusCode};
-use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Response};
+use axum::extract::{DefaultBodyLimit, Path, State};
+use axum::http::StatusCode;
+use axum::middleware;
 use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
-use hotsheet_index::{Index, IndexError, TicketRow, TicketSummary, hash_bytes};
-use hotsheet_model::{
-    CloseReason, Confidence, ConfidenceError, NoteKind, ReviewKind, ReviewRequest, Status, Ticket,
-    Timestamp, Ulid, parse_file, to_file_string,
-};
-use hotsheet_ticketing::checkout_order::{AfterKey, MergeKey};
-use hotsheet_ticketing::checkout_page;
+use hotsheet_index::Index;
+use hotsheet_model::{Status, Timestamp};
 use hotsheet_ticketing::provider_outbox::{OutboxAdmission, OutboxError, ProviderOutbox};
-use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
-    FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, NotWorkingReport, OpError,
-    OsKeychain, ProjectTicketRef, ProviderConfigRegistry, ProviderConnection, ProviderDraft,
-    ProviderEvidence, ProviderMutationTiming, ProviderPatch, ProviderRegistry, STORE_METADATA_FILE,
-    Settings, SortKey, StoreError, StoreRegistry, TicketPatch, TicketQuery, TicketRef,
-    auto_context, copy_between, move_between, ops,
+    FsStore, KeyRegistry, OsKeychain, ProviderPatch, ProviderRegistry, Settings,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
 
 pub use api_error::ApiError;
-pub(crate) use api_error::{ActorReq, parse_actor};
-use dto::{
-    AiFeedbackReq, BatchError, BatchReq, BatchResult, ClaimReq, CloseReq, CreateReq,
-    DuplicateOfReq, ListParams, ReleaseReq, RenewReq, UpdateReq, WsParams, parse_fields,
-    rows_to_json,
-};
 pub use events::{AssignmentEvent, ChangeEvent};
-pub(crate) use events::{
-    EventLog, INDEX_REPAIR_RETRY_MIN, IndexRepairs, emit_change, next_index_repair_delay,
-};
+pub(crate) use events::{EventLog, emit_change};
 use routes::accounts::{
-    GitHubAuthSession, account_listing_inputs, cancel_github_device_auth, identify_github_account,
+    GitHubAuthSession, cancel_github_device_auth, identify_github_account,
     list_account_github_repositories, list_accounts_route, list_github_auth_repositories,
     list_stores, remove_unused_account_source, sign_out_account, start_github_device_auth,
     wait_github_device_auth,
@@ -96,101 +74,86 @@ use routes::auth::require_secret;
 use routes::checkout_tickets::{
     act_on_checkout_ticket_attachment, act_on_checkout_ticket_attachment_by_name,
     add_checkout_ticket_attachment, assign_checkout_ticket, batch_update_checkout_tickets,
-    checkout_git_ticket, checkout_source_for_create, checkout_ticket_owner, close_checkout_ticket,
-    create_checkout_ticket, delete_checkout_ticket_attachment, delete_checkout_ticket_note,
-    empty_checkout_trash, get_checkout_ticket, get_checkout_ticket_attachment,
-    get_checkout_ticket_attachment_by_name, get_checkout_ticket_attachment_original,
-    get_checkout_ticket_attachment_thumbnail, get_checkout_ticket_duplicate_backlinks,
-    put_checkout_ticket_attachment_thumbnail, rename_checkout_ticket_attachment,
-    resolve_project_ticket_ref, restore_checkout_ticket, update_checkout_ticket,
+    close_checkout_ticket, create_checkout_ticket, delete_checkout_ticket_attachment,
+    delete_checkout_ticket_note, empty_checkout_trash, get_checkout_ticket,
+    get_checkout_ticket_attachment, get_checkout_ticket_attachment_by_name,
+    get_checkout_ticket_attachment_original, get_checkout_ticket_attachment_thumbnail,
+    get_checkout_ticket_duplicate_backlinks, put_checkout_ticket_attachment_thumbnail,
+    rename_checkout_ticket_attachment, restore_checkout_ticket, update_checkout_ticket,
     update_checkout_ticket_attachment_annotations, update_checkout_ticket_attachment_markup,
     update_checkout_ticket_attachment_metadata, update_ticket_attachment_annotations,
 };
 use routes::checkouts::{
-    TRUNCATED_HEADER, add_checkout_source, checkout_entries, checkout_lookup_error,
-    checkout_repository_commits, checkout_repository_file_action, checkout_repository_files,
-    checkout_repository_status, code_review_api_error, configure_checkout_repository_remote,
+    add_checkout_source, checkout_repository_commits, checkout_repository_file_action,
+    checkout_repository_files, checkout_repository_status, configure_checkout_repository_remote,
     create_corrupt_ticket_repair, get_checkout_code_review, initialize_checkout_repository,
     list_checkout_corrupt_tickets, list_checkout_tickets, list_checkouts,
     open_checkout_code_review, open_checkout_repository_review, open_project,
-    prewarm_corrupt_tickets, regenerate_checkout_worklist_indexed, register_checkout,
-    relink_checkout_git_source, remove_checkout_source, repository_browser_api_error,
+    prewarm_corrupt_tickets, register_checkout, relink_checkout_git_source, remove_checkout_source,
     resolve_checkout, set_checkout_default_source, set_checkout_source_color,
 };
 use routes::claims::{claim_next_ticket, claim_ticket, release_ticket, renew_ticket};
 use routes::permissions::{
-    ask_permission, create_drive_connection, delete_drive_connection, discovered_ai_tools,
+    ask_permission, create_drive_connection, delete_drive_connection,
     discovered_ai_tools_off_runtime, get_ai_settings, get_checkout_ai_settings,
     interrupt_drive_turn, list_ai_tools, list_connections, list_drive_sessions, list_permissions,
     now_ms, probe_permission_bridge, put_ai_settings, put_checkout_ai_settings, send_drive_turn,
 };
 use routes::project_tools::{
     acknowledge_notification, cancel_checkout_command_run, cancel_command_run,
-    checkout_confidence_report, checkout_settings, confidence_report, get_checkout_command_run,
-    get_command_run, list_checkout_command_groups, list_checkout_command_runs,
-    list_checkout_commands, list_checkout_custom_views, list_command_groups, list_command_runs,
-    list_commands, list_custom_views, list_notifications, publish_notification,
-    run_checkout_command, run_command, save_checkout_command_groups, save_checkout_commands,
-    save_checkout_custom_views, save_command_groups, save_commands, save_custom_views,
-    synthesize_speech, ticket_flow_summary, usage_metrics_summary,
+    checkout_confidence_report, confidence_report, get_checkout_command_run, get_command_run,
+    list_checkout_command_groups, list_checkout_command_runs, list_checkout_commands,
+    list_checkout_custom_views, list_command_groups, list_command_runs, list_commands,
+    list_custom_views, list_notifications, publish_notification, run_checkout_command, run_command,
+    save_checkout_command_groups, save_checkout_commands, save_checkout_custom_views,
+    save_command_groups, save_commands, save_custom_views, synthesize_speech, ticket_flow_summary,
+    usage_metrics_summary,
 };
 use routes::providers::{
-    ProviderTransferBody, assign_provider_ticket, close_provider_ticket, connection_disabled,
-    connection_token, copy_provider_attachment, create_checkout_provider_connection,
-    create_provider_connection, create_provider_ticket, delete_provider_connection,
-    delete_provider_ticket_note, do_provider_create, do_provider_update, do_rate_ai_feedback,
-    get_provider_ticket, hosted_provider_registry, list_checkout_provider_connections,
-    list_checkout_providers, list_provider_ai_feedback, list_provider_connections,
-    list_provider_tickets, list_providers, provider_copy_route, provider_for, provider_move_route,
-    provider_read_get, provider_read_query, provider_read_query_after, provider_timing_headers,
-    provider_transfer_error, report_provider_ticket_not_working,
+    assign_provider_ticket, close_provider_ticket, copy_provider_attachment,
+    create_checkout_provider_connection, create_provider_connection, create_provider_ticket,
+    delete_provider_connection, delete_provider_ticket_note, get_provider_ticket,
+    list_checkout_provider_connections, list_checkout_providers, list_provider_ai_feedback,
+    list_provider_connections, list_provider_tickets, list_providers, provider_copy_route,
+    provider_for, provider_move_route, provider_transfer_error, report_provider_ticket_not_working,
     report_provider_ticket_not_working_json, restore_provider_ticket,
     set_checkout_provider_connection_disabled, set_provider_connection_disabled,
     update_checkout_provider_connection, update_provider_connection, update_provider_ticket,
 };
 use routes::store_scoped::{
-    ResolvedTicket, UnhostSweep, assign_store_ticket, close_checkout_session, close_store_ticket,
-    create_store_ticket, get_store_ticket, poll_events, resolve_ticket, run_unhost_sweeper,
-    scoped_entry, setup_tool, update_store_ticket, ws_sync,
-};
-pub(crate) use routes::terminals::{
-    OpenTerminalReq, TerminalAiConnectionReq, TerminalInfo, answer_terminal_question,
-    ask_terminal_question, attach_terminal, broker_err, broker_info, clear_terminal_halt,
-    connect_terminal_ai, disconnect_terminal_ai, get_checkout_terminal_settings,
-    get_checkout_trash_settings, get_terminal_settings, halt_terminal, kill_terminal,
-    list_terminals, open_terminal, poll_terminal_question_answer, put_checkout_terminal_settings,
-    put_checkout_trash_settings, put_terminal_settings, read_terminal, read_terminal_settings,
-    release_session_claims, release_session_claims_blocking, rename_terminal, resolve_permission,
-    resolve_terminal_question, term_info, term_key, write_terminal,
+    UnhostSweep, assign_store_ticket, close_checkout_session, close_store_ticket,
+    create_store_ticket, get_store_ticket, poll_events, resolve_ticket, setup_tool,
+    update_store_ticket, ws_sync,
 };
 pub use routes::terminals::{
     TerminalAiConnection, TerminalHalt, TerminalHookSource, TerminalQuestion,
     prune_orphaned_terminal_names, release_orphaned_drive_sessions,
     resume_broker_terminal_sessions,
 };
+pub(crate) use routes::terminals::{
+    answer_terminal_question, ask_terminal_question, attach_terminal, clear_terminal_halt,
+    connect_terminal_ai, disconnect_terminal_ai, get_checkout_terminal_settings,
+    get_checkout_trash_settings, get_terminal_settings, halt_terminal, kill_terminal,
+    list_terminals, open_terminal, poll_terminal_question_answer, put_checkout_terminal_settings,
+    put_checkout_trash_settings, put_terminal_settings, read_terminal, rename_terminal,
+    resolve_permission, resolve_terminal_question, write_terminal,
+};
 use routes::ticket_writes::{
-    AssignReq, add_store, add_ticket_attachment, assign_ticket, attachment_filename,
-    attachment_metadata, batch_update, close_ticket, create_ticket, delete_ticket_note, do_assign,
-    do_close, do_create, do_update, do_update_with_ticket, list_store_tickets, update_ticket,
-    validate_attachment_metadata,
+    add_store, add_ticket_attachment, assign_ticket, batch_update, close_ticket, create_ticket,
+    delete_ticket_note, list_store_tickets, update_ticket,
 };
 use routes::tickets::{
-    api_ticket, api_ticket_with_settings, compatibility, contextualize_api_ticket, get_ticket,
-    health, lifecycle_quiescence, lifecycle_restart, list_entry_tickets, list_tickets,
+    compatibility, get_ticket, health, lifecycle_quiescence, lifecycle_restart, list_tickets,
 };
 use routes::transfer::{copy_ticket_route, move_ticket_route};
-pub(crate) use watcher::{
-    RepositoryWatchHandle, WatchTarget, registered_watcher_backend, repository_change_event,
-    same_path, spawn_repository_watcher, spawn_watcher_for,
-};
+pub(crate) use watcher::RepositoryWatchHandle;
 pub use watcher::{WatchHandle, spawn_polling_watcher_for_test, spawn_watcher};
 
 #[cfg(test)]
 mod request_performance_tests;
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use time::OffsetDateTime;
-use time::format_description::well_known::Rfc3339;
 use tokio::sync::{Notify, broadcast};
 
 /// Attachment uploads may contain screenshots, recordings, and other binary evidence.
@@ -1523,7 +1486,8 @@ fn initial_status(value: Option<&str>) -> Result<Status, ApiError> {
 
 #[cfg(test)]
 mod terminal_permission_route_tests {
-    use super::{AppState, OpenTerminalReq};
+    use super::AppState;
+    use crate::routes::terminals::OpenTerminalReq;
     use crate::routes::terminals::launch::{
         terminal_permission_project, terminal_permission_route_env,
     };

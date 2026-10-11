@@ -1,6 +1,26 @@
 //! Store-scoped write routes (`/stores/{id}/...`, HS2-87).
 
-use crate::*;
+use crate::api_error::ApiError;
+use crate::dto::{CloseReq, CreateReq, UpdateReq, WsParams};
+use crate::events::ChangeEvent;
+use crate::multistore::StoreEntry;
+use crate::routes::terminals::{TerminalInfo, broker_info, term_info};
+use crate::routes::ticket_writes::{AssignReq, do_assign, do_close, do_create, do_update};
+use crate::routes::tickets::api_ticket;
+use crate::watcher::RepositoryWatchHandle;
+use crate::{AppState, now, presence};
+use axum::Json;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use hotsheet_model::Ulid;
+use hotsheet_sync::LockExt;
+use hotsheet_ticketing::{ApiTicket, ops};
+use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+use std::time::Duration;
+use tokio::sync::broadcast;
 
 // ---- store-scoped write routes (multi-store, HS2-87) -----------------------------
 
