@@ -3625,7 +3625,7 @@ export async function startHotSheetWebClient() {
       release();
     };
   }
-  const { syncProjectChangeStreams } = createProjectChangeStreamsController({
+  const { syncProjectChangeStreams, dispose: disposeProjectChangeStreams } = createProjectChangeStreamsController({
     projects,
     project,
     shellMode,
@@ -6249,6 +6249,7 @@ export async function startHotSheetWebClient() {
       haltedSessionsController.dispose();
       permissionsController.dispose();
       disposeClaimClock();
+      disposeProjectChangeStreams();
     },
   };
 }

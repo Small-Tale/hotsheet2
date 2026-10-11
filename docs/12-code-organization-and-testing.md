@@ -294,7 +294,9 @@ HS2-3JGWTV lifted three more behavior-preserving owners out of `app/runtime.tsx`
   Runtime teardown of a closed project (`closeProjectIds`) stays in the runtime as a callback.
 - `project-change-streams.ts`: one WebSocket/long-poll change stream per open project, its
   event fan-out, and the debounced repository refresh; the runtime's background-refresh flag
-  crosses the port through a setter.
+  crosses the port through a setter. Its `dispose()` (called from the runtime's
+  `disposeInteractions`) stops every stream and pending repository refresh and ignores later
+  syncs (HS2-A9E7QB).
 
 Owners created before these read them through lazy accessors (saved views read
 `availableSearchTags`, the project lifecycle reads `syncProjectChangeStreams`).

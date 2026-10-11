@@ -14,12 +14,20 @@ import { createProjectChangeStreamsController } from './project-change-streams';
 import { createProjectCloseController } from './project-close';
 import { createWorkspaceSearchController, type SidebarSearchCounts } from './workspace-search';
 
-const streams = vi.hoisted(() => ({ started: [] as string[], stopped: [] as string[] }));
+const streams = vi.hoisted(() => ({
+  started: [] as string[],
+  stopped: [] as string[],
+  onEvents: new Map<string, (response: unknown) => Promise<void>>(),
+}));
 vi.mock('../project-change-poll', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../project-change-poll')>()),
-  startProjectChangeStream: (options: { client: { origin?: string } }) => {
+  startProjectChangeStream: (options: {
+    client: { origin?: string };
+    onEvents: (response: unknown) => Promise<void>;
+  }) => {
     const id = (options.client as unknown as { origin: string }).origin;
     streams.started.push(id);
+    streams.onEvents.set(id, options.onEvents);
     return () => streams.stopped.push(id);
   },
 }));
@@ -37,6 +45,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   streams.started.length = 0;
   streams.stopped.length = 0;
+  streams.onEvents.clear();
   vi.stubGlobal('window', { setTimeout, clearTimeout });
   vi.stubGlobal('requestAnimationFrame', (callback: () => void) => setTimeout(callback, 0));
 });
@@ -124,6 +133,60 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
     expect(streams.started).toEqual(['/api/a', '/api/b', '/api/b']);
   });
 
+  it('change streams: dispose stops every stream and pending repository refresh; restart builds a fresh owner (HS2-A9E7QB)', async () => {
+    const projects = signal([project('a'), project('b')]),
+      noop = vi.fn(async () => undefined),
+      refreshRepositoryStatus = vi.fn(async () => undefined),
+      build = () =>
+        createProjectChangeStreamsController({
+          projects,
+          project: () => projects.value[0],
+          shellMode: signal('project'),
+          statsProjectId: signal(undefined),
+          localTicketMutationBarrier: createRefreshBarrier(),
+          localTicketChangeAcknowledgements: new LocalTicketChangeAcknowledgements(),
+          projectTabRefresh: { request: noop },
+          turnStreamEvents: () => [],
+          conversationPersistence: { flush: vi.fn() } as never,
+          updateConversation: vi.fn(),
+          conversationForActivity: vi.fn(),
+          refreshDriveConnections: noop,
+          refreshPermissions: noop,
+          serverResolvedPermission: vi.fn(),
+          applyTerminalRenamed: vi.fn(),
+          refreshTerminalDashboard: noop,
+          refreshProviderOutbox: noop,
+          refreshCommands: noop,
+          refreshCustomViews: noop,
+          refreshRepositoryStatus,
+          loadConfidenceReport: noop,
+          setBackgroundProjectRefresh: vi.fn(),
+        });
+    const owner = build();
+    owner.syncProjectChangeStreams();
+    // A repository change schedules the debounced refresh; disposing before it fires cancels it.
+    await streams.onEvents.get('/api/a')!({ events: [{ kind: 'repository_changed', id: 'a' }] });
+    owner.dispose();
+    expect(streams.stopped).toEqual(['/api/a', '/api/b']);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(refreshRepositoryStatus).not.toHaveBeenCalled();
+    // Repeated dispose, a late sync (startup restore), and a late stream event are all inert.
+    owner.dispose();
+    owner.syncProjectChangeStreams();
+    await streams.onEvents.get('/api/a')!({ events: [{ kind: 'repository_changed', id: 'a' }] });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(streams.started).toEqual(['/api/a', '/api/b']);
+    expect(streams.stopped).toEqual(['/api/a', '/api/b']);
+    expect(refreshRepositoryStatus).not.toHaveBeenCalled();
+    // Restart: a new runtime's owner opens fresh streams and schedules refreshes again.
+    const restarted = build();
+    restarted.syncProjectChangeStreams();
+    expect(streams.started).toEqual(['/api/a', '/api/b', '/api/a', '/api/b']);
+    await streams.onEvents.get('/api/a')!({ events: [{ kind: 'repository_changed', id: 'a' }] });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(refreshRepositoryStatus).toHaveBeenCalledTimes(1);
+    restarted.dispose();
+  });
   it('workspace search: debounces repeated edits into one search and clears when the query empties', async () => {
     const searchQuery = signal(''),
       searchTokens = signal<InlineSearchToken[]>([]),

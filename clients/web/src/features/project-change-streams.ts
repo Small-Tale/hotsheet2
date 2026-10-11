@@ -74,7 +74,9 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
   const repositoryRefreshTimers = new Map<string, number>();
+  let disposed = false;
   function scheduleRepositoryRefresh(current: Project) {
+    if (disposed) return;
     const existing = repositoryRefreshTimers.get(current.id);
     if (existing !== undefined) window.clearTimeout(existing);
     repositoryRefreshTimers.set(
@@ -86,6 +88,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     );
   }
   function syncProjectChangeStreams() {
+    // A disposed runtime never reopens streams, even when a late startup restore calls in.
+    if (disposed) return;
     const live = new Set(projects.value.map((item) => item.id));
     for (const [id, stop] of projectChangeStreams)
       if (!live.has(id)) {
@@ -184,5 +188,16 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
         projectChangeStreams.set(current.id, stop);
       }
   }
-  return { syncProjectChangeStreams };
+  /**
+   * Stop every live stream and pending repository refresh when the runtime is disposed
+   * (HS2-A9E7QB). Idempotent; later syncs are ignored, and a new runtime builds a fresh owner.
+   */
+  function dispose() {
+    disposed = true;
+    for (const stop of projectChangeStreams.values()) stop();
+    projectChangeStreams.clear();
+    for (const timer of repositoryRefreshTimers.values()) window.clearTimeout(timer);
+    repositoryRefreshTimers.clear();
+  }
+  return { syncProjectChangeStreams, dispose };
 }
