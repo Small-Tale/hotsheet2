@@ -263,6 +263,29 @@ acknowledgement while also publishing live events. `/tts/synthesize` accepts tex
 provider id, and voice only; provider adapters and their credential resolution remain in
 the server process.
 
+#### Route reference: runs, views, lifecycle, bridge probe, announce
+
+All routes below sit behind the loopback secret (`X-Hotsheet-Secret`) like the rest of
+the authenticated API. Unscoped forms act on the server's primary store; the
+`/checkouts/{reference}/…` forms act on a registered checkout and return 404/400 for an
+unknown reference. Provider and GitHub sign-in routes are listed in
+[16-external-sync-interface.md](16-external-sync-interface.md) §16.8.
+
+| Method | Path                                                                           | Request                                                                 | Response                                                                                                                                                                                             |
+| ------ | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/command-runs`, `/checkouts/{reference}/command-runs`                         | —                                                                       | `200` array of command runs (bounded history; checkout form lists only that checkout's runs)                                                                                                         |
+| `GET`  | `/command-runs/{id}`, `/checkouts/{reference}/command-runs/{id}`               | query `after=<line cursor>` (default `0`)                               | `200` the run with stdout/stderr lines after the cursor; `404` `unknown command run`                                                                                                                 |
+| `POST` | `/command-runs/{id}/cancel`, `/checkouts/{reference}/command-runs/{id}/cancel` | —                                                                       | `200` the cancelled run; `409` when it is not cancellable (already finished/unknown)                                                                                                                 |
+| `GET`  | `/views`, `/checkouts/{reference}/views`                                       | —                                                                       | `200` array of custom views from settings                                                                                                                                                            |
+| `PUT`  | `/views`, `/checkouts/{reference}/views`                                       | JSON array of custom views (replaces the whole list)                    | `200` the saved array; `400` on validation failure. Emits a `views_updated` event over `/ws/sync` and long-poll                                                                                      |
+| `GET`  | `/lifecycle/quiescence`                                                        | —                                                                       | `200` `{quiescing, report}`; `report.quiescent` says whether all server-owned work is idle                                                                                                           |
+| `POST` | `/lifecycle/restart`                                                           | —                                                                       | `202` `{restarting: true}` and the server shuts down for its supervisor to restart; `409` `{error, quiescence}` when work is active (nothing is interrupted) or a restart is already being evaluated |
+| `GET`  | `/permissions/bridge-probe`                                                    | —                                                                       | `200` `{bridge_reachable: true}`; `503` while stopping. Read-only: it never announces a session or changes a terminal's AI connection state                                                          |
+| `POST` | `/announce`                                                                    | `{message, store?}` (`store` = store URL id, default the primary store) | `204`; `400` for an empty message. Broadcast to live `/ws/sync` subscribers only — not persisted or replayed                                                                                         |
+
+Command runs are started with `POST /commands/{id}/run` (or the checkout form) as
+described above; restart semantics are in §4.3.1.
+
 > **Status: v1 built (HS2-7).** `crates/hotsheet-server` — axum HTTP REST
 > (`/health`, `/tickets` list/create, `/tickets/{id}` get/patch,
 > `/tickets/{id}/close`) + `/ws/sync` live push, over the shared engine

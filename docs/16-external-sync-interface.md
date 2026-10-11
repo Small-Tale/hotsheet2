@@ -225,6 +225,21 @@ dependencies, no terminal dependency). External provider executables use the exi
 trusted plugin loading model and a versioned IPC contract rather than Rust ABI dynamic
 libraries.
 
+**GitHub device sign-in and attachment copy routes.** These authenticated server routes
+(loopback secret, `X-Hotsheet-Secret`) keep tokens inside the server process:
+
+| Method   | Path                                            | Request                                                                                        | Response                                                                                                                                                                                           |
+| -------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/github-auth/device`                           | `{web_base?}` (default `https://github.com`; must map to a configured GitHub App client id)    | `202` `{session_id, user_code, verification_uri, expires_in}`; the server polls GitHub in the background. `400` unknown web base, `502` GitHub error                                               |
+| `GET`    | `/github-auth/device/{session_id}`              | —                                                                                              | Long-polls while pending, then `200` a status tagged by `state`: `pending`, `authorized` (`credential_reference`), `denied`, `expired`, `cancelled`, or `error` (`message`); `404` unknown session |
+| `DELETE` | `/github-auth/device/{session_id}`              | —                                                                                              | `204`; the session becomes `cancelled`                                                                                                                                                             |
+| `GET`    | `/github-auth/device/{session_id}/repositories` | —                                                                                              | `200` `{repositories, installations, install_url}` for the authorized app; `409` until sign-in completes                                                                                           |
+| `POST`   | `/provider-attachments/copy`                    | `{source: {connection_id, native_id, attachment_id}, destination: {connection_id, native_id}}` | `201` the destination ticket with the copied attachment (new id, no batch, crop dropped); `404` unknown attachment; `409` provider failure or a cropped source attachment                          |
+
+The authorized credential is stored in the keychain registry under the returned
+`credential_reference`; clients then link it to a connection without ever holding the
+token. Attachment copy is a user-initiated copy (§16.9), not synchronization.
+
 ## 16.9 No automatic cross-provider mirroring
 
 Hot Sheet does **not** continuously mirror a ticket between two authoritative
