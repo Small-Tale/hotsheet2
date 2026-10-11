@@ -8,18 +8,16 @@ import { type ConversationExportDialogState } from '../components/conversation-e
 import {
   buildConversationExportRequest,
   conversationExportAssets,
-  type ConversationExportDestination,
   type ConversationExportDraft,
-  type ConversationExportOpenResult,
   type ConversationExportScope,
   conversationExportScopeAfterMessagePick,
-  type ConversationExportWriteResult,
   conversationTranscriptMarkdown,
   defaultConversationExportDraft,
   selectedConversationMessages,
   suggestedConversationExportName,
 } from '../conversation-export';
 import type { Project } from '../interactions/types';
+import { localBridge } from '../local-bridge-client';
 import { type DrawerAIChat } from '../project-drive';
 import { hideNewTerminalInNamedGroups, type TerminalVisibilityState } from '../terminal-visibility';
 
@@ -120,7 +118,7 @@ export function createConversationArchiveController(dependencies: ConversationAr
 
   // prettier-ignore
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-  async function pickConversationExportDestination(){const state=conversationExportDialog.value;if(!state||state.busy)return;conversationExportDialog.value={...state,busy:true,error:''};try{const response=await fetch('/__hotsheet/conversation-exports/destination',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({suggestedName:suggestedConversationExportName(state.source.tool)})}),result=await response.json() as {destination?:ConversationExportDestination;error?:string};if(!response.ok)throw new Error(result.error??'Could not choose a conversation export destination.');if(conversationExportDialog.value){if(!result.destination){conversationExportDialog.value={...state,busy:false};return}conversationExportDialog.value={...state,busy:false,draft:{...state.draft,destination:result.destination,writeMode:'create'},error:''}}}catch(reason){if(conversationExportDialog.value)conversationExportDialog.value={...state,busy:false,error:reason instanceof Error?reason.message:String(reason)}}}
+  async function pickConversationExportDestination(){const state=conversationExportDialog.value;if(!state||state.busy)return;conversationExportDialog.value={...state,busy:true,error:''};try{const result=await localBridge.chooseConversationExportDestination(suggestedConversationExportName(state.source.tool));if(conversationExportDialog.value){if(!result.destination){conversationExportDialog.value={...state,busy:false};return}conversationExportDialog.value={...state,busy:false,draft:{...state.draft,destination:result.destination,writeMode:'create'},error:''}}}catch(reason){if(conversationExportDialog.value)conversationExportDialog.value={...state,busy:false,error:reason instanceof Error?reason.message:String(reason)}}}
 
   async function saveConversationExport() {
     const state = conversationExportDialog.value;
@@ -130,13 +128,12 @@ export function createConversationArchiveController(dependencies: ConversationAr
         messages = [...selectedConversationMessages(state.messages, state.draft.scope)];
       conversationExportDialog.value = { ...state, busy: true, error: '' };
       const assets = await conversationExportAssets(state.messages, state.draft),
-        response = await fetch('/__hotsheet/conversation-exports/write', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ request, messages, activity: state.activity ?? [], assets }),
-        }),
-        result = (await response.json()) as ConversationExportWriteResult & { error?: string };
-      if (!response.ok) throw new Error(result.error ?? 'Could not save the conversation.');
+        result = await localBridge.writeConversationExport({
+          request,
+          messages,
+          activity: state.activity ?? [],
+          assets,
+        });
       conversationExportDialog.value = undefined;
       showToast(`Saved conversation revision ${result.manifest.revision}.`);
     } catch (reason) {
@@ -164,9 +161,7 @@ export function createConversationArchiveController(dependencies: ConversationAr
     const current = project();
     if (!current) return;
     try {
-      const response = await fetch('/__hotsheet/conversation-exports/open', { method: 'POST' }),
-        result = (await response.json()) as { conversation?: ConversationExportOpenResult; error?: string };
-      if (!response.ok) throw new Error(result.error ?? 'Could not open the saved conversation.');
+      const result = await localBridge.openConversationExport();
       if (!result.conversation) return;
       const saved = result.conversation,
         source = saved.manifest.source,

@@ -38,7 +38,6 @@ import {
   type AiToolDefaults,
   Api,
   type Capabilities,
-  type Checkout,
   type CheckoutTicketCounts,
   type CheckoutTicketQuery,
   type CommandDefinition,
@@ -247,6 +246,7 @@ import type {
   Project,
 } from '../interactions/types';
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from '../keyboard-shortcuts';
+import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
 import { automaticInputFocusAllowed, isMobileViewport, isSidePanelPortal } from '../mobile-layout';
@@ -6004,9 +6004,7 @@ export async function startHotSheetWebClient() {
     try {
       let target = projects.value.find((item) => item.id === link.project || item.root === link.project);
       if (!target) {
-        const response = await fetch('/__hotsheet/checkouts');
-        if (!response.ok) throw new Error('Could not find registered Hot Sheet projects.');
-        const root = ticketDeepLinkRoot(link.project, (await response.json()) as Checkout[]);
+        const root = ticketDeepLinkRoot(link.project, await localBridge.checkouts());
         if (!root) throw new Error(`No registered project matches ${link.project}.`);
         target = projects.value.find((item) => item.root === root);
         if (!target) {

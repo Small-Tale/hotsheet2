@@ -16,6 +16,7 @@ import { type ProjectRestoreFailure, rememberedProjectName } from '../components
 import { type ExternalProviderKind, type GithubAuthState, providerName } from '../components/provider-setup-form';
 import { githubAttachmentSettings } from '../github-attachment-settings';
 import { type Control, type Project, type UnhealthyServerRecovery } from '../interactions/types';
+import { localBridge } from '../local-bridge-client';
 import { type MigrationJobClient, MigrationJobClient as MigrationJobs } from '../migration-job-client';
 import { type MigrationJob } from '../migration-progress';
 import { type ProjectTicketSources, projectTicketSources } from '../new-ticket-source';
@@ -135,13 +136,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     async (job) => {
       const target = projects.value.find((item) => item.root === job.root);
       if (!target) return;
-      const response = await fetch('/__hotsheet/projects/open', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ root: target.root }),
-      });
-      const current = (await response.json()) as Project & { error?: string };
-      if (!response.ok) throw new Error(current.error ?? 'Could not refresh the completed migration.');
+      const current = await localBridge.openProject(target.root, 'Could not refresh the completed migration.');
       if (migrationJobsByRoot.value[job.root]?.attempt !== job.attempt) return;
       migrationConnectionErrors.value = { ...migrationConnectionErrors.value, [job.root]: '' };
       projects.value = projects.value.map((item) => (item.root === target.root ? { ...item, ...current } : item));
@@ -361,14 +356,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     unhealthyServerRecoveryBusy.value = true;
     projectDialogError.value = '';
     try {
-      const response = await fetch('/__hotsheet/server/recover-unhealthy', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(recovery),
-        }),
-        result = (await response.json()) as { recovered?: boolean; error?: string };
-      if (!response.ok || !result.recovered)
-        throw new Error(result.error ?? 'Could not recover the unresponsive server.');
+      const result = await localBridge.recoverUnhealthyServer(recovery);
+      if (!result.recovered) throw new Error(result.error ?? 'Could not recover the unresponsive server.');
       const root = (form.querySelector('[name="project-root"]') as Control).value,
         store = (form.querySelector('[name="ticket-store"]') as Control).value;
       await openProject(root, store || undefined);
@@ -380,10 +369,11 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
   }
 
   async function chooseHs1TicketStore() {
-    const choice = await fetch('/__hotsheet/folders/choose', { method: 'POST' }),
-      chosen = (await choice.json()) as { path?: string; error?: string };
-    if (!choice.ok) {
-      hs1MigrationError.value = chosen.error ?? 'Could not choose a ticket repository folder.';
+    let chosen: { path?: string };
+    try {
+      chosen = await localBridge.chooseFolder('Could not choose a ticket repository folder.');
+    } catch (reason) {
+      hs1MigrationError.value = reason instanceof Error ? reason.message : String(reason);
       return;
     }
     const input = document.querySelector<Control>('[name="hs1-ticket-store"]');
@@ -420,11 +410,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     )
       return;
     try {
-      const response = await fetch(`/__hotsheet/projects/${encodeURIComponent(current.id)}/hs1-data`, {
-          method: 'DELETE',
-        }),
-        result = (await response.json()) as { removed?: string[]; error?: string };
-      if (!response.ok) throw new Error(result.error ?? 'Could not remove the old Hot Sheet 1 files.');
+      const result = await localBridge.removeHs1Data(current.id);
       dismissHs1CleanupPrompt(localStorage, current.id, hs1SourceIdentity(current));
       projects.value = projects.value.map((item) =>
         item.id === current.id
@@ -442,7 +428,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
       dependencies.showToast(
         repair
           ? 'Repaired the old Hot Sheet 1 project registration; the verified backup was kept.'
-          : `Removed ${result.removed?.length ?? 0} old Hot Sheet 1 item${result.removed?.length === 1 ? '' : 's'}; backups were kept.`,
+          : `Removed ${result.removed.length} old Hot Sheet 1 item${result.removed.length === 1 ? '' : 's'}; backups were kept.`,
       );
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
@@ -457,19 +443,12 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     try {
       let location: string | undefined;
       if (custom) {
-        const choice = await fetch('/__hotsheet/folders/choose', { method: 'POST' }),
-          chosen = (await choice.json()) as { path?: string; error?: string };
-        if (!choice.ok) throw new Error(chosen.error ?? 'Could not choose a ticket repository folder.');
+        const chosen = await localBridge.chooseFolder('Could not choose a ticket repository folder.');
         if (!chosen.path) return;
         location = chosen.path;
       }
-      const response = await fetch('/__hotsheet/projects/setup-git', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ root: target.root, location }),
-        }),
-        result = (await response.json()) as { ticketStore?: string; connectionId?: string; error?: string };
-      if (!response.ok || !result.ticketStore || !result.connectionId)
+      const result = await localBridge.setupGit(target.root, location);
+      if (!result.ticketStore || !result.connectionId)
         throw new Error(result.error ?? 'Could not create the git ticket store.');
       const client = new Api(target.apiPath),
         checkout = await client.addCheckoutSource(
@@ -523,13 +502,8 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
         }
         return;
       }
-      const response = await fetch('/__hotsheet/projects/setup-git-remote', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ store, remote }),
-        }),
-        result = (await response.json()) as { connected?: boolean; error?: string };
-      if (!response.ok || !result.connected) throw new Error(result.error ?? 'Could not connect the Git remote.');
+      const result = await localBridge.setupGitRemote(store, remote);
+      if (!result.connected) throw new Error(result.error ?? 'Could not connect the Git remote.');
       dependencies.showToast('Ticket repository connected and backed up.');
       ticketSourceSetupProject.value = undefined;
       createdGitTicketStore.value = '';
@@ -1184,16 +1158,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     try {
       const input = button.closest('.project-dialog__path')?.querySelector<Control>('wa-input');
       if (!input) throw new Error('Could not find the project path field.');
-      const endpoint = new URL('/__hotsheet/folders/choose', window.location.href),
-        response = await fetch(endpoint, { method: 'POST' }),
-        text = await response.text();
-      let result: { path?: string; error?: string } = {};
-      try {
-        result = text ? (JSON.parse(text) as typeof result) : {};
-      } catch {
-        throw new Error(`The folder chooser returned an invalid response (${response.status}).`);
-      }
-      if (!response.ok) throw new Error(result.error ?? 'Could not open the folder chooser.');
+      const result = await localBridge.chooseFolder();
       if (!result.path) return;
       input.value = result.path;
       input.focus();
@@ -1206,15 +1171,7 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     error.value = '';
     projectDialogError.value = '';
     try {
-      const response = await fetch(new URL('/__hotsheet/folders/choose', window.location.href), { method: 'POST' }),
-        text = await response.text();
-      let result: { path?: string; error?: string } = {};
-      try {
-        result = text ? (JSON.parse(text) as typeof result) : {};
-      } catch {
-        throw new Error(`The folder chooser returned an invalid response (${response.status}).`);
-      }
-      if (!response.ok) throw new Error(result.error ?? 'Could not open the folder chooser.');
+      const result = await localBridge.chooseFolder();
       if (result.path) await openProject(result.path);
     } catch (reason) {
       projectDialogError.value = reason instanceof Error ? reason.message : String(reason);
@@ -1235,11 +1192,9 @@ export function createProjectLifecycleController(dependencies: ProjectLifecycleD
     remoteProjectLoading.value = true;
     remoteProjectDialogOpen.value = true;
     try {
-      const response = await fetch('/__hotsheet/checkouts');
-      if (!response.ok) throw new Error(`the server responded with ${response.status}`);
-      remoteProjectCheckouts.value = (await response.json()) as Checkout[];
-    } catch (reason) {
-      console.error('Could not load the server open-projects list', reason);
+      remoteProjectCheckouts.value = await localBridge.checkouts();
+    } catch {
+      // The dialog's error region is the surfacing; no console-only diagnostics (HS2-313JET).
       remoteProjectError.value =
         'Could not load the projects open on the Hot Sheet server. Check the connection to the server and try again.';
     } finally {
