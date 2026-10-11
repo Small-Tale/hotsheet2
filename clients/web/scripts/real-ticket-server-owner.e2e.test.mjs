@@ -1,22 +1,18 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readdir, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { promisify } from 'node:util';
 
-import { beforeAll, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 
 // HS2-VQ8ZWT: a browser-test runner killed before its teardown must not orphan the real ticket
 // server it started. The harness holds the server's stdin pipe; SIGKILL closes it.
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
-  repoRoot = resolve(webRoot, '../..'),
-  run = promisify(execFile),
   harness = pathToFileURL(resolve(webRoot, 'tests/real-ticket-server.ts')).href;
 
-beforeAll(async () => {
-  await run('cargo', ['build', '-p', 'hotsheet-cli', '-p', 'hotsheet-server', '--bins'], { cwd: repoRoot });
-}, 300_000);
+// The binaries are built once by the vitest globalSetup (scripts/vitest-build-binaries.mjs);
+// building here relinked them under other test files already running (HS2-A0M8CM).
 
 function alive(pid) {
   try {

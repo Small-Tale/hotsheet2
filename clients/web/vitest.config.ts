@@ -13,6 +13,8 @@ export default defineConfig({
   cacheDir: viteCacheDir,
   test: {
     include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
+    // Builds the real CLI/server/migrator once before any worker runs (HS2-A0M8CM).
+    globalSetup: ['./scripts/vitest-build-binaries.mjs'],
     setupFiles: ['./src/source-format-matchers.ts'],
   },
 });

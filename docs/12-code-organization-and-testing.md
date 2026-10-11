@@ -392,7 +392,14 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   six-minute attempts, so a stalled Linux package mirror fails clearly instead of holding
   the whole job indefinitely (HS2-47BAAC). The Vitest suite includes real-browser
   local-host and stable-dev tests, so browser setup is required before `test:unit` as well
-  as before the Playwright smoke group. `npm run test:ci:browser` starts its own local
+  as before the Playwright smoke group. Vitest's `globalSetup`
+  (`clients/web/scripts/vitest-build-binaries.mjs`) runs
+  `cargo build -p hotsheet-cli -p hotsheet-server --bins` once before any worker starts.
+  Test files never build these binaries themselves: a build inside one file relinked them
+  while parallel files were spawning them, causing intermittent `ENOENT`/"not built"
+  failures (HS2-A0M8CM). A cargo build run outside the suite against the same `target/`
+  can still swap binaries mid-run, so do not build concurrently with a full
+  `test:unit`. `npm run test:ci:browser` starts its own local
   Vite server, selects tests marked `@ci-smoke`, and uses two browser workers with a
   12-minute CI timeout. The video scrub smoke case uses the checked-in four-second,
   30-fps H.264 fixture at `clients/web/tests/fixtures/video-scrub.mp4` to check decoded

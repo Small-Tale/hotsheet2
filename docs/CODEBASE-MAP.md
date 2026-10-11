@@ -205,6 +205,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     scripts/sync-component-catalog-extension.mjs # Deterministically derives/checks the app-owned Kerf consumer catalog extension from the implemented UX inventory
     scripts/repository-env.mjs # withoutGitRepositoryEnv(env): strips the same repo-locating GIT_* list as hotsheet_ticketing::git for test helpers that spawn Hot Sheet binaries or git (real-ticket-server.ts, scale-stress.mjs; HS2-RRD417); tested by scripts/repository-env.test.mjs
+    scripts/vitest-build-binaries.mjs # vitest globalSetup: builds the real hotsheet-cli/-server/-migrate once before any worker runs, so no test file relinks them mid-suite (HS2-A0M8CM)
     scripts/playwright-workers.mjs # Load-aware local Playwright worker count used by playwright.config.ts (HS2-MHPHZB); tested by scripts/playwright-workers.test.mjs
     scripts/remify-css.mjs   #   PostCSS plugin (wired in vite.config.ts css.postcss) — author spacing in px via remify(8px) → 0.5rem (÷16); keeps CSS on the 8px grid. Tested by scripts/remify-css.test.mjs
     src/dev-server.ts        #   Hono local project bridge incl. source-less bootstrap/git setup and explicit unhealthy-server recovery, plus dev-only /ux-demo, corrupt-file reveal, and review routes
