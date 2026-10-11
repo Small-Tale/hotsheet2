@@ -476,6 +476,12 @@ protocol or store-schema upgrades and local-host build replacement only when bot
 capabilities are explicit, waits for the
 old registration to be relinquished, and then supervises the replacement. Ambiguous writes
 are never replayed across recovery. Remote restart remains a separately authorized concern.
+Headless parity (HS2-10T048): `hotsheet lifecycle status` prints the selected store's
+running server quiescence report (`GET /lifecycle/quiescence`), and `hotsheet lifecycle
+restart` sends the same authenticated `POST /lifecycle/restart`. A busy server refuses with
+its blocker message and keeps its work, so the command exits non-zero and is safe to repeat;
+an absent server fails explicitly. The CLI never stops the process itself. Saved command-run
+cancellation is already headless through `hotsheet commands cancel <checkout> <run>`.
 If a registered local process remains alive but cannot answer its health probe, automatic
 supervision preserves it instead of launching a duplicate. The local client may offer an
 explicit recovery action that rechecks the complete registered process identity, requests

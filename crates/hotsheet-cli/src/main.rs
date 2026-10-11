@@ -516,6 +516,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: CommandsCmd,
     },
+    /// Inspect or request a safe restart of the store's running local server.
+    Lifecycle {
+        #[command(subcommand)]
+        cmd: LifecycleCmd,
+    },
     /// Read the selected store's current ticket-flow summary from the local server.
     TicketFlow,
     /// Read the local server's recent activity timeline.
@@ -985,6 +990,15 @@ enum CommandsCmd {
 }
 
 #[derive(Subcommand)]
+enum LifecycleCmd {
+    /// Print whether the server is quiescing and which active work would block a restart.
+    Status,
+    /// Ask the server to restart once all server-owned work is quiescent. A busy server
+    /// refuses and keeps its work; repeating the request is safe.
+    Restart,
+}
+
+#[derive(Subcommand)]
 enum NotificationsCmd {
     /// List notifications, optionally filtering by target or recipient.
     List {
@@ -1296,6 +1310,7 @@ fn main() -> Result<()> {
             | Cmd::Link { .. }
             | Cmd::Checkout { .. }
             | Cmd::Commands { .. }
+            | Cmd::Lifecycle { .. }
             | Cmd::TicketFlow
             | Cmd::Activity { .. }
             | Cmd::Notifications { .. }
@@ -1720,6 +1735,14 @@ fn main() -> Result<()> {
         Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, &cwd, cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, &cwd, cmd),
         Cmd::Commands { cmd } => cmd_commands(&cli.path, cmd),
+        Cmd::Lifecycle { cmd } => match cmd {
+            LifecycleCmd::Status => {
+                print_local_server_json(&cli.path, "GET", "lifecycle/quiescence")
+            }
+            LifecycleCmd::Restart => {
+                print_local_server_json(&cli.path, "POST", "lifecycle/restart")
+            }
+        },
         Cmd::TicketFlow => print_local_server_json(&cli.path, "GET", "analytics/tickets"),
         Cmd::Activity {
             ticket,

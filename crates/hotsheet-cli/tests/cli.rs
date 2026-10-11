@@ -7459,3 +7459,94 @@ fn github_connect_configures_the_attachment_repository_headlessly() {
         .stdout(predicate::str::contains("Attachments: off"));
     assert!(connection()["settings"].get("attachment_repo").is_none());
 }
+
+/// HS2-10T048: headless parity for the server's quiescence report and safe restart.
+#[test]
+fn lifecycle_cli_reports_quiescence_and_requests_safe_restart() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    let store = root.path().join("tickets");
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": format!("http://{}", listener.local_addr().unwrap()),
+            "secret": "lifecycle-secret",
+            "store_path": store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let requests = [
+        (
+            "GET",
+            "/lifecycle/quiescence",
+            200,
+            r#"{"quiescing":false,"report":{"quiescent":false,"blockers":[{"kind":"commands","count":1}]}}"#,
+        ),
+        (
+            "POST",
+            "/lifecycle/restart",
+            409,
+            r#"{"error":"server is not quiescent; active work was preserved"}"#,
+        ),
+        ("POST", "/lifecycle/restart", 202, r#"{"restarting":true}"#),
+    ];
+    let server = std::thread::spawn(move || {
+        for (method, path, status, body) in requests {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert_eq!(line.trim_end(), format!("{method} {path} HTTP/1.1"));
+            let mut secret = None;
+            loop {
+                line.clear();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_ascii_lowercase().strip_prefix("x-hotsheet-secret:") {
+                    secret = Some(value.trim().to_string());
+                }
+            }
+            assert_eq!(secret.as_deref(), Some("lifecycle-secret"));
+            write!(
+                reader.get_mut(),
+                "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        }
+    });
+    let cli = |arg: &str| {
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", &home)
+            .args(["-C", store.to_str().unwrap(), "lifecycle", arg])
+            .output()
+            .unwrap()
+    };
+    let status = cli("status");
+    assert!(status.status.success());
+    assert!(String::from_utf8_lossy(&status.stdout).contains("\"commands\""));
+    let busy = cli("restart");
+    assert!(!busy.status.success());
+    assert!(String::from_utf8_lossy(&busy.stderr).contains("active work was preserved"));
+    let accepted = cli("restart");
+    assert!(accepted.status.success());
+    assert!(String::from_utf8_lossy(&accepted.stdout).contains("restarting"));
+    server.join().unwrap();
+
+    // Once the server is gone the CLI fails explicitly instead of hanging or retrying.
+    let none = cli("status");
+    assert!(!none.status.success());
+}
