@@ -30,59 +30,59 @@ pub(crate) async fn list_permissions(State(state): State<AppState>) -> Json<Vec<
 /// never offers a durable response when this server has no rule store configured.
 #[derive(Serialize)]
 pub(crate) struct PermissionInfo {
-    pub(crate) id: u64,
-    pub(crate) project: String,
-    pub(crate) connection: String,
-    pub(crate) tool: String,
-    pub(crate) action: String,
+    id: u64,
+    project: String,
+    connection: String,
+    tool: String,
+    action: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) agent: Option<String>,
-    pub(crate) always_allow_supported: bool,
+    agent: Option<String>,
+    always_allow_supported: bool,
 }
 
 /// Body for `POST /permissions/ask`: who's asking + what.
 #[derive(Deserialize)]
 pub(crate) struct AskBody {
     #[serde(default)]
-    pub(crate) project: String,
+    project: String,
     /// The live connection id (so a client attributes the prompt to the right tool).
-    pub(crate) connection: String,
+    connection: String,
     /// The tool/action asking (e.g. `"Bash"`, `"Edit"`) — the rule-match key.
-    pub(crate) tool: String,
-    pub(crate) action: String,
+    tool: String,
+    action: String,
     #[serde(default)]
-    pub(crate) agent: Option<String>,
+    agent: Option<String>,
     /// A trusted interactive hook's hosting terminal. Presence proves its permission bridge is
     /// live even if its earlier SessionStart event never reached the server (HS2-XYSXVT).
     #[serde(default)]
-    pub(crate) terminal_id: Option<String>,
+    terminal_id: Option<String>,
     /// Identifies the reporting session so a late end from an earlier session cannot clear it.
     #[serde(default)]
-    pub(crate) session_id: Option<String>,
+    session_id: Option<String>,
 }
 
 /// A disconnected hook is no longer waiting for a decision. Remove its pending prompt
 /// immediately instead of leaving it visible until the 24-hour safety timeout.
-pub(crate) struct PermissionAskGuard {
-    pub(crate) state: Arc<PermissionAskState>,
+struct PermissionAskGuard {
+    state: Arc<PermissionAskState>,
 }
 
-pub(crate) struct PermissionAskState {
-    pub(crate) server: AppState,
-    pub(crate) project: String,
-    pub(crate) pending_id: AtomicU64,
-    pub(crate) cancelled: AtomicBool,
+struct PermissionAskState {
+    server: AppState,
+    project: String,
+    pending_id: AtomicU64,
+    cancelled: AtomicBool,
 }
 
 impl PermissionAskState {
-    pub(crate) fn mark_pending(&self, id: u64) {
+    fn mark_pending(&self, id: u64) {
         self.pending_id.store(id, Ordering::Release);
         if self.cancelled.load(Ordering::Acquire) {
             self.cancel_pending(id);
         }
     }
 
-    pub(crate) fn cancel_pending(&self, id: u64) {
+    fn cancel_pending(&self, id: u64) {
         if self
             .server
             .permissions
@@ -97,7 +97,7 @@ impl PermissionAskState {
         }
     }
 
-    pub(crate) fn emit_removed(&self, id: u64) {
+    fn emit_removed(&self, id: u64) {
         self.server.emit(ChangeEvent {
             cursor: None,
             store: self.project.clone(),
@@ -211,7 +211,7 @@ pub(crate) async fn ask_permission(
 
 /// `503` for a permission ask on a stopping server: the hook treats it as a transport
 /// failure and falls back to the tool's native prompt (HS2-W1KJR4).
-pub(crate) fn permission_ask_stopping() -> Response {
+fn permission_ask_stopping() -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
         Json(serde_json::json!({ "error": "server is shutting down" })),
@@ -222,27 +222,27 @@ pub(crate) fn permission_ask_stopping() -> Response {
 /// One driven connection as reported by `GET /connections`.
 #[derive(Serialize)]
 pub(crate) struct ConnectionInfo {
-    pub(crate) id: String,
-    pub(crate) tool: String,
-    pub(crate) project: String,
+    id: String,
+    tool: String,
+    project: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) source: Option<String>,
+    source: Option<String>,
     /// `main` | `worker`.
-    pub(crate) role: String,
+    role: String,
     /// Whether the connection is busy (a turn is actively streaming) right now.
-    pub(crate) busy: bool,
+    busy: bool,
     /// Available semantic actions. Capability is represented by presence, never an inert
     /// `can_interrupt` boolean.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) actions: Vec<String>,
+    actions: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) session_id: Option<String>,
+    session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) last_error: Option<String>,
+    last_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) model: Option<String>,
+    model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) effort: Option<String>,
+    effort: Option<String>,
 }
 
 /// `GET /connections` — what the server's driving loop is currently running (HS2-TCV3BF):
@@ -293,19 +293,19 @@ pub(crate) async fn list_connections(State(state): State<AppState>) -> Json<Vec<
 
 #[derive(Deserialize)]
 pub(crate) struct CreateDriveConnectionReq {
-    pub(crate) tool: String,
+    tool: String,
     #[serde(default)]
-    pub(crate) model: Option<String>,
+    model: Option<String>,
     #[serde(default)]
-    pub(crate) effort: Option<String>,
+    effort: Option<String>,
     #[serde(default)]
-    pub(crate) checkout: Option<String>,
+    checkout: Option<String>,
     #[serde(default)]
-    pub(crate) source: Option<String>,
+    source: Option<String>,
     #[serde(default)]
-    pub(crate) connection_id: Option<String>,
+    connection_id: Option<String>,
     #[serde(default)]
-    pub(crate) session_id: Option<String>,
+    session_id: Option<String>,
 }
 
 pub(crate) fn discovered_ai_tools(
@@ -325,7 +325,7 @@ pub(crate) fn discovered_ai_tools(
 /// Blocking AI-tool discovery through the short-lived memo (HS2-QV8B7R). The generation is
 /// read under the catalog lock, so callers that queued behind a scan reuse its result
 /// unless an invalidation landed after it started.
-pub(crate) fn discover_ai_tools_memoized(
+fn discover_ai_tools_memoized(
     catalogs: &Mutex<ai_tool_discovery::AiToolDiscoveryCache>,
     generation: &AtomicU64,
     config: &ai_tool_discovery::AiToolDiscoveryConfig,
@@ -402,7 +402,7 @@ pub(crate) async fn discovered_ai_tools_off_runtime(
 #[derive(Default, Deserialize)]
 pub(crate) struct AiToolsQuery {
     #[serde(default)]
-    pub(crate) refresh: bool,
+    refresh: bool,
 }
 
 pub(crate) async fn list_ai_tools(
@@ -413,10 +413,10 @@ pub(crate) async fn list_ai_tools(
 }
 
 /// The settings key holding the default Drive tool, model, and effort.
-pub(crate) const AI_DEFAULTS_SETTING: &str = "ai.defaults";
+const AI_DEFAULTS_SETTING: &str = "ai.defaults";
 
 /// A saved AI default from one settings scope, kept only while it still names an installed tool.
-pub(crate) fn saved_ai_defaults(
+fn saved_ai_defaults(
     settings: &Settings,
     scope: hotsheet_ticketing::Scope,
     tools: &[hotsheet_plugins::AiToolDescriptor],
@@ -427,7 +427,7 @@ pub(crate) fn saved_ai_defaults(
 }
 
 /// The AI defaults stored in one scope, unvalidated.
-pub(crate) fn stored_ai_defaults(
+fn stored_ai_defaults(
     settings: &Settings,
     scope: hotsheet_ticketing::Scope,
 ) -> Result<Option<hotsheet_plugins::AiToolDefaults>, ApiError> {
@@ -439,7 +439,7 @@ pub(crate) fn stored_ai_defaults(
 
 /// The effective AI defaults: the project's own choice (machine-local project settings, HS2-SW5S13),
 /// else the legacy machine-wide value, else the discovered default tool.
-pub(crate) async fn effective_ai_settings(
+async fn effective_ai_settings(
     state: &AppState,
     project: Option<&Settings>,
 ) -> Result<hotsheet_plugins::AiToolDefaults, ApiError> {
@@ -463,7 +463,7 @@ pub(crate) async fn effective_ai_settings(
 
 /// Validate and store AI defaults in one settings scope, keeping the per-provider choices for
 /// tools that are not installed right now (HS2-EK24KF). Returns the value as served back.
-pub(crate) async fn save_ai_settings(
+async fn save_ai_settings(
     state: &AppState,
     settings: &Settings,
     scope: hotsheet_ticketing::Scope,
@@ -684,13 +684,13 @@ pub(crate) async fn list_drive_sessions(
 
 #[derive(Deserialize)]
 pub(crate) struct SendDriveTurnReq {
-    pub(crate) content: String,
+    content: String,
     #[serde(default)]
-    pub(crate) session_id: Option<String>,
+    session_id: Option<String>,
     #[serde(default)]
-    pub(crate) model: Option<String>,
+    model: Option<String>,
     #[serde(default)]
-    pub(crate) effort: Option<String>,
+    effort: Option<String>,
 }
 
 pub(crate) async fn send_drive_turn(
@@ -849,7 +849,7 @@ pub(crate) async fn interrupt_drive_turn(
     Ok((StatusCode::ACCEPTED, Json(info)))
 }
 
-pub(crate) fn client_drive_api_error(error: client_drive::ClientDriveError) -> ApiError {
+fn client_drive_api_error(error: client_drive::ClientDriveError) -> ApiError {
     use client_drive::ClientDriveError as Error;
     let status = match error {
         Error::NotFound(_) => StatusCode::NOT_FOUND,

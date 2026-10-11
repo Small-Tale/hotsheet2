@@ -18,7 +18,7 @@ use tokio::sync::watch;
 /// How long `/health` waits for a fresh listing before answering from the last one. Well
 /// under the dev bridge's 750 ms probe timeout (`HS2-TANE0V`), yet long enough that an
 /// ordinary store answers with fresh counts.
-pub(crate) const HEALTH_SCAN_BUDGET: Duration = Duration::from_millis(250);
+const HEALTH_SCAN_BUDGET: Duration = Duration::from_millis(250);
 
 /// What one completed scan found: the healthy ticket count and the corrupt-file entries
 /// already shaped for the `/health` wire format.
@@ -35,7 +35,7 @@ pub(crate) struct ScanFailure {
     pub(crate) message: String,
 }
 
-pub(crate) type ScanOutcome = Result<Arc<HealthListing>, ScanFailure>;
+type ScanOutcome = Result<Arc<HealthListing>, ScanFailure>;
 
 /// How a `/health` request's listing was resolved.
 #[derive(Debug)]
@@ -67,7 +67,7 @@ impl Default for HealthScan {
 }
 
 impl HealthScan {
-    pub(crate) fn new(budget: Duration) -> Self {
+    fn new(budget: Duration) -> Self {
         Self {
             state: Mutex::new(ScanState::default()),
             budget,

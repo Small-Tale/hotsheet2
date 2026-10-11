@@ -8,20 +8,20 @@ use crate::*;
 /// and `importance` default from the kind unless the caller provides them (docs/15 §15.7).
 #[derive(Debug, Deserialize)]
 pub(crate) struct ActivityIngest {
-    pub(crate) tool: String,
-    pub(crate) kind: hotsheet_ticketing::ActivityKind,
+    tool: String,
+    kind: hotsheet_ticketing::ActivityKind,
     #[serde(default)]
-    pub(crate) detail: serde_json::Value,
+    detail: serde_json::Value,
     #[serde(default)]
-    pub(crate) ticket: Option<String>,
+    ticket: Option<String>,
     #[serde(default)]
-    pub(crate) session: Option<String>,
+    session: Option<String>,
     #[serde(default)]
-    pub(crate) project: Option<String>,
+    project: Option<String>,
     #[serde(default)]
-    pub(crate) summary: Option<String>,
+    summary: Option<String>,
     #[serde(default)]
-    pub(crate) importance: Option<hotsheet_ticketing::Importance>,
+    importance: Option<hotsheet_ticketing::Importance>,
 }
 
 /// `POST /activity` — record one activity event to the store's rolling window.
@@ -54,11 +54,11 @@ pub(crate) async fn ingest_activity(
 /// `GET /activity` query params — the timeline filter (docs/15 §15.6).
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct ActivityParams {
-    pub(crate) ticket: Option<String>,
-    pub(crate) session: Option<String>,
+    ticket: Option<String>,
+    session: Option<String>,
     /// `low` | `normal` | `high` — only events at or above this emphasis.
-    pub(crate) min_importance: Option<String>,
-    pub(crate) limit: Option<usize>,
+    min_importance: Option<String>,
+    limit: Option<usize>,
 }
 
 /// `GET /activity` — the per-ticket/session "what happened" window, most-recent-capped.
@@ -92,10 +92,10 @@ pub(crate) async fn list_activity(
 /// `POST /announce` body: a store-level broadcast message (HS2-HHDNTH).
 #[derive(Debug, Deserialize)]
 pub(crate) struct AnnounceReq {
-    pub(crate) message: String,
+    message: String,
     /// The target store's URL id; omitted = the default store.
     #[serde(default)]
-    pub(crate) store: Option<String>,
+    store: Option<String>,
 }
 
 /// `POST /announce` — broadcast an ephemeral message to live `/ws/sync` subscribers. Not

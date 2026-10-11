@@ -10,7 +10,7 @@ pub struct ApiError {
     pub(crate) status: StatusCode,
     pub(crate) message: String,
     /// Stable machine-readable code for errors an automated caller should branch on.
-    pub(crate) code: Option<&'static str>,
+    code: Option<&'static str>,
 }
 
 impl ApiError {
@@ -53,9 +53,9 @@ impl From<hotsheet_ticketing::actor::RuleViolation> for ApiError {
 pub(crate) struct ActorReq {
     /// Defaulted so a missing role reads as an explicit 400, like an unknown one.
     #[serde(default)]
-    pub(crate) role: String,
+    role: String,
     #[serde(default)]
-    pub(crate) id: Option<String>,
+    id: Option<String>,
 }
 
 pub(crate) fn parse_actor(

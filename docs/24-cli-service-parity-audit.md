@@ -2,7 +2,7 @@
 
 This audit compares the public command enum in `crates/hotsheet-cli/src/main.rs`,
 the MCP tool registry in `crates/hotsheet-mcp/src/lib.rs`, and the HTTP route table
-in `crates/hotsheet-server/src/lib.rs` as of 2026-10-08. It covers high-level
+in `crates/hotsheet-server/src/lib.rs` (`app()`; handlers under `src/routes/`) as of 2026-10-08. It covers high-level
 user workflows, rather than requiring a one-to-one command for each transport
 detail. A generic `settings set` is counted only when it addresses the same
 project and applies the same validation as the dedicated service route.

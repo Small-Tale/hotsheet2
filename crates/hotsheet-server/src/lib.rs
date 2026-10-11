@@ -5,6 +5,7 @@
 //! it fresh and broadcasts change events, so a CLI/git edit shows up live. Terminals
 //! (HS2-10) and the detached lifecycle (HS2-59) are separate.
 
+mod activity_capture;
 mod ai_tool_discovery;
 mod api_error;
 pub mod client_drive;
@@ -17,6 +18,7 @@ mod dto;
 mod events;
 pub mod github_app_config;
 mod health_scan;
+mod hosting;
 mod image_crop_cache;
 pub mod lifecycle;
 pub mod media;
@@ -72,24 +74,116 @@ use hotsheet_ticketing::{
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
 
-pub use api_error::*;
-use dto::*;
-pub use events::*;
-use routes::accounts::*;
-use routes::activity::*;
-use routes::auth::*;
-use routes::checkout_tickets::*;
-use routes::checkouts::*;
-use routes::claims::*;
-use routes::permissions::*;
-use routes::project_tools::*;
-use routes::providers::*;
-use routes::store_scoped::*;
-pub use routes::terminals::*;
-use routes::ticket_writes::*;
-use routes::tickets::*;
-use routes::transfer::*;
-pub use watcher::*;
+pub use api_error::ApiError;
+pub(crate) use api_error::{ActorReq, parse_actor};
+use dto::{
+    AiFeedbackReq, BatchError, BatchReq, BatchResult, ClaimReq, CloseReq, CreateReq,
+    DuplicateOfReq, ListParams, ReleaseReq, RenewReq, UpdateReq, WsParams, parse_fields,
+    rows_to_json,
+};
+pub use events::{AssignmentEvent, ChangeEvent};
+pub(crate) use events::{
+    EventLog, INDEX_REPAIR_RETRY_MIN, IndexRepairs, emit_change, next_index_repair_delay,
+};
+use routes::accounts::{
+    GitHubAuthSession, account_listing_inputs, cancel_github_device_auth, identify_github_account,
+    list_account_github_repositories, list_accounts_route, list_github_auth_repositories,
+    list_stores, remove_unused_account_source, sign_out_account, start_github_device_auth,
+    wait_github_device_auth,
+};
+use routes::activity::{ingest_activity, list_activity, post_announce};
+use routes::auth::require_secret;
+use routes::checkout_tickets::{
+    act_on_checkout_ticket_attachment, act_on_checkout_ticket_attachment_by_name,
+    add_checkout_ticket_attachment, assign_checkout_ticket, batch_update_checkout_tickets,
+    checkout_git_ticket, checkout_source_for_create, checkout_ticket_owner, close_checkout_ticket,
+    create_checkout_ticket, delete_checkout_ticket_attachment, delete_checkout_ticket_note,
+    empty_checkout_trash, get_checkout_ticket, get_checkout_ticket_attachment,
+    get_checkout_ticket_attachment_by_name, get_checkout_ticket_attachment_original,
+    get_checkout_ticket_attachment_thumbnail, get_checkout_ticket_duplicate_backlinks,
+    put_checkout_ticket_attachment_thumbnail, rename_checkout_ticket_attachment,
+    resolve_project_ticket_ref, restore_checkout_ticket, update_checkout_ticket,
+    update_checkout_ticket_attachment_annotations, update_checkout_ticket_attachment_markup,
+    update_checkout_ticket_attachment_metadata, update_ticket_attachment_annotations,
+};
+use routes::checkouts::{
+    TRUNCATED_HEADER, add_checkout_source, checkout_entries, checkout_lookup_error,
+    checkout_repository_commits, checkout_repository_file_action, checkout_repository_files,
+    checkout_repository_status, code_review_api_error, configure_checkout_repository_remote,
+    create_corrupt_ticket_repair, get_checkout_code_review, initialize_checkout_repository,
+    list_checkout_corrupt_tickets, list_checkout_tickets, list_checkouts,
+    open_checkout_code_review, open_checkout_repository_review, open_project,
+    prewarm_corrupt_tickets, regenerate_checkout_worklist_indexed, register_checkout,
+    relink_checkout_git_source, remove_checkout_source, repository_browser_api_error,
+    resolve_checkout, set_checkout_default_source, set_checkout_source_color,
+};
+use routes::claims::{claim_next_ticket, claim_ticket, release_ticket, renew_ticket};
+use routes::permissions::{
+    ask_permission, create_drive_connection, delete_drive_connection, discovered_ai_tools,
+    discovered_ai_tools_off_runtime, get_ai_settings, get_checkout_ai_settings,
+    interrupt_drive_turn, list_ai_tools, list_connections, list_drive_sessions, list_permissions,
+    now_ms, probe_permission_bridge, put_ai_settings, put_checkout_ai_settings, send_drive_turn,
+};
+use routes::project_tools::{
+    acknowledge_notification, cancel_checkout_command_run, cancel_command_run,
+    checkout_confidence_report, checkout_settings, confidence_report, get_checkout_command_run,
+    get_command_run, list_checkout_command_groups, list_checkout_command_runs,
+    list_checkout_commands, list_checkout_custom_views, list_command_groups, list_command_runs,
+    list_commands, list_custom_views, list_notifications, publish_notification,
+    run_checkout_command, run_command, save_checkout_command_groups, save_checkout_commands,
+    save_checkout_custom_views, save_command_groups, save_commands, save_custom_views,
+    synthesize_speech, ticket_flow_summary, usage_metrics_summary,
+};
+use routes::providers::{
+    ProviderTransferBody, assign_provider_ticket, close_provider_ticket, connection_disabled,
+    connection_token, copy_provider_attachment, create_checkout_provider_connection,
+    create_provider_connection, create_provider_ticket, delete_provider_connection,
+    delete_provider_ticket_note, do_provider_create, do_provider_update, do_rate_ai_feedback,
+    get_provider_ticket, hosted_provider_registry, list_checkout_provider_connections,
+    list_checkout_providers, list_provider_ai_feedback, list_provider_connections,
+    list_provider_tickets, list_providers, provider_copy_route, provider_for, provider_move_route,
+    provider_read_get, provider_read_query, provider_read_query_after, provider_timing_headers,
+    provider_transfer_error, report_provider_ticket_not_working,
+    report_provider_ticket_not_working_json, restore_provider_ticket,
+    set_checkout_provider_connection_disabled, set_provider_connection_disabled,
+    update_checkout_provider_connection, update_provider_connection, update_provider_ticket,
+};
+use routes::store_scoped::{
+    ResolvedTicket, UnhostSweep, assign_store_ticket, close_checkout_session, close_store_ticket,
+    create_store_ticket, get_store_ticket, poll_events, resolve_ticket, run_unhost_sweeper,
+    scoped_entry, setup_tool, update_store_ticket, ws_sync,
+};
+pub(crate) use routes::terminals::{
+    OpenTerminalReq, TerminalAiConnectionReq, TerminalInfo, answer_terminal_question,
+    ask_terminal_question, attach_terminal, broker_err, broker_info, clear_terminal_halt,
+    connect_terminal_ai, disconnect_terminal_ai, get_checkout_terminal_settings,
+    get_checkout_trash_settings, get_terminal_settings, halt_terminal, kill_terminal,
+    list_terminals, open_terminal, poll_terminal_question_answer, put_checkout_terminal_settings,
+    put_checkout_trash_settings, put_terminal_settings, read_terminal, read_terminal_settings,
+    release_session_claims, release_session_claims_blocking, rename_terminal, resolve_permission,
+    resolve_terminal_question, term_info, term_key, write_terminal,
+};
+pub use routes::terminals::{
+    TerminalAiConnection, TerminalHalt, TerminalHookSource, TerminalQuestion,
+    prune_orphaned_terminal_names, release_orphaned_drive_sessions,
+    resume_broker_terminal_sessions,
+};
+use routes::ticket_writes::{
+    AssignReq, add_store, add_ticket_attachment, assign_ticket, attachment_filename,
+    attachment_metadata, batch_update, close_ticket, create_ticket, delete_ticket_note, do_assign,
+    do_close, do_create, do_update, do_update_with_ticket, list_store_tickets, update_ticket,
+    validate_attachment_metadata,
+};
+use routes::tickets::{
+    api_ticket, api_ticket_with_settings, compatibility, contextualize_api_ticket, get_ticket,
+    health, lifecycle_quiescence, lifecycle_restart, list_entry_tickets, list_tickets,
+};
+use routes::transfer::{copy_ticket_route, move_ticket_route};
+pub(crate) use watcher::{
+    RepositoryWatchHandle, WatchTarget, registered_watcher_backend, repository_change_event,
+    same_path, spawn_repository_watcher, spawn_watcher_for,
+};
+pub use watcher::{WatchHandle, spawn_polling_watcher_for_test, spawn_watcher};
 
 #[cfg(test)]
 mod request_performance_tests;
@@ -778,7 +872,7 @@ impl AppState {
     /// Effective automatic Trash retention for a hosted store. A store may be shared by
     /// several checkouts; the longest configured retention wins so one project cannot
     /// permanently remove another project's recoverable tickets early.
-    pub(crate) fn trash_cleanup_days_for_store(&self, root: &FsPath) -> u32 {
+    fn trash_cleanup_days_for_store(&self, root: &FsPath) -> u32 {
         let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         let mut configured = None;
         for checkout in self.checkout_registry.list().unwrap_or_default() {
@@ -912,285 +1006,6 @@ impl AppState {
         }
     }
 
-    /// Host a store: build its index (file-backed when persisting, else in-memory),
-    /// register it, and spawn its fs-watcher. Idempotent by store id — returns whether it
-    /// was newly added. Shared by `POST /stores` and startup discovery.
-    fn host_store(&self, store: FsStore) -> Result<bool, ApiError> {
-        let store = store.with_deferred_push();
-        // Validate the store boundary before registering an index, watcher, or discovery
-        // file. Otherwise an older server can appear to accept a newer store and fail only
-        // when its first ticket mutation reaches the writer.
-        store
-            .metadata()
-            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
-        let id = multistore::store_url_id(&store);
-        let initialization = self.host.initialization_lock(&id);
-        let _initializing = initialization.lock_or_recover();
-        if self.host.contains(&id) {
-            return Ok(false);
-        }
-        let index = if self.persist_indexes {
-            let path = multistore::index_path_for(&self.machine_home, &store)
-                .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            Index::open_reconciled(&path, &store)?
-        } else {
-            let ix = Index::open_in_memory(store.root().display().to_string())?;
-            ix.rebuild_from_store(&store)?;
-            ix
-        };
-        let entry = StoreEntry {
-            instance_id: store
-                .metadata()
-                .ok()
-                .and_then(|metadata| metadata.instance_id),
-            store: store.clone(),
-            index: Arc::new(Mutex::new(index)),
-            corrupt: Arc::default(),
-        };
-        self.host.register(entry.clone());
-        prewarm_corrupt_tickets(entry.clone());
-        let project = store.root().display().to_string();
-        let mut paths = self.permission_rule_paths.lock_or_recover();
-        if !paths.is_empty()
-            && !paths.contains_key(&project)
-            && let Some(directory) = paths.values().next().and_then(|path| path.parent())
-        {
-            let path = directory.join(format!("{id}.json"));
-            let rules = hotsheet_aitools::load_permission_rules(&path)
-                .into_iter()
-                .map(|mut rule| {
-                    rule.project = project.clone();
-                    rule
-                });
-            self.permissions.add_rules(rules);
-            paths.insert(project, path);
-        }
-        drop(paths);
-        let store_root = store.root().to_path_buf();
-        let watched_id = id.clone();
-        match spawn_watcher_for(
-            WatchTarget {
-                entry,
-                store_id: id,
-                host: self.host.clone(),
-                local_write_hashes: self.local_write_hashes.clone(),
-                events: self.events.clone(),
-                event_log: self.event_log.clone(),
-                checkout_registry: self.checkout_registry.clone(),
-                index_repairs: self.index_repairs.clone(),
-            },
-            registered_watcher_backend(),
-        ) {
-            Ok(handle) => {
-                let mut w = self.watchers.lock_or_recover();
-                w.insert(watched_id, handle);
-            }
-            Err(e) => {
-                tracing::warn!(store = %store_root.display(), error = %e, "store watcher failed to start")
-            }
-        }
-        // Advertise the newly-hosted store for discovery (real run only; a no-op in tests).
-        self.register_store_instance(&store_root);
-        Ok(true)
-    }
-
-    fn watch_checkout_repository(&self, checkout: &hotsheet_ticketing::checkouts::Checkout) {
-        let mut watchers = self.repository_watchers.lock_or_recover();
-        if watchers.contains_key(&checkout.id) {
-            return;
-        }
-        let root = std::path::PathBuf::from(&checkout.root);
-        if hotsheet_ticketing::repository_status::snapshot(&root).is_err() {
-            return;
-        }
-        match spawn_repository_watcher(
-            root.clone(),
-            checkout.id.clone(),
-            self.events.clone(),
-            self.event_log.clone(),
-        ) {
-            Ok(handle) => {
-                watchers.insert(checkout.id.clone(), handle);
-            }
-            Err(error) => tracing::warn!(
-                checkout_root = %root.display(),
-                %error,
-                "repository watcher failed to start"
-            ),
-        }
-    }
-
-    /// The hosted entry for a checkout's git source, hosting it again when an earlier sweep
-    /// unhosted it (HS2-ARJ9J1): a client that kept a project open across a long sleep keeps
-    /// working without reopening it.
-    fn hosted_source(
-        &self,
-        source: &hotsheet_ticketing::checkouts::TicketSource,
-    ) -> Option<StoreEntry> {
-        if let Some(entry) = self.host.get(&source.connection_id) {
-            return Some(entry);
-        }
-        if source.provider != "git" {
-            return None;
-        }
-        let store = FsStore::open(&source.locator).ok()?;
-        self.host_project_store(store).ok()?;
-        self.host.get(&source.connection_id)
-    }
-
-    /// Host a store for an open project, making it eligible to be unhosted once no open
-    /// checkout references it (HS2-ARJ9J1).
-    fn host_project_store(&self, store: FsStore) -> Result<bool, ApiError> {
-        let id = multistore::store_url_id(&store);
-        let pinned = self.host.contains(&id) && !self.is_project_hosted(&id);
-        let added = self.host_store(store)?;
-        if !pinned {
-            self.project_hosted.lock_or_recover().insert(id);
-        }
-        self.request_unhost_sweep(presence::POLL_RECONNECT_GAP + presence::UNHOST_GRACE);
-        Ok(added)
-    }
-
-    fn is_project_hosted(&self, id: &str) -> bool {
-        self.project_hosted.with_lock(|hosted| hosted.contains(id))
-    }
-
-    /// Stop hosting a project store: its index, watcher, discovery file and writer lock go,
-    /// and the next open or checkout request hosts it again (HS2-ARJ9J1).
-    fn unhost_store(&self, id: &str) {
-        if !self.project_hosted.lock_or_recover().remove(id) {
-            return;
-        }
-        let Some(entry) = self.host.unregister(id) else {
-            return;
-        };
-        let root = entry.store.root().display().to_string();
-        let watcher = self.watchers.with_lock(|w| w.remove(id));
-        let guard = self.instance_guards.with_lock(|g| g.remove(&root));
-        let lock = self.writer_locks.with_lock(|w| w.remove(&root));
-        // Stop the watcher and release the files outside every lock.
-        drop((watcher, guard, lock));
-        tracing::info!(store = %root, "unhosted store: no open project references it");
-    }
-
-    /// Ask for an unhost sweep `delay` from now; an earlier pending request wins.
-    fn request_unhost_sweep(&self, delay: Duration) {
-        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
-            return;
-        };
-        let at = tokio::time::Instant::now() + delay;
-        {
-            let mut due = self.unhost_sweep.due.lock_or_recover();
-            if due.is_some_and(|current| current <= at) {
-                return;
-            }
-            *due = Some(at);
-        }
-        self.unhost_sweep.wake.notify_one();
-        if !self
-            .unhost_sweep
-            .started
-            .swap(true, std::sync::atomic::Ordering::SeqCst)
-        {
-            let state = self.clone();
-            runtime.spawn(async move { run_unhost_sweeper(state).await });
-        }
-    }
-
-    /// Record the machine server's coordinates (URL + start time; a real run, after bind)
-    /// and register a discovery instance file for **every** already-hosted store, so a
-    /// client asking "who serves project X?" finds this one machine server for each project
-    /// it hosts (HS2-87 topology A). Runtime `POST /stores` additions register via
-    /// [`Self::host_store`]. No-op'd in tests (they never call this).
-    pub fn publish_instances(&self, url: String, started_at: String) {
-        {
-            let mut m = self.instance.lock_or_recover();
-            *m = Some(InstanceMeta {
-                url,
-                secret: self.secret.clone(),
-                started_at,
-            });
-        }
-        for (_, root) in self.host.locations() {
-            self.register_store_instance(&root);
-        }
-    }
-
-    /// Write the discovery instance file for one hosted store (if instance publishing is
-    /// on), retaining its guard so the file is removed on shutdown.
-    fn register_store_instance(&self, store_path: &FsPath) {
-        let Some(meta) = self.instance.with_lock(|m| m.clone()) else {
-            return; // not a published (real) run — nothing to register
-        };
-        let index_path = if self.persist_indexes {
-            FsStore::open(store_path)
-                .ok()
-                .and_then(|s| multistore::index_path_for(&self.machine_home, &s).ok())
-                .map(|p| p.display().to_string())
-                .unwrap_or_default()
-        } else {
-            "(in-memory)".into()
-        };
-        let info = lifecycle::InstanceInfo {
-            pid: std::process::id(),
-            url: meta.url,
-            secret: meta.secret,
-            store_path: store_path.display().to_string(),
-            index_path,
-            started_at: meta.started_at,
-        };
-        // Hold this store's index-writer lock too, so a second machine server can't
-        // double-write its index (HS2-AYCA1W). The primary store's lock is already held by
-        // the server binary (main.rs), so skip it here. A lock held by another *live* server
-        // is logged, not fatal — the discovery instance file (above) already steers clients
-        // to a single server; this is belt-and-suspenders against a stray duplicate.
-        let is_primary = same_path(store_path, self.store.root());
-        let instances = self.instance_registry();
-        if !is_primary {
-            match instances.acquire_writer_lock(store_path) {
-                Ok(lock) => {
-                    let mut w = self.writer_locks.lock_or_recover();
-                    w.insert(store_path.display().to_string(), lock);
-                }
-                Err(lifecycle::LockError::Held(pid)) => tracing::warn!(
-                    "warning: store {} is also index-write-locked by live server pid {pid} \
-                     — index writes may collide",
-                    store_path.display()
-                ),
-                Err(e) => tracing::warn!("writer lock for {} failed: {e}", store_path.display()),
-            }
-        }
-        match instances.register_instance(&info, store_path) {
-            Ok(guard) => {
-                let mut g = self.instance_guards.lock_or_recover();
-                g.insert(store_path.display().to_string(), guard);
-            }
-            Err(e) => tracing::warn!(
-                store = %store_path.display(),
-                error = %e,
-                "instance registration failed"
-            ),
-        }
-    }
-
-    /// Auto-host the stores listed in `${HOTSHEET_HOME}/stores.json` (HS2-87 startup
-    /// discovery). A path that isn't a store is logged and skipped — one bad entry never
-    /// stops the server. Returns how many were newly hosted.
-    pub fn host_configured_stores(&self) -> usize {
-        let mut hosted = 0;
-        for path in multistore::configured_store_paths(&self.machine_home) {
-            match FsStore::open(&path) {
-                Ok(store) => match self.host_store(store) {
-                    Ok(true) => hosted += 1,
-                    Ok(false) => {}
-                    Err(e) => tracing::warn!("could not host {}: {}", path.display(), e.message),
-                },
-                Err(e) => tracing::warn!("configured store {} skipped: {e}", path.display()),
-            }
-        }
-        hosted
-    }
-
     /// State over a store with a fresh **in-memory** index rebuilt from it (tests, or
     /// a run that doesn't want to persist the cache).
     pub fn new(store: FsStore, secret: String) -> anyhow::Result<Self> {
@@ -1231,122 +1046,6 @@ impl AppState {
             ));
         }
         Ok(())
-    }
-
-    /// Persist one activity event and publish that exact event on the shared live bus.
-    /// Unlike announcements this is also placed in the long-poll ring; the rolling
-    /// activity store remains the authoritative reconnect/digest source.
-    pub fn record_activity(
-        &self,
-        store: &FsStore,
-        event: hotsheet_ticketing::ActivityEvent,
-    ) -> std::io::Result<()> {
-        let admitted = self.activity_volume.lock_or_recover().observe(event);
-        for event in admitted {
-            hotsheet_ticketing::activity::record(store, &event)?;
-            self.emit(ChangeEvent {
-                cursor: None,
-                store: multistore::store_url_id(store),
-                kind: "activity".to_string(),
-                id: event.id.clone(),
-                slug: String::new(),
-                message: None,
-                activity: Some(event.clone()),
-                assignment: None,
-                turn: None,
-            });
-            self.maybe_distill_activity(store, &event);
-        }
-        Ok(())
-    }
-
-    fn maybe_distill_activity(&self, store: &FsStore, event: &hotsheet_ticketing::ActivityEvent) {
-        let store_id = multistore::store_url_id(store);
-        let (pipeline_id, settings) = match event.project.as_deref() {
-            Some(reference) => {
-                let checkout = match self.checkout_registry.resolve(reference) {
-                    Ok(checkout) => checkout,
-                    Err(error) => {
-                        tracing::warn!(
-                            checkout = reference,
-                            %error,
-                            "activity distillation skipped for unresolved checkout"
-                        );
-                        return;
-                    }
-                };
-                let canonical_store = store
-                    .root()
-                    .canonicalize()
-                    .unwrap_or_else(|_| store.root().to_path_buf());
-                let linked = checkout.sources.iter().any(|source| {
-                    source.provider == "git"
-                        && std::path::Path::new(&source.locator)
-                            .canonicalize()
-                            .unwrap_or_else(|_| source.locator.clone().into())
-                            == canonical_store
-                });
-                if !linked {
-                    tracing::warn!(
-                        checkout = %checkout.id,
-                        store = store_id,
-                        "activity distillation skipped: checkout does not own store"
-                    );
-                    return;
-                }
-                (
-                    format!("checkout:{}:store:{store_id}", checkout.id),
-                    checkout.settings(),
-                )
-            }
-            None => (
-                format!("legacy-store:{store_id}"),
-                Settings::new(store.root()),
-            ),
-        };
-        let policy = match hotsheet_ticketing::DistillationPolicy::from_local_settings(&settings) {
-            Ok(policy) => policy,
-            Err(error) => {
-                tracing::warn!(%error, "activity distillation policy ignored");
-                return;
-            }
-        };
-        // Named client adapters (including Apple Foundation Models) consume the same
-        // normalized stream on-device. They are never loaded as server requirements.
-        if !policy.enabled || policy.adapter != "deterministic" {
-            {
-                let mut pipelines = self.activity_distillation.lock_or_recover();
-                pipelines.remove(&pipeline_id);
-            }
-            return;
-        }
-        let request = self.activity_distillation.with_lock(|pipelines| {
-            pipelines
-                .entry(pipeline_id)
-                .or_default()
-                .observe(event, &policy)
-        });
-        let Some(request) = request else {
-            return;
-        };
-        let Some(note) = hotsheet_ticketing::activity_distillation::distill(
-            &request,
-            &policy,
-            &hotsheet_ticketing::DeterministicActivitySummarizer,
-        ) else {
-            return;
-        };
-        let provider = GitProvider::new(store_id, store.clone());
-        if let Err(error) = hotsheet_ticketing::write_distilled_note(
-            &provider,
-            &request.provenance.ticket,
-            Timestamp::new(event.ts.clone()),
-            &note,
-        ) {
-            // Activity capture is authoritative and must not fail because an optional
-            // distillation adapter or ticket mutation is temporarily unavailable.
-            tracing::warn!(%error, "activity distillation note failed");
-        }
     }
 }
 /// Build the router. Ticket routes require the secret; `/health` and `/ws/sync` don't
@@ -1823,201 +1522,10 @@ fn initial_status(value: Option<&str>) -> Result<Status, ApiError> {
 }
 
 #[cfg(test)]
-mod activity_distillation_tests {
-    use super::AppState;
-    use hotsheet_model::{NoteKind, Timestamp, Ulid};
-    use hotsheet_ticketing::{
-        ActivityEvent, ActivityKind, FsStore, NewTicket, Scope, Settings, StoreMetadata, ops,
-    };
-    use serde_json::json;
-
-    #[test]
-    fn enabled_deterministic_adapter_distills_live_activity_once() {
-        let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
-        let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
-        ops::create(
-            &store,
-            ticket_id,
-            "HS",
-            Timestamp::new("2026-09-02T00:00:00Z"),
-            NewTicket::default(),
-        )
-        .unwrap();
-        Settings::new(store.root())
-            .set(
-                "activity_distillation",
-                json!({"enabled":true,"adapter":"deterministic"}),
-                Scope::Local,
-            )
-            .unwrap();
-        let state = AppState::new(store.clone(), "secret".into()).unwrap();
-        let mut event = ActivityEvent::new(
-            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "2026-09-02T01:00:00Z",
-            "codex",
-            ActivityKind::Decision,
-            json!({"text":"private decision text"}),
-        );
-        event.ticket = Some(ticket_id.to_string());
-        event.session = Some("session-1".into());
-
-        state.record_activity(&store, event.clone()).unwrap();
-        state.record_activity(&store, event).unwrap();
-
-        let ticket = store.read_ticket(&ticket_id).unwrap();
-        assert_eq!(ticket.notes.len(), 1);
-        assert_eq!(ticket.notes[0].kind, NoteKind::Activity);
-        assert!(ticket.notes[0].text.starts_with("Recorded a decision"));
-        assert!(!ticket.notes[0].text.contains("private decision text"));
-    }
-
-    #[test]
-    fn project_activity_distillation_uses_explicit_checkout_settings_for_a_shared_store() {
-        let root = tempfile::tempdir().unwrap();
-        let store_root = root.path().join("shared.hs2");
-        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
-        let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
-        ops::create(
-            &store,
-            ticket_id,
-            "HS",
-            Timestamp::new("2026-09-02T00:00:00Z"),
-            NewTicket::default(),
-        )
-        .unwrap();
-        let first_root = root.path().join("first");
-        let second_root = root.path().join("second");
-        std::fs::create_dir(&first_root).unwrap();
-        std::fs::create_dir(&second_root).unwrap();
-        let registry_path = root.path().join("home/checkouts.json");
-        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
-        let first = registry
-            .register(&first_root, Some("first"), None, vec![store_root.clone()])
-            .unwrap();
-        let second = registry
-            .register(&second_root, Some("second"), None, vec![store_root])
-            .unwrap();
-        first
-            .settings()
-            .set(
-                "activity_distillation",
-                json!({"enabled":true,"adapter":"deterministic"}),
-                Scope::Local,
-            )
-            .unwrap();
-        second
-            .settings()
-            .set(
-                "activity_distillation",
-                json!({"enabled":false,"adapter":"deterministic"}),
-                Scope::Local,
-            )
-            .unwrap();
-        let state = AppState::new(store.clone(), "secret".into())
-            .unwrap()
-            .with_checkout_registry(registry_path);
-
-        let mut first_event = ActivityEvent::new(
-            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "2026-09-02T01:00:00Z",
-            "codex",
-            ActivityKind::Decision,
-            json!({"text":"first private decision"}),
-        );
-        first_event.ticket = Some(ticket_id.to_string());
-        first_event.session = Some("first-session".into());
-        first_event.project = Some(first.id);
-        state.record_activity(&store, first_event).unwrap();
-
-        let mut second_event = ActivityEvent::new(
-            "01ARZ3NDEKTSV4RRFFQ69G5FAW",
-            "2026-09-02T01:01:00Z",
-            "codex",
-            ActivityKind::Decision,
-            json!({"text":"second private decision"}),
-        );
-        second_event.ticket = Some(ticket_id.to_string());
-        second_event.session = Some("second-session".into());
-        second_event.project = Some(second.id);
-        state.record_activity(&store, second_event).unwrap();
-
-        let ticket = store.read_ticket(&ticket_id).unwrap();
-        assert_eq!(ticket.notes.len(), 1);
-        assert!(ticket.notes[0].text.starts_with("Recorded a decision"));
-    }
-
-    #[test]
-    fn distillation_is_disabled_by_default() {
-        let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
-        let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
-        ops::create(
-            &store,
-            ticket_id,
-            "HS",
-            Timestamp::new("2026-09-02T00:00:00Z"),
-            NewTicket::default(),
-        )
-        .unwrap();
-        let state = AppState::new(store.clone(), "secret".into()).unwrap();
-        let mut event = ActivityEvent::new(
-            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "2026-09-02T01:00:00Z",
-            "codex",
-            ActivityKind::Decision,
-            json!({}),
-        );
-        event.ticket = Some(ticket_id.to_string());
-        event.session = Some("session-1".into());
-        state.record_activity(&store, event).unwrap();
-        assert!(store.read_ticket(&ticket_id).unwrap().notes.is_empty());
-    }
-
-    #[test]
-    fn noisy_activity_is_bounded_before_persistence_and_broadcast() {
-        let root = tempfile::tempdir().unwrap();
-        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
-        let state = AppState::new(store.clone(), "secret".into()).unwrap();
-        let mut live = state.subscribe();
-
-        for index in 0..140 {
-            let mut event = ActivityEvent::new(
-                format!("01ARZ3NDEKTSV4RRFFQ{index:06}"),
-                "2026-09-02T01:00:00Z",
-                "codex",
-                ActivityKind::Command,
-                json!({"command": "chatty"}),
-            );
-            event.session = Some("noisy-session".into());
-            state.record_activity(&store, event).unwrap();
-        }
-        let mut done = ActivityEvent::new(
-            "01ARZ3NDEKTSV4RRFFQ999999",
-            "2026-09-02T01:01:00Z",
-            "codex",
-            ActivityKind::TurnEnd,
-            json!({}),
-        );
-        done.session = Some("noisy-session".into());
-        state.record_activity(&store, done).unwrap();
-
-        let recorded = hotsheet_ticketing::activity::read_recent(&store).unwrap();
-        assert_eq!(recorded.len(), 130);
-        assert_eq!(recorded[128].kind, ActivityKind::Summary);
-        assert_eq!(recorded[128].detail["coalesced"], 12);
-        assert_eq!(recorded[129].kind, ActivityKind::TurnEnd);
-
-        let broadcast = std::iter::from_fn(|| live.try_recv().ok()).collect::<Vec<_>>();
-        assert_eq!(broadcast.len(), recorded.len());
-        assert_eq!(broadcast[128].activity.as_ref(), Some(&recorded[128]));
-    }
-}
-
-#[cfg(test)]
 mod terminal_permission_route_tests {
-    use super::{
-        AppState, OpenTerminalReq, terminal_permission_project, terminal_permission_route_env,
+    use super::{AppState, OpenTerminalReq};
+    use crate::routes::terminals::launch::{
+        terminal_permission_project, terminal_permission_route_env,
     };
     use hotsheet_ticketing::{FsStore, StoreMetadata, checkouts::CheckoutRegistry};
 
@@ -2115,7 +1623,7 @@ mod terminal_permission_route_tests {
 
 #[cfg(test)]
 mod startup_bridge_tests {
-    use super::startup_bridge_config;
+    use crate::watcher::startup_bridge_config;
     use notify::{RecursiveMode, Watcher};
     use std::time::{Duration, SystemTime};
 
@@ -2163,7 +1671,7 @@ mod startup_bridge_tests {
 
 #[cfg(test)]
 mod ai_terminal_tool_tests {
-    use super::ai_terminal_tool;
+    use crate::routes::terminals::ai_terminal_tool;
     use hotsheet_terminals::TerminalKind;
 
     /// The tool comes only from an `ai` terminal's `<tool>-<id>` worker id (HS2-HZK0NK).

@@ -6,7 +6,7 @@ use crate::*;
 
 /// Routes that read or write the primary store without a checkout or hosted-store id.
 /// Keep project/store-scoped routes available when only the primary path was replaced.
-pub(crate) fn primary_store_route(path: &str) -> bool {
+fn primary_store_route(path: &str) -> bool {
     const PREFIXES: &[&str] = &[
         "/tickets",
         "/claim-next",

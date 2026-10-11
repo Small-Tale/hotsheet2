@@ -41,7 +41,7 @@ impl AppState {
     /// (HS2-9PPDR1): a large or blocked store never stalls the liveness probe. Past the
     /// budget the answer is the last completed scan (`"cached"`), or, before any scan has
     /// completed, the index's row count with no corrupt entries (`"index"`).
-    pub(crate) async fn health_listing(
+    async fn health_listing(
         &self,
     ) -> Result<(Arc<health_scan::HealthListing>, &'static str), ApiError> {
         use health_scan::{HealthListing, Resolution, ScanFailure};
@@ -186,8 +186,8 @@ pub(crate) async fn lifecycle_restart(State(state): State<AppState>) -> Response
         .into_response()
 }
 
-pub(crate) const API_PROTOCOL_MIN: u32 = 1;
-pub(crate) const API_PROTOCOL_MAX: u32 = 1;
+const API_PROTOCOL_MIN: u32 = 1;
+const API_PROTOCOL_MAX: u32 = 1;
 
 /// Authenticated build metadata and protocol compatibility. Exact application/revision
 /// equality is informational; clients make hard decisions from the inclusive range.

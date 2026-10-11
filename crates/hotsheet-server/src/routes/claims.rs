@@ -4,7 +4,7 @@ use crate::*;
 
 // ---- coordination: claim / release / renew (HS2-86) ------------------------------
 
-pub(crate) const DEFAULT_LEASE_MINUTES: i64 = 30;
+const DEFAULT_LEASE_MINUTES: i64 = 30;
 
 /// `POST /claim-next` — atomically claim the top available ticket for a worker. Returns the
 /// claimed ticket, or `null` (200) when nothing is claimable.

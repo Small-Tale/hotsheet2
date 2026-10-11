@@ -1,5 +1,14 @@
 //! Ticket-provider connection and provider-ticket routes.
 
+mod tickets;
+pub(crate) use tickets::{
+    assign_provider_ticket, close_provider_ticket, create_provider_ticket,
+    delete_provider_ticket_note, do_provider_create, do_provider_update, do_rate_ai_feedback,
+    get_provider_ticket, list_provider_ai_feedback, list_provider_tickets, provider_copy_route,
+    provider_move_route, provider_timing_headers, report_provider_ticket_not_working,
+    report_provider_ticket_not_working_json, restore_provider_ticket, update_provider_ticket,
+};
+
 use crate::*;
 
 /// `GET /providers` — capability-bearing ticket-provider connections. The current
@@ -166,7 +175,7 @@ pub(crate) async fn list_provider_connections(
         .map_err(provider_transfer_error)
 }
 
-pub(crate) fn save_provider_connections(
+fn save_provider_connections(
     state: &AppState,
     connections: Vec<ProviderConnection>,
     connection: ProviderConnection,
@@ -231,7 +240,7 @@ pub(crate) async fn create_provider_connection(
 /// A new GitHub source reusing a GitHub Enterprise sign-in gets that site's `api_base` even
 /// when the client did not send one (HS2-16MYXN). Best effort: an unreadable key registry
 /// leaves the connection as sent.
-pub(crate) fn fill_reused_sign_in_endpoint(state: &AppState, connection: &mut ProviderConnection) {
+fn fill_reused_sign_in_endpoint(state: &AppState, connection: &mut ProviderConnection) {
     if connection.provider != "github" {
         return;
     }
@@ -255,11 +264,11 @@ pub(crate) async fn update_provider_connection(
 #[derive(Debug, Serialize)]
 pub(crate) struct ProjectConnection {
     #[serde(flatten)]
-    pub(crate) connection: ProviderConnection,
-    pub(crate) projects: Vec<hotsheet_ticketing::accounts::AccountProject>,
+    connection: ProviderConnection,
+    projects: Vec<hotsheet_ticketing::accounts::AccountProject>,
 }
 
-pub(crate) fn project_connection(
+fn project_connection(
     connection: ProviderConnection,
     checkouts: &[hotsheet_ticketing::checkouts::Checkout],
 ) -> ProjectConnection {
@@ -272,7 +281,7 @@ pub(crate) fn project_connection(
 
 /// The checkout `reference`, when it links `connection_id`; otherwise 404, so a project can
 /// never read or change another project's ticket source through its own routes.
-pub(crate) fn checkout_linking(
+fn checkout_linking(
     state: &AppState,
     reference: &str,
     connection_id: &str,
@@ -312,9 +321,9 @@ pub(crate) async fn list_checkout_provider_connections(
 #[derive(Debug, Deserialize)]
 pub(crate) struct CreateCheckoutConnectionBody {
     #[serde(flatten)]
-    pub(crate) connection: ProviderConnection,
+    connection: ProviderConnection,
     #[serde(default)]
-    pub(crate) make_default: bool,
+    make_default: bool,
 }
 
 /// `POST /checkouts/{reference}/provider-connections`: create a ticket source owned by this
@@ -392,7 +401,7 @@ pub(crate) async fn set_checkout_provider_connection_disabled(
         .ok_or_else(|| ApiError::not_found(&connection_id))
 }
 
-pub(crate) fn update_connection_record(
+fn update_connection_record(
     state: &AppState,
     connection_id: String,
     mut connection: ProviderConnection,
@@ -419,7 +428,7 @@ pub(crate) fn update_connection_record(
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct ProviderConnectionDisabledBody {
-    pub(crate) disabled: bool,
+    disabled: bool,
 }
 
 /// Temporarily switch a connection off (or back on). While disabled, Hot Sheet neither reads
@@ -476,11 +485,11 @@ pub(crate) async fn delete_provider_connection(
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct ProviderTransferBody {
-    pub(crate) source: TicketRef,
-    pub(crate) destination_connection: String,
-    pub(crate) operation_id: String,
+    source: TicketRef,
+    destination_connection: String,
+    operation_id: String,
     #[serde(default)]
-    pub(crate) confirm: bool,
+    confirm: bool,
 }
 
 pub(crate) fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegistry, ApiError> {
@@ -635,7 +644,7 @@ pub(crate) fn provider_read_query_after(
         .map_err(provider_transfer_error)
 }
 
-pub(crate) fn forget_live_provider(state: &AppState, connection_id: &str) {
+fn forget_live_provider(state: &AppState, connection_id: &str) {
     {
         let mut providers = state.live_providers.lock_or_recover();
         providers.remove(connection_id);
@@ -643,22 +652,22 @@ pub(crate) fn forget_live_provider(state: &AppState, connection_id: &str) {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct AttachmentCopyRef {
-    pub(crate) connection_id: String,
-    pub(crate) native_id: String,
-    pub(crate) attachment_id: String,
+struct AttachmentCopyRef {
+    connection_id: String,
+    native_id: String,
+    attachment_id: String,
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct AttachmentTicketRef {
-    pub(crate) connection_id: String,
-    pub(crate) native_id: String,
+struct AttachmentTicketRef {
+    connection_id: String,
+    native_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct CopyAttachmentReq {
-    pub(crate) source: AttachmentCopyRef,
-    pub(crate) destination: AttachmentTicketRef,
+    source: AttachmentCopyRef,
+    destination: AttachmentTicketRef,
 }
 
 pub(crate) async fn copy_provider_attachment(
@@ -709,655 +718,4 @@ pub(crate) async fn copy_provider_attachment(
 
 pub(crate) fn provider_transfer_error(error: impl std::fmt::Display) -> ApiError {
     ApiError::new(StatusCode::CONFLICT, error.to_string())
-}
-
-pub(crate) async fn list_provider_tickets(
-    State(state): State<AppState>,
-    Path(connection_id): Path<String>,
-    Query(params): Query<ListParams>,
-) -> Result<Json<Vec<ApiTicket>>, ApiError> {
-    let query = params.into_query(state.store.root())?;
-    provider_read_query(&state, &connection_id, &query).map(Json)
-}
-
-pub(crate) async fn get_provider_ticket(
-    State(state): State<AppState>,
-    Path((connection_id, id)): Path<(String, String)>,
-) -> Result<Json<ApiTicket>, ApiError> {
-    provider_read_get(&state, &connection_id, &id).map(Json)
-}
-
-pub(crate) async fn restore_provider_ticket(
-    State(state): State<AppState>,
-    Path((connection_id, id)): Path<(String, String)>,
-) -> Result<Json<ApiTicket>, ApiError> {
-    let Some(entry) = state.host.get(&connection_id) else {
-        // Preserve not-found diagnostics for unknown connections, then report the
-        // capability boundary for every configured non-git provider.
-        let _ = provider_for(&state, &connection_id)?;
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!(
-                "provider connection '{connection_id}' does not support git-backed Hot Sheet Trash restore"
-            ),
-        ));
-    };
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
-    let restored = ops::restore(&entry.store, &ticket.id, now())?;
-    state.changed_in(&entry, "updated", &restored);
-    Ok(Json(api_ticket(&entry, &restored)?))
-}
-
-pub(crate) async fn create_provider_ticket(
-    State(state): State<AppState>,
-    Path(connection_id): Path<String>,
-    Json(req): Json<CreateReq>,
-) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(do_provider_create(&state, &connection_id, req)?),
-    ))
-}
-
-pub(crate) fn do_provider_create(
-    state: &AppState,
-    connection_id: &str,
-    req: CreateReq,
-) -> Result<ApiTicket, ApiError> {
-    let priority = opt_parse(req.priority.as_deref())?.unwrap_or_default();
-    let status = initial_status(req.status.as_deref())?;
-    let provider = provider_for(state, connection_id)?;
-    let new = ops::normalize_new_ticket_input(NewTicket {
-        title: req.title,
-        category: req.category.unwrap_or_else(|| "issue".into()),
-        priority,
-        status,
-        details: req.details.unwrap_or_default(),
-        tags: req.tags.unwrap_or_default(),
-        up_next: req.up_next.unwrap_or(false),
-        blocked_by: Vec::new(),
-    });
-    provider
-        .create(
-            MutationContext {
-                now: now(),
-                generated_id: Ulid::new(),
-            },
-            ProviderDraft {
-                title: new.title,
-                category: new.category,
-                priority: new.priority,
-                status: new.status,
-                details: new.details,
-                tags: new.tags,
-                up_next: new.up_next,
-                blocked_by: req.blocked_by.unwrap_or_default(),
-                transfer: None,
-            },
-        )
-        .map_err(provider_transfer_error)
-}
-
-pub(crate) async fn update_provider_ticket(
-    State(state): State<AppState>,
-    Path((connection_id, id)): Path<(String, String)>,
-    Json(req): Json<UpdateReq>,
-) -> Result<(HeaderMap, Json<ApiTicket>), ApiError> {
-    let started = Instant::now();
-    let (ticket, timing) = do_provider_update(&state, &connection_id, &id, req)?;
-    Ok((
-        provider_timing_headers(timing, started.elapsed()),
-        Json(ticket),
-    ))
-}
-
-/// A provider-scoped source ledger. Unsupported connections fail explicitly so a
-/// synthesis caller cannot mistake an unreadable provider for zero feedback.
-pub(crate) async fn list_provider_ai_feedback(
-    State(state): State<AppState>,
-    Path(connection_id): Path<String>,
-) -> Result<Json<Vec<hotsheet_ticketing::AiFeedbackRecord>>, ApiError> {
-    let provider = provider_for(&state, &connection_id)?;
-    provider
-        .ai_feedback_records()
-        .map(Json)
-        .map_err(|error| match error {
-            hotsheet_ticketing::ProviderError::Unsupported { .. } => {
-                ApiError::new(StatusCode::NOT_IMPLEMENTED, error.to_string())
-            }
-            _ => provider_transfer_error(error),
-        })
-}
-
-pub(crate) fn do_rate_ai_feedback(
-    state: &AppState,
-    entry: &StoreEntry,
-    id: &str,
-    feedback: AiFeedbackReq,
-    actor: Option<&ActorReq>,
-    expected_token: Option<&str>,
-) -> Result<(ApiTicket, Ticket), ApiError> {
-    let (feedback, note_actor) = parse_ai_feedback(feedback, actor)?;
-    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
-    if expected_token.is_some_and(|expected| expected != ticket.updated_at.as_str()) {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "ticket changed since it was read",
-        ));
-    }
-    let updated = ops::rate_ai_content(
-        &entry.store,
-        &ticket.id,
-        now(),
-        &feedback.target,
-        feedback.rating,
-        feedback.explanation,
-        Some(note_actor),
-    )
-    .map_err(|error| {
-        if error.is_io_kind(std::io::ErrorKind::InvalidInput) {
-            ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
-        } else {
-            ApiError::from(error)
-        }
-    })?;
-    state.changed_in(entry, "updated", &updated);
-    Ok((api_ticket(entry, &updated)?, updated))
-}
-
-pub(crate) fn parse_ai_feedback(
-    feedback: AiFeedbackReq,
-    actor: Option<&ActorReq>,
-) -> Result<(hotsheet_model::AiFeedback, hotsheet_model::NoteActor), ApiError> {
-    let Some(actor) = parse_actor(actor)? else {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "AI feedback requires a rater actor",
-        ));
-    };
-    let note_actor = hotsheet_ticketing::actor::note_actor(Some(&actor)).ok_or_else(|| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "AI feedback requires a rater actor",
-        )
-    })?;
-    if note_actor.id.as_deref().is_none_or(str::is_empty) {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "AI feedback requires a stable rater id",
-        ));
-    }
-    let rating =
-        serde_json::from_value::<Option<hotsheet_model::AiFeedbackRating>>(feedback.rating)
-            .map_err(|error| {
-                ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    format!("AI feedback rating: {error}"),
-                )
-            })?;
-    Ok((
-        hotsheet_model::AiFeedback {
-            target: feedback.target,
-            rating,
-            explanation: feedback.explanation,
-        },
-        note_actor,
-    ))
-}
-
-pub(crate) fn do_provider_update(
-    state: &AppState,
-    connection_id: &str,
-    id: &str,
-    req: UpdateReq,
-) -> Result<(ApiTicket, ProviderMutationTiming), ApiError> {
-    if let Some(feedback) = req.ai_feedback.clone() {
-        req.validate_feedback_only()?;
-        let provider = provider_for(state, connection_id)?;
-        let (feedback, actor) = parse_ai_feedback(feedback, req.actor.as_ref())?;
-        let ticket = provider
-            .rate_ai_content(id, now(), feedback, actor, req.expected_token.as_deref())
-            .map_err(|error| match error {
-                hotsheet_ticketing::ProviderError::Unsupported { .. } => {
-                    ApiError::new(StatusCode::NOT_IMPLEMENTED, error.to_string())
-                }
-                hotsheet_ticketing::ProviderError::Store(ref store_error)
-                    if store_error.is_io_kind(std::io::ErrorKind::InvalidInput) =>
-                {
-                    ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
-                }
-                _ => provider_transfer_error(error),
-            })?;
-        reindex_hosted_provider_write(state, connection_id, id);
-        return Ok((ticket, ProviderMutationTiming::default()));
-    }
-    let provider = provider_for(state, connection_id)?;
-    if req.note_id.is_some() && !provider.supports_note_edit() {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!("provider connection '{connection_id}' does not support note editing"),
-        ));
-    }
-    if req.note_id.is_some() && req.note_summary.is_some() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "note_summary is only valid when appending a note",
-        ));
-    }
-    if req.note_summary.is_some() && req.note.as_deref().is_none_or(str::is_empty) {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "note_summary requires a non-empty note",
-        ));
-    }
-    let confidence_change = req.note_confidence_change(req.note_id.is_some())?;
-    // An append's null means "no score"; only an edit can clear one (HS2-CY4CWC).
-    let note_confidence = confidence_change.flatten();
-    if (note_confidence.is_some() || (req.note_id.is_some() && confidence_change.is_some()))
-        && !provider.supports_note_confidence()
-    {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!("provider connection '{connection_id}' does not support note confidence"),
-        ));
-    }
-    let status = opt_parse(req.status.as_deref())?;
-    let actor = parse_actor(req.actor.as_ref())?;
-    if actor
-        .as_ref()
-        .is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
-        && status == Some(Status::Completed)
-    {
-        let current = provider.get(id).map_err(provider_transfer_error)?;
-        let scores_now = match &req.note_id {
-            Some(_) => matches!(confidence_change, Some(Some(_))),
-            None => req.note.is_some() && note_confidence.is_some(),
-        };
-        hotsheet_ticketing::actor::check_completion(
-            actor.as_ref(),
-            &current.slug,
-            hotsheet_ticketing::actor::completes(current.status, status),
-            scores_now || hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
-        )?;
-    }
-    let timestamp = now();
-    let note = req.note.clone();
-    let note_id = req.note_id.clone();
-    let note_kind = req.note_kind.unwrap_or(NoteKind::Regular);
-    let note_summary = req.note_summary.clone();
-    let (mut ticket, timing) = provider
-        .update_timed(
-            id,
-            timestamp.clone(),
-            ProviderPatch {
-                actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
-                expected_token: req.expected_token,
-                title: req.title,
-                details: req.details,
-                category: req.category,
-                priority: opt_parse(req.priority.as_deref())?,
-                status,
-                started_phase: req
-                    .started_phase
-                    .as_ref()
-                    .map(|phase| opt_parse(phase.as_deref()))
-                    .transpose()?,
-                tags: req.tags,
-                up_next: req.up_next,
-                blocked_by: req.blocked_by,
-                blocked_reason: req.blocked_reason,
-            },
-        )
-        .map_err(provider_transfer_error)?;
-    let edit = ops::NoteEditInput {
-        text: note,
-        confidence: confidence_change,
-        actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
-    };
-    match (note_id, edit) {
-        (Some(note_id), edit) if !edit.is_empty() => {
-            ticket = provider
-                .edit_note_with_metadata(id, &note_id, timestamp, edit)
-                .map_err(provider_transfer_error)?;
-        }
-        (
-            None,
-            ops::NoteEditInput {
-                text: Some(note), ..
-            },
-        ) => {
-            ticket = provider
-                .add_note_with_metadata(
-                    id,
-                    MutationContext {
-                        now: timestamp,
-                        generated_id: Ulid::new(),
-                    },
-                    note_kind,
-                    ops::NoteMetadataInput {
-                        human_edited: false,
-                        summary: note_summary,
-                        confidence: note_confidence,
-                        actor: hotsheet_ticketing::actor::note_actor(actor.as_ref()),
-                        ai_feedback: None,
-                    },
-                    note,
-                )
-                .map_err(provider_transfer_error)?;
-        }
-        _ => {}
-    }
-    reindex_hosted_provider_write(state, connection_id, id);
-    Ok((ticket, timing))
-}
-
-pub(crate) fn provider_timing_headers(
-    timing: ProviderMutationTiming,
-    total: Duration,
-) -> HeaderMap {
-    let ms = |duration: Duration| duration.as_secs_f64() * 1000.0;
-    let value = format!(
-        "provider_read;dur={:.1}, provider_token;dur={:.1}, provider_write;dur={:.1}, provider_ack;dur={:.1}, provider_queue;dur={:.1}, provider_total;dur={:.1}",
-        ms(timing.remote_read),
-        ms(timing.token_check),
-        ms(timing.remote_write),
-        ms(timing.acknowledgement),
-        ms(timing.queue_wait),
-        ms(total),
-    );
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "server-timing",
-        axum::http::HeaderValue::from_str(&value).expect("numeric provider timing"),
-    );
-    headers
-}
-
-/// A provider-route write to a hosted git store reindexes and broadcasts the ticket at
-/// once, like the legacy route, so an immediate list read sees it (read-your-writes; the
-/// derived `latest_confidence` column depends on it, HS2-RD4M29). External providers are
-/// authoritative remotely and have no local index row.
-pub(crate) fn reindex_hosted_provider_write(
-    state: &AppState,
-    connection_id: &str,
-    native_id: &str,
-) {
-    let Some(entry) = state.host.get(connection_id) else {
-        return;
-    };
-    let Ok(id) = Ulid::from_string(native_id) else {
-        return;
-    };
-    if let Ok(ticket) = entry.store.read_ticket(&id) {
-        state.changed_in(&entry, "updated", &ticket);
-    }
-}
-
-pub(crate) async fn report_provider_ticket_not_working(
-    State(state): State<AppState>,
-    Path((connection_id, id)): Path<(String, String)>,
-    mut multipart: Multipart,
-) -> Result<Json<ApiTicket>, ApiError> {
-    let provider = provider_for(&state, &connection_id)?;
-    if !provider.descriptor().capabilities.not_working_report {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!(
-                "provider connection '{connection_id}' does not support an atomic Not Working report"
-            ),
-        ));
-    }
-    let timestamp = now();
-    let mut note = None;
-    let mut expected_token = None;
-    let mut evidence = Vec::new();
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
-    {
-        match field.name() {
-            Some("note") => {
-                note =
-                    Some(field.text().await.map_err(|error| {
-                        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
-                    })?);
-            }
-            Some("expected_token") => {
-                expected_token =
-                    Some(field.text().await.map_err(|error| {
-                        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
-                    })?);
-            }
-            Some("evidence") => {
-                let filename = field.file_name().unwrap_or("attachment").to_string();
-                let bytes = field
-                    .bytes()
-                    .await
-                    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
-                evidence.push(ProviderEvidence {
-                    id: Ulid::new(),
-                    filename,
-                    created_at: timestamp.clone(),
-                    bytes: bytes.to_vec(),
-                });
-            }
-            _ => {}
-        }
-    }
-    let note = note.and_then(|text| (!text.trim().is_empty()).then(|| (Ulid::new(), text)));
-    if note.is_none() && evidence.is_empty() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "a Not Working report requires a note or at least one evidence attachment",
-        ));
-    }
-    provider
-        .report_not_working(
-            &id,
-            timestamp,
-            NotWorkingReport {
-                expected_token,
-                note,
-                evidence,
-            },
-        )
-        .map(Json)
-        .map_err(provider_transfer_error)
-}
-
-#[derive(Deserialize)]
-pub(crate) struct NotWorkingJsonRequest {
-    pub(crate) note: Option<String>,
-    pub(crate) expected_token: Option<String>,
-    #[serde(default)]
-    pub(crate) evidence: Vec<NotWorkingJsonEvidence>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct NotWorkingJsonEvidence {
-    pub(crate) filename: String,
-    pub(crate) content_base64: String,
-}
-
-pub(crate) async fn report_provider_ticket_not_working_json(
-    State(state): State<AppState>,
-    Path((connection_id, id)): Path<(String, String)>,
-    Json(body): Json<NotWorkingJsonRequest>,
-) -> Result<Json<ApiTicket>, ApiError> {
-    use base64::Engine;
-
-    let provider = provider_for(&state, &connection_id)?;
-    if !provider.descriptor().capabilities.not_working_report {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!(
-                "provider connection '{connection_id}' does not support an atomic Not Working report"
-            ),
-        ));
-    }
-    let timestamp = now();
-    let note = body
-        .note
-        .and_then(|text| (!text.trim().is_empty()).then(|| (Ulid::new(), text)));
-    let evidence = body
-        .evidence
-        .into_iter()
-        .map(|item| {
-            if item.filename.trim().is_empty() {
-                return Err(ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    "evidence filename is required",
-                ));
-            }
-            let bytes = base64::engine::general_purpose::STANDARD
-                .decode(item.content_base64)
-                .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid evidence base64"))?;
-            Ok(ProviderEvidence {
-                id: Ulid::new(),
-                filename: item.filename,
-                created_at: timestamp.clone(),
-                bytes,
-            })
-        })
-        .collect::<Result<Vec<_>, ApiError>>()?;
-    if note.is_none() && evidence.is_empty() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "a Not Working report requires a note or at least one evidence attachment",
-        ));
-    }
-    provider
-        .report_not_working(
-            &id,
-            timestamp,
-            NotWorkingReport {
-                expected_token: body.expected_token,
-                note,
-                evidence,
-            },
-        )
-        .map(Json)
-        .map_err(provider_transfer_error)
-}
-
-pub(crate) async fn delete_provider_ticket_note(
-    State(state): State<AppState>,
-    Path((connection_id, id, note_id)): Path<(String, String, String)>,
-) -> Result<Json<ApiTicket>, ApiError> {
-    let provider = provider_for(&state, &connection_id)?;
-    if !provider.supports_note_delete() {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!("provider connection '{connection_id}' does not support note deletion"),
-        ));
-    }
-    provider
-        .delete_note(&id, &note_id, now())
-        .map(Json)
-        .map_err(provider_transfer_error)
-}
-
-pub(crate) async fn close_provider_ticket(
-    State(state): State<AppState>,
-    Path((connection_id, id)): Path<(String, String)>,
-    Json(req): Json<CloseReq>,
-) -> Result<Json<ApiTicket>, ApiError> {
-    let duplicate_of = match req.duplicate_of {
-        Some(DuplicateOfReq::Legacy(reference)) => Some(reference),
-        Some(DuplicateOfReq::Qualified(reference)) => {
-            let target = resolve_project_ticket_ref(&state, reference)?;
-            // This compatibility route is provider-scoped rather than checkout-scoped,
-            // so it has no source project identity to compare. Treat the same provider
-            // connection/native pair as the same underlying ticket. Checkout routes use
-            // all three ProjectTicketRef fields below.
-            if target.connection_id == connection_id && target.native_id == id {
-                return Err(ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    "a ticket cannot be a duplicate of itself",
-                ));
-            }
-            Some(target.qualified())
-        }
-        None => None,
-    };
-    let provider = provider_for(&state, &connection_id)?;
-    let reason: CloseReason = opt_parse(Some(&req.reason))?.expect("required close reason");
-    let actor = parse_actor(req.actor.as_ref())?;
-    if actor
-        .as_ref()
-        .is_some_and(hotsheet_ticketing::actor::MutationActor::is_ai)
-    {
-        let current = provider.get(&id).map_err(provider_transfer_error)?;
-        hotsheet_ticketing::actor::check_completion(
-            actor.as_ref(),
-            &current.slug,
-            hotsheet_ticketing::actor::close_completes(current.status, reason),
-            hotsheet_ticketing::actor::api_scored_in_current_cycle(&current),
-        )?;
-    }
-    let closed = provider
-        .close(&id, now(), reason, duplicate_of)
-        .map_err(provider_transfer_error)?;
-    reindex_hosted_provider_write(&state, &connection_id, &id);
-    Ok(Json(closed))
-}
-
-pub(crate) async fn assign_provider_ticket(
-    State(state): State<AppState>,
-    Path((connection_id, id)): Path<(String, String)>,
-    Json(req): Json<AssignReq>,
-) -> Result<Json<ApiTicket>, ApiError> {
-    let at = now();
-    let reviews = req
-        .reviews
-        .into_iter()
-        .map(|review| ReviewRequest {
-            who: review.who,
-            kind: review.kind,
-            by: Ulid::new(),
-            at: at.clone(),
-            requested_by: None,
-        })
-        .collect();
-    provider_for(&state, &connection_id)?
-        .assign(&id, at, req.assignees, reviews)
-        .map(Json)
-        .map_err(provider_transfer_error)
-}
-
-pub(crate) async fn provider_copy_route(
-    State(state): State<AppState>,
-    Json(body): Json<ProviderTransferBody>,
-) -> Result<(StatusCode, Json<hotsheet_ticketing::TransferOutcome>), ApiError> {
-    let outcome = copy_between(
-        &hosted_provider_registry(&state)?,
-        body.source,
-        &body.destination_connection,
-        &body.operation_id,
-        now(),
-    )
-    .map_err(provider_transfer_error)?;
-    Ok((StatusCode::CREATED, Json(outcome)))
-}
-
-pub(crate) async fn provider_move_route(
-    State(state): State<AppState>,
-    Json(body): Json<ProviderTransferBody>,
-) -> Result<Json<hotsheet_ticketing::TransferOutcome>, ApiError> {
-    if !body.confirm {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "provider move requires confirm=true",
-        ));
-    }
-    let outcome = move_between(
-        &hosted_provider_registry(&state)?,
-        body.source,
-        &body.destination_connection,
-        &body.operation_id,
-        now(),
-    )
-    .map_err(provider_transfer_error)?;
-    Ok(Json(outcome))
 }

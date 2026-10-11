@@ -7,25 +7,25 @@ use crate::*;
 /// Body for copy: `to` names the hosted destination store (its URL id).
 #[derive(Deserialize)]
 pub(crate) struct CopyBody {
-    pub(crate) to: String,
+    to: String,
 }
 
 /// Body for move: destination store + the explicit `confirm` acknowledging that git
 /// history in the source never forgets (the retention/exposure caveat, `docs/02` §2.13).
 #[derive(Deserialize)]
 pub(crate) struct MoveBody {
-    pub(crate) to: String,
+    to: String,
     #[serde(default)]
-    pub(crate) confirm: bool,
+    confirm: bool,
 }
 
 /// A copy result: the new ticket + the destination store it now lives in.
 #[derive(Serialize)]
 pub(crate) struct CopyResult {
     /// URL id of the destination store.
-    pub(crate) store: String,
+    store: String,
     #[serde(flatten)]
-    pub(crate) ticket: ApiTicket,
+    ticket: ApiTicket,
 }
 
 /// A move result: the live ticket (now in `store`), the source store it left, and the
@@ -33,13 +33,13 @@ pub(crate) struct CopyResult {
 #[derive(Serialize)]
 pub(crate) struct MoveResult {
     /// URL id of the destination store (where the live ticket now is).
-    pub(crate) store: String,
+    store: String,
     /// URL id of the source store (which keeps a `moved` tombstone).
-    pub(crate) source_store: String,
+    source_store: String,
     /// Slug of the tombstone left in the source store.
-    pub(crate) tombstone: String,
+    tombstone: String,
     #[serde(flatten)]
-    pub(crate) ticket: ApiTicket,
+    ticket: ApiTicket,
 }
 
 /// `POST /tickets/{id}/copy` `{to:<store_id>}` — copy a default-store ticket into another

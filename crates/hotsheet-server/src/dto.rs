@@ -8,51 +8,51 @@ use crate::*;
 pub(crate) struct ListParams {
     /// Checkout page only: read local git sources without touching external credentials.
     pub(crate) source: Option<String>,
-    pub(crate) status: Option<String>,
+    status: Option<String>,
     /// Built-in multi-status client collection (`queue`, `archive`, or `trash`).
-    pub(crate) collection: Option<String>,
-    pub(crate) priority: Option<String>,
-    pub(crate) category: Option<String>,
+    collection: Option<String>,
+    priority: Option<String>,
+    category: Option<String>,
     /// Comma-separated; a ticket must carry all of them.
-    pub(crate) tags: Option<String>,
-    pub(crate) text: Option<String>,
-    pub(crate) up_next: Option<bool>,
-    pub(crate) open: Option<bool>,
+    tags: Option<String>,
+    text: Option<String>,
+    up_next: Option<bool>,
+    open: Option<bool>,
     /// Filter by close reason (completed|not_planned|duplicate|obsolete|works_as_designed).
-    pub(crate) close_reason: Option<String>,
+    close_reason: Option<String>,
     /// `true` = only closed tickets; `false` = only tickets with no close reason.
-    pub(crate) closed: Option<bool>,
+    closed: Option<bool>,
     /// Only tickets assigned to this person (git email).
-    pub(crate) assignee: Option<String>,
+    assignee: Option<String>,
     /// Only tickets with a review request for this person (git email).
-    pub(crate) review_requested: Option<String>,
+    review_requested: Option<String>,
     /// Only tickets whose review was requested by this person (git email).
-    pub(crate) review_by: Option<String>,
+    review_by: Option<String>,
     /// `true` = only claimed tickets; `false` = only unclaimed.
-    pub(crate) claimed: Option<bool>,
+    claimed: Option<bool>,
     /// `true` = only blocked tickets; `false` = only unblocked (HS2-T84F9F).
-    pub(crate) blocked: Option<bool>,
+    blocked: Option<bool>,
     /// ISO-8601 `created_at` / `updated_at` range bounds (inclusive).
-    pub(crate) created_after: Option<String>,
-    pub(crate) created_before: Option<String>,
-    pub(crate) updated_after: Option<String>,
-    pub(crate) updated_before: Option<String>,
-    pub(crate) completed_after: Option<String>,
-    pub(crate) completed_before: Option<String>,
-    pub(crate) verified_after: Option<String>,
-    pub(crate) verified_before: Option<String>,
+    created_after: Option<String>,
+    created_before: Option<String>,
+    updated_after: Option<String>,
+    updated_before: Option<String>,
+    completed_after: Option<String>,
+    completed_before: Option<String>,
+    verified_after: Option<String>,
+    verified_before: Option<String>,
     /// Inclusive bounds on the derived `latest_confidence` (0-100, HS2-RD4M29).
-    pub(crate) min_confidence: Option<u8>,
-    pub(crate) max_confidence: Option<u8>,
-    pub(crate) has_attachment: Option<bool>,
-    pub(crate) has_media_annotation: Option<bool>,
+    min_confidence: Option<u8>,
+    max_confidence: Option<u8>,
+    has_attachment: Option<bool>,
+    has_media_annotation: Option<bool>,
     /// Checkout-only filter: whether repository commits reference the ticket slug.
     pub(crate) has_commit: Option<bool>,
     /// Comma-separated attachment filename patterns; `*` is a wildcard.
-    pub(crate) attachment: Option<String>,
-    pub(crate) sort: Option<String>,
+    attachment: Option<String>,
+    sort: Option<String>,
     /// Sort direction for bounded checkout pages (`ascending` or `descending`).
-    pub(crate) direction: Option<String>,
+    direction: Option<String>,
     pub(crate) limit: Option<usize>,
     /// Opt into the bounded checkout page envelope. Capped to protect server and browser.
     pub(crate) page_size: Option<usize>,
@@ -64,7 +64,7 @@ pub(crate) struct ListParams {
     /// so whole-checkout walkers avoid a provider summary walk per page (HS2-VPEAM4).
     pub(crate) counts: Option<bool>,
     /// Keyset cursor (a ULID): return rows strictly after this one in `sort` order (HS2-TCDTCH).
-    pub(crate) page_after: Option<String>,
+    page_after: Option<String>,
     /// Omit the Markdown body from each row (default true). `compact=false` keeps it.
     pub(crate) compact: Option<bool>,
     /// Comma-separated field allow-list for a leaner-than-compact projection (HS2-GY3GWT):
@@ -253,7 +253,7 @@ pub(crate) struct UpdateReq {
     /// (HS2-DWTJ43), or on the note named by `note_id`, where JSON null clears it
     /// (HS2-CY4CWC). Kept as raw JSON so a malformed value gets an explicit 400.
     #[serde(default, deserialize_with = "deserialize_nullable_patch")]
-    pub(crate) note_confidence: Option<Option<serde_json::Value>>,
+    note_confidence: Option<Option<serde_json::Value>>,
     /// Who is acting (HS2-RD4M29): `{"role":"human|ai|system","id":"..."}`. Absent is
     /// unspecified, never assumed AI.
     #[serde(default)]
@@ -326,9 +326,7 @@ impl UpdateReq {
     }
 }
 
-pub(crate) fn deserialize_nullable_patch<'de, D, T>(
-    deserializer: D,
-) -> Result<Option<Option<T>>, D::Error>
+fn deserialize_nullable_patch<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: Deserialize<'de>,

@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 const HISTORY_CAP: usize = 50;
 const OUTPUT_CAP: usize = 10_000;
-pub(crate) type ChangeCallback = Arc<dyn Fn(CommandRun) + Send + Sync>;
+type ChangeCallback = Arc<dyn Fn(CommandRun) + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OutputLine {

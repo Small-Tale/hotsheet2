@@ -6,13 +6,13 @@ use crate::*;
 
 /// Keeps the watcher alive; dropping it stops watching.
 pub struct WatchHandle {
-    pub(crate) _watcher: HeldWatcher,
+    _watcher: HeldWatcher,
 }
 
 /// Keeps one checkout monitor alive. Initialization and repository inspection happen on
 /// its background thread, so opening a project never waits for a recursive traversal.
 pub(crate) struct RepositoryWatchHandle {
-    pub(crate) stop: std::sync::mpsc::Sender<()>,
+    stop: std::sync::mpsc::Sender<()>,
 }
 
 impl Drop for RepositoryWatchHandle {
@@ -22,7 +22,7 @@ impl Drop for RepositoryWatchHandle {
 }
 
 /// Held only for its `Drop`.
-pub(crate) enum HeldWatcher {
+enum HeldWatcher {
     Native { _hold: NativeWatcherHold },
     Poll { _watcher: notify::PollWatcher },
 }
@@ -30,17 +30,17 @@ pub(crate) enum HeldWatcher {
 /// A native watcher started on its own thread; `stopped` tells a still-starting thread to
 /// discard the watcher it is creating.
 #[derive(Default)]
-pub(crate) struct NativeWatcherState {
-    pub(crate) watcher: Option<notify::RecommendedWatcher>,
+struct NativeWatcherState {
+    watcher: Option<notify::RecommendedWatcher>,
     /// Bridges the native stream's start-up: polls until the stream has been live a moment.
-    pub(crate) bridge: Option<notify::PollWatcher>,
-    pub(crate) stopped: bool,
+    bridge: Option<notify::PollWatcher>,
+    stopped: bool,
 }
 
-pub(crate) type NativeWatcherSlot = Arc<Mutex<NativeWatcherState>>;
+type NativeWatcherSlot = Arc<Mutex<NativeWatcherState>>;
 
 /// Owns a started (or starting) native watcher; dropping it stops the watcher.
-pub(crate) struct NativeWatcherHold(pub(crate) NativeWatcherSlot);
+struct NativeWatcherHold(pub(crate) NativeWatcherSlot);
 
 impl Drop for NativeWatcherHold {
     fn drop(&mut self) {
@@ -116,9 +116,9 @@ pub(crate) fn registered_watcher_backend() -> WatcherBackend {
 
 /// Marks the synthetic event that asks a store's watch loop to re-check its tickets once
 /// the native stream is live, covering writes made while the stream was starting.
-pub(crate) const STARTUP_RESYNC: &str = "hotsheet-startup-resync";
+const STARTUP_RESYNC: &str = "hotsheet-startup-resync";
 /// When the startup resync runs; a native stream is live well within this (HS2-P3SSGR).
-pub(crate) const STARTUP_RESYNC_DELAY: Duration = Duration::from_millis(1500);
+const STARTUP_RESYNC_DELAY: Duration = Duration::from_millis(1500);
 
 /// The startup bridge's polling config. notify's poller compares mtimes in whole seconds, so an
 /// edit landing in the same second as the previous scan looks unchanged; comparing contents
@@ -275,7 +275,7 @@ pub(crate) fn spawn_repository_watcher(
 }
 
 /// One checkout monitor's loop: runs on its own thread until the stop channel fires.
-pub(crate) type RepositoryMonitor = fn(
+type RepositoryMonitor = fn(
     std::path::PathBuf,
     String,
     broadcast::Sender<ChangeEvent>,
@@ -283,7 +283,7 @@ pub(crate) type RepositoryMonitor = fn(
     std::sync::mpsc::Receiver<()>,
 );
 
-pub(crate) fn spawn_repository_monitor(
+fn spawn_repository_monitor(
     root: std::path::PathBuf,
     checkout_id: String,
     events: broadcast::Sender<ChangeEvent>,
@@ -298,26 +298,26 @@ pub(crate) fn spawn_repository_monitor(
 }
 
 /// How long filesystem events must pause before the checkout's Git status is re-read.
-pub(crate) const REPOSITORY_EVENT_QUIET: Duration = Duration::from_millis(175);
+const REPOSITORY_EVENT_QUIET: Duration = Duration::from_millis(175);
 /// The most often a checkout's Git status is re-read while events keep arriving (a build or
 /// checkout in progress); matches the old poller's fastest rate, so a busy checkout costs no
 /// more than before and an idle one costs nothing.
-pub(crate) const REPOSITORY_FINGERPRINT_INTERVAL: Duration = Duration::from_millis(750);
+const REPOSITORY_FINGERPRINT_INTERVAL: Duration = Duration::from_millis(750);
 /// A continuous event stream still gets its status re-read this often.
-pub(crate) const REPOSITORY_MAX_EVENT_LATENCY: Duration = Duration::from_secs(1);
+const REPOSITORY_MAX_EVENT_LATENCY: Duration = Duration::from_secs(1);
 
 /// Decides when filesystem events warrant re-reading a checkout's Git status: after a pause in
 /// the events, or periodically during a continuous stream, never more often than
 /// [`REPOSITORY_FINGERPRINT_INTERVAL`].
 #[derive(Debug)]
-pub(crate) struct RepositoryRefreshGate {
-    pub(crate) first_event: Option<Instant>,
-    pub(crate) last_event: Option<Instant>,
-    pub(crate) last_fingerprint: Option<Instant>,
+struct RepositoryRefreshGate {
+    first_event: Option<Instant>,
+    last_event: Option<Instant>,
+    last_fingerprint: Option<Instant>,
 }
 
 impl RepositoryRefreshGate {
-    pub(crate) fn new() -> Self {
+    fn new() -> Self {
         Self {
             first_event: None,
             last_event: None,
@@ -325,12 +325,12 @@ impl RepositoryRefreshGate {
         }
     }
 
-    pub(crate) fn note_event(&mut self, now: Instant) {
+    fn note_event(&mut self, now: Instant) {
         self.first_event.get_or_insert(now);
         self.last_event = Some(now);
     }
 
-    pub(crate) fn due(&self, now: Instant) -> bool {
+    fn due(&self, now: Instant) -> bool {
         let (Some(first), Some(last)) = (self.first_event, self.last_event) else {
             return false;
         };
@@ -342,14 +342,14 @@ impl RepositoryRefreshGate {
         settled && rested
     }
 
-    pub(crate) fn fingerprinted(&mut self, now: Instant) {
+    fn fingerprinted(&mut self, now: Instant) {
         self.first_event = None;
         self.last_event = None;
         self.last_fingerprint = Some(now);
     }
 
     /// How long the monitor may block waiting for the next event.
-    pub(crate) fn wait(&self, now: Instant) -> Duration {
+    fn wait(&self, now: Instant) -> Duration {
         let Some(first) = self.first_event else {
             return Duration::from_millis(250);
         };
@@ -368,13 +368,13 @@ impl RepositoryRefreshGate {
 /// watcher errors and rescan requests, may matter. Lock files are kept: Git updates its index
 /// and refs by renaming `*.lock` into place, and FSEvents may report only the lock's path.
 #[derive(Debug, Default)]
-pub(crate) struct RepositoryEventFilter {
-    pub(crate) ignored: Vec<std::path::PathBuf>,
-    pub(crate) git_dirs: Vec<std::path::PathBuf>,
+struct RepositoryEventFilter {
+    ignored: Vec<std::path::PathBuf>,
+    git_dirs: Vec<std::path::PathBuf>,
 }
 
 impl RepositoryEventFilter {
-    pub(crate) fn load(root: &FsPath) -> Self {
+    fn load(root: &FsPath) -> Self {
         let mut filter = Self {
             ignored: Vec::new(),
             git_dirs: repository_git_dirs(root),
@@ -385,7 +385,7 @@ impl RepositoryEventFilter {
 
     /// Re-read the ignored paths, so a build directory created after startup stops
     /// triggering status reads once Git has confirmed it ignores it.
-    pub(crate) fn refresh_ignored(&mut self, root: &FsPath) {
+    fn refresh_ignored(&mut self, root: &FsPath) {
         let Ok(output) = hotsheet_ticketing::git::command()
             .arg("--no-optional-locks")
             .arg("-C")
@@ -424,7 +424,7 @@ impl RepositoryEventFilter {
             .collect();
     }
 
-    pub(crate) fn is_relevant(&self, result: &notify::Result<notify::Event>) -> bool {
+    fn is_relevant(&self, result: &notify::Result<notify::Event>) -> bool {
         let Ok(event) = result else {
             return true;
         };
@@ -434,7 +434,7 @@ impl RepositoryEventFilter {
         event.paths.iter().any(|path| self.path_is_relevant(path))
     }
 
-    pub(crate) fn path_is_relevant(&self, path: &FsPath) -> bool {
+    fn path_is_relevant(&self, path: &FsPath) -> bool {
         if self.ignored.iter().any(|ignored| path.starts_with(ignored)) {
             return false;
         }
@@ -448,7 +448,7 @@ impl RepositoryEventFilter {
 }
 
 /// A path as given and canonicalized (macOS reports `/private/var/...` for `/var/...`).
-pub(crate) fn path_spellings(path: &FsPath) -> Vec<std::path::PathBuf> {
+fn path_spellings(path: &FsPath) -> Vec<std::path::PathBuf> {
     let mut spellings = vec![path.to_path_buf()];
     if let Ok(canonical) = path.canonicalize()
         && canonical != path
@@ -460,7 +460,7 @@ pub(crate) fn path_spellings(path: &FsPath) -> Vec<std::path::PathBuf> {
 
 /// The checkout's Git directory and common directory (distinct for a linked worktree, whose
 /// HEAD, index and refs live outside the working tree), in every spelling.
-pub(crate) fn repository_git_dirs(root: &FsPath) -> Vec<std::path::PathBuf> {
+fn repository_git_dirs(root: &FsPath) -> Vec<std::path::PathBuf> {
     let Ok(output) = hotsheet_ticketing::git::command()
         .arg("-C")
         .arg(root)
@@ -489,7 +489,7 @@ pub(crate) fn repository_git_dirs(root: &FsPath) -> Vec<std::path::PathBuf> {
 
 /// Re-read a checkout's Git status and announce it when it differs from the last read.
 /// Returns whether it changed.
-pub(crate) fn announce_repository_change(
+fn announce_repository_change(
     root: &FsPath,
     previous: &mut Option<Vec<u8>>,
     checkout_id: &str,
@@ -505,7 +505,7 @@ pub(crate) fn announce_repository_change(
     Some(changed)
 }
 
-pub(crate) fn run_native_repository_monitor(
+fn run_native_repository_monitor(
     root: std::path::PathBuf,
     checkout_id: String,
     events: broadcast::Sender<ChangeEvent>,
@@ -600,7 +600,7 @@ pub(crate) fn run_native_repository_monitor(
     }
 }
 
-pub(crate) fn git_repository_fingerprint(root: &FsPath) -> Option<Vec<u8>> {
+fn git_repository_fingerprint(root: &FsPath) -> Option<Vec<u8>> {
     let output = hotsheet_ticketing::git::command()
         .arg("--no-optional-locks")
         .arg("-C")
@@ -618,7 +618,7 @@ pub(crate) fn git_repository_fingerprint(root: &FsPath) -> Option<Vec<u8>> {
     output.status.success().then_some(output.stdout)
 }
 
-pub(crate) fn run_git_repository_monitor(
+fn run_git_repository_monitor(
     root: std::path::PathBuf,
     checkout_id: String,
     events: broadcast::Sender<ChangeEvent>,
@@ -722,7 +722,7 @@ fn regenerate_target_worklists(target: &WatchTarget) {
 
 /// The ticket files one watcher event concerns; a startup resync yields the store's ticket
 /// files whose bytes differ from the index.
-pub(crate) fn watch_event_paths(
+fn watch_event_paths(
     target: &WatchTarget,
     res: notify::Result<notify::Event>,
 ) -> Vec<std::path::PathBuf> {
@@ -741,10 +741,7 @@ pub(crate) fn watch_event_paths(
 /// Ticket files under `tickets_dir` (`<shard>/<ULID>.md`) whose content hash differs from
 /// the store's index: the writes a starting native stream may have missed. Unchanged
 /// tickets are skipped so a resync does not re-announce the whole store.
-pub(crate) fn stale_ticket_files(
-    target: &WatchTarget,
-    tickets_dir: &FsPath,
-) -> Vec<std::path::PathBuf> {
+fn stale_ticket_files(target: &WatchTarget, tickets_dir: &FsPath) -> Vec<std::path::PathBuf> {
     let is_md = |path: &FsPath| path.extension().and_then(|e| e.to_str()) == Some("md");
     let mut files = Vec::new();
     let mut dirs = vec![tickets_dir.to_path_buf()];
@@ -780,7 +777,7 @@ pub(crate) fn stale_ticket_files(
         .collect()
 }
 
-pub(crate) fn event_paths(res: notify::Result<notify::Event>) -> Vec<std::path::PathBuf> {
+fn event_paths(res: notify::Result<notify::Event>) -> Vec<std::path::PathBuf> {
     match res {
         Ok(event) => expand_ticket_files(event.paths),
         Err(_) => Vec::new(),
@@ -793,7 +790,7 @@ pub(crate) fn event_paths(res: notify::Result<notify::Event>) -> Vec<std::path::
 /// file event created inside a brand-new subdir — so a bare `.md` filter drops the only
 /// event we get and the reindex never fires. We therefore also expand any directory path
 /// to the `.md` files it now contains, so a new shard dir's ticket is still picked up.
-pub(crate) fn expand_ticket_files(paths: Vec<std::path::PathBuf>) -> Vec<std::path::PathBuf> {
+fn expand_ticket_files(paths: Vec<std::path::PathBuf>) -> Vec<std::path::PathBuf> {
     let is_md = |p: &std::path::Path| p.extension().and_then(|e| e.to_str()) == Some("md");
     let mut out = Vec::new();
     for p in paths {

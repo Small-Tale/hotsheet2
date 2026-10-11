@@ -24,7 +24,7 @@ use hotsheet_aitools::ModelCatalogCache;
 use hotsheet_plugins::AiToolDescriptor;
 
 /// How long a discovery result is reused before the next caller rescans.
-pub(crate) const AI_TOOL_DISCOVERY_TTL: Duration = Duration::from_secs(10);
+const AI_TOOL_DISCOVERY_TTL: Duration = Duration::from_secs(10);
 
 /// The scan a cache miss runs: plugin search dirs, project root, the model catalogs, and
 /// whether to refresh them. Production uses

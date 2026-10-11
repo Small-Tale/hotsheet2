@@ -56,7 +56,7 @@ pub(crate) async fn list_commands(
     Json(state.commands.definitions())
 }
 
-pub(crate) fn validate_command_definitions(
+fn validate_command_definitions(
     definitions: &[hotsheet_ticketing::commands::CommandDefinition],
 ) -> Result<(), ApiError> {
     use hotsheet_ticketing::commands::CommandKind;
@@ -128,7 +128,7 @@ pub(crate) async fn list_checkout_commands(
     Ok(Json(definitions))
 }
 
-pub(crate) fn read_command_groups(settings: &Settings) -> Result<Json<Vec<String>>, ApiError> {
+fn read_command_groups(settings: &Settings) -> Result<Json<Vec<String>>, ApiError> {
     hotsheet_ticketing::commands::groups_from_settings(settings)
         .map(Json)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
@@ -136,7 +136,7 @@ pub(crate) fn read_command_groups(settings: &Settings) -> Result<Json<Vec<String
 
 /// Persist the kept (possibly empty) command groups beside `commands`, in the same
 /// machine-local scope, so an "Add group" survives a reload (HS2-EZ5KMC).
-pub(crate) fn write_command_groups(
+fn write_command_groups(
     settings: &Settings,
     groups: Vec<String>,
 ) -> Result<Json<Vec<String>>, ApiError> {
@@ -312,7 +312,7 @@ pub(crate) async fn list_checkout_command_runs(
 #[derive(Deserialize)]
 pub(crate) struct RunOutputQuery {
     #[serde(default)]
-    pub(crate) after: u64,
+    after: u64,
 }
 
 pub(crate) async fn get_command_run(
@@ -365,10 +365,10 @@ pub(crate) async fn cancel_checkout_command_run(
 
 #[derive(Deserialize)]
 pub(crate) struct NotificationQuery {
-    pub(crate) checkout: Option<String>,
-    pub(crate) store: Option<String>,
-    pub(crate) ticket: Option<String>,
-    pub(crate) recipient: Option<String>,
+    checkout: Option<String>,
+    store: Option<String>,
+    ticket: Option<String>,
+    recipient: Option<String>,
 }
 pub(crate) async fn list_notifications(
     State(state): State<AppState>,

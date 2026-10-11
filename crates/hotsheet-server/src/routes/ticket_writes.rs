@@ -5,7 +5,7 @@ use crate::*;
 /// Body for `POST /stores`: register another local store by its path.
 #[derive(Deserialize)]
 pub(crate) struct AddStoreBody {
-    pub(crate) path: String,
+    path: String,
 }
 
 /// `POST /stores` — open a store at `path` (building its own in-memory index) and host it.
@@ -527,7 +527,7 @@ pub(crate) fn validate_attachment_metadata(
         .map_err(|message| ApiError::new(StatusCode::BAD_REQUEST, message))
 }
 
-pub(crate) fn decode_attachment_header(raw: &str, field: &str) -> Result<String, ApiError> {
+fn decode_attachment_header(raw: &str, field: &str) -> Result<String, ApiError> {
     let bytes = raw.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;

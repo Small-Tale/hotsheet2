@@ -29,28 +29,28 @@ pub(crate) enum GitHubAuthStatus {
 }
 
 pub(crate) struct GitHubAuthSession {
-    pub(crate) status: tokio::sync::watch::Sender<GitHubAuthStatus>,
-    pub(crate) client_id: String,
-    pub(crate) web_base: String,
-    pub(crate) credential_reference: String,
+    status: tokio::sync::watch::Sender<GitHubAuthStatus>,
+    client_id: String,
+    web_base: String,
+    credential_reference: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct StartGitHubAuthBody {
     #[serde(default = "default_github_web_base")]
-    pub(crate) web_base: String,
+    web_base: String,
 }
 
-pub(crate) fn default_github_web_base() -> String {
+fn default_github_web_base() -> String {
     "https://github.com".into()
 }
 
 #[derive(Debug, Serialize)]
 pub(crate) struct StartGitHubAuthResponse {
-    pub(crate) session_id: String,
-    pub(crate) user_code: String,
-    pub(crate) verification_uri: String,
-    pub(crate) expires_in: u64,
+    session_id: String,
+    user_code: String,
+    verification_uri: String,
+    expires_in: u64,
 }
 
 pub(crate) async fn start_github_device_auth(
@@ -185,10 +185,10 @@ pub(crate) async fn cancel_github_device_auth(
 
 #[derive(Debug, Serialize)]
 pub(crate) struct GitHubRepositoriesResponse {
-    pub(crate) repositories: Vec<String>,
+    repositories: Vec<String>,
     /// What each app installation grants and where to change it (HS2-27T5WT).
-    pub(crate) installations: Vec<hotsheet_extsync::AppInstallation>,
-    pub(crate) install_url: Option<String>,
+    installations: Vec<hotsheet_extsync::AppInstallation>,
+    install_url: Option<String>,
 }
 
 pub(crate) async fn list_github_auth_repositories(
@@ -237,7 +237,7 @@ pub(crate) async fn list_github_auth_repositories(
     .await
 }
 
-pub(crate) async fn github_repository_access(
+async fn github_repository_access(
     client_id: String,
     web_base: String,
     access_token: String,

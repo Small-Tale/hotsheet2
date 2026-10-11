@@ -10,12 +10,12 @@ pub(crate) struct IndexRepairs {
     pending: Arc<Mutex<HashSet<(String, Ulid)>>>,
     /// Test-only fault injection: the next N index writes fail.
     #[cfg(test)]
-    pub(crate) faults: Arc<AtomicUsize>,
+    faults: Arc<AtomicUsize>,
 }
 
 impl IndexRepairs {
     /// Run one index write, mapping a SQLite failure to its message.
-    pub(crate) fn write(
+    fn write(
         &self,
         entry: &StoreEntry,
         write: impl FnOnce(&Index) -> Result<(), IndexError>,
@@ -33,7 +33,7 @@ impl IndexRepairs {
     }
 
     /// Log a failed index write and queue that ticket for re-indexing from its file.
-    pub(crate) fn schedule(&self, store_id: &str, id: Ulid, error: &str) {
+    fn schedule(&self, store_id: &str, id: Ulid, error: &str) {
         tracing::warn!(ticket = %id, store = store_id, error, "index write failed; scheduled repair");
         self.pending
             .lock_or_recover()
@@ -64,14 +64,14 @@ impl IndexRepairs {
     }
 
     #[cfg(test)]
-    pub(crate) fn contains(&self, store_id: &str, id: Ulid) -> bool {
+    fn contains(&self, store_id: &str, id: Ulid) -> bool {
         self.pending
             .lock_or_recover()
             .contains(&(store_id.to_string(), id))
     }
 
     #[cfg(test)]
-    pub(crate) fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.pending.lock_or_recover().is_empty()
     }
 
@@ -117,7 +117,7 @@ impl IndexRepairs {
 
 /// Bounded backoff for the watcher's background index-repair retry (HS2-5BAEX9).
 pub(crate) const INDEX_REPAIR_RETRY_MIN: Duration = Duration::from_secs(1);
-pub(crate) const INDEX_REPAIR_RETRY_MAX: Duration = Duration::from_secs(60);
+const INDEX_REPAIR_RETRY_MAX: Duration = Duration::from_secs(60);
 
 /// The next retry delay after a background repair attempt: reset once the queue drains,
 /// otherwise double up to [`INDEX_REPAIR_RETRY_MAX`].
@@ -141,7 +141,7 @@ impl AppState {
 
     /// Run one server-side index write, surfacing a SQLite failure instead of swallowing
     /// it (HS2-JD7TK0). A poisoned index lock is recovered (HS2-ZGQJZP).
-    pub(crate) fn index_write(
+    fn index_write(
         &self,
         entry: &StoreEntry,
         write: impl FnOnce(&Index) -> Result<(), IndexError>,
@@ -150,12 +150,12 @@ impl AppState {
     }
 
     /// Log a failed index write and queue that ticket for re-indexing from its file.
-    pub(crate) fn schedule_index_repair(&self, store_id: &str, id: Ulid, error: &str) {
+    fn schedule_index_repair(&self, store_id: &str, id: Ulid, error: &str) {
         self.index_repairs.schedule(store_id, id, error);
     }
 
     /// Re-index every queued ticket of `entry` from its current file.
-    pub(crate) fn repair_pending_index_rows(&self, entry: &StoreEntry, store_id: &str) {
+    fn repair_pending_index_rows(&self, entry: &StoreEntry, store_id: &str) {
         self.index_repairs.repair(entry, store_id);
     }
 
@@ -367,7 +367,7 @@ pub struct AssignmentEvent {
 
 /// How many recent events the long-poll ring retains. A poller whose cursor falls behind
 /// this many events gets an `overflow` signal and should re-sync via a full list.
-pub(crate) const EVENT_LOG_CAP: usize = 512;
+const EVENT_LOG_CAP: usize = 512;
 
 /// A bounded, monotonically-sequenced ring of recent [`ChangeEvent`]s, so a long-poll
 /// client can ask "everything since cursor N" without holding a socket (HS2-P3P3CC). Each
@@ -377,7 +377,7 @@ pub(crate) struct EventLog {
     /// The last sequence number assigned (0 = nothing emitted yet).
     pub(crate) seq: u64,
     /// `(seq, event)`, oldest first, capped at [`EVENT_LOG_CAP`].
-    pub(crate) ring: std::collections::VecDeque<(u64, ChangeEvent)>,
+    ring: std::collections::VecDeque<(u64, ChangeEvent)>,
 }
 
 pub(crate) fn emit_change(
@@ -392,7 +392,7 @@ pub(crate) fn emit_change(
 
 impl EventLog {
     /// Record an event, assigning it the next seq.
-    pub(crate) fn push(&mut self, mut event: ChangeEvent) -> ChangeEvent {
+    fn push(&mut self, mut event: ChangeEvent) -> ChangeEvent {
         self.seq += 1;
         event.cursor = Some(self.seq);
         self.ring.push_back((self.seq, event.clone()));
@@ -685,9 +685,12 @@ mod index_repair_tests {
         let (_root, store, state, store_id, entry) = fixture();
         let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
         create(&store, id);
-        let target = super::default_watch_target(&state);
+        let target = crate::watcher::default_watch_target(&state);
         state.index_repairs.faults.store(1, Ordering::SeqCst);
-        assert!(super::handle_path_change(&target, &store.ticket_path(&id)));
+        assert!(crate::watcher::handle_path_change(
+            &target,
+            &store.ticket_path(&id)
+        ));
         assert_eq!(indexed_hash(&entry, &id), None);
         assert!(state.index_repairs.contains(&store_id, id));
         assert!(!state.index_repairs.repair(&entry, &store_id));
@@ -703,9 +706,12 @@ mod index_repair_tests {
         let ticket = create(&store, id);
         state.changed_in(&entry, "created", &ticket);
         std::fs::remove_file(store.ticket_path(&id)).unwrap();
-        let target = super::default_watch_target(&state);
+        let target = crate::watcher::default_watch_target(&state);
         state.index_repairs.faults.store(1, Ordering::SeqCst);
-        assert!(super::handle_path_change(&target, &store.ticket_path(&id)));
+        assert!(crate::watcher::handle_path_change(
+            &target,
+            &store.ticket_path(&id)
+        ));
         assert!(indexed_hash(&entry, &id).is_some());
         assert!(state.index_repairs.contains(&store_id, id));
         // Repair fails once more (stays queued), then succeeds.
@@ -727,8 +733,8 @@ mod index_repair_tests {
         state.changed_in(&entry, "created", &ticket);
         assert!(state.index_repairs.contains(&store_id, id));
         let (tx, rx) = std::sync::mpsc::channel();
-        let target = super::default_watch_target(&state);
-        let worker = std::thread::spawn(move || super::watch_loop(rx, target));
+        let target = crate::watcher::default_watch_target(&state);
+        let worker = std::thread::spawn(move || crate::watcher::watch_loop(rx, target));
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
         while indexed_hash(&entry, &id).is_none() {
             assert!(

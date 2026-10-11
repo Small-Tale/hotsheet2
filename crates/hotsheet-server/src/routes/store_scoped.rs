@@ -132,7 +132,7 @@ pub(crate) async fn ws_sync(
 
 /// Start a change-stream lease. A lease on a checkout also brings its stores and repository
 /// monitor back if an earlier sweep stopped them, off the request path.
-pub(crate) fn begin_presence(
+fn begin_presence(
     state: &AppState,
     checkout: Option<&str>,
     client: Option<&str>,
@@ -175,7 +175,7 @@ pub(crate) async fn close_checkout_session(
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct CloseSessionParams {
-    pub(crate) client: Option<String>,
+    client: Option<String>,
 }
 
 /// When the next unhost sweep runs; a request for an earlier time wakes the sweeper.
@@ -213,7 +213,7 @@ pub(crate) async fn run_unhost_sweeper(state: AppState) {
 /// drive on the store, a terminal inside a checkout that uses it, or a live claim in it.
 /// Repository monitors of checkouts nobody has open stop too. While project stores remain
 /// hosted, another sweep is scheduled for when their leases could have lapsed.
-pub(crate) async fn sweep_unhosted(state: &AppState) {
+async fn sweep_unhosted(state: &AppState) {
     let live = state.presence.live();
     let terminal_dirs = live_terminal_dirs(state).await;
     let drive_sources: std::collections::HashSet<String> = state
@@ -292,7 +292,7 @@ pub(crate) async fn sweep_unhosted(state: &AppState) {
 }
 
 /// The working directories of live terminals, which keep their checkout's stores hosted.
-pub(crate) async fn live_terminal_dirs(state: &AppState) -> Vec<std::path::PathBuf> {
+async fn live_terminal_dirs(state: &AppState) -> Vec<std::path::PathBuf> {
     let infos: Vec<TerminalInfo> = if let Some(broker) = &state.terminal_broker {
         match broker.call(hotsheet_terminals::BrokerRequest::List).await {
             Ok(hotsheet_terminals::BrokerResponse::List { terminals }) => {
@@ -316,7 +316,7 @@ pub(crate) async fn live_terminal_dirs(state: &AppState) -> Vec<std::path::PathB
 }
 
 /// Whether any ticket in a hosted store is claimed under a lease that has not expired.
-pub(crate) fn store_has_live_claim(state: &AppState, id: &str) -> bool {
+fn store_has_live_claim(state: &AppState, id: &str) -> bool {
     let Some(entry) = state.host.get(id) else {
         return false;
     };
@@ -328,7 +328,7 @@ pub(crate) fn store_has_live_claim(state: &AppState, id: &str) -> bool {
     })
 }
 
-pub(crate) async fn ws_loop(mut socket: WebSocket, mut rx: broadcast::Receiver<ChangeEvent>) {
+async fn ws_loop(mut socket: WebSocket, mut rx: broadcast::Receiver<ChangeEvent>) {
     while let Ok(event) = rx.recv().await {
         let text = match serde_json::to_string(&event) {
             Ok(t) => t,
@@ -341,29 +341,29 @@ pub(crate) async fn ws_loop(mut socket: WebSocket, mut rx: broadcast::Receiver<C
 }
 
 /// The default and max time a long-poll request will wait for a new event.
-pub(crate) const POLL_DEFAULT_MS: u64 = 25_000;
-pub(crate) const POLL_MAX_MS: u64 = 55_000;
+const POLL_DEFAULT_MS: u64 = 25_000;
+const POLL_MAX_MS: u64 = 55_000;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct PollParams {
-    pub(crate) secret: Option<String>,
+    secret: Option<String>,
     /// Return events with `seq > since`. Omit to just fetch the current cursor (no backlog),
     /// the way a fresh WebSocket only sees future events.
-    pub(crate) since: Option<u64>,
+    since: Option<u64>,
     /// How long to block for the next event when none are newer than `since` (ms, capped).
-    pub(crate) timeout_ms: Option<u64>,
+    timeout_ms: Option<u64>,
     /// The checkout this subscription serves and the client holding it (HS2-ARJ9J1).
-    pub(crate) checkout: Option<String>,
-    pub(crate) client: Option<String>,
+    checkout: Option<String>,
+    client: Option<String>,
 }
 
 /// One long-poll response: the new cursor, any events since the requested one, and whether
 /// the caller fell so far behind the ring that events were lost (→ re-sync via a full list).
 #[derive(Debug, Serialize)]
-pub(crate) struct PollResponse {
-    pub(crate) cursor: u64,
-    pub(crate) events: Vec<ChangeEvent>,
-    pub(crate) overflow: bool,
+struct PollResponse {
+    cursor: u64,
+    events: Vec<ChangeEvent>,
+    overflow: bool,
 }
 
 /// `GET /ws/poll?secret=…&since=<seq>&timeout_ms=<n>` — the long-poll fallback to `/ws/sync`
