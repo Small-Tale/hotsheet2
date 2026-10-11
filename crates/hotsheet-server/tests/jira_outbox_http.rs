@@ -936,3 +936,221 @@ async fn manual_retry_gets_a_new_bounded_attempt_window_after_attention() {
     assert_eq!(dispatch_jira_at(&state, 1_000).await.unwrap(), 1);
     assert_eq!(*fake.title.lock().unwrap(), "Retry later");
 }
+
+// ---- HS2-699TB6: outbox transition-matrix sequences ----
+
+fn put_count(fake: &FakeJira) -> usize {
+    fake.requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(method, _)| method == "PUT")
+        .count()
+}
+
+fn outbox_state(dir: &std::path::Path, fake: &Arc<FakeJira>) -> AppState {
+    let store = FsStore::open(dir).unwrap();
+    AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_ticket_provider(Arc::new(provider(fake.clone())))
+        .with_jira_outbox(dir.join("dispatch.sqlite"), 4)
+        .unwrap()
+}
+
+async fn queue(server: &axum::Router, operations: Value) -> (StatusCode, Value) {
+    let response = server
+        .clone()
+        .oneshot(request(
+            "POST",
+            &format!("/providers/{CONNECTION}/tickets/queued"),
+            Some(json!({ "operations": operations })),
+        ))
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+async fn outbox(server: &axum::Router) -> Vec<(String, String, i64)> {
+    let rows = json_body(
+        server
+            .clone()
+            .oneshot(request(
+                "GET",
+                &format!("/providers/{CONNECTION}/outbox"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let mut rows: Vec<_> = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            (
+                row["operation_id"].as_str().unwrap().to_owned(),
+                row["state"].as_str().unwrap().to_owned(),
+                row["attempts"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    rows.sort();
+    rows
+}
+
+#[tokio::test]
+async fn same_operation_id_retried_across_every_dispatch_state_is_one_remote_write() {
+    let dir = tempfile::tempdir().unwrap();
+    FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    let state = outbox_state(dir.path(), &fake);
+    let server = app(state.clone());
+    let op = || json!([edit("same", "Retried intent")]);
+
+    // queued -> retry -> still one row
+    assert_eq!(queue(&server, op()).await.0, StatusCode::ACCEPTED);
+    assert_eq!(queue(&server, op()).await.0, StatusCode::ACCEPTED);
+    assert_eq!(outbox(&server).await, [("same".into(), "queued".into(), 0)]);
+
+    // failed dispatch (deferred) -> retry must not reset attempts or add a duplicate
+    fake.offline_once.store(true, Ordering::SeqCst);
+    assert_eq!(dispatch_jira_at(&state, 100).await.unwrap(), 1);
+    assert_eq!(queue(&server, op()).await.0, StatusCode::ACCEPTED);
+    assert_eq!(outbox(&server).await, [("same".into(), "queued".into(), 1)]);
+
+    // confirmed -> retry is idempotent and dispatch has nothing to send
+    assert_eq!(dispatch_jira_at(&state, 1_000).await.unwrap(), 1);
+    let (status, body) = queue(&server, op()).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(body[0]["state"], "confirmed");
+    assert_eq!(dispatch_jira_at(&state, 2_000).await.unwrap(), 0);
+    assert_eq!(put_count(&fake), 1, "one remote write for one operation id");
+
+    // the same id with a changed payload is rejected, not silently reapplied
+    let (changed, _) = queue(&server, json!([edit("same", "Different")])).await;
+    assert!(changed.is_client_error(), "{changed}");
+    assert_eq!(*fake.title.lock().unwrap(), "Retried intent");
+}
+
+#[tokio::test]
+async fn failed_dispatch_requeues_with_backoff_and_later_edits_stay_behind_it() {
+    let dir = tempfile::tempdir().unwrap();
+    FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    let state = outbox_state(dir.path(), &fake);
+    let server = app(state.clone());
+    assert_eq!(
+        queue(&server, json!([edit("a", "First")])).await.0,
+        StatusCode::ACCEPTED
+    );
+    fake.offline_once.store(true, Ordering::SeqCst);
+    assert_eq!(dispatch_jira_at(&state, 100).await.unwrap(), 1);
+    // An edit to the same ticket arrives while "a" is backed off.
+    assert_eq!(
+        queue(&server, json!([edit("b", "Second")])).await.0,
+        StatusCode::ACCEPTED
+    );
+    // Before the backoff deadline nothing is claimable: "b" must not overtake "a".
+    assert_eq!(dispatch_jira_at(&state, 100).await.unwrap(), 0);
+    assert_eq!(put_count(&fake), 0);
+    // After it, "a" sends first, then "b"; the remote ends at the latest intent.
+    assert_eq!(dispatch_jira_at(&state, 1_000).await.unwrap(), 1);
+    assert_eq!(*fake.title.lock().unwrap(), "First");
+    assert_eq!(dispatch_jira_at(&state, 1_001).await.unwrap(), 1);
+    assert_eq!(*fake.title.lock().unwrap(), "Second");
+    assert_eq!(
+        outbox(&server).await,
+        [
+            ("a".into(), "confirmed".into(), 2),
+            ("b".into(), "confirmed".into(), 1)
+        ]
+    );
+}
+
+#[tokio::test]
+async fn interleaved_edits_to_one_native_id_project_and_dispatch_in_admission_order() {
+    let dir = tempfile::tempdir().unwrap();
+    FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    let state = outbox_state(dir.path(), &fake);
+    let server = app(state.clone());
+    for (id, title) in [("x1", "One"), ("x2", "Two")] {
+        assert_eq!(
+            queue(&server, json!([edit(id, title)])).await.0,
+            StatusCode::ACCEPTED
+        );
+    }
+    // A dispatch confirms x1 while x3 is admitted between passes.
+    assert_eq!(dispatch_jira_at(&state, 100).await.unwrap(), 1);
+    assert_eq!(*fake.title.lock().unwrap(), "One");
+    let (_, body) = queue(&server, json!([edit("x3", "Three")])).await;
+    assert_eq!(
+        body[0]["ticket"]["title"], "Three",
+        "projection shows the latest"
+    );
+    assert_eq!(dispatch_jira_at(&state, 101).await.unwrap(), 1);
+    assert_eq!(*fake.title.lock().unwrap(), "Two");
+    assert_eq!(dispatch_jira_at(&state, 102).await.unwrap(), 1);
+    assert_eq!(dispatch_jira_at(&state, 103).await.unwrap(), 0);
+    assert_eq!(*fake.title.lock().unwrap(), "Three");
+    assert_eq!(
+        outbox(&server).await,
+        [
+            ("x1".into(), "confirmed".into(), 1),
+            ("x2".into(), "confirmed".into(), 1),
+            ("x3".into(), "confirmed".into(), 1)
+        ]
+    );
+    assert_eq!(put_count(&fake), 3);
+}
+
+#[tokio::test]
+async fn restart_with_pending_and_mid_send_entries_resumes_in_order_without_loss() {
+    let dir = tempfile::tempdir().unwrap();
+    FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let fake = Arc::new(FakeJira::default());
+    {
+        let state = outbox_state(dir.path(), &fake);
+        let server = app(state.clone());
+        assert_eq!(
+            queue(
+                &server,
+                json!([edit("p1", "Pending one"), edit("p2", "Pending two")])
+            )
+            .await
+            .0,
+            StatusCode::ACCEPTED
+        );
+    }
+    // Simulate a crash mid-send: claim p1 (dispatch_state = sending) with no server alive,
+    // so neither a provider call nor a settlement follows.
+    let claimed = ProviderOutbox::open(dir.path().join("dispatch.sqlite"), 4)
+        .unwrap()
+        .claim_ready(100, 4)
+        .unwrap();
+    assert_eq!(claimed.len(), 1);
+    assert_eq!(claimed[0].operation_id, "p1");
+
+    let state = outbox_state(dir.path(), &fake);
+    let server = app(state.clone());
+    assert_eq!(
+        outbox(&server).await,
+        [
+            ("p1".into(), "queued".into(), 1),
+            ("p2".into(), "queued".into(), 0)
+        ],
+        "restart recovers sending -> queued and keeps later intent"
+    );
+    assert_eq!(dispatch_jira_at(&state, 200).await.unwrap(), 1);
+    assert_eq!(*fake.title.lock().unwrap(), "Pending one");
+    assert_eq!(dispatch_jira_at(&state, 201).await.unwrap(), 1);
+    assert_eq!(dispatch_jira_at(&state, 202).await.unwrap(), 0);
+    assert_eq!(*fake.title.lock().unwrap(), "Pending two");
+    assert_eq!(put_count(&fake), 2);
+}
