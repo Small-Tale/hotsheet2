@@ -788,3 +788,422 @@ pub(crate) fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result
     }
     Ok(())
 }
+
+#[derive(Args)]
+pub(crate) struct TriggerArgs {
+    /// The tool to drive (e.g. `claude`, `codex`).
+    tool: String,
+    /// The turn content. Defaults to a "work the top Up Next ticket" prompt.
+    #[arg(long)]
+    prompt: Option<String>,
+    /// Project directory the tool runs in (defaults to the store path).
+    #[arg(long)]
+    project: Option<PathBuf>,
+    /// Resume a prior session id (channel tools).
+    #[arg(long)]
+    resume: Option<String>,
+    /// Restrict a channel tool to only this MCP config (`--strict-mcp-config`), so it
+    /// can't reach anything but the Hot Sheet shim (HS2-103 isolation).
+    #[arg(long)]
+    mcp_config: Option<PathBuf>,
+    /// Claude permission mode for headless work (e.g. `acceptEdits`,
+    /// `bypassPermissions`). Defaults to `acceptEdits`.
+    #[arg(long)]
+    permission_mode: Option<String>,
+    /// Set an env var for the launched tool (repeatable): `--env CODEX_HOME=/path`.
+    #[arg(long = "env")]
+    envs: Vec<String>,
+    /// Register the connection as a self-claim worker rather than the main session.
+    #[arg(long)]
+    worker: bool,
+    /// Codex only: drive the shared app-server **daemon** for the (isolated) CODEX_HOME
+    /// — reuse one codex instance across turns instead of a fresh process per turn
+    /// (HS2-B7C66H). Needs the managed standalone install available to symlink.
+    #[arg(long = "shared-daemon")]
+    shared_daemon: bool,
+}
+
+#[derive(Args)]
+pub(crate) struct WorkArgs {
+    /// The tool to drive (e.g. `claude`).
+    tool: String,
+    /// Project directory the tool runs in (defaults to the store path).
+    #[arg(long)]
+    project: Option<PathBuf>,
+    /// Maximum turns before stopping (a hard safety cap).
+    #[arg(long, default_value_t = 50)]
+    max: u32,
+    /// Stop after this many consecutive turns that change nothing (thrash guard).
+    #[arg(long = "max-stall", default_value_t = 3)]
+    max_stall: u32,
+    /// Register connections as a self-claim worker rather than the main session.
+    #[arg(long)]
+    worker: bool,
+    /// Codex only: drive the shared app-server **daemon** for the isolated CODEX_HOME —
+    /// one codex instance reused across the whole loop's turns instead of a fresh
+    /// process per turn (HS2-B7C66H); the daemon is stopped when the loop ends.
+    #[arg(long = "shared-daemon")]
+    shared_daemon: bool,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum PluginCmd {
+    /// List built-in + installed plugins, with provenance and whether each is detected.
+    List,
+    /// Show what a plugin declares it will write + launch (the trust disclosure).
+    Info { id: String },
+    /// Install an external plugin from a directory into the machine plugin dir.
+    Install {
+        dir: PathBuf,
+        /// Skip the confirmation prompt (non-interactive install).
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Verify a plugin structurally (loads, known MCP format, safe write targets).
+    Verify { id: String },
+    /// Remove an installed external plugin by id.
+    Remove { id: String },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SettingsCmd {
+    /// Read a setting (effective precedence global < shared < local, unless --scope is given).
+    Get {
+        key: String,
+        /// global | shared | local (default: the effective value).
+        #[arg(long)]
+        scope: Option<String>,
+    },
+    /// Write a setting. Value is parsed as JSON if possible, else stored as a string.
+    Set {
+        key: String,
+        value: String,
+        /// global | shared | local (default: shared).
+        #[arg(long)]
+        scope: Option<String>,
+    },
+    /// List settings (effective, unless --scope is given).
+    List {
+        #[arg(long)]
+        scope: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum AiSettingsCmd {
+    /// Print the effective defaults: this project's, else the machine-wide fallback.
+    Get {
+        #[arg(long)]
+        json: bool,
+        /// Read only the machine-wide fallback.
+        #[arg(long)]
+        global: bool,
+    },
+    /// Save this project's default provider with its model and effort (machine-local project
+    /// settings), or the machine-wide fallback.
+    Set {
+        #[arg(long)]
+        tool: String,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long)]
+        effort: Option<String>,
+        /// Save the machine-wide fallback used by projects without their own choice.
+        #[arg(long)]
+        global: bool,
+    },
+    /// Save one provider's default model and effort without changing the default provider
+    /// (HS2-EK24KF); used whenever that provider is picked without an explicit model.
+    SetProvider {
+        #[arg(long)]
+        tool: String,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long)]
+        effort: Option<String>,
+        /// Change the machine-wide fallback instead of this project.
+        #[arg(long)]
+        global: bool,
+    },
+}
+
+/// The default "play" prompt: work the top Up Next ticket end to end, headless.
+pub(crate) const DEFAULT_TRIGGER_PROMPT: &str = "Read the Hot Sheet Up Next queue (hotsheet tools or \
+`hotsheet-cli ls --up-next`), take the highest-priority ticket, set it started, implement \
+it, and mark it completed with a note on what you did. If nothing is Up Next, say so and \
+stop.";
+
+/// The CLI's per-turn event sink: stream assistant output to stdout, note permission asks.
+pub(crate) fn stream_to_stdout(ev: &hotsheet_aitools::TurnEvent) {
+    use hotsheet_aitools::TurnEvent;
+    match ev {
+        TurnEvent::Output(text) => {
+            print!("{text}");
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+        }
+        TurnEvent::PermissionAsked(p) => {
+            eprintln!("\n[permission] {} — {}", p.tool, p.summary)
+        }
+        TurnEvent::Usage(u) => {
+            eprintln!("\n[usage] {} in / {} out", u.tokens_in, u.tokens_out)
+        }
+        // Native activity is for the attributed server sink. Do not dump raw tool inputs
+        // into a CLI transcript; assistant output remains the human-facing stream.
+        TurnEvent::NativeActivity { .. } => {}
+        TurnEvent::Done(_) => {}
+    }
+}
+
+/// The per-turn prompt for the `work` loop: like the trigger default, but explicit that
+/// exactly one ticket should be taken this turn (the loop drives the next one).
+pub(crate) const DEFAULT_TRIGGER_PROMPT_LOOP: &str = "Read the Hot Sheet Up Next queue (hotsheet tools \
+or `hotsheet-cli ls --up-next`) and take ONLY the single highest-priority ticket: set it \
+started, implement it, and mark it completed with a note on what you did. Do just that one \
+ticket this turn, then stop. If nothing is Up Next, say so and stop.";
+
+pub(crate) fn choose_launch_source(project: &Path, candidates: &[PathBuf]) -> Result<PathBuf> {
+    use std::io::Write;
+    if candidates.is_empty() {
+        let proposed = PathBuf::from(format!("{}.hs2", project.display()));
+        eprint!(
+            "No ticket source found. [c]reate {}, [s]elect existing, or [q]uit: ",
+            proposed.display()
+        );
+        std::io::stderr().flush()?;
+        let mut answer = String::new();
+        std::io::stdin().read_line(&mut answer)?;
+        if answer.trim().eq_ignore_ascii_case("c") {
+            FsStore::init(&proposed, &StoreMetadata::new("HS"))?;
+            git_init(&proposed);
+            return Ok(proposed.canonicalize().unwrap_or(proposed));
+        }
+        if answer.trim().eq_ignore_ascii_case("s") {
+            eprint!("Existing ticket store path: ");
+            std::io::stderr().flush()?;
+            answer.clear();
+            std::io::stdin().read_line(&mut answer)?;
+            let path = PathBuf::from(answer.trim());
+            FsStore::open(&path)
+                .with_context(|| format!("{} is not a Hot Sheet ticket store", path.display()))?;
+            return Ok(path.canonicalize().unwrap_or(path));
+        }
+        bail!("ticket-source onboarding cancelled")
+    }
+    eprintln!("Choose a ticket source for {}:", project.display());
+    for (index, path) in candidates.iter().enumerate() {
+        eprintln!("  {}) {}", index + 1, path.display());
+    }
+    eprint!("Selection (or 0 to cancel): ");
+    std::io::stderr().flush()?;
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer)?;
+    let selection = answer.trim().parse::<usize>().unwrap_or(0);
+    hotsheet_cli::select_launch_candidate(candidates, selection)
+        .context("ticket-source onboarding cancelled")
+}
+
+/// POST the ask to the server's `/permissions/ask`, returning its JSON reply.
+/// The running Hot Sheet server a hook should talk to: the project's discovered instance, else
+/// the URL and secret the terminal was launched with.
+pub(crate) fn hook_server_route() -> Option<(String, String)> {
+    let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
+    let current = (!project.is_empty())
+        .then(|| {
+            hotsheet_cli::external_launch::discover_running_server(
+                Path::new(&project),
+                &hotsheet_plugins::hotsheet_home(),
+            )
+            .ok()
+        })
+        .flatten();
+    current
+        .map(|server| (server.url, server.secret))
+        .or_else(|| {
+            Some((
+                std::env::var("HOTSHEET_SERVER").ok()?,
+                std::env::var("HOTSHEET_SECRET").ok()?,
+            ))
+        })
+}
+
+pub(crate) fn hook_get_json(url: &str, secret: &str) -> Result<serde_json::Value> {
+    let body = ureq::get(url)
+        .set("X-Hotsheet-Secret", secret)
+        .timeout(std::time::Duration::from_secs(5))
+        .call()?
+        .into_string()?;
+    Ok(serde_json::from_str(&body)?)
+}
+
+/// Report a session lifecycle event against the hook's terminal: `POST` (halted) or `DELETE`
+/// (resumed) `/terminals/{id}/halt`, and `POST` (session started) or `DELETE` (ended)
+/// `/terminals/{id}/ai-connection`.
+pub(crate) fn report_terminal_session(
+    url: &str,
+    secret: &str,
+    terminal: &str,
+    session: &hotsheet_cli::permission_hook::SessionHookEvent,
+    agent: Option<&str>,
+    session_id: Option<&str>,
+) -> Result<()> {
+    use hotsheet_cli::permission_hook::SessionHookEvent;
+    let endpoint = |route: &str| {
+        format!(
+            "{}/terminals/{}/{route}",
+            url.trim_end_matches('/'),
+            urlencoding_component(terminal)
+        )
+    };
+    let post = |route: &str, body: serde_json::Value| -> Result<()> {
+        ureq::post(&endpoint(route))
+            .set("X-Hotsheet-Secret", secret)
+            .set("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(5))
+            .send_string(&body.to_string())?;
+        Ok(())
+    };
+    let delete = |route: &str, session_id: Option<&str>| -> Result<()> {
+        let url = match session_id.filter(|id| !id.is_empty()) {
+            Some(id) => format!(
+                "{}?session_id={}",
+                endpoint(route),
+                urlencoding_component(id)
+            ),
+            None => endpoint(route),
+        };
+        ureq::delete(&url)
+            .set("X-Hotsheet-Secret", secret)
+            .timeout(std::time::Duration::from_secs(5))
+            .call()?;
+        Ok(())
+    };
+    match session {
+        SessionHookEvent::QuestionAsked {
+            question,
+            tool_use_id,
+            questions,
+        } => post(
+            "question",
+            serde_json::json!({ "question": question, "tool_use_id": tool_use_id, "session_id": session_id, "questions": questions }),
+        ),
+        SessionHookEvent::QuestionResolved { tool_use_id } => {
+            let mut url = format!(
+                "{}?tool_use_id={}",
+                endpoint("question"),
+                urlencoding_component(tool_use_id)
+            );
+            if let Some(session_id) = session_id {
+                url.push_str("&session_id=");
+                url.push_str(&urlencoding_component(session_id));
+            }
+            ureq::delete(&url)
+                .set("X-Hotsheet-Secret", secret)
+                .timeout(std::time::Duration::from_secs(5))
+                .call()?;
+            Ok(())
+        }
+        SessionHookEvent::Halted {
+            error_type,
+            message,
+        } => post(
+            "halt",
+            serde_json::json!({ "error_type": error_type, "message": message, "agent": agent }),
+        ),
+        SessionHookEvent::Resumed => delete("halt", None),
+        SessionHookEvent::Connected => post(
+            "ai-connection",
+            serde_json::json!({ "agent": agent, "session_id": session_id }),
+        ),
+        SessionHookEvent::Disconnected => delete("ai-connection", session_id),
+    }
+}
+
+pub(crate) fn wait_for_terminal_question_answer(
+    url: &str,
+    secret: &str,
+    terminal: &str,
+    tool_use_id: &str,
+    session_id: Option<&str>,
+) -> Option<serde_json::Value> {
+    let mut endpoint = format!(
+        "{}/terminals/{}/question?tool_use_id={}",
+        url.trim_end_matches('/'),
+        urlencoding_component(terminal),
+        urlencoding_component(tool_use_id),
+    );
+    if let Some(session_id) = session_id {
+        endpoint.push_str("&session_id=");
+        endpoint.push_str(&urlencoding_component(session_id));
+    }
+    // Claude's installed hook timeout is just over one day. Leave a small margin so Claude
+    // gets its native prompt if nobody answers or the server disappears.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(86_400);
+    while std::time::Instant::now() < deadline {
+        match ureq::get(&endpoint)
+            .set("X-Hotsheet-Secret", secret)
+            .timeout(std::time::Duration::from_secs(5))
+            .call()
+        {
+            Ok(response) if response.status() == 204 => {}
+            Ok(response) => {
+                let reply: serde_json::Value =
+                    serde_json::from_str(&response.into_string().ok()?).ok()?;
+                if reply["native"] == true {
+                    return None;
+                }
+                return reply.get("answers").cloned();
+            }
+            Err(_) => {
+                // A failed poll returns Claude to its native prompt. Clear the matching notice
+                // when the server is still reachable; a newer session/tool cannot be removed.
+                let _ = ureq::delete(&endpoint)
+                    .set("X-Hotsheet-Secret", secret)
+                    .timeout(std::time::Duration::from_secs(2))
+                    .call();
+                return None;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(350));
+    }
+    None
+}
+
+pub(crate) fn ask_server(
+    url: &str,
+    secret: &str,
+    request: &serde_json::Value,
+) -> Result<serde_json::Value> {
+    let endpoint = format!("{}/permissions/ask", url.trim_end_matches('/'));
+    let text = ureq::post(&endpoint)
+        .set("X-Hotsheet-Secret", secret)
+        .set("Content-Type", "application/json")
+        .send_string(&request.to_string())?
+        .into_string()?;
+    Ok(serde_json::from_str(&text)?)
+}
+
+/// Validate and store AI defaults, keeping choices for providers that are not installed now.
+pub(crate) fn save_ai_defaults(
+    store: &Path,
+    cwd: &Path,
+    global: bool,
+    defaults: &hotsheet_plugins::AiToolDefaults,
+) -> Result<hotsheet_plugins::AiToolDefaults> {
+    let tools = discovered_ai_tools();
+    let (settings, scope) = ai_settings_target(store, cwd, global);
+    let previous = stored_ai_defaults(&settings, scope)?;
+    let prepared =
+        hotsheet_plugins::prepare_ai_defaults_for_save(&tools, defaults, previous.as_ref())
+            .map_err(anyhow::Error::msg)?;
+    settings.set("ai.defaults", serde_json::to_value(&prepared)?, scope)?;
+    Ok(hotsheet_plugins::sanitize_ai_defaults(&tools, prepared))
+}
+
+/// Render a JSON setting value for the terminal: a bare string prints unquoted;
+/// everything else prints as compact JSON.
+pub(crate) fn render_value(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}

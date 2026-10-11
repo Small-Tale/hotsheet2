@@ -1017,3 +1017,202 @@ pub(crate) fn cmd_key(cmd: KeyCmd) -> Result<()> {
     }
     Ok(())
 }
+
+#[derive(Args)]
+pub(crate) struct GithubConnectArgs {
+    /// Owner/repository reachable by the Hot Sheet GitHub App.
+    locator: String,
+    /// Credential reference printed by `github-sign-in` or created with `key set`.
+    #[arg(long)]
+    credential: String,
+    /// Display name (defaults to GitHub Issues).
+    #[arg(long)]
+    name: Option<String>,
+    /// Explicit connection id; otherwise use the existing locator or generate an id.
+    #[arg(long)]
+    id: Option<String>,
+    /// Make this connection the default for its store and, with --checkout, that checkout.
+    #[arg(long)]
+    default: bool,
+    /// Also link the connection to this registered checkout (id, alias, or path).
+    #[arg(long)]
+    checkout: Option<String>,
+    /// Enable attachments by committing files to this `owner/repo` assets repository
+    /// and linking them from issue comments (HS2-HSA64D). Kept on a later reconnect.
+    #[arg(long, value_name = "OWNER/REPO", conflicts_with = "no_attachments")]
+    attachment_repo: Option<String>,
+    /// Folder inside the assets repository (default `hotsheet-attachments`).
+    #[arg(long, requires = "attachment_repo")]
+    attachment_folder: Option<String>,
+    /// Branch uploads are committed to (default `main`).
+    #[arg(long, requires = "attachment_repo")]
+    attachment_branch: Option<String>,
+    /// Remove the assets repository; the connection then reports no attachment support.
+    #[arg(long)]
+    no_attachments: bool,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum FeedbackSynthesisCmd {
+    /// Read only the explicitly selected connections and prepare a private local draft.
+    Prepare {
+        #[arg(long = "connection", required = true)]
+        connections: Vec<String>,
+    },
+    /// Advance the review ledger after a human has edited or rejected the draft.
+    Accept {
+        #[arg(long)]
+        reviewed: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum AccountCmd {
+    /// List provider sign-ins with the ticket sources and projects using each.
+    List {
+        /// Emit the accounts as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Resolve missing GitHub usernames for a bounded batch of older managed sign-ins.
+    /// This may read the OS keychain and contact GitHub; plain `account list` never does so.
+    BackfillLogins {
+        /// Maximum accounts to try in this run (1-10; default 5).
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+        /// Start after this credential reference to reach later accounts when earlier ones fail.
+        #[arg(long)]
+        after: Option<String>,
+    },
+    /// Sign out: delete the account's credential. Refused while a ticket source uses it.
+    SignOut { account: String },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum KeyCmd {
+    /// Store/replace a provider key. Prompts securely on a terminal or reads piped stdin.
+    Set { provider: String },
+    /// Print a provider key to stdout (explicit secret-reveal operation).
+    Get { provider: String },
+    /// List registered provider names and their read-only environment fallbacks.
+    List,
+    /// Delete a provider key from the OS credential store and registry.
+    Delete { provider: String },
+}
+
+/// How `github-connect` changes a connection's attachment repository (HS2-HSA64D).
+pub(crate) enum GitHubAttachmentChange {
+    Keep,
+    Set {
+        repository: String,
+        folder: Option<String>,
+        branch: Option<String>,
+    },
+    Remove,
+}
+
+impl GitHubAttachmentChange {
+    fn from_flags(
+        repository: Option<String>,
+        folder: Option<String>,
+        branch: Option<String>,
+        remove: bool,
+    ) -> Self {
+        match (repository, remove) {
+            (Some(repository), _) => Self::Set {
+                repository,
+                folder,
+                branch,
+            },
+            (None, true) => Self::Remove,
+            (None, false) => Self::Keep,
+        }
+    }
+}
+
+pub(crate) fn configured_provider(
+    path: &Path,
+    connection_id: &str,
+) -> Result<Arc<dyn TicketProvider>> {
+    let store = FsStore::open(path)?;
+    let git_id = git_connection_id(&store);
+    if connection_id == git_id {
+        return Ok(Arc::new(GitProvider::new(git_id, store)));
+    }
+    let connection = ProviderConfigRegistry::new(store.root().join("providers.json"))
+        .load()?
+        .into_iter()
+        .find(|connection| connection.id == connection_id)
+        .ok_or_else(|| anyhow::anyhow!("provider connection '{connection_id}' was not found"))?;
+    if connection.disabled {
+        return Err(hotsheet_ticketing::ProviderError::Disabled {
+            connection_id: connection_id.into(),
+        }
+        .into());
+    }
+    let token = hotsheet_extsync::connection_access_token(
+        &connection,
+        &KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain),
+        time::OffsetDateTime::now_utc().unix_timestamp(),
+    )?;
+    Ok(hotsheet_extsync::live_provider(&connection, token)?)
+}
+
+pub(crate) struct ProviderEditInput {
+    title: Option<String>,
+    details: Option<String>,
+    status: Option<String>,
+    expected_token: Option<String>,
+    note: Option<String>,
+    note_kind: NoteKind,
+    note_summary: Option<String>,
+    note_confidence: Option<Option<Confidence>>,
+    edit_note: Option<String>,
+}
+
+pub(crate) fn read_key_secret(
+    provider: &str,
+    terminal: bool,
+    mut reader: impl std::io::Read,
+    prompt: impl FnOnce(&str) -> Result<String>,
+) -> Result<String> {
+    let value = if terminal {
+        prompt(&format!("Key for {provider}: "))?
+    } else {
+        let mut value = String::new();
+        reader.read_to_string(&mut value)?;
+        value
+    };
+    let value = value.trim_end_matches(['\r', '\n']).to_owned();
+    if value.is_empty() {
+        bail!("refusing to store an empty key")
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_input_prompts_on_a_terminal_and_reads_pipes_without_prompting() {
+        let prompted = read_key_secret("github-live", true, "ignored".as_bytes(), |prompt| {
+            assert_eq!(prompt, "Key for github-live: ");
+            Ok("terminal-secret".into())
+        })
+        .unwrap();
+        assert_eq!(prompted, "terminal-secret");
+
+        let piped = read_key_secret("github-live", false, "pipe-secret\n".as_bytes(), |_| {
+            panic!("non-terminal input must not prompt")
+        })
+        .unwrap();
+        assert_eq!(piped, "pipe-secret");
+        assert!(
+            read_key_secret("github-live", false, "\n".as_bytes(), |_| unreachable!())
+                .unwrap_err()
+                .to_string()
+                .contains("empty key")
+        );
+    }
+}

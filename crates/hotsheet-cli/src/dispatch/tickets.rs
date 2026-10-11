@@ -986,3 +986,305 @@ pub(crate) fn cmd_restore(path: &PathBuf, id: &str) -> Result<()> {
     );
     Ok(())
 }
+
+#[derive(Args)]
+pub(crate) struct NewArgs {
+    /// Ticket title (positional). Alternatively pass --title.
+    title: Option<String>,
+    /// Ticket title (alias for the positional form).
+    #[arg(long = "title")]
+    title_flag: Option<String>,
+    #[arg(long, default_value = "issue")]
+    category: String,
+    #[arg(long, default_value = "default")]
+    priority: String,
+    #[arg(long)]
+    details: Option<String>,
+    /// Mark the new ticket Up Next.
+    #[arg(long)]
+    up_next: bool,
+    /// Add a tag (repeatable): `--tag a --tag b`.
+    #[arg(long = "tag")]
+    tags: Vec<String>,
+    /// Blocker ticket (slug or ULID), repeatable: `--blocked-by HS2-ABC --blocked-by HS2-DEF`.
+    #[arg(long = "blocked-by")]
+    blocked_by: Vec<String>,
+}
+
+#[derive(Args)]
+pub(crate) struct AttachArgs {
+    id: String,
+    #[arg(required = true)]
+    files: Vec<PathBuf>,
+    /// Print attachment ids and filenames as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long)]
+    batch_id: Option<String>,
+    #[arg(long)]
+    batch_label: Option<String>,
+    #[arg(long)]
+    actor_role: Option<String>,
+    #[arg(long)]
+    actor_id: Option<String>,
+    #[arg(long)]
+    actor_name: Option<String>,
+    #[arg(long)]
+    purpose: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum PeopleCmd {
+    /// List the roster (email → name).
+    List,
+    /// Add or update a person (matched by email).
+    Add {
+        /// The person's git email (their identity).
+        email: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        github: Option<String>,
+    },
+    /// Seed people.json from GitHub collaborators that expose a public email.
+    SeedGithub {
+        /// Repository as owner/name.
+        #[arg(long)]
+        repo: String,
+        /// GitHub API root (override for GitHub Enterprise/testing).
+        #[arg(long, default_value = "https://api.github.com")]
+        api_base: String,
+    },
+}
+
+/// Field edits shared by `edit` (one ticket) and `batch` (many tickets).
+#[derive(Args)]
+pub(crate) struct TicketEditArgs {
+    #[arg(long)]
+    title: Option<String>,
+    #[arg(long)]
+    details: Option<String>,
+    #[arg(long)]
+    category: Option<String>,
+    #[arg(long)]
+    priority: Option<String>,
+    /// One of not_started|started|completed|verified|backlog|archive|deleted|moved.
+    #[arg(long)]
+    status: Option<String>,
+    /// Progress within Started (analyzing|planning|working|initial_testing|integrating|final_testing).
+    #[arg(long, conflicts_with = "clear_started_phase")]
+    started_phase: Option<String>,
+    /// Clear the Started phase.
+    #[arg(long)]
+    clear_started_phase: bool,
+    /// Replace the tag list (repeatable): `--tag a --tag b`.
+    #[arg(long = "tag")]
+    tags: Vec<String>,
+    /// Replace the blocker set (slug or ULID), repeatable. Ignored if --clear-blocked-by is set.
+    #[arg(long = "blocked-by", conflicts_with = "clear_blocked_by")]
+    blocked_by: Vec<String>,
+    /// Clear all blockers.
+    #[arg(long)]
+    clear_blocked_by: bool,
+    /// Set the user-facing explanation for why this ticket is blocked.
+    #[arg(long, conflicts_with = "clear_blocked_reason")]
+    blocked_reason: Option<String>,
+    /// Clear the blocked reason without changing dependency blockers.
+    #[arg(long)]
+    clear_blocked_reason: bool,
+    /// Mark Up Next.
+    #[arg(long, conflicts_with = "no_up_next")]
+    up_next: bool,
+    /// Clear Up Next.
+    #[arg(long)]
+    no_up_next: bool,
+    /// Append a note to the ticket.
+    #[arg(long)]
+    note: Option<String>,
+    /// Read the note body from a UTF-8 file, or from stdin with `-`.
+    #[arg(long, value_name = "PATH", conflicts_with = "note")]
+    note_file: Option<PathBuf>,
+    /// Permit literal `\\n` text outside Markdown code spans/blocks.
+    #[arg(long, requires = "note")]
+    allow_literal_backslash_n: bool,
+    /// Edit this existing note ULID instead of appending a note.
+    #[arg(long, conflicts_with = "note_kind")]
+    edit_note: Option<String>,
+    /// Kind for --note: regular | activity | feedback_needed | status.
+    #[arg(long)]
+    note_kind: Option<String>,
+    /// Concise plain-text timeline headline for an activity/status note.
+    #[arg(long, conflicts_with = "edit_note")]
+    note_summary: Option<String>,
+    /// AI completion confidence (integer 0-100) recorded on the appended note, or the
+    /// corrected score of the note named by --edit-note (note text then optional).
+    #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
+    note_confidence: Option<Confidence>,
+    /// Remove the completion confidence from the note named by --edit-note.
+    #[arg(long, requires = "edit_note", conflicts_with = "note_confidence")]
+    clear_note_confidence: bool,
+}
+
+/// Filters + sort for index-backed `ls`.
+#[derive(Args)]
+pub(crate) struct LsFilters {
+    /// Only this status.
+    #[arg(long)]
+    status: Option<String>,
+    /// Only this priority.
+    #[arg(long)]
+    priority: Option<String>,
+    /// Only this category.
+    #[arg(long)]
+    category: Option<String>,
+    /// Must carry every given tag (repeatable).
+    #[arg(long = "tag")]
+    tags: Vec<String>,
+    /// Case-insensitive substring across title, details, and note text.
+    #[arg(long)]
+    text: Option<String>,
+    /// Only Up Next tickets.
+    #[arg(long)]
+    up_next: bool,
+    /// Only open tickets (not completed/verified/deleted/archived/moved).
+    #[arg(long)]
+    open: bool,
+    /// Only tickets closed with this reason (completed|not_planned|duplicate|obsolete|works_as_designed).
+    #[arg(long = "close-reason")]
+    close_reason: Option<String>,
+    /// Only tickets that have a close reason set.
+    #[arg(long)]
+    closed: bool,
+    /// Only tickets assigned to this person (git email, or `me` for your git identity).
+    #[arg(long)]
+    assignee: Option<String>,
+    /// Only tickets with a review request for this person (git email, or `me`).
+    #[arg(long = "review-requested")]
+    review_requested: Option<String>,
+    /// Only tickets whose review was requested by this person (git email, or `me`).
+    #[arg(long = "review-by")]
+    review_by: Option<String>,
+    /// Only tickets with a worker claim (a held lease).
+    #[arg(long)]
+    claimed: bool,
+    /// Only tickets that are blocked (a blocker isn't done yet).
+    #[arg(long, conflicts_with = "unblocked")]
+    blocked: bool,
+    /// Only tickets that are unblocked (all blockers done / none).
+    #[arg(long)]
+    unblocked: bool,
+    /// Only completed/verified tickets whose derived confidence is at least this (0-100).
+    #[arg(long, value_name = "0-100", value_parser = clap::value_parser!(u8).range(0..=100))]
+    min_confidence: Option<u8>,
+    /// Only completed/verified tickets whose derived confidence is at most this (0-100).
+    #[arg(long, value_name = "0-100", value_parser = clap::value_parser!(u8).range(0..=100))]
+    max_confidence: Option<u8>,
+    /// Sort key: id | created | updated | priority | status | title | confidence
+    /// (least confident first, unscored last).
+    #[arg(long, default_value = "id")]
+    sort: String,
+    /// Cap the number of rows shown (after sort).
+    #[arg(long)]
+    limit: Option<usize>,
+    /// Keyset cursor (a ULID): show rows strictly after this one, in `sort` order. Page a
+    /// large store without OFFSET — pass the last slug/ULID of the previous page.
+    #[arg(long = "page-after")]
+    page_after: Option<String>,
+}
+
+impl LsFilters {
+    /// `Some(true)` for `--blocked`, `Some(false)` for `--unblocked`, else `None`.
+    fn blocked_filter(&self) -> Option<bool> {
+        match (self.blocked, self.unblocked) {
+            (true, _) => Some(true),
+            (_, true) => Some(false),
+            _ => None,
+        }
+    }
+}
+
+pub(crate) fn parse_attachment_actor_role(
+    value: &str,
+) -> Result<hotsheet_model::AttachmentActorRole> {
+    match value {
+        "human" => Ok(hotsheet_model::AttachmentActorRole::Human),
+        "ai" => Ok(hotsheet_model::AttachmentActorRole::Ai),
+        "system" => Ok(hotsheet_model::AttachmentActorRole::System),
+        "unknown" => Ok(hotsheet_model::AttachmentActorRole::Unknown),
+        _ => anyhow::bail!("--actor-role must be human, ai, system, or unknown"),
+    }
+}
+
+/// A validated ticket edit: [`TicketEditArgs`] with its note input read and checked.
+#[derive(Clone)]
+pub(crate) struct TicketEdit {
+    title: Option<String>,
+    details: Option<String>,
+    category: Option<String>,
+    priority: Option<String>,
+    status: Option<String>,
+    started_phase: Option<String>,
+    clear_started_phase: bool,
+    tags: Vec<String>,
+    blocked_by: Vec<String>,
+    clear_blocked_by: bool,
+    blocked_reason: Option<String>,
+    clear_blocked_reason: bool,
+    up_next: bool,
+    no_up_next: bool,
+    note: Option<String>,
+    note_kind: NoteKind,
+    note_summary: Option<String>,
+    note_confidence: Option<Option<Confidence>>,
+    edit_note: Option<String>,
+}
+
+impl TicketEdit {
+    /// Read `--note`/`--note-file` and validate the note modifiers before any write.
+    fn prepare(args: TicketEditArgs) -> Result<Self> {
+        let note = read_note_input(args.note, args.note_file, args.allow_literal_backslash_n)?;
+        let note_confidence = confidence_change(args.note_confidence, args.clear_note_confidence);
+        validate_note_modifiers(
+            &note,
+            args.note_kind.as_ref(),
+            args.note_summary.as_ref(),
+            note_confidence,
+            args.edit_note.as_ref(),
+        )?;
+        Ok(Self {
+            title: args.title,
+            details: args.details,
+            category: args.category,
+            priority: args.priority,
+            status: args.status,
+            started_phase: args.started_phase,
+            clear_started_phase: args.clear_started_phase,
+            tags: args.tags,
+            blocked_by: args.blocked_by,
+            clear_blocked_by: args.clear_blocked_by,
+            blocked_reason: args.blocked_reason,
+            clear_blocked_reason: args.clear_blocked_reason,
+            up_next: args.up_next,
+            no_up_next: args.no_up_next,
+            note,
+            note_kind: parse_note_kind(args.note_kind.as_deref().unwrap_or("regular"))?,
+            note_summary: args.note_summary,
+            note_confidence,
+            edit_note: args.edit_note,
+        })
+    }
+}
+
+pub(crate) fn parse_started_phase(s: &str) -> Result<StartedPhase> {
+    Ok(match s {
+        "analyzing" => StartedPhase::Analyzing,
+        "planning" => StartedPhase::Planning,
+        "working" => StartedPhase::Working,
+        "initial_testing" => StartedPhase::InitialTesting,
+        "integrating" => StartedPhase::Integrating,
+        "final_testing" => StartedPhase::FinalTesting,
+        other => bail!(
+            "invalid started phase '{other}' (analyzing|planning|working|initial_testing|integrating|final_testing)"
+        ),
+    })
+}

@@ -805,3 +805,248 @@ pub(crate) fn cmd_import(path: &Path, file: &Path, prefix: &str) -> Result<()> {
     );
     Ok(())
 }
+
+#[derive(Subcommand)]
+pub(crate) enum CheckoutCmd {
+    /// Register or update a checkout. Repeating --store records all ticket stores it uses.
+    Register {
+        root: PathBuf,
+        #[arg(long)]
+        alias: Option<String>,
+        #[arg(long = "store")]
+        stores: Vec<PathBuf>,
+        #[arg(long)]
+        repository: Option<String>,
+    },
+    /// List registered checkouts as JSON.
+    List,
+    /// Resolve an id, id prefix, alias, or path and print its JSON record.
+    Resolve { reference: String },
+    /// Move a registered checkout while preserving its durable project id.
+    Relocate {
+        reference: String,
+        root: PathBuf,
+        #[arg(long)]
+        alias: Option<String>,
+    },
+    /// Associate a provider-neutral ticket source with a checkout.
+    AddSource {
+        reference: String,
+        connection_id: String,
+        provider: String,
+        locator: String,
+        #[arg(long)]
+        default: bool,
+    },
+    /// Remove a ticket source from this project; removing the default clears it. Sources
+    /// belong to projects: a connection no other checkout links is deleted from the -C
+    /// store's providers.json too (its account stays signed in).
+    RemoveSource {
+        reference: String,
+        connection_id: String,
+        /// Print the removal report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Rename a non-Git source while retaining its old id as a durable alias.
+    RenameSource {
+        reference: String,
+        connection_id: String,
+        new_connection_id: String,
+    },
+    /// Inspect a linked source's project-local color as JSON.
+    SourceColor {
+        reference: String,
+        connection_id: String,
+    },
+    /// Set a linked source's project-local color; use Gray (#6b7280) to restore the default.
+    SetSourceColor {
+        reference: String,
+        connection_id: String,
+        color: String,
+    },
+    /// Select the source used by unqualified creates, or clear it with --clear.
+    SetDefault {
+        reference: String,
+        #[arg(required_unless_present = "clear")]
+        connection_id: Option<String>,
+        #[arg(long, conflicts_with = "connection_id")]
+        clear: bool,
+    },
+}
+
+pub(crate) fn shell_quote_path(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+/// Read-only first-run guidance. Detection never writes tool configuration and never
+/// opens/migrates HS1's database; the printed commands are explicit trust gates.
+pub(crate) fn print_onboarding_report(store: &Path, project: &Path) {
+    let detected: Vec<_> = hotsheet_plugins::all_plugins(&hotsheet_plugins::default_dirs())
+        .into_iter()
+        .filter(|plugin| {
+            plugin
+                .manifest
+                .detection
+                .binaries
+                .iter()
+                .any(|binary| binary_on_path(binary))
+        })
+        .map(|plugin| {
+            (
+                plugin.manifest.product_name.clone(),
+                plugin.id().to_string(),
+            )
+        })
+        .collect();
+    print!("{}", render_onboarding_report(store, project, &detected));
+}
+
+pub(crate) fn render_onboarding_report(
+    store: &Path,
+    project: &Path,
+    detected: &[(String, String)],
+) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::from("\nOnboarding (read-only):\n");
+    if detected.is_empty() {
+        writeln!(out, "  AI tools: none detected on PATH; no setup was run").unwrap();
+    } else {
+        writeln!(
+            out,
+            "  AI tools detected (setup is explicit and idempotent):"
+        )
+        .unwrap();
+        for (product, id) in detected {
+            writeln!(
+                out,
+                "    - {}: hotsheet-cli -C \"{}\" setup {} --project \"{}\"",
+                product,
+                store.display(),
+                id,
+                project.display()
+            )
+            .unwrap();
+        }
+        writeln!(out, "  No tool configuration was changed.").unwrap();
+    }
+
+    let hs1 = project.join(".hotsheet/db/PG_VERSION");
+    if hs1.is_file() {
+        writeln!(
+            out,
+            "  ! Hot Sheet 1 PGlite data detected at {}",
+            hs1.display()
+        )
+        .unwrap();
+        writeln!(out, "    Close the Hot Sheet 1 project before migrating.").unwrap();
+        writeln!(
+            out,
+            "    Review and run explicitly: hotsheet-migrate \"{}\" -C \"{}\"",
+            project.join(".hotsheet").display(),
+            store.display()
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "    Migration was not started; the HS1 source remains untouched."
+        )
+        .unwrap();
+    } else {
+        writeln!(
+            out,
+            "  Hot Sheet 1 data: not detected (looked for .hotsheet/db/PG_VERSION)"
+        )
+        .unwrap();
+    }
+    out
+}
+
+/// A plain text 3-way merge via `git merge-file` (returns the merged text — with conflict
+/// markers when it can't resolve — and whether it was clean).
+pub(crate) fn git_merge_file(ours: &str, base: &str, theirs: &str) -> Result<(String, bool)> {
+    let dir = tempfile::tempdir()?;
+    let write = |name: &str, s: &str| -> Result<PathBuf> {
+        let p = dir.path().join(name);
+        std::fs::write(&p, s)?;
+        Ok(p)
+    };
+    let (op, bp, tp) = (
+        write("ours", ours)?,
+        write("base", base)?,
+        write("theirs", theirs)?,
+    );
+    let out = hotsheet_ticketing::git::command()
+        .args([
+            "merge-file",
+            "-p",
+            "-L",
+            "ours",
+            "-L",
+            "base",
+            "-L",
+            "theirs",
+        ])
+        .args([&op, &bp, &tp])
+        .output()
+        .context("running `git merge-file`")?;
+    Ok((
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        out.status.success(),
+    ))
+}
+
+pub(crate) fn print_checkout_source_color(
+    checkout: &hotsheet_ticketing::checkouts::Checkout,
+    connection_id: &str,
+) -> Result<()> {
+    if checkout.source(connection_id).is_none() {
+        bail!(
+            "ticket source '{connection_id}' is not linked to checkout {}",
+            checkout.id
+        );
+    }
+    let color = hotsheet_ticketing::checkouts::effective_source_color(
+        checkout
+            .source_colors
+            .get(connection_id)
+            .map(String::as_str),
+    );
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "checkout_id": checkout.id,
+            "connection_id": connection_id,
+            "color": color,
+        }))?
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn onboarding_is_read_only_and_distinguishes_hs1_by_its_database_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("project");
+        let store = dir.path().join("store");
+        std::fs::create_dir_all(project.join(".hotsheet/db")).unwrap();
+        std::fs::write(project.join(".hotsheet/db/PG_VERSION"), "17").unwrap();
+        let report =
+            render_onboarding_report(&store, &project, &[("Claude Code".into(), "claude".into())]);
+
+        assert!(report.contains("AI tools detected"));
+        assert!(report.contains("setup claude --project"));
+        assert!(report.contains("Hot Sheet 1 PGlite data detected"));
+        assert!(report.contains("Close the Hot Sheet 1 project before migrating"));
+        assert!(report.contains("hotsheet-migrate"));
+        assert!(report.contains("Migration was not started"));
+        assert_eq!(
+            std::fs::read_to_string(project.join(".hotsheet/db/PG_VERSION")).unwrap(),
+            "17"
+        );
+    }
+}

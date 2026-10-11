@@ -239,3 +239,481 @@ pub(crate) fn cmd_notifications(store: &Path, cmd: NotificationsCmd) -> Result<(
     };
     print_local_server_json(store, method, &route)
 }
+
+#[derive(Subcommand)]
+pub(crate) enum CertCmd {
+    /// Create the per-project CA + server cert (refuses if one already exists). Pass `--host`
+    /// once per IP/DNS the server will be reached at off-loopback; `localhost` + `127.0.0.1`
+    /// are always covered.
+    Init {
+        #[arg(long = "host")]
+        hosts: Vec<String>,
+    },
+    /// Issue a client (device) cert signed by the project CA, printing the cert + key + CA
+    /// PEMs to copy to the device. `name` identifies it for later revocation.
+    Issue { name: String },
+    /// Rotate a device certificate, revoking the old leaf and printing a fresh 90-day leaf.
+    Renew { name: String },
+    /// Set an issued device's explicit ACL role: read-only, read-write, or deny.
+    Role { name: String, role: String },
+    /// Revoke a previously-issued device by name (takes effect on the next TLS connection).
+    Revoke { name: String },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum CommandsCmd {
+    /// List saved command definitions for a checkout.
+    List { checkout: String },
+    /// List saved command groups, including empty groups.
+    Groups { checkout: String },
+    /// Start a saved command and print its run record.
+    Run { checkout: String, id: String },
+    /// List recent runs for this checkout.
+    History { checkout: String },
+    /// Get a run, optionally returning only output after a sequence number.
+    Get {
+        checkout: String,
+        id: String,
+        #[arg(long, default_value_t = 0)]
+        after: u64,
+    },
+    /// Cancel an active run in this checkout.
+    Cancel { checkout: String, id: String },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum LifecycleCmd {
+    /// Print whether the server is quiescing and which active work would block a restart.
+    Status,
+    /// Ask the server to restart once all server-owned work is quiescent. A busy server
+    /// refuses and keeps its work; repeating the request is safe.
+    Restart,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum NotificationsCmd {
+    /// List notifications, optionally filtering by target or recipient.
+    List {
+        #[arg(long)]
+        checkout: Option<String>,
+        #[arg(long)]
+        store: Option<String>,
+        #[arg(long)]
+        ticket: Option<String>,
+        #[arg(long)]
+        recipient: Option<String>,
+    },
+    /// Acknowledge one notification by its stable id.
+    Ack { id: String },
+}
+
+#[derive(Clone, Debug, serde::Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct RegisteredServer {
+    pid: u32,
+    url: String,
+    store_path: String,
+    started_at: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RegistryRecord {
+    source: PathBuf,
+    server: Option<RegisteredServer>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct ServerIdentity {
+    pid: u32,
+    url: String,
+    started_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ServerInventoryEntry {
+    identity: ServerIdentity,
+    status: &'static str,
+    stores: Vec<String>,
+}
+
+pub(crate) fn cmd_list_servers() -> Result<()> {
+    let directory = hotsheet_plugins::hotsheet_home().join("instances");
+    let records = read_registry_records(&directory)?;
+    let agent = ureq::AgentBuilder::new()
+        .user_agent("hotsheet2-server-inventory")
+        .timeout_connect(std::time::Duration::from_millis(300))
+        .timeout_read(std::time::Duration::from_millis(500))
+        .build();
+    let (servers, invalid) = server_inventory(records, process_is_alive, |url| {
+        match agent
+            .get(&format!("{}/health", url.trim_end_matches('/')))
+            .call()
+        {
+            Ok(response) => {
+                response
+                    .into_string()
+                    .ok()
+                    .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+                    .and_then(|value| {
+                        value
+                            .get("status")
+                            .and_then(|status| status.as_str())
+                            .map(str::to_owned)
+                    })
+                    .as_deref()
+                    == Some("ok")
+            }
+            Err(_) => false,
+        }
+    });
+    print!("{}", render_server_inventory(&servers, &invalid));
+    Ok(())
+}
+
+pub(crate) fn read_registry_records(directory: &Path) -> Result<Vec<RegistryRecord>> {
+    let entries = match std::fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error).context("could not read server instance registry"),
+    };
+    let mut records = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
+        .map(|source| RegistryRecord {
+            server: std::fs::read_to_string(&source)
+                .ok()
+                .and_then(|text| serde_json::from_str(&text).ok()),
+            source,
+        })
+        .collect::<Vec<_>>();
+    records.sort_by(|left, right| left.source.cmp(&right.source));
+    Ok(records)
+}
+
+pub(crate) fn server_inventory(
+    records: Vec<RegistryRecord>,
+    is_alive: impl Fn(u32) -> bool,
+    is_healthy: impl Fn(&str) -> bool,
+) -> (Vec<ServerInventoryEntry>, Vec<PathBuf>) {
+    let mut grouped = BTreeMap::<ServerIdentity, BTreeSet<String>>::new();
+    let mut invalid = Vec::new();
+    for record in records {
+        let Some(server) = record.server else {
+            invalid.push(record.source);
+            continue;
+        };
+        let identity = ServerIdentity {
+            pid: server.pid,
+            url: server.url,
+            started_at: server.started_at,
+        };
+        grouped
+            .entry(identity)
+            .or_default()
+            .insert(server.store_path);
+    }
+    let mut servers = grouped
+        .into_iter()
+        .map(|(identity, stores)| {
+            let status = if !is_alive(identity.pid) {
+                "stale"
+            } else if is_healthy(&identity.url) {
+                "healthy"
+            } else {
+                "unhealthy"
+            };
+            ServerInventoryEntry {
+                identity,
+                status,
+                stores: stores.into_iter().collect(),
+            }
+        })
+        .collect::<Vec<_>>();
+    servers.sort_by_key(|server| {
+        (
+            match server.status {
+                "healthy" => 0,
+                "unhealthy" => 1,
+                _ => 2,
+            },
+            server.identity.pid,
+        )
+    });
+    (servers, invalid)
+}
+
+pub(crate) fn render_server_inventory(
+    servers: &[ServerInventoryEntry],
+    invalid: &[PathBuf],
+) -> String {
+    if servers.is_empty() && invalid.is_empty() {
+        return "no registered Hot Sheet servers\n".into();
+    }
+    let mut output = String::new();
+    for server in servers {
+        output.push_str(&format!(
+            "{:<9} pid={} url={} started={}\n",
+            server.status, server.identity.pid, server.identity.url, server.identity.started_at
+        ));
+        for store in &server.stores {
+            output.push_str(&format!("  store: {store}\n"));
+        }
+    }
+    for path in invalid {
+        output.push_str(&format!(
+            "stale     invalid registry record: {}\n",
+            path.display()
+        ));
+    }
+    output
+}
+
+#[cfg(unix)]
+pub(crate) fn process_is_alive(pid: u32) -> bool {
+    if pid == 0 || pid > i32::MAX as u32 {
+        return false;
+    }
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn process_is_alive(_pid: u32) -> bool {
+    false
+}
+
+pub(crate) fn resolve_server_binary(
+    current_exe: &Path,
+    path: Option<&std::ffi::OsStr>,
+) -> Result<PathBuf> {
+    let sibling = current_exe
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+    if sibling.is_file() {
+        return Ok(sibling);
+    }
+    if let Some(found) = path.and_then(|paths| {
+        std::env::split_paths(paths)
+            .map(|dir| dir.join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX)))
+            .find(|candidate| candidate.is_file())
+    }) {
+        return Ok(found);
+    }
+    bail!(
+        "hotsheet-server is not installed: expected it beside hotsheet-cli at {} or on PATH",
+        sibling.display()
+    )
+}
+
+pub(crate) fn verify_server_version(exe: &Path) -> Result<()> {
+    let output = hotsheet_ticketing::git::launch(exe)
+        .arg("--version")
+        .output()
+        .with_context(|| format!("could not run {} --version", exe.display()))?;
+    if !output.status.success() {
+        bail!("{} --version exited with {}", exe.display(), output.status);
+    }
+    let reported = String::from_utf8_lossy(&output.stdout);
+    let version = reported.split_whitespace().next_back().unwrap_or_default();
+    if version != env!("CARGO_PKG_VERSION") {
+        bail!(
+            "hotsheet-cli {} cannot launch hotsheet-server {} at {}; install matching binaries",
+            env!("CARGO_PKG_VERSION"),
+            if version.is_empty() {
+                "(unknown)"
+            } else {
+                version
+            },
+            exe.display()
+        );
+    }
+    Ok(())
+}
+
+pub(crate) fn server_args(
+    path: &Path,
+    bind: &str,
+    secret: Option<&str>,
+    stop: bool,
+    kill_all_terminals: bool,
+) -> Vec<std::ffi::OsString> {
+    let mut args = vec![
+        "-C".into(),
+        path.as_os_str().to_owned(),
+        "--bind".into(),
+        bind.into(),
+    ];
+    if let Some(secret) = secret {
+        args.extend(["--secret".into(), secret.into()]);
+    }
+    if stop {
+        args.push("--stop".into());
+    }
+    if kill_all_terminals {
+        args.push("--kill-all-terminals".into());
+    }
+    args
+}
+
+pub(crate) fn filtered_route(base: &str, filters: &[(&str, String)]) -> String {
+    if filters.is_empty() {
+        return base.to_owned();
+    }
+    let query = filters
+        .iter()
+        .map(|(key, value)| format!("{key}={}", urlencoding_component(value)))
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{base}?{query}")
+}
+
+pub(crate) fn print_local_server_json(store: &Path, method: &str, route: &str) -> Result<()> {
+    let body = local_server_json(store, method, route)?;
+    println!("{}", serde_json::to_string_pretty(&body)?);
+    Ok(())
+}
+
+pub(crate) fn local_server_json(
+    store: &Path,
+    method: &str,
+    route: &str,
+) -> Result<serde_json::Value> {
+    let server = hotsheet_cli::external_launch::discover_running_server(
+        store,
+        &hotsheet_plugins::hotsheet_home(),
+    )?;
+    let endpoint = format!("{}/{}", server.url.trim_end_matches('/'), route);
+    let request = ureq::request(method, &endpoint)
+        .set("X-Hotsheet-Secret", &server.secret)
+        .timeout(std::time::Duration::from_secs(10));
+    let response = match request.call() {
+        Ok(response) => response,
+        Err(ureq::Error::Status(status, response)) => {
+            let body = response.into_string().unwrap_or_default();
+            let message = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|body| body["error"].as_str().map(str::to_owned))
+                .unwrap_or_else(|| format!("server returned HTTP {status}"));
+            bail!("Hot Sheet server request failed: {message}");
+        }
+        Err(error) => return Err(error.into()),
+    };
+    Ok(serde_json::from_reader(response.into_reader())?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sibling_server_wins_over_path_and_arguments_are_forwarded_exactly() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let cli = bin.join(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
+        let sibling = bin.join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+        let path_server =
+            elsewhere.join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+        std::fs::write(&sibling, "").unwrap();
+        std::fs::write(&path_server, "").unwrap();
+
+        assert_eq!(
+            resolve_server_binary(&cli, Some(elsewhere.as_os_str())).unwrap(),
+            sibling
+        );
+        assert_eq!(
+            server_args(
+                Path::new("store path"),
+                "127.0.0.1:0",
+                Some("secret"),
+                true,
+                true
+            ),
+            [
+                "-C",
+                "store path",
+                "--bind",
+                "127.0.0.1:0",
+                "--secret",
+                "secret",
+                "--stop",
+                "--kill-all-terminals"
+            ]
+            .map(std::ffi::OsString::from)
+        );
+    }
+
+    #[test]
+    fn server_inventory_deduplicates_stores_checks_health_and_omits_secrets() {
+        let dir = tempfile::tempdir().unwrap();
+        let records = [
+            (
+                "one.json",
+                r#"{"pid":42,"url":"http://127.0.0.1:8787","secret":"never-print-me","store_path":"/stores/one","started_at":"2026-09-10T01:00:00Z"}"#,
+            ),
+            (
+                "two.json",
+                r#"{"pid":42,"url":"http://127.0.0.1:8787","secret":"never-print-me","store_path":"/stores/two","started_at":"2026-09-10T01:00:00Z"}"#,
+            ),
+            (
+                "stale.json",
+                r#"{"pid":99,"url":"http://127.0.0.1:9999","secret":"also-private","store_path":"/stores/old","started_at":"2026-09-09T01:00:00Z"}"#,
+            ),
+            ("broken.json", "not json"),
+        ];
+        for (name, contents) in records {
+            std::fs::write(dir.path().join(name), contents).unwrap();
+        }
+        let health_checks = std::cell::Cell::new(0);
+        let (servers, invalid) = server_inventory(
+            read_registry_records(dir.path()).unwrap(),
+            |pid| pid == 42,
+            |url| {
+                health_checks.set(health_checks.get() + 1);
+                url.ends_with(":8787")
+            },
+        );
+        assert_eq!(servers.len(), 2, "two registrations share one live server");
+        assert_eq!(health_checks.get(), 1, "stale processes are not probed");
+        assert_eq!(servers[0].status, "healthy");
+        assert_eq!(servers[0].stores, ["/stores/one", "/stores/two"]);
+        assert_eq!(servers[1].status, "stale");
+        assert_eq!(invalid, [dir.path().join("broken.json")]);
+        let rendered = render_server_inventory(&servers, &invalid);
+        assert!(rendered.contains("healthy   pid=42"));
+        assert!(rendered.contains("stale     pid=99"));
+        assert!(rendered.contains("invalid registry record"));
+        assert!(!rendered.contains("never-print-me"));
+        assert!(!rendered.contains("also-private"));
+        assert!(!rendered.contains("secret"));
+    }
+
+    #[test]
+    fn path_fallback_and_missing_binary_are_explicit() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let cli = bin.join("hotsheet-cli");
+        let path_server =
+            elsewhere.join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+        std::fs::write(&path_server, "").unwrap();
+        assert_eq!(
+            resolve_server_binary(&cli, Some(elsewhere.as_os_str())).unwrap(),
+            path_server
+        );
+
+        let error = resolve_server_binary(&cli, None).unwrap_err().to_string();
+        assert!(error.contains("hotsheet-server is not installed"));
+        assert!(error.contains("beside hotsheet-cli"));
+    }
+}

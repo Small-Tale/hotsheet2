@@ -142,3 +142,16 @@ pub(crate) fn cmd_renew(
     }
     Ok(())
 }
+
+/// The suffix that reports a claim's ETA, if it has one.
+pub(crate) fn eta_suffix(ticket: &hotsheet_model::Ticket) -> String {
+    ticket
+        .claim_eta_at
+        .as_ref()
+        .map(|eta| format!(", ETA {}", eta.as_str()))
+        .unwrap_or_default()
+}
+
+pub(crate) fn lease_until(now: OffsetDateTime, minutes: i64) -> Timestamp {
+    Timestamp::from_datetime(now + Duration::minutes(minutes))
+}
