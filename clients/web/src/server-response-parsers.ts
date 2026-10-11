@@ -350,19 +350,9 @@ const ticketRowsPage = shape<CheckoutTicketRowsPage>(
   { items: listOf(parseTicketRow.check) },
   { next_cursor: isString, source_errors: isStringArray },
 );
-/**
- * A legacy (unpaged) server answers a page request with a bare row list. The rows are validated
- * and passed through under the page type because the page loaders already detect and normalize
- * that list with `Array.isArray` (`project-ticket-refresh.ts`); HS2-5T7QHE tracks
- * widening the declared return type.
- */
-const orLegacyRows =
-  <T>(page: ResponseParser<T>): ResponseParser<T> =>
-  (value) =>
-    Array.isArray(value) ? (parseTicketRow.list(value) as unknown as T) : page(value);
-
-export const parseCheckoutTicketPage = orLegacyRows(ticketPage);
-export const parseCheckoutTicketRowsPage = orLegacyRows(ticketRowsPage);
+/** `page_size` requests always receive the page envelope; a bare row list is rejected (HS2-5T7QHE). */
+export const parseCheckoutTicketPage = ticketPage;
+export const parseCheckoutTicketRowsPage = ticketRowsPage;
 
 export const parseCalibrationReport = shape<CalibrationReport>('confidence report', {
   completions: isNumber,

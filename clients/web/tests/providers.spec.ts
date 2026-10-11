@@ -13,6 +13,7 @@ import type { ConversationExportPayload } from '../src/conversation-export';
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { realTicketServer } from './real-ticket-server';
+import { ticketsJson } from './ticket-page-fixture';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 test.use({ video: process.env.HOTSHEET_MEDIA_RECORD_VIDEO === '1' ? 'on' : 'off' });
@@ -9668,7 +9669,9 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
   await mockProject(page);
   const target = { ...row, blocked_by: [notStartedRow.id] };
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: [target, notStartedRow] }) : route.fallback(),
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: ticketsJson(route.request(), [target, notStartedRow]) })
+      : route.fallback(),
   );
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -9679,7 +9682,9 @@ test('shows Blocked only when the ticket has a visible blocked reason', async ({
   await ticket.screenshot({ path: 'target/visual-captures/hs2-e3c530-edge-without-reason.png' });
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
     route.request().method() === 'GET'
-      ? route.fulfill({ json: [{ ...target, blocked_reason: 'Waiting for access' }, notStartedRow] })
+      ? route.fulfill({
+          json: ticketsJson(route.request(), [{ ...target, blocked_reason: 'Waiting for access' }, notStartedRow]),
+        })
       : route.fallback(),
   );
   await page.reload();
@@ -10842,7 +10847,9 @@ test('orders equal status priority and title groups by most recently updated', a
   ];
   await mockProject(page);
   await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/tickets*', (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: recencyRows }) : route.fallback(),
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: ticketsJson(route.request(), recencyRows) })
+      : route.fallback(),
   );
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -11276,7 +11283,7 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
     cursor = 0;
   const polls: Array<import('@playwright/test').Route> = [];
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: rows }) : route.fallback(),
+    route.request().method() === 'GET' ? route.fulfill({ json: ticketsJson(route.request(), rows) }) : route.fallback(),
   );
   await page.route('**/ws/poll*', (route) => {
     const since = new URL(route.request().url()).searchParams.get('since');
@@ -12470,7 +12477,7 @@ test('finishes local ticket creation motion without redundantly reconciling its 
     const request = route.request();
     if (request.method() === 'GET') {
       ticketGets += 1;
-      return route.fulfill({ json: authoritative });
+      return route.fulfill({ json: ticketsJson(route.request(), authoritative) });
     }
     if (request.method() === 'POST') {
       const body = request.postDataJSON(),
@@ -14236,7 +14243,9 @@ test('updates the open project after external ticket additions edits and deletio
     cursor = 0;
   const polls: Array<import('@playwright/test').Route> = [];
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: liveRows }) : route.fallback(),
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: ticketsJson(route.request(), liveRows) })
+      : route.fallback(),
   );
   await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
@@ -14310,7 +14319,9 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   const polls: Array<import('@playwright/test').Route> = [],
     patches: Record<string, unknown>[] = [];
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: liveRows }) : route.fallback(),
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: ticketsJson(route.request(), liveRows) })
+      : route.fallback(),
   );
   await page.route('**/tickets/*01', (route) => {
     const request = route.request();
@@ -14530,7 +14541,9 @@ test('does not report this clients own in-flight autosave as a merge conflict @c
   const polls: Array<import('@playwright/test').Route> = [],
     writes: Array<import('@playwright/test').Route> = [];
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: liveRows }) : route.fallback(),
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: ticketsJson(route.request(), liveRows) })
+      : route.fallback(),
   );
   await page.route('**/tickets/*01', (route) => {
     if (route.request().method() === 'GET') return route.fulfill({ json: { store: 'git-local', ...liveFull } });
@@ -14747,18 +14760,21 @@ test('keeps primary 138-ticket interactions within the painted UI budget', async
     if (new URL(route.request().url()).searchParams.get('text') === 'PERF000')
       return route.fulfill({ json: { items: [largeRows[1]], counts: { total: 1 } } });
     return route.fulfill({
-      json: new URL(route.request().url()).pathname.includes('/other-checkout/')
-        ? [
-            {
-              ...row,
-              id: 'other',
-              native_id: 'other',
-              qualified_id: 'git-local:other',
-              slug: 'HS2-OTHER1',
-              title: 'Other ticket',
-            },
-          ]
-        : largeRows,
+      json: ticketsJson(
+        route.request(),
+        new URL(route.request().url()).pathname.includes('/other-checkout/')
+          ? [
+              {
+                ...row,
+                id: 'other',
+                native_id: 'other',
+                qualified_id: 'git-local:other',
+                slug: 'HS2-OTHER1',
+                title: 'Other ticket',
+              },
+            ]
+          : largeRows,
+      ),
     });
   });
   await page.route('**/connections', (route) =>
@@ -21397,7 +21413,9 @@ test('marks continuation totals partial while retaining both healthy pages (HS2-
 test('shows view-specific feedback when a populated project has no tickets in the selected view', async ({ page }) => {
   await mockProject(page);
   await page.route('**/checkouts/demo-checkout/tickets*', (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: [archiveRow] }) : route.fallback(),
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: ticketsJson(route.request(), [archiveRow]) })
+      : route.fallback(),
   );
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -21687,7 +21705,7 @@ test('switches and searches large ticket views without cloning every row into mo
   await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     const query = new URL(route.request().url()).searchParams.get('text');
-    if (!query) return route.fulfill({ json: largeRows });
+    if (!query) return route.fulfill({ json: ticketsJson(route.request(), largeRows) });
     const matches = largeRows.filter((ticket) => ticket.title.includes(query));
     return route.fulfill({ json: { items: matches, counts: {} } });
   });
@@ -22153,7 +22171,9 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   await page.route('**/__hotsheet/project-api/*/checkouts/*/tickets*', (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     const other = new URL(route.request().url()).pathname.includes('/other-checkout/');
-    return route.fulfill({ json: other ? [otherUnique, sharedOther] : [row, sharedDemo] });
+    return route.fulfill({
+      json: ticketsJson(route.request(), other ? [otherUnique, sharedOther] : [row, sharedDemo]),
+    });
   });
   await page.route('**/tickets/*01', (route) =>
     route.request().method() === 'GET'
@@ -23185,8 +23205,8 @@ test('switches already-open projects from cache within one frame and rejects sta
   let holdRefreshes = false;
   // A board refresh reads each status column separately, so every held request of a project is released together.
   const pending = new Map<string, Array<import('@playwright/test').Route>>();
-  const release = (key: string, json: unknown) =>
-    Promise.all(pending.get(key)!.map((route) => route.fulfill({ json })));
+  const release = (key: string, json: object[]) =>
+    Promise.all(pending.get(key)!.map((route) => route.fulfill({ json: ticketsJson(route.request(), json) })));
   await mockProject(page);
   await page.route('**/__hotsheet/projects/open', (route) => {
     const root = route.request().postDataJSON().root as string;
@@ -23216,7 +23236,7 @@ test('switches already-open projects from cache within one frame and rejects sta
       pending.set(key, [...(pending.get(key) ?? []), route]);
       return;
     }
-    return route.fulfill({ json: rows });
+    return route.fulfill({ json: ticketsJson(route.request(), rows) });
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -23370,7 +23390,7 @@ test('keeps the new-ticket composer open when it is opened right after a project
       pending.set(other ? 'other' : 'demo', route);
       return;
     }
-    return route.fulfill({ json: other ? [otherRow] : [row, notStartedRow] });
+    return route.fulfill({ json: ticketsJson(route.request(), other ? [otherRow] : [row, notStartedRow]) });
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
@@ -23384,7 +23404,7 @@ test('keeps the new-ticket composer open when it is opened right after a project
   await expect(page.getByRole('textbox', { name: 'Ticket title' })).toBeVisible();
   // Release the held refresh so the delayed session restore runs; it must not close the composer the user just opened.
   await expect.poll(() => pending.has('demo')).toBe(true);
-  await pending.get('demo')!.fulfill({ json: [row, notStartedRow] });
+  await pending.get('demo')!.fulfill({ json: ticketsJson(pending.get('demo')!.request(), [row, notStartedRow]) });
   await page.waitForTimeout(400);
   await expect(page.getByRole('textbox', { name: 'Ticket title' })).toBeVisible();
 });
@@ -24346,7 +24366,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
       return route.fulfill({
         json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
       });
-    if (path.endsWith('/tickets') && req.method() === 'GET') return route.fulfill({ json: many });
+    if (path.endsWith('/tickets') && req.method() === 'GET') return route.fulfill({ json: ticketsJson(req, many) });
     if (path.includes('/tickets/') && req.method() === 'GET') {
       const id = path.split('/').pop();
       const t = many.find((r) => r.id === id) || many[0];
@@ -24756,7 +24776,8 @@ test('preserves list and every board-column scroll position across ticket mutati
       return route.fulfill({
         json: { branch: 'main', ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0, clean: true },
       });
-    if (path.endsWith('/tickets') && request.method() === 'GET') return route.fulfill({ json: rows });
+    if (path.endsWith('/tickets') && request.method() === 'GET')
+      return route.fulfill({ json: ticketsJson(request, rows) });
     if (path.endsWith('/batch') && request.method() === 'POST') {
       const updates = request.postDataJSON().updates as Array<{ id: string; status: (typeof statuses)[number] }>;
       rows = rows.map((item) => {
@@ -25566,7 +25587,9 @@ test('keeps the open new-ticket composer and its draft through a background tick
     cursor = 0;
   const polls: Array<import('@playwright/test').Route> = [];
   await page.route(/\/tickets(?:\?.*)?$/, (route) =>
-    route.request().method() === 'GET' ? route.fulfill({ json: liveRows }) : route.fallback(),
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: ticketsJson(route.request(), liveRows) })
+      : route.fallback(),
   );
   await page.route('**/ws/poll*', (route) => {
     const since = new URL(route.request().url()).searchParams.get('since');

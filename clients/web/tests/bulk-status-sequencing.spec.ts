@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { ticketsJson } from './ticket-page-fixture';
+
 const project = {
   id: 'demo-checkout',
   root: '/work/demo',
@@ -111,22 +113,25 @@ async function mockBulkProject(page: Page, { conflictFirst = false }: { conflict
         holdTicketRefresh = false;
         staleRefreshStarted = true;
         await staleRefreshResponse;
-        return route.fulfill({ json: staleRows });
+        return route.fulfill({ json: ticketsJson(request, staleRows) });
       }
       return route.fulfill({
-        json: path.includes('/other-checkout/')
-          ? [
-              {
-                ...base,
-                native_id: 'other',
-                qualified_id: 'git-local:other',
-                id: 'other',
-                slug: 'HS2-OTHER1',
-                title: 'Other project ticket',
-                status: 'not_started',
-              },
-            ]
-          : rows,
+        json: ticketsJson(
+          request,
+          path.includes('/other-checkout/')
+            ? [
+                {
+                  ...base,
+                  native_id: 'other',
+                  qualified_id: 'git-local:other',
+                  id: 'other',
+                  slug: 'HS2-OTHER1',
+                  title: 'Other project ticket',
+                  status: 'not_started',
+                },
+              ]
+            : rows,
+        ),
       });
     }
     if (path.endsWith('/batch') && request.method() === 'POST') {

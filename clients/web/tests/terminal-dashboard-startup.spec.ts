@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { ticketsJson } from './ticket-page-fixture';
+
 test.use({ deviceScaleFactor: 2, video: 'on' });
 
 const capabilities = {
@@ -138,7 +140,9 @@ test('reveals a restored terminal workspace atomically and separates All Project
       });
     if (path.endsWith('/tickets')) {
       await ticketsReleased;
-      return route.fulfill({ json: completedRows(other ? 'other' : 'demo', other ? 3 : 2) });
+      return route.fulfill({
+        json: ticketsJson(route.request(), completedRows(other ? 'other' : 'demo', other ? 3 : 2)),
+      });
     }
     if (path.endsWith('/terminals')) {
       await new Promise((resolve) => setTimeout(resolve, 250));

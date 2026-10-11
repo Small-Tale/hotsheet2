@@ -1,3 +1,5 @@
+import { ticketsJson } from './ticket-page-fixture';
+
 export const project = {
   id: 'terminal-feedback',
   root: '/work/terminal-feedback',
@@ -144,7 +146,10 @@ export async function installTerminalFixture(
     if (ticketLinks && path.endsWith('/tickets')) {
       const text = url.searchParams.get('text')?.toLocaleLowerCase();
       return route.fulfill({
-        json: text ? linkTickets.filter((ticket) => ticket.slug.toLocaleLowerCase() === text) : [],
+        json: ticketsJson(
+          request,
+          text ? linkTickets.filter((ticket) => ticket.slug.toLocaleLowerCase() === text) : [],
+        ),
       });
     }
     if (ticketLinks && path.match(/\/tickets\/[^/]+$/)) {
@@ -168,10 +173,10 @@ export async function installTerminalFixture(
       path.endsWith('/connections') ||
       path.endsWith('/commands') ||
       path.endsWith('/command-runs') ||
-      path.endsWith('/tickets') ||
       path.endsWith('/corrupt-tickets')
     )
       return route.fulfill({ json: [] });
+    if (path.endsWith('/tickets')) return route.fulfill({ json: ticketsJson(request, []) });
     if (path.endsWith('/ws/poll'))
       return route.fulfill({
         json: { cursor: Number(new URL(request.url()).searchParams.get('since') ?? 0), events: [], overflow: false },

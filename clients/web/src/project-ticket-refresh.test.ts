@@ -20,17 +20,6 @@ describe('loadProjectTicketRefresh', () => {
     started: 0,
     completed_today: 0,
   };
-  it('accepts the legacy ticket-array response while compatible servers transition to pagination', async () => {
-    const ticket = { id: '1', slug: 'HS2-LEGACY', title: 'Legacy', tags: [] };
-    const result = await loadProjectTicketRefresh(
-      {
-        checkoutTicketPage: vi.fn().mockResolvedValue([ticket]),
-        checkoutCorruptTickets: vi.fn().mockResolvedValue([]),
-      },
-      'checkout',
-    );
-    expect(result).toEqual({ tickets: [ticket], corruptTickets: [] });
-  });
   it('keeps healthy tickets when the corrupt-ticket index fails', async () => {
     const ticket = { id: '01', slug: 'HS2-OK', title: 'Healthy', tags: [] };
     const checkoutTicketPage = vi.fn().mockResolvedValue({ items: [ticket], counts });
@@ -294,27 +283,6 @@ describe('loadBoardColumnRefresh (HS2-HNZZHC)', () => {
       { verified: 5 },
     );
     expect(restored.tickets.filter((ticket) => ticket.status === 'verified')).toHaveLength(5);
-  });
-
-  it('accepts a legacy row-array server as one exhausted page per column', async () => {
-    const legacy = [...rows('not_started', 2), ...rows('started', 1)];
-    const result = await loadBoardColumnRefresh(
-      {
-        checkoutTicketPage: vi.fn().mockResolvedValue(legacy),
-        checkoutTicketRowsPage: vi.fn().mockResolvedValue(legacy),
-      },
-      'demo',
-      {},
-      columns.slice(0, 3),
-    );
-    expect(result.tickets.map((ticket) => ticket.slug)).toEqual(legacy.map((ticket) => ticket.slug));
-    expect(result.counts).toBeUndefined();
-    expect(result.pages['not-started']).toEqual({
-      loaded: 3,
-      exhausted: true,
-      streams: { not_started: { exhausted: true } },
-    });
-    expect(result.pages.completed.exhausted).toBe(true);
   });
 
   it('empty columns are exhausted and a board refresh carries pages, counts, and no global cursor', async () => {

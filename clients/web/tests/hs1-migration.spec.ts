@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import type { MigrationJob, MigrationProgress } from '../src/migration-progress';
+import { ticketsJson } from './ticket-page-fixture';
 
 async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' | 'repair' = 'hs1') {
   let job: MigrationJob | undefined;
@@ -152,8 +153,8 @@ async function mockHs1Project(page: Page, initialState: 'hs1' | 'imported' | 're
           : [],
       });
     }
+    if (path.endsWith('/tickets')) return route.fulfill({ json: ticketsJson(route.request(), []) });
     if (
-      path.endsWith('/tickets') ||
       path.endsWith('/corrupt-tickets') ||
       path.endsWith('/connections') ||
       path.endsWith('/permissions') ||

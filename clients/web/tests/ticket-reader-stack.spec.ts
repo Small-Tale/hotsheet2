@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
 import type { Attachment } from '../src/api';
+import { ticketsJson } from './ticket-page-fixture';
 
 const projects = {
   source: {
@@ -159,11 +160,15 @@ async function mockLayeredProjects(
     if (path.endsWith('/tickets') && request.method() === 'GET') {
       const query = url.searchParams.get('text')?.toLocaleLowerCase();
       return route.fulfill({
-        json: query
-          ? tickets.filter(
-              (ticket) => ticket.slug.toLocaleLowerCase() === query || ticket.title.toLocaleLowerCase().includes(query),
-            )
-          : tickets,
+        json: ticketsJson(
+          request,
+          query
+            ? tickets.filter(
+                (ticket) =>
+                  ticket.slug.toLocaleLowerCase() === query || ticket.title.toLocaleLowerCase().includes(query),
+              )
+            : tickets,
+        ),
       });
     }
     const ticketId = path.match(/\/tickets\/([^/]+)$/)?.[1];

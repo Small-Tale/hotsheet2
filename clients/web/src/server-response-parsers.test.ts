@@ -166,6 +166,9 @@ describe('endpoint DTO parsers (HS2-E0AG5E)', () => {
     [parseTicketRow, { title: 'no slug' }],
     [parseTicketRow, { slug: 'HS2-ONE', tags: 'a' }],
     [parseCheckoutTicketPage, { items: [] }],
+    // A page request never gets a bare row list from a supported server (HS2-5T7QHE).
+    [parseCheckoutTicketPage, [{ slug: 'HS2-ONE' }]],
+    [parseCheckoutTicketRowsPage, [{ slug: 'HS2-ONE' }]],
     [parseCheckoutRelink, { checkouts: [{ id: 'c' }], connection_id: 'git' }],
     [parseRepositoryStatus, { ahead: '1' }],
     [parsePollResponse, { cursor: 1, events: [{}], overflow: false }],

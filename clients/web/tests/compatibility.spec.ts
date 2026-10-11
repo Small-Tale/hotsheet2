@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 
 import type { CompatibilityAssessment } from '../src/compatibility';
 import { releaseBinaryEnvironment } from '../src/local-host';
+import { ticketsJson } from './ticket-page-fixture';
 
 test('selects current local server, CLI, and migrator binaries from the real checkout', () => {
   const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -30,7 +31,7 @@ async function openWithCompatibility(page: import('@playwright/test').Page, comp
         },
       });
     if (path.endsWith('/providers')) return route.fulfill({ json: [] });
-    if (path.endsWith('/tickets')) return route.fulfill({ json: [] });
+    if (path.endsWith('/tickets')) return route.fulfill({ json: ticketsJson(route.request(), []) });
     if (path.endsWith('/repository/status'))
       return route.fulfill({ json: { ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 } });
     return route.continue();

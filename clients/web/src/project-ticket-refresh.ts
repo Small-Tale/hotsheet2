@@ -50,27 +50,18 @@ export async function loadBoardColumnRefresh(
   let counts: CheckoutTicketCounts | undefined,
     countsRequested = false;
   const sourceErrors = new Set<string>();
-  // A legacy server answers with a plain row array (no paging or counts); treat it as one exhausted page and
-  // keep its rows as-is, as the global loader does. The board buckets rows by status when it renders.
-  const normalize = (
-    page:
-      | { items: TicketRow[]; next_cursor?: string; counts?: CheckoutTicketCounts | null; source_errors?: string[] }
-      | TicketRow[],
-  ) => (Array.isArray(page) ? { items: page, next_cursor: undefined } : page);
   const fetchPage = async (size: number, cursor: string | undefined, status: string) => {
     const statusQuery = { ...query, status };
     if (!countsRequested || !client.checkoutTicketRowsPage) {
       countsRequested = true;
       const page = await client.checkoutTicketPage(checkout, size, cursor, statusQuery);
-      if (!Array.isArray(page)) {
-        counts ??= page.counts;
-        page.source_errors?.forEach((error) => sourceErrors.add(error));
-      }
-      return normalize(page);
+      counts ??= page.counts;
+      page.source_errors?.forEach((error) => sourceErrors.add(error));
+      return page;
     }
     const page = await client.checkoutTicketRowsPage(checkout, size, cursor, statusQuery);
-    if (!Array.isArray(page)) page.source_errors?.forEach((error) => sourceErrors.add(error));
-    return normalize(page);
+    page.source_errors?.forEach((error) => sourceErrors.add(error));
+    return page;
   };
   const loadStream = async (status: string, target: number) => {
     const rows: TicketRow[] = [];
@@ -167,19 +158,15 @@ export async function loadProjectTicketRefresh(
   const diagnostics = corruptTickets.status === 'fulfilled' ? corruptTickets.value : undefined;
   const corruptSlugs = new Set(diagnostics?.flatMap((item) => (item.slug ? [item.slug] : [])) ?? []);
   const ticketPage = tickets.status === 'fulfilled' ? tickets.value : undefined;
-  const ticketRows: TicketRow[] = Array.isArray(ticketPage) ? (ticketPage as TicketRow[]) : (ticketPage?.items ?? []);
+  const ticketRows: TicketRow[] = ticketPage?.items ?? [];
   return {
     ...(tickets.status === 'fulfilled'
       ? {
           tickets: ticketRows.filter((ticket) => !corruptSlugs.has(ticket.slug)),
-          ...(Array.isArray(ticketPage)
-            ? {}
-            : {
-                ticketCounts: ticketPage?.counts,
-                nextCursor: ticketPage?.next_cursor,
-                ...(ticketPage?.source_errors?.length ? { sourceErrors: ticketPage.source_errors } : {}),
-                ...(ticketPage?.source_errors?.length ? { ticketsError: ticketPage.source_errors.join(' · ') } : {}),
-              }),
+          ticketCounts: ticketPage?.counts,
+          nextCursor: ticketPage?.next_cursor,
+          ...(ticketPage?.source_errors?.length ? { sourceErrors: ticketPage.source_errors } : {}),
+          ...(ticketPage?.source_errors?.length ? { ticketsError: ticketPage.source_errors.join(' · ') } : {}),
         }
       : { ticketsError: message(tickets.reason) }),
     ...(corruptTickets.status === 'fulfilled'
