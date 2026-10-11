@@ -500,7 +500,9 @@ unavailable source tree is not reported as stale. The `--revision-status` probe 
 reports `source_unavailable_reason` whenever `source_revision` is null (an explicit
 build revision, or the source root's I/O error). A Hot Sheet terminal never inherits
 the host's `HOT_SHEET_*` build pins, so a `cargo build` inside one hashes its own
-checkout or worktree (HS2-6C7NQ7). Missing or invalid metadata is an
+checkout or worktree (HS2-6C7NQ7); neither does any non-PTY process launched through
+`hotsheet_ticketing::git::launch` (AI tools, configured commands, the terminal broker,
+external apps, `hotsheet-cli launch`; HS2-CGVHTM). Missing or invalid metadata is an
 explicit unknown state. The server advertises authenticated restart and quiescence only
 with its admission gate active. A restart first refuses new mutations/background passes,
 then proceeds only when mutations, sync/drive passes, commands, setup refreshes, AI turns,

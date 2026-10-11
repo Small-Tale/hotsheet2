@@ -74,10 +74,40 @@ pub fn command() -> Command {
 /// instead of the checkout it was started in. Explicit `.env(...)` calls made after this
 /// still apply. A source-scan test forbids a bare `Command::new` in the launching
 /// crates' production code.
+///
+/// It also drops the local host's inherited `HOT_SHEET_*` build pins
+/// (`HOT_SHEET_BUILD_REVISION`, `HOT_SHEET_LOCAL_SOURCE_ROOT`; HS2-CGVHTM), matching the
+/// PTY `scrub_env` (HS2-6C7NQ7): a `cargo build` run by a launched process would
+/// otherwise bake the pin in as an explicit release revision and disable
+/// source-staleness detection. Those values are build-time inputs only (read through
+/// `option_env!`), so no launched child needs them at run time. The `HOTSHEET_*`
+/// launch markers are a different prefix and are kept.
 #[must_use]
 pub fn launch(program: impl AsRef<OsStr>) -> Command {
     let mut cmd = Command::new(program);
     remove_repository_env(&mut cmd);
+    remove_build_pins(&mut cmd, std::env::vars_os().map(|(key, _)| key));
+    cmd
+}
+
+/// Prefix of the local host's build-pin variables removed from launched processes.
+pub const BUILD_PIN_PREFIX: &str = "HOT_SHEET_";
+
+/// Remove every variable in `inherited` whose name starts with [`BUILD_PIN_PREFIX`].
+pub fn remove_build_pins<I, K>(cmd: &mut Command, inherited: I) -> &mut Command
+where
+    I: IntoIterator<Item = K>,
+    K: AsRef<OsStr>,
+{
+    for key in inherited {
+        let key = key.as_ref();
+        if key
+            .to_str()
+            .is_some_and(|key| key.starts_with(BUILD_PIN_PREFIX))
+        {
+            cmd.env_remove(key);
+        }
+    }
     cmd
 }
 
@@ -150,6 +180,54 @@ mod tests {
         assert!(
             envs.iter()
                 .any(|(k, v)| k == "GIT_AUTHOR_NAME" && v.as_deref() == Some("kept"))
+        );
+    }
+
+    /// HS2-CGVHTM: a launched child never sees the host's `HOT_SHEET_*` build pins, while
+    /// `HOTSHEET_*` launch markers and ordinary variables survive.
+    #[cfg(unix)]
+    #[test]
+    fn launched_child_does_not_inherit_build_pins() {
+        let mut cmd = Command::new("/bin/sh");
+        cmd.args(["-c", "env"])
+            .env("HOT_SHEET_BUILD_REVISION", "source-sha256:pinned")
+            .env("HOT_SHEET_LOCAL_SOURCE_ROOT", "/pinned/root")
+            .env("HOTSHEET_WORKER_ID", "w1")
+            .env("KEEP_ME", "1");
+        remove_build_pins(
+            &mut cmd,
+            [
+                "HOT_SHEET_BUILD_REVISION",
+                "HOT_SHEET_LOCAL_SOURCE_ROOT",
+                "HOTSHEET_WORKER_ID",
+                "KEEP_ME",
+            ],
+        );
+        let out = cmd.output().expect("sh runs");
+        let env = String::from_utf8_lossy(&out.stdout);
+        assert!(!env.contains("HOT_SHEET_"), "{env}");
+        assert!(env.contains("HOTSHEET_WORKER_ID=w1") && env.contains("KEEP_ME=1"));
+    }
+
+    /// `launch` removes exactly the inherited build pins plus the repository variables.
+    #[test]
+    fn launch_removes_inherited_build_pins_only() {
+        let cmd = launch("claude");
+        let removed: Vec<String> = cmd
+            .get_envs()
+            .filter(|(_, value)| value.is_none())
+            .map(|(key, _)| key.to_string_lossy().into_owned())
+            .collect();
+        for (key, _) in std::env::vars_os() {
+            let key = key.to_string_lossy().into_owned();
+            if key.starts_with(BUILD_PIN_PREFIX) {
+                assert!(removed.contains(&key), "{key} must be removed");
+            }
+        }
+        assert!(
+            removed.iter().all(|key| key.starts_with(BUILD_PIN_PREFIX)
+                || REPOSITORY_ENV_VARS.contains(&key.as_str())),
+            "{removed:?}"
         );
     }
 
