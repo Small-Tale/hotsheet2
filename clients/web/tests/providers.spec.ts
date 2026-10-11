@@ -18296,6 +18296,59 @@ test('keeps gallery shortcuts out of a focused annotation note (HS2-V14PVP)', as
   await expect(gallery).toHaveAccessibleName(/Image 2 of 2: second.svg/);
 });
 
+test.describe('phone touch annotation editing (HS2-BCA512)', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
+
+  test('keeps the annotation note out of iOS focus zoom and restores the clipped root after the keyboard @ci-webkit', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'firefox', 'Firefox has no mobile (isMobile) emulation.');
+    await mockProject(page);
+    await page.goto('/?dev-review=false');
+    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
+    await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+    await page.getByRole('tab', { name: /Attachments/ }).click();
+    await page.getByRole('button', { name: 'Open proof.png in media gallery' }).click();
+    const gallery = page.locator('[data-component="attachment-gallery"]');
+    await gallery.getByRole('button', { name: 'Annotate media' }).click();
+    await gallery.getByRole('button', { name: 'Add rectangle' }).click();
+    const surface = gallery.locator('[data-gallery-annotation-surface="true"]'),
+      box = (await surface.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5);
+    await page.mouse.up();
+    const note = gallery.getByRole('textbox', { name: 'Annotation note' });
+    await expect(note).toBeFocused();
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+    // iOS auto-zooms into any focused field under 16px and leaves the page zoomed afterwards.
+    expect(await note.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
+    await note.fill('Phone note');
+    await page.screenshot({ path: test.info().outputPath('hs2-bca512-annotation-note-phone.png') });
+    // iOS scrolls the clipped root to reveal the field above the keyboard; simulate that offset, then
+    // dismiss the keyboard by leaving the field. The root must return to its origin by itself.
+    await page.evaluate(() => {
+      let y = 260;
+      Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
+      const original = window.scrollTo.bind(window);
+      (window as unknown as { scrollTo: (x: number, y: number) => void }).scrollTo = (x: number, next: number) => {
+        y = next;
+        original(x, next);
+      };
+    });
+    await gallery.getByRole('button', { name: 'Finish markup' }).click();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    await page.screenshot({ path: test.info().outputPath('hs2-bca512-after-finish-phone.png') });
+    await page.keyboard.press('Escape');
+    await expect(gallery).toBeHidden();
+    // The app shell sits at the document origin again: its header is flush with the top.
+    expect(await page.evaluate(() => document.querySelector('#app')!.getBoundingClientRect().top)).toBe(0);
+    await page.screenshot({ path: test.info().outputPath('hs2-bca512-app-after-phone.png') });
+  });
+});
+
 test('draws, edits, resizes, and deletes durable image annotations in the full-screen gallery', async ({ page }) => {
   const writes: unknown[] = [];
   await mockProject(page);

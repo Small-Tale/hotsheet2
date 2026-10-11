@@ -12,8 +12,11 @@ import { wireResizableRegions } from '@kerfjs/ui/wire-resizable-regions';
 import { wireScrollDividers } from '@kerfjs/ui/wire-scroll-dividers';
 
 import { startHotSheetWebClient } from './app/runtime';
+import { installDocumentScrollRestore } from './document-scroll-restore';
 
 const { appRoot } = await startHotSheetWebClient();
+// iOS keyboard scrolls of the clipped app root are not user-recoverable; undo them on dismissal (HS2-BCA512).
+installDocumentScrollRestore(window);
 // Kerf panes, NavStacks, TabScaffolds, and TabBar strips draw their chrome dividers only while content
 // scrolls beneath them; one page-lifetime instance at the application root (HS2-TAZJ0V, HS2-TF76Z2).
 void wireScrollDividers(appRoot);

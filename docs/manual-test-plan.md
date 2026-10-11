@@ -175,6 +175,15 @@ scrolling inside a column is not hijacked by the horizontal snap, that tapping a
 opens the inspector overlay, and that rotating the device re-snaps to a column. Playwright
 covers wheel/trackpad snapping in Chromium; real touch momentum is manual.
 
+### Mobile keyboard leaves the app at its origin (HS2-BCA512)
+
+On a **physical iPhone** (Safari and the installed PWA), open an image attachment, choose
+Annotate, draw a mark, type in the Annotation note, then dismiss the keyboard (tap the image or
+Finish markup). The page must not zoom in when the note is focused, and once the keyboard closes
+the app header must sit flush at the top with no empty band at the bottom. Repeat with another
+text field (ticket title, search). Playwright pins the 16px coarse-pointer note size and the
+root-scroll restore with a simulated offset; real iOS keyboard scrolling and focus zoom are manual.
+
 ### Web visual quality gate
 
 For every change affecting rendered web-client visuals, inspect the real affected

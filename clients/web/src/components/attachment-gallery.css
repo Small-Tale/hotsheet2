@@ -415,6 +415,14 @@
   border-radius: var(--wa-border-radius-s);
   field-sizing: var(--hotsheet-textarea-field-sizing, fixed);
   resize: var(--hotsheet-textarea-resize, vertical);
+  font: inherit;
+}
+/* iOS Safari zooms the page into any focused field whose text is smaller than 16px and leaves it
+   zoomed after the keyboard closes; touch screens keep the note at 16px or larger (HS2-BCA512). */
+@media (pointer: coarse) {
+  .attachment-gallery__editor textarea {
+    font-size: max(var(--hs-touch-field-min-font-size), 1em);
+  }
 }
 .attachment-gallery__selected-note blockquote {
   color: white;
