@@ -5822,11 +5822,21 @@ test("opens an AI shell per provider from the drawer submenu with each provider'
   await shell('codex').click();
   await expect.poll(() => created.length).toBe(3);
   expect(created.at(-1)).toMatchObject({ connect: 'codex', model: 'gpt-6-astra', effort: 'medium' });
-  // On a phone the selected terminal can be in focus mode; leave it to reach the drawer's create menu.
+  // On a phone a focused terminal is in focus mode; leave it to reach the drawer's create menu.
+  // Whether the new terminal's own asynchronous focus lands before or after the resize depends on
+  // load, so first wait for the phone geometry pass (it may focus the terminal), then focus the
+  // terminal explicitly so focus mode is always entered and left deterministically (HS2-PYVWJ6).
+  const session = drawer.locator('.terminal-session:not([hidden]) [data-terminal-id]'),
+    wideGrid = await session.getAttribute('data-grid-size');
   await page.setViewportSize({ width: 390, height: 844 });
-  const exitFocus = page.getByRole('button', { name: 'Exit terminal focus' });
-  await expect(exitFocus.or(create)).toBeVisible();
-  if (await exitFocus.isVisible()) await exitFocus.click();
+  await expect(session).not.toHaveAttribute('data-grid-size', wideGrid ?? '');
+  await session.locator('.xterm-helper-textarea').evaluate((input: HTMLElement) => {
+    input.blur();
+    input.focus();
+  });
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'true');
+  await page.getByRole('button', { name: 'Exit terminal focus' }).click();
+  await expect(drawer).toHaveAttribute('data-focus-mode', 'false');
   await expect(create).toBeVisible();
   await openSubmenu();
   await page.waitForTimeout(250);
