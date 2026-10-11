@@ -6078,6 +6078,7 @@ export async function startHotSheetWebClient() {
       toastLifetime.dispose();
       disposeInteractions();
       haltedSessionsController.dispose();
+      permissionsController.dispose();
     },
   };
 }

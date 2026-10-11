@@ -1,5 +1,6 @@
 import type { Signal } from 'kerfjs';
 import { signal } from 'kerfjs';
+import { createScope } from 'kerfjs/scope';
 
 import { Api, ApiHttpError } from '../api';
 import { updatePermissionCountdownText } from '../components/permission-request-card';
@@ -50,6 +51,8 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     }
   }
   const storedPermissionHistory = loadPermissionHistory();
+  // Owns the countdown interval and cross-window storage listener (HS2-30J7W5).
+  let lifetime = createScope();
   const permissionRevision = signal(0),
     permissionInbox = new PermissionInbox(storedPermissionHistory),
     permissionTimer = new VisiblePermissionTimer();
@@ -159,11 +162,18 @@ export function createPermissionsController(dependencies: PermissionsDependencie
 
   function startPermissionUpdates() {
     if (permissionTimerInterval === undefined) {
-      permissionTimerInterval = window.setInterval(updatePermissionTimer, 1_000);
+      const interval = window.setInterval(updatePermissionTimer, 1_000);
+      permissionTimerInterval = interval;
       // Another window paused or resumed; follow it without writing the key back.
-      window.addEventListener('storage', (event) => {
+      const sync = (event: StorageEvent) => {
         const paused = notificationsPausedFromStorageEvent(event);
         if (paused !== undefined) setNotificationsPaused(paused, false);
+      };
+      window.addEventListener('storage', sync);
+      lifetime.add(() => {
+        window.clearInterval(interval);
+        window.removeEventListener('storage', sync);
+        permissionTimerInterval = undefined;
       });
     }
     void refreshPermissions();
@@ -297,7 +307,13 @@ export function createPermissionsController(dependencies: PermissionsDependencie
     );
   }
 
+  /** Stop the countdown interval and storage listener; a later start re-registers them. */
+  function dispose() {
+    lifetime.dispose();
+    lifetime = createScope();
+  }
   return {
+    dispose,
     loadPermissionAutomation,
     permissionRevision,
     permissionInbox,

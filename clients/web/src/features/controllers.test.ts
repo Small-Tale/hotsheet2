@@ -286,6 +286,39 @@ describe('feature owners retain live state across transitions (HS2-DHYGXJ)', () 
     expect(owner.permissionCount('b')).toBe(0);
   });
 
+  it('disposes the countdown interval and storage listener with its owner and restarts cleanly (HS2-30J7W5)', () => {
+    const added: unknown[] = [],
+      removed: unknown[] = [],
+      clearInterval = vi.fn();
+    let nextInterval = 0;
+    vi.stubGlobal('window', {
+      setInterval: vi.fn(() => ++nextInterval),
+      clearInterval,
+      addEventListener: (type: string, listener: unknown) => {
+        if (type === 'storage') added.push(listener);
+      },
+      removeEventListener: (type: string, listener: unknown) => {
+        if (type === 'storage') removed.push(listener);
+      },
+    });
+    fetchMock.mockResolvedValue(json([]));
+    const owner = createPermissionsController({ projects: signal([project('a')]), selectedProjectId: signal('a') });
+    owner.startPermissionUpdates();
+    owner.startPermissionUpdates();
+    expect(added).toHaveLength(1);
+    owner.dispose();
+    expect(clearInterval).toHaveBeenCalledWith(1);
+    expect(removed).toEqual(added);
+    owner.dispose();
+    expect(clearInterval).toHaveBeenCalledTimes(1);
+    // Restart after dispose registers a fresh interval and listener, disposed again later.
+    owner.startPermissionUpdates();
+    expect(added).toHaveLength(2);
+    owner.dispose();
+    expect(clearInterval).toHaveBeenLastCalledWith(2);
+    expect(removed).toEqual(added);
+  });
+
   it('pauses popups in every project, freezes their countdown, and follows other windows (HS2-QYA9SC)', () => {
     const listeners: ((event: { key: string | null; newValue: string | null }) => void)[] = [];
     vi.stubGlobal('window', {
