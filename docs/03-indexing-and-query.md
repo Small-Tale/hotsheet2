@@ -205,6 +205,14 @@ On change:
    reconnects after its cursor fell out of the ring receives `overflow` and performs
    an authoritative project refresh.
 
+**Failed index writes are repaired, not swallowed.** When a server write or a watcher
+upsert/delete/hash record fails in SQLite, the failure is logged and the ticket is queued
+for repair (HS2-JD7TK0). The store's next server write retries the queue first, and each
+store watcher also retries it on its own bounded backoff (1s doubling to 60s, reset once the
+queue drains), so a store with no further writes still converges without a restart
+(HS2-5BAEX9). A repair re-indexes the ticket from its current file, or drops the row when
+the file is gone; a still-failing repair stays queued.
+
 **Git-aware fast path.** Once a store has an indexed HEAD baseline, reconciliation
 combines the `old-HEAD..new-HEAD` diff with Git's current ticket worktree delta. It also
 remembers the previous dirty-ticket set so reverting an external edit refreshes the stale

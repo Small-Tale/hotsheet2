@@ -75,6 +75,7 @@ pub(crate) struct WatchTarget {
     pub(crate) events: broadcast::Sender<ChangeEvent>,
     pub(crate) event_log: Arc<Mutex<EventLog>>,
     pub(crate) checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
+    pub(crate) index_repairs: IndexRepairs,
 }
 
 /// Watch the **default** store (back-compat entry point used by the server binary).
@@ -91,6 +92,7 @@ pub(crate) fn default_watch_target(state: &AppState) -> WatchTarget {
         events: state.events.clone(),
         event_log: state.event_log.clone(),
         checkout_registry: state.checkout_registry.clone(),
+        index_repairs: state.index_repairs.clone(),
     }
 }
 
@@ -653,7 +655,29 @@ pub(crate) fn watch_loop(
 ) {
     use std::time::Duration;
 
-    while let Ok(first) = rx.recv() {
+    use std::sync::mpsc::RecvTimeoutError;
+
+    let mut retry_delay = INDEX_REPAIR_RETRY_MIN;
+    loop {
+        // Retry queued index repairs on a bounded backoff so a store with no further
+        // writes (and a missed watcher echo) still converges (HS2-5BAEX9). This is a
+        // local timer over in-memory state; it issues no network requests.
+        let first = match rx.recv_timeout(retry_delay) {
+            Ok(first) => first,
+            Err(RecvTimeoutError::Timeout) => {
+                if target.index_repairs.has_pending(&target.store_id) {
+                    let still = target.index_repairs.repair(&target.entry, &target.store_id);
+                    retry_delay = next_index_repair_delay(retry_delay, still);
+                    if !still {
+                        regenerate_target_worklists(&target);
+                    }
+                } else {
+                    retry_delay = INDEX_REPAIR_RETRY_MIN;
+                }
+                continue;
+            }
+            Err(RecvTimeoutError::Disconnected) => return,
+        };
         let mut paths = watch_event_paths(&target, first);
         // Debounce a burst (editor save, git checkout touching many files).
         while let Ok(next) = rx.recv_timeout(Duration::from_millis(150)) {
@@ -671,18 +695,22 @@ pub(crate) fn watch_loop(
         if !index_changed {
             continue;
         }
-        // Refresh each checkout-local projection that consumes this store. The store is
-        // syncable authority; worklists remain local per checkout and may aggregate stores.
-        if let Ok(checkouts) = target.checkout_registry.list() {
-            for checkout in checkouts {
-                if checkout
-                    .stores
-                    .iter()
-                    .any(|root| same_path(FsPath::new(root), target.entry.store.root()))
-                {
-                    if let Err(e) = regenerate_checkout_worklist_indexed(&target.host, &checkout) {
-                        tracing::warn!("worklist regenerate failed for {}: {e}", checkout.root);
-                    }
+        regenerate_target_worklists(&target);
+    }
+}
+
+/// Refresh each checkout-local projection that consumes this store. The store is
+/// syncable authority; worklists remain local per checkout and may aggregate stores.
+fn regenerate_target_worklists(target: &WatchTarget) {
+    if let Ok(checkouts) = target.checkout_registry.list() {
+        for checkout in checkouts {
+            if checkout
+                .stores
+                .iter()
+                .any(|root| same_path(FsPath::new(root), target.entry.store.root()))
+            {
+                if let Err(e) = regenerate_checkout_worklist_indexed(&target.host, &checkout) {
+                    tracing::warn!("worklist regenerate failed for {}: {e}", checkout.root);
                 }
             }
         }
@@ -787,6 +815,7 @@ pub(crate) fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
         return false;
     };
     let index = &target.entry.index;
+    let repairs = &target.index_repairs;
     let emit = |kind: &str, id: String, slug: String| {
         emit_change(
             &target.event_log,
@@ -812,12 +841,9 @@ pub(crate) fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
                 .remove(&(target.store_id.clone(), id.to_string(), String::new()))
                 .is_some()
         });
-        {
-            let index = index.lock_or_recover();
-            if let Err(error) = index.delete(&id) {
-                tracing::warn!(ticket = %id, %error, "watcher index delete failed");
-            }
-        }
+        repairs.write_or_schedule(&target.entry, &target.store_id, id, |index| {
+            index.delete(&id)
+        });
         if local_echo {
             return false;
         }
@@ -848,24 +874,19 @@ pub(crate) fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
         // Preserve the last healthy row, but remember the corrupt bytes. Otherwise a
         // manual repair that restores the previous healthy content compares equal to
         // the stale hash and is incorrectly treated as a no-op.
-        {
-            let index = index.lock_or_recover();
-            if let Err(error) = index.record_source_hash(&id, &hash) {
-                tracing::warn!(ticket = %id, %error, "watcher could not record a corrupt file's hash");
-            }
-        }
+        repairs.write_or_schedule(&target.entry, &target.store_id, id, |index| {
+            index.record_source_hash(&id, &hash)
+        });
         let (_, slug) = hotsheet_ticketing::recover_ticket_identity(path);
         // Keep the last healthy indexed row available, but wake every client so its
         // resilient refresh can replace that stale projection with recovery UI.
         emit("changed", id.to_string(), slug.unwrap_or_default());
         return true;
     };
-    {
-        let index = index.lock_or_recover();
-        if let Err(error) = index.upsert(&ticket, &path.display().to_string(), &hash) {
-            tracing::warn!(ticket = %ticket.id, %error, "watcher index upsert failed");
-        }
-    }
+    let file = path.display().to_string();
+    repairs.write_or_schedule(&target.entry, &target.store_id, ticket.id, |index| {
+        index.upsert(&ticket, &file, &hash)
+    });
     emit("changed", ticket.id.to_string(), ticket.slug.clone());
     true
 }

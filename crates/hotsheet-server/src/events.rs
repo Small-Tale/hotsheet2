@@ -3,26 +3,26 @@
 
 use crate::*;
 
-impl AppState {
-    pub(crate) fn emit(&self, event: ChangeEvent) {
-        emit_change(&self.event_log, &self.events, event);
-    }
+/// The queue of tickets whose index write failed (HS2-JD7TK0), shared by the server's
+/// write path and every store watcher so either can retry it (HS2-5BAEX9).
+#[derive(Clone, Default)]
+pub(crate) struct IndexRepairs {
+    pending: Arc<Mutex<HashSet<(String, Ulid)>>>,
+    /// Test-only fault injection: the next N index writes fail.
+    #[cfg(test)]
+    pub(crate) faults: Arc<AtomicUsize>,
+}
 
-    /// The current long-poll cursor (the last emitted event's seq; 0 if none).
-    pub(crate) fn event_cursor(&self) -> u64 {
-        self.event_log.with_lock(|l| l.seq)
-    }
-
-    /// Run one server-side index write, surfacing a SQLite failure instead of swallowing
-    /// it (HS2-JD7TK0). A poisoned index lock is recovered (HS2-ZGQJZP).
-    pub(crate) fn index_write(
+impl IndexRepairs {
+    /// Run one index write, mapping a SQLite failure to its message.
+    pub(crate) fn write(
         &self,
         entry: &StoreEntry,
         write: impl FnOnce(&Index) -> Result<(), IndexError>,
     ) -> Result<(), String> {
         #[cfg(test)]
         if self
-            .index_write_faults
+            .faults
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
             .is_ok()
         {
@@ -33,17 +33,53 @@ impl AppState {
     }
 
     /// Log a failed index write and queue that ticket for re-indexing from its file.
-    pub(crate) fn schedule_index_repair(&self, store_id: &str, id: Ulid, error: &str) {
+    pub(crate) fn schedule(&self, store_id: &str, id: Ulid, error: &str) {
         tracing::warn!(ticket = %id, store = store_id, error, "index write failed; scheduled repair");
-        self.pending_index_repairs
+        self.pending
             .lock_or_recover()
             .insert((store_id.to_string(), id));
     }
 
+    /// Run an index write; a failure is logged and queued for repair.
+    pub(crate) fn write_or_schedule(
+        &self,
+        entry: &StoreEntry,
+        store_id: &str,
+        id: Ulid,
+        write: impl FnOnce(&Index) -> Result<(), IndexError>,
+    ) -> bool {
+        match self.write(entry, write) {
+            Ok(()) => true,
+            Err(error) => {
+                self.schedule(store_id, id, &error);
+                false
+            }
+        }
+    }
+
+    /// Whether any repair is queued for `store_id`.
+    pub(crate) fn has_pending(&self, store_id: &str) -> bool {
+        self.pending
+            .with_lock(|pending| pending.iter().any(|(store, _)| store == store_id))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn contains(&self, store_id: &str, id: Ulid) -> bool {
+        self.pending
+            .lock_or_recover()
+            .contains(&(store_id.to_string(), id))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.pending.lock_or_recover().is_empty()
+    }
+
     /// Re-index every queued ticket of `entry` from its current file (or drop its row
-    /// when the file is gone). A still-failing repair stays queued.
-    pub(crate) fn repair_pending_index_rows(&self, entry: &StoreEntry, store_id: &str) {
-        let queued: Vec<Ulid> = self.pending_index_repairs.with_lock(|pending| {
+    /// when the file is gone). A still-failing repair stays queued. Returns whether any
+    /// repair for this store remains queued.
+    pub(crate) fn repair(&self, entry: &StoreEntry, store_id: &str) -> bool {
+        let queued: Vec<Ulid> = self.pending.with_lock(|pending| {
             let ids = pending
                 .iter()
                 .filter(|(store, _)| store == store_id)
@@ -61,20 +97,66 @@ impl AppState {
                     Ok(ticket) => {
                         let hash = hash_bytes(&bytes);
                         let path = path.display().to_string();
-                        self.index_write(entry, |index| index.upsert(&ticket, &path, &hash))
+                        self.write(entry, |index| index.upsert(&ticket, &path, &hash))
                     }
                     // A corrupt file is the watcher's recovery path, not an index fault.
                     Err(_) => Ok(()),
                 },
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    self.index_write(entry, |index| index.delete(&id))
+                    self.write(entry, |index| index.delete(&id))
                 }
                 Err(error) => Err(error.to_string()),
             };
             if let Err(error) = result {
-                self.schedule_index_repair(store_id, id, &error);
+                self.schedule(store_id, id, &error);
             }
         }
+        self.has_pending(store_id)
+    }
+}
+
+/// Bounded backoff for the watcher's background index-repair retry (HS2-5BAEX9).
+pub(crate) const INDEX_REPAIR_RETRY_MIN: Duration = Duration::from_secs(1);
+pub(crate) const INDEX_REPAIR_RETRY_MAX: Duration = Duration::from_secs(60);
+
+/// The next retry delay after a background repair attempt: reset once the queue drains,
+/// otherwise double up to [`INDEX_REPAIR_RETRY_MAX`].
+pub(crate) fn next_index_repair_delay(current: Duration, still_pending: bool) -> Duration {
+    if still_pending {
+        (current * 2).min(INDEX_REPAIR_RETRY_MAX)
+    } else {
+        INDEX_REPAIR_RETRY_MIN
+    }
+}
+
+impl AppState {
+    pub(crate) fn emit(&self, event: ChangeEvent) {
+        emit_change(&self.event_log, &self.events, event);
+    }
+
+    /// The current long-poll cursor (the last emitted event's seq; 0 if none).
+    pub(crate) fn event_cursor(&self) -> u64 {
+        self.event_log.with_lock(|l| l.seq)
+    }
+
+    /// Run one server-side index write, surfacing a SQLite failure instead of swallowing
+    /// it (HS2-JD7TK0). A poisoned index lock is recovered (HS2-ZGQJZP).
+    pub(crate) fn index_write(
+        &self,
+        entry: &StoreEntry,
+        write: impl FnOnce(&Index) -> Result<(), IndexError>,
+    ) -> Result<(), String> {
+        self.index_repairs.write(entry, write)
+    }
+
+    /// Log a failed index write and queue that ticket for re-indexing from its file.
+    pub(crate) fn schedule_index_repair(&self, store_id: &str, id: Ulid, error: &str) {
+        self.index_repairs.schedule(store_id, id, error);
+    }
+
+    /// Re-index every queued ticket of `entry` from its current file.
+    pub(crate) fn repair_pending_index_rows(&self, entry: &StoreEntry, store_id: &str) {
+        self.index_repairs.repair(entry, store_id);
     }
 
     /// Reindex a ticket the server just wrote into `entry`'s index, then broadcast a
@@ -433,15 +515,10 @@ mod index_repair_tests {
             NewTicket::default(),
         )
         .unwrap();
-        state.index_write_faults.store(1, Ordering::SeqCst);
+        state.index_repairs.faults.store(1, Ordering::SeqCst);
         state.changed_in(&entry, "created", &created);
         assert_eq!(indexed_hash(&entry, &first), None);
-        assert!(
-            state
-                .pending_index_repairs
-                .lock_or_recover()
-                .contains(&(store_id.clone(), first))
-        );
+        assert!(state.index_repairs.contains(&store_id, first));
         // The failed write must not mark its watcher echo as a local no-op.
         assert!(state.local_write_hashes.lock_or_recover().is_empty());
 
@@ -457,16 +534,16 @@ mod index_repair_tests {
         state.changed_in(&entry, "created", &other);
         assert!(indexed_hash(&entry, &first).is_some());
         assert!(indexed_hash(&entry, &second).is_some());
-        assert!(state.pending_index_repairs.lock_or_recover().is_empty());
+        assert!(state.index_repairs.is_empty());
 
         // A failed delete is queued too; once the file is gone the repair drops the row.
-        state.index_write_faults.store(1, Ordering::SeqCst);
+        state.index_repairs.faults.store(1, Ordering::SeqCst);
         state.removed_in(&entry, &created);
         std::fs::remove_file(store.ticket_path(&first)).unwrap();
         assert!(indexed_hash(&entry, &first).is_some());
         state.changed_in(&entry, "changed", &other);
         assert_eq!(indexed_hash(&entry, &first), None);
-        assert!(state.pending_index_repairs.lock_or_recover().is_empty());
+        assert!(state.index_repairs.is_empty());
     }
 
     /// HS2-PD8NJ6: the failure is a structured `tracing` warning naming the ticket.
@@ -502,7 +579,7 @@ mod index_repair_tests {
             .with_writer(move || writer.clone())
             .with_ansi(false)
             .finish();
-        state.index_write_faults.store(1, Ordering::SeqCst);
+        state.index_repairs.faults.store(1, Ordering::SeqCst);
         tracing::subscriber::with_default(subscriber, || {
             state.changed_in(&entry, "created", &ticket);
         });
@@ -566,17 +643,134 @@ mod index_repair_tests {
         )
         .unwrap();
         // The write fails, its repair fails, and the write itself fails again.
-        state.index_write_faults.store(3, Ordering::SeqCst);
+        state.index_repairs.faults.store(3, Ordering::SeqCst);
         state.changed_in(&entry, "created", &ticket);
         state.changed_in(&entry, "changed", &ticket);
-        assert!(
-            state
-                .pending_index_repairs
-                .lock_or_recover()
-                .contains(&(store_id.clone(), id))
-        );
+        assert!(state.index_repairs.contains(&store_id, id));
         state.changed_in(&entry, "changed", &ticket);
         assert!(indexed_hash(&entry, &id).is_some());
-        assert!(state.pending_index_repairs.lock_or_recover().is_empty());
+        assert!(state.index_repairs.is_empty());
+    }
+
+    fn fixture() -> (
+        tempfile::TempDir,
+        FsStore,
+        AppState,
+        String,
+        super::StoreEntry,
+    ) {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let state = AppState::new(store.clone(), "secret".into()).unwrap();
+        let store_id = multistore::store_url_id(&store);
+        let entry = state.host.get(&store_id).unwrap();
+        (root, store, state, store_id, entry)
+    }
+
+    fn create(store: &FsStore, id: Ulid) -> hotsheet_model::Ticket {
+        ops::create(
+            store,
+            id,
+            "HS",
+            Timestamp::new("2026-09-02T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap()
+    }
+
+    /// HS2-5BAEX9: a failed watcher-path upsert is queued like a server write and a
+    /// later repair re-indexes it without any further store write.
+    #[test]
+    fn a_failed_watcher_upsert_is_queued_and_repaired_without_a_store_write() {
+        let (_root, store, state, store_id, entry) = fixture();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        create(&store, id);
+        let target = super::default_watch_target(&state);
+        state.index_repairs.faults.store(1, Ordering::SeqCst);
+        assert!(super::handle_path_change(&target, &store.ticket_path(&id)));
+        assert_eq!(indexed_hash(&entry, &id), None);
+        assert!(state.index_repairs.contains(&store_id, id));
+        assert!(!state.index_repairs.repair(&entry, &store_id));
+        assert!(indexed_hash(&entry, &id).is_some());
+        assert!(state.index_repairs.is_empty());
+    }
+
+    /// HS2-5BAEX9: a failed watcher-path delete is queued; the repair drops the row.
+    #[test]
+    fn a_failed_watcher_delete_is_queued_and_repaired() {
+        let (_root, store, state, store_id, entry) = fixture();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        let ticket = create(&store, id);
+        state.changed_in(&entry, "created", &ticket);
+        std::fs::remove_file(store.ticket_path(&id)).unwrap();
+        let target = super::default_watch_target(&state);
+        state.index_repairs.faults.store(1, Ordering::SeqCst);
+        assert!(super::handle_path_change(&target, &store.ticket_path(&id)));
+        assert!(indexed_hash(&entry, &id).is_some());
+        assert!(state.index_repairs.contains(&store_id, id));
+        // Repair fails once more (stays queued), then succeeds.
+        state.index_repairs.faults.store(1, Ordering::SeqCst);
+        assert!(state.index_repairs.repair(&entry, &store_id));
+        assert!(!state.index_repairs.repair(&entry, &store_id));
+        assert_eq!(indexed_hash(&entry, &id), None);
+    }
+
+    /// HS2-5BAEX9: the watcher loop retries a queued repair on its own timer, with no
+    /// further store write and no watcher event, then idles once the queue drains.
+    #[test]
+    fn the_watch_loop_retries_queued_repairs_without_a_store_write() {
+        let (_root, store, state, store_id, entry) = fixture();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        let ticket = create(&store, id);
+        // Fail the write and the first background retry; the second retry succeeds.
+        state.index_repairs.faults.store(2, Ordering::SeqCst);
+        state.changed_in(&entry, "created", &ticket);
+        assert!(state.index_repairs.contains(&store_id, id));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let target = super::default_watch_target(&state);
+        let worker = std::thread::spawn(move || super::watch_loop(rx, target));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        while indexed_hash(&entry, &id).is_none() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "background repair never ran"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(state.index_repairs.is_empty());
+        assert_eq!(state.index_repairs.faults.load(Ordering::SeqCst), 0);
+        drop(tx);
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn the_background_retry_backoff_is_bounded_and_resets_when_drained() {
+        use super::{INDEX_REPAIR_RETRY_MAX, INDEX_REPAIR_RETRY_MIN, next_index_repair_delay};
+        let mut delay = INDEX_REPAIR_RETRY_MIN;
+        for _ in 0..20 {
+            delay = next_index_repair_delay(delay, true);
+            assert!(delay <= INDEX_REPAIR_RETRY_MAX);
+        }
+        assert_eq!(delay, INDEX_REPAIR_RETRY_MAX);
+        assert_eq!(
+            next_index_repair_delay(delay, false),
+            INDEX_REPAIR_RETRY_MIN
+        );
+        assert_eq!(
+            next_index_repair_delay(INDEX_REPAIR_RETRY_MIN, true),
+            INDEX_REPAIR_RETRY_MIN * 2
+        );
+    }
+
+    /// Repairs are per store: one store's queue never drains or reports another's.
+    #[test]
+    fn repairs_are_scoped_to_their_store() {
+        let (_root, store, state, store_id, entry) = fixture();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        create(&store, id);
+        state.index_repairs.schedule("other-store", id, "boom");
+        assert!(!state.index_repairs.has_pending(&store_id));
+        assert!(!state.index_repairs.repair(&entry, &store_id));
+        assert!(state.index_repairs.contains("other-store", id));
     }
 }

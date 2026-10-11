@@ -178,13 +178,10 @@ pub struct AppState {
     /// Recently indexed server writes, used to distinguish their filesystem echo from
     /// an external edit that happens to match the current index hash.
     local_write_hashes: LocalWriteHashes,
-    /// Tickets whose server-side index write failed (HS2-JD7TK0), keyed by store URL id.
-    /// Each is re-indexed from its file on the next write to that store, so a transient
-    /// SQLite failure cannot leave list/search serving a stale row until restart.
-    pending_index_repairs: Arc<Mutex<HashSet<(String, Ulid)>>>,
-    /// Test-only fault injection: the next N server index writes fail (HS2-JD7TK0).
-    #[cfg(test)]
-    index_write_faults: Arc<AtomicUsize>,
+    /// Tickets whose index write failed (HS2-JD7TK0), keyed by store URL id. Shared with
+    /// each store watcher, which retries them on a bounded backoff (HS2-5BAEX9); the
+    /// store's next server write also retries them first.
+    index_repairs: events::IndexRepairs,
     /// The live permission bridge (HS2-9R9YZW): a driven tool blocks on it; a client answers
     /// over `GET/POST /permissions`. A `permission_asked` nudge rides the event bus so
     /// clients know to fetch + answer. Empty (headless auto-nothing) until seeded.
@@ -412,9 +409,7 @@ impl AppState {
             writer_locks: Arc::default(),
             sync_kick: Arc::new(Mutex::new(None)),
             local_write_hashes: Default::default(),
-            pending_index_repairs: Arc::default(),
-            #[cfg(test)]
-            index_write_faults: Arc::default(),
+            index_repairs: Default::default(),
             permissions,
             permission_rule_paths: Arc::new(Mutex::new(std::collections::HashMap::new())),
             // A generous busy window: a driven turn heartbeats via the local registry, but
@@ -981,6 +976,7 @@ impl AppState {
                 events: self.events.clone(),
                 event_log: self.event_log.clone(),
                 checkout_registry: self.checkout_registry.clone(),
+                index_repairs: self.index_repairs.clone(),
             },
             registered_watcher_backend(),
         ) {
