@@ -85,6 +85,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       claim-clock.ts          # Local live-claim ETA tick and lease-expiry wake-up timers (no network polling)
       corrupt-ticket-recovery.ts # Corrupt-ticket recovery state plus reveal and queue-AI-repair actions
       terminal-names.ts       # Terminal tab names: local in-flight copy, serialized writes, reset, reconcile, live rename events
+      workspace-search.ts     # Workspace token search: debounced server search, boolean paging, sidebar match counts, partial warning (HS2-3JGWTV)
+      project-close.ts        # Project-close confirmation queue, live-resource inventory, confirm/close-all/cancel (HS2-3JGWTV)
+      project-change-streams.ts # Per-project WebSocket/long-poll change streams, event fan-out, debounced repository refresh (HS2-3JGWTV)
       conversation-archive.tsx # Range selection, copy, export, and saved-chat opening
       saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion
       project-lifecycle.ts    # Project open/restore, HS1 migration, source/provider setup, and lifecycle dialog state

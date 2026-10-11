@@ -10,19 +10,7 @@ import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { batch, effect, mount, signal } from 'kerfjs';
 
 import { claimEtaPresentation, isTicketActivelyWorkedOn, projectTabTicketState } from '../active-ticket-work';
-import {
-  collectMatchingSearchPages,
-  filterAdvancedSearchResults,
-  usesAdvancedSearchExpression,
-  usesBooleanSearchExpression,
-} from '../advanced-search';
-import {
-  applyConversationActivity,
-  applyConversationEvent,
-  conversationError,
-  conversationUsage,
-  EMPTY_CONVERSATION,
-} from '../ai-conversation';
+import { filterAdvancedSearchResults, usesAdvancedSearchExpression } from '../advanced-search';
 import {
   type AiToolDefaults,
   Api,
@@ -90,13 +78,7 @@ import type { MarkdownEditorMode } from '../components/markdown-editor';
 import { NotificationCenter } from '../components/notification-center';
 import { type NotificationView, notificationViewTitle } from '../components/notification-navigation';
 import { NotificationsPausedBanner } from '../components/notifications-paused-banner';
-import {
-  ProjectCloseDialog,
-  type ProjectCloseDialogState,
-  type ProjectCloseResource,
-  projectCloseResourceKey,
-  selectedProjectCloseResource,
-} from '../components/project-close-dialog';
+import { ProjectCloseDialog, type ProjectCloseDialogState } from '../components/project-close-dialog';
 import { ProjectDialog, projectDialogRoot, RemoteProjectDialog } from '../components/project-dialog';
 import { ProjectRestoreError, projectRestoreTabId } from '../components/project-restore-error';
 import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
@@ -200,6 +182,8 @@ import { createDriveConversationsController } from '../features/drive-conversati
 import { createGalleryController } from '../features/gallery';
 import { createHaltedSessionsController } from '../features/halted-sessions';
 import { createPermissionsController } from '../features/permissions';
+import { createProjectChangeStreamsController } from '../features/project-change-streams';
+import { createProjectCloseController } from '../features/project-close';
 import { createProjectLifecycleController } from '../features/project-lifecycle';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
@@ -207,18 +191,12 @@ import { createTerminalNamesController } from '../features/terminal-names';
 import { createTerminalPresentation } from '../features/terminal-presentation';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
 import { createTicketWorkflows } from '../features/ticket-workflows';
+import { createWorkspaceSearchController, type SidebarSearchCounts } from '../features/workspace-search';
 import { fullTicketFeedbackNeeded } from '../feedback-needed';
 import { type InlineFeedbackReply } from '../feedback-replies';
 import { syncFocusedDraftControl } from '../focused-draft-sync';
 import { projectHaltedSessions } from '../halted-sessions';
-import {
-  effectiveSearch,
-  type InlineSearchToken,
-  orderedSearchText,
-  sameInlineSearchState,
-  tokenQuery,
-} from '../inline-search';
-import { restoreInlineSearchCaret } from '../inline-search-caret';
+import { effectiveSearch, type InlineSearchToken, orderedSearchText } from '../inline-search';
 import { beginInteractionTiming } from '../interaction-performance';
 import type {
   Control,
@@ -249,10 +227,9 @@ import {
 import { mobileViewChoices } from '../mobile-view-choices';
 import { type ProjectTicketSources, resolveNewTicketSource, writableTicketSources } from '../new-ticket-source';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
-import { parsePermissionResolution, PERMISSION_DELAYS } from '../permission-notifications';
+import { PERMISSION_DELAYS } from '../permission-notifications';
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
-import { containsRepositoryChange, containsTicketChange, startProjectChangeStream } from '../project-change-poll';
 import { type DrawerAIChat, projectChatConnectionId, projectDriveControlState } from '../project-drive';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
@@ -266,7 +243,6 @@ import {
 import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
 import { createRenderMetrics } from '../render-metrics';
-import { customViewSearch } from '../saved-views';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
 import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
 import { deriveAiConnectionStates } from '../terminal-ai-connection';
@@ -313,7 +289,7 @@ import {
 } from '../ticket-reader-stack';
 import { defersContainedListScrollRestore, supportsTicketRowContainment } from '../ticket-row-containment';
 import { TicketScrollMemory } from '../ticket-scroll-state';
-import { createTicketSearchModel, inlineSearchTokens, replaceTicketSearch } from '../ticket-search-model';
+import { replaceTicketSearch } from '../ticket-search-model';
 import type { TicketTitleEditSurface } from '../ticket-title-editing';
 import {
   canCreateTicketInView,
@@ -324,7 +300,6 @@ import {
   isQueuedTicket,
   isTrashedTicket,
   selectionAfterTicketViewChange,
-  ticketSearchCountViews,
   ticketsForView,
   type TicketView,
   ticketViewQuery,
@@ -404,13 +379,6 @@ export async function startHotSheetWebClient() {
       [projectId]: { trend: counts.completion_trend ?? [], completedToday: counts.completed_today },
     };
   }
-  interface SidebarSearchCounts {
-    projectId: string;
-    signature: string;
-    generation: number;
-    values: Partial<Record<string, number>>;
-    pending: string[];
-  }
   const sidebarSearchCounts = signal<SidebarSearchCounts | undefined>(undefined);
   const duplicateBacklinkState = signal<{
     key: string;
@@ -436,7 +404,6 @@ export async function startHotSheetWebClient() {
   const warmProjects = createProjectWarmCache();
   const projectCloseDialog = signal<ProjectCloseDialogState | undefined>(undefined);
   const ticketLinkChoice = signal<TicketLinkChoice | undefined>(undefined);
-  let pendingProjectCloseIds: string[] = [];
   const customViewsByProject = signal<Record<string, CustomView[]>>({});
   const repositoryController = createRepositoryController({ project: () => project(), selectedTicket, showToast });
   const {
@@ -624,8 +591,6 @@ export async function startHotSheetWebClient() {
   const singleTicketMutationSequencer = new BulkTicketMutationSequencer();
   const bulkTicketMutationSequencer = new BulkTicketMutationSequencer();
   let clipboard: { tickets: ClipboardTicket[]; cut: boolean; source: Project } | undefined;
-  const projectChangeStreams = new Map<string, () => void>();
-  const repositoryRefreshTimers = new Map<string, number>();
   const storedWorkspacePreferences = loadWorkspacePreferences(localStorage);
   const loading = signal(false),
     bulkUpdateProgress = signal<BulkUpdateProgress | undefined>(undefined),
@@ -1118,7 +1083,10 @@ export async function startHotSheetWebClient() {
       permissionAutomationByProject.value = { ...permissionAutomationByProject.value, [projectId]: automation };
     },
     startPermissionUpdates,
-    syncProjectChangeStreams,
+    // The change-stream controller is created later; resolve it lazily.
+    syncProjectChangeStreams: () => {
+      syncProjectChangeStreams();
+    },
     refreshProject,
     refreshCommands,
     refreshCustomViews,
@@ -1332,7 +1300,8 @@ export async function startHotSheetWebClient() {
     selectedView,
     searchQuery,
     searchTokens,
-    availableSearchTags,
+    // The workspace search controller is created later; resolve it lazily.
+    availableSearchTags: () => availableSearchTags(),
     selectTicketView,
     showToast,
   });
@@ -1947,109 +1916,22 @@ export async function startHotSheetWebClient() {
       commandRuns.value = [];
     }
   }
-  function projectCloseResources(projectId: string): ProjectCloseResource[] {
-    const terminals = (terminalGroups.value.find((group) => group.projectId === projectId)?.sessions ?? [])
-      .filter((session) => session.alive)
-      .map((session) => ({
-        kind: 'terminal' as const,
-        id: session.id,
-        name: session.title ?? session.id,
-        busy: session.busy,
-        cwd: session.cwd,
-        progress: session.progress,
-        preview: session.scrollback,
-      }));
-    const connections = driveConnectionsByProject.value[projectId] ?? [],
-      chats = (terminalDrawerChatsByProject.value[projectId] ?? [])
-        .filter((chat) => !chat.localOnly)
-        .map((chat) => {
-          const connection = connections.find((item) => item.id === chat.connectionId),
-            state = conversationStates.peek()[chat.connectionId] ?? EMPTY_CONVERSATION;
-          return {
-            kind: 'ai-chat' as const,
-            id: chat.connectionId,
-            name: chat.name,
-            busy: connection?.busy,
-            tool: aiToolLabel(chat.tool),
-            model: chat.model ?? connection?.model,
-            effort: chat.effort ?? connection?.effort,
-            sessionId: connection?.session_id,
-            messages: state.messages,
-            activity: state.activity,
-            progress: state.progress,
-            totalUsage: conversationUsage(state),
-            error: conversationError(state, connection),
-          };
-        });
-    return [...terminals, ...chats];
-  }
-  function presentNextProjectClose() {
-    while (pendingProjectCloseIds.length) {
-      const projectId = pendingProjectCloseIds[0],
-        target = projects.value.find((item) => item.id === projectId);
-      if (!target) {
-        pendingProjectCloseIds.shift();
-        continue;
-      }
-      const resources = projectCloseResources(projectId);
-      projectCloseDialog.value = {
-        projectId,
-        projectName: target.name,
-        resources,
-        selectedKey: resources[0] ? projectCloseResourceKey(resources[0]) : undefined,
-      };
-      return;
-    }
-    projectCloseDialog.value = undefined;
-  }
-  function requestProjectClose(ids: readonly string[]) {
-    pendingProjectCloseIds = [...new Set(ids)].filter((id) => projects.value.some((item) => item.id === id));
-    projectCloseDialog.value = undefined;
-    presentNextProjectClose();
-  }
-  function confirmProjectClose() {
-    const state = projectCloseDialog.value;
-    if (!state || state.operation) return;
-    projectCloseDialog.value = { ...state, operation: 'closing-project', error: '' };
-    closeProjectIds([state.projectId]);
-    pendingProjectCloseIds = pendingProjectCloseIds.filter((id) => id !== state.projectId);
-    projectCloseDialog.value = undefined;
-    queueMicrotask(presentNextProjectClose);
-  }
-  async function closeAllProjectResources() {
-    const state = projectCloseDialog.value,
-      target = state && projects.value.find((item) => item.id === state.projectId);
-    if (!state || !target || state.operation) return;
-    projectCloseDialog.value = { ...state, operation: 'closing-all', error: '' };
-    try {
-      await Promise.all(
-        state.resources.map((resource) =>
-          resource.kind === 'terminal'
-            ? new Api(target.apiPath).deleteTerminal(resource.id)
-            : new Api(target.apiPath).deleteToolConnection(target.id, resource.id),
-        ),
-      );
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      if (projectCloseDialog.value?.projectId !== state.projectId) return;
-      closeProjectIds([state.projectId]);
-      pendingProjectCloseIds = pendingProjectCloseIds.filter((id) => id !== state.projectId);
-      projectCloseDialog.value = undefined;
-      queueMicrotask(presentNextProjectClose);
-    } catch (reason) {
-      if (projectCloseDialog.value?.projectId === state.projectId)
-        projectCloseDialog.value = { ...state, error: reason instanceof Error ? reason.message : String(reason) };
-    }
-  }
-  function restoreBorrowedProjectCloseTerminal(state: ProjectCloseDialogState | undefined) {
-    if (selectedProjectCloseResource(state?.resources ?? [], state?.selectedKey)?.kind !== 'terminal') return;
-    requestAnimationFrame(() => window.dispatchEvent(new CustomEvent(TERMINAL_DRAWER_RESIZE_END_EVENT)));
-  }
-  function cancelProjectClose() {
-    const state = projectCloseDialog.value;
-    pendingProjectCloseIds = [];
-    projectCloseDialog.value = undefined;
-    restoreBorrowedProjectCloseTerminal(state);
-  }
+  const {
+    requestProjectClose,
+    confirmProjectClose,
+    closeAllProjectResources,
+    restoreBorrowedProjectCloseTerminal,
+    cancelProjectClose,
+  } = createProjectCloseController({
+    projects,
+    projectCloseDialog,
+    terminalGroups,
+    terminalDrawerChatsByProject,
+    driveConnectionsByProject,
+    conversationStates,
+    aiToolLabel,
+    closeProjectIds,
+  });
   async function closeDrawerTabIds(ids: readonly string[]) {
     const current = project(),
       group = current && terminalGroups.value.find((item) => item.projectId === current.id);
@@ -2811,292 +2693,41 @@ export async function startHotSheetWebClient() {
     const active = activeWorkspaceSort();
     return result.slice().sort((a, b) => compareWorkspaceTickets(a, b, active.sort, active.sortDirection));
   }
-  /** Whether the search bar itself holds a query. */
-  function searchBarActive() {
-    return Boolean(searchQuery.value.trim() || searchTokens.value.length);
-  }
-  /** Whether the visible rows come from a search: a search-bar query or a selected shared view's query. */
-  function workspaceSearchActive() {
-    return searchBarActive() || customViewFor(selectedView.value) !== undefined;
-  }
-  /** The search that selects the visible rows: the bar query, scoped by the selected shared view's query. */
-  function selectedViewSearch(view = selectedView.value) {
-    const bar = effectiveSearch(searchQuery.value, searchTokens.value),
-      definition = customViewFor(view);
-    return definition ? combinedCustomViewSearch(definition, bar) : bar;
-  }
-
-  let searchTimer: number | undefined,
-    searchGeneration = 0,
-    searchPartialWarning = '',
-    searchReplacedError = '';
-  function updateSearchPartialWarning(message: string) {
-    if (message) {
-      if (error.value && error.value !== searchPartialWarning) searchReplacedError = error.value;
-      searchPartialWarning = message;
-      error.value = message;
-    } else if (error.value === searchPartialWarning) {
-      error.value = searchReplacedError;
-      searchPartialWarning = '';
-      searchReplacedError = '';
-    } else {
-      searchPartialWarning = '';
-      searchReplacedError = '';
-    }
-  }
-  // Kerf's managed TokenSearchModel owns the workspace search text, its chips, and the in-place tag
-  // completion (HS2-5JXBQY); `searchQuery`/`searchTokens` are projections of its state for the rest
-  // of the app, and every change schedules the debounced ticket search.
-  const workspaceSearchModel = createTicketSearchModel({
-    tags: () => availableSearchTags(),
-    onClear: () => {
-      searchHelpOpen.value = false;
-    },
+  const {
+    searchBarActive,
+    workspaceSearchActive,
+    selectedViewSearch,
+    workspaceSearchModel,
+    workspaceSearchTokenOffset,
+    searchSignature,
+    sortedTicketQuery,
+    refreshTicketSearch,
+    availableSearchTags,
+    focusWorkspaceSearch,
+    scheduleTicketSearch,
+  } = createWorkspaceSearchController({
+    searchQuery,
+    searchTokens,
+    searchHelpOpen,
+    searchMatchKeys,
+    sidebarSearchCounts,
+    selectedView,
+    error,
+    ticketPageQuery,
+    ticketNextCursor,
+    tickets,
+    ticketRowsByProject,
+    project,
+    customViewFor,
+    customViewsFor,
+    activeWorkspaceSort,
+    ticketSearchKey,
+    mergeTicketLinkRows,
+    refreshProject,
+    resetBoardColumnPages,
+    resetProgressiveTicketRendering,
+    scheduleProjectSessionPersistence,
   });
-  effect(() => {
-    const state = workspaceSearchModel.state.value,
-      tokens = inlineSearchTokens(state);
-    if (sameInlineSearchState(searchQuery.value, searchTokens.value, state.query, tokens)) return;
-    const committed = tokens.length > searchTokens.value.length;
-    batch(() => {
-      searchQuery.value = state.query;
-      searchTokens.value = tokens;
-      if (committed) searchHelpOpen.value = false;
-    });
-    scheduleTicketSearch();
-  });
-  /** The caret position a workspace chip occupies, for focus restoration around Kerf's chip actions. */
-  function workspaceSearchTokenOffset(raw: string) {
-    return workspaceSearchModel.state.value.tokens.find((token) => token.value === raw)?.offset;
-  }
-  type EffectiveTicketSearch = ReturnType<typeof effectiveSearch>;
-  const searchSignature = () => JSON.stringify([searchQuery.value.trim(), searchTokens.value]);
-  const searchScopeQuery = (view: TicketView) => (customTicketViewKey(view) ? {} : ticketViewQuery(view));
-  function sortedTicketQuery(query: CheckoutTicketQuery): CheckoutTicketQuery {
-    const active = activeWorkspaceSort();
-    return { ...query, sort: active.sort, direction: active.sortDirection };
-  }
-  function matchedSearchRows(rows: WireTicketRow[], effective: EffectiveTicketSearch) {
-    const advanced = usesAdvancedSearchExpression(effective.text),
-      matched = advanced ? filterAdvancedSearchResults(rows, effective.text, 'all', []) : rows,
-      tags = effective.tokens
-        .filter((token): token is Extract<InlineSearchToken, { kind: 'tag' }> => token.kind === 'tag')
-        .map((token) => token.value.toLowerCase());
-    return matched.filter((ticket) => tags.every((tag) => ticket.tags.some((value) => value.toLowerCase() === tag)));
-  }
-  function searchRequest(effective: EffectiveTicketSearch, view: TicketView): CheckoutTicketQuery {
-    const advanced = usesAdvancedSearchExpression(effective.text),
-      serverTokens = usesBooleanSearchExpression(effective.text) ? [] : effective.tokens;
-    return sortedTicketQuery({
-      ...searchScopeQuery(view),
-      text: advanced ? '' : effective.text,
-      ...tokenQuery(serverTokens),
-    });
-  }
-  function activeSidebarSearchCount(state: SidebarSearchCounts) {
-    const active = sidebarSearchCounts.value;
-    return (
-      active?.projectId === state.projectId &&
-      active.signature === state.signature &&
-      active.generation === state.generation
-    );
-  }
-  function updateSidebarSearchCount(state: SidebarSearchCounts, view: TicketView, count?: number) {
-    const active = sidebarSearchCounts.value;
-    if (!activeSidebarSearchCount(state) || !active) return;
-    const values =
-      count === undefined
-        ? Object.fromEntries(Object.entries(active.values).filter(([id]) => id !== view))
-        : { ...active.values, [view]: count };
-    sidebarSearchCounts.value = {
-      ...active,
-      values,
-      pending: active.pending.filter((id) => id !== view),
-    };
-  }
-  async function countSearchView(
-    client: Api,
-    current: Project,
-    view: TicketView,
-    effective: EffectiveTicketSearch,
-    state: SidebarSearchCounts,
-    first?: { rows: WireTicketRow[]; cursor?: string; query: CheckoutTicketQuery; sourceErrors?: string[] },
-  ) {
-    let count = first ? matchedSearchRows(first.rows, effective).length : 0,
-      cursor = first?.cursor;
-    const sourceErrors = new Set(first?.sourceErrors ?? []);
-    const query = first?.query ?? searchRequest(effective, view);
-    do {
-      if (!first || cursor) {
-        const page = await client.checkoutTicketPage(current.id, 500, cursor, query);
-        count += matchedSearchRows(page.items, effective).length;
-        page.source_errors?.forEach((message) => sourceErrors.add(message));
-        cursor = page.next_cursor;
-      } else cursor = undefined;
-      first = undefined;
-    } while (cursor && activeSidebarSearchCount(state));
-    updateSidebarSearchCount(state, view, sourceErrors.size ? undefined : count);
-    if (sourceErrors.size && activeSidebarSearchCount(state)) updateSearchPartialWarning([...sourceErrors].join(' · '));
-  }
-  function combinedCustomViewSearch(view: CustomView, effective: EffectiveTicketSearch) {
-    return customViewSearch(view, effective.text, effective.tokens);
-  }
-  async function refreshSidebarSearchCounts(
-    current: Project,
-    selected: TicketView,
-    effective: EffectiveTicketSearch,
-    state: SidebarSearchCounts,
-    first: { rows: WireTicketRow[]; cursor?: string; query: CheckoutTicketQuery; sourceErrors?: string[] },
-    refreshEveryView: boolean,
-  ) {
-    const client = new Api(current.apiPath),
-      selectedDefinition = customViewFor(selected, current.id),
-      selectedSearch = selectedDefinition ? combinedCustomViewSearch(selectedDefinition, effective) : effective;
-    try {
-      await countSearchView(client, current, selected, selectedSearch, state, first);
-    } catch (reason) {
-      updateSidebarSearchCount(state, selected);
-      if (activeSidebarSearchCount(state))
-        updateSearchPartialWarning(reason instanceof Error ? reason.message : String(reason));
-    }
-    if (!refreshEveryView || !activeSidebarSearchCount(state)) return;
-    const views = ticketSearchCountViews(customViewsFor(current.id).map((view) => view.id));
-    await Promise.all(
-      views
-        .filter((view) => view !== selected)
-        .map(async (view) => {
-          const definition = customViewFor(view, current.id),
-            viewSearch = definition ? combinedCustomViewSearch(definition, effective) : effective;
-          try {
-            await countSearchView(client, current, view, viewSearch, state);
-          } catch (reason) {
-            updateSidebarSearchCount(state, view);
-            if (activeSidebarSearchCount(state))
-              updateSearchPartialWarning(reason instanceof Error ? reason.message : String(reason));
-          }
-        }),
-    );
-  }
-  async function refreshTicketSearch() {
-    resetBoardColumnPages();
-    const current = project(),
-      view = selectedView.value,
-      effective = selectedViewSearch(view),
-      barEffective = effectiveSearch(searchQuery.value, searchTokens.value),
-      countSidebar = Boolean(barEffective.text || barEffective.tokens.length),
-      signature = searchSignature(),
-      generation = ++searchGeneration;
-    if (searchTimer !== undefined) {
-      window.clearTimeout(searchTimer);
-      searchTimer = undefined;
-    }
-    if (!current || (!effective.text && !effective.tokens.length)) {
-      updateSearchPartialWarning('');
-      ticketPageQuery.value = {};
-      searchMatchKeys.value = undefined;
-      sidebarSearchCounts.value = undefined;
-      if (current) void refreshProject({ showLoading: false });
-      return;
-    }
-    const countViews = ticketSearchCountViews(customViewsFor(current.id).map((item) => item.id)),
-      previous = sidebarSearchCounts.value,
-      countsComplete =
-        previous?.projectId === current.id &&
-        previous.signature === signature &&
-        previous.pending.length === 0 &&
-        countViews.every((id) => Object.prototype.hasOwnProperty.call(previous.values, id)),
-      countState: SidebarSearchCounts = {
-        projectId: current.id,
-        signature,
-        generation,
-        values: countsComplete ? { ...previous.values } : {},
-        pending: countsComplete ? [view] : countViews,
-      };
-    sidebarSearchCounts.value = countSidebar ? countState : undefined;
-    try {
-      const query = searchRequest(effective, view),
-        client = new Api(current.apiPath),
-        page = await client.checkoutTicketPage(current.id, 200, undefined, query),
-        boolean = usesBooleanSearchExpression(effective.text),
-        active = () =>
-          generation === searchGeneration &&
-          project()?.id === current.id &&
-          selectedView.value === view &&
-          searchSignature() === signature,
-        sourceErrors = new Set(page.source_errors ?? []),
-        allMatches = boolean
-          ? await collectMatchingSearchPages(
-              page,
-              async (cursor) => {
-                const next = await client.checkoutTicketPage(current.id, 500, cursor, query);
-                next.source_errors?.forEach((message) => sourceErrors.add(message));
-                return next;
-              },
-              (row) => matchedSearchRows([row], effective).length === 1,
-              active,
-            )
-          : undefined;
-      if (boolean && !allMatches) return;
-      const rows = boolean ? allMatches! : page.items,
-        matched = boolean ? rows : matchedSearchRows(rows, effective);
-      if (!active()) return;
-      ticketPageQuery.value = query;
-      ticketNextCursor.value = boolean ? undefined : page.next_cursor;
-      tickets.value = mergeTicketLinkRows(tickets.value, rows);
-      ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: tickets.value };
-      searchMatchKeys.value = new Set(matched.map(ticketSearchKey));
-      updateSearchPartialWarning([...sourceErrors].join(' · '));
-      // Sidebar counts report the search-bar query per view, so a shared view alone shows ordinary counts.
-      if (countSidebar)
-        void refreshSidebarSearchCounts(
-          current,
-          view,
-          barEffective,
-          countState,
-          { rows, cursor: boolean ? undefined : page.next_cursor, query, sourceErrors: [...sourceErrors] },
-          !countsComplete,
-        );
-    } catch (reason) {
-      if (generation === searchGeneration) {
-        searchMatchKeys.value = new Set();
-        sidebarSearchCounts.value = undefined;
-        error.value = reason instanceof Error ? reason.message : String(reason);
-      }
-    }
-  }
-  // Every TicketSearchField derives its own `tag:` suggestions from this sorted, canonical-case
-  // tag list; it is recomputed only when the ticket collection changes (HS2-N5G6JS).
-  let availableSearchTagsSource: WireTicketRow[] | undefined,
-    availableSearchTagsValue: string[] = [];
-  function availableSearchTags() {
-    if (availableSearchTagsSource !== tickets.value) {
-      availableSearchTagsSource = tickets.value;
-      availableSearchTagsValue = [...new Set(tickets.value.flatMap((ticket) => ticket.tags))].sort((a, b) =>
-        a.localeCompare(b),
-      );
-    }
-    return availableSearchTagsValue;
-  }
-  function focusWorkspaceSearch(offset?: number) {
-    restoreInlineSearchCaret(document, '[data-token-search-editor="workspace-search"]', offset);
-  }
-  function scheduleTicketSearch() {
-    resetProgressiveTicketRendering();
-    scheduleProjectSessionPersistence();
-    searchGeneration += 1;
-    sidebarSearchCounts.value = undefined;
-    if (searchTimer !== undefined) window.clearTimeout(searchTimer);
-    if (!workspaceSearchActive()) {
-      searchTimer = undefined;
-      searchMatchKeys.value = undefined;
-      return;
-    }
-    searchMatchKeys.value = undefined;
-    searchTimer = window.setTimeout(() => {
-      searchTimer = undefined;
-      void refreshTicketSearch();
-    }, 150);
-  }
 
   function mergeTicketLinkRows(existing: readonly WireTicketRow[], incoming: readonly WireTicketRow[]) {
     const byId = new Map(existing.map((ticket) => [ticket.qualified_id, ticket]));
@@ -3994,116 +3625,32 @@ export async function startHotSheetWebClient() {
       release();
     };
   }
-  function scheduleRepositoryRefresh(current: Project) {
-    const existing = repositoryRefreshTimers.get(current.id);
-    if (existing !== undefined) window.clearTimeout(existing);
-    repositoryRefreshTimers.set(
-      current.id,
-      window.setTimeout(() => {
-        repositoryRefreshTimers.delete(current.id);
-        if (project()?.id === current.id) void refreshRepositoryStatus();
-      }, 180),
-    );
-  }
-  function syncProjectChangeStreams() {
-    const live = new Set(projects.value.map((item) => item.id));
-    for (const [id, stop] of projectChangeStreams)
-      if (!live.has(id)) {
-        stop();
-        projectChangeStreams.delete(id);
-      }
-    for (const [id, timer] of repositoryRefreshTimers)
-      if (!live.has(id)) {
-        window.clearTimeout(timer);
-        repositoryRefreshTimers.delete(id);
-      }
-    for (const current of projects.value)
-      if (!projectChangeStreams.has(current.id)) {
-        const stop = startProjectChangeStream({
-          client: new Api(current.apiPath),
-          beforeRefresh: () => localTicketMutationBarrier.wait(),
-          shouldRefresh: (response) =>
-            containsTicketChange({
-              ...response,
-              events: localTicketChangeAcknowledgements.unacknowledged(current.id, response.events),
-            }),
-          // Event-driven state reconciles when the stream (re)establishes continuity rather than
-          // on a polling timer (HS2-NKCXW4): permissions on every resync, drive connections only
-          // after an outage or overflow (opening the project already loaded them).
-          onResync: async (reason) => {
-            await Promise.all([
-              refreshPermissions(),
-              refreshTerminalDashboard(true, current),
-              refreshProviderOutbox(current),
-              ...(reason === 'initial' ? [] : [refreshDriveConnections(current, false, true)]),
-            ]);
-          },
-          refresh: async () => {
-            backgroundProjectRefresh = true;
-            try {
-              await projectTabRefresh.request(current);
-              await refreshProviderOutbox(current);
-            } finally {
-              backgroundProjectRefresh = false;
-            }
-            // Ticket changes can complete, reopen, or verify: keep an open calibration current.
-            if (shellMode.peek() === 'stats' && statsProjectId.peek() === current.id)
-              await loadConfidenceReport(current);
-          },
-          onEvents: async (response) => {
-            const acceptedTurns = new Set(turnStreamEvents(response));
-            for (const event of response.events) {
-              if (event.kind === 'permission_resolved') {
-                const resolution = parsePermissionResolution(event.message),
-                  key = `${current.id}:${event.id}`;
-                serverResolvedPermission(key, resolution);
-              }
-              if (event.kind === 'turn_event' && event.turn && acceptedTurns.has(event.turn)) {
-                updateConversation(
-                  event.turn.connection_id,
-                  (state) => applyConversationEvent(state, event.turn!.event),
-                  event.turn.event.type !== 'done',
-                );
-                if (event.turn.event.type === 'done') conversationPersistence.flush();
-              }
-              if (event.kind === 'activity' && event.activity) {
-                const activity = event.activity,
-                  connection = conversationForActivity(current, activity.tool, activity.session);
-                if (connection)
-                  updateConversation(connection.id, (state) => applyConversationActivity(state, activity), true);
-              }
-            }
-            if (
-              response.events.some((event) => event.kind === 'permission_asked' || event.kind === 'permission_resolved')
-            )
-              await refreshPermissions();
-            if (response.events.some((event) => event.kind === 'drive_updated')) await refreshDriveConnections(current);
-            if (response.events.some((event) => event.kind === 'command_updated') && project()?.id === current.id)
-              await refreshCommands(current);
-            if (response.events.some((event) => event.kind === 'views_updated')) await refreshCustomViews(current);
-            for (const event of response.events)
-              if (event.kind === 'terminal_renamed') applyTerminalRenamed(current, event.id, event.message);
-            // A terminal's AI session halted or resumed (HS2-HJ4D1H), or connected to or left Hot Sheet
-            // (HS2-EV1XK3): refetch so its tab marks it. A visible permission ask independently
-            // proves a live hook and must refresh the terminal even if its connection event was
-            // missed or arrived on another change-stream page (HS2-XYSXVT).
-            if (
-              response.events.some(
-                (event) =>
-                  event.kind === 'terminal_halted' ||
-                  event.kind === 'terminal_question' ||
-                  event.kind === 'terminal_ai_connection' ||
-                  event.kind === 'terminal_hook_report' ||
-                  event.kind === 'permission_asked',
-              )
-            )
-              void refreshTerminalDashboard(true, current);
-            if (containsRepositoryChange(response, current.id)) scheduleRepositoryRefresh(current);
-          },
-        });
-        projectChangeStreams.set(current.id, stop);
-      }
-  }
+  const { syncProjectChangeStreams } = createProjectChangeStreamsController({
+    projects,
+    project,
+    shellMode,
+    statsProjectId,
+    localTicketMutationBarrier,
+    localTicketChangeAcknowledgements,
+    projectTabRefresh,
+    turnStreamEvents,
+    conversationPersistence,
+    updateConversation,
+    conversationForActivity,
+    refreshDriveConnections,
+    refreshPermissions,
+    serverResolvedPermission,
+    applyTerminalRenamed,
+    refreshTerminalDashboard,
+    refreshProviderOutbox,
+    refreshCommands,
+    refreshCustomViews,
+    refreshRepositoryStatus,
+    loadConfidenceReport,
+    setBackgroundProjectRefresh: (value) => {
+      backgroundProjectRefresh = value;
+    },
+  });
   const {
     restoreTicketDraft,
     flushTicketDrafts,

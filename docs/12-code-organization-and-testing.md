@@ -285,6 +285,20 @@ HS2-K7SYHQ continued the split with four more owners lifted verbatim out of
 - `terminal-names.ts`: browser-local in-flight names, serialized server writes, resets,
   reconciliation, and live `terminal_renamed` events.
 
+HS2-3JGWTV lifted three more behavior-preserving owners out of `app/runtime.tsx`:
+
+- `workspace-search.ts`: Kerf's token search model projection, the debounced server search,
+  boolean-expression paging, sidebar per-view match counts, and the partial-source warning.
+- `project-close.ts`: the project-close confirmation queue, live-resource inventory,
+  confirm / close-everything / cancel, and the borrowed drawer terminal hand-back.
+  Runtime teardown of a closed project (`closeProjectIds`) stays in the runtime as a callback.
+- `project-change-streams.ts`: one WebSocket/long-poll change stream per open project, its
+  event fan-out, and the debounced repository refresh; the runtime's background-refresh flag
+  crosses the port through a setter.
+
+Owners created before these read them through lazy accessors (saved views read
+`availableSearchTags`, the project lifecycle reads `syncProjectChangeStreams`).
+
 Owners created before the AI configuration owner read it through a lazy accessor so no
 binding is touched before its declaration.
 
