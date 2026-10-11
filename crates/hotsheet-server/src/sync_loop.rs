@@ -88,32 +88,203 @@ pub fn purge_all_trash(state: &AppState) -> Vec<(String, usize)> {
 }
 
 fn run(state: AppState, base: Duration, rx: Receiver<()>) {
-    let mut delay = base;
     let mut last_trash_purge: Option<std::time::Instant> = None;
-    loop {
+    drive(base, &mut ChannelWaker::new(rx), || {
         if last_trash_purge.is_none_or(|at| at.elapsed() >= TRASH_PURGE_INTERVAL) {
             purge_all_trash(&state);
             last_trash_purge = Some(std::time::Instant::now());
         }
-        let reports = sync_all(&state);
-        delay = next_delay(base, delay, &reports);
-        // Wait for the next tick OR a kick (a local write) — whichever comes first. A
-        // kick resets to the base cadence so a fresh change pushes promptly.
-        match rx.recv_timeout(delay) {
-            Ok(()) => {
-                delay = base;
-                // Drain any coalesced kicks so a burst of writes is one pass.
-                while rx.try_recv().is_ok() {}
-            }
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => return, // AppState gone → stop
+        sync_all(&state)
+    });
+}
+
+/// What ended a wait in [`drive`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Wake {
+    Kick,
+    Timeout,
+    Disconnected,
+}
+
+/// The loop's view of time and kicks, so [`drive`] runs against a virtual clock in tests.
+trait Waker {
+    /// Time elapsed since the loop started.
+    fn now(&self) -> Duration;
+    /// Block until a kick arrives or `deadline` (on the [`Waker::now`] clock) passes.
+    fn wait_until(&mut self, deadline: Duration) -> Wake;
+    /// Discard every kick already queued (they coalesce into the pass about to run).
+    fn drain(&mut self);
+}
+
+struct ChannelWaker {
+    rx: Receiver<()>,
+    started: std::time::Instant,
+}
+
+impl ChannelWaker {
+    fn new(rx: Receiver<()>) -> Self {
+        Self {
+            rx,
+            started: std::time::Instant::now(),
         }
+    }
+}
+
+impl Waker for ChannelWaker {
+    fn now(&self) -> Duration {
+        self.started.elapsed()
+    }
+    fn wait_until(&mut self, deadline: Duration) -> Wake {
+        match self.rx.recv_timeout(deadline.saturating_sub(self.now())) {
+            Ok(()) => Wake::Kick,
+            Err(RecvTimeoutError::Timeout) => Wake::Timeout,
+            Err(RecvTimeoutError::Disconnected) => Wake::Disconnected,
+        }
+    }
+    fn drain(&mut self) {
+        while self.rx.try_recv().is_ok() {}
+    }
+}
+
+/// The loop core (HS2-2YSMCW). Each pass schedules the next by [`next_delay`]. While the
+/// cadence is healthy (`delay == base`) a kick (a local write) runs a pass immediately so
+/// the change pushes promptly. While backed off for an offline remote, a kick does **not**
+/// reset the backoff or cut the wait short: kicks are coalesced and the pass runs at the
+/// backoff deadline, so a burst of local writes cannot make an unreachable remote spin.
+/// The loop ends when every kicker is gone.
+fn drive<W: Waker>(
+    base: Duration,
+    waker: &mut W,
+    mut pass: impl FnMut() -> Vec<(String, SyncReport)>,
+) {
+    let mut delay = base;
+    loop {
+        let reports = pass();
+        delay = next_delay(base, delay, &reports);
+        let deadline = waker.now() + delay;
+        loop {
+            match waker.wait_until(deadline) {
+                Wake::Kick if delay <= base => break,
+                // Backed off: remember nothing beyond "a pass is due"; the deadline pass
+                // carries the pending local changes.
+                Wake::Kick => {}
+                Wake::Timeout => break,
+                Wake::Disconnected => return,
+            }
+        }
+        // Drain any coalesced kicks so a burst of writes is one pass.
+        waker.drain();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+    use std::collections::VecDeque;
+    use std::rc::Rc;
+
+    /// A virtual clock with scripted kicks/disconnects at absolute virtual seconds.
+    struct FakeWaker {
+        now: Rc<Cell<Duration>>,
+        events: VecDeque<(Duration, Wake)>,
+    }
+
+    impl Waker for FakeWaker {
+        fn now(&self) -> Duration {
+            self.now.get()
+        }
+        fn wait_until(&mut self, deadline: Duration) -> Wake {
+            if let Some((at, _)) = self.events.front()
+                && *at <= deadline
+            {
+                let (at, wake) = self.events.pop_front().unwrap();
+                self.now.set(self.now.get().max(at));
+                return wake;
+            }
+            self.now.set(deadline);
+            Wake::Timeout
+        }
+        fn drain(&mut self) {
+            while self
+                .events
+                .front()
+                .is_some_and(|(at, wake)| *at <= self.now.get() && *wake == Wake::Kick)
+            {
+                self.events.pop_front();
+            }
+        }
+    }
+
+    const BASE: Duration = Duration::from_secs(30);
+
+    /// Drive the loop over a scripted event list; `report(n)` is pass n's result. Returns
+    /// the virtual second each pass ran at. Every script must end in a disconnect.
+    fn pass_times(events: &[(u64, Wake)], report: impl Fn(usize) -> SyncReport) -> Vec<u64> {
+        let now = Rc::new(Cell::new(Duration::ZERO));
+        let mut waker = FakeWaker {
+            now: now.clone(),
+            events: events
+                .iter()
+                .map(|(at, wake)| (Duration::from_secs(*at), *wake))
+                .collect(),
+        };
+        let mut times = Vec::new();
+        drive(BASE, &mut waker, || {
+            let n = times.len();
+            times.push(now.get().as_secs());
+            assert!(n < 100, "loop did not stop");
+            vec![("s".into(), report(n))]
+        });
+        times
+    }
+
+    use Wake::{Disconnected as Gone, Kick};
+
+    #[test]
+    fn healthy_kick_runs_an_immediate_pass_and_timeouts_keep_the_base_cadence() {
+        let times = pass_times(&[(10, Kick), (75, Gone)], |_| SyncReport::UpToDate);
+        assert_eq!(times, [0, 10, 40, 70]);
+    }
+
+    #[test]
+    fn kick_during_backoff_neither_resets_nor_shortens_the_backoff() {
+        // Offline: passes at 0, +60, +120, +240 (cap 300). Kicks mid-backoff must not
+        // pull a pass forward or restart the doubling from base.
+        let times = pass_times(
+            &[(5, Kick), (70, Kick), (71, Kick), (200, Kick), (500, Gone)],
+            |_| SyncReport::Offline,
+        );
+        assert_eq!(times, [0, 60, 180, 420]);
+    }
+
+    #[test]
+    fn a_burst_of_kicks_while_healthy_coalesces_into_one_pass() {
+        let times = pass_times(
+            &[(10, Kick), (10, Kick), (10, Kick), (10, Kick), (35, Gone)],
+            |_| SyncReport::UpToDate,
+        );
+        assert_eq!(times, [0, 10], "four kicks at once are one pass");
+    }
+
+    #[test]
+    fn disconnect_stops_the_loop_in_both_healthy_and_backed_off_waits() {
+        assert_eq!(pass_times(&[(1, Gone)], |_| SyncReport::UpToDate), [0]);
+        assert_eq!(pass_times(&[(100, Gone)], |_| SyncReport::Offline), [0, 60]);
+    }
+
+    #[test]
+    fn offline_then_online_then_offline_restarts_the_backoff_from_base() {
+        // Passes 0-1 offline, 2-3 online, then offline again.
+        let report = |n: usize| match n {
+            0 | 1 => SyncReport::Offline,
+            2 | 3 => SyncReport::UpToDate,
+            _ => SyncReport::Offline,
+        };
+        // 0 off, 60 off, 180 up, a kick at 190 is prompt again, 220 off (backs off from base).
+        let times = pass_times(&[(100, Kick), (190, Kick), (260, Gone)], report);
+        assert_eq!(times, [0, 60, 180, 190, 220]);
+    }
 
     #[test]
     fn next_delay_backs_off_on_offline_and_resets_otherwise() {

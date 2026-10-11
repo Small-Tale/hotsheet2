@@ -804,7 +804,11 @@ engine** so the user effectively never runs git by hand:
   Hot Sheet never deletes another process's Git lock. Exhausted contention or any
   other Git failure warns while preserving the successful ticket write; network
   publication remains asynchronous (HS2-C71XN1).
-- **Push** automatically after local commits, with backoff + retry on failure.
+- **Push** automatically after local commits, with backoff + retry on failure. A
+  local write wakes the background loop for an immediate pass while the remote is
+  healthy; while the loop is backed off for an offline remote (doubling from 60 s to a
+  300 s cap), writes are coalesced into the backoff-deadline pass and never reset the
+  backoff (HS2-2YSMCW).
 - **Offline-tolerant:** when the remote is unreachable, keep working locally and
   reconcile on reconnect; never block a local edit on the network.
 - **Surface a conflict only when the driver genuinely cannot resolve** (the rare
