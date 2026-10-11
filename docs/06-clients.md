@@ -1959,6 +1959,10 @@ and identity-less legacy entries remain conservatively blocking.
   way, and a touch-phone browser test walks every UX demo to keep every editable text field at
   16 px or larger; read-only fields (the terminal copy view) and Web Awesome's hidden form-value
   mirrors never take keyboard focus and keep their compact size (HS2-JDXSND).
+  Fields the composed app renders only after an interaction (the project dialog, phone sidebar and
+  inspector overlays, search, new ticket, add view, inspector note/tag/blocked-reason editors, the
+  terminal drawer, and settings) are audited the same way on a touch phone and a touch tablet; the
+  terminal Paste sheet's editable field keeps 16 px on a touch tablet wider than 640 px (HS2-R2H1BA).
   The form uses 16 px between sibling regions, 8 px within metadata/evidence/action groups,
   and 4 px for connected labels and icon details (HS2-4Y6SM9).
   The footer names the ticket source the new ticket is created in. When the project has two

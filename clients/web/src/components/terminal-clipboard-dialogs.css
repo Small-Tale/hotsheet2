@@ -51,3 +51,9 @@
   width: 1px;
   height: 1px;
 }
+/* A touch tablet is wider than 640px but still zooms into an editable field under 16px (HS2-R2H1BA). */
+@media (pointer: coarse) {
+  .terminal-clipboard-dialog__text:not([readonly]) {
+    font-size: max(var(--hs-touch-field-min-font-size), 1em);
+  }
+}

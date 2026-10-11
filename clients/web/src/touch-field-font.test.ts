@@ -17,6 +17,7 @@ describe('touch text fields stay at 16px or larger (HS2-8JPRRC)', () => {
     ['components/ticket-attachments.css', '.ticket-attachments__batch > header select'],
     ['components/provider-setup-form.css', '.provider-setup-form__field-control'],
     ['components/not-working-dialog.css', '.not-working-dialog__note textarea'],
+    ['components/terminal-clipboard-dialogs.css', '.terminal-clipboard-dialog__text:not([readonly])'],
   ])('%s raises %s to the token on coarse pointers only', (file, selector) => {
     const source = css(file),
       coarse = source.slice(source.lastIndexOf('@media (pointer: coarse)'));

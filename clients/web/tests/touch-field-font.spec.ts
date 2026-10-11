@@ -1,5 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 
+import { openDemoProject } from './mobile-project-fixture';
+
 // HS2-8JPRRC: iOS zooms the page into any focused text field set below 16px, so touch screens keep
 // every native text field at least that size while desktop keeps the compact type.
 
@@ -128,6 +130,69 @@ test.describe('touch phone audit (HS2-JDXSND)', () => {
     expect(await note.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
     await page.screenshot({ path: test.info().outputPath('hs2-jdxsnd-not-working-390.png') });
   });
+});
+
+/**
+ * Fields that only render after an interaction in the composed app (HS2-R2H1BA): walk the whole DOM,
+ * hidden dialogs included, after each step that opens a surface, and collect every small field.
+ */
+async function auditAppInteractions(page: Page, phone: boolean) {
+  const small: string[] = [],
+    audit = async (step: string) => {
+      small.push(...(await smallEditableFields(page)).map((field) => `${step}: ${field}`));
+    },
+    dismiss = () => page.keyboard.press('Escape');
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open project' }).click();
+  await expect(page.getByRole('textbox', { name: /^Project folder/ })).toBeVisible();
+  await audit('project dialog');
+  await openDemoProject(page);
+  await expect(page.locator('[data-component="app-shell"]')).toBeVisible();
+  await audit('project');
+  if (phone) {
+    await page.getByRole('button', { name: 'Show project sidebar' }).click();
+    await audit('phone sidebar');
+    await dismiss();
+    await page.getByRole('button', { name: 'Show ticket inspector' }).click();
+    await audit('phone inspector');
+    return small;
+  }
+  await page.getByRole('button', { name: 'Search tickets' }).click();
+  await audit('search');
+  await dismiss();
+  await page.getByRole('button', { name: 'New ticket…' }).click();
+  await audit('new ticket');
+  await dismiss();
+  await page.getByRole('button', { name: 'Add view' }).click();
+  await audit('add view');
+  await dismiss();
+  await page.getByLabel('HS2-M1: HS2-M1').first().click();
+  const rail = page.locator('#app-right-rail');
+  for (const action of ['Add note', 'Add tag', 'Block ticket']) {
+    await rail.getByRole('button', { name: action }).first().click();
+    await audit(`inspector ${action}`);
+    await dismiss();
+  }
+  await page.getByRole('button', { name: 'Show terminal drawer' }).click();
+  await audit('terminal drawer');
+  await page.getByLabel('Settings view').click();
+  await expect(page.locator('[data-component="settings-workspace"]')).toBeVisible();
+  await audit('settings');
+  return small;
+}
+
+test.describe('touch app interactions (HS2-R2H1BA)', () => {
+  for (const [label, viewport] of [
+    ['phone', { width: 390, height: 844 }],
+    ['tablet', { width: 1180, height: 820 }],
+  ] as const)
+    test.describe(label, () => {
+      test.use({ viewport, hasTouch: true, isMobile: true });
+      test(`keeps fields the real app opens on interaction at 16px or larger on a touch ${label}`, async ({ page }) => {
+        expect(await auditAppInteractions(page, label === 'phone')).toEqual([]);
+        await page.screenshot({ path: test.info().outputPath(`hs2-r2h1ba-${label}.png`) });
+      });
+    });
 });
 
 test.describe('desktop', () => {
