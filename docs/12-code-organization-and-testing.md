@@ -304,8 +304,20 @@ HS2-ZJ67VE lifted the terminal dashboard snapshot owner:
   connection grace states and their local re-derive timer, terminal visibility scopes and
   persistence, and the remembered drawer tab order. It reads the later-built
   `workspaceTerminalGroups` lazily, and its `dispose()` runs from `disposeInteractions`.
-  Drawer visibility, focus, terminal creation, and the mobile terminal viewport stay in the
-  runtime for now.
+  Drawer visibility, focus, and terminal creation stay in the runtime for now.
+
+HS2-T1DX2V lifted the terminal drawer geometry and phone viewport owner:
+
+- `terminal-drawer-geometry.ts`: the drawer's measured minimum/maximum height, maximize
+  toggle, and settle pass (which dispatches the drawer resize-end event), plus the phone
+  terminal viewport: focus-mode enter/viewport-change/exit transitions, visual-viewport and
+  keyboard geometry (published only on change), and the magnified column count. It is
+  created right after the drawer signals and reads the later-built `viewportMobile` signal
+  lazily; `currentMobileViewportGeometry()` is module-level so the geometry signal's initial
+  value needs no owner. The remaining runtime split (drawer visibility/selection/focus,
+  terminal and AI-chat creation, `closeDrawerTabIds`, surface-prop builders and
+  `HotSheetShell`, `refreshProject` and board paging, `closeProjectIds`) is tracked as a
+  follow-up (`HS2-H2R2JB`).
 
 Owners created before these read them through lazy accessors (saved views read
 `availableSearchTags`, the project lifecycle reads `syncProjectChangeStreams`).

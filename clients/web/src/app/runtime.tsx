@@ -34,7 +34,6 @@ import {
   loadAppRegionSize,
   normalizeAppRegionSize,
   saveAppRegionSize,
-  terminalDrawerMaximum,
   terminalDrawerMinimum,
 } from '../app-region-resize';
 import { attachmentRoundNumbers } from '../attachment-grouping';
@@ -185,6 +184,10 @@ import { createProjectLifecycleController } from '../features/project-lifecycle'
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
 import { createTerminalDashboardController } from '../features/terminal-dashboard';
+import {
+  createTerminalDrawerGeometryController,
+  currentMobileViewportGeometry,
+} from '../features/terminal-drawer-geometry';
 import { createTerminalNamesController } from '../features/terminal-names';
 import { createTerminalPresentation } from '../features/terminal-presentation';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
@@ -210,18 +213,8 @@ import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
 import { automaticInputFocusAllowed, isMobileViewport, isSidePanelPortal } from '../mobile-layout';
-import {
-  loadMobileTerminalColumns,
-  MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT,
-  nextMobileTerminalColumns,
-  saveMobileTerminalColumns,
-} from '../mobile-terminal-columns';
-import {
-  INACTIVE_MOBILE_TERMINAL_FOCUS,
-  mobileTerminalViewport,
-  mobileVirtualKeyboardVisible,
-  transitionMobileTerminalFocus,
-} from '../mobile-terminal-focus';
+import { loadMobileTerminalColumns } from '../mobile-terminal-columns';
+import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
 import { mobileViewChoices } from '../mobile-view-choices';
 import { type ProjectTicketSources, resolveNewTicketSource, writableTicketSources } from '../new-ticket-source';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
@@ -247,7 +240,7 @@ import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../ter
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
 import { parseTerminalNames } from '../terminal-names';
 import { terminalDrawerActivation } from '../terminal-project-scope';
-import { TERMINAL_DRAWER_RESIZE_END_EVENT, type TerminalFocusRequest } from '../terminal-viewport';
+import type { TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
   hideNewTerminalInNamedGroups,
@@ -491,6 +484,31 @@ export async function startHotSheetWebClient() {
     terminalModifiers = signal<TerminalModifiers>(NO_TERMINAL_MODIFIERS),
     terminalFunctionRow = signal(false),
     mobileViewportGeometry = signal(currentMobileViewportGeometry());
+  // Drawer geometry and the phone terminal viewport live in their own owner (HS2-T1DX2V). The
+  // mobile-layout signal is created further down, so it is read lazily.
+  const {
+    syncTerminalDrawerMaximum,
+    settleTerminalDrawerGeometry,
+    toggleTerminalDrawerMaximized,
+    enterMobileTerminalFocus,
+    syncMobileTerminalViewport,
+    exitMobileTerminalFocus,
+    syncMobileViewportGeometry,
+    cycleMobileTerminalColumns,
+    mobileMagnifiedTerminal,
+  } = createTerminalDrawerGeometryController({
+    terminalDrawerMin,
+    terminalDrawerMax,
+    terminalDrawerMaximized,
+    mobileTerminalFocus,
+    mobileTerminalColumns,
+    mobileViewportGeometry,
+    terminalModifiers,
+    terminalFunctionRow,
+    viewportMobile: () => viewportMobile.value,
+    updateTerminalDrawerBounds,
+    showToast,
+  });
   const terminalDrawerChatsByProject = signal<Record<string, DrawerAIChat[]>>({}),
     terminalDrawerOrderByProject = signal<Record<string, string[]>>({});
   const magnifiedTerminalKey = signal<string | undefined>(undefined),
@@ -1964,95 +1982,6 @@ export async function startHotSheetWebClient() {
     const next = saveAppRegionSize(localStorage, id, size);
     if (id === 'app-left-rail') sidebarSize.value = next;
     else inspectorSize.value = next;
-  }
-  function syncTerminalDrawerMaximum() {
-    // The drawer docks below the main column in the Workbench's center, so the column it may grow
-    // into ends at the shell's bottom edge, not at the main column's (which the drawer shortens).
-    const shell = document.querySelector<HTMLElement>('.app-shell'),
-      workArea = shell?.querySelector<HTMLElement>('.app-shell__work-area');
-    if (!shell || !workArea) return;
-    // The phone drawer pads its content by the home-indicator inset (HS2-ZEC4QV), so its minimum
-    // grows by the resolved inset; on desktop the inset is zero.
-    const minimum = terminalDrawerMinimum(
-      viewportMobile.value
-        ? Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hotsheet-safe-area-bottom'))
-        : 0,
-    );
-    if (minimum !== terminalDrawerMin.value) terminalDrawerMin.value = minimum;
-    const next = terminalDrawerMaximum(
-      shell.getBoundingClientRect().bottom,
-      workArea.getBoundingClientRect().top,
-      minimum,
-    );
-    if (next !== terminalDrawerMax.value) terminalDrawerMax.value = next;
-  }
-  function settleTerminalDrawerGeometry() {
-    requestAnimationFrame(() => {
-      const target = document.querySelector<HTMLElement>(
-        '[data-terminal-drawer-measure="true"] .terminal-drawer__content',
-      );
-      if (target) updateTerminalDrawerBounds(target);
-      window.dispatchEvent(new CustomEvent(TERMINAL_DRAWER_RESIZE_END_EVENT));
-    });
-  }
-  function toggleTerminalDrawerMaximized() {
-    terminalDrawerMaximized.value = !terminalDrawerMaximized.value;
-    settleTerminalDrawerGeometry();
-  }
-  function currentMobileTerminalViewport() {
-    return mobileTerminalViewport(window.visualViewport, window);
-  }
-  function enterMobileTerminalFocus(terminalId: string) {
-    mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, {
-      type: 'terminal-focus',
-      mobile: viewportMobile.value,
-      terminalId,
-      viewport: currentMobileTerminalViewport(),
-    });
-  }
-  function syncMobileTerminalViewport() {
-    mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, {
-      type: 'viewport-change',
-      viewport: currentMobileTerminalViewport(),
-    });
-  }
-  function exitMobileTerminalFocus() {
-    mobileTerminalFocus.value = transitionMobileTerminalFocus(mobileTerminalFocus.value, { type: 'exit' });
-  }
-  function currentMobileViewportGeometry() {
-    return {
-      viewport: mobileTerminalViewport(window.visualViewport, window),
-      keyboardVisible: mobileVirtualKeyboardVisible(window.visualViewport, window.innerHeight),
-    };
-  }
-  function syncMobileViewportGeometry() {
-    const next = currentMobileViewportGeometry(),
-      current = mobileViewportGeometry.peek();
-    if (
-      next.keyboardVisible !== current.keyboardVisible ||
-      (Object.keys(next.viewport) as (keyof typeof next.viewport)[]).some(
-        (key) => next.viewport[key] !== current.viewport[key],
-      )
-    )
-      mobileViewportGeometry.value = next;
-  }
-  function cycleMobileTerminalColumns() {
-    mobileTerminalColumns.value = saveMobileTerminalColumns(
-      localStorage,
-      nextMobileTerminalColumns(mobileTerminalColumns.peek()),
-    );
-    window.dispatchEvent(new CustomEvent(MOBILE_TERMINAL_COLUMNS_CHANGE_EVENT));
-    // The size button no longer shows the column count inline (HS2-89JZSN); a toast reports it.
-    showToast(`Terminal text size: ${mobileTerminalColumns.value} columns`);
-  }
-  function mobileMagnifiedTerminal() {
-    if (!viewportMobile.value) return undefined;
-    const geometry = mobileViewportGeometry.value;
-    return {
-      ...geometry,
-      columns: mobileTerminalColumns.value,
-      keyBar: { modifiers: terminalModifiers.value, functionRow: terminalFunctionRow.value },
-    };
   }
   function activeWorkspaceSort() {
     return workspaceSorts.value[sortableWorkspaceView(viewMode.value)];

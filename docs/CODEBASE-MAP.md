@@ -89,6 +89,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       project-close.ts        # Project-close confirmation queue, live-resource inventory, confirm/close-all/cancel (HS2-3JGWTV)
       project-change-streams.ts # Per-project WebSocket/long-poll change streams, event fan-out, debounced repository refresh (HS2-3JGWTV)
       terminal-dashboard.ts # Terminal dashboard snapshot: per-project terminal fetch/merge, AI-connection grace, visibility scopes, drawer tab order (HS2-ZJ67VE)
+      terminal-drawer-geometry.ts # Terminal drawer min/max/maximize geometry and the phone terminal viewport: focus-mode transitions, keyboard geometry, magnified columns (HS2-T1DX2V)
       conversation-archive.tsx # Range selection, copy, export, and saved-chat opening
       saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion
       project-lifecycle.ts    # Project open/restore, HS1 migration, source/provider setup, and lifecycle dialog state
