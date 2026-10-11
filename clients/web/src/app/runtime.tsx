@@ -168,9 +168,6 @@ import {
   drawerInputFocusRequestStillOwned,
   drawerTabFocusRequestStillOwned,
   drawerTabSelectionAfterClose,
-  loadDrawerTabOrder,
-  orderedDrawerTabIds,
-  saveDrawerTabOrder,
   selectedDrawerInput,
 } from '../drawer-tab-order';
 import { createAiConfigurationController } from '../features/ai-configuration';
@@ -187,6 +184,7 @@ import { createProjectCloseController } from '../features/project-close';
 import { createProjectLifecycleController } from '../features/project-lifecycle';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
+import { createTerminalDashboardController } from '../features/terminal-dashboard';
 import { createTerminalNamesController } from '../features/terminal-names';
 import { createTerminalPresentation } from '../features/terminal-presentation';
 import { createTerminalViewportsController } from '../features/terminal-viewports';
@@ -244,13 +242,11 @@ import { createProjectWarmCache } from '../project-warm-cache';
 import { createRefreshBarrier } from '../refresh-barrier';
 import { createRenderMetrics } from '../render-metrics';
 import { computeServerBusyBarCount, serverBusy, serverBusyMessage } from '../server-busy';
-import { applyRememberedTabOrder, interleaveByRank } from '../tab-order';
-import { deriveAiConnectionStates } from '../terminal-ai-connection';
+import { interleaveByRank } from '../tab-order';
 import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../terminal-grid-layout';
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
-import { defaultTerminalNames, parseTerminalNames, terminalNameKey, terminalTitle } from '../terminal-names';
-import { terminalDrawerActivation, terminalProjectOwner } from '../terminal-project-scope';
-import { sameTerminalDashboardSnapshot, TerminalSnapshotRefresh } from '../terminal-snapshot-refresh';
+import { parseTerminalNames } from '../terminal-names';
+import { terminalDrawerActivation } from '../terminal-project-scope';
 import { TERMINAL_DRAWER_RESIZE_END_EVENT, type TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
@@ -259,8 +255,6 @@ import {
   TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
   TERMINAL_VISIBILITY_STORAGE_KEY,
   TERMINAL_VISIBILITY_TYPES,
-  terminalProjectVisibilityScope,
-  terminalVisibilityItems,
   type TerminalVisibilityType,
 } from '../terminal-visibility';
 import { hasUnresolvedBlocker } from '../ticket-blocking';
@@ -524,9 +518,7 @@ export async function startHotSheetWebClient() {
       terminalGroupLoaded: (projectId) => terminalGroupLoaded(projectId),
       refreshTerminalDashboard: () => refreshTerminalDashboard(),
     });
-  let terminalDashboardGeneration = 0,
-    terminalCreateChain: Promise<unknown> = Promise.resolve();
-  const terminalSnapshotRefresh = new TerminalSnapshotRefresh();
+  let terminalCreateChain: Promise<unknown> = Promise.resolve();
   let terminalDrawerTransitionTimer: number | undefined, terminalPreviewClickTimer: number | undefined;
   let pendingTerminalFocus: TerminalFocusRequest | undefined;
   let drawerInputFocusGeneration = 0;
@@ -984,7 +976,9 @@ export async function startHotSheetWebClient() {
     showToast,
     error,
     terminalVisibility,
-    persistTerminalVisibility,
+    persistTerminalVisibility: (next) => {
+      persistTerminalVisibility(next);
+    },
     replaceConversationStates,
     selectDrawerItem,
     setTerminalDrawerVisible,
@@ -1091,7 +1085,7 @@ export async function startHotSheetWebClient() {
     refreshCommands,
     refreshCustomViews,
     refreshDriveConnections,
-    refreshTerminalDashboard,
+    refreshTerminalDashboard: () => refreshTerminalDashboard(),
     restoreProjectSession,
     projectSessionInteractionVersion: () => projectSessionInteractionVersion,
     customViewFor,
@@ -1401,59 +1395,39 @@ export async function startHotSheetWebClient() {
       }
     }
   }
-  function terminalSession(key?: string) {
-    return terminalGroups.value
-      .flatMap((group) => group.sessions)
-      .find((session) => `${session.projectId}:${session.id}` === key);
-  }
-  function terminalHiddenKeys(scope: string) {
-    return activeTerminalVisibilityGroup(terminalVisibility.value, scope).hiddenKeys;
-  }
-  function terminalHiddenCount(scope: string, projectId?: string) {
-    const live = new Set(
-      terminalVisibilityItems(
-        workspaceTerminalGroups(),
-        projectId ? terminalProjectVisibilityScope(projectId) : scope,
-      ).flatMap((group) => group.items.map((item) => item.key)),
-    );
-    return terminalHiddenKeys(scope).filter((key) => live.has(key)).length;
-  }
-  function persistTerminalVisibility(next: typeof terminalVisibility.value) {
-    terminalVisibility.value = next;
-    localStorage.setItem(TERMINAL_VISIBILITY_STORAGE_KEY, JSON.stringify(next));
-  }
-  function terminalVisibilityScopeFor(target: Element) {
-    return (
-      target.closest<HTMLElement>('[data-visibility-scope]')?.dataset.visibilityScope ??
-      TERMINAL_DASHBOARD_VISIBILITY_SCOPE
-    );
-  }
-  function terminalKeysForVisibilityDialog() {
-    return terminalVisibilityItems(
-      workspaceTerminalGroups(),
-      terminalVisibilityDialogScope.value ?? TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
-      terminalVisibilityFilter.value,
-    ).flatMap((group) => group.items.map((item) => item.key));
-  }
-  function drawerTabOrder(projectId: string) {
-    return terminalDrawerOrderByProject.value[projectId] ?? loadDrawerTabOrder(localStorage, projectId);
-  }
-  function currentDrawerTabIds(projectId: string) {
-    const terminalIds =
-        terminalGroups.value.find((group) => group.projectId === projectId)?.sessions.map((session) => session.id) ??
-        [],
-      chatIds = (terminalDrawerChatsByProject.value[projectId] ?? []).map((chat) => chat.id);
-    return orderedDrawerTabIds(terminalIds, chatIds, drawerTabOrder(projectId));
-  }
-  function persistDrawerTabOrder(projectId: string, ids: readonly string[]) {
-    const order = saveDrawerTabOrder(localStorage, projectId, ids);
-    terminalDrawerOrderByProject.value = { ...terminalDrawerOrderByProject.value, [projectId]: order };
-    terminalGroups.value = terminalGroups.value.map((group) =>
-      group.projectId === projectId
-        ? { ...group, sessions: applyRememberedTabOrder(group.sessions, (item) => item.id, order) }
-        : group,
-    );
-  }
+  const terminalDashboardController = createTerminalDashboardController({
+    projects,
+    selectedProjectId: () => selectedProjectId.value,
+    terminalGroups,
+    terminalDashboardLoading,
+    terminalDashboardMessage,
+    terminalVisibility,
+    terminalVisibilityDialogScope: () => terminalVisibilityDialogScope.value,
+    terminalVisibilityFilter: () => terminalVisibilityFilter.value,
+    terminalDrawerOrderByProject,
+    terminalDrawerChatsByProject: () => terminalDrawerChatsByProject.value,
+    terminalNames: () => terminalNames.value,
+    hasDriveConnections: (projectId) => Object.hasOwn(driveConnectionsByProject.value, projectId),
+    refreshDriveConnections,
+    reconcileTerminalNames,
+    workspaceTerminalGroups: () => workspaceTerminalGroups(),
+    aiToolLabel,
+    showToast,
+    error,
+  });
+  const {
+    terminalSession,
+    terminalHiddenKeys,
+    terminalHiddenCount,
+    persistTerminalVisibility,
+    terminalVisibilityScopeFor,
+    terminalKeysForVisibilityDialog,
+    drawerTabOrder,
+    currentDrawerTabIds,
+    persistDrawerTabOrder,
+    refreshTerminalDashboard,
+    clearTerminalHalt,
+  } = terminalDashboardController;
   function focusDrawerTab(projectId: string, id: string) {
     const scheduled = document.activeElement;
     requestAnimationFrame(() =>
@@ -1495,86 +1469,6 @@ export async function startHotSheetWebClient() {
           input.focus();
       }),
     );
-  }
-  // When each terminal first appeared, for the AI-connection grace period (HS2-EV1XK3).
-  const terminalFirstSeen = new Map<string, number>();
-  let aiConnectionTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Mark each terminal connected to Hot Sheet or not; re-derives locally (no request) when a grace ends. */
-  function applyAiConnectionStates(snapshot = terminalGroups.peek()) {
-    clearTimeout(aiConnectionTimer);
-    aiConnectionTimer = undefined;
-    const { groups, nextCheckInMs } = deriveAiConnectionStates(snapshot, terminalFirstSeen, Date.now());
-    if (!sameTerminalDashboardSnapshot(terminalGroups.peek(), groups)) terminalGroups.value = groups;
-    if (nextCheckInMs !== undefined) aiConnectionTimer = setTimeout(applyAiConnectionStates, nextCheckInMs);
-  }
-  async function refreshTerminalDashboard(quiet = false, targetProject?: Project) {
-    const generation = quiet ? terminalDashboardGeneration : ++terminalDashboardGeneration,
-      openProjects = [...projects.value],
-      fetchProjects = targetProject ? openProjects.filter((project) => project.id === targetProject.id) : openProjects,
-      versions = fetchProjects.map((project) => terminalSnapshotRefresh.begin(project.id));
-    if (!quiet) {
-      terminalDashboardLoading.value = true;
-      terminalDashboardMessage.value = '';
-    }
-    const results: Array<TerminalDashboardGroup | undefined> = await Promise.all(
-      fetchProjects.map(async (current) => {
-        try {
-          const [infos] = await Promise.all([
-              new Api(current.apiPath, '', { trackBusy: !quiet }).terminals(),
-              ...(current.id !== selectedProjectId.value && !Object.hasOwn(driveConnectionsByProject.value, current.id)
-                ? [refreshDriveConnections(current, true, quiet)]
-                : []),
-            ]),
-            owned = infos.filter((session) => terminalProjectOwner(openProjects, session.cwd) === current.id),
-            defaultNames = defaultTerminalNames(owned, aiToolLabel),
-            sessions = owned.map((session, index) => {
-              const localName = terminalNames.value[terminalNameKey(current.id, session.id)];
-              return {
-                ...session,
-                scrollback: '',
-                projectId: current.id,
-                projectName: current.name,
-                title: terminalTitle(localName, session.name, defaultNames[index]),
-                defaultTitle: defaultNames[index],
-                named: Boolean(localName || session.name),
-              };
-            });
-          reconcileTerminalNames(current, owned);
-          return {
-            projectId: current.id,
-            projectName: current.name,
-            sessions: applyRememberedTabOrder(sessions, (item) => item.id, drawerTabOrder(current.id)),
-          } satisfies TerminalDashboardGroup;
-        } catch {
-          return undefined;
-        }
-      }),
-    );
-    if (!quiet && generation !== terminalDashboardGeneration) return;
-    // A failed fetch is not a resumed session. Keep the last snapshot for still-open projects.
-    const merged = terminalSnapshotRefresh.merge(
-      terminalGroups.peek(),
-      results.map((group, index) => ({ projectId: fetchProjects[index].id, version: versions[index], group })),
-      projects.value.map((project) => project.id),
-    );
-    applyAiConnectionStates(merged);
-    if (!quiet) {
-      terminalDashboardMessage.value =
-        openProjects.length > 0 && terminalGroups.value.length === 0 ? 'Terminal snapshots could not be loaded.' : '';
-      terminalDashboardLoading.value = false;
-    } else if (terminalGroups.peek().length > 0) terminalDashboardMessage.value = '';
-  }
-  async function clearTerminalHalt(key: string) {
-    const session = terminalSession(key),
-      current = projects.value.find((item) => item.id === session?.projectId);
-    if (!session?.halt || !current) return;
-    try {
-      await new Api(current.apiPath).clearTerminalHalt(session.id, session.halt.at);
-      await refreshTerminalDashboard(true, current);
-      if (!terminalSession(key)?.halt) showToast('Stopped state cleared.');
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    }
   }
   // The workspace grid and drawer sizes follow whichever element currently renders them: a re-render
   // that replaces the measured node must re-bind the observer, or the size freezes (HS2-0PF13V).
@@ -6250,6 +6144,7 @@ export async function startHotSheetWebClient() {
       permissionsController.dispose();
       disposeClaimClock();
       disposeProjectChangeStreams();
+      terminalDashboardController.dispose();
     },
   };
 }

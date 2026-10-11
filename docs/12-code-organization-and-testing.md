@@ -298,6 +298,15 @@ HS2-3JGWTV lifted three more behavior-preserving owners out of `app/runtime.tsx`
   `disposeInteractions`) stops every stream and pending repository refresh and ignores later
   syncs (HS2-A9E7QB).
 
+HS2-ZJ67VE lifted the terminal dashboard snapshot owner:
+
+- `terminal-dashboard.ts`: per-project terminal fetches merged by snapshot version, AI
+  connection grace states and their local re-derive timer, terminal visibility scopes and
+  persistence, and the remembered drawer tab order. It reads the later-built
+  `workspaceTerminalGroups` lazily, and its `dispose()` runs from `disposeInteractions`.
+  Drawer visibility, focus, terminal creation, and the mobile terminal viewport stay in the
+  runtime for now.
+
 Owners created before these read them through lazy accessors (saved views read
 `availableSearchTags`, the project lifecycle reads `syncProjectChangeStreams`).
 
