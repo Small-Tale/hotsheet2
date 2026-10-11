@@ -274,12 +274,11 @@ fn drive_one_ticket(
     let mut safe = prepare_trigger_with_home(
         store.root(),
         tool,
-        None,
-        None,
-        None,
-        envs,
-        false,
-        persistent_home,
+        hotsheet_aitools::TriggerOptions {
+            envs,
+            persistent_codex_home: persistent_home,
+            ..hotsheet_aitools::TriggerOptions::default()
+        },
     )?;
     // Attach the server's permission bridge so a driven codex's approvals block for a human
     // answering over POST /permissions instead of auto-approving (HS2-Q1F6HV).

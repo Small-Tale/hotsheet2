@@ -295,13 +295,15 @@ fn trigger_codex_uses_the_app_server_and_registers_a_connection() {
 
     let out = trigger(
         &codex,
-        "/proj",
-        Role::Main,
-        "sess-1".into(),
-        "work the top ticket",
+        TriggerRequest {
+            project: "/proj",
+            role: Role::Main,
+            conn_id: "sess-1".into(),
+            content: "work the top ticket",
+            now_ms: 1_000,
+        },
         &appctx(&spawner, &app, "/proj"),
         &mut reg,
-        1_000,
     )
     .unwrap();
 
@@ -940,13 +942,15 @@ fn trigger_claude_uses_the_channel_and_registers_a_connection() {
 
     let out = trigger(
         &claude,
-        "/proj",
-        Role::Main,
-        "sess-1".into(),
-        "work the top ticket",
+        TriggerRequest {
+            project: "/proj",
+            role: Role::Main,
+            conn_id: "sess-1".into(),
+            content: "work the top ticket",
+            now_ms: 1_000,
+        },
         &chanctx(&spawner, &ch, "/proj"),
         &mut reg,
-        1_000,
     )
     .unwrap();
 

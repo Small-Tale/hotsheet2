@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use hotsheet_aitools::{
-    ConnectionRegistry, SafeTrigger, SharedPermissionBridge, TurnControl, TurnDone, TurnEvent,
-    prepare_trigger_with_home,
+    ConnectionRegistry, SafeTrigger, SharedPermissionBridge, TriggerOptions, TurnControl, TurnDone,
+    TurnEvent, TurnRequest, prepare_trigger_with_home,
 };
 use serde::{Deserialize, Serialize};
 
@@ -59,14 +59,15 @@ impl ClientDriveBackend for NativeClientDriveBackend {
         let trigger = prepare_trigger_with_home(
             &request.store_path,
             &request.tool,
-            Some(request.project_path),
-            None,
-            None,
-            request.env,
-            // The shared daemon uses a Unix-domain control socket. Windows uses the
-            // direct app-server transport while preserving the same client API/session.
-            cfg!(unix),
-            request.persistent_home,
+            TriggerOptions {
+                project: Some(request.project_path),
+                envs: request.env,
+                // The shared daemon uses a Unix-domain control socket. Windows uses the
+                // direct app-server transport while preserving the same client API/session.
+                shared_daemon: cfg!(unix),
+                persistent_codex_home: request.persistent_home,
+                ..TriggerOptions::default()
+            },
         )
         .map_err(|error| error.to_string())?
         .with_permission_bridge(request.permission_bridge);
@@ -91,12 +92,14 @@ impl PreparedClientDrive for NativePreparedDrive {
         let mut registry = ConnectionRegistry::new(30_000);
         self.0
             .run_turn_controlled_with_options(
-                request.prompt,
-                request.resume,
-                request.model,
-                request.effort,
-                false,
-                request.connection_id.to_owned(),
+                TurnRequest {
+                    prompt: request.prompt,
+                    resume: request.resume,
+                    model: request.model,
+                    effort: request.effort,
+                    worker: false,
+                    conn_id: request.connection_id.to_owned(),
+                },
                 &mut registry,
                 request.control,
                 on_event,

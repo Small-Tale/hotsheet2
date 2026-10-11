@@ -49,26 +49,58 @@ pub fn prepare_trigger(
     prepare_trigger_with_home(
         store_path,
         tool,
+        TriggerOptions {
+            project,
+            mcp_config,
+            permission_mode,
+            envs,
+            shared_daemon,
+            persistent_codex_home: None,
+        },
+    )
+}
+
+/// Launch options for [`prepare_trigger_with_home`] (HS2-J7HJC4).
+#[derive(Debug, Default)]
+pub struct TriggerOptions {
+    /// The checkout the tool works in; defaults to the store path.
+    pub project: Option<PathBuf>,
+    pub mcp_config: Option<PathBuf>,
+    pub permission_mode: Option<String>,
+    /// `KEY=VALUE` pairs for the launched tool.
+    pub envs: Vec<String>,
+    /// Drive through the shared app-server daemon (Unix control socket).
+    pub shared_daemon: bool,
+    /// A stable isolated `CODEX_HOME` instead of a throwaway one.
+    pub persistent_codex_home: Option<PathBuf>,
+}
+
+/// One controlled turn's inputs for [`SafeTrigger::run_turn_controlled_with_options`].
+#[derive(Debug, Default)]
+pub struct TurnRequest<'a> {
+    pub prompt: &'a str,
+    pub resume: Option<&'a str>,
+    /// Plugin-validated provider model override.
+    pub model: Option<&'a str>,
+    /// Plugin-validated provider effort override.
+    pub effort: Option<&'a str>,
+    pub worker: bool,
+    pub conn_id: String,
+}
+
+pub fn prepare_trigger_with_home(
+    store_path: &Path,
+    tool: &str,
+    options: TriggerOptions,
+) -> Result<SafeTrigger> {
+    let TriggerOptions {
         project,
         mcp_config,
         permission_mode,
         envs,
         shared_daemon,
-        None,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn prepare_trigger_with_home(
-    store_path: &Path,
-    tool: &str,
-    project: Option<PathBuf>,
-    mcp_config: Option<PathBuf>,
-    permission_mode: Option<String>,
-    envs: Vec<String>,
-    shared_daemon: bool,
-    persistent_codex_home: Option<PathBuf>,
-) -> Result<SafeTrigger> {
+        persistent_codex_home,
+    } = options;
     let plugin = hotsheet_plugins::find(tool)
         .with_context(|| format!("unknown tool '{tool}' (no such plugin)"))?;
     let cwd = project.unwrap_or_else(|| store_path.to_path_buf());
@@ -265,37 +297,23 @@ impl SafeTrigger {
         })
     }
 
-    /// Drive one turn while accepting a thread-safe external interrupt request.
-    #[allow(clippy::too_many_arguments)]
-    pub fn run_turn_controlled(
-        &self,
-        prompt: &str,
-        resume: Option<&str>,
-        worker: bool,
-        conn_id: String,
-        registry: &mut ConnectionRegistry,
-        control: &TurnControl,
-        on_event: &mut dyn FnMut(&TurnEvent),
-    ) -> Result<TurnDone> {
-        self.run_turn_controlled_with_options(
-            prompt, resume, None, None, worker, conn_id, registry, control, on_event,
-        )
-    }
-
-    /// Controlled turn with plugin-validated provider model/effort overrides.
-    #[allow(clippy::too_many_arguments)]
+    /// Drive one turn while accepting a thread-safe external interrupt request, with
+    /// plugin-validated provider model/effort overrides.
     pub fn run_turn_controlled_with_options(
         &self,
-        prompt: &str,
-        resume: Option<&str>,
-        model: Option<&str>,
-        effort: Option<&str>,
-        worker: bool,
-        conn_id: String,
+        request: TurnRequest<'_>,
         registry: &mut ConnectionRegistry,
         control: &TurnControl,
         on_event: &mut dyn FnMut(&TurnEvent),
     ) -> Result<TurnDone> {
+        let TurnRequest {
+            prompt,
+            resume,
+            model,
+            effort,
+            worker,
+            conn_id,
+        } = request;
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

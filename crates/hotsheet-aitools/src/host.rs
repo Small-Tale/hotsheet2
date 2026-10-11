@@ -81,20 +81,35 @@ pub enum TriggerError {
     Drive(#[from] DriveError),
 }
 
+/// What one [`trigger`] call registers and sends (HS2-J7HJC4).
+#[derive(Debug)]
+pub struct TriggerRequest<'a> {
+    pub project: &'a str,
+    pub role: Role,
+    /// Caller-minted connection id (a session id).
+    pub conn_id: String,
+    /// The turn's prompt.
+    pub content: &'a str,
+    /// The injected clock.
+    pub now_ms: u64,
+}
+
 /// Trigger `plugin` for `project`: register a connection, run one turn with `content`,
 /// and mark the connection busy. `conn_id` is caller-minted (a session id); `now_ms` is
 /// the injected clock. The connection's transport is taken from the plugin's drive.
-#[allow(clippy::too_many_arguments)]
 pub fn trigger(
     plugin: &Plugin,
-    project: &str,
-    role: Role,
-    conn_id: String,
-    content: &str,
+    request: TriggerRequest<'_>,
     ctx: &DriveCtx,
     registry: &mut ConnectionRegistry,
-    now_ms: u64,
 ) -> Result<Triggered, TriggerError> {
+    let TriggerRequest {
+        project,
+        role,
+        conn_id,
+        content,
+        now_ms,
+    } = request;
     let drive =
         drive_for(plugin).ok_or_else(|| TriggerError::NotDrivable(plugin.id().to_string()))?;
     let connection_id = registry.register(Connection {

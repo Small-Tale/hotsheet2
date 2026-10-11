@@ -249,6 +249,9 @@ impl PermissionBridge {
     }
 }
 
+/// An observer of a permission request entering or leaving the queue.
+type RequestCallback = Box<dyn Fn(&Request) + Send + Sync>;
+
 /// A thread-safe [`PermissionBridge`] that supports the **live human round-trip**
 /// (`docs/05` §5.7, HS2-9R9YZW): a tool thread calls [`request_blocking`] and **blocks**
 /// until a person answers over a separate path (an HTTP route-back on the server that calls
@@ -266,10 +269,8 @@ pub struct SharedPermissionBridge {
     /// Fired when a request is enqueued (goes `Pending`) — the server sets this to push a
     /// "permission_asked" nudge over its event bus so attached clients fetch + answer it
     /// (HS2-9R9YZW). `None` = headless / no observer.
-    #[allow(clippy::type_complexity)]
-    on_pending: Mutex<Option<Box<dyn Fn(&Request) + Send + Sync>>>,
-    #[allow(clippy::type_complexity)]
-    on_removed: Mutex<Option<Box<dyn Fn(&Request) + Send + Sync>>>,
+    on_pending: Mutex<Option<RequestCallback>>,
+    on_removed: Mutex<Option<RequestCallback>>,
 }
 
 impl SharedPermissionBridge {

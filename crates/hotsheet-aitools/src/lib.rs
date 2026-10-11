@@ -43,7 +43,7 @@ pub use drive::{
     BackingService, ClaudeChannelClient, DoneReason, Drive, DriveCtx, DriveError, DriveInfo,
     PermReq, Target, Transport, TurnControl, TurnEvent, TurnHandle, Usage,
 };
-pub use host::{TriggerError, Triggered, drive_for, trigger};
+pub use host::{TriggerError, TriggerRequest, Triggered, drive_for, trigger};
 pub use live::{LiveError, LiveTrigger, TurnDone, run_trigger, run_trigger_controlled};
 pub use model_catalog::{
     CommandModelCatalog, ModelCatalogCache, RuntimeModelCatalog, RuntimeModelCatalogSource,
@@ -61,7 +61,9 @@ pub use ports::{
     RpcReader, RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,
 };
 pub use registry::{Connection, ConnectionRegistry, Role};
-pub use safe_trigger::{SafeTrigger, prepare_trigger, prepare_trigger_with_home};
+pub use safe_trigger::{
+    SafeTrigger, TriggerOptions, TurnRequest, prepare_trigger, prepare_trigger_with_home,
+};
 pub use spawn::{ContentMode, SpawnConfig, SpawnDrive};
 pub use system::SystemSpawner;
 

@@ -15,7 +15,7 @@ use crate::codex::{
     ensure_codex_daemon_in,
 };
 use crate::drive::{DoneReason, DriveCtx, TurnControl, TurnEvent};
-use crate::host::{TriggerError, trigger};
+use crate::host::{TriggerError, TriggerRequest, trigger};
 use crate::registry::{ConnectionRegistry, Role};
 use crate::system::SystemSpawner;
 
@@ -258,13 +258,15 @@ fn drive_and_stream(
     let project = t.cwd.display().to_string();
     let out = trigger(
         plugin,
-        &project,
-        t.role,
-        t.conn_id.clone(),
-        &t.prompt,
+        TriggerRequest {
+            project: &project,
+            role: t.role,
+            conn_id: t.conn_id.clone(),
+            content: &t.prompt,
+            now_ms: t.now_ms,
+        },
         ctx,
         registry,
-        t.now_ms,
     )
     .map_err(|e| match e {
         TriggerError::NotDrivable(id) => LiveError::NotDrivable(id),
