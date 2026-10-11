@@ -316,8 +316,20 @@ HS2-T1DX2V lifted the terminal drawer geometry and phone viewport owner:
   lazily; `currentMobileViewportGeometry()` is module-level so the geometry signal's initial
   value needs no owner. The remaining runtime split (drawer visibility/selection/focus,
   terminal and AI-chat creation, `closeDrawerTabIds`, surface-prop builders and
-  `HotSheetShell`, `refreshProject` and board paging, `closeProjectIds`) is tracked as a
-  follow-up (`HS2-H2R2JB`).
+  `HotSheetShell`, `refreshProject` and board paging, `closeProjectIds`) was tracked as
+  `HS2-H2R2JB`.
+
+HS2-H2R2JB lifted the per-column board paging owner:
+
+- `board-column-paging.ts`: the per-column board refresh spec (which keeps each paged
+  column's loaded length), the bulk status-change refill begin/finish pair, and one
+  column's Load more (status-stream cursors, deduped row append, partial-source warning).
+  The column page/loading signals, their visible-limit merge, reset, and per-project cache
+  stay in the runtime; it is created after the workspace search owner and reads the
+  later-declared `refreshProject`, `loadNextTicketPage`, and `visibleTickets` through
+  callbacks. The remaining split (drawer visibility/selection/focus, terminal and AI-chat
+  creation, `closeDrawerTabIds`, surface-prop builders and `HotSheetShell`,
+  `refreshProject`, `closeProjectIds`) is tracked as `HS2-DCTS07`.
 
 Owners created before these read them through lazy accessors (saved views read
 `availableSearchTags`, the project lifecycle reads `syncProjectChangeStreams`).
