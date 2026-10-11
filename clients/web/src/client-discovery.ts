@@ -3,6 +3,8 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
+import { isRecord, parseJson } from './json-value';
+
 export interface ClientDiscovery {
   pid: number;
   url: string;
@@ -35,8 +37,8 @@ export async function publishClientUrl(url: string, home?: string): Promise<() =
   }
   return async () => {
     try {
-      const current = JSON.parse(await readFile(path, 'utf8')) as Partial<ClientDiscovery>;
-      if (current.id === id) await rm(path, { force: true });
+      const current = parseJson(await readFile(path, 'utf8'));
+      if (isRecord(current) && current.id === id) await rm(path, { force: true });
     } catch {
       // A stale or replaced record belongs to another host or has already been removed.
     }

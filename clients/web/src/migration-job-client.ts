@@ -1,3 +1,4 @@
+import { errorMessageOf, responseJson } from './json-value';
 import { acceptMigrationJob, type MigrationJob, type MigrationStart } from './migration-progress';
 
 function validatedJob(value: unknown): MigrationJob {
@@ -32,8 +33,10 @@ export class MigrationJobClient {
   ) {}
 
   private async decode(response: Response): Promise<unknown> {
-    const value = (await response.json()) as { error?: string };
-    if (!response.ok) throw new Error(value.error ?? 'Could not reach the migration owner.');
+    const value = await responseJson(response);
+    if (!response.ok) throw new Error(errorMessageOf(value) ?? 'Could not reach the migration owner.');
+    if (value === undefined)
+      throw new Error('Unsupported migration job response. Reconnect after updating the local bridge.');
     return value;
   }
   private accept(job: MigrationJob) {

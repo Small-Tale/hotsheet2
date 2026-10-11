@@ -1,5 +1,6 @@
 import type { DevReviewSubmission } from '../dev-review';
 import { devReviewRequested } from '../dev-review/request';
+import { errorMessageOf, isRecord, responseJson } from '../json-value';
 import { isMobileViewport } from '../mobile-layout';
 import type { UiStabilityDiagnostics } from '../ui-stability-diagnostics';
 
@@ -9,9 +10,10 @@ async function submitDevReview(submission: DevReviewSubmission) {
       headers: { 'content-type': 'application/json', 'x-hotsheet-dev-review': '1' },
       body: JSON.stringify(submission),
     }),
-    result = (await response.json()) as { slug?: string; error?: string };
-  if (!response.ok || !result.slug) throw new Error(result.error ?? 'Ticket creation failed.');
-  return { slug: result.slug };
+    result = await responseJson(response),
+    slug = isRecord(result) && typeof result.slug === 'string' ? result.slug : '';
+  if (!response.ok || !slug) throw new Error(errorMessageOf(result) ?? 'Ticket creation failed.');
+  return { slug };
 }
 
 /** Install development-only diagnostics and return the render-stability observer, when enabled. */

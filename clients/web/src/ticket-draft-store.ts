@@ -1,3 +1,5 @@
+import { isRecord, parseJson } from './json-value';
+
 /**
  * Local recovery copies of in-progress ticket text edits (HS2-RE1PS6). While the user types, the
  * focus-loss autosave keeps the latest draft here together with the field value the edit started
@@ -44,8 +46,8 @@ export function loadTicketDraft(storage: Pick<Storage, 'getItem'>, key: string):
   try {
     const raw = storage.getItem(key);
     if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as Partial<StoredTicketDraft>;
-    if (typeof parsed.base !== 'string' || typeof parsed.draft !== 'string') return undefined;
+    const parsed = parseJson(raw);
+    if (!isRecord(parsed) || typeof parsed.base !== 'string' || typeof parsed.draft !== 'string') return undefined;
     return { base: parsed.base, draft: parsed.draft, at: typeof parsed.at === 'number' ? parsed.at : 0 };
   } catch {
     return undefined;

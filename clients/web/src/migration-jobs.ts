@@ -3,6 +3,7 @@ import { watch as watchFiles } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+import { isRecord, parseJson } from './json-value';
 import { acquireMigrationLock, type MigrationLock } from './migration-lock';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 
@@ -61,9 +62,19 @@ export class MigrationJobs {
     await mkdir(this.directory, { recursive: true });
     for (const name of await readdir(this.directory)) {
       if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
-      const job = JSON.parse(await readFile(resolve(this.directory, name), 'utf8')) as MigrationJob;
-      if (!job.id || !job.attempt || !job.root || !Number.isSafeInteger(job.revision))
+      const value = parseJson(await readFile(resolve(this.directory, name), 'utf8'));
+      if (
+        !isRecord(value) ||
+        typeof value.id !== 'string' ||
+        !value.id ||
+        typeof value.attempt !== 'string' ||
+        !value.attempt ||
+        typeof value.root !== 'string' ||
+        !value.root ||
+        !Number.isSafeInteger(value.revision)
+      )
         throw new Error('Invalid migration job checkpoint. Keep the checkpoint for recovery.');
+      const job = value as unknown as MigrationJob;
       if (job.status === 'running' && !this.alive(job.ownerPid)) {
         job.status = 'interrupted';
         job.error =

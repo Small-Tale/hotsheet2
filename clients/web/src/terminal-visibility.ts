@@ -1,4 +1,5 @@
 import type { TerminalDashboardGroup } from './components/terminal-dashboard';
+import { isRecord, parseJson } from './json-value';
 
 export const DEFAULT_TERMINAL_VISIBILITY_GROUP_ID = 'default';
 export const DEFAULT_TERMINAL_VISIBILITY_GROUP_NAME = 'Default';
@@ -28,13 +29,13 @@ export function initialTerminalVisibilityState(): TerminalVisibilityState {
 export function parseTerminalVisibilityState(raw: string | null): TerminalVisibilityState {
   if (!raw) return initialTerminalVisibilityState();
   try {
-    const value = JSON.parse(raw) as { groups?: unknown; activeByScope?: unknown };
-    if (!Array.isArray(value.groups)) return initialTerminalVisibilityState();
+    const value = parseJson(raw);
+    if (!isRecord(value) || !Array.isArray(value.groups)) return initialTerminalVisibilityState();
     const seen = new Set<string>(),
       groups: TerminalVisibilityGroup[] = [];
     for (const item of value.groups) {
-      if (!item || typeof item !== 'object') continue;
-      const candidate = item as { id?: unknown; name?: unknown; hiddenKeys?: unknown };
+      if (!isRecord(item)) continue;
+      const candidate = item;
       if (
         typeof candidate.id !== 'string' ||
         !candidate.id ||

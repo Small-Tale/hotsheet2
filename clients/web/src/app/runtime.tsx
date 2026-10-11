@@ -228,6 +228,7 @@ import type {
   PendingEvidence,
   Project,
 } from '../interactions/types';
+import { stringArray, tryParseJson } from '../json-value';
 import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } from '../keyboard-shortcuts';
 import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
@@ -503,7 +504,9 @@ export async function startHotSheetWebClient() {
       Number(localStorage.getItem('hotsheet.terminals.fit-across')) || TERMINAL_GRID_DEFAULT_ACROSS,
     ),
     terminalFitHigh = signal(Number(localStorage.getItem('hotsheet.terminals.fit-high')) || TERMINAL_GRID_DEFAULT_HIGH);
-  const rememberedRoots = [...new Set(JSON.parse(localStorage.getItem('hotsheet.open-projects') || '[]') as string[])],
+  const rememberedRoots = [
+      ...new Set(stringArray(tryParseJson(localStorage.getItem('hotsheet.open-projects') || '[]'))),
+    ],
     initialProjectRestorePending = signal(rememberedRoots.length > 0),
     // Remembered roots still opening in the background after the active project was revealed (HS2-2BEJXD).
     projectRestorePendingRoots = signal<readonly string[]>(rememberedRoots);

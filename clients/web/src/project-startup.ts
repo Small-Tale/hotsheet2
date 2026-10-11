@@ -1,5 +1,7 @@
 import { Api, type ProviderDescriptor } from './api';
 import type { Project, UnhealthyServerRecovery } from './interactions/types';
+import { isRecord } from './json-value';
+import { localBridge, LocalBridgeHttpError, parseUnhealthyServerRecovery } from './local-bridge-client';
 
 export type ProjectOpenResult =
   | { ok: true; project: Project; providers: ProviderDescriptor[] }
@@ -13,18 +15,13 @@ export async function openProjectFetch(
   providers: (project: Project) => Promise<ProviderDescriptor[]> = (project) => new Api(project.apiPath).providers(),
 ): Promise<ProjectOpenResult> {
   try {
-    const response = await request('/__hotsheet/projects/open', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ root, ticketStore }),
-    });
-    if (!response.ok) {
-      const failure = (await response.json()) as { error?: string; recovery?: UnhealthyServerRecovery };
-      return { ok: false, error: failure.error || 'Could not open project.', recovery: failure.recovery };
-    }
-    const project = (await response.json()) as Project;
+    const project = await localBridge.openProject(root, 'Could not open project.', request, ticketStore);
     return { ok: true, project, providers: await providers(project).catch(() => []) };
   } catch (reason) {
+    if (reason instanceof LocalBridgeHttpError) {
+      const recovery = isRecord(reason.body) ? parseUnhealthyServerRecovery(reason.body.recovery) : undefined;
+      return { ok: false, error: reason.message, ...(recovery ? { recovery } : {}) };
+    }
     return { ok: false, error: reason instanceof Error ? reason.message : String(reason) };
   }
 }

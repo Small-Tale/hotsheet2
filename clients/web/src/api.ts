@@ -1,5 +1,6 @@
 import { browserRandomId } from './browser-id';
 import type { ServerCompatibility } from './compatibility';
+import { errorMessageOf, responseJson } from './json-value';
 import { prioritiesToWire } from './priority-wire';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
 import type { TicketCloseReason } from './ticket-close';
@@ -820,10 +821,7 @@ export class Api {
     try {
       const response = await fetch(`${this.origin}${path}`, { ...init, headers });
       if (!response.ok)
-        throw new ApiHttpError(
-          (await response.json().catch(() => null))?.error ?? `${response.status}`,
-          response.status,
-        );
+        throw new ApiHttpError(errorMessageOf(await responseJson(response)) ?? `${response.status}`, response.status);
       onResponse?.(response);
       return response.status === 204 ? (undefined as T) : await response.json();
     } finally {
@@ -1326,8 +1324,5 @@ export async function revealCorruptTicketFile(project: string, path: string): Pr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   });
-  if (!response.ok)
-    throw new Error(
-      ((await response.json().catch(() => null)) as { error?: string } | null)?.error ?? `${response.status}`,
-    );
+  if (!response.ok) throw new Error(errorMessageOf(await responseJson(response)) ?? `${response.status}`);
 }

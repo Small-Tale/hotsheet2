@@ -20,6 +20,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { spawnSync } from './child-process';
 import { localClientUrl, publishClientUrl } from './client-discovery';
 import { createDevApp } from './dev-server';
+import { isRecord, parseJson } from './json-value';
 import { developmentRepositoryRoot } from './project-bridge';
 import { installProjectWebSocketBridge } from './terminal-ws-bridge';
 
@@ -31,6 +32,20 @@ interface BinaryRevisionStatus {
   source_stale?: boolean;
 }
 
+const nullableString = (value: unknown) => value === undefined || value === null || typeof value === 'string';
+
+/** Validate `--revision-status` output; any other shape is treated as unknown (HS2-3DA0FQ). */
+export function parseBinaryRevisionStatus(value: unknown): BinaryRevisionStatus | undefined {
+  if (
+    !isRecord(value) ||
+    !nullableString(value.build_revision) ||
+    !nullableString(value.source_revision) ||
+    (value.source_stale !== undefined && typeof value.source_stale !== 'boolean')
+  )
+    return undefined;
+  return value;
+}
+
 function binaryRevisionStatus(path: string): BinaryRevisionStatus | undefined {
   try {
     const result = spawnSync(path, ['--revision-status'], {
@@ -38,7 +53,7 @@ function binaryRevisionStatus(path: string): BinaryRevisionStatus | undefined {
       timeout: 10_000,
       stdio: ['ignore', 'pipe', 'ignore'],
     });
-    return result.status === 0 ? (JSON.parse(result.stdout.toString()) as BinaryRevisionStatus) : undefined;
+    return result.status === 0 ? parseBinaryRevisionStatus(parseJson(result.stdout.toString())) : undefined;
   } catch {
     return undefined;
   }

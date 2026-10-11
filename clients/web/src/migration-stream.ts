@@ -1,6 +1,7 @@
 import { StringDecoder } from 'node:string_decoder';
 
 import { spawn, spawnSync } from './child-process';
+import { isRecord, parseJson } from './json-value';
 import type { MigrationProgress } from './migration-progress';
 
 /** Decode split UTF-8, CR updates, coalesced records, and a final unterminated line. */
@@ -31,18 +32,22 @@ export function lineDecoder(onLine: (line: string) => void) {
 export function parseMigrationProgress(
   line: string,
 ): MigrationProgress & { result?: { tickets: number; attachments: number }; error?: string } {
-  const event = JSON.parse(line) as Omit<MigrationProgress, 'version'> & {
-    version: number;
-    result?: { tickets: number; attachments: number };
-    error?: string;
-  };
+  const event: unknown = parseJson(line);
   if (
+    !isRecord(event) ||
     event.version !== 1 ||
     typeof event.phase !== 'string' ||
-    [event.completed, event.total].some((value) => value !== undefined && (!Number.isFinite(value) || value < 0))
+    [event.completed, event.total].some(
+      (value) => value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0),
+    ) ||
+    (event.error !== undefined && typeof event.error !== 'string') ||
+    (event.result !== undefined &&
+      (!isRecord(event.result) ||
+        typeof event.result.tickets !== 'number' ||
+        typeof event.result.attachments !== 'number'))
   )
     throw new Error('Unsupported migration progress record.');
-  return { ...event, version: 1 };
+  return { ...(event as Omit<MigrationProgress, 'version'>), version: 1 };
 }
 export function parseGitProgress(line: string): MigrationProgress | undefined {
   const match = line.match(/(Enumerating|Counting|Compressing|Writing) objects:\s*(?:\d+%\s*\((\d+)\/(\d+)\)|(\d+))/);

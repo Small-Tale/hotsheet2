@@ -5,7 +5,8 @@ import type {
   ConversationExportOpenResult,
   ConversationExportWriteResult,
 } from './conversation-export';
-import type { Project } from './interactions/types';
+import type { Project, UnhealthyServerRecovery } from './interactions/types';
+import { isRecord } from './json-value';
 
 /**
  * Typed adapter for the same-origin `/__hotsheet/*` local bridge (HS2-313JET).
@@ -53,9 +54,7 @@ export interface LocalBridgeRequest<T> {
   readonly responder?: string;
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+export { isRecord };
 
 function invalid(what: string): never {
   throw new LocalBridgeResponseError(`The local bridge returned an invalid ${what} response.`, 200);
@@ -134,6 +133,14 @@ export function parseOpenedProject(value: unknown): Project {
   )
     invalid('project');
   return value as unknown as Project;
+}
+
+/** The unhealthy-server recovery identity a failed project open may carry (HS2-3DA0FQ). */
+export function parseUnhealthyServerRecovery(value: unknown): UnhealthyServerRecovery | undefined {
+  if (!isRecord(value) || typeof value.store !== 'string' || !isRecord(value.expected)) return undefined;
+  const { pid, url, started_at: startedAt } = value.expected;
+  if (typeof pid !== 'number' || typeof url !== 'string' || typeof startedAt !== 'string') return undefined;
+  return { store: value.store, expected: { pid, url, started_at: startedAt } };
 }
 
 export function parseRecoveryResult(value: unknown): { recovered: boolean; error?: string } {
@@ -227,10 +234,15 @@ export const localBridge = {
     }),
   checkouts: (fallbackError = 'Could not find registered Hot Sheet projects.', request?: typeof fetch) =>
     localBridgeRequest('/__hotsheet/checkouts', { parse: parseCheckouts, fallbackError, request }),
-  openProject: (root: string, fallbackError = 'Could not open project.', request?: typeof fetch) =>
+  openProject: (
+    root: string,
+    fallbackError = 'Could not open project.',
+    request?: typeof fetch,
+    ticketStore?: string,
+  ) =>
     localBridgeRequest('/__hotsheet/projects/open', {
       method: 'POST',
-      body: { root },
+      body: { root, ticketStore },
       parse: parseOpenedProject,
       fallbackError,
       request,

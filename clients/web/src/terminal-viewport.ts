@@ -1,6 +1,7 @@
 import './terminal-viewport-error.css';
 
 import { browserRandomId } from './browser-id';
+import { isRecord, parseJson } from './json-value';
 import type { TerminalModifiers } from './terminal-keys';
 
 export interface TerminalSizeMessage {
@@ -24,11 +25,19 @@ export function terminalResizeClaim(
 
 export function parseTerminalSizeMessage(value: string): TerminalSizeMessage | undefined {
   try {
-    const parsed = JSON.parse(value) as { pty_size?: { cols?: unknown; rows?: unknown }; driven_by?: string | null },
-      cols = parsed.pty_size?.cols,
-      rows = parsed.pty_size?.rows;
-    if (Number.isInteger(cols) && Number.isInteger(rows) && (cols as number) > 0 && (rows as number) > 0)
-      return parsed as TerminalSizeMessage;
+    const parsed = parseJson(value);
+    if (!isRecord(parsed) || !isRecord(parsed.pty_size)) return undefined;
+    const { cols, rows } = parsed.pty_size;
+    if (
+      typeof cols === 'number' &&
+      typeof rows === 'number' &&
+      Number.isInteger(cols) &&
+      Number.isInteger(rows) &&
+      cols > 0 &&
+      rows > 0 &&
+      (parsed.driven_by === undefined || parsed.driven_by === null || typeof parsed.driven_by === 'string')
+    )
+      return parsed as unknown as TerminalSizeMessage;
   } catch {
     /* terminal text input is not a control frame */
   }
@@ -37,7 +46,8 @@ export function parseTerminalSizeMessage(value: string): TerminalSizeMessage | u
 
 export function isTerminalReplacementReplay(value: string): boolean {
   try {
-    return (JSON.parse(value) as { terminal_replay?: unknown }).terminal_replay === 'replace';
+    const parsed = parseJson(value);
+    return isRecord(parsed) && parsed.terminal_replay === 'replace';
   } catch {
     return false;
   }

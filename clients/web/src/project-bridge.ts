@@ -16,6 +16,7 @@ import {
   recordHs1Backup,
   requireHs1Backup,
 } from './hs1-backup';
+import { errorMessageOf, isRecord, parseJson, responseJson } from './json-value';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
 
@@ -282,9 +283,28 @@ const runProcess: ProcessRunner = (command, args, cwd) =>
     });
   });
 
+/** Validate `hotsheet-cli compatibility --json` output (HS2-3DA0FQ). */
+export function parseCliCompatibility(value: unknown): CliCompatibility {
+  const schema = isRecord(value) ? value.store_schema : undefined;
+  if (
+    !isRecord(value) ||
+    typeof value.generation !== 'string' ||
+    (value.setup_assets_fingerprint !== undefined && typeof value.setup_assets_fingerprint !== 'string') ||
+    (value.selected_store_schema !== undefined &&
+      value.selected_store_schema !== null &&
+      typeof value.selected_store_schema !== 'number') ||
+    !isRecord(schema) ||
+    typeof schema.min !== 'number' ||
+    typeof schema.max !== 'number' ||
+    typeof schema.creates !== 'number'
+  )
+    throw new Error('hotsheet-cli returned an invalid compatibility report.');
+  return value as unknown as CliCompatibility;
+}
+
 async function cliCompatibility(store: string | undefined, runner: ProcessRunner): Promise<CliCompatibility> {
   const args = [...(store ? ['-C', store] : []), 'compatibility', '--json'];
-  return JSON.parse(await runner(toolBinary(), args, developmentRepositoryRoot())) as CliCompatibility;
+  return parseCliCompatibility(parseJson(await runner(toolBinary(), args, developmentRepositoryRoot())));
 }
 
 export async function developmentSetupAssetsFingerprint(repositoryRoot = developmentRepositoryRoot()): Promise<string> {
@@ -513,8 +533,8 @@ async function hs1ChannelPids(directory: string): Promise<number[]> {
   const registrations = await Promise.all(
     paths.map(async (path) => {
       try {
-        const value = JSON.parse(await readFile(path, 'utf8')) as { pid?: unknown; slug?: unknown };
-        return typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
+        const value = parseJson(await readFile(path, 'utf8'));
+        return isRecord(value) && typeof value.pid === 'number' && Number.isSafeInteger(value.pid) && value.pid > 0
           ? { pid: value.pid, ...(typeof value.slug === 'string' && value.slug ? { slug: value.slug } : {}) }
           : undefined;
       } catch {
@@ -913,13 +933,31 @@ export async function suggestedTicketStore(root: string): Promise<string | undef
   return (await exists(resolve(candidate, 'hotsheet-store.json'))) ? candidate : undefined;
 }
 
+/** Validate an instance registration file; undefined for any other shape (HS2-3DA0FQ). */
+export function parseInstanceInfo(value: unknown): InstanceInfo | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.pid !== 'number' ||
+    !Number.isSafeInteger(value.pid) ||
+    value.pid <= 0 ||
+    typeof value.url !== 'string' ||
+    !/^https?:\/\//.test(value.url) ||
+    typeof value.secret !== 'string' ||
+    !value.secret ||
+    (value.started_at !== undefined && typeof value.started_at !== 'string')
+  )
+    return undefined;
+  return value as unknown as InstanceInfo;
+}
+
 async function instanceFor(store: string): Promise<InstanceInfo | undefined> {
   const canonical = await realpath(store);
   const id = createHash('sha256').update(canonical).digest('hex').slice(0, 16);
   try {
-    const info = JSON.parse(await readFile(resolve(hotsheetHome(), 'instances', `${id}.json`), 'utf8')) as InstanceInfo;
-    if (!Number.isSafeInteger(info.pid) || info.pid <= 0 || !/^https?:\/\//.test(info.url) || !info.secret)
-      throw new Error('invalid instance registration');
+    const info = parseInstanceInfo(
+      parseJson(await readFile(resolve(hotsheetHome(), 'instances', `${id}.json`), 'utf8')),
+    );
+    if (!info) throw new Error('invalid instance registration');
     process.kill(info.pid, 0);
     return info;
   } catch {
@@ -1024,7 +1062,8 @@ export function createServerHealthProbe(
         signal: AbortSignal.timeout(attempt === 0 ? patientTimeoutMs : retryTimeoutMs),
       });
       if (!response.ok) return false;
-      const healthy = ((await response.json()) as { status?: string }).status === 'ok';
+      const health = await responseJson(response),
+        healthy = isRecord(health) && health.status === 'ok';
       if (healthy) verified.set(store, { instance, at: now() });
       return healthy;
     } catch {
@@ -1200,10 +1239,7 @@ async function serverRequest<T>(
     ...init,
     headers: { 'content-type': 'application/json', 'x-hotsheet-secret': target.secret, ...init.headers },
   });
-  if (!response.ok)
-    throw new Error(
-      ((await response.json().catch(() => null)) as { error?: string } | null)?.error || `${response.status}`,
-    );
+  if (!response.ok) throw new Error(errorMessageOf(await responseJson(response)) || `${response.status}`);
   return response.json() as Promise<T>;
 }
 
