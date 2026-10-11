@@ -76,6 +76,56 @@ describe('runtime-extracted feature owners (HS2-K7SYHQ)', () => {
     expect(refreshProjectTab).toHaveBeenCalledTimes(1);
   });
 
+  it('claim clock: dispose clears the ETA and lease-expiry timers and restarts cleanly (HS2-3T458H)', async () => {
+    const now = Date.now(),
+      claimed = {
+        status: 'started',
+        claimed_by: 'w',
+        claim_lease_expires_at: new Date(now + 5_000).toISOString(),
+        claim_eta_at: new Date(now + 120_000).toISOString(),
+      } as TicketRow,
+      rows: Record<string, TicketRow[]> = { a: [claimed] },
+      refreshProjectTab = vi.fn(async () => undefined),
+      clock = createClaimClockController({
+        projects: signal([project('a')]),
+        selectedProjectId: signal('a'),
+        ticketCountsByProject: signal({}),
+        activeTicketCount: signal(0),
+        projectTabClaimClock: signal(0),
+        claimEtaClock: signal(0),
+        projectTabTicketRows: (id) => rows[id] ?? [],
+        projectTicketCounts: (id) => counts((rows[id] ?? []).length),
+        refreshProjectTab,
+      });
+    clock.scheduleClaimLeaseExpiry();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    clock.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(refreshProjectTab).not.toHaveBeenCalled();
+    clock.dispose();
+    // Restart after dispose arms fresh timers; a refresh settling after a second dispose does not re-arm.
+    rows.a = [{ ...claimed, claim_lease_expires_at: new Date(Date.now() + 5_000).toISOString() }];
+    let settle: () => void = () => undefined;
+    refreshProjectTab.mockImplementationOnce(
+      () =>
+        new Promise<undefined>(
+          (resolve) =>
+            (settle = () => {
+              resolve(undefined);
+            }),
+        ),
+    );
+    clock.scheduleClaimLeaseExpiry();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    await vi.advanceTimersByTimeAsync(5_100);
+    expect(refreshProjectTab).toHaveBeenCalledTimes(1);
+    clock.dispose();
+    settle();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('corrupt recovery: blocks duplicate actions while pending and records failures', async () => {
     const ticket = { path: 'tickets/x.md', error_code: 'parse_error' } as unknown as CorruptTicket,
       showToast = vi.fn(),

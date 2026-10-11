@@ -741,7 +741,11 @@ export async function startHotSheetWebClient() {
     projectTabClaimClock = signal(Date.now()),
     // Local render clock for ETA countdowns (HS2-XQMDQB); its timer never makes network requests.
     claimEtaClock = signal(Date.now());
-  const { liveClaimNotice, scheduleClaimLeaseExpiry } = createClaimClockController({
+  const {
+    liveClaimNotice,
+    scheduleClaimLeaseExpiry,
+    dispose: disposeClaimClock,
+  } = createClaimClockController({
     projects,
     selectedProjectId,
     ticketCountsByProject,
@@ -6694,6 +6698,7 @@ export async function startHotSheetWebClient() {
       disposeInteractions();
       haltedSessionsController.dispose();
       permissionsController.dispose();
+      disposeClaimClock();
     },
   };
 }

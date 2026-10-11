@@ -45,6 +45,8 @@ export function createClaimClockController(dependencies: ClaimClockDependencies)
   } = dependencies;
   let claimLeaseExpiryTimer: number | undefined;
   let claimEtaTimer: number | undefined;
+  // Bumped by dispose() so a refresh that settles afterwards cannot re-arm a disposed clock (HS2-3T458H).
+  let generation = 0;
   /** The inspector/reader header's live-claim notice, on the same local ETA clock as rows (HS2-QKNQXC). */
   function liveClaimNotice(ticket: WireTicketRow): LiveClaimNoticeProps | undefined {
     const now = claimEtaClock.value;
@@ -104,13 +106,25 @@ export function createClaimClockController(dependencies: ClaimClockDependencies)
           }
           ticketCountsByProject.value = adjusted;
           projectTabClaimClock.value = expiredAt;
-          void Promise.allSettled(expiringProjects.map((current) => refreshProjectTab(current))).finally(
-            scheduleClaimLeaseExpiry,
-          );
+          const armedGeneration = generation;
+          void Promise.allSettled(expiringProjects.map((current) => refreshProjectTab(current))).finally(() => {
+            if (armedGeneration === generation) scheduleClaimLeaseExpiry();
+          });
         },
         claimExpiryWakeDelay(next, now),
       );
     }
   }
-  return { liveClaimNotice, scheduleClaimEtaTick, scheduleClaimLeaseExpiry };
+  /**
+   * Clear both local timers with the app lifetime (HS2-3T458H). A later schedule call restarts
+   * the clock cleanly; a refresh still in flight at dispose time does not re-arm it.
+   */
+  function dispose() {
+    generation += 1;
+    if (claimEtaTimer !== undefined) window.clearTimeout(claimEtaTimer);
+    if (claimLeaseExpiryTimer !== undefined) window.clearTimeout(claimLeaseExpiryTimer);
+    claimEtaTimer = undefined;
+    claimLeaseExpiryTimer = undefined;
+  }
+  return { liveClaimNotice, scheduleClaimEtaTick, scheduleClaimLeaseExpiry, dispose };
 }
