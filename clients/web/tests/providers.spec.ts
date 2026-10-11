@@ -24108,16 +24108,16 @@ test('shares the settings category across projects but scopes command drafts to 
   await page.getByRole('button', { name: 'Commands', exact: true }).click();
   let editor = page.locator('[data-component="command-settings-editor"]');
   const commandDialog = page.locator('#command-editor-dialog');
-  await editor
-    .locator('.command-settings-editor__row')
-    .first()
-    .locator('.command-settings-editor__row-menu [slot="trigger"]')
-    .click();
-  await editor
-    .locator('.command-settings-editor__row')
-    .first()
-    .locator('[data-action="edit-command-setting"]')
-    .dispatchEvent('click');
+  // Open the first command only once the editor shows the expected project's commands: right after
+  // a project switch the previous project's row can still be rendered, and editing its command id
+  // opens an empty dialog (HS2-DA18DQ).
+  const openFirstCommand = async (title: string) => {
+    const row = page.locator('[data-component="command-settings-editor"] .command-settings-editor__row').first();
+    await expect(row).toContainText(title);
+    await row.locator('.command-settings-editor__row-menu [slot="trigger"]').click();
+    await row.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
+  };
+  await openFirstCommand('Demo checks');
   await expect(commandDialog.getByLabel('Button label')).toHaveValue('Demo checks');
   await commandDialog.getByLabel('Button label').fill('Unsaved demo draft');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
@@ -24129,37 +24129,21 @@ test('shares the settings category across projects but scopes command drafts to 
   await expect(page.getByRole('region', { name: 'Commands settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commands', exact: true })).toHaveAttribute('aria-current', 'page');
   editor = page.locator('[data-component="command-settings-editor"]');
-  await editor
-    .locator('.command-settings-editor__row')
-    .first()
-    .locator('.command-settings-editor__row-menu [slot="trigger"]')
-    .click();
-  await editor
-    .locator('.command-settings-editor__row')
-    .first()
-    .locator('[data-action="edit-command-setting"]')
-    .dispatchEvent('click');
+  await openFirstCommand('Other checks');
   await expect(commandDialog.getByLabel('Button label')).toHaveValue('Other checks');
   await expect(editor).not.toContainText('Unsaved demo draft');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
+  await expect.poll(() => commandDialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
   await page.screenshot({ path: 'target/visual-captures/hs2-g9fmqj-other-project-settings-wide.png', fullPage: true });
   await page.getByRole('tab', { name: 'demo' }).click();
   editor = page.locator('[data-component="command-settings-editor"]');
   await expect(page.getByRole('region', { name: 'Commands settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commands', exact: true })).toHaveAttribute('aria-current', 'page');
-  await editor
-    .locator('.command-settings-editor__row')
-    .first()
-    .locator('.command-settings-editor__row-menu [slot="trigger"]')
-    .click();
-  await editor
-    .locator('.command-settings-editor__row')
-    .first()
-    .locator('[data-action="edit-command-setting"]')
-    .dispatchEvent('click');
+  await openFirstCommand('Unsaved demo draft');
   await expect(commandDialog.getByLabel('Button label')).toHaveValue('Unsaved demo draft');
   await expect(editor).not.toContainText('Other checks');
   await commandDialog.getByRole('button', { name: 'Done' }).click();
+  await expect.poll(() => commandDialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
   await page.setViewportSize({ width: 1024, height: 640 });
   await page.screenshot({ path: 'target/visual-captures/hs2-g9fmqj-demo-project-settings-narrow.png', fullPage: true });
 });
