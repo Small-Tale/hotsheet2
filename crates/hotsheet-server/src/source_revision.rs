@@ -92,14 +92,17 @@ impl SourceRevisionMonitor {
 
     fn source_revision(&self, root: &Path) -> io::Result<String> {
         let (files, fingerprint) = source_fingerprint(root)?;
-        if let Ok(cache) = self.cache.lock()
-            && cache.fingerprint.as_ref() == Some(&fingerprint)
-            && let Some(revision) = cache.revision.clone()
         {
-            return Ok(revision);
+            let cache = lock_or_recover(&self.cache);
+            if cache.fingerprint.as_ref() == Some(&fingerprint)
+                && let Some(revision) = cache.revision.clone()
+            {
+                return Ok(revision);
+            }
         }
         let revision = hash_source_files(root, &files);
-        if let Ok(mut cache) = self.cache.lock() {
+        {
+            let mut cache = lock_or_recover(&self.cache);
             cache.fingerprint = Some(fingerprint);
             cache.revision = revision.as_ref().ok().cloned();
         }
@@ -218,6 +221,13 @@ fn hash_source_files(root: &Path, files: &[PathBuf]) -> io::Result<String> {
         hash.update(contents);
     }
     Ok(format!("{REVISION_PREFIX}{:x}", hash.finalize()))
+}
+
+/// This file is also compiled into build scripts that cannot depend on `hotsheet-sync`,
+/// so it applies the same recover-on-poison policy (HS2-ZGQJZP) locally.
+fn lock_or_recover<T>(lock: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    lock.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 #[cfg(test)]

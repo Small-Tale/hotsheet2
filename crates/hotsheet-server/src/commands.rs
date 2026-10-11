@@ -1,6 +1,7 @@
 //! Bounded in-memory command execution/history. Exact argv comes from typed settings;
 //! output is cursor-pollable while the process runs and cancellation kills the child.
 
+use hotsheet_sync::LockExt;
 use hotsheet_ticketing::commands::{CommandDefinition, CommandKind};
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
@@ -67,16 +68,14 @@ impl CommandManager {
     }
     pub fn definitions_for(&self, project: &str) -> Vec<CommandDefinition> {
         self.definitions
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .get(project)
             .cloned()
             .unwrap_or_default()
     }
     pub fn replace_definitions(&self, definitions: Vec<CommandDefinition>) {
         self.definitions
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .insert(String::new(), definitions);
     }
     pub fn replace_project(
@@ -86,29 +85,26 @@ impl CommandManager {
         definitions: Vec<CommandDefinition>,
     ) {
         let project = project.into();
-        self.roots.lock().unwrap().insert(project.clone(), root);
+        self.roots.lock_or_recover().insert(project.clone(), root);
         self.definitions
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .insert(project, definitions);
     }
     pub fn list(&self) -> Vec<CommandRun> {
         self.list_for("")
     }
     pub fn list_all(&self) -> Vec<CommandRun> {
-        let runs = self.runs.lock().unwrap();
+        let runs = self.runs.lock_or_recover();
         self.order
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .iter()
             .filter_map(|id| runs.get(id).map(|run| run.view.clone()))
             .collect()
     }
     pub fn list_for(&self, project: &str) -> Vec<CommandRun> {
-        let runs = self.runs.lock().unwrap();
+        let runs = self.runs.lock_or_recover();
         self.order
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .iter()
             .filter_map(|id| {
                 runs.get(id)
@@ -121,7 +117,7 @@ impl CommandManager {
         self.get_for("", id, after)
     }
     pub fn get_for(&self, project: &str, id: &str, after: u64) -> Option<CommandRun> {
-        self.runs.lock().unwrap().get(id).and_then(|r| {
+        self.runs.lock_or_recover().get(id).and_then(|r| {
             if r.view.project != project {
                 return None;
             }
@@ -136,8 +132,7 @@ impl CommandManager {
     pub fn start_for(&self, project: &str, command_id: &str) -> Result<CommandRun, String> {
         let def = self
             .definitions
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .get(project)
             .and_then(|definitions| {
                 definitions
@@ -150,7 +145,7 @@ impl CommandManager {
             .cwd
             .as_deref()
             .map(PathBuf::from)
-            .or_else(|| self.roots.lock().unwrap().get(project).cloned())
+            .or_else(|| self.roots.lock_or_recover().get(project).cloned())
             .ok_or_else(|| "unknown command project".to_string())?;
         let (program, args) = execution(&def, &root)?;
         let mut child = hotsheet_ticketing::git::launch(program)
@@ -173,7 +168,7 @@ impl CommandManager {
             exit_code: None,
             output: vec![],
         };
-        self.runs.lock().unwrap().insert(
+        self.runs.lock_or_recover().insert(
             id.clone(),
             LiveRun {
                 view: view.clone(),
@@ -182,11 +177,11 @@ impl CommandManager {
             },
         );
         {
-            let mut order = self.order.lock().unwrap();
+            let mut order = self.order.lock_or_recover();
             order.push_front(id.clone());
             while order.len() > HISTORY_CAP {
                 if let Some(old) = order.pop_back() {
-                    self.runs.lock().unwrap().remove(&old);
+                    self.runs.lock_or_recover().remove(&old);
                 }
             }
         }
@@ -205,12 +200,12 @@ impl CommandManager {
         std::thread::spawn(move || {
             loop {
                 let result = {
-                    let mut c = handle.lock().unwrap();
+                    let mut c = handle.lock_or_recover();
                     c.try_wait()
                 };
                 match result {
                     Ok(Some(status)) => {
-                        let changed = if let Some(r) = runs.lock().unwrap().get_mut(&run_id) {
+                        let changed = if let Some(r) = runs.lock_or_recover().get_mut(&run_id) {
                             if r.view.state == "running" {
                                 r.view.state = "completed".into();
                             }
@@ -227,7 +222,7 @@ impl CommandManager {
                     }
                     Ok(None) => std::thread::sleep(std::time::Duration::from_millis(20)),
                     Err(_) => {
-                        let changed = if let Some(r) = runs.lock().unwrap().get_mut(&run_id) {
+                        let changed = if let Some(r) = runs.lock_or_recover().get_mut(&run_id) {
                             r.view.state = "failed".into();
                             r.child = None;
                             Some(r.view.clone())
@@ -249,7 +244,7 @@ impl CommandManager {
         let stream = stream.to_owned();
         std::thread::spawn(move || {
             for line in BufReader::new(reader).lines().map_while(Result::ok) {
-                if let Some(r) = runs.lock().unwrap().get_mut(&id) {
+                if let Some(r) = runs.lock_or_recover().get_mut(&id) {
                     r.next_seq += 1;
                     let seq = r.next_seq;
                     r.view.output.push(OutputLine {
@@ -269,14 +264,14 @@ impl CommandManager {
     }
     pub fn cancel_for(&self, project: &str, id: &str) -> Result<CommandRun, String> {
         let child = {
-            let runs = self.runs.lock().unwrap();
+            let runs = self.runs.lock_or_recover();
             runs.get(id)
                 .filter(|run| run.view.project == project)
                 .and_then(|r| r.child.clone())
                 .ok_or_else(|| "run is not active".to_string())?
         };
-        child.lock().unwrap().kill().map_err(|e| e.to_string())?;
-        let mut runs = self.runs.lock().unwrap();
+        child.lock_or_recover().kill().map_err(|e| e.to_string())?;
+        let mut runs = self.runs.lock_or_recover();
         let r = runs.get_mut(id).unwrap();
         r.view.state = "cancelled".into();
         let view = r.view.clone();

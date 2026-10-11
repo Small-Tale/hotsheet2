@@ -1,6 +1,7 @@
 //! Explicit, durable admission for experimental Jira field edits.
 
 use super::*;
+use hotsheet_sync::LockExt;
 use hotsheet_ticketing::ProviderError;
 use hotsheet_ticketing::provider_outbox::{DispatchState, OutboxOperation, project_pending_ticket};
 use serde_json::{Map, Value};
@@ -67,8 +68,7 @@ pub(super) async fn list_jira_operations(
         .as_ref()
         .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "write-behind is disabled"))?;
     let operations = outbox
-        .lock()
-        .map_err(lock_error)?
+        .lock_or_recover()
         .recent_for_connection(&connection_id, 1_000)
         .map_err(outbox_error)?;
     Ok(Json(
@@ -85,7 +85,7 @@ pub(super) async fn retry_jira_operation(
         .jira_outbox
         .as_ref()
         .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "write-behind is disabled"))?;
-    let mut guard = outbox.lock().map_err(lock_error)?;
+    let mut guard = outbox.lock_or_recover();
     let current = guard
         .get(&operation_id)
         .map_err(outbox_error)?
@@ -113,8 +113,7 @@ pub(super) async fn discard_jira_operation(
         .as_ref()
         .ok_or_else(|| ApiError::new(StatusCode::CONFLICT, "write-behind is disabled"))?;
     let current = outbox
-        .lock()
-        .map_err(lock_error)?
+        .lock_or_recover()
         .get(&operation_id)
         .map_err(outbox_error)?
         .filter(|operation| operation.connection_id == connection_id)
@@ -140,7 +139,7 @@ pub(super) async fn discard_jira_operation(
             .iter()
             .all(|(field, value)| remote.get(field) == Some(value))
     };
-    let mut guard = outbox.lock().map_err(lock_error)?;
+    let mut guard = outbox.lock_or_recover();
     if already_applied {
         guard.settle_applied(&operation_id).map_err(outbox_error)?;
     } else {
@@ -180,8 +179,7 @@ pub(super) async fn queue_jira_updates(
     for edit in request.operations {
         validate_edit(&edit)?;
         let existing = outbox
-            .lock()
-            .map_err(lock_error)?
+            .lock_or_recover()
             .get(&edit.operation_id)
             .map_err(outbox_error)?;
         let base = if let Some(existing) = existing {
@@ -208,14 +206,13 @@ pub(super) async fn queue_jira_updates(
             OutboxAdmission::new(edit.operation_id, &base, edit.patch).map_err(outbox_error)?,
         );
     }
-    let mut guard = outbox.lock().map_err(lock_error)?;
+    let mut guard = outbox.lock_or_recover();
     let admitted = guard.admit_batch(&admissions).map_err(outbox_error)?;
     drop(guard);
     let mut results = Vec::with_capacity(admitted.len());
     for operation in admitted {
         let pending = outbox
-            .lock()
-            .map_err(lock_error)?
+            .lock_or_recover()
             .pending_for_ticket(&operation.connection_id, &operation.native_id)
             .map_err(outbox_error)?;
         let base = pending.first().map_or_else(
@@ -269,8 +266,7 @@ pub async fn dispatch_jira_at(state: &AppState, now: i64) -> Result<usize, ApiEr
         return Ok(0);
     };
     let claimed = outbox
-        .lock()
-        .map_err(lock_error)?
+        .lock_or_recover()
         .claim_ready(now, 4)
         .map_err(outbox_error)?;
     for operation in &claimed {
@@ -339,11 +335,7 @@ fn dispatch_one(
             .all(|(field, value)| remote_value.get(field) == Some(value))
         {
             outbox
-                .lock()
-                .map_err(|_| ProviderError::Conflict {
-                    ticket: operation.native_id.clone(),
-                    message: "outbox lock poisoned".into(),
-                })?
+                .lock_or_recover()
                 .confirm(&operation.operation_id)
                 .map_err(|error| ProviderError::Conflict {
                     ticket: operation.native_id.clone(),
@@ -360,11 +352,7 @@ fn dispatch_one(
         }
         if !conflict.is_empty() {
             outbox
-                .lock()
-                .map_err(|_| ProviderError::Conflict {
-                    ticket: operation.native_id.clone(),
-                    message: "outbox lock poisoned".into(),
-                })?
+                .lock_or_recover()
                 .record_conflict(&operation.operation_id, &Value::Object(conflict))
                 .map_err(|error| ProviderError::Conflict {
                     ticket: operation.native_id.clone(),
@@ -380,11 +368,7 @@ fn dispatch_one(
             .all(|(field, value)| written_value.get(field) == Some(value))
         {
             outbox
-                .lock()
-                .map_err(|_| ProviderError::Conflict {
-                    ticket: operation.native_id.clone(),
-                    message: "outbox lock poisoned".into(),
-                })?
+                .lock_or_recover()
                 .needs_attention(
                     &operation.operation_id,
                     "provider acknowledgement did not contain local intent",
@@ -397,11 +381,7 @@ fn dispatch_one(
             return Ok(());
         }
         outbox
-            .lock()
-            .map_err(|_| ProviderError::Conflict {
-                ticket: operation.native_id.clone(),
-                message: "outbox lock poisoned".into(),
-            })?
+            .lock_or_recover()
             .confirm(&operation.operation_id)
             .map_err(|error| ProviderError::Conflict {
                 ticket: operation.native_id.clone(),
@@ -411,7 +391,7 @@ fn dispatch_one(
     })();
     if let Err(error) = outcome {
         let epoch = now_epoch;
-        let mut guard = outbox.lock().map_err(lock_error)?;
+        let mut guard = outbox.lock_or_recover();
         match error {
             ProviderError::RateLimited {
                 retry_after_seconds,
@@ -514,13 +494,6 @@ fn outbox_error(error: OutboxError) -> ApiError {
         }
     };
     ApiError::new(status, error.to_string())
-}
-
-fn lock_error<T>(_error: std::sync::PoisonError<T>) -> ApiError {
-    ApiError::new(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "provider outbox lock poisoned",
-    )
 }
 
 fn internal_json_error(error: serde_json::Error) -> ApiError {

@@ -1,5 +1,6 @@
 //! Disposable, bounded cache for cropped still-image renditions.
 
+use hotsheet_sync::LockExt;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -14,9 +15,7 @@ const MAX_BYTES: u64 = 256 * 1024 * 1024;
 /// all writers, so publication and eviction must share a single lock.
 fn writer_lock() -> std::sync::MutexGuard<'static, ()> {
     static WRITER: Mutex<()> = Mutex::new(());
-    WRITER
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+    WRITER.lock_or_recover()
 }
 
 fn path(root: &Path, key: &str) -> PathBuf {

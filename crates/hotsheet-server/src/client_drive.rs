@@ -1,6 +1,7 @@
 //! Client-owned AI connections: prepare once, send sequential turns, and expose an
 //! interrupt action only when the resolved drive implements it (HS2-5DGFG2).
 
+use hotsheet_sync::LockExt;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::PathBuf;
@@ -334,8 +335,7 @@ impl ClientDriveManager {
             }),
         });
         self.connections
-            .lock()
-            .map_err(|_| ClientDriveError::Unavailable)?
+            .lock_or_recover()
             .insert(id, connection.clone());
         // Best effort: without the ledger entry a restart falls back to lease expiry.
         if let Err(error) = self.update_catalog(|catalog| {
@@ -352,7 +352,8 @@ impl ClientDriveManager {
         }
         if let Some(session_id) = session_id {
             if let Err(error) = self.record_session(&connection, session_id) {
-                if let Ok(mut connections) = self.connections.lock() {
+                {
+                    let mut connections = self.connections.lock_or_recover();
                     connections.remove(&connection.id);
                 }
                 return Err(error);
@@ -371,14 +372,8 @@ impl ClientDriveManager {
         let connection = self
             .connection(id)?
             .ok_or_else(|| ClientDriveError::NotFound(id.into()))?;
-        let mut active_sessions = self
-            .active_sessions
-            .lock()
-            .map_err(|_| ClientDriveError::Unavailable)?;
-        let mut state = connection
-            .state
-            .lock()
-            .map_err(|_| ClientDriveError::Unavailable)?;
+        let mut active_sessions = self.active_sessions.lock_or_recover();
+        let mut state = connection.state.lock_or_recover();
         if state.closing {
             return Err(ClientDriveError::NotFound(id.into()));
         }
@@ -423,12 +418,8 @@ impl ClientDriveManager {
         result: &Result<TurnDone, String>,
     ) -> Option<String> {
         let connection = &job.connection;
-        let Ok(mut active_sessions) = self.active_sessions.lock() else {
-            return None;
-        };
-        let Ok(mut state) = connection.state.lock() else {
-            return None;
-        };
+        let mut active_sessions = self.active_sessions.lock_or_recover();
+        let mut state = connection.state.lock_or_recover();
         let ended = state.closing.then(|| connection.worker_id.clone());
         if let Some(worker) = &ended {
             self.forget_live_drive(worker);
@@ -450,10 +441,8 @@ impl ClientDriveManager {
         let session_id = state.session_id.clone();
         drop(state);
         if let Some(session_id) = session_id {
-            if let Err(error) = self.record_session(connection, session_id)
-                && let Ok(mut state) = connection.state.lock()
-            {
-                state.last_error = Some(error.to_string());
+            if let Err(error) = self.record_session(connection, session_id) {
+                connection.state.lock_or_recover().last_error = Some(error.to_string());
             }
         }
         ended
@@ -463,20 +452,14 @@ impl ClientDriveManager {
     /// checkout. A busy drive is removed only after its interrupt signal is accepted; the
     /// running job retains its `Arc` so `finish_turn` can still release session ownership.
     pub fn close(&self, project: &str, id: &str) -> Result<DriveClosed, ClientDriveError> {
-        let mut connections = self
-            .connections
-            .lock()
-            .map_err(|_| ClientDriveError::Unavailable)?;
+        let mut connections = self.connections.lock_or_recover();
         let Some(connection) = connections.get(id).cloned() else {
             return Ok(DriveClosed::NotFound);
         };
         if connection.project != project {
             return Ok(DriveClosed::NotFound);
         }
-        let mut state = connection
-            .state
-            .lock()
-            .map_err(|_| ClientDriveError::Unavailable)?;
+        let mut state = connection.state.lock_or_recover();
         if state.busy {
             if !connection.drive.supports_interrupt() {
                 return Err(ClientDriveError::Unsupported(format!(
@@ -515,10 +498,7 @@ impl ClientDriveManager {
                 "connection '{id}' does not expose an interrupt action"
             )));
         }
-        let state = connection
-            .state
-            .lock()
-            .map_err(|_| ClientDriveError::Unavailable)?;
+        let state = connection.state.lock_or_recover();
         let control = state.control.as_ref().ok_or_else(|| {
             ClientDriveError::Conflict(format!("connection '{id}' has no running turn"))
         })?;
@@ -527,9 +507,7 @@ impl ClientDriveManager {
     }
 
     pub fn list(&self) -> Vec<ClientConnectionInfo> {
-        let Ok(connections) = self.connections.lock() else {
-            return Vec::new();
-        };
+        let connections = self.connections.lock_or_recover();
         let mut infos = connections
             .values()
             .map(|connection| connection_info(connection))
@@ -545,9 +523,7 @@ impl ClientDriveManager {
     }
 
     pub fn sessions(&self, project: &str) -> Vec<ClientSessionInfo> {
-        let Ok(catalog) = self.sessions.lock() else {
-            return Vec::new();
-        };
+        let catalog = self.sessions.lock_or_recover();
         let mut sessions = catalog
             .sessions
             .iter()
@@ -595,9 +571,7 @@ impl ClientDriveManager {
     /// once so their claims can be released (HS2-VFXEF4).
     pub fn take_orphaned_drives(&self) -> Vec<LiveDrive> {
         self.orphaned_drives
-            .lock()
-            .map(|mut drives| std::mem::take(&mut *drives))
-            .unwrap_or_default()
+            .with_lock(|drives| std::mem::take(&mut *drives))
     }
 
     /// Apply `change` to the session catalog and persist it atomically when persistence is on.
@@ -605,10 +579,7 @@ impl ClientDriveManager {
         &self,
         change: impl FnOnce(&mut SessionCatalog),
     ) -> Result<(), ClientDriveError> {
-        let mut catalog = self
-            .sessions
-            .lock()
-            .map_err(|_| ClientDriveError::Unavailable)?;
+        let mut catalog = self.sessions.lock_or_recover();
         let mut next = catalog.clone();
         change(&mut next);
         if let Some(path) = &self.session_path {
@@ -634,10 +605,9 @@ impl ClientDriveManager {
     }
 
     fn connection(&self, id: &str) -> Result<Option<Arc<ClientConnection>>, ClientDriveError> {
-        self.connections
-            .lock()
-            .map(|connections| connections.get(id).cloned())
-            .map_err(|_| ClientDriveError::Unavailable)
+        Ok(self
+            .connections
+            .with_lock(|connections| connections.get(id).cloned()))
     }
 
     fn stored_session(
@@ -647,8 +617,7 @@ impl ClientDriveManager {
         session_id: &str,
     ) -> Option<StoredClientSession> {
         self.sessions
-            .lock()
-            .ok()?
+            .lock_or_recover()
             .sessions
             .iter()
             .find_map(|session| {
@@ -715,7 +684,7 @@ impl ClientTurnJob {
 }
 
 fn connection_info(connection: &ClientConnection) -> ClientConnectionInfo {
-    let state = connection.state.lock().ok();
+    let state = connection.state.lock_or_recover();
     let mut actions = vec!["send_turn".into()];
     if connection.drive.supports_interrupt() {
         actions.push("interrupt".into());
@@ -727,10 +696,10 @@ fn connection_info(connection: &ClientConnection) -> ClientConnectionInfo {
         project: connection.project.clone(),
         source: connection.source.clone(),
         role: "main".into(),
-        busy: state.as_ref().is_some_and(|state| state.busy),
+        busy: state.busy,
         actions,
-        session_id: state.as_ref().and_then(|state| state.session_id.clone()),
-        last_error: state.and_then(|state| state.last_error.clone()),
+        session_id: state.session_id.clone(),
+        last_error: state.last_error.clone(),
         model: connection.model.clone(),
         effort: connection.effort.clone(),
     }
@@ -768,7 +737,7 @@ mod tests {
 
     impl ClientDriveBackend for StubBackend {
         fn prepare(&self, request: PrepareDrive) -> Result<Arc<dyn PreparedClientDrive>, String> {
-            self.envs.lock().unwrap().push(request.env.clone());
+            self.envs.lock_or_recover().push(request.env.clone());
             Ok(Arc::new(StubDrive {
                 tool: request.tool,
                 supports_interrupt: self.supports_interrupt,
@@ -898,7 +867,7 @@ mod tests {
             Some("fake-connection-1".into()),
             "the interrupted turn ends the closed drive's session"
         );
-        assert!(manager.active_sessions.lock().unwrap().is_empty());
+        assert!(manager.active_sessions.lock_or_recover().is_empty());
     }
 
     #[test]
@@ -1007,7 +976,7 @@ mod tests {
             .create_or_attach(prepare("/project"), Some("connection-1".into()), None)
             .unwrap();
         assert_eq!(
-            backend.envs.lock().unwrap().as_slice(),
+            backend.envs.lock_or_recover().as_slice(),
             // The drive is an AI session, so it also acts as `ai` (HS2-RD4M29).
             [vec![
                 "HOTSHEET_WORKER_ID=fake-connection-1".to_string(),
@@ -1019,7 +988,7 @@ mod tests {
         manager
             .create_or_attach(prepare("/project"), Some("connection-1".into()), None)
             .unwrap();
-        assert_eq!(backend.envs.lock().unwrap().len(), 1);
+        assert_eq!(backend.envs.lock_or_recover().len(), 1);
 
         // Turns on an open drive keep the session (and its claims) alive.
         for _ in 0..2 {

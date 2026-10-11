@@ -8,6 +8,7 @@
 //! short budget. Past the budget the caller answers from the last completed scan, or —
 //! before any scan has completed — from the index.
 
+use hotsheet_sync::LockExt;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -93,7 +94,7 @@ impl HealthScan {
         }
         // Timed out, or the scan task died without reporting (it panicked). Either way,
         // answer from what is already known.
-        match self.state.lock().ok().and_then(|state| state.last.clone()) {
+        match self.state.with_lock(|state| state.last.clone()) {
             Some(last) => Resolution::Cached(last),
             None => Resolution::Pending,
         }
@@ -103,10 +104,7 @@ impl HealthScan {
     where
         F: FnOnce() -> ScanOutcome + Send + 'static,
     {
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut state = self.state.lock_or_recover();
         // A live scan is joined. A receiver whose sender is gone belongs to a scan that
         // panicked before clearing itself; replace it rather than wait on it forever.
         if let Some(receiver) = &state.in_flight
@@ -121,10 +119,7 @@ impl HealthScan {
         let _detached = tokio::task::spawn_blocking(move || {
             let outcome = scan();
             {
-                let mut state = coordinator
-                    .state
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let mut state = coordinator.state.lock_or_recover();
                 if let Ok(listing) = &outcome {
                     state.last = Some(listing.clone());
                 }
@@ -191,7 +186,7 @@ mod tests {
         let blocked = wait.clone();
         let first = scan
             .resolve(move || {
-                blocked.lock().unwrap().recv().unwrap();
+                blocked.lock_or_recover().recv().unwrap();
                 listing(7)
             })
             .await;
@@ -225,7 +220,7 @@ mod tests {
         let blocked = wait.clone();
         let cached = scan
             .resolve(move || {
-                blocked.lock().unwrap().recv().unwrap();
+                blocked.lock_or_recover().recv().unwrap();
                 listing(9)
             })
             .await;
@@ -272,7 +267,10 @@ mod tests {
             Resolution::Fresh(Err(error)) => assert_eq!(error, expected),
             other => panic!("expected a fresh failure, got {other:?}"),
         }
-        assert_eq!(scan.state.lock().unwrap().last.as_ref().unwrap().tickets, 4);
+        assert_eq!(
+            scan.state.lock_or_recover().last.as_ref().unwrap().tickets,
+            4
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

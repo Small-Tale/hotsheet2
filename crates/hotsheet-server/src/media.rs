@@ -1,3 +1,4 @@
+use hotsheet_sync::LockExt;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -142,9 +143,7 @@ pub fn cache_video_poster(root: &Path, bytes: &[u8], poster: &[u8]) -> Result<()
     // content hash, shared by every server state in this process; one lock serializes the
     // stage-and-persist publication across all of them. Writes are rare and tiny.
     static POSTER_WRITER: Mutex<()> = Mutex::new(());
-    let _writer = POSTER_WRITER
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _writer = POSTER_WRITER.lock_or_recover();
     let path = video_poster_cache_path(root, bytes);
     let parent = path
         .parent()

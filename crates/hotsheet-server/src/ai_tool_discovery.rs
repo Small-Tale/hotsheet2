@@ -97,6 +97,7 @@ impl AiToolDiscoveryCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hotsheet_sync::LockExt;
 
     fn tool(id: &str) -> AiToolDescriptor {
         AiToolDescriptor {
@@ -248,7 +249,7 @@ mod tests {
                 let barrier = barrier.clone();
                 std::thread::spawn(move || {
                     barrier.wait();
-                    let mut cache = cache.lock().unwrap();
+                    let mut cache = cache.lock_or_recover();
                     cache.discover(now, 0, AI_TOOL_DISCOVERY_TTL, false, |_, _| {
                         scans.fetch_add(1, Ordering::SeqCst);
                         std::thread::sleep(Duration::from_millis(50));

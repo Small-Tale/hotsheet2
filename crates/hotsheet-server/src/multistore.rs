@@ -8,6 +8,7 @@
 //! per-store fs-watcher, the scoped write routes, and reconciling the machine-server
 //! instance registry (HS2-59) with N hosted projects are the next increments.
 
+use hotsheet_sync::LockExt;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -174,8 +175,7 @@ impl StoreHost {
     /// Serialize cold initialization of one source without locking unrelated stores.
     pub fn initialization_lock(&self, id: &str) -> Arc<Mutex<()>> {
         self.initializing
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .entry(id.to_string())
             .or_default()
             .clone()
@@ -184,7 +184,8 @@ impl StoreHost {
     /// Register (or replace) a served store, returning its URL id.
     pub fn register(&self, entry: StoreEntry) -> String {
         let id = store_url_id(&entry.store);
-        if let Ok(mut map) = self.stores.lock() {
+        {
+            let mut map = self.stores.lock_or_recover();
             map.insert(id.clone(), entry);
         }
         id
@@ -192,12 +193,12 @@ impl StoreHost {
 
     /// Stop serving a store, returning its entry (HS2-ARJ9J1).
     pub fn unregister(&self, id: &str) -> Option<StoreEntry> {
-        self.stores.lock().ok()?.remove(id)
+        self.stores.lock_or_recover().remove(id)
     }
 
     /// The entry for a URL id, if hosted.
     pub fn get(&self, id: &str) -> Option<StoreEntry> {
-        let entry = self.stores.lock().ok()?.get(id).cloned()?;
+        let entry = self.stores.lock_or_recover().get(id).cloned()?;
         let current_id = entry.store.metadata().ok()?.instance_id;
         if entry
             .instance_id
@@ -211,10 +212,7 @@ impl StoreHost {
 
     /// Whether a store with this canonical root is already hosted.
     pub fn contains(&self, id: &str) -> bool {
-        self.stores
-            .lock()
-            .map(|m| m.contains_key(id))
-            .unwrap_or(false)
+        self.stores.with_lock(|m| m.contains_key(id))
     }
 
     /// Lightweight `(id, root)` pairs for every hosted store, read without opening or
@@ -223,9 +221,7 @@ impl StoreHost {
     /// during disk I/O — which otherwise serialized a single-ticket detail read behind an
     /// unrelated all-stores scan (HS2-P6N7FR).
     pub fn locations(&self) -> Vec<(String, PathBuf)> {
-        let Ok(map) = self.stores.lock() else {
-            return Vec::new();
-        };
+        let map = self.stores.lock_or_recover();
         map.iter()
             .map(|(id, e)| (id.clone(), e.store.root().to_path_buf()))
             .collect()
@@ -234,9 +230,7 @@ impl StoreHost {
     /// `(id, store)` clones sorted by id. Stores are cheap to clone, so later disk I/O
     /// never holds the `stores` lock (HS2-P6N7FR).
     fn snapshot(&self) -> Vec<(String, FsStore)> {
-        let Ok(map) = self.stores.lock() else {
-            return Vec::new();
-        };
+        let map = self.stores.lock_or_recover();
         let mut entries: Vec<(String, FsStore)> = map
             .iter()
             .map(|(id, e)| (id.clone(), e.store.clone()))
@@ -277,7 +271,7 @@ impl StoreHost {
 
     /// How many stores are hosted.
     pub fn count(&self) -> usize {
-        self.stores.lock().map(|m| m.len()).unwrap_or(0)
+        self.stores.with_lock(|m| m.len())
     }
 
     /// Resolve a ULID to its single **live** instance across every hosted store,
@@ -286,7 +280,8 @@ impl StoreHost {
     /// how a cross-store `blocked_by` / `duplicate_of` / mention resolves (HS2-S4H2AM).
     pub fn resolve(&self, id: &Ulid) -> Result<Option<(String, Ticket)>, StoreError> {
         let mut reg = StoreRegistry::new();
-        if let Ok(map) = self.stores.lock() {
+        {
+            let map = self.stores.lock_or_recover();
             for e in map.values() {
                 reg.add(e.store.clone());
             }

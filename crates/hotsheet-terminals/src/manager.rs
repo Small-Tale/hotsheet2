@@ -4,6 +4,7 @@
 //! server restart** is a follow-on (it wraps this manager in a separate process); this is
 //! the in-process host.
 
+use hotsheet_sync::LockExt;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -27,7 +28,7 @@ impl TerminalManager {
     /// previous one has exited. An already-live terminal is returned as-is (its `spec` arg is
     /// ignored) so many viewers share one stream.
     pub fn get_or_spawn(&self, key: TermKey, spec: TermSpec) -> Result<Arc<Terminal>, TermError> {
-        let mut map = self.terminals.lock().map_err(|_| poisoned())?;
+        let mut map = self.terminals.lock_or_recover();
         if let Some(t) = map.get(&key) {
             if t.is_alive() {
                 return Ok(t.clone());
@@ -40,28 +41,24 @@ impl TerminalManager {
 
     /// The live terminal for `key`, if any.
     pub fn get(&self, key: &TermKey) -> Option<Arc<Terminal>> {
-        self.terminals.lock().ok()?.get(key).cloned()
+        self.terminals.lock_or_recover().get(key).cloned()
     }
 
     /// The keys of all tracked terminals, sorted.
     pub fn list(&self) -> Vec<TermKey> {
-        let mut keys: Vec<TermKey> = self
-            .terminals
-            .lock()
-            .map(|m| m.keys().cloned().collect())
-            .unwrap_or_default();
+        let mut keys: Vec<TermKey> = self.terminals.with_lock(|m| m.keys().cloned().collect());
         keys.sort();
         keys
     }
 
     /// How many terminals are tracked.
     pub fn count(&self) -> usize {
-        self.terminals.lock().map(|m| m.len()).unwrap_or(0)
+        self.terminals.with_lock(|m| m.len())
     }
 
     /// Kill and forget the terminal for `key`. Returns whether one was present.
     pub fn kill(&self, key: &TermKey) -> Result<bool, TermError> {
-        let removed = self.terminals.lock().map_err(|_| poisoned())?.remove(key);
+        let removed = self.terminals.lock_or_recover().remove(key);
         match removed {
             Some(t) => {
                 let _ = t.kill(); // best-effort; a dead child's kill is harmless
@@ -74,17 +71,11 @@ impl TerminalManager {
     /// Drop terminals whose child has exited (a housekeeping sweep). Returns how many were
     /// reaped.
     pub fn reap(&self) -> usize {
-        let Ok(mut map) = self.terminals.lock() else {
-            return 0;
-        };
+        let mut map = self.terminals.lock_or_recover();
         let before = map.len();
         map.retain(|_, t| t.is_alive());
         before - map.len()
     }
-}
-
-fn poisoned() -> TermError {
-    TermError::Pty("terminal manager lock poisoned".into())
 }
 
 #[cfg(test)]

@@ -3,6 +3,7 @@
 //! machine-local PTYs) so it survives a page reload, a project restore, and a server restart,
 //! and every client of that server sees the same name.
 
+use hotsheet_sync::LockExt;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
@@ -56,9 +57,7 @@ pub fn normalize(name: Option<&str>) -> Result<Option<String>, String> {
 
 /// Save (`Some`) or clear (`None`) one terminal's name. Returns whether the stored value changed.
 pub fn set(settings: &Settings, id: &str, name: Option<&str>) -> Result<bool, SettingsError> {
-    let _guard = WRITE_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = WRITE_LOCK.lock_or_recover();
     let mut names = all(settings)?;
     let changed = match name {
         Some(name) => names.insert(id.to_owned(), name.to_owned()).as_deref() != Some(name),
@@ -83,9 +82,7 @@ pub fn retain_live<S: AsRef<str>>(
     settings: &Settings,
     live: &[S],
 ) -> Result<Vec<String>, SettingsError> {
-    let _guard = WRITE_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = WRITE_LOCK.lock_or_recover();
     let mut names = all(settings)?;
     let pruned: Vec<String> = names
         .keys()

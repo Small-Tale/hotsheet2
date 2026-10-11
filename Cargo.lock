@@ -1173,6 +1173,7 @@ dependencies = [
  "hotsheet-mcp",
  "hotsheet-model",
  "hotsheet-plugins",
+ "hotsheet-sync",
  "hotsheet-terminals",
  "hotsheet-ticketing",
  "hotsheet-tls",
@@ -1202,9 +1203,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotsheet-sync"
+version = "0.0.0"
+
+[[package]]
 name = "hotsheet-terminals"
 version = "0.0.0"
 dependencies = [
+ "hotsheet-sync",
  "libc",
  "portable-pty",
  "serde",

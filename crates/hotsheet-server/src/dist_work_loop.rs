@@ -13,6 +13,7 @@
 //! clones with no AI tool in the loop. The live drive wiring itself (which spawns real
 //! tools and can't be unit-tested) is the remaining live-only piece (HS2-1TY7GC).
 
+use hotsheet_sync::LockExt;
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
@@ -241,7 +242,8 @@ struct DriveGuard {
 
 impl Drop for DriveGuard {
     fn drop(&mut self) {
-        if let Ok(mut r) = self.registry.lock() {
+        {
+            let mut r = self.registry.lock_or_recover();
             r.unregister(&self.id);
         }
     }
@@ -290,7 +292,8 @@ fn drive_one_ticket(
     // Advertise this ticket as being driven on the SHARED registry (GET /connections), busy
     // for the turn; the guard removes it when the turn ends (HS2-TCV3BF).
     let _guard = ctx.drive_registry.clone().map(|reg| {
-        if let Ok(mut r) = reg.lock() {
+        {
+            let mut r = reg.lock_or_recover();
             r.register(hotsheet_aitools::Connection {
                 id: conn.clone(),
                 project: store.root().display().to_string(),
@@ -414,14 +417,12 @@ fn worker_session_key(store: &FsStore, id: &hotsheet_model::Ulid) -> String {
 fn worker_resume(ctx: &LiveDriveCtx, key: &str) -> Option<String> {
     ctx.worker_sessions
         .as_ref()
-        .and_then(|sessions| sessions.lock().ok()?.get(key).cloned())
+        .and_then(|sessions| sessions.lock_or_recover().get(key).cloned())
 }
 
 fn remember_worker_session(ctx: &LiveDriveCtx, key: String, session_id: String) {
-    if let Some(sessions) = &ctx.worker_sessions
-        && let Ok(mut sessions) = sessions.lock()
-    {
-        sessions.insert(key, session_id);
+    if let Some(sessions) = &ctx.worker_sessions {
+        sessions.lock_or_recover().insert(key, session_id);
     }
 }
 
@@ -814,7 +815,7 @@ mod tests {
         let sink_events = captured.clone();
         let ctx = LiveDriveCtx {
             activity_sink: Some(std::sync::Arc::new(move |_store, event| {
-                sink_events.lock().unwrap().push(event);
+                sink_events.lock_or_recover().push(event);
             })),
             ..Default::default()
         };
@@ -830,7 +831,7 @@ mod tests {
             serde_json::json!({"name": "shell"}),
         );
 
-        let events = captured.lock().unwrap();
+        let events = captured.lock_or_recover();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].tool, "codex");
         assert_eq!(events[0].ticket, Some(ticket.to_string()));
@@ -848,7 +849,7 @@ mod tests {
         let sink_events = captured.clone();
         let ctx = LiveDriveCtx {
             activity_sink: Some(std::sync::Arc::new(move |_store, event| {
-                sink_events.lock().unwrap().push(event);
+                sink_events.lock_or_recover().push(event);
             })),
             ..Default::default()
         };
@@ -887,7 +888,7 @@ mod tests {
             &serde_json::json!({}),
         );
 
-        let events = captured.lock().unwrap();
+        let events = captured.lock_or_recover();
         assert_eq!(events.len(), 2, "unknown native sources are ignored");
         assert_eq!(events[0].tool, "codex");
         assert_eq!(

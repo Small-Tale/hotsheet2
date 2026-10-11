@@ -8,6 +8,7 @@
 //! subscription that names no checkout (an older client) pins every store, so version skew can
 //! never unhost a store a client still shows.
 
+use hotsheet_sync::LockExt;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -86,7 +87,8 @@ impl Presence {
         now: Instant,
     ) -> PresenceGuard {
         let key = Self::key(checkout, client);
-        if let Ok(mut leases) = self.leases.lock() {
+        {
+            let mut leases = self.leases.lock_or_recover();
             let lease = leases.entry(key.clone()).or_default();
             match channel {
                 Channel::Socket => lease.sockets += 1,
@@ -102,9 +104,7 @@ impl Presence {
     }
 
     fn end_at(&self, key: &(String, String), channel: Channel, now: Instant) {
-        if let Ok(mut leases) = self.leases.lock()
-            && let Some(lease) = leases.get_mut(key)
-        {
+        if let Some(lease) = self.leases.lock_or_recover().get_mut(key) {
             match channel {
                 Channel::Socket => lease.sockets = lease.sockets.saturating_sub(1),
                 Channel::Poll => lease.polls = lease.polls.saturating_sub(1),
@@ -115,7 +115,8 @@ impl Presence {
 
     /// A client closed a project: its lease on that checkout ends now, not after the gap.
     pub fn close(&self, checkout: &str, client: Option<&str>) {
-        if let Ok(mut leases) = self.leases.lock() {
+        {
+            let mut leases = self.leases.lock_or_recover();
             leases.remove(&Self::key(Some(checkout), client));
         }
     }
@@ -127,7 +128,8 @@ impl Presence {
 
     fn live_at(&self, now: Instant) -> LiveCheckouts {
         let mut live = LiveCheckouts::default();
-        if let Ok(mut leases) = self.leases.lock() {
+        {
+            let mut leases = self.leases.lock_or_recover();
             leases.retain(|_, lease| lease.live(now));
             for (checkout, _) in leases.keys() {
                 if checkout == UNTAGGED {

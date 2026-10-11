@@ -19,6 +19,7 @@ path = "src/bin/fake_agent.rs"
 
 [dependencies]
 portable-pty.workspace = true
+hotsheet-sync.workspace = true
 thiserror.workspace = true
 # A live output fan-out so a WS viewer streams new bytes as they arrive (HS2-XTTTMV).
 # tokio also drives the detached broker's Unix-socket server (HS2-8HHFHN); `io-util` for the

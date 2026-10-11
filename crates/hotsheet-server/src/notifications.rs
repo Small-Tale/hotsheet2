@@ -1,3 +1,4 @@
+use hotsheet_sync::LockExt;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -45,7 +46,7 @@ pub struct NotificationHub {
 }
 impl NotificationHub {
     pub fn publish(&self, n: NewNotification) -> Notification {
-        let mut items = self.items.lock().unwrap();
+        let mut items = self.items.lock_or_recover();
         if let Some(key) = &n.dedupe_key {
             if let Some(old) = items
                 .iter()
@@ -77,8 +78,7 @@ impl NotificationHub {
         recipient: Option<&str>,
     ) -> Vec<Notification> {
         self.items
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .iter()
             .filter(|n| {
                 checkout.is_none_or(|v| n.checkout.as_deref() == Some(v))
@@ -90,7 +90,7 @@ impl NotificationHub {
             .collect()
     }
     pub fn acknowledge(&self, id: &str) -> Option<Notification> {
-        let mut items = self.items.lock().unwrap();
+        let mut items = self.items.lock_or_recover();
         let n = items.iter_mut().find(|v| v.id == id)?;
         n.acknowledged = true;
         Some(n.clone())

@@ -2,6 +2,7 @@
 //! A Keychain approval belongs to the process, not to every provider read. The
 //! registry file is non-secret and changes whenever Hot Sheet replaces/deletes a key.
 
+use hotsheet_sync::LockExt;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -48,10 +49,7 @@ impl<S: SecretStore> CachedSecretStore<S> {
     }
 
     fn state(&self) -> Result<std::sync::MutexGuard<'_, CacheState>, SecretError> {
-        let mut state =
-            self.cache.0.lock().map_err(|_| {
-                SecretError::Backend("managed credential cache lock poisoned".into())
-            })?;
+        let mut state = self.cache.0.lock_or_recover();
         let revision = self.revision()?;
         if state.revision != revision {
             state.values.clear();
@@ -114,17 +112,16 @@ mod tests {
     impl SecretStore for CountingStore {
         fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
             self.values
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .insert(account.into(), secret.into());
             Ok(())
         }
         fn get(&self, account: &str) -> Result<Option<String>, SecretError> {
             self.reads.fetch_add(1, Ordering::SeqCst);
-            Ok(self.values.lock().unwrap().get(account).cloned())
+            Ok(self.values.lock_or_recover().get(account).cloned())
         }
         fn delete(&self, account: &str) -> Result<bool, SecretError> {
-            Ok(self.values.lock().unwrap().remove(account).is_some())
+            Ok(self.values.lock_or_recover().remove(account).is_some())
         }
     }
 

@@ -31,6 +31,7 @@ pub mod tls;
 pub mod tts;
 pub mod turn_stream;
 
+use hotsheet_sync::LockExt;
 use std::collections::HashSet;
 use std::path::Path as FsPath;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -469,14 +470,10 @@ impl AppState {
     pub fn release_instances(&self) {
         let guards: Vec<_> = self
             .instance_guards
-            .lock()
-            .map(|mut g| g.drain().map(|(_, guard)| guard).collect())
-            .unwrap_or_default();
+            .with_lock(|g| g.drain().map(|(_, guard)| guard).collect());
         let locks: Vec<_> = self
             .writer_locks
-            .lock()
-            .map(|mut w| w.drain().map(|(_, lock)| lock).collect())
-            .unwrap_or_default();
+            .with_lock(|w| w.drain().map(|(_, lock)| lock).collect());
         drop((guards, locks));
     }
 
@@ -508,22 +505,14 @@ impl AppState {
                 count: commands,
             });
         }
-        let setup_refreshes = self
-            .setup_refreshes
-            .lock()
-            .map(|set| set.len())
-            .unwrap_or(1);
+        let setup_refreshes = self.setup_refreshes.with_lock(|set| set.len());
         if setup_refreshes > 0 {
             blockers.push(QuiescenceBlocker {
                 kind: "setup_refreshes",
                 count: setup_refreshes,
             });
         }
-        let driven_turns = self
-            .drive_registry
-            .lock()
-            .map(|reg| reg.count())
-            .unwrap_or(1);
+        let driven_turns = self.drive_registry.with_lock(|reg| reg.count());
         if driven_turns > 0 {
             blockers.push(QuiescenceBlocker {
                 kind: "driven_turns",
@@ -551,9 +540,7 @@ impl AppState {
         }
         let github_auth = self
             .github_auth_sessions
-            .lock()
-            .map(|sessions| sessions.len())
-            .unwrap_or(1);
+            .with_lock(|sessions| sessions.len());
         if github_auth > 0 {
             blockers.push(QuiescenceBlocker {
                 kind: "github_auth",
@@ -741,7 +728,7 @@ impl AppState {
         }));
         // Re-seed the bridge with the loaded rules (keeping the on_pending observer).
         self.permissions.reseed_rules(rules);
-        let mut paths = self.permission_rule_paths.lock().unwrap();
+        let mut paths = self.permission_rule_paths.lock_or_recover();
         paths.insert(String::new(), path.clone());
         paths.insert(project, path);
         drop(paths);
@@ -801,14 +788,16 @@ impl AppState {
 
     /// Register the background sync loop's kick channel (called by [`sync_loop::spawn_sync_loop`]).
     pub fn set_sync_kicker(&self, tx: std::sync::mpsc::Sender<()>) {
-        if let Ok(mut k) = self.sync_kick.lock() {
+        {
+            let mut k = self.sync_kick.lock_or_recover();
             *k = Some(tx);
         }
     }
 
     /// Nudge the sync loop to run now (best-effort; a no-op if the loop isn't running).
     fn kick_sync(&self) {
-        if let Ok(k) = self.sync_kick.lock() {
+        {
+            let k = self.sync_kick.lock_or_recover();
             if let Some(tx) = k.as_ref() {
                 let _ = tx.send(());
             }
@@ -896,7 +885,8 @@ impl AppState {
     /// Set the URL injected into interactively launched tools. The real server calls this
     /// after binding; tests may use it without publishing machine discovery files.
     pub fn set_terminal_server_url(&self, url: String) {
-        if let Ok(mut slot) = self.terminal_server_url.lock() {
+        {
+            let mut slot = self.terminal_server_url.lock_or_recover();
             *slot = Some(url);
         }
     }
@@ -914,7 +904,7 @@ impl AppState {
             .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
         let id = multistore::store_url_id(&store);
         let initialization = self.host.initialization_lock(&id);
-        let _initializing = initialization.lock().unwrap();
+        let _initializing = initialization.lock_or_recover();
         if self.host.contains(&id) {
             return Ok(false);
         }
@@ -939,8 +929,8 @@ impl AppState {
         self.host.register(entry.clone());
         prewarm_corrupt_tickets(entry.clone());
         let project = store.root().display().to_string();
-        if let Ok(mut paths) = self.permission_rule_paths.lock()
-            && !paths.is_empty()
+        let mut paths = self.permission_rule_paths.lock_or_recover();
+        if !paths.is_empty()
             && !paths.contains_key(&project)
             && let Some(directory) = paths.values().next().and_then(|path| path.parent())
         {
@@ -954,6 +944,7 @@ impl AppState {
             self.permissions.add_rules(rules);
             paths.insert(project, path);
         }
+        drop(paths);
         let store_root = store.root().to_path_buf();
         let watched_id = id.clone();
         match spawn_watcher_for(
@@ -969,9 +960,8 @@ impl AppState {
             registered_watcher_backend(),
         ) {
             Ok(handle) => {
-                if let Ok(mut w) = self.watchers.lock() {
-                    w.insert(watched_id, handle);
-                }
+                let mut w = self.watchers.lock_or_recover();
+                w.insert(watched_id, handle);
             }
             Err(e) => eprintln!("watcher for {} failed to start: {e}", store_root.display()),
         }
@@ -981,9 +971,7 @@ impl AppState {
     }
 
     fn watch_checkout_repository(&self, checkout: &hotsheet_ticketing::checkouts::Checkout) {
-        let Ok(mut watchers) = self.repository_watchers.lock() else {
-            return;
-        };
+        let mut watchers = self.repository_watchers.lock_or_recover();
         if watchers.contains_key(&checkout.id) {
             return;
         }
@@ -1031,42 +1019,30 @@ impl AppState {
         let id = multistore::store_url_id(&store);
         let pinned = self.host.contains(&id) && !self.is_project_hosted(&id);
         let added = self.host_store(store)?;
-        if !pinned && let Ok(mut hosted) = self.project_hosted.lock() {
-            hosted.insert(id);
+        if !pinned {
+            self.project_hosted.lock_or_recover().insert(id);
         }
         self.request_unhost_sweep(presence::POLL_RECONNECT_GAP + presence::UNHOST_GRACE);
         Ok(added)
     }
 
     fn is_project_hosted(&self, id: &str) -> bool {
-        self.project_hosted
-            .lock()
-            .is_ok_and(|hosted| hosted.contains(id))
+        self.project_hosted.with_lock(|hosted| hosted.contains(id))
     }
 
     /// Stop hosting a project store: its index, watcher, discovery file and writer lock go,
     /// and the next open or checkout request hosts it again (HS2-ARJ9J1).
     fn unhost_store(&self, id: &str) {
-        if let Ok(mut hosted) = self.project_hosted.lock()
-            && !hosted.remove(id)
-        {
+        if !self.project_hosted.lock_or_recover().remove(id) {
             return;
         }
         let Some(entry) = self.host.unregister(id) else {
             return;
         };
         let root = entry.store.root().display().to_string();
-        let watcher = self.watchers.lock().ok().and_then(|mut w| w.remove(id));
-        let guard = self
-            .instance_guards
-            .lock()
-            .ok()
-            .and_then(|mut g| g.remove(&root));
-        let lock = self
-            .writer_locks
-            .lock()
-            .ok()
-            .and_then(|mut w| w.remove(&root));
+        let watcher = self.watchers.with_lock(|w| w.remove(id));
+        let guard = self.instance_guards.with_lock(|g| g.remove(&root));
+        let lock = self.writer_locks.with_lock(|w| w.remove(&root));
         // Stop the watcher and release the files outside every lock.
         drop((watcher, guard, lock));
         eprintln!("unhosted store {root}: no open project references it");
@@ -1079,9 +1055,7 @@ impl AppState {
         };
         let at = tokio::time::Instant::now() + delay;
         {
-            let Ok(mut due) = self.unhost_sweep.due.lock() else {
-                return;
-            };
+            let mut due = self.unhost_sweep.due.lock_or_recover();
             if due.is_some_and(|current| current <= at) {
                 return;
             }
@@ -1104,7 +1078,8 @@ impl AppState {
     /// it hosts (HS2-87 topology A). Runtime `POST /stores` additions register via
     /// [`Self::host_store`]. No-op'd in tests (they never call this).
     pub fn publish_instances(&self, url: String, started_at: String) {
-        if let Ok(mut m) = self.instance.lock() {
+        {
+            let mut m = self.instance.lock_or_recover();
             *m = Some(InstanceMeta {
                 url,
                 secret: self.secret.clone(),
@@ -1119,7 +1094,7 @@ impl AppState {
     /// Write the discovery instance file for one hosted store (if instance publishing is
     /// on), retaining its guard so the file is removed on shutdown.
     fn register_store_instance(&self, store_path: &FsPath) {
-        let Some(meta) = self.instance.lock().ok().and_then(|m| m.clone()) else {
+        let Some(meta) = self.instance.with_lock(|m| m.clone()) else {
             return; // not a published (real) run — nothing to register
         };
         let index_path = if self.persist_indexes {
@@ -1149,9 +1124,8 @@ impl AppState {
         if !is_primary {
             match instances.acquire_writer_lock(store_path) {
                 Ok(lock) => {
-                    if let Ok(mut w) = self.writer_locks.lock() {
-                        w.insert(store_path.display().to_string(), lock);
-                    }
+                    let mut w = self.writer_locks.lock_or_recover();
+                    w.insert(store_path.display().to_string(), lock);
                 }
                 Err(lifecycle::LockError::Held(pid)) => eprintln!(
                     "warning: store {} is also index-write-locked by live server pid {pid} \
@@ -1163,9 +1137,8 @@ impl AppState {
         }
         match instances.register_instance(&info, store_path) {
             Ok(guard) => {
-                if let Ok(mut g) = self.instance_guards.lock() {
-                    g.insert(store_path.display().to_string(), guard);
-                }
+                let mut g = self.instance_guards.lock_or_recover();
+                g.insert(store_path.display().to_string(), guard);
             }
             Err(e) => eprintln!(
                 "instance registration failed for {}: {e}",
@@ -1207,7 +1180,7 @@ impl AppState {
 
     /// The current long-poll cursor (the last emitted event's seq; 0 if none).
     fn event_cursor(&self) -> u64 {
-        self.event_log.lock().map(|l| l.seq).unwrap_or(0)
+        self.event_log.with_lock(|l| l.seq)
     }
 
     /// The default (primary) served store as a host entry — what the unprefixed routes
@@ -1243,8 +1216,8 @@ impl AppState {
         Ok(())
     }
 
-    /// Run one server-side index write, surfacing a poisoned lock or SQLite failure
-    /// instead of swallowing it (HS2-JD7TK0).
+    /// Run one server-side index write, surfacing a SQLite failure instead of swallowing
+    /// it (HS2-JD7TK0). A poisoned index lock is recovered (HS2-ZGQJZP).
     fn index_write(
         &self,
         entry: &StoreEntry,
@@ -1258,10 +1231,7 @@ impl AppState {
         {
             return Err("injected index write fault".into());
         }
-        let index = entry
-            .index
-            .lock()
-            .map_err(|_| "index lock poisoned".to_string())?;
+        let index = entry.index.lock_or_recover();
         write(&index).map_err(|error| error.to_string())
     }
 
@@ -1270,7 +1240,8 @@ impl AppState {
         eprintln!(
             "index write failed for ticket {id} in store {store_id}: {error}; scheduled repair"
         );
-        if let Ok(mut pending) = self.pending_index_repairs.lock() {
+        {
+            let mut pending = self.pending_index_repairs.lock_or_recover();
             pending.insert((store_id.to_string(), id));
         }
     }
@@ -1278,20 +1249,17 @@ impl AppState {
     /// Re-index every queued ticket of `entry` from its current file (or drop its row
     /// when the file is gone). A still-failing repair stays queued.
     fn repair_pending_index_rows(&self, entry: &StoreEntry, store_id: &str) {
-        let queued: Vec<Ulid> = match self.pending_index_repairs.lock() {
-            Ok(mut pending) => {
-                let ids = pending
-                    .iter()
-                    .filter(|(store, _)| store == store_id)
-                    .map(|(_, id)| *id)
-                    .collect::<Vec<_>>();
-                for id in &ids {
-                    pending.remove(&(store_id.to_string(), *id));
-                }
-                ids
+        let queued: Vec<Ulid> = self.pending_index_repairs.with_lock(|pending| {
+            let ids = pending
+                .iter()
+                .filter(|(store, _)| store == store_id)
+                .map(|(_, id)| *id)
+                .collect::<Vec<_>>();
+            for id in &ids {
+                pending.remove(&(store_id.to_string(), *id));
             }
-            Err(_) => return,
-        };
+            ids
+        });
         for id in queued {
             let path = entry.store.ticket_path(&id);
             let result = match std::fs::read(&path) {
@@ -1340,12 +1308,11 @@ impl AppState {
                 // Only a successfully indexed write may suppress its watcher echo; a
                 // failed one leaves the echo free to re-index the file (HS2-JD7TK0).
                 Ok(()) => {
-                    if let Ok(mut writes) = self.local_write_hashes.lock() {
-                        writes.insert(
-                            (store_id.clone(), t.id.to_string(), hash.clone()),
-                            std::time::Instant::now(),
-                        );
-                    }
+                    let mut writes = self.local_write_hashes.lock_or_recover();
+                    writes.insert(
+                        (store_id.clone(), t.id.to_string(), hash.clone()),
+                        std::time::Instant::now(),
+                    );
                 }
                 Err(error) => self.schedule_index_repair(&store_id, t.id, &error),
             }
@@ -1389,12 +1356,11 @@ impl AppState {
         self.repair_pending_index_rows(entry, &store_id);
         match self.index_write(entry, |index| index.delete(&ticket.id)) {
             Ok(()) => {
-                if let Ok(mut writes) = self.local_write_hashes.lock() {
-                    writes.insert(
-                        (store_id.clone(), ticket.id.to_string(), String::new()),
-                        std::time::Instant::now(),
-                    );
-                }
+                let mut writes = self.local_write_hashes.lock_or_recover();
+                writes.insert(
+                    (store_id.clone(), ticket.id.to_string(), String::new()),
+                    std::time::Instant::now(),
+                );
             }
             Err(error) => self.schedule_index_repair(&store_id, ticket.id, &error),
         }
@@ -1490,11 +1456,7 @@ impl AppState {
         store: &FsStore,
         event: hotsheet_ticketing::ActivityEvent,
     ) -> std::io::Result<()> {
-        let admitted = self
-            .activity_volume
-            .lock()
-            .map_err(|_| std::io::Error::other("activity volume guard is unavailable"))?
-            .observe(event);
+        let admitted = self.activity_volume.lock_or_recover().observe(event);
         for event in admitted {
             hotsheet_ticketing::activity::record(store, &event)?;
             self.emit(ChangeEvent {
@@ -1564,21 +1526,18 @@ impl AppState {
         // Named client adapters (including Apple Foundation Models) consume the same
         // normalized stream on-device. They are never loaded as server requirements.
         if !policy.enabled || policy.adapter != "deterministic" {
-            if let Ok(mut pipelines) = self.activity_distillation.lock() {
+            {
+                let mut pipelines = self.activity_distillation.lock_or_recover();
                 pipelines.remove(&pipeline_id);
             }
             return;
         }
-        let request = self
-            .activity_distillation
-            .lock()
-            .ok()
-            .and_then(|mut pipelines| {
-                pipelines
-                    .entry(pipeline_id)
-                    .or_default()
-                    .observe(event, &policy)
-            });
+        let request = self.activity_distillation.with_lock(|pipelines| {
+            pipelines
+                .entry(pipeline_id)
+                .or_default()
+                .observe(event, &policy)
+        });
         let Some(request) = request else {
             return;
         };
@@ -1658,10 +1617,7 @@ fn emit_change(
     event: ChangeEvent,
 ) {
     // Record first so a long poll racing the broadcast can always replay by cursor.
-    let event = event_log
-        .lock()
-        .map(|mut log| log.push(event.clone()))
-        .unwrap_or(event);
+    let event = event_log.with_lock(|log| log.push(event.clone()));
     let _ = events.send(event); // Err just means no live subscribers.
 }
 
@@ -2376,13 +2332,7 @@ impl AppState {
             Resolution::Fresh(Err(failure)) => Err(ApiError::new(failure.status, failure.message)),
             Resolution::Cached(listing) => Ok((listing, "cached")),
             Resolution::Pending => {
-                let tickets = self
-                    .index
-                    .lock()
-                    .map_err(|_| {
-                        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned")
-                    })?
-                    .ticket_count()?;
+                let tickets = self.index.lock_or_recover().ticket_count()?;
                 Ok((
                     Arc::new(HealthListing {
                         tickets,
@@ -2497,9 +2447,7 @@ const API_PROTOCOL_MAX: u32 = 1;
 async fn compatibility(State(state): State<AppState>) -> Json<serde_json::Value> {
     let started_at = state
         .instance
-        .lock()
-        .ok()
-        .and_then(|instance| instance.as_ref().map(|value| value.started_at.clone()));
+        .with_lock(|instance| instance.as_ref().map(|value| value.started_at.clone()));
     let source = state.source_revision.status();
     Json(serde_json::json!({
         "generation": "hs2",
@@ -2545,11 +2493,7 @@ fn list_entry_tickets(
     let mut query = params.into_query(entry.store.root())?;
     let bound = ops::StoreReadBound::new(query.limit)?;
     query.limit = Some(bound.fetch_limit());
-    let mut rows = entry
-        .index
-        .lock()
-        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
-        .query(&query)?;
+    let mut rows = entry.index.lock_or_recover().query(&query)?;
     let truncated = bound.finish(&mut rows)?;
     for row in &mut rows {
         row.set_connection(connection_id);
@@ -2795,13 +2739,7 @@ async fn start_github_device_auth(
     });
     state
         .github_auth_sessions
-        .lock()
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "GitHub sign-in state is unavailable",
-            )
-        })?
+        .lock_or_recover()
         .insert(session_id.clone(), session.clone());
     let device_code = authorization.device_code.clone();
     let mut interval = authorization.interval.max(1);
@@ -2877,13 +2815,7 @@ async fn wait_github_device_auth(
 ) -> Result<Json<GitHubAuthStatus>, ApiError> {
     let session = state
         .github_auth_sessions
-        .lock()
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "GitHub sign-in state is unavailable",
-            )
-        })?
+        .lock_or_recover()
         .get(&session_id)
         .cloned()
         .ok_or_else(|| ApiError::not_found(&session_id))?;
@@ -2902,13 +2834,7 @@ async fn cancel_github_device_auth(
 ) -> Result<StatusCode, ApiError> {
     let session = state
         .github_auth_sessions
-        .lock()
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "GitHub sign-in state is unavailable",
-            )
-        })?
+        .lock_or_recover()
         .get(&session_id)
         .cloned()
         .ok_or_else(|| ApiError::not_found(&session_id))?;
@@ -2930,13 +2856,7 @@ async fn list_github_auth_repositories(
 ) -> Result<Json<GitHubRepositoriesResponse>, ApiError> {
     let session = state
         .github_auth_sessions
-        .lock()
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "GitHub sign-in state is unavailable",
-            )
-        })?
+        .lock_or_recover()
         .get(&session_id)
         .cloned()
         .ok_or_else(|| ApiError::not_found(&session_id))?;
@@ -3761,12 +3681,7 @@ fn provider_for(
     fingerprint.update(serde_json::to_vec(&connection).map_err(provider_transfer_error)?);
     fingerprint.update(token.as_bytes());
     let fingerprint = format!("{:x}", fingerprint.finalize());
-    let mut cached = state.live_providers.lock().map_err(|_| {
-        ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "provider cache lock poisoned",
-        )
-    })?;
+    let mut cached = state.live_providers.lock_or_recover();
     if let Some((key, provider)) = cached.get(connection_id) {
         if key == &fingerprint {
             return Ok(provider.clone());
@@ -3786,12 +3701,7 @@ fn provider_read_get(
     let provider = provider_for(state, connection_id)?;
     if provider.descriptor().capabilities.write_behind {
         if let Some(outbox) = &state.jira_outbox {
-            let guard = outbox.lock().map_err(|_| {
-                ApiError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "provider outbox lock poisoned",
-                )
-            })?;
+            let guard = outbox.lock_or_recover();
             return provider_overlay::get(provider.as_ref(), &guard, connection_id, id)
                 .map_err(provider_transfer_error);
         }
@@ -3807,12 +3717,7 @@ fn provider_read_query(
     let provider = provider_for(state, connection_id)?;
     if provider.descriptor().capabilities.write_behind {
         if let Some(outbox) = &state.jira_outbox {
-            let guard = outbox.lock().map_err(|_| {
-                ApiError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "provider outbox lock poisoned",
-                )
-            })?;
+            let guard = outbox.lock_or_recover();
             return provider_overlay::query(provider.as_ref(), &guard, connection_id, query)
                 .map_err(provider_transfer_error);
         }
@@ -3831,12 +3736,7 @@ fn provider_read_query_after(
     let provider = provider_for(state, connection_id)?;
     if provider.descriptor().capabilities.write_behind {
         if let Some(outbox) = &state.jira_outbox {
-            let guard = outbox.lock().map_err(|_| {
-                ApiError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "provider outbox lock poisoned",
-                )
-            })?;
+            let guard = outbox.lock_or_recover();
             return provider_overlay::query_after(
                 provider.as_ref(),
                 &guard,
@@ -3855,7 +3755,8 @@ fn provider_read_query_after(
 }
 
 fn forget_live_provider(state: &AppState, connection_id: &str) {
-    if let Ok(mut providers) = state.live_providers.lock() {
+    {
+        let mut providers = state.live_providers.lock_or_recover();
         providers.remove(connection_id);
     }
 }
@@ -4632,8 +4533,7 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
     let id = checkout.id.clone();
     if !state
         .setup_refreshes
-        .lock()
-        .is_ok_and(|mut active| active.insert(id.clone()))
+        .with_lock(|active| active.insert(id.clone()))
     {
         return;
     }
@@ -4653,7 +4553,8 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
         );
         let _ =
             hotsheet_plugins::refresh_setup_in(&store, &project, enabled.as_ref(), &plugin_dirs);
-        if let Ok(mut active) = active.lock() {
+        {
+            let mut active = active.lock_or_recover();
             active.remove(&id);
         }
     });
@@ -4681,11 +4582,7 @@ fn regenerate_checkout_worklist_indexed(
         let entry = host.get(&source.connection_id).ok_or_else(|| {
             anyhow::anyhow!("checkout links an unhosted store: {}", source.locator)
         })?;
-        let rows = entry
-            .index
-            .lock()
-            .map_err(|_| anyhow::anyhow!("index lock poisoned"))?
-            .query(&query)?;
+        let rows = entry.index.lock_or_recover().query(&query)?;
         for row in rows {
             let id = Ulid::from_string(&row.id)?;
             if let std::collections::btree_map::Entry::Vacant(ticket) = tickets.entry(id) {
@@ -5646,8 +5543,7 @@ fn merge_checkout_page(
     for (_, entry) in entries.iter().filter(|_| with_counts) {
         let summary = entry
             .index
-            .lock()
-            .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
+            .lock_or_recover()
             .summary(&now_text, &day_starts)?;
         counts.add(index_summary(summary));
     }
@@ -5700,13 +5596,7 @@ fn merge_checkout_page(
                     key,
                     connection_id: store_id.clone(),
                 });
-                let rows = entry
-                    .index
-                    .lock()
-                    .map_err(|_| {
-                        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned")
-                    })?
-                    .query(&query)?;
+                let rows = entry.index.lock_or_recover().query(&query)?;
                 let exhausted = rows.len() < request.want;
                 let matches = commit_filter(rows.iter().map(|row| row.slug.clone()).collect())?;
                 let mut batch = Vec::with_capacity(rows.len());
@@ -5876,10 +5766,7 @@ async fn list_checkout_corrupt_tickets(
             let store_path = entry.store.root().display().to_string();
             let listed = entry
                 .corrupt
-                .lock()
-                .map_err(|_| {
-                    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "corrupt cache poisoned")
-                })?
+                .lock_or_recover()
                 .corrupt_tickets(&entry.store)?;
             for corrupt in listed {
                 result.push(CheckoutCorruptTicket {
@@ -5907,9 +5794,8 @@ fn prewarm_corrupt_tickets(entry: StoreEntry) {
     let _ = std::thread::Builder::new()
         .name("hs-corrupt-prewarm".into())
         .spawn(move || {
-            if let Ok(mut cache) = entry.corrupt.lock() {
-                let _ = cache.corrupt_tickets(&entry.store);
-            }
+            let mut cache = entry.corrupt.lock_or_recover();
+            let _ = cache.corrupt_tickets(&entry.store);
         });
 }
 
@@ -6264,12 +6150,7 @@ fn probe_provider_source(
     let provider = provider_for(state, connection_id)?;
     let result = if provider.descriptor().capabilities.write_behind {
         if let Some(outbox) = &state.jira_outbox {
-            let guard = outbox.lock().map_err(|_| {
-                ApiError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "provider outbox lock poisoned",
-                )
-            })?;
+            let guard = outbox.lock_or_recover();
             provider_overlay::get(provider.as_ref(), &guard, connection_id, id)
         } else {
             provider
@@ -6339,43 +6220,42 @@ async fn get_checkout_ticket_duplicate_backlinks(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
 ) -> Result<Json<DuplicateBacklinkResponse>, ApiError> {
-    let (backlinks, inaccessible_projects) =
-        tokio::task::spawn_blocking(move || {
-            let (checkout, source, resolved) = resolve_checkout_ticket(&state, &reference, &id)?;
-            let target = ProjectTicketRef {
-                project_id: checkout.id,
-                connection_id: source.connection_id,
-                native_id: resolved.ticket.native_id,
-            };
-            let checkouts = state.checkout_registry.list().map_err(|error| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-            })?;
-            // Cold sources build an index once on this blocking worker; warm sources query
-            // maintained reverse indexes. No host-registry lock spans indexing or file I/O.
-            let mut backlinks = Vec::new();
-            let mut inaccessible_projects = Vec::new();
-            for checkout in checkouts {
-                // A remembered checkout may outlive a temporary or deleted working directory.
-                // It cannot contain a usable backlink while absent, and presenting it as a
-                // transient source failure makes every ticket show a permanent warning.
-                if !FsPath::new(&checkout.root).is_dir() {
-                    continue;
-                }
-                let mut inaccessible = false;
-                for source in &checkout.sources {
-                    let tickets =
-                        if source.provider == "git" {
-                            // A directory can be recreated after a remembered temporary checkout is
-                            // deleted (for example by an old setup tool) without recreating its HS2
-                            // ticket store. A locator without HS2 metadata is no longer a searchable
-                            // source, not a transient lookup failure that should warn on every ticket.
-                            if !FsPath::new(&source.locator)
-                                .join(STORE_METADATA_FILE)
-                                .is_file()
-                            {
-                                continue;
-                            }
-                            let indexed =
+    let (backlinks, inaccessible_projects) = tokio::task::spawn_blocking(move || {
+        let (checkout, source, resolved) = resolve_checkout_ticket(&state, &reference, &id)?;
+        let target = ProjectTicketRef {
+            project_id: checkout.id,
+            connection_id: source.connection_id,
+            native_id: resolved.ticket.native_id,
+        };
+        let checkouts = state
+            .checkout_registry
+            .list()
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        // Cold sources build an index once on this blocking worker; warm sources query
+        // maintained reverse indexes. No host-registry lock spans indexing or file I/O.
+        let mut backlinks = Vec::new();
+        let mut inaccessible_projects = Vec::new();
+        for checkout in checkouts {
+            // A remembered checkout may outlive a temporary or deleted working directory.
+            // It cannot contain a usable backlink while absent, and presenting it as a
+            // transient source failure makes every ticket show a permanent warning.
+            if !FsPath::new(&checkout.root).is_dir() {
+                continue;
+            }
+            let mut inaccessible = false;
+            for source in &checkout.sources {
+                let tickets = if source.provider == "git" {
+                    // A directory can be recreated after a remembered temporary checkout is
+                    // deleted (for example by an old setup tool) without recreating its HS2
+                    // ticket store. A locator without HS2 metadata is no longer a searchable
+                    // source, not a transient lookup failure that should warn on every ticket.
+                    if !FsPath::new(&source.locator)
+                        .join(STORE_METADATA_FILE)
+                        .is_file()
+                    {
+                        continue;
+                    }
+                    let indexed =
                         (|| -> Result<Vec<hotsheet_index::DuplicateBacklinkRow>, ApiError> {
                             let store = FsStore::open(&source.locator)?;
                             state.host_store(store.clone())?;
@@ -6383,121 +6263,124 @@ async fn get_checkout_ticket_duplicate_backlinks(
                                 .host
                                 .get(&multistore::store_url_id(&store))
                                 .ok_or_else(|| ApiError::not_found(&source.connection_id))?;
-                            let rows = entry.index.lock().map_err(|error| {
-                                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-                            })?.duplicate_backlinks(&target.qualified(), &target.native_id)?;
+                            let rows = entry
+                                .index
+                                .lock_or_recover()
+                                .duplicate_backlinks(&target.qualified(), &target.native_id)?;
                             // A watcher retains the last healthy index row for corrupt files.
                             // Validate only indexed matches, outside the index lock, to retain
                             // the old resilient scan's omission of corrupt or removed sources.
-                            Ok(rows.into_iter().filter_map(|mut row| {
-                                let id = Ulid::from_string(&row.id).ok()?;
-                                let ticket = entry.store.read_ticket(&id).ok()?;
-                                if ticket.close_reason != Some(CloseReason::Duplicate)
-                                    || !ticket.duplicate_of.as_deref().is_some_and(|reference|
-                                        duplicate_reference_matches(reference, &target)) {
-                                    return None;
-                                }
-                                row.slug = ticket.slug;
-                                row.title = ticket.title;
-                                Some(row)
-                            }).collect())
-                        })();
-                            match indexed {
-                                Ok(rows) => {
-                                    for row in rows {
-                                        let source_reference = ProjectTicketRef {
-                                            project_id: checkout.id.clone(),
-                                            connection_id: source.connection_id.clone(),
-                                            native_id: row.id.clone(),
-                                        };
-                                        backlinks.push(DuplicateBacklink {
-                                            reference: source_reference.qualified(),
-                                            project_id: checkout.id.clone(),
-                                            project_name: checkout.alias.clone(),
-                                            connection_id: source.connection_id.clone(),
-                                            qualified_id: format!(
-                                                "{}:{}",
-                                                source.connection_id, row.id
-                                            ),
-                                            native_id: row.id,
-                                            slug: row.slug,
-                                            title: row.title,
-                                        });
+                            Ok(rows
+                                .into_iter()
+                                .filter_map(|mut row| {
+                                    let id = Ulid::from_string(&row.id).ok()?;
+                                    let ticket = entry.store.read_ticket(&id).ok()?;
+                                    if ticket.close_reason != Some(CloseReason::Duplicate)
+                                        || !ticket.duplicate_of.as_deref().is_some_and(
+                                            |reference| {
+                                                duplicate_reference_matches(reference, &target)
+                                            },
+                                        )
+                                    {
+                                        return None;
                                     }
-                                    continue;
-                                }
-                                Err(_) => {
-                                    inaccessible = true;
-                                    continue;
-                                }
+                                    row.slug = ticket.slug;
+                                    row.title = ticket.title;
+                                    Some(row)
+                                })
+                                .collect())
+                        })();
+                    match indexed {
+                        Ok(rows) => {
+                            for row in rows {
+                                let source_reference = ProjectTicketRef {
+                                    project_id: checkout.id.clone(),
+                                    connection_id: source.connection_id.clone(),
+                                    native_id: row.id.clone(),
+                                };
+                                backlinks.push(DuplicateBacklink {
+                                    reference: source_reference.qualified(),
+                                    project_id: checkout.id.clone(),
+                                    project_name: checkout.alias.clone(),
+                                    connection_id: source.connection_id.clone(),
+                                    qualified_id: format!("{}:{}", source.connection_id, row.id),
+                                    native_id: row.id,
+                                    slug: row.slug,
+                                    title: row.title,
+                                });
                             }
-                        } else if connection_disabled(&state, &source.connection_id)
-                            .unwrap_or(false)
-                        {
-                            // Disabled sources are not read; they are not "inaccessible" (HS2-SF6W34).
-                            continue;
-                        } else {
-                            match provider_for(&state, &source.connection_id).and_then(|provider| {
-                                provider
-                                    .query(&TicketQuery::default())
-                                    .map_err(provider_transfer_error)
-                            }) {
-                                Ok(tickets) => tickets,
-                                Err(_) => {
-                                    inaccessible = true;
-                                    continue;
-                                }
-                            }
-                        };
-                    for ticket in tickets {
-                        let Some(duplicate_of) = ticket.duplicate_of.as_deref() else {
-                            continue;
-                        };
-                        if ticket.close_reason != Some(CloseReason::Duplicate)
-                            || !duplicate_reference_matches(duplicate_of, &target)
-                        {
                             continue;
                         }
-                        let source_reference = ProjectTicketRef {
-                            project_id: checkout.id.clone(),
-                            connection_id: ticket.connection_id.clone(),
-                            native_id: ticket.native_id.clone(),
-                        };
-                        backlinks.push(DuplicateBacklink {
-                            reference: source_reference.qualified(),
-                            project_id: checkout.id.clone(),
-                            project_name: checkout.alias.clone(),
-                            connection_id: ticket.connection_id,
-                            native_id: ticket.native_id,
-                            qualified_id: ticket.qualified_id,
-                            slug: ticket.slug,
-                            title: ticket.title,
-                        });
+                        Err(_) => {
+                            inaccessible = true;
+                            continue;
+                        }
                     }
-                }
-                if inaccessible {
-                    inaccessible_projects.push(DuplicateBacklinkProject {
-                        project_id: checkout.id,
-                        project_name: checkout.alias,
+                } else if connection_disabled(&state, &source.connection_id).unwrap_or(false) {
+                    // Disabled sources are not read; they are not "inaccessible" (HS2-SF6W34).
+                    continue;
+                } else {
+                    match provider_for(&state, &source.connection_id).and_then(|provider| {
+                        provider
+                            .query(&TicketQuery::default())
+                            .map_err(provider_transfer_error)
+                    }) {
+                        Ok(tickets) => tickets,
+                        Err(_) => {
+                            inaccessible = true;
+                            continue;
+                        }
+                    }
+                };
+                for ticket in tickets {
+                    let Some(duplicate_of) = ticket.duplicate_of.as_deref() else {
+                        continue;
+                    };
+                    if ticket.close_reason != Some(CloseReason::Duplicate)
+                        || !duplicate_reference_matches(duplicate_of, &target)
+                    {
+                        continue;
+                    }
+                    let source_reference = ProjectTicketRef {
+                        project_id: checkout.id.clone(),
+                        connection_id: ticket.connection_id.clone(),
+                        native_id: ticket.native_id.clone(),
+                    };
+                    backlinks.push(DuplicateBacklink {
+                        reference: source_reference.qualified(),
+                        project_id: checkout.id.clone(),
+                        project_name: checkout.alias.clone(),
+                        connection_id: ticket.connection_id,
+                        native_id: ticket.native_id,
+                        qualified_id: ticket.qualified_id,
+                        slug: ticket.slug,
+                        title: ticket.title,
                     });
                 }
             }
-            backlinks.sort_by(|left, right| {
-                left.project_name
-                    .cmp(&right.project_name)
-                    .then(left.slug.cmp(&right.slug))
-                    .then(left.reference.cmp(&right.reference))
-            });
-            backlinks.dedup_by(|left, right| left.reference == right.reference);
-            inaccessible_projects.sort_by(|left, right| {
-                left.project_name
-                    .cmp(&right.project_name)
-                    .then(left.project_id.cmp(&right.project_id))
-            });
-            Ok::<_, ApiError>((backlinks, inaccessible_projects))
-        })
-        .await
-        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
+            if inaccessible {
+                inaccessible_projects.push(DuplicateBacklinkProject {
+                    project_id: checkout.id,
+                    project_name: checkout.alias,
+                });
+            }
+        }
+        backlinks.sort_by(|left, right| {
+            left.project_name
+                .cmp(&right.project_name)
+                .then(left.slug.cmp(&right.slug))
+                .then(left.reference.cmp(&right.reference))
+        });
+        backlinks.dedup_by(|left, right| left.reference == right.reference);
+        inaccessible_projects.sort_by(|left, right| {
+            left.project_name
+                .cmp(&right.project_name)
+                .then(left.project_id.cmp(&right.project_id))
+        });
+        Ok::<_, ApiError>((backlinks, inaccessible_projects))
+    })
+    .await
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))??;
     Ok(Json(DuplicateBacklinkResponse {
         backlinks,
         inaccessible_projects,
@@ -8626,7 +8509,7 @@ async fn renew_ticket(
 /// `GET /permissions` — the requests a driven tool is currently blocked on, for a client
 /// to render + answer. Each carries the raising connection + the `(tool, action)` asked.
 async fn list_permissions(State(state): State<AppState>) -> Json<Vec<PermissionInfo>> {
-    let rule_projects = state.permission_rule_paths.lock().unwrap().clone();
+    let rule_projects = state.permission_rule_paths.lock_or_recover().clone();
     Json(
         state
             .permissions
@@ -8865,10 +8748,7 @@ struct ConnectionInfo {
 /// one entry per in-flight driven ticket. Empty when nothing is being driven.
 async fn list_connections(State(state): State<AppState>) -> Json<Vec<ConnectionInfo>> {
     let now = now_ms();
-    let reg = match state.drive_registry.lock() {
-        Ok(r) => r,
-        Err(_) => return Json(Vec::new()),
-    };
+    let reg = state.drive_registry.lock_or_recover();
     let infos = reg
         .list()
         .into_iter()
@@ -8949,7 +8829,7 @@ fn discover_ai_tools_memoized(
     root: &FsPath,
     refresh: bool,
 ) -> Vec<hotsheet_plugins::AiToolDescriptor> {
-    let mut cache = catalogs.lock().unwrap();
+    let mut cache = catalogs.lock_or_recover();
     let generation = generation.load(Ordering::Acquire);
     cache.discover(
         std::time::Instant::now(),
@@ -9219,12 +9099,7 @@ async fn create_drive_connection(
             )
         };
     let mut env = vec![format!("HOTSHEET_PROJECT={}", project_path.display())];
-    if let Some(url) = state
-        .terminal_server_url
-        .lock()
-        .ok()
-        .and_then(|value| value.clone())
-    {
+    if let Some(url) = state.terminal_server_url.with_lock(|value| value.clone()) {
         env.push(format!("HOTSHEET_SERVER={url}"));
         env.push(format!("HOTSHEET_SECRET={}", state.secret));
     }
@@ -10118,9 +9993,7 @@ fn terminal_permission_route_env(
         // Lets a tool's hook adapter report a halted session against this tab (HS2-HJ4D1H).
         ("HOTSHEET_TERMINAL_ID".to_string(), terminal_id.to_string()),
     ];
-    if let Ok(url) = state.terminal_server_url.lock()
-        && let Some(url) = url.as_ref()
-    {
+    if let Some(url) = state.terminal_server_url.lock_or_recover().as_ref() {
         env.push(("HOTSHEET_SERVER".to_string(), url.clone()));
     }
     env
@@ -10366,7 +10239,8 @@ fn register_terminal_connection(
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
 ) {
     let registry = state.drive_registry();
-    if let Ok(mut r) = registry.lock() {
+    {
+        let mut r = registry.lock_or_recover();
         r.register(hotsheet_aitools::Connection {
             id: id.to_string(),
             project: state.store.root().display().to_string(),
@@ -10385,19 +10259,19 @@ fn register_terminal_connection(
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             let alive = term.is_alive();
             if !alive {
-                if let Ok(mut r) = registry.lock() {
+                {
+                    let mut r = registry.lock_or_recover();
                     r.unregister(&conn_id);
                 }
                 release_session_claims(host, worker).await;
                 break;
             }
-            if let Ok(mut r) = registry.lock() {
+            {
+                let mut r = registry.lock_or_recover();
                 match term.activity() {
                     hotsheet_terminals::Activity::Busy => r.note_activity(&conn_id, now_ms()),
                     hotsheet_terminals::Activity::Idle => r.set_idle(&conn_id),
                 }
-            } else {
-                break;
             }
         }
     });
@@ -10415,7 +10289,8 @@ fn register_broker_terminal_connection(
     broker: terminal_broker::TerminalBroker,
 ) {
     let registry = state.drive_registry();
-    if let Ok(mut r) = registry.lock() {
+    {
+        let mut r = registry.lock_or_recover();
         r.register(hotsheet_aitools::Connection {
             id: id.to_string(),
             project: state.store.root().display().to_string(),
@@ -10439,19 +10314,17 @@ fn register_broker_terminal_connection(
                 .await
             {
                 Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) if info.alive => {
-                    if let Ok(mut r) = registry.lock() {
-                        if info.busy {
-                            r.note_activity(&conn_id, now_ms());
-                        } else {
-                            r.set_idle(&conn_id);
-                        }
+                    let mut r = registry.lock_or_recover();
+                    if info.busy {
+                        r.note_activity(&conn_id, now_ms());
                     } else {
-                        break;
+                        r.set_idle(&conn_id);
                     }
                 }
                 // Terminal gone (NotFound / exited) or broker unreachable → stop + unregister.
                 _ => {
-                    if let Ok(mut r) = registry.lock() {
+                    {
+                        let mut r = registry.lock_or_recover();
                         r.unregister(&conn_id);
                     }
                     release_session_claims(host, worker).await;
@@ -10693,10 +10566,10 @@ async fn live_terminal_infos(state: &AppState) -> Vec<TerminalInfo> {
 /// every terminal unnamed rather than failing the terminal list.
 fn with_terminal_names(state: &AppState, mut infos: Vec<TerminalInfo>) -> Vec<TerminalInfo> {
     let names = terminal_names::all(&Settings::new(state.store.root())).unwrap_or_default();
-    let halts = state.terminal_halts.lock().unwrap().clone();
-    let mut questions = state.terminal_questions.lock().unwrap();
-    let connections = state.terminal_ai_connections.lock().unwrap().clone();
-    let mut last_reports = state.terminal_ai_last_reports.lock().unwrap();
+    let halts = state.terminal_halts.lock_or_recover().clone();
+    let mut questions = state.terminal_questions.lock_or_recover();
+    let connections = state.terminal_ai_connections.lock_or_recover().clone();
+    let mut last_reports = state.terminal_ai_last_reports.lock_or_recover();
     for info in &mut infos {
         if !info.alive {
             last_reports.remove(&info.id);
@@ -10748,8 +10621,7 @@ async fn ask_terminal_question(
     }
     if state
         .terminal_ai_connections
-        .lock()
-        .unwrap()
+        .lock_or_recover()
         .get(&id)
         .is_some_and(|connection| {
             connection.session_id.is_some() && connection.session_id != body.session_id
@@ -10760,7 +10632,7 @@ async fn ask_terminal_question(
     if forget_terminal_halt(&state, &id) {
         emit_terminal_halted(&state, &id, None);
     }
-    let mut questions = state.terminal_questions.lock().unwrap();
+    let mut questions = state.terminal_questions.lock_or_recover();
     let same = questions.get(&id).is_some_and(|current| {
         current.tool_use_id == body.tool_use_id && current.session_id == body.session_id
     });
@@ -10809,7 +10681,7 @@ async fn answer_terminal_question(
     Path(id): Path<String>,
     Json(body): Json<TerminalQuestionAnswerReq>,
 ) -> Result<StatusCode, ApiError> {
-    let mut questions = state.terminal_questions.lock().unwrap();
+    let mut questions = state.terminal_questions.lock_or_recover();
     let current = questions
         .get_mut(&id)
         .filter(|current| current.tool_use_id == body.tool_use_id && current.at == body.at)
@@ -10862,7 +10734,7 @@ async fn poll_terminal_question_answer(
     Path(id): Path<String>,
     Query(query): Query<TerminalQuestionIdentity>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
-    let questions = state.terminal_questions.lock().unwrap();
+    let questions = state.terminal_questions.lock_or_recover();
     let current = questions
         .get(&id)
         .filter(|current| {
@@ -10910,7 +10782,7 @@ fn forget_terminal_question_for_session(
     tool_use_id: Option<&str>,
     session_id: Option<&str>,
 ) -> bool {
-    let mut questions = state.terminal_questions.lock().unwrap();
+    let mut questions = state.terminal_questions.lock_or_recover();
     if tool_use_id.is_some_and(|expected| {
         questions
             .get(id)
@@ -10990,7 +10862,7 @@ async fn halt_terminal(
             .unwrap_or_default(),
     };
     let changed = {
-        let mut halts = state.terminal_halts.lock().unwrap();
+        let mut halts = state.terminal_halts.lock_or_recover();
         let same = halts.get(&id).is_some_and(|current| {
             current.error_type == halt.error_type && current.message == halt.message
         });
@@ -11033,7 +10905,7 @@ fn forget_terminal_halt(state: &AppState, id: &str) -> bool {
 }
 
 fn forget_terminal_halt_if(state: &AppState, id: &str, at: Option<&str>) -> bool {
-    let mut halts = state.terminal_halts.lock().unwrap();
+    let mut halts = state.terminal_halts.lock_or_recover();
     if at.is_some_and(|expected| halts.get(id).is_none_or(|halt| halt.at != expected)) {
         return false;
     }
@@ -11089,13 +10961,11 @@ async fn connect_terminal_ai(
     };
     state
         .terminal_ai_last_reports
-        .lock()
-        .unwrap()
+        .lock_or_recover()
         .insert(id.clone(), connection.clone());
     let changed = state
         .terminal_ai_connections
-        .lock()
-        .unwrap()
+        .lock_or_recover()
         .insert(id.clone(), connection)
         .is_none_or(|previous| previous.agent != agent);
     state.emit(ChangeEvent {
@@ -11153,7 +11023,7 @@ fn forget_terminal_ai_connection_if(
     id: &str,
     session_id: Option<&str>,
 ) -> Option<bool> {
-    let mut connections = state.terminal_ai_connections.lock().unwrap();
+    let mut connections = state.terminal_ai_connections.lock_or_recover();
     if session_id.is_some_and(|expected| {
         connections
             .get(id)
@@ -11360,7 +11230,7 @@ async fn kill_terminal(
                     emit_terminal_question(&state, &id);
                 }
                 forget_terminal_ai_connection(&state, &id);
-                state.terminal_ai_last_reports.lock().unwrap().remove(&id);
+                state.terminal_ai_last_reports.lock_or_recover().remove(&id);
                 Ok(StatusCode::NO_CONTENT)
             }
             other => Err(broker_err(other)),
@@ -11378,7 +11248,7 @@ async fn kill_terminal(
         emit_terminal_question(&state, &id);
     }
     forget_terminal_ai_connection(&state, &id);
-    state.terminal_ai_last_reports.lock().unwrap().remove(&id);
+    state.terminal_ai_last_reports.lock_or_recover().remove(&id);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -11787,8 +11657,7 @@ async fn resolve_permission(
     let mut persisted = false;
     let rules_path = state
         .permission_rule_paths
-        .lock()
-        .unwrap()
+        .lock_or_recover()
         .get(&resolved.project)
         .cloned();
     if let (Some(rule), Some(path)) = (&resolved.persisted_rule, rules_path.as_ref()) {
@@ -12098,18 +11967,18 @@ struct UnhostSweep {
 /// requests, and stays idle when no project store is hosted.
 async fn run_unhost_sweeper(state: AppState) {
     loop {
-        let due = state.unhost_sweep.due.lock().ok().and_then(|due| *due);
+        let due = state.unhost_sweep.due.with_lock(|due| *due);
         let Some(at) = due else {
             state.unhost_sweep.wake.notified().await;
             continue;
         };
         tokio::select! {
             () = tokio::time::sleep_until(at) => {
-                if let Ok(mut due) = state.unhost_sweep.due.lock()
-                    && due.is_some_and(|due| due <= tokio::time::Instant::now())
-                {
-                    *due = None;
-                }
+                state.unhost_sweep.due.with_lock(|due| {
+                    if due.is_some_and(|due| due <= tokio::time::Instant::now()) {
+                        *due = None;
+                    }
+                });
                 sweep_unhosted(&state).await;
             }
             () = state.unhost_sweep.wake.notified() => {}
@@ -12147,9 +12016,7 @@ async fn sweep_unhosted(state: &AppState) {
         };
         let hosted: Vec<String> = state
             .project_hosted
-            .lock()
-            .map(|hosted| hosted.iter().cloned().collect())
-            .unwrap_or_default();
+            .with_lock(|hosted| hosted.iter().cloned().collect());
         let mut eligible = Vec::new();
         let mut busy = std::collections::HashSet::new();
         for id in hosted {
@@ -12180,10 +12047,8 @@ async fn sweep_unhosted(state: &AppState) {
             state.unhost_store(id);
         }
         if !live.untagged {
-            let stopped: Vec<RepositoryWatchHandle> = state
-                .repository_watchers
-                .lock()
-                .map(|mut watchers| {
+            let stopped: Vec<RepositoryWatchHandle> =
+                state.repository_watchers.with_lock(|watchers| {
                     checkouts
                         .iter()
                         .filter(|checkout| {
@@ -12191,8 +12056,7 @@ async fn sweep_unhosted(state: &AppState) {
                         })
                         .filter_map(|checkout| watchers.remove(&checkout.id))
                         .collect()
-                })
-                .unwrap_or_default();
+                });
             drop(stopped);
         }
         eligible.len() - candidates.len()
@@ -12316,13 +12180,10 @@ async fn poll_events(
     // Subscribe BEFORE reading the log, so an event emitted in the gap isn't missed: it
     // either lands in the log we read, or wakes the receiver below.
     let mut rx = state.events.subscribe();
-    let (backlog, overflow, snapshot_cursor) = match state.event_log.lock() {
-        Ok(log) => {
-            let (events, overflow) = log.since(since);
-            (events, overflow, log.seq)
-        }
-        Err(_) => (Vec::new(), false, since),
-    };
+    let (backlog, overflow, snapshot_cursor) = state.event_log.with_lock(|log| {
+        let (events, overflow) = log.since(since);
+        (events, overflow, log.seq)
+    });
     if overflow || !backlog.is_empty() {
         return Json(PollResponse {
             cursor: snapshot_cursor,
@@ -12349,13 +12210,10 @@ async fn poll_events(
         // Re-read the ring rather than returning only the wake-up event. This atomically
         // captures every event + the exact cursor through that span, so a burst racing the
         // response cannot advance the cursor past an event the client never received.
-        Ok(Ok(_)) => match state.event_log.lock() {
-            Ok(log) => {
-                let (events, overflow) = log.since(since);
-                (events, log.seq, overflow)
-            }
-            Err(_) => (Vec::new(), since, false),
-        },
+        Ok(Ok(_)) => state.event_log.with_lock(|log| {
+            let (events, overflow) = log.since(since);
+            (events, log.seq, overflow)
+        }),
         // Lagged (fell behind the broadcast buffer) → signal overflow so the client re-syncs.
         Ok(Err(broadcast::error::RecvError::Lagged(_))) => {
             return Json(PollResponse {
@@ -12963,7 +12821,7 @@ struct NativeWatcherHold(NativeWatcherSlot);
 
 impl Drop for NativeWatcherHold {
     fn drop(&mut self) {
-        let watchers = self.0.lock().ok().map(|mut state| {
+        let watchers = self.0.with_lock(|state| {
             state.stopped = true;
             (state.watcher.take(), state.bridge.take())
         });
@@ -13092,9 +12950,7 @@ fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Re
                     Ok(bridge)
                 });
                 {
-                    let Ok(mut slot) = started.lock() else {
-                        return;
-                    };
+                    let mut slot = started.lock_or_recover();
                     if slot.stopped {
                         return;
                     }
@@ -13121,9 +12977,7 @@ fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Re
                     return;
                 }
                 {
-                    let Ok(mut slot) = started.lock() else {
-                        return;
-                    };
+                    let mut slot = started.lock_or_recover();
                     // The handle was dropped while the stream started: stop it again.
                     if slot.stopped {
                         return;
@@ -13132,7 +12986,7 @@ fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Re
                 }
                 std::thread::sleep(STARTUP_RESYNC_DELAY);
                 // The native stream is live: retire the bridge and re-check once more.
-                let bridge = started.lock().ok().and_then(|mut slot| slot.bridge.take());
+                let bridge = started.with_lock(|slot| slot.bridge.take());
                 drop(bridge);
                 request_resync(&tickets_dir);
             });
@@ -13644,9 +13498,7 @@ fn stale_ticket_files(target: &WatchTarget, tickets_dir: &FsPath) -> Vec<std::pa
             }
         }
     }
-    let Ok(index) = target.entry.index.lock() else {
-        return files;
-    };
+    let index = target.entry.index.lock_or_recover();
     files
         .into_iter()
         .filter(|path| {
@@ -13722,13 +13574,14 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
     };
 
     if !path.exists() {
-        let local_echo = target.local_write_hashes.lock().is_ok_and(|mut writes| {
+        let local_echo = target.local_write_hashes.with_lock(|writes| {
             writes.retain(|_, at| at.elapsed() <= Duration::from_secs(5));
             writes
                 .remove(&(target.store_id.clone(), id.to_string(), String::new()))
                 .is_some()
         });
-        if let Ok(index) = index.lock() {
+        {
+            let index = index.lock_or_recover();
             let _ = index.delete(&id);
         }
         if local_echo {
@@ -13742,7 +13595,7 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
         return false;
     };
     let hash = hash_bytes(&bytes);
-    let local_echo = target.local_write_hashes.lock().is_ok_and(|mut writes| {
+    let local_echo = target.local_write_hashes.with_lock(|writes| {
         writes.retain(|_, at| at.elapsed() <= Duration::from_secs(5));
         writes.contains_key(&(target.store_id.clone(), id.to_string(), hash.clone()))
     });
@@ -13752,10 +13605,7 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
 
     // An unmarked event is external. Preserve its worklist invalidation even when its
     // bytes happen to match the current index row.
-    let already = index
-        .lock()
-        .ok()
-        .and_then(|index| index.content_hash(&id).ok().flatten());
+    let already = index.with_lock(|index| index.content_hash(&id).ok().flatten());
     if already.as_deref() == Some(hash.as_str()) {
         return true;
     }
@@ -13764,7 +13614,8 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
         // Preserve the last healthy row, but remember the corrupt bytes. Otherwise a
         // manual repair that restores the previous healthy content compares equal to
         // the stale hash and is incorrectly treated as a no-op.
-        if let Ok(index) = index.lock() {
+        {
+            let index = index.lock_or_recover();
             let _ = index.record_source_hash(&id, &hash);
         }
         let (_, slug) = hotsheet_ticketing::recover_ticket_identity(path);
@@ -13773,7 +13624,8 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
         emit("changed", id.to_string(), slug.unwrap_or_default());
         return true;
     };
-    if let Ok(index) = index.lock() {
+    {
+        let index = index.lock_or_recover();
         let _ = index.upsert(&ticket, &path.display().to_string(), &hash);
     }
     emit("changed", ticket.id.to_string(), ticket.slug.clone());
@@ -14440,11 +14292,12 @@ mod ai_terminal_tool_tests {
 mod index_repair_tests {
     use super::{AppState, multistore};
     use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_sync::LockExt;
     use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, ops};
     use std::sync::atomic::Ordering;
 
     fn indexed_hash(entry: &super::StoreEntry, id: &Ulid) -> Option<String> {
-        let index = entry.index.lock().unwrap();
+        let index = entry.index.lock_or_recover();
         index.content_hash(id).unwrap()
     }
 
@@ -14474,12 +14327,11 @@ mod index_repair_tests {
         assert!(
             state
                 .pending_index_repairs
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .contains(&(store_id.clone(), first))
         );
         // The failed write must not mark its watcher echo as a local no-op.
-        assert!(state.local_write_hashes.lock().unwrap().is_empty());
+        assert!(state.local_write_hashes.lock_or_recover().is_empty());
 
         // A later write to the same store repairs the queued row from disk.
         let other = ops::create(
@@ -14493,7 +14345,7 @@ mod index_repair_tests {
         state.changed_in(&entry, "created", &other);
         assert!(indexed_hash(&entry, &first).is_some());
         assert!(indexed_hash(&entry, &second).is_some());
-        assert!(state.pending_index_repairs.lock().unwrap().is_empty());
+        assert!(state.pending_index_repairs.lock_or_recover().is_empty());
 
         // A failed delete is queued too; once the file is gone the repair drops the row.
         state.index_write_faults.store(1, Ordering::SeqCst);
@@ -14502,7 +14354,40 @@ mod index_repair_tests {
         assert!(indexed_hash(&entry, &first).is_some());
         state.changed_in(&entry, "changed", &other);
         assert_eq!(indexed_hash(&entry, &first), None);
-        assert!(state.pending_index_repairs.lock().unwrap().is_empty());
+        assert!(state.pending_index_repairs.lock_or_recover().is_empty());
+    }
+
+    /// HS2-ZGQJZP: a panic while holding a server lock must not wedge later writes.
+    #[test]
+    fn poisoned_server_locks_are_recovered_by_later_writes() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        let state = AppState::new(store.clone(), "secret".into()).unwrap();
+        let entry = state.host.get(&multistore::store_url_id(&store)).unwrap();
+        let ticket = ops::create(
+            &store,
+            id,
+            "HS",
+            Timestamp::new("2026-09-02T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let index = entry.index.clone();
+        let writes = state.local_write_hashes.clone();
+        let log = state.event_log.clone();
+        let _ = std::thread::spawn(move || {
+            let _a = index.lock().unwrap();
+            let _b = writes.lock().unwrap();
+            let _c = log.lock().unwrap();
+            panic!("poison");
+        })
+        .join();
+        assert!(entry.index.is_poisoned());
+        state.changed_in(&entry, "created", &ticket);
+        assert!(indexed_hash(&entry, &id).is_some());
+        assert_eq!(state.local_write_hashes.lock_or_recover().len(), 1);
+        assert!(state.event_cursor() > 0);
     }
 
     #[test]
@@ -14528,12 +14413,11 @@ mod index_repair_tests {
         assert!(
             state
                 .pending_index_repairs
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .contains(&(store_id.clone(), id))
         );
         state.changed_in(&entry, "changed", &ticket);
         assert!(indexed_hash(&entry, &id).is_some());
-        assert!(state.pending_index_repairs.lock().unwrap().is_empty());
+        assert!(state.pending_index_repairs.lock_or_recover().is_empty());
     }
 }

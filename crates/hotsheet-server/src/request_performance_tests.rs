@@ -1,4 +1,5 @@
 use super::*;
+use hotsheet_sync::LockExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 
@@ -16,7 +17,7 @@ impl HeldResource {
         let active = Arc::new(AtomicBool::new(true));
         let held = active.clone();
         let worker = std::thread::spawn(move || {
-            let _guard = resource.lock().unwrap();
+            let _guard = resource.lock_or_recover();
             ready.send(()).unwrap();
             let _ = released.recv_timeout(Duration::from_secs(10));
             held.store(false, Ordering::SeqCst);
@@ -206,7 +207,7 @@ async fn concurrent_cold_backlink_sources_initialize_once_and_keep_updates() {
         assert_eq!(request.await.unwrap().unwrap().0.backlinks.len(), 1);
     }
     assert_eq!(state.host.count(), 2);
-    assert_eq!(state.watchers.lock().unwrap().len(), 1);
+    assert_eq!(state.watchers.lock_or_recover().len(), 1);
     let healthy = source.read_ticket(&duplicate.id).unwrap();
     std::fs::write(source.ticket_path(&duplicate.id), "corrupt ticket bytes").unwrap();
     assert!(

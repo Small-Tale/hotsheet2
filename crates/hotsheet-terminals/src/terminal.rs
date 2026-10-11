@@ -6,6 +6,7 @@
 //! Server-arbitrated PTY **sizing** across many viewers is its own concern (HS2-62); here a
 //! terminal simply has one size that [`resize`](Terminal::resize) sets.
 
+use hotsheet_sync::LockExt;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -198,10 +199,7 @@ impl OutputReplay {
     }
 
     fn publish(&self, bytes: &[u8]) {
-        let mut ring = self
-            .ring
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut ring = self.ring.lock_or_recover();
         ring.push(bytes);
         // Broadcast while the ring lock is held. `subscribe_with_snapshot` takes the same
         // lock before subscribing, which makes the handoff sequence-exact.
@@ -209,17 +207,11 @@ impl OutputReplay {
     }
 
     fn snapshot(&self) -> Vec<u8> {
-        self.ring
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .snapshot()
+        self.ring.lock_or_recover().snapshot()
     }
 
     fn subscribe_with_snapshot(&self) -> (Vec<u8>, broadcast::Receiver<Vec<u8>>) {
-        let ring = self
-            .ring
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let ring = self.ring.lock_or_recover();
         let receiver = self.tx.subscribe();
         (ring.snapshot(), receiver)
     }
@@ -260,8 +252,7 @@ fn resize_pty(
     cols: u16,
 ) -> Result<(), TermError> {
     master
-        .lock()
-        .map_err(|_| pty_err("master poisoned"))?
+        .lock_or_recover()
         .resize(PtySize {
             rows,
             cols,
@@ -302,15 +293,11 @@ fn release_slave_when_drained(
                 return;
             };
             let exited = child
-                .lock()
-                .ok()
-                .and_then(|mut child| child.try_wait().ok())
+                .with_lock(|child| child.try_wait().ok())
                 .is_none_or(|status| status.is_some());
             if exited {
                 let unread = master
-                    .lock()
-                    .ok()
-                    .and_then(|master| master.as_raw_fd())
+                    .with_lock(|master| master.as_raw_fd())
                     .map(unread_bytes)
                     .unwrap_or(0);
                 if unread == 0 {
@@ -410,10 +397,12 @@ impl Terminal {
                     Ok(n) => {
                         let chunk = &buf[..n];
                         out.publish(chunk);
-                        if let Ok(mut d) = bz.lock() {
+                        {
+                            let mut d = bz.lock_or_recover();
                             d.feed(chunk);
                         }
-                        if let Ok(mut o) = oc.lock() {
+                        {
+                            let mut o = oc.lock_or_recover();
                             o.feed(chunk);
                         }
                     }
@@ -454,7 +443,7 @@ impl Terminal {
     /// when a resize happened. `now_ms` is the injected clock (real millis from the caller).
     pub fn claim_size(&self, claim: ViewportClaim, now_ms: u64) -> Option<Decision> {
         let decision = {
-            let mut s = self.sizer.lock().ok()?;
+            let mut s = self.sizer.lock_or_recover();
             s.upsert(claim, now_ms);
             s.decide(now_ms)
         };
@@ -464,7 +453,7 @@ impl Terminal {
     /// A viewport disconnected: drop its claim and recompute (self-heal).
     pub fn drop_viewer(&self, viewer_id: &str, now_ms: u64) -> Option<Decision> {
         let decision = {
-            let mut s = self.sizer.lock().ok()?;
+            let mut s = self.sizer.lock_or_recover();
             s.remove(viewer_id);
             s.decide(now_ms)
         };
@@ -473,7 +462,8 @@ impl Terminal {
 
     /// Set the per-terminal sizing policy (focus-follows | smallest | largest | pinned).
     pub fn set_size_policy(&self, policy: SizePolicy) {
-        if let Ok(mut s) = self.sizer.lock() {
+        {
+            let mut s = self.sizer.lock_or_recover();
             s.set_policy(policy);
         }
     }
@@ -482,7 +472,7 @@ impl Terminal {
     /// paths send this right after the replay, because [`Self::subscribe_size`] only reports
     /// later changes and a viewer of a stable-size terminal would otherwise never learn it.
     pub fn current_size(&self) -> Option<Decision> {
-        self.sizer.lock().ok().and_then(|s| s.applied())
+        self.sizer.with_lock(|s| s.applied())
     }
 
     /// Subscribe to reconciled-size changes (each viewer forwards these to its client).
@@ -503,7 +493,7 @@ impl Terminal {
     /// change, decide again once the min-interval has passed so the last size of a burst lands
     /// without waiting for a viewer's next claim. At most one trailing decide is pending.
     fn schedule_trailing_resize(&self) {
-        let deferred = self.sizer.lock().ok().and_then(|s| s.deferred_until());
+        let deferred = self.sizer.with_lock(|s| s.deferred_until());
         if deferred.is_none()
             || self
                 .trailing_resize
@@ -524,10 +514,8 @@ impl Terminal {
                     std::thread::sleep(std::time::Duration::from_millis(
                         at.saturating_sub(wall_ms()),
                     ));
-                    let (decision, next) = match sizer.lock() {
-                        Ok(mut s) => (s.decide(wall_ms()), s.deferred_until()),
-                        Err(_) => (None, None),
-                    };
+                    let (decision, next) =
+                        sizer.with_lock(|s| (s.decide(wall_ms()), s.deferred_until()));
                     if let Some(d) = decision {
                         let _ = resize_pty(&master, d.rows, d.cols);
                         let _ = size_tx.send(d);
@@ -537,7 +525,7 @@ impl Terminal {
                 pending.store(false, std::sync::atomic::Ordering::SeqCst);
                 // A claim deferred between the last decide and clearing the flag saw a pending
                 // trailing decide and did not schedule its own: pick it up here.
-                due = sizer.lock().ok().and_then(|s| s.deferred_until());
+                due = sizer.with_lock(|s| s.deferred_until());
                 if due.is_none() || pending.swap(true, std::sync::atomic::Ordering::SeqCst) {
                     break;
                 }
@@ -553,7 +541,7 @@ impl Terminal {
 
     /// Write input bytes to the terminal (keystrokes / a command).
     pub fn write(&self, bytes: &[u8]) -> Result<(), TermError> {
-        let mut w = self.writer.lock().map_err(|_| pty_err("writer poisoned"))?;
+        let mut w = self.writer.lock_or_recover();
         w.write_all(bytes)?;
         w.flush()?;
         Ok(())
@@ -571,15 +559,12 @@ impl Terminal {
 
     /// The inferred busy/idle activity from the output stream.
     pub fn activity(&self) -> Activity {
-        self.busy
-            .lock()
-            .map(|d| d.activity())
-            .unwrap_or(Activity::Idle)
+        self.busy.with_lock(|d| d.activity())
     }
 
     /// Informational terminal state parsed from OSC 7/8/9 (cwd / hyperlink / progress).
     pub fn term_state(&self) -> TermState {
-        self.osc.lock().map(|o| o.state()).unwrap_or_default()
+        self.osc.with_lock(|o| o.state())
     }
 
     /// Whether a command other than the terminal's own process holds the PTY foreground: a
@@ -589,8 +574,8 @@ impl Terminal {
     pub fn foreground_command_running(&self) -> Option<bool> {
         #[cfg(unix)]
         {
-            let leader = self.master.lock().ok()?.process_group_leader()?;
-            let own = self.child.lock().ok()?.process_id()?;
+            let leader = self.master.lock_or_recover().process_group_leader()?;
+            let own = self.child.lock_or_recover().process_id()?;
             Some(i64::from(leader) != i64::from(own))
         }
         #[cfg(not(unix))]
@@ -602,20 +587,14 @@ impl Terminal {
     /// Whether the child process is still running.
     pub fn is_alive(&self) -> bool {
         self.child
-            .lock()
-            .ok()
-            .and_then(|mut c| c.try_wait().ok())
+            .with_lock(|c| c.try_wait().ok())
             .map(|status| status.is_none())
             .unwrap_or(false)
     }
 
     /// Kill the child process.
     pub fn kill(&self) -> Result<(), TermError> {
-        self.child
-            .lock()
-            .map_err(|_| pty_err("child poisoned"))?
-            .kill()
-            .map_err(TermError::Io)
+        self.child.lock_or_recover().kill().map_err(TermError::Io)
     }
 }
 
@@ -853,7 +832,7 @@ mod tests {
             .expect("the drain reaches EOF once the slave keeper releases the slave");
         assert_eq!(String::from_utf8_lossy(&out), "late-reader-bytes");
         assert!(wait_until(
-            || child.lock().unwrap().try_wait().unwrap().is_some(),
+            || child.lock_or_recover().try_wait().unwrap().is_some(),
             5
         ));
     }
