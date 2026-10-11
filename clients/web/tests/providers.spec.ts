@@ -15328,9 +15328,10 @@ test('projects a newly created ticket within one frame without a collection refr
       const url = input instanceof Request ? input.url : String(input);
       const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
       if (method === 'POST' && new URL(url, location.href).pathname.endsWith('/tickets')) {
-        const readJson = response.json.bind(response);
-        response.json = async () => {
-          const ticket: unknown = await readJson();
+        // The API client reads bodies as text before validating them (HS2-34P6XY).
+        const readText = response.text.bind(response);
+        response.text = async () => {
+          const ticket = await readText();
           state.newTicketResponseAt = performance.now();
           state.newTicketTransportMs = state.newTicketResponseAt - started;
           animationFrame = requestAnimationFrame(countFrame);

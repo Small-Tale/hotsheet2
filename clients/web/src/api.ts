@@ -1,8 +1,16 @@
 import { browserRandomId } from './browser-id';
-import type { ServerCompatibility } from './compatibility';
-import { errorMessageOf, responseJson } from './json-value';
+import { errorMessageOf, responseJson, responseJsonBody } from './json-value';
 import { prioritiesToWire } from './priority-wire';
 import { beginServerRequest, describeServerRequest, endServerRequest } from './server-busy';
+import {
+  ignoreBody,
+  parseAccountIdentity,
+  parseCheckout,
+  parseServerCompatibility,
+  parseStringList,
+  parseTrashPurge,
+  type ResponseParser,
+} from './server-response-parsers';
 import type { TicketCloseReason } from './ticket-close';
 import { completionDayStarts } from './ticket-completion-trend';
 
@@ -805,12 +813,28 @@ export class Api {
   // `trackBusy` defaults to true so ordinary loads and mutations drive the server-busy indicator.
   // Idle long-poll streams (e.g. pollEvents) pass false: they sit pending by design and must not
   // read as the server being busy (HS2-MW1V3M).
+  /**
+   * Legacy unchecked request: casts the 2xx body to `T`. Endpoints move to {@link parsed} one
+   * family at a time (HS2-34P6XY); new endpoints must use `parsed`.
+   */
   private async request<T>(
     path: string,
     requested: RequestInit = {},
     trackRequest = true,
     onResponse?: (response: Response) => void,
   ): Promise<T> {
+    return (await this.requestBody(path, requested, trackRequest, onResponse)) as T;
+  }
+  /** Request an endpoint and validate its 2xx body with the endpoint's response parser. */
+  private async parsed<T>(parse: ResponseParser<T>, path: string, requested: RequestInit = {}): Promise<T> {
+    return parse(await this.requestBody(path, requested));
+  }
+  private async requestBody(
+    path: string,
+    requested: RequestInit = {},
+    trackRequest = true,
+    onResponse?: (response: Response) => void,
+  ): Promise<unknown> {
     const init = withHumanActor(path, requested);
     const headers = new Headers(init.headers);
     headers.set('X-Hotsheet-Secret', this.secret);
@@ -823,12 +847,12 @@ export class Api {
       if (!response.ok)
         throw new ApiHttpError(errorMessageOf(await responseJson(response)) ?? `${response.status}`, response.status);
       onResponse?.(response);
-      return response.status === 204 ? (undefined as T) : await response.json();
+      return response.status === 204 ? undefined : await responseJsonBody(response);
     } finally {
       if (trackBusy) endServerRequest();
     }
   }
-  compatibility = () => this.request<ServerCompatibility>('/compatibility');
+  compatibility = () => this.parsed(parseServerCompatibility, '/compatibility');
   providers = () => this.request<ProviderDescriptor[]>('/providers');
   /** This project's own ticket-source connections; the bridge scopes the path to the checkout (HS2-SM9PM8). */
   connections = () => this.request<ProviderConnection[]>('/provider-connections');
@@ -868,11 +892,11 @@ export class Api {
   /** Machine-wide sign-ins with the sources and projects using each (HS2-SM9PM8). */
   accounts = () => this.request<ProviderAccount[]>('/accounts');
   identifyAccount = (id: string) =>
-    this.request<{ identity: string }>(`/accounts/${encodeURIComponent(id)}/identity`, { method: 'POST' });
-  signOutAccount = (id: string) => this.request<void>(`/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    this.parsed(parseAccountIdentity, `/accounts/${encodeURIComponent(id)}/identity`, { method: 'POST' });
+  signOutAccount = (id: string) => this.parsed(ignoreBody, `/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' });
   /** Remove an unlinked source belonging to this account without signing out. */
   removeUnusedAccountSource = (account: string, source: string) =>
-    this.request<void>(`/accounts/${encodeURIComponent(account)}/sources/${encodeURIComponent(source)}`, {
+    this.parsed(ignoreBody, `/accounts/${encodeURIComponent(account)}/sources/${encodeURIComponent(source)}`, {
       method: 'DELETE',
     });
   accountGithubRepositories = (id: string) =>
@@ -894,12 +918,16 @@ export class Api {
   githubAuthRepositories = (session: string) =>
     this.request<GitHubRepositoryAccess>(`/github-auth/device/${encodeURIComponent(session)}/repositories`);
   cancelGitHubAuth = (session: string) =>
-    this.request<void>(`/github-auth/device/${encodeURIComponent(session)}`, { method: 'DELETE' });
+    this.parsed(ignoreBody, `/github-auth/device/${encodeURIComponent(session)}`, { method: 'DELETE' });
   addCheckoutSource = (checkout: string, connection: ProviderConnection, makeDefault = false) =>
-    this.request<Checkout>(`/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connection.id)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ provider: connection.provider, locator: connection.locator, make_default: makeDefault }),
-    });
+    this.parsed(
+      parseCheckout,
+      `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connection.id)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ provider: connection.provider, locator: connection.locator, make_default: makeDefault }),
+      },
+    );
   /**
    * Remove a ticket source from one project. A connection no other project uses is deleted with it;
    * its account stays signed in (HS2-SM9PM8).
@@ -910,7 +938,7 @@ export class Api {
       { method: 'DELETE' },
     );
   setCheckoutDefaultSource = (checkout: string, connectionId: string | null) =>
-    this.request<Checkout>(`/checkouts/${encodeURIComponent(checkout)}/default-source`, {
+    this.parsed(parseCheckout, `/checkouts/${encodeURIComponent(checkout)}/default-source`, {
       method: 'PUT',
       body: JSON.stringify({ connection_id: connectionId }),
     });
@@ -1068,7 +1096,7 @@ export class Api {
     ).then((ticket) => ({ store: ticket.store, ticket }));
   /** Permanently remove every Trash ticket from the checkout's git-backed stores. */
   emptyCheckoutTrash = (checkout: string) =>
-    this.request<{ purged: number; tickets: string[] }>(`/checkouts/${encodeURIComponent(checkout)}/trash/empty`, {
+    this.parsed(parseTrashPurge, `/checkouts/${encodeURIComponent(checkout)}/trash/empty`, {
       method: 'POST',
     });
   batchUpdateCheckoutTickets = (checkout: string, updates: Array<{ id: string; patch: Record<string, unknown> }>) =>
@@ -1284,9 +1312,9 @@ export class Api {
       ...(options.keepalive ? { keepalive: true } : {}),
     });
   /** Command groups kept even while empty, stored beside `commands` (HS2-EZ5KMC). */
-  commandGroups = () => this.request<string[]>('/command-groups');
+  commandGroups = () => this.parsed(parseStringList, '/command-groups');
   saveCommandGroups = (groups: string[]) =>
-    this.request<string[]>('/command-groups', { method: 'PUT', body: JSON.stringify(groups) });
+    this.parsed(parseStringList, '/command-groups', { method: 'PUT', body: JSON.stringify(groups) });
   customViews = () => this.request<CustomView[]>('/views');
   saveCustomViews = (views: CustomView[]) =>
     this.request<CustomView[]>('/views', { method: 'PUT', body: JSON.stringify(views) });

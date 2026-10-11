@@ -27,6 +27,15 @@ export async function responseJson(response: Response): Promise<unknown> {
   return tryParseJson(await response.text().catch(() => ''));
 }
 
+/**
+ * A successful response body as `unknown` for a response parser: `undefined` when empty, and a
+ * SyntaxError for non-JSON text (HS2-34P6XY).
+ */
+export async function responseJsonBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  return text.trim() ? parseJson(text) : undefined;
+}
+
 /** The non-empty `error` string of a failure body, or undefined. */
 export function errorMessageOf(body: unknown): string | undefined {
   return isRecord(body) && typeof body.error === 'string' && body.error ? body.error : undefined;

@@ -16,9 +16,18 @@ import {
   recordHs1Backup,
   requireHs1Backup,
 } from './hs1-backup';
-import { errorMessageOf, isRecord, parseJson, responseJson } from './json-value';
+import { errorMessageOf, isRecord, parseJson, responseJson, responseJsonBody } from './json-value';
 import type { MigrationJob, MigrationProgress, MigrationResult } from './migration-progress';
 import { parseGitProgress, parseMigrationProgress, runMigrationProcess } from './migration-stream';
+import {
+  ignoreBody,
+  parseCheckout,
+  parseCheckouts,
+  parseCorruptTicketPaths,
+  parseOpenedCheckout,
+  parseServerCompatibility,
+  type ResponseParser,
+} from './server-response-parsers';
 
 export interface ProjectSession {
   id: string;
@@ -785,7 +794,7 @@ export async function createLocalGitTicketStore(
     target = sessionForRoot(root);
   if (target) {
     const existing = await exists(resolve(path, 'hotsheet-store.json'));
-    const server = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
+    const server = await serverRequest(target, '/compatibility', parseServerCompatibility).catch(() => undefined);
     requireStoreSchemaCompatibility(server, cli, existing ? 'open' : 'create');
   }
   await runner(binary, projectBootstrapArgs(root, path), developmentRepositoryRoot());
@@ -1223,7 +1232,7 @@ function supportsSafeRestart(server: ServerCompatibility | undefined): boolean {
 async function restartForUpgrade(store: string, target: SessionTarget, current: InstanceInfo): Promise<InstanceInfo> {
   const platform = serverPlatform(store);
   return safelyRestartServer(current, {
-    request: () => serverRequest(target, '/lifecycle/restart', { method: 'POST' }).then(() => undefined),
+    request: () => serverRequest(target, '/lifecycle/restart', ignoreBody, { method: 'POST' }).then(() => undefined),
     discover: () => platform.discover(),
     supervise: () => superviseServer(platform),
     wait: () => platform.wait(),
@@ -1233,6 +1242,7 @@ async function restartForUpgrade(store: string, target: SessionTarget, current: 
 async function serverRequest<T>(
   target: SessionTarget,
   path: string,
+  parse: ResponseParser<T>,
   init: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {},
 ): Promise<T> {
   const response = await fetch(`${target.url}${path}`, {
@@ -1240,7 +1250,7 @@ async function serverRequest<T>(
     headers: { 'content-type': 'application/json', 'x-hotsheet-secret': target.secret, ...init.headers },
   });
   if (!response.ok) throw new Error(errorMessageOf(await responseJson(response)) || `${response.status}`);
-  return response.json() as Promise<T>;
+  return parse(await responseJsonBody(response));
 }
 
 export async function openLocalProject(rootInput: string, ticketStoreInput?: string): Promise<ProjectSession> {
@@ -1260,7 +1270,7 @@ async function openPreparedLocalProject(
   const plan = projectServerPlan(await bootstrapStore(), root, ticketStore);
   let instance = await ensureServer(plan.serverStore),
     target: SessionTarget = { url: instance.url, secret: instance.secret, root, serverStore: plan.serverStore };
-  let metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
+  let metadata = await serverRequest(target, '/compatibility', parseServerCompatibility).catch(() => undefined);
   const cli = ticketStore ? await cliCompatibility(ticketStore, runProcess) : undefined;
   const selectedRevision = process.env.HOT_SHEET_BUILD_REVISION;
   let compatibility = assessCompatibility(metadata, undefined, selectedRevision);
@@ -1272,7 +1282,7 @@ async function openPreparedLocalProject(
   ) {
     instance = await restartForUpgrade(plan.serverStore, target, instance);
     target = { url: instance.url, secret: instance.secret, root, serverStore: plan.serverStore };
-    metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
+    metadata = await serverRequest(target, '/compatibility', parseServerCompatibility).catch(() => undefined);
     compatibility = assessCompatibility(metadata, undefined, selectedRevision);
   }
   // A running production host pins its selected binaries at launch. Source edits after
@@ -1280,9 +1290,7 @@ async function openPreparedLocalProject(
   requireSelectedServerBuild(metadata, selectedRevision);
   if (ticketStore && cli) requireStoreSchemaCompatibility(metadata, cli, 'open');
   requireCompatibleServer(compatibility);
-  const opened = await serverRequest<{
-    checkout: { id: string; root: string; alias: string; stores: string[]; sources: unknown[] };
-  }>(target, '/projects/open', {
+  const opened = await serverRequest(target, '/projects/open', parseOpenedCheckout, {
     method: 'POST',
     body: JSON.stringify(plan.openBody),
   });
@@ -1322,14 +1330,14 @@ async function openPreparedLocalProject(
  * (HS2-QMR41J). Dependencies are injectable for testing. */
 export async function listServerCheckouts(
   ensure: (store: string) => Promise<InstanceInfo> = ensureServer,
-  request: <T>(target: SessionTarget, path: string) => Promise<T> = serverRequest,
+  request: (target: SessionTarget, path: string) => Promise<unknown> = (target, path) =>
+    serverRequest(target, path, (value) => value),
   resolveStore: () => Promise<string> = bootstrapStore,
 ): Promise<Checkout[]> {
   const store = await resolveStore();
   const instance = await ensure(store);
-  const checkouts = await request<Checkout[]>(
-    { url: instance.url, secret: instance.secret, serverStore: store },
-    '/checkouts',
+  const checkouts = parseCheckouts(
+    await request({ url: instance.url, secret: instance.secret, serverStore: store }, '/checkouts'),
   );
   const available = await Promise.all(
     checkouts.map(async (checkout) => {
@@ -1423,9 +1431,10 @@ export async function revealCorruptTicket(
 ): Promise<void> {
   const target = sessions.get(projectId);
   if (!target) throw new Error('Project session is not open.');
-  const diagnostics = await serverRequest<CorruptDiagnostic[]>(
+  const diagnostics = await serverRequest(
     target,
     `/checkouts/${encodeURIComponent(projectId)}/corrupt-tickets`,
+    parseCorruptTicketPaths,
   );
   requireReportedCorruptPath(diagnostics, path);
   const command = revealCommand(path);
@@ -1513,9 +1522,10 @@ export async function runHs1MigrationJob(
   }
   const result = await migrateHs1Project(job.root, job.store, ownedRunner, observe);
   await observe({ version: 1, phase: 'register_source' });
-  const checkout = await serverRequest<Checkout>(
+  const checkout = await serverRequest(
     target,
     `/checkouts/${encodeURIComponent(job.projectId)}/sources/${encodeURIComponent(result.connectionId)}`,
+    parseCheckout,
     {
       method: 'PUT',
       body: JSON.stringify({ provider: 'git', locator: result.ticketStore, make_default: true }),
