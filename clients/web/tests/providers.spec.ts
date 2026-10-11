@@ -20550,8 +20550,8 @@ test('searches only the current view before updating scoped sidebar counts', asy
   expect(searchBadgeGeometry.numberLeft).toBeLessThan(searchBadgeGeometry.badgeRight);
   expect(searchBadgeGeometry.iconCenterY).toBeCloseTo(searchBadgeGeometry.numberCenterY, 0);
   await navigation.screenshot({ path: 'target/visual-captures/hs2-41szwd-search-counts.png' });
-  await page.locator('[data-workspace-overflow]').getByRole('button', { name: 'More workspace controls' }).click();
-  await page.locator('[data-workspace-overflow] [data-view-mode="board"]').click();
+  // The search keeps the short view title, so the view switcher stays in the toolbar (HS2-18Y67S).
+  await page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Columns view' }).click();
   const board = page.locator('[data-component="ticket-board"]');
   await expect(board.getByRole('region', { name: 'Backlog column' })).toHaveCount(0);
   await expect(board.getByRole('region', { name: 'Archive column' })).toHaveCount(0);
@@ -21134,8 +21134,8 @@ test('distinguishes pending and empty ticket search feedback in list and board v
     'No tickets match “missing parser”',
   );
   await page.screenshot({ path: 'target/visual-captures/hs2-ydrmad-search-empty-list-wide.png', fullPage: true });
-  await page.locator('[data-workspace-overflow]').getByRole('button', { name: 'More workspace controls' }).click();
-  await page.locator('[data-workspace-overflow] [data-view-mode="board"]').click();
+  // The search keeps the short view title, so the view switcher stays in the toolbar (HS2-18Y67S).
+  await page.getByRole('group', { name: 'View mode' }).getByRole('button', { name: 'Columns view' }).click();
   await expect(page.locator('[data-component="ticket-board"] [data-component="empty-state"]')).toHaveCount(1);
   await expect(page.getByText('No tickets match “missing parser”')).toBeVisible();
   await page.setViewportSize({ width: 1024, height: 600 });
