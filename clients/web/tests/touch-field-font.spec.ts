@@ -195,32 +195,91 @@ test.describe('touch app interactions (HS2-R2H1BA)', () => {
     });
 });
 
-/** Saved commands and a custom view, in the `GET /commands` and `GET /views` response shapes. */
+/**
+ * Saved commands, a custom view, and two installed AI tools, in the `GET /commands`, `GET /views`,
+ * `GET /ai-tools`, and `GET /ai-settings` response shapes.
+ */
 const POPULATED = {
   commands: [
     { id: 'cmd-tests', title: 'Run tests', kind: 'shell', command: 'npm test', group: 'Build' },
     { id: 'cmd-review', title: 'Review diff', kind: 'ai', prompt: 'Review the staged diff.', group: 'AI' },
   ],
   views: [{ id: 'view-mine', name: 'Mine', query: 'status:started' }],
+  aiTools: [
+    {
+      id: 'codex',
+      display_name: 'Codex',
+      models: [
+        { id: 'gpt-6-astra', label: 'GPT-6 Astra', effort_levels: ['low', 'medium', 'high'] },
+        { id: 'gpt-5.5', label: 'GPT-5.5', effort_levels: ['low', 'medium', 'high'] },
+      ],
+      default_model: 'gpt-6-astra',
+      default_effort: 'medium',
+      actions: ['change_model', 'change_effort'],
+    },
+    {
+      id: 'claude',
+      display_name: 'Claude',
+      models: [
+        { id: 'opus', label: 'Opus', effort_levels: ['low', 'medium', 'high'] },
+        { id: 'sonnet', label: 'Sonnet', effort_levels: ['low', 'medium', 'high'] },
+      ],
+      default_model: 'sonnet',
+      default_effort: 'medium',
+      actions: ['change_model', 'change_effort'],
+    },
+  ],
+  aiSettings: { tool: 'codex', model: 'gpt-6-astra', effort: 'medium' },
 };
 
+/** Close the open dialog and wait until no dialog in the page is still open. */
+async function closeDialog(page: Page) {
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.locator('dialog[open]').count()).toBe(0);
+}
+
 /**
- * Populated surfaces (HS2-NYGR2Q): every settings category with saved commands, the saved-view rename,
- * and the terminal rename, each walked with the hidden-dialog-inclusive field audit.
+ * Populated surfaces (HS2-NYGR2Q, HS2-ME1XBC): every settings category with saved commands and
+ * installed AI tools, the AI tools "Other…" model field, each non-git provider connection form, the
+ * saved-view and terminal renames, and the repository setup remote field, each walked with the
+ * hidden-dialog-inclusive field audit. `shot` names the screenshot of each loaded surface.
  */
-async function auditPopulatedSurfaces(page: Page) {
+async function auditPopulatedSurfaces(page: Page, label: 'phone' | 'tablet') {
   const small: string[] = [],
+    phone = label === 'phone',
     audit = async (step: string) => {
       small.push(...(await smallEditableFields(page)).map((field) => `${step}: ${field}`));
+    },
+    shot = (name: string) => page.screenshot({ path: test.info().outputPath(`hs2-me1xbc-${name}-${label}.png`) }),
+    sidebar = async () => {
+      const show = page.getByRole('button', { name: 'Show project sidebar' });
+      if (phone && (await show.isVisible())) await show.click();
     };
-  await openDemoProject(page, true, 1, undefined, undefined, POPULATED);
+  await openDemoProject(page, true, 1, undefined, undefined, { ...POPULATED, uninitializedRepository: true });
   await expect(page.locator('[data-component="app-shell"]')).toBeVisible();
   await audit('populated project');
+
+  // Repository setup: the not-a-repository state, then the remote URL field after initializing.
+  await sidebar();
+  await page.locator('[data-action="open-repository-status"]').first().click();
+  const repository = page.locator('[data-component="repository-status-popover"]');
+  await expect(repository).toHaveAttribute('data-state', 'uninitialized');
+  await repository.getByRole('button', { name: 'Initialize Git repository' }).click();
+  await expect(repository.getByRole('textbox', { name: 'Remote URL' })).toBeVisible();
+  await audit('repository remote');
+  await repository.getByRole('textbox', { name: 'Remote URL' }).fill('git@example.com:small-tale/demo.git');
+  await shot('repository-remote');
+  await page.keyboard.press('Escape');
+  await expect(repository).toBeHidden();
+
+  await sidebar();
   await page.getByRole('button', { name: 'More actions for Mine' }).click();
   await page.getByRole('menu', { name: 'Mine view actions' }).getByText('Edit view…').click();
   await expect(page.getByRole('textbox', { name: 'View name' })).toHaveValue('Mine');
   await audit('saved view rename');
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('textbox', { name: 'View name' })).toBeHidden();
+  if (phone) await page.getByRole('button', { name: 'Hide project sidebar' }).click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
   const drawer = page.locator('[data-component="terminal-drawer"]');
   await drawer.getByRole('tab', { name: /Codex Main/ }).click({ button: 'right' });
@@ -230,6 +289,7 @@ async function auditPopulatedSurfaces(page: Page) {
   await audit('terminal rename');
   await page.keyboard.press('Escape');
   await expect(rename).toHaveJSProperty('open', false);
+  if (phone) await page.getByRole('button', { name: 'Hide terminal drawer' }).click();
   await page.getByLabel('Settings view').click();
   const workspace = page.locator('[data-component="settings-workspace"]');
   await expect(workspace).toBeVisible();
@@ -245,13 +305,50 @@ async function auditPopulatedSurfaces(page: Page) {
     'Accounts',
     'Keyboard',
   ]) {
+    // The phone keeps the settings categories in a sidebar overlay.
+    const settingsSidebar = page.getByRole('button', { name: 'Show settings sidebar' });
+    if (phone && (await settingsSidebar.isVisible())) await settingsSidebar.click();
     await page.getByRole('button', { name: category, exact: true }).first().click();
+    if (phone) await page.getByRole('button', { name: 'Hide settings sidebar' }).click();
     await audit(`settings ${category}`);
     if (category === 'Ticket sources') {
       await page.getByRole('button', { name: 'Edit Hot Sheet git' }).click();
       await expect(page.getByRole('textbox', { name: 'Location' })).toHaveValue('/tickets');
       await audit('ticket source form');
       await page.keyboard.press('Escape');
+      for (const provider of ['GitHub Issues', 'GitLab Issues', 'Jira Cloud']) {
+        await page.getByRole('button', { name: 'Add data source' }).click();
+        await page.getByRole('button', { name: `Connect ${provider}` }).click();
+        const form = page.locator('[data-component="provider-setup-form"]').last();
+        await expect(form).toBeVisible();
+        await audit(`${provider} connection form`);
+        const locator = form.locator('input[name="connection-locator"]');
+        if (await locator.isVisible()) {
+          await locator.fill(provider === 'Jira Cloud' ? 'HS' : 'small-tale/demo');
+          await locator.tap();
+        }
+        // Let the form's slide-in transition settle so the screenshot shows the finished state.
+        await page.waitForTimeout(400);
+        await shot(`${provider.split(' ')[0].toLowerCase()}-form`);
+        await closeDialog(page);
+      }
+    }
+    if (category === 'AI tools') {
+      const settings = page.locator('[data-component="ai-tool-settings"]'),
+        model = settings.locator('wa-select[name="ai-provider-model-codex"]');
+      await expect(model).toHaveAttribute('value', 'gpt-6-astra');
+      await shot('ai-tools');
+      await model.click();
+      await model.getByText('Other…').click();
+      const field = page.getByRole('textbox', { name: /Model identifier/ });
+      await expect(field).toBeVisible();
+      await field.fill('codex-preview');
+      await audit('AI tools other model');
+      // Let the dialog's open transition settle so the screenshot shows the finished state.
+      await page.waitForTimeout(400);
+      await shot('ai-other-model');
+      await page.locator('[data-component="manual-model-dialog"]').getByRole('button', { name: 'Cancel' }).click();
+      await expect.poll(() => page.locator('dialog[open]').count()).toBe(0);
     }
     if (category === 'Commands') {
       await expect(page.getByRole('list', { name: 'Custom commands' })).toContainText('Run tests');
@@ -260,19 +357,28 @@ async function auditPopulatedSurfaces(page: Page) {
       await row.locator('[data-action="edit-command-setting"]').dispatchEvent('click');
       await expect(page.locator('#command-editor-dialog').getByLabel('Button label')).toHaveValue('Run tests');
       await audit('command editor');
-      await page.screenshot({ path: test.info().outputPath('hs2-nygr2q-command-editor-tablet.png') });
+      await page.screenshot({ path: test.info().outputPath(`hs2-nygr2q-command-editor-${label}.png`) });
       await page.keyboard.press('Escape');
     }
   }
   return small;
 }
 
-test.describe('touch populated surfaces (HS2-NYGR2Q)', () => {
-  test.use({ viewport: { width: 1180, height: 820 }, hasTouch: true, isMobile: true });
-  test('keeps populated settings editors and rename fields at 16px or larger on a touch tablet', async ({ page }) => {
-    expect(await auditPopulatedSurfaces(page)).toEqual([]);
-    await page.screenshot({ path: test.info().outputPath('hs2-nygr2q-tablet.png') });
-  });
+test.describe('touch populated surfaces (HS2-NYGR2Q, HS2-ME1XBC)', () => {
+  for (const [label, viewport] of [
+    ['phone', { width: 390, height: 844 }],
+    ['tablet', { width: 1180, height: 820 }],
+  ] as const)
+    test.describe(label, () => {
+      test.use({ viewport, hasTouch: true, isMobile: true });
+      test(`keeps populated settings editors, provider forms, and rename fields at 16px or larger on a touch ${label}`, async ({
+        page,
+      }) => {
+        test.setTimeout(120_000);
+        expect(await auditPopulatedSurfaces(page, label)).toEqual([]);
+        await page.screenshot({ path: test.info().outputPath(`hs2-nygr2q-${label}.png`) });
+      });
+    });
 });
 
 test.describe('desktop', () => {
