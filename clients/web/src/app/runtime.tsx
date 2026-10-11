@@ -174,6 +174,7 @@ import { createPermissionsController } from '../features/permissions';
 import { createProjectChangeStreamsController } from '../features/project-change-streams';
 import { createProjectCloseController } from '../features/project-close';
 import { createProjectLifecycleController } from '../features/project-lifecycle';
+import { nextProjectAfterClose, pruneProjectRecords } from '../features/project-teardown';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
 import { createTerminalDashboardController } from '../features/terminal-dashboard';
@@ -1749,65 +1750,33 @@ export async function startHotSheetWebClient() {
       aiConfigurationController.forgetAiConfiguration(id);
     }
     projects.value = before.filter((item) => !closing.has(item.id));
-    ticketRowsByProject.value = Object.fromEntries(
-      Object.entries(ticketRowsByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    ticketCursorsByProject.value = Object.fromEntries(
-      Object.entries(ticketCursorsByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    boardPagesByProject.value = Object.fromEntries(
-      Object.entries(boardPagesByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    ticketCountsByProject.value = Object.fromEntries(
-      Object.entries(ticketCountsByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    ticketTrendByProject.value = Object.fromEntries(
-      Object.entries(ticketTrendByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    projectProjectionById.value = Object.fromEntries(
-      Object.entries(projectProjectionById.value).filter(([id]) => !closing.has(id)),
-    );
-    customViewsByProject.value = Object.fromEntries(
-      Object.entries(customViewsByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    terminalDrawerChatsByProject.value = Object.fromEntries(
-      Object.entries(terminalDrawerChatsByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    commandSettingsDraftsByProject.value = Object.fromEntries(
-      Object.entries(commandSettingsDraftsByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    commandSettingsMessagesByProject.value = Object.fromEntries(
-      Object.entries(commandSettingsMessagesByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    commandSettingsSelectedByProject.value = Object.fromEntries(
-      Object.entries(commandSettingsSelectedByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    commandSettingsExtraGroupsByProject.value = Object.fromEntries(
-      Object.entries(commandSettingsExtraGroupsByProject.value).filter(([id]) => !closing.has(id)),
+    pruneProjectRecords(
+      [
+        ticketRowsByProject,
+        ticketCursorsByProject,
+        boardPagesByProject,
+        ticketCountsByProject,
+        ticketTrendByProject,
+        projectProjectionById,
+        customViewsByProject,
+        terminalDrawerChatsByProject,
+        commandSettingsDraftsByProject,
+        commandSettingsMessagesByProject,
+        commandSettingsSelectedByProject,
+        commandSettingsExtraGroupsByProject,
+      ],
+      closing,
     );
     if (statsProjectId.value && closing.has(statsProjectId.value)) statsProjectId.value = undefined;
     if (closing.has(selectedProjectId.value)) {
       resetTicketComposer();
-      const next =
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-        projects.value.find((item) => before.indexOf(item) > selectedIndex)?.id ??
-        [...projects.value].reverse().find((item) => before.indexOf(item) < selectedIndex)?.id ??
-        projects.value[0]?.id ??
-        '';
+      const next = nextProjectAfterClose(before, projects.value, selectedIndex);
       if (next) activation = activateOpenProject(next);
       else selectedProjectId.value = '';
       if (!selectedProjectId.value && projectRestoreFailures.value.length)
         selectedProjectRestoreRoot.value = projectRestoreFailures.value[0].root;
     }
-    defaultProviders.value = Object.fromEntries(
-      Object.entries(defaultProviders.value).filter(([id]) => !closing.has(id)),
-    );
-    driveConnectionsByProject.value = Object.fromEntries(
-      Object.entries(driveConnectionsByProject.value).filter(([id]) => !closing.has(id)),
-    );
-    drivePendingByProject.value = Object.fromEntries(
-      Object.entries(drivePendingByProject.value).filter(([id]) => !closing.has(id)),
-    );
+    pruneProjectRecords([defaultProviders, driveConnectionsByProject, drivePendingByProject], closing);
     localStorage.setItem('hotsheet.open-projects', JSON.stringify(currentRememberedProjectRoots()));
     syncProjectChangeStreams();
     commandDialogId.value = undefined;

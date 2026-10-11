@@ -331,6 +331,17 @@ HS2-H2R2JB lifted the per-column board paging owner:
   creation, `closeDrawerTabIds`, surface-prop builders and `HotSheetShell`,
   `refreshProject`, `closeProjectIds`) is tracked as `HS2-DCTS07`.
 
+HS2-DCTS07 lifted the pure project-teardown helpers:
+
+- `project-teardown.ts`: `pruneProjectRecords` drops the closing ids from each per-project
+  record signal (in the runtime's original order, before and after the selection change),
+  and `nextProjectAfterClose` picks the surviving tab that takes the selection (nearest to
+  the right, then the left, then the first). `closeProjectIds` keeps the orchestration:
+  closing server sessions, cancelling refreshes, activating the next project, and
+  refreshing. The remaining split (drawer visibility/selection/focus, terminal and AI-chat
+  creation, `closeDrawerTabIds`, surface-prop builders and `HotSheetShell`,
+  `refreshProject`, the `closeProjectIds` orchestration) is tracked as `HS2-BSSWGV`.
+
 Owners created before these read them through lazy accessors (saved views read
 `availableSearchTags`, the project lifecycle reads `syncProjectChangeStreams`).
 

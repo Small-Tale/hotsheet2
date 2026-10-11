@@ -90,6 +90,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       project-change-streams.ts # Per-project WebSocket/long-poll change streams, event fan-out, debounced repository refresh (HS2-3JGWTV)
       terminal-dashboard.ts # Terminal dashboard snapshot: per-project terminal fetch/merge, AI-connection grace, visibility scopes, drawer tab order (HS2-ZJ67VE)
       board-column-paging.ts # Per-column board paging: refresh spec, bulk status-change refill, one column's Load more (HS2-H2R2JB)
+      project-teardown.ts # Closing project tabs: per-project record pruning and the next selected tab (HS2-DCTS07)
       terminal-drawer-geometry.ts # Terminal drawer min/max/maximize geometry and the phone terminal viewport: focus-mode transitions, keyboard geometry, magnified columns (HS2-T1DX2V)
       conversation-archive.tsx # Range selection, copy, export, and saved-chat opening
       saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion
