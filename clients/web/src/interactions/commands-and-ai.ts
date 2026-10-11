@@ -674,8 +674,12 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   }
   lifetime.add(
     delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.editCommandSetting.selector, (_event, target) => {
-      const id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-      if (id) openCommandEditor(id);
+      const id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
+        current = project();
+      // Right after a project switch the previous project's row can still be in the DOM; a command id
+      // the selected project does not own would open an empty Edit command dialog (HS2-9ZWR5D).
+      if (id && current && commandSettingsDefinitions(current.id).some((command) => command.id === id))
+        openCommandEditor(id);
     }),
   );
   lifetime.add(

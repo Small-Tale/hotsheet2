@@ -8853,7 +8853,6 @@ test('snaps the drawer track while compositing visibility motion and suppressing
   await expect(region).toHaveAttribute('data-collapsed', 'true');
   await expect(drawer).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toHaveCount(0);
-  await page.waitForTimeout(100);
   await page.screenshot({ path: 'target/visual-captures/hs2-x8fg23-drawer-hiding.png', fullPage: true });
   await expect(drawer).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show terminal drawer' })).toBeVisible();
@@ -13550,7 +13549,6 @@ test('renders exactly once when the long poll announces a permission request', a
   await expect(page.locator('.app-loading')).toHaveCount(0);
   await expect.poll(() => polls.length).toBeGreaterThan(0);
   await resetRenderMetrics(page);
-  await page.waitForTimeout(100);
   expect(await renderMetrics(page)).toEqual({ passes: 0, mutations: 0 });
   pending = [
     {
@@ -23313,7 +23311,6 @@ test('switches already-open projects from cache within one frame and rejects sta
   await release('other', [{ ...otherRow, title: 'Other project refreshed ticket' }, otherQueuedRow]);
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toContainText('Other project refreshed ticket');
   await release('demo', [{ ...row, title: 'Stale demo response must stay hidden' }]);
-  await page.waitForTimeout(100);
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toContainText('Other project refreshed ticket');
   await expect(page.getByText('Stale demo response must stay hidden')).toHaveCount(0);
   await expect(projectTabs.filter({ hasText: 'demo' }).locator('.project-tab__work-count')).not.toContainText('≥');
@@ -24182,6 +24179,25 @@ test('shares the settings category across projects but scopes command drafts to 
   await expect(page.getByRole('region', { name: 'Commands settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commands', exact: true })).toHaveAttribute('aria-current', 'page');
   editor = page.locator('[data-component="command-settings-editor"]');
+  // A previous-project row that is still in the DOM right after the switch must not open an empty
+  // Edit command dialog (HS2-9ZWR5D). Recreate that stale row deterministically and use its Edit.
+  await expect(editor.locator('.command-settings-editor__row').first()).toContainText('Other checks');
+  await page.evaluate(() => {
+    const list = document.querySelector(
+        '[data-component="command-settings-editor"] .command-settings-editor__row',
+      )!.parentElement!,
+      stale = document.createElement('li');
+    stale.className = 'command-settings-editor__row';
+    stale.dataset.commandId = 'demo-command';
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.dataset.action = 'edit-command-setting';
+    stale.append(edit);
+    list.append(stale);
+    edit.click();
+    stale.remove();
+  });
+  expect(await commandDialog.evaluate((node) => node.matches(':popover-open'))).toBe(false);
   await openFirstCommand('Other checks');
   await expect(commandDialog.getByLabel('Button label')).toHaveValue('Other checks');
   await expect(editor).not.toContainText('Unsaved demo draft');

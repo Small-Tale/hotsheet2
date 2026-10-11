@@ -144,6 +144,44 @@ describe('extracted handlers retain live application bindings', () => {
     expect(confirmation.value).toBe(false);
   });
 
+  it('opens the command editor only for a command the selected project owns (HS2-9ZWR5D)', () => {
+    const showPopover = vi.fn(),
+      editing = signal<string | undefined>(undefined),
+      iconSearch = signal('stale'),
+      byProject: Record<string, Array<{ id: string; title: string }>> = {
+        demo: [{ id: 'demo-check', title: 'Demo checks' }],
+        other: [{ id: 'other-check', title: 'Other checks' }],
+      };
+    let current: { id: string } | undefined = { id: 'demo' };
+    vi.stubGlobal('document', { body: {}, addEventListener: vi.fn(), querySelector: () => ({ showPopover }) });
+    wireCommandAndAiInteractions({
+      project: () => current,
+      commandSettingsDefinitions: (projectId?: string) => byProject[projectId ?? ''] ?? [],
+      commandSettingsEditingId: editing,
+      commandIconSearch: iconSearch,
+    } as unknown as CommandAndAiInteractionsDependencies);
+    const edit = handler('click', '[data-action="edit-command-setting"]'),
+      row = (commandId: string) => ({ closest: () => ({ dataset: { commandId } }) }) as unknown as Element;
+    edit(new Event('click'), row('demo-check'));
+    expect(editing.value).toBe('demo-check');
+    expect(showPopover).toHaveBeenCalledTimes(1);
+    // Switch projects: the previous project's row is still rendered and clicked.
+    current = { id: 'other' };
+    editing.value = undefined;
+    edit(new Event('click'), row('demo-check'));
+    expect(editing.value).toBeUndefined();
+    expect(showPopover).toHaveBeenCalledTimes(1);
+    // The new project's own row opens normally, and no project at all opens nothing.
+    edit(new Event('click'), row('other-check'));
+    expect(editing.value).toBe('other-check');
+    expect(showPopover).toHaveBeenCalledTimes(2);
+    current = undefined;
+    editing.value = undefined;
+    edit(new Event('click'), row('other-check'));
+    expect(editing.value).toBeUndefined();
+    expect(showPopover).toHaveBeenCalledTimes(2);
+  });
+
   it('synchronizes repeated native project dismissal through the original signals', () => {
     const opened = signal(true),
       recovery = signal<ProjectLifecycleInteractionsDependencies['unhealthyServerRecovery']['value']>({
