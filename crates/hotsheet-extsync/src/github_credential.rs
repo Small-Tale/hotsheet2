@@ -159,6 +159,7 @@ fn resolve_token(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hotsheet_sync::LockExt;
     use std::sync::{Arc, Mutex};
 
     #[derive(Clone, Default)]
@@ -166,14 +167,16 @@ mod tests {
 
     impl SecretStore for MemorySecrets {
         fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
-            self.0.lock().unwrap().insert(account.into(), secret.into());
+            self.0
+                .lock_or_recover()
+                .insert(account.into(), secret.into());
             Ok(())
         }
         fn get(&self, account: &str) -> Result<Option<String>, SecretError> {
-            Ok(self.0.lock().unwrap().get(account).cloned())
+            Ok(self.0.lock_or_recover().get(account).cloned())
         }
         fn delete(&self, account: &str) -> Result<bool, SecretError> {
-            Ok(self.0.lock().unwrap().remove(account).is_some())
+            Ok(self.0.lock_or_recover().remove(account).is_some())
         }
     }
 
@@ -316,7 +319,7 @@ mod tests {
             ]
         );
         // Recorded on disk, so the next listing reads no keychain entry for it.
-        secrets.0.lock().unwrap().remove("github-app-old");
+        secrets.0.lock_or_recover().remove("github-app-old");
         let again = credentials_with_sites(&keys).unwrap();
         assert_eq!(again[2].site.as_deref(), Some("https://ghe.corp.test"));
     }

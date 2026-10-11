@@ -3,6 +3,7 @@
 //! Provider-native ids stay strings at this boundary. The built-in git provider is
 //! the only adapter that translates them to ULIDs and delegates to [`crate::ops`].
 
+use hotsheet_sync::LockExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -1352,14 +1353,7 @@ impl TicketProvider for GitProvider {
         let prefix = self.store.metadata()?.ticket_prefix;
         let blocked_by = self.blockers(&draft.blocked_by)?;
         let _transfer_guard = if draft.transfer.is_some() {
-            Some(
-                self.transfer_lock
-                    .lock()
-                    .map_err(|_| ProviderError::Conflict {
-                        ticket: self.connection_id.clone(),
-                        message: "transfer lock poisoned".into(),
-                    })?,
-            )
+            Some(self.transfer_lock.lock_or_recover())
         } else {
             None
         };
@@ -1861,28 +1855,26 @@ pub struct ProviderRegistry {
 impl ProviderRegistry {
     pub fn register(&self, provider: Arc<dyn TicketProvider>) -> Result<(), ProviderError> {
         let id = provider.descriptor().connection_id;
-        let mut providers = self.providers.lock().map_err(|_| ProviderError::Conflict {
-            ticket: id.clone(),
-            message: "provider registry lock poisoned".into(),
-        })?;
+        let mut providers = self.providers.lock_or_recover();
         providers.insert(id, provider);
         Ok(())
     }
 
     pub fn get(&self, connection_id: &str) -> Result<Arc<dyn TicketProvider>, ProviderError> {
         self.providers
-            .lock()
-            .ok()
-            .and_then(|p| p.get(connection_id).cloned())
+            .lock_or_recover()
+            .get(connection_id)
+            .cloned()
             .ok_or_else(|| ProviderError::UnknownConnection(connection_id.into()))
     }
 
     pub fn descriptors(&self) -> Vec<ProviderDescriptor> {
         let mut values = self
             .providers
-            .lock()
-            .map(|p| p.values().map(|v| v.descriptor()).collect::<Vec<_>>())
-            .unwrap_or_default();
+            .lock_or_recover()
+            .values()
+            .map(|v| v.descriptor())
+            .collect::<Vec<_>>();
         values.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
         values
     }
@@ -1900,13 +1892,7 @@ impl ProviderRegistry {
     }
 
     fn transfer_lock(&self, operation_id: &str) -> Result<Arc<Mutex<()>>, ProviderError> {
-        let mut locks = self
-            .transfer_locks
-            .lock()
-            .map_err(|_| ProviderError::Conflict {
-                ticket: operation_id.into(),
-                message: "transfer lock registry poisoned".into(),
-            })?;
+        let mut locks = self.transfer_locks.lock_or_recover();
         Ok(locks
             .entry(operation_id.into())
             .or_insert_with(|| Arc::new(Mutex::new(())))
@@ -1967,10 +1953,7 @@ pub fn copy_between(
         return Err(TransferError::EmptyOperationId);
     }
     let transfer_lock = registry.transfer_lock(operation_id)?;
-    let _guard = transfer_lock.lock().map_err(|_| ProviderError::Conflict {
-        ticket: operation_id.into(),
-        message: "transfer operation lock poisoned".into(),
-    })?;
+    let _guard = transfer_lock.lock_or_recover();
     let source_provider = registry.get(&source.connection_id)?;
     let destination = registry.get(destination_connection)?;
     let ticket = source_provider.get(&source.native_id)?;
@@ -2168,6 +2151,24 @@ pub fn move_between(
 mod tests {
     use super::*;
     use crate::StoreMetadata;
+
+    #[test]
+    fn a_poisoned_registry_lock_still_registers_and_routes() {
+        // HS2-B2RFSB: a panic while holding the registry lock must not turn every later
+        // register/get/descriptors call into a spurious Conflict or UnknownConnection.
+        let (_dir, git) = git_provider();
+        let registry = ProviderRegistry::default();
+        let providers = registry.providers.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = providers.lock().unwrap();
+            panic!("poison the registry");
+        })
+        .join();
+        assert!(registry.providers.is_poisoned());
+        registry.register(Arc::new(git)).unwrap();
+        assert!(registry.get("local").is_ok());
+        assert_eq!(registry.descriptors().len(), 1);
+    }
 
     fn git_provider() -> (tempfile::TempDir, GitProvider) {
         let dir = tempfile::tempdir().unwrap();

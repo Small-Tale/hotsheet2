@@ -1043,6 +1043,7 @@ dependencies = [
  "anyhow",
  "futures-util",
  "hotsheet-plugins",
+ "hotsheet-sync",
  "hotsheet-ticketing",
  "libc",
  "serde",
@@ -1089,6 +1090,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "hotsheet-model",
+ "hotsheet-sync",
  "hotsheet-ticketing",
  "image",
  "serde",
@@ -1229,6 +1231,7 @@ name = "hotsheet-ticketing"
 version = "0.0.0"
 dependencies = [
  "hotsheet-model",
+ "hotsheet-sync",
  "image",
  "libavif-sys",
  "libc",

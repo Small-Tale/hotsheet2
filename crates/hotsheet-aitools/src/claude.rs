@@ -12,6 +12,7 @@
 //! spawns the real `claude`, while tests inject a **scripted claude** so the whole engine
 //! is exercised with no live tool (`docs/05` §5.10).
 
+use hotsheet_sync::LockExt;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -47,8 +48,7 @@ impl Inner {
     fn send_user(&self, content: &str) -> Result<(), DriveError> {
         let msg = json!({ "type": "user", "message": { "role": "user", "content": content } });
         self.writer
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .send(&msg.to_string())
             .map_err(|e| DriveError::NotConnected(format!("claude channel write failed: {e}")))
     }
@@ -61,21 +61,21 @@ impl Inner {
             && v.get("subtype").and_then(Value::as_str) == Some("init")
             && let Some(sid) = v.get("session_id").and_then(Value::as_str)
         {
-            *self.session_id.lock().unwrap() = Some(sid.to_string());
+            *self.session_id.lock_or_recover() = Some(sid.to_string());
         }
-        let mut events = self.events.lock().unwrap();
+        let mut events = self.events.lock_or_recover();
         events.push(v);
         self.cvar.notify_all();
     }
 
     fn mark_closed(&self) {
         self.closed.store(true, Ordering::SeqCst);
-        let _guard = self.events.lock().unwrap();
+        let _guard = self.events.lock_or_recover();
         self.cvar.notify_all();
     }
 
     fn events_len(&self) -> usize {
-        self.events.lock().unwrap().len()
+        self.events.lock_or_recover().len()
     }
 }
 
@@ -122,7 +122,7 @@ impl ClaudeChannel {
 
 impl ClaudeChannelClient for ClaudeChannel {
     fn session_id(&self) -> Option<String> {
-        self.inner.session_id.lock().unwrap().clone()
+        self.inner.session_id.lock_or_recover().clone()
     }
 
     fn start_turn(&self, content: &str) -> Result<Box<dyn TurnHandle>, DriveError> {
@@ -318,7 +318,7 @@ impl ClaudeTurn {
             return Some(event);
         }
         let deadline = Instant::now() + TURN_TIMEOUT;
-        let mut events = self.inner.events.lock().unwrap();
+        let mut events = self.inner.events.lock_or_recover();
         loop {
             while self.cursor < events.len() {
                 let ev = &events[self.cursor];
@@ -359,7 +359,7 @@ impl TurnHandle for ClaudeTurn {
             return false;
         }
         // Read-only peek: a `result` at/after the cursor means the turn is finished.
-        let events = self.inner.events.lock().unwrap();
+        let events = self.inner.events.lock_or_recover();
         !events[self.cursor..]
             .iter()
             .any(|e| e.get("type").and_then(Value::as_str) == Some("result"))

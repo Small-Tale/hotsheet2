@@ -1,5 +1,6 @@
 //! Agent Client Protocol drive + standard usage mapper (HS2-DEK94W/HS2-96BZEF).
 
+use hotsheet_sync::LockExt;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::Path;
@@ -31,10 +32,9 @@ impl Inner {
     fn request(&self, method: &str, params: Value) -> Result<Value, DriveError> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = channel();
-        self.pending.lock().unwrap().insert(id, tx);
+        self.pending.lock_or_recover().insert(id, tx);
         self.writer
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .send(&json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}).to_string())
             .map_err(|e| DriveError::NotConnected(e.to_string()))?;
         let response = rx
@@ -47,8 +47,7 @@ impl Inner {
     }
     fn notify(&self, method: &str, params: Value) -> bool {
         self.writer
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .send(&json!({"jsonrpc":"2.0","method":method,"params":params}).to_string())
             .is_ok()
     }
@@ -61,10 +60,10 @@ impl Inner {
         if has_method && has_id {
             self.answer_request(&v);
         } else if has_method {
-            self.notes.lock().unwrap().push(v);
+            self.notes.lock_or_recover().push(v);
             self.cvar.notify_all();
         } else if let Some(id) = v.get("id").and_then(Value::as_i64) {
-            if let Some(tx) = self.pending.lock().unwrap().remove(&id) {
+            if let Some(tx) = self.pending.lock_or_recover().remove(&id) {
                 let _ = tx.send(v);
             }
         }
@@ -94,8 +93,7 @@ impl Inner {
         };
         let _ = self
             .writer
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .send(&json!({"jsonrpc":"2.0","id":id,"result":result}).to_string());
     }
 }
@@ -172,13 +170,13 @@ struct AcpTurn {
 }
 /// The first terminal outcome wins even if a prompt RPC resolves after closure or timeout.
 fn finish_once(done: &Mutex<Option<DoneReason>>, reason: DoneReason) {
-    done.lock().unwrap().get_or_insert(reason);
+    done.lock_or_recover().get_or_insert(reason);
 }
 
 impl AcpTurn {
     fn next(&mut self) -> Option<TurnEvent> {
         loop {
-            let notes = self.inner.notes.lock().unwrap();
+            let notes = self.inner.notes.lock_or_recover();
             if self.cursor < notes.len() {
                 let v = notes[self.cursor].clone();
                 self.cursor += 1;
@@ -192,10 +190,10 @@ impl AcpTurn {
                 continue;
             }
             drop(notes);
-            if let Some(done) = self.done.lock().unwrap().clone() {
+            if let Some(done) = self.done.lock_or_recover().clone() {
                 if !self.emitted_usage {
                     self.emitted_usage = true;
-                    if let Some(u) = self.response.lock().unwrap().as_ref().and_then(usage) {
+                    if let Some(u) = self.response.lock_or_recover().as_ref().and_then(usage) {
                         return Some(TurnEvent::Usage(u));
                     }
                 }
@@ -220,7 +218,7 @@ impl AcpTurn {
                 );
                 continue;
             }
-            let guard = self.inner.notes.lock().unwrap();
+            let guard = self.inner.notes.lock_or_recover();
             let _ = self
                 .inner
                 .cvar
@@ -231,7 +229,7 @@ impl AcpTurn {
 }
 impl TurnHandle for AcpTurn {
     fn is_busy(&mut self) -> bool {
-        self.done.lock().unwrap().is_none()
+        self.done.lock_or_recover().is_none()
     }
     fn wait(&mut self) -> DoneReason {
         while let Some(e) = self.next() {
@@ -240,8 +238,7 @@ impl TurnHandle for AcpTurn {
             }
         }
         self.done
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .clone()
             .unwrap_or(DoneReason::Failed {
                 exit_code: 1,
@@ -256,7 +253,7 @@ impl TurnHandle for AcpTurn {
         self.next()
     }
     fn usage(&mut self) -> Option<Usage> {
-        self.response.lock().unwrap().as_ref().and_then(usage)
+        self.response.lock_or_recover().as_ref().and_then(usage)
     }
 }
 
@@ -302,7 +299,7 @@ impl AcpClient for AcpSession {
                 )?;
             }
         }
-        let cursor = self.inner.notes.lock().unwrap().len();
+        let cursor = self.inner.notes.lock_or_recover().len();
         let done = Arc::new(Mutex::new(None));
         let response = Arc::new(Mutex::new(None));
         let i = self.inner.clone();
@@ -317,7 +314,7 @@ impl AcpClient for AcpSession {
             );
             match result {
                 Ok(v) => {
-                    *r.lock().unwrap() = Some(v.clone());
+                    *r.lock_or_recover() = Some(v.clone());
                     let reason = match v.get("stopReason").and_then(Value::as_str) {
                         Some("cancelled") => DoneReason::Interrupted,
                         Some("end_turn" | "stop_sequence" | "max_tokens") | None => {
@@ -651,7 +648,7 @@ mod tests {
             let first = DoneReason::failed(1, "ACP connection closed");
             finish_once(&done, first.clone());
             finish_once(&done, late);
-            assert_eq!(*done.lock().unwrap(), Some(first));
+            assert_eq!(*done.lock_or_recover(), Some(first));
         }
     }
 

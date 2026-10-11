@@ -978,6 +978,7 @@ fn transfer_suffix(body: &Option<String>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hotsheet_sync::LockExt;
     use std::collections::{HashMap, VecDeque};
     use std::sync::Mutex;
 
@@ -996,7 +997,7 @@ mod tests {
             headers: &[(&str, String)],
             body: Option<&Value>,
         ) -> Result<HttpResponse, String> {
-            self.requests.lock().unwrap().push((
+            self.requests.lock_or_recover().push((
                 method.into(),
                 url.into(),
                 headers
@@ -1006,8 +1007,7 @@ mod tests {
                 body.cloned(),
             ));
             self.responses
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .pop_front()
                 .ok_or_else(|| "unexpected request".into())
         }
@@ -1099,11 +1099,11 @@ mod tests {
         assert_eq!(ticket.latest_confidence, Some(64));
         assert_eq!(add().notes[0].confidence, Some(64));
         assert!(
-            fake.requests.lock().unwrap()[4]
+            fake.requests.lock_or_recover()[4]
                 .1
                 .ends_with("/issues/7/resource_state_events?per_page=100&page=1")
         );
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         let posts = requests
             .iter()
             .filter(|request| request.0 == "POST")
@@ -1136,7 +1136,7 @@ mod tests {
         assert_eq!(tickets[0].category, "bug");
         assert_eq!(tickets[0].priority, Priority::High);
         assert_eq!(tickets[0].tags, ["customer"]);
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert!(requests[0].1.contains("projects/acme%2Frepo/issues"));
         assert!(
             requests[0]
@@ -1159,7 +1159,7 @@ mod tests {
             .unwrap();
         assert_eq!(page.items.len(), 1);
         assert_eq!(page.next_cursor.as_deref(), Some("2"));
-        assert_eq!(fake.requests.lock().unwrap().len(), 1);
+        assert_eq!(fake.requests.lock_or_recover().len(), 1);
     }
 
     #[test]
@@ -1223,7 +1223,7 @@ mod tests {
                 })
             ));
         }
-        assert!(fake.requests.lock().unwrap().is_empty());
+        assert!(fake.requests.lock_or_recover().is_empty());
     }
 
     #[test]
@@ -1237,10 +1237,9 @@ mod tests {
         let mut second = issue(2, "two");
         second["created_at"] = json!("2026-08-27T00:00:00Z");
         second["updated_at"] = json!("2026-08-27T00:01:00Z");
-        fake.responses.lock().unwrap().clear();
+        fake.responses.lock_or_recover().clear();
         fake.responses
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .push_back(response(200, json!([issue(1, "one"), second])));
         let tickets = provider(fake)
             .query(&TicketQuery {
@@ -1451,7 +1450,7 @@ mod tests {
         let gitlab = provider(fake.clone());
         assert_eq!(gitlab.get("7").unwrap().latest_confidence, None);
         assert_eq!(gitlab.get("7").unwrap().latest_confidence, Some(70));
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert!(
             requests[3]
                 .1
@@ -1498,7 +1497,7 @@ mod tests {
         let ticket = provider(fake.clone()).get("7").unwrap();
         assert_eq!(ticket.notes.len(), 101);
         assert_eq!(ticket.latest_confidence, Some(75));
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert!(
             requests[1]
                 .1
@@ -1546,7 +1545,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(ticket.notes.len(), 101);
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert!(
             requests.iter().all(|request| request.0 == "GET"),
             "no duplicate POST"
@@ -1572,6 +1571,6 @@ mod tests {
         let gitlab = provider(fake.clone());
         assert_eq!(gitlab.get("7").unwrap().latest_confidence, None);
         assert_eq!(gitlab.get("7").unwrap().latest_confidence, None);
-        assert_eq!(fake.requests.lock().unwrap().len(), 4);
+        assert_eq!(fake.requests.lock_or_recover().len(), 4);
     }
 }

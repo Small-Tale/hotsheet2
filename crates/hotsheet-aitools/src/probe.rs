@@ -7,6 +7,7 @@
 //! back to the plugin manifest. Every in-flight probe is also tracked so a stopping server
 //! can kill them all and refuse new ones ([`stop_probes`]) instead of orphaning them.
 
+use hotsheet_sync::LockExt;
 use std::collections::HashSet;
 use std::io::Read;
 use std::process::{Command, Output, Stdio};
@@ -51,9 +52,7 @@ pub fn set_probe_timeout(timeout: Duration) {
 pub fn kill_in_flight_probes() -> usize {
     // Signal under the lock: a probe leaves the set before it is reaped, so every pid seen
     // here is still this process's own unreaped child.
-    let Ok(guard) = IN_FLIGHT.lock() else {
-        return 0;
-    };
+    let guard = IN_FLIGHT.lock_or_recover();
     let pids: Vec<u32> = guard.iter().flatten().copied().collect();
     for pid in &pids {
         kill_group(*pid);
@@ -67,7 +66,7 @@ pub fn kill_in_flight_probes() -> usize {
 /// the exiting process would orphan.
 pub fn stop_probes() -> usize {
     {
-        let _guard = IN_FLIGHT.lock();
+        let _guard = IN_FLIGHT.lock_or_recover();
         STOPPED.store(true, Ordering::SeqCst);
     }
     kill_in_flight_probes()
@@ -122,15 +121,14 @@ impl Drop for ProbeGroup {
 /// `Child` handle (owned by a stream reader) is dropped without waiting, so without this
 /// the killed child would linger as a zombie.
 fn finish(pid: u32, finished: &Mutex<bool>) {
-    let Ok(mut finished) = finished.lock() else {
-        return;
-    };
+    let mut finished = finished.lock_or_recover();
     if *finished {
         return;
     }
     *finished = true;
     kill_group(pid);
-    if let Ok(mut guard) = IN_FLIGHT.lock() {
+    {
+        let mut guard = IN_FLIGHT.lock_or_recover();
         if let Some(set) = guard.as_mut() {
             set.remove(&pid);
         }
@@ -176,10 +174,7 @@ fn reap(_pid: u32) {}
 
 /// The number of probes currently running (diagnostics and tests).
 pub fn in_flight_probes() -> usize {
-    IN_FLIGHT
-        .lock()
-        .map(|guard| guard.as_ref().map_or(0, HashSet::len))
-        .unwrap_or(0)
+    IN_FLIGHT.lock_or_recover().as_ref().map_or(0, HashSet::len)
 }
 
 /// Run `command` to completion within [`probe_timeout`], capturing stdout and stderr.
@@ -217,14 +212,12 @@ pub fn run_probe_within(command: &mut Command, timeout: Duration) -> Result<Outp
         // Leave the in-flight set before reaping, so a pid `kill_in_flight_probes` can
         // still see is never one the kernel could already have reused.
         wait_exited(pid);
-        let status = match IN_FLIGHT.lock() {
-            Ok(mut guard) => {
-                if let Some(set) = guard.as_mut() {
-                    set.remove(&pid);
-                }
-                child.wait()
+        let status = {
+            let mut guard = IN_FLIGHT.lock_or_recover();
+            if let Some(set) = guard.as_mut() {
+                set.remove(&pid);
             }
-            Err(_) => child.wait(),
+            child.wait()
         };
         let _ = done_tx.send(());
         status
@@ -263,7 +256,8 @@ fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle<V
 }
 
 fn track(pid: u32, running: bool) {
-    if let Ok(mut guard) = IN_FLIGHT.lock() {
+    {
+        let mut guard = IN_FLIGHT.lock_or_recover();
         let set = guard.get_or_insert_with(HashSet::new);
         if running {
             set.insert(pid);

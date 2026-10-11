@@ -329,6 +329,7 @@ impl GitHubDeviceClient {
 mod tests {
     use super::*;
     use crate::HttpResponse;
+    use hotsheet_sync::LockExt;
     use std::{
         collections::{HashMap, VecDeque},
         sync::Mutex,
@@ -347,12 +348,10 @@ mod tests {
             body: Option<&Value>,
         ) -> Result<HttpResponse, String> {
             self.requests
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .push(body.cloned().unwrap_or(Value::Null));
             self.responses
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .pop_front()
                 .ok_or("missing response".into())
         }
@@ -423,7 +422,7 @@ mod tests {
             client.installed_repositories("access").unwrap(),
             vec!["small-tale/docs", "small-tale/hotsheet2"]
         );
-        assert!(fake.requests.lock().unwrap()[0].get("scope").is_none());
+        assert!(fake.requests.lock_or_recover()[0].get("scope").is_none());
     }
 
     #[test]
@@ -487,7 +486,7 @@ mod tests {
             Some("https://github.test/apps/hot-sheet/installations/new")
         );
         assert!(
-            fake.responses.lock().unwrap().is_empty(),
+            fake.responses.lock_or_recover().is_empty(),
             "every page was read"
         );
     }

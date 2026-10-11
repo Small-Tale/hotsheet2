@@ -14,6 +14,7 @@
 //! [`CodexAppServer`], [`CodexTurn`]) is exercised with no live `codex` (`docs/05` §5.10,
 //! the load-bearing testability rule).
 
+use hotsheet_sync::LockExt;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -79,8 +80,7 @@ struct Inner {
 impl Inner {
     fn send_raw(&self, msg: &str) -> Result<(), AppServerError> {
         self.writer
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .send(msg)
             .map_err(|e| AppServerError::Unavailable(e.to_string()))
     }
@@ -92,11 +92,11 @@ impl Inner {
         }
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = channel();
-        self.pending.lock().unwrap().insert(id, tx);
+        self.pending.lock_or_recover().insert(id, tx);
 
         let msg = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
         if let Err(e) = self.send_raw(&msg.to_string()) {
-            self.pending.lock().unwrap().remove(&id);
+            self.pending.lock_or_recover().remove(&id);
             return Err(e);
         }
 
@@ -108,7 +108,7 @@ impl Inner {
                 Ok(resp.get("result").cloned().unwrap_or(Value::Null))
             }
             Err(_) => {
-                self.pending.lock().unwrap().remove(&id);
+                self.pending.lock_or_recover().remove(&id);
                 if self.closed.load(Ordering::SeqCst) {
                     Err(AppServerError::Unavailable("connection closed".into()))
                 } else {
@@ -127,7 +127,7 @@ impl Inner {
     }
 
     fn notes_len(&self) -> usize {
-        self.notes.lock().unwrap().len()
+        self.notes.lock_or_recover().len()
     }
 
     /// Route one inbound message: a response to a pending request, a server request
@@ -142,11 +142,11 @@ impl Inner {
         if has_method && has_id {
             self.auto_answer_server_request(&v);
         } else if has_method {
-            let mut notes = self.notes.lock().unwrap();
+            let mut notes = self.notes.lock_or_recover();
             notes.push(v);
             self.cvar.notify_all();
         } else if let Some(id) = v.get("id").and_then(Value::as_i64) {
-            if let Some(tx) = self.pending.lock().unwrap().remove(&id) {
+            if let Some(tx) = self.pending.lock_or_recover().remove(&id) {
                 let _ = tx.send(v);
             }
         }
@@ -161,7 +161,7 @@ impl Inner {
         let Some(id) = v.get("id") else { return };
         let method = v.get("method").and_then(Value::as_str).unwrap_or("");
         let params = v.get("params").cloned().unwrap_or(Value::Null);
-        let policy = self.permission.lock().unwrap().clone();
+        let policy = self.permission.lock_or_recover().clone();
         let result = decide_approval_with_pending(policy.as_ref(), method, &params, |id| {
             self.active_approval.store(id, Ordering::Release);
             if self.closed.load(Ordering::Acquire) {
@@ -181,7 +181,7 @@ impl Inner {
     fn cancel_active_approval(&self) {
         let id = self.active_approval.load(Ordering::Acquire);
         if id != 0 {
-            if let Some(policy) = self.permission.lock().unwrap().as_ref() {
+            if let Some(policy) = self.permission.lock_or_recover().as_ref() {
                 policy.bridge.cancel(id);
             }
         }
@@ -191,17 +191,18 @@ impl Inner {
         self.closed.store(true, Ordering::SeqCst);
         self.cancel_active_approval();
         // Wake any turn blocked in `wait_for_completed` so it can observe the close.
-        let _guard = self.notes.lock().unwrap();
+        let _guard = self.notes.lock_or_recover();
         self.cvar.notify_all();
     }
 
     fn close(&self) {
         if !self.closed.swap(true, Ordering::SeqCst) {
             self.cancel_active_approval();
-            if let Ok(mut writer) = self.writer.lock() {
+            {
+                let mut writer = self.writer.lock_or_recover();
                 writer.close();
             }
-            let _guard = self.notes.lock().unwrap();
+            let _guard = self.notes.lock_or_recover();
             self.cvar.notify_all();
         }
     }
@@ -371,7 +372,8 @@ impl CodexAppServer {
     /// auto-approving (HS2-0QGW07 / §5.7). Set it before running a turn; without one,
     /// approvals are auto-approved (the isolated headless default).
     pub fn set_permission_policy(&self, policy: PermissionPolicy) {
-        if let Ok(mut p) = self.inner.permission.lock() {
+        {
+            let mut p = self.inner.permission.lock_or_recover();
             *p = Some(policy);
         }
     }
@@ -495,12 +497,12 @@ impl AppServerClient for CodexAppServer {
             )?,
         };
         let id = thread_id_of(&result)?;
-        *self.last_thread.lock().unwrap() = Some(id.clone());
+        *self.last_thread.lock_or_recover() = Some(id.clone());
         Ok(id)
     }
 
     fn session_id(&self) -> Option<String> {
-        self.last_thread.lock().unwrap().clone()
+        self.last_thread.lock_or_recover().clone()
     }
 
     fn start_turn(
@@ -760,7 +762,7 @@ impl CodexTurn {
         if self.done.is_some() {
             return;
         }
-        let notes = self.inner.notes.lock().unwrap();
+        let notes = self.inner.notes.lock_or_recover();
         while self.cursor < notes.len() {
             let n = &notes[self.cursor];
             self.cursor += 1;
@@ -891,7 +893,7 @@ impl AppServerTurn for CodexTurn {
                 ));
                 continue;
             }
-            let notes = self.inner.notes.lock().unwrap();
+            let notes = self.inner.notes.lock_or_recover();
             if self.cursor < notes.len() {
                 continue;
             }
@@ -1805,7 +1807,7 @@ mod failure_tests {
     #[test]
     fn retryable_error_keeps_running_and_success_clears_diagnostic() {
         let mut turn = turn();
-        turn.inner.notes.lock().unwrap().push(error(
+        turn.inner.notes.lock_or_recover().push(error(
             "thread-1",
             "turn-1",
             true,
@@ -1816,8 +1818,7 @@ mod failure_tests {
         assert_eq!(turn.last_error.as_deref(), Some("Model at capacity"));
         turn.inner
             .notes
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .push(completed("completed", None));
         assert_eq!(
             turn.next_event(),
@@ -1829,7 +1830,7 @@ mod failure_tests {
     #[test]
     fn error_is_scoped_terminal_message_wins_and_done_is_emitted_once() {
         let mut turn = turn();
-        turn.inner.notes.lock().unwrap().extend([
+        turn.inner.notes.lock_or_recover().extend([
             error("elsewhere", "turn-1", false, "Wrong thread"),
             error("thread-1", "older-turn", false, "Wrong turn"),
             error("thread-1", "turn-1", true, "Retry in progress"),
@@ -1838,8 +1839,7 @@ mod failure_tests {
         assert!(turn.is_running()); // Even non-retrying diagnostics await terminal completion.
         turn.inner
             .notes
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .push(completed("failed", Some("Final provider message")));
         assert_eq!(
             turn.next_event(),
@@ -1854,7 +1854,7 @@ mod failure_tests {
     fn missing_or_blank_terminal_error_uses_scoped_diagnostic_or_fallback() {
         for message in [None, Some("  ")] {
             let mut turn = turn();
-            turn.inner.notes.lock().unwrap().extend([
+            turn.inner.notes.lock_or_recover().extend([
                 error("thread-1", "turn-1", false, " Provider diagnostic "),
                 completed("failed", message),
             ]);
@@ -1867,7 +1867,7 @@ mod failure_tests {
             );
         }
         let mut turn = turn();
-        turn.inner.notes.lock().unwrap().extend([
+        turn.inner.notes.lock_or_recover().extend([
             error("elsewhere", "turn-1", false, "Wrong thread"),
             error("thread-1", "turn-1", false, " "),
             completed("failed", None),
@@ -1880,12 +1880,12 @@ mod failure_tests {
     #[test]
     fn connection_loss_finishes_once_with_last_diagnostic_and_interrupt_is_not_failure() {
         let mut failed = turn();
-        failed
-            .inner
-            .notes
-            .lock()
-            .unwrap()
-            .push(error("thread-1", "turn-1", true, "Rate limited"));
+        failed.inner.notes.lock_or_recover().push(error(
+            "thread-1",
+            "turn-1",
+            true,
+            "Rate limited",
+        ));
         failed.inner.closed.store(true, Ordering::SeqCst);
         assert_eq!(
             failed.next_event(),
@@ -1896,8 +1896,7 @@ mod failure_tests {
         stopped
             .inner
             .notes
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .push(completed("interrupted", None));
         assert_eq!(
             stopped.next_event(),

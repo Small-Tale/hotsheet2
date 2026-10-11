@@ -1069,6 +1069,7 @@ fn base64(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hotsheet_sync::LockExt;
     use std::collections::{HashMap, VecDeque};
     use std::sync::Mutex;
 
@@ -1087,7 +1088,7 @@ mod tests {
             headers: &[(&str, String)],
             body: Option<&Value>,
         ) -> Result<HttpResponse, String> {
-            self.requests.lock().unwrap().push((
+            self.requests.lock_or_recover().push((
                 method.into(),
                 url.into(),
                 headers
@@ -1097,8 +1098,7 @@ mod tests {
                 body.cloned(),
             ));
             self.responses
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .pop_front()
                 .ok_or_else(|| "unexpected request".into())
         }
@@ -1181,7 +1181,7 @@ mod tests {
                 "## Result\nShipped.".into(),
             )
             .unwrap();
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert_eq!(requests[1].0, "POST");
         assert_eq!(requests[1].3.as_ref().unwrap()["body"], written);
         assert_eq!(ticket.notes[0].text, "## Result\nShipped.");
@@ -1201,7 +1201,7 @@ mod tests {
         assert_eq!(ticket.assignees, ["acct-1"]);
         assert_eq!(ticket.notes[0].text, "comment");
         assert!(
-            fake.requests.lock().unwrap()[0]
+            fake.requests.lock_or_recover()[0]
                 .2
                 .iter()
                 .any(|(k, v)| k == "Authorization" && v.starts_with("Basic "))
@@ -1217,7 +1217,7 @@ mod tests {
         };
         let tickets = provider(fake.clone()).query(&query).unwrap();
         assert_eq!(tickets.len(), 2);
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert!(
             requests[0].3.as_ref().unwrap()["jql"]
                 .as_str()
@@ -1235,7 +1235,7 @@ mod tests {
             .unwrap();
         assert_eq!(page.items.len(), 1);
         assert_eq!(page.next_cursor.as_deref(), Some("page-2"));
-        assert_eq!(fake.requests.lock().unwrap().len(), 1);
+        assert_eq!(fake.requests.lock_or_recover().len(), 1);
     }
 
     #[test]
@@ -1314,7 +1314,7 @@ mod tests {
                 })
             ));
         }
-        assert!(fake.requests.lock().unwrap().is_empty());
+        assert!(fake.requests.lock_or_recover().is_empty());
     }
 
     #[test]
@@ -1483,7 +1483,7 @@ mod tests {
             "the pre-reopen score does not survive the re-completion"
         );
         assert_eq!(jira.get("ENG-9").unwrap().latest_confidence, Some(66));
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert!(
             requests[2]
                 .1
@@ -1533,7 +1533,7 @@ mod tests {
         let ticket = provider(fake.clone()).get("ENG-9").unwrap();
         assert_eq!(ticket.notes.len(), 101);
         assert_eq!(ticket.latest_confidence, Some(88));
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert!(
             requests[1]
                 .1
@@ -1567,7 +1567,7 @@ mod tests {
         let jira = provider(fake.clone());
         assert_eq!(jira.get("ENG-9").unwrap().notes.len(), 100);
         assert_eq!(jira.get("ENG-9").unwrap().notes.len(), 100);
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert!(
             requests[4]
                 .1
@@ -1611,7 +1611,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(ticket.notes.len(), 101);
-        let requests = fake.requests.lock().unwrap();
+        let requests = fake.requests.lock_or_recover();
         assert!(
             requests.iter().all(|request| request.0 == "GET"),
             "no duplicate POST"
@@ -1640,6 +1640,6 @@ mod tests {
         let jira = provider(fake.clone());
         assert_eq!(jira.get("ENG-9").unwrap().latest_confidence, None);
         assert_eq!(jira.get("ENG-9").unwrap().latest_confidence, None);
-        assert_eq!(fake.requests.lock().unwrap().len(), 4);
+        assert_eq!(fake.requests.lock_or_recover().len(), 4);
     }
 }

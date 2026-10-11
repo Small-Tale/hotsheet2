@@ -1,3 +1,4 @@
+use hotsheet_sync::LockExt;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -266,7 +267,8 @@ impl GitHubProvider {
         body: Option<&Value>,
     ) -> Result<HttpResponse, ProviderError> {
         if let Some(cooldown) = &self.rate_limited_until {
-            if let Ok(mut until) = cooldown.lock() {
+            {
+                let mut until = cooldown.lock_or_recover();
                 if let Some(remaining) =
                     until.and_then(|deadline| deadline.checked_duration_since(Instant::now()))
                 {
@@ -306,7 +308,8 @@ impl GitHubProvider {
             200..=299 => {
                 if method != "GET" && !url.ends_with("/graphql") {
                     if let Some(cache) = &self.issues_cache {
-                        if let Ok(mut cached) = cache.lock() {
+                        {
+                            let mut cached = cache.lock_or_recover();
                             *cached = None;
                         }
                     }
@@ -352,7 +355,8 @@ impl GitHubProvider {
                     })
                     .unwrap_or(60);
                 if let Some(cooldown) = &self.rate_limited_until {
-                    if let Ok(mut until) = cooldown.lock() {
+                    {
+                        let mut until = cooldown.lock_or_recover();
                         *until = Some(Instant::now() + Duration::from_secs(seconds));
                     }
                 }
@@ -638,7 +642,8 @@ impl GitHubProvider {
     fn list_issues(&self, updated_after: Option<&str>) -> Result<Vec<GitHubIssue>, ProviderError> {
         if updated_after.is_none() {
             if let Some(cache) = &self.issues_cache {
-                if let Ok(mut cached) = cache.lock() {
+                {
+                    let mut cached = cache.lock_or_recover();
                     if let Some(snapshot) = cached.as_ref() {
                         if snapshot.checked_at.elapsed() < ISSUE_LIST_CACHE_TTL {
                             return Ok(snapshot.issues.clone());
@@ -2163,7 +2168,7 @@ mod tests {
             headers: &[(&str, String)],
             body: Option<&Value>,
         ) -> Result<HttpResponse, String> {
-            self.requests.lock().unwrap().push((
+            self.requests.lock_or_recover().push((
                 method.into(),
                 url.into(),
                 headers
@@ -2173,8 +2178,7 @@ mod tests {
                 body.cloned(),
             ));
             self.responses
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .pop_front()
                 .ok_or_else(|| "unexpected request".into())
         }
@@ -2294,7 +2298,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(ticket.assignees, vec!["octocat"]);
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].0, "PATCH");
         assert_eq!(
@@ -2327,7 +2331,7 @@ mod tests {
         assert_eq!(ticket.tags, ["customer"]);
         assert_eq!(ticket.assignees, ["octocat"]);
         assert_eq!(ticket.notes[0].text, "investigating");
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert!(
             requests[0]
                 .2
@@ -2510,7 +2514,7 @@ mod tests {
                 "## Result\nDone.".into(),
             )
             .unwrap();
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert_eq!(requests[1].0, "POST");
         assert_eq!(
             requests[1].3.as_ref().unwrap()["body"],
@@ -2594,7 +2598,7 @@ mod tests {
             "the pre-reopen score does not survive the re-completion"
         );
         assert_eq!(github.get("42").unwrap().latest_confidence, Some(95));
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert!(
             requests[2]
                 .1
@@ -2638,7 +2642,7 @@ mod tests {
         assert_eq!(ticket.notes.len(), 101);
         assert_eq!(ticket.notes[100].confidence, Some(90));
         assert_eq!(ticket.latest_confidence, Some(90));
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert!(
             requests[1]
                 .1
@@ -2670,7 +2674,7 @@ mod tests {
         let github = provider(transport.clone());
         assert_eq!(github.get("42").unwrap().notes.len(), 100);
         assert_eq!(github.get("42").unwrap().notes.len(), 99);
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert!(
             requests[2]
                 .1
@@ -2699,7 +2703,7 @@ mod tests {
             .add_note("42", note_ctx(note_id), NoteKind::Regular, "Done.".into())
             .unwrap();
         assert_eq!(ticket.notes.len(), 101);
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert!(
             requests.iter().all(|request| request.0 == "GET"),
             "no duplicate POST"
@@ -2721,7 +2725,7 @@ mod tests {
         let github = provider(transport.clone());
         assert_eq!(github.get("42").unwrap().latest_confidence, None);
         assert_eq!(github.get("42").unwrap().latest_confidence, None);
-        assert_eq!(transport.requests.lock().unwrap().len(), 4);
+        assert_eq!(transport.requests.lock_or_recover().len(), 4);
     }
 
     fn closed_issue(number: u64, state_reason: &str, labels: &[&str]) -> Value {
@@ -2739,7 +2743,7 @@ mod tests {
     }
 
     fn patch_body(transport: &FakeTransport, index: usize) -> Value {
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert_eq!(requests[index].0, "PATCH", "request {index} is a PATCH");
         requests[index].3.clone().expect("PATCH body")
     }
@@ -3082,7 +3086,7 @@ mod tests {
                 "status:archived"
             ]
         );
-        assert_eq!(transport.requests.lock().unwrap().len(), 10);
+        assert_eq!(transport.requests.lock_or_recover().len(), 10);
     }
 
     #[test]
@@ -3145,7 +3149,7 @@ mod tests {
 
         assert_eq!(provider.query(&TicketQuery::default()).unwrap().len(), 1);
         assert_eq!(provider.query(&TicketQuery::default()).unwrap().len(), 1);
-        assert_eq!(transport.requests.lock().unwrap().len(), 1);
+        assert_eq!(transport.requests.lock_or_recover().len(), 1);
         provider
             .request(
                 "POST",
@@ -3157,8 +3161,8 @@ mod tests {
             provider.query(&TicketQuery::default()).unwrap()[0].title,
             "two"
         );
-        assert_eq!(transport.requests.lock().unwrap().len(), 3);
-        *provider.issues_cache.as_ref().unwrap().lock().unwrap() = None;
+        assert_eq!(transport.requests.lock_or_recover().len(), 3);
+        *provider.issues_cache.as_ref().unwrap().lock_or_recover() = None;
         assert!(matches!(
             provider.query(&TicketQuery::default()),
             Err(ProviderError::RateLimited { .. })
@@ -3167,18 +3171,17 @@ mod tests {
             provider.query(&TicketQuery::default()),
             Err(ProviderError::RateLimited { .. })
         ));
-        assert_eq!(transport.requests.lock().unwrap().len(), 4);
+        assert_eq!(transport.requests.lock_or_recover().len(), 4);
         *provider
             .rate_limited_until
             .as_ref()
             .unwrap()
-            .lock()
-            .unwrap() = None;
+            .lock_or_recover() = None;
         assert_eq!(
             provider.query(&TicketQuery::default()).unwrap()[0].title,
             "three"
         );
-        assert_eq!(transport.requests.lock().unwrap().len(), 5);
+        assert_eq!(transport.requests.lock_or_recover().len(), 5);
     }
 
     #[test]
@@ -3218,20 +3221,19 @@ mod tests {
 
         assert_eq!(titles(&provider), ["one", "two"]);
         assert_eq!(titles(&provider), ["one", "two"]);
-        assert_eq!(transport.requests.lock().unwrap().len(), 2);
+        assert_eq!(transport.requests.lock_or_recover().len(), 2);
 
         provider
             .issues_cache
             .as_ref()
             .unwrap()
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .as_mut()
             .unwrap()
             .checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
         assert_eq!(titles(&provider), ["one edited", "two", "three"]);
         assert_eq!(titles(&provider), ["one edited", "two", "three"]);
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert_eq!(
             requests.len(),
             3,
@@ -3244,13 +3246,12 @@ mod tests {
             .issues_cache
             .as_ref()
             .unwrap()
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .as_mut()
             .unwrap()
             .checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
         assert_eq!(titles(&provider), ["one edited", "two", "three"]);
-        assert_eq!(transport.requests.lock().unwrap().len(), 4);
+        assert_eq!(transport.requests.lock_or_recover().len(), 4);
     }
 
     #[test]
@@ -3274,7 +3275,7 @@ mod tests {
         };
         assert_eq!(ids(&provider), ["1", "2"]);
         {
-            let mut cache = provider.issues_cache.as_ref().unwrap().lock().unwrap();
+            let mut cache = provider.issues_cache.as_ref().unwrap().lock_or_recover();
             cache.as_mut().unwrap().checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
         }
         assert_eq!(
@@ -3283,13 +3284,13 @@ mod tests {
             "incremental reads cannot see deletions"
         );
         {
-            let mut cache = provider.issues_cache.as_ref().unwrap().lock().unwrap();
+            let mut cache = provider.issues_cache.as_ref().unwrap().lock_or_recover();
             cache.as_mut().unwrap().full_scan_at =
                 Instant::now() - ISSUE_LIST_FULL_REFRESH_INTERVAL;
             cache.as_mut().unwrap().checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
         }
         assert_eq!(ids(&provider), ["2"]);
-        assert!(!transport.requests.lock().unwrap()[2].1.contains("since="));
+        assert!(!transport.requests.lock_or_recover()[2].1.contains("since="));
 
         provider
             .request(
@@ -3299,7 +3300,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(ids(&provider), ["2", "3"]);
-        assert_eq!(transport.requests.lock().unwrap().len(), 5);
+        assert_eq!(transport.requests.lock_or_recover().len(), 5);
     }
 
     #[test]
@@ -3328,8 +3329,7 @@ mod tests {
             .issues_cache
             .as_ref()
             .unwrap()
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .as_mut()
             .unwrap()
             .checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
@@ -3342,8 +3342,7 @@ mod tests {
                 .issues_cache
                 .as_ref()
                 .unwrap()
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .as_ref()
                 .unwrap()
                 .issues[0]
@@ -3354,17 +3353,16 @@ mod tests {
             provider.query(&TicketQuery::default()),
             Err(ProviderError::RateLimited { .. })
         ));
-        assert_eq!(transport.requests.lock().unwrap().len(), 3);
+        assert_eq!(transport.requests.lock_or_recover().len(), 3);
         *provider
             .rate_limited_until
             .as_ref()
             .unwrap()
-            .lock()
-            .unwrap() = None;
+            .lock_or_recover() = None;
         let refreshed = provider.query(&TicketQuery::default()).unwrap();
         assert_eq!(refreshed.len(), 2);
         assert_eq!(refreshed[0].title, "one edited");
-        assert_eq!(transport.requests.lock().unwrap().len(), 4);
+        assert_eq!(transport.requests.lock_or_recover().len(), 4);
     }
 
     #[test]
@@ -3383,16 +3381,15 @@ mod tests {
             .issues_cache
             .as_ref()
             .unwrap()
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .as_mut()
             .unwrap()
             .checked_at = Instant::now() - ISSUE_LIST_CACHE_TTL;
         let tickets = provider.query(&TicketQuery::default()).unwrap();
         assert_eq!(tickets[0].title, "first issue");
-        assert_eq!(transport.requests.lock().unwrap().len(), 2);
+        assert_eq!(transport.requests.lock_or_recover().len(), 2);
         assert!(
-            transport.requests.lock().unwrap()[1]
+            transport.requests.lock_or_recover()[1]
                 .1
                 .contains("since=2026-08-26T00:09:59Z")
         );
@@ -3430,7 +3427,7 @@ mod tests {
             page.next_cursor.as_deref(),
             Some("https://api.test/repos/acme/widgets/issues?page2")
         );
-        assert_eq!(transport.requests.lock().unwrap().len(), 1);
+        assert_eq!(transport.requests.lock_or_recover().len(), 1);
     }
 
     #[test]
@@ -3519,8 +3516,7 @@ mod tests {
         assert_eq!(
             transport
                 .requests
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .iter()
                 .filter(|request| request.0 == "POST")
                 .count(),
@@ -3544,7 +3540,7 @@ mod tests {
             )
             .unwrap_err();
         assert!(matches!(error, ProviderError::Conflict { .. }));
-        assert_eq!(transport.requests.lock().unwrap().len(), 1);
+        assert_eq!(transport.requests.lock_or_recover().len(), 1);
     }
 
     #[test]
@@ -3567,7 +3563,7 @@ mod tests {
                 })
             ));
         }
-        assert!(transport.requests.lock().unwrap().is_empty());
+        assert!(transport.requests.lock_or_recover().is_empty());
     }
 
     #[test]
@@ -3793,7 +3789,7 @@ mod tests {
             let ticket = github.get("42").unwrap();
             let elapsed = started.elapsed();
             assert_eq!(ticket.attachments.len(), count);
-            let requests = inner.requests.lock().unwrap();
+            let requests = inner.requests.lock_or_recover();
             assert_eq!(requests.len(), count + if count == 100 { 3 } else { 2 });
             assert_eq!(
                 requests
@@ -3838,7 +3834,7 @@ mod tests {
             let github = assets_provider(Arc::new(BatchTransport(inner.clone())));
             let ticket = github.get("42").unwrap();
             assert_eq!(ticket.attachments.len(), count);
-            let requests = inner.requests.lock().unwrap();
+            let requests = inner.requests.lock_or_recover();
             assert_eq!(requests.len(), if count == 100 { 7 } else { 3 });
             let batches = requests
                 .iter()
@@ -3885,7 +3881,7 @@ mod tests {
             ticket.attachments[0].revision,
             Some(attachment_comment_revision(&winner))
         );
-        assert_eq!(inner.requests.lock().unwrap().len(), 3);
+        assert_eq!(inner.requests.lock_or_recover().len(), 3);
 
         let inner = FakeTransport::with(vec![
             response(200, issue(42, "broken widget", "details")),
@@ -3909,7 +3905,7 @@ mod tests {
             ticket.attachments[0].revision,
             Some(attachment_comment_revision(&winner))
         );
-        assert_eq!(inner.requests.lock().unwrap().len(), 4);
+        assert_eq!(inner.requests.lock_or_recover().len(), 4);
     }
 
     #[test]
@@ -3953,7 +3949,7 @@ mod tests {
         assert_ne!(legacy.attachments[0].revision, winning_revision);
         assert_eq!(recovered.attachments[0].revision, winning_revision);
         assert_eq!(fallback.attachments[0].revision, winning_revision);
-        assert_eq!(inner.requests.lock().unwrap().len(), 10);
+        assert_eq!(inner.requests.lock_or_recover().len(), 10);
     }
 
     #[test]
@@ -3969,7 +3965,7 @@ mod tests {
         let mut github = assets_provider(Arc::new(BatchTransport(inner.clone())));
         github.config.api_base = "https://ghe.test/api/v3".into();
         github.get("42").unwrap();
-        let requests = inner.requests.lock().unwrap();
+        let requests = inner.requests.lock_or_recover();
         assert_eq!(requests[2].1, "https://ghe.test/api/graphql");
     }
 
@@ -4014,12 +4010,12 @@ mod tests {
             body: Option<&Value>,
         ) -> Result<HttpResponse, String> {
             if method == "PUT" && url.contains("/.hotsheet-markers/") {
-                let gate = self.manifest_gate.lock().unwrap().clone();
+                let gate = self.manifest_gate.lock_or_recover().clone();
                 if let Some(gate) = gate {
                     gate.wait();
                 }
             }
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state.lock_or_recover();
             let result = if method == "GET" && url.ends_with("/issues/42") {
                 issue(42, "broken widget", "details")
             } else if method == "GET" && url.contains("/issues/42/comments?") {
@@ -4101,13 +4097,13 @@ mod tests {
             annotations: vec![],
             crop: Some(crop),
         };
-        transport.state.lock().unwrap().fail_patch_once = true;
+        transport.state.lock_or_recover().fail_patch_once = true;
         assert!(
             provider
                 .set_attachment_markup("42", ATTACHMENT_ID, Some(&revision), markup())
                 .is_err()
         );
-        assert_eq!(transport.state.lock().unwrap().uploads, 1);
+        assert_eq!(transport.state.lock_or_recover().uploads, 1);
         let pending = provider.get("42").unwrap();
         assert_eq!(pending.attachments[0].crop, Some(crop));
         assert_eq!(
@@ -4119,9 +4115,9 @@ mod tests {
         let cropped = provider
             .set_attachment_markup("42", ATTACHMENT_ID, Some(&revision), markup())
             .unwrap();
-        assert_eq!(transport.state.lock().unwrap().uploads, 1);
+        assert_eq!(transport.state.lock_or_recover().uploads, 1);
         assert_eq!(cropped.attachments[0].crop, Some(crop));
-        let cropped_comment = transport.state.lock().unwrap().comment.clone();
+        let cropped_comment = transport.state.lock_or_recover().comment.clone();
         let (_, cropped_marker) = github_attachments::parse_comment(&cropped_comment).unwrap();
         assert_eq!(cropped_marker.sha.as_deref(), Some("blobsha1"));
         assert!(cropped_marker.rendition_sha.is_some());
@@ -4157,7 +4153,7 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(transport.state.lock().unwrap().uploads, 1);
+        assert_eq!(transport.state.lock_or_recover().uploads, 1);
         assert_eq!(
             annotated.attachments[0].annotations,
             vec![annotation.clone()]
@@ -4239,7 +4235,7 @@ mod tests {
                 .revision
                 .clone()
                 .unwrap();
-            *transport.manifest_gate.lock().unwrap() = Some(Arc::new(std::sync::Barrier::new(2)));
+            *transport.manifest_gate.lock_or_recover() = Some(Arc::new(std::sync::Barrier::new(2)));
             let writers = crops.map(|crop| {
                 let provider = provider.clone();
                 let revision = revision.clone();
@@ -4256,7 +4252,7 @@ mod tests {
                 })
             });
             let results = writers.map(|writer| writer.join().unwrap());
-            *transport.manifest_gate.lock().unwrap() = None;
+            *transport.manifest_gate.lock_or_recover() = None;
             assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
             assert!(
                 results
@@ -4266,7 +4262,7 @@ mod tests {
             let winner = results.into_iter().find_map(Result::ok).unwrap();
             let current = provider.get("42").unwrap();
             assert_eq!(current.attachments[0].crop, winner.attachments[0].crop);
-            let state = transport.state.lock().unwrap();
+            let state = transport.state.lock_or_recover();
             let path = "hotsheet-attachments/.hotsheet-markers/ATTACHMENT_ID.json"
                 .replace("ATTACHMENT_ID", ATTACHMENT_ID);
             let sha = state.files.get(&path).unwrap();
@@ -4275,7 +4271,7 @@ mod tests {
             assert_eq!(manifest.body, state.comment);
         }
         let current = provider.get("42").unwrap();
-        let mut state = transport.state.lock().unwrap();
+        let mut state = transport.state.lock_or_recover();
         let (_, mut manual) = github_attachments::parse_comment(&state.comment).unwrap();
         manual.batch_label = Some("Edited on GitHub".into());
         state.comment =
@@ -4292,7 +4288,7 @@ mod tests {
             },
         );
         assert!(matches!(conflict, Err(ProviderError::Conflict { .. })));
-        assert_eq!(transport.state.lock().unwrap().comment, manual_body);
+        assert_eq!(transport.state.lock_or_recover().comment, manual_body);
     }
 
     #[test]
@@ -4312,7 +4308,7 @@ mod tests {
                 ..
             }
         ));
-        assert!(transport.requests.lock().unwrap().is_empty());
+        assert!(transport.requests.lock_or_recover().is_empty());
         let assets = assets_provider(FakeTransport::with(vec![]));
         assert!(assets.descriptor().capabilities.attachments);
         assert!(!assets.descriptor().capabilities.attachment_edit);
@@ -4342,7 +4338,7 @@ mod tests {
                 vec![0, 159, 255],
             )
             .unwrap();
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         let (method, url, _, body) = &requests[1];
         assert_eq!(method, "PUT");
         assert_eq!(
@@ -4417,7 +4413,7 @@ mod tests {
             message.contains("installation owner must approve"),
             "{message}"
         );
-        assert_eq!(transport.requests.lock().unwrap().len(), 2);
+        assert_eq!(transport.requests.lock_or_recover().len(), 2);
     }
 
     #[test]
@@ -4435,7 +4431,7 @@ mod tests {
         GitHubProvider::new(config, transport.clone())
             .add_attachment("42", evidence(ATTACHMENT_ID, "notes.txt"), b"hi".to_vec())
             .unwrap();
-        let requests = transport.requests.lock().unwrap();
+        let requests = transport.requests.lock_or_recover();
         assert!(
             requests[1]
                 .1
@@ -4466,8 +4462,7 @@ mod tests {
         assert!(
             linked
                 .requests
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .iter()
                 .all(|(method, ..)| method == "GET")
         );
@@ -4486,7 +4481,7 @@ mod tests {
             .add_attachment("42", evidence(ATTACHMENT_ID, "a.txt"), b"x".to_vec())
             .unwrap();
         assert_eq!(ticket.attachments.len(), 1);
-        let requests = half.requests.lock().unwrap();
+        let requests = half.requests.lock_or_recover();
         assert_eq!(
             requests[2].1,
             format!("https://api.test/repos/acme/assets/contents/{path}?ref=main")
@@ -4508,7 +4503,7 @@ mod tests {
             error.to_string().contains("Branch media not found"),
             "{error}"
         );
-        assert_eq!(transport.requests.lock().unwrap().len(), 3);
+        assert_eq!(transport.requests.lock_or_recover().len(), 3);
         let invalid = assets_provider(FakeTransport::with(vec![]))
             .add_attachment("42", evidence("../x", "a.txt"), b"x".to_vec())
             .unwrap_err();
@@ -4532,7 +4527,7 @@ mod tests {
             vec![0, 159, 255, 0]
         );
         assert_eq!(
-            transport.requests.lock().unwrap()[2].1,
+            transport.requests.lock_or_recover()[2].1,
             "https://api.test/repos/acme/assets/git/blobs/blobsha1"
         );
         assert!(matches!(

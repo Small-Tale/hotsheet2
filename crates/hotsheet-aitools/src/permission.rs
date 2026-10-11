@@ -18,6 +18,7 @@
 //! file — HS2-9R9YZW). The WebSocket push to clients and the per-plugin transport adapters
 //! are the server/plugin wiring on top (HS2-113 / HS2-0QGW07).
 
+use hotsheet_sync::LockExt;
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::{Condvar, Mutex};
@@ -286,23 +287,23 @@ impl SharedPermissionBridge {
 
     /// Register the enqueue observer (the server's WS/event-bus nudge). Replaces any prior.
     pub fn set_on_pending(&self, f: impl Fn(&Request) + Send + Sync + 'static) {
-        *self.on_pending.lock().unwrap() = Some(Box::new(f));
+        *self.on_pending.lock_or_recover() = Some(Box::new(f));
     }
 
     /// Notify clients when cancellation or timeout removes an unanswered approval.
     pub fn set_on_removed(&self, f: impl Fn(&Request) + Send + Sync + 'static) {
-        *self.on_removed.lock().unwrap() = Some(Box::new(f));
+        *self.on_removed.lock_or_recover() = Some(Box::new(f));
     }
 
     /// Replace the bridge's allow-rules (e.g. seeding durable `Always` rules loaded from
     /// disk at startup) without disturbing the observer or any in-flight waiters.
     pub fn reseed_rules(&self, rules: Vec<Rule>) {
-        self.inner.lock().unwrap().set_rules(rules);
+        self.inner.lock_or_recover().set_rules(rules);
     }
 
     /// Add another project's durable rules without disturbing already seeded projects.
     pub fn add_rules(&self, rules: impl IntoIterator<Item = Rule>) {
-        self.inner.lock().unwrap().rules.extend(rules);
+        self.inner.lock_or_recover().rules.extend(rules);
     }
 
     /// Raise a request and **block** until it's decided: an allow-rule answers immediately;
@@ -331,7 +332,7 @@ impl SharedPermissionBridge {
             tool.into(),
             action.into(),
         );
-        let id = match self.inner.lock().unwrap().request_for_project(
+        let id = match self.inner.lock_or_recover().request_for_project(
             project.clone(),
             connection.clone(),
             tool.clone(),
@@ -341,7 +342,7 @@ impl SharedPermissionBridge {
             Outcome::Pending(id) => id,
         };
         // Nudge any observer (server → WS "permission_asked") now that it's queued.
-        if let Some(f) = self.on_pending.lock().unwrap().as_ref() {
+        if let Some(f) = self.on_pending.lock_or_recover().as_ref() {
             f(&Request {
                 id,
                 project,
@@ -353,7 +354,7 @@ impl SharedPermissionBridge {
         }
         // Wait for the answer. If `resolve` already ran (before we started waiting), the
         // result is already present, so there's no lost wakeup.
-        let mut results = self.results.lock().unwrap();
+        let mut results = self.results.lock_or_recover();
         loop {
             if let Some(d) = results.remove(&id) {
                 return d;
@@ -416,7 +417,7 @@ impl SharedPermissionBridge {
             action,
             agent,
         } = ask;
-        let id = match self.inner.lock().unwrap().request_for_project_as(
+        let id = match self.inner.lock_or_recover().request_for_project_as(
             project.clone(),
             connection.clone(),
             tool.clone(),
@@ -434,12 +435,12 @@ impl SharedPermissionBridge {
             action,
             agent,
         };
-        if let Some(f) = self.on_pending.lock().unwrap().as_ref() {
+        if let Some(f) = self.on_pending.lock_or_recover().as_ref() {
             f(&request);
         }
         on_pending(id);
         let deadline = Instant::now() + timeout;
-        let mut results = self.results.lock().unwrap();
+        let mut results = self.results.lock_or_recover();
         loop {
             if let Some(d) = results.remove(&id) {
                 return d;
@@ -450,8 +451,7 @@ impl SharedPermissionBridge {
                 // Win the race to abandon it; if a human resolved it just now, honor that.
                 let expired = self
                     .inner
-                    .lock()
-                    .unwrap()
+                    .lock_or_recover()
                     .resolve(id, on_timeout, Scope::Once)
                     .is_some();
                 if expired {
@@ -461,8 +461,7 @@ impl SharedPermissionBridge {
                 }
                 return self
                     .results
-                    .lock()
-                    .unwrap()
+                    .lock_or_recover()
                     .remove(&id)
                     .unwrap_or(on_timeout);
             }
@@ -473,14 +472,14 @@ impl SharedPermissionBridge {
 
     /// The pending requests (for the server to push over the WS to clients).
     pub fn pending(&self) -> Vec<Request> {
-        self.inner.lock().unwrap().pending().cloned().collect()
+        self.inner.lock_or_recover().pending().cloned().collect()
     }
 
     /// Answer a pending request (the route-back a client POSTs). Wakes the blocked waiter and
     /// returns who raised it + any rule to persist. `None` if the id isn't pending.
     pub fn resolve(&self, id: u64, decision: Decision, scope: Scope) -> Option<Resolved> {
-        let resolved = self.inner.lock().unwrap().resolve(id, decision, scope)?;
-        self.results.lock().unwrap().insert(id, decision);
+        let resolved = self.inner.lock_or_recover().resolve(id, decision, scope)?;
+        self.results.lock_or_recover().insert(id, decision);
         self.cvar.notify_all();
         Some(resolved)
     }
@@ -489,21 +488,21 @@ impl SharedPermissionBridge {
     /// This wakes its waiter with a one-time denial and never creates a durable rule.
     pub fn cancel(&self, id: u64) -> bool {
         let request = {
-            let mut bridge = self.inner.lock().unwrap();
+            let mut bridge = self.inner.lock_or_recover();
             let Some(request) = bridge.pending().find(|request| request.id == id).cloned() else {
                 return false;
             };
             bridge.resolve(id, Decision::Deny, Scope::Once);
             request
         };
-        self.results.lock().unwrap().insert(id, Decision::Deny);
+        self.results.lock_or_recover().insert(id, Decision::Deny);
         self.cvar.notify_all();
         self.notify_removed(&request);
         true
     }
 
     fn notify_removed(&self, request: &Request) {
-        if let Some(callback) = self.on_removed.lock().unwrap().as_ref() {
+        if let Some(callback) = self.on_removed.lock_or_recover().as_ref() {
             callback(request);
         }
     }
@@ -578,6 +577,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_poisoned_bridge_lock_keeps_serving_requests() {
+        // HS2-B2RFSB: recover a poisoned lock instead of panicking every later caller.
+        use std::sync::Arc;
+        let b = Arc::new(SharedPermissionBridge::new(PermissionBridge::new()));
+        let poisoner = b.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoner.inner.lock().unwrap();
+            panic!("poison the bridge");
+        })
+        .join();
+        assert!(b.inner.is_poisoned());
+        assert!(b.pending().is_empty());
+    }
+
+    #[test]
     fn default_transport_timeout_outlasts_longest_client_automation_window() {
         assert!(DEFAULT_PERMISSION_TIMEOUT > Duration::from_secs(60 * 60));
         assert_eq!(
@@ -627,7 +641,7 @@ mod tests {
         let bridge = Arc::new(SharedPermissionBridge::default());
         let cancelled = Arc::new(Mutex::new(Vec::new()));
         let observed = cancelled.clone();
-        bridge.set_on_removed(move |request| observed.lock().unwrap().push(request.id));
+        bridge.set_on_removed(move |request| observed.lock_or_recover().push(request.id));
         let first_bridge = bridge.clone();
         let first =
             std::thread::spawn(move || first_bridge.request_blocking("first", "Bash", "rm x"));
@@ -666,12 +680,12 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![second_id]
         );
-        assert_eq!(*cancelled.lock().unwrap(), vec![first_id]);
+        assert_eq!(*cancelled.lock_or_recover(), vec![first_id]);
         bridge
             .resolve(second_id, Decision::Allow, Scope::Once)
             .unwrap();
         assert_eq!(second.join().unwrap(), Decision::Allow);
-        assert!(bridge.inner.lock().unwrap().rules().is_empty());
+        assert!(bridge.inner.lock_or_recover().rules().is_empty());
     }
 
     #[test]
@@ -697,7 +711,7 @@ mod tests {
         let expired = Arc::new(Mutex::new(Vec::new()));
         let removed = Arc::new(Mutex::new(Vec::new()));
         let observed = removed.clone();
-        bridge.set_on_removed(move |request| observed.lock().unwrap().push(request.id));
+        bridge.set_on_removed(move |request| observed.lock_or_recover().push(request.id));
         let timeout_ids = expired.clone();
         let decision = bridge.request_blocking_timeout_with_pending(
             PermissionAsk {
@@ -710,11 +724,11 @@ mod tests {
             Duration::from_millis(1),
             Decision::Deny,
             |_| {},
-            move |id| timeout_ids.lock().unwrap().push(id),
+            move |id| timeout_ids.lock_or_recover().push(id),
         );
         assert_eq!(decision, Decision::Deny);
-        assert_eq!(expired.lock().unwrap().len(), 1);
-        assert_eq!(*removed.lock().unwrap(), *expired.lock().unwrap());
+        assert_eq!(expired.lock_or_recover().len(), 1);
+        assert_eq!(*removed.lock_or_recover(), *expired.lock_or_recover());
         assert!(bridge.pending().is_empty());
 
         let waiter_bridge = bridge.clone();
@@ -731,7 +745,7 @@ mod tests {
                 Duration::from_secs(1),
                 Decision::Deny,
                 |_| {},
-                move |id| human_ids.lock().unwrap().push(id),
+                move |id| human_ids.lock_or_recover().push(id),
             )
         });
         let id = loop {
@@ -742,8 +756,8 @@ mod tests {
         };
         bridge.resolve(id, Decision::Allow, Scope::Once).unwrap();
         assert_eq!(waiter.join().unwrap(), Decision::Allow);
-        assert_eq!(expired.lock().unwrap().len(), 1);
-        assert_eq!(removed.lock().unwrap().len(), 1);
+        assert_eq!(expired.lock_or_recover().len(), 1);
+        assert_eq!(removed.lock_or_recover().len(), 1);
     }
 
     #[test]
@@ -802,14 +816,13 @@ mod tests {
         let seen = Arc::new(Mutex::new(Vec::<(u64, String, String)>::new()));
         let s2 = seen.clone();
         b.set_on_pending(move |r| {
-            s2.lock()
-                .unwrap()
+            s2.lock_or_recover()
                 .push((r.id, r.tool.clone(), r.action.clone()));
         });
 
         // A rule-answered request never enqueues → no notification.
         assert_eq!(b.request_blocking("c", "Bash", "ls"), Decision::Allow);
-        assert!(seen.lock().unwrap().is_empty(), "auto-resolved: no nudge");
+        assert!(seen.lock_or_recover().is_empty(), "auto-resolved: no nudge");
 
         // An unruled request enqueues → the observer fires with the full request.
         let bt = b.clone();
@@ -822,7 +835,7 @@ mod tests {
         };
         b.resolve(id, Decision::Allow, Scope::Once).unwrap();
         handle.join().unwrap();
-        let got = seen.lock().unwrap().clone();
+        let got = seen.lock_or_recover().clone();
         assert_eq!(got, vec![(id, "Bash".to_string(), "rm y".to_string())]);
     }
 
