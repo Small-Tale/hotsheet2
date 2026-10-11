@@ -111,6 +111,7 @@ const DEFAULT_SHUTDOWN_DRAIN_MS: u64 = 5_000;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    init_logging();
     let cli = Cli::parse();
 
     if cli.revision_status {
@@ -332,7 +333,7 @@ async fn main() -> Result<()> {
                 let state = state.clone();
                 std::sync::Arc::new(move |store, event| {
                     if let Err(error) = state.record_activity(store, event) {
-                        eprintln!("activity record failed: {error}");
+                        tracing::warn!(%error, "activity record failed");
                     }
                 })
             }),
@@ -509,6 +510,19 @@ fn stop_on_stdin_eof(state: AppState) {
     });
 }
 
+/// Install the stderr diagnostics subscriber (HS2-PD8NJ6). `RUST_LOG` overrides the
+/// default `info` filter; stdout stays reserved for the startup contract lines.
+fn init_logging() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    // A second init (never expected in the binary) keeps the first subscriber.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_target(false)
+        .try_init();
+}
+
 /// Best-effort shutdown diagnostic. Unlike `eprintln!`, never panics when stderr is a pipe
 /// whose reader is gone, which is exactly the situation an owner-death stop runs in.
 fn shutdown_log(message: &str) {
@@ -605,7 +619,7 @@ fn prune_stale_indexes() {
                 println!("index: {summary}");
             }
         }
-        Err(error) => eprintln!("index: could not prune stale index files: {error}"),
+        Err(error) => tracing::warn!(%error, "index: could not prune stale index files"),
     }
 }
 

@@ -777,7 +777,7 @@ impl AppState {
                 Ok(days) => {
                     configured = Some(configured.map_or(days, |current: u32| current.max(days)))
                 }
-                Err(error) => eprintln!(
+                Err(error) => tracing::warn!(
                     "Trash retention ignored for checkout {}: {error}",
                     checkout.id
                 ),
@@ -878,6 +878,7 @@ impl AppState {
     pub fn prewarm_ai_catalog(&self) {
         let state = self.clone();
         tokio::spawn(async move {
+            // Best-effort warm-up: a failure leaves the cache cold for on-demand discovery.
             let _ = discovered_ai_tools_off_runtime(&state, false).await;
         });
     }
@@ -963,7 +964,7 @@ impl AppState {
                 let mut w = self.watchers.lock_or_recover();
                 w.insert(watched_id, handle);
             }
-            Err(e) => eprintln!("watcher for {} failed to start: {e}", store_root.display()),
+            Err(e) => tracing::warn!("watcher for {} failed to start: {e}", store_root.display()),
         }
         // Advertise the newly-hosted store for discovery (real run only; a no-op in tests).
         self.register_store_instance(&store_root);
@@ -988,7 +989,7 @@ impl AppState {
             Ok(handle) => {
                 watchers.insert(checkout.id.clone(), handle);
             }
-            Err(error) => eprintln!(
+            Err(error) => tracing::warn!(
                 "repository watcher for {} failed to start: {error}",
                 root.display()
             ),
@@ -1045,7 +1046,7 @@ impl AppState {
         let lock = self.writer_locks.with_lock(|w| w.remove(&root));
         // Stop the watcher and release the files outside every lock.
         drop((watcher, guard, lock));
-        eprintln!("unhosted store {root}: no open project references it");
+        tracing::info!("unhosted store {root}: no open project references it");
     }
 
     /// Ask for an unhost sweep `delay` from now; an earlier pending request wins.
@@ -1127,12 +1128,12 @@ impl AppState {
                     let mut w = self.writer_locks.lock_or_recover();
                     w.insert(store_path.display().to_string(), lock);
                 }
-                Err(lifecycle::LockError::Held(pid)) => eprintln!(
+                Err(lifecycle::LockError::Held(pid)) => tracing::warn!(
                     "warning: store {} is also index-write-locked by live server pid {pid} \
                      — index writes may collide",
                     store_path.display()
                 ),
-                Err(e) => eprintln!("writer lock for {} failed: {e}", store_path.display()),
+                Err(e) => tracing::warn!("writer lock for {} failed: {e}", store_path.display()),
             }
         }
         match instances.register_instance(&info, store_path) {
@@ -1140,7 +1141,7 @@ impl AppState {
                 let mut g = self.instance_guards.lock_or_recover();
                 g.insert(store_path.display().to_string(), guard);
             }
-            Err(e) => eprintln!(
+            Err(e) => tracing::warn!(
                 "instance registration failed for {}: {e}",
                 store_path.display()
             ),
@@ -1157,9 +1158,9 @@ impl AppState {
                 Ok(store) => match self.host_store(store) {
                     Ok(true) => hosted += 1,
                     Ok(false) => {}
-                    Err(e) => eprintln!("could not host {}: {}", path.display(), e.message),
+                    Err(e) => tracing::warn!("could not host {}: {}", path.display(), e.message),
                 },
-                Err(e) => eprintln!("configured store {} skipped: {e}", path.display()),
+                Err(e) => tracing::warn!("configured store {} skipped: {e}", path.display()),
             }
         }
         hosted
@@ -1237,13 +1238,10 @@ impl AppState {
 
     /// Log a failed index write and queue that ticket for re-indexing from its file.
     fn schedule_index_repair(&self, store_id: &str, id: Ulid, error: &str) {
-        eprintln!(
-            "index write failed for ticket {id} in store {store_id}: {error}; scheduled repair"
-        );
-        {
-            let mut pending = self.pending_index_repairs.lock_or_recover();
-            pending.insert((store_id.to_string(), id));
-        }
+        tracing::warn!(ticket = %id, store = store_id, error, "index write failed; scheduled repair");
+        self.pending_index_repairs
+            .lock_or_recover()
+            .insert((store_id.to_string(), id));
     }
 
     /// Re-index every queued ticket of `entry` from its current file (or drop its row
@@ -1287,6 +1285,7 @@ impl AppState {
     /// change tagged with the store it happened in. The index now carries the file's
     /// hash, so the watcher sees "no change" and won't re-emit.
     fn changed_in(&self, entry: &StoreEntry, kind: &str, t: &Ticket) {
+        // The phase timings only feed request-performance reporting for batches.
         let _ = self.changed_many_in(entry, kind, std::slice::from_ref(t));
     }
 
@@ -1339,7 +1338,7 @@ impl AppState {
                     .any(|root| same_path(FsPath::new(root), entry.store.root()))
             }) {
                 if let Err(error) = regenerate_checkout_worklist_indexed(&self.host, &checkout) {
-                    eprintln!("worklist regenerate failed for {}: {error}", checkout.root);
+                    tracing::warn!("worklist regenerate failed for {}: {error}", checkout.root);
                 }
             }
         }
@@ -1383,7 +1382,7 @@ impl AppState {
                     .any(|root| same_path(FsPath::new(root), entry.store.root()))
             }) {
                 if let Err(error) = regenerate_checkout_worklist_indexed(&self.host, &checkout) {
-                    eprintln!("worklist regenerate failed for {}: {error}", checkout.root);
+                    tracing::warn!("worklist regenerate failed for {}: {error}", checkout.root);
                 }
             }
         }
@@ -1482,7 +1481,7 @@ impl AppState {
                 let checkout = match self.checkout_registry.resolve(reference) {
                     Ok(checkout) => checkout,
                     Err(error) => {
-                        eprintln!(
+                        tracing::warn!(
                             "activity distillation skipped for unresolved checkout {reference}: {error}"
                         );
                         return;
@@ -1500,7 +1499,7 @@ impl AppState {
                             == canonical_store
                 });
                 if !linked {
-                    eprintln!(
+                    tracing::warn!(
                         "activity distillation skipped because checkout {} does not own store {store_id}",
                         checkout.id
                     );
@@ -1519,7 +1518,7 @@ impl AppState {
         let policy = match hotsheet_ticketing::DistillationPolicy::from_local_settings(&settings) {
             Ok(policy) => policy,
             Err(error) => {
-                eprintln!("activity distillation policy ignored: {error}");
+                tracing::warn!("activity distillation policy ignored: {error}");
                 return;
             }
         };
@@ -1557,7 +1556,7 @@ impl AppState {
         ) {
             // Activity capture is authoritative and must not fail because an optional
             // distillation adapter or ticket mutation is temporarily unavailable.
-            eprintln!("activity distillation note failed: {error}");
+            tracing::warn!("activity distillation note failed: {error}");
         }
     }
 }
@@ -2775,7 +2774,11 @@ async fn start_github_device_auth(
                     );
                     if result.is_ok() {
                         if let Some(login) = login {
-                            let _ = keys.record_identity(&credential_reference, &login);
+                            // The credential itself is stored; only the display login is lost.
+                            if let Err(error) = keys.record_identity(&credential_reference, &login)
+                            {
+                                tracing::warn!(%error, "recording the GitHub login failed");
+                            }
                         }
                     }
                     let next = match result {
@@ -3478,7 +3481,9 @@ async fn create_checkout_provider_connection(
     if let Err(error) = linked {
         if let Ok(mut current) = registry.load() {
             current.retain(|item| item.id != connection.id);
-            let _ = registry.save(&current);
+            if let Err(error) = registry.save(&current) {
+                tracing::warn!(connection = %connection.id, %error, "rolling back a failed provider link failed");
+            }
         }
         return Err(ApiError::new(StatusCode::BAD_REQUEST, error.to_string()));
     }
@@ -4526,7 +4531,9 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
         });
     let Some(source) = source else {
         tokio::task::spawn_blocking(move || {
-            let _ = settings.migrate_existing();
+            if let Err(error) = settings.migrate_existing() {
+                tracing::warn!(%error, "settings migration failed");
+            }
         });
         return;
     };
@@ -4542,7 +4549,9 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
     let store = std::path::PathBuf::from(&source.locator);
     let plugin_dirs = state.plugin_dirs.as_ref().clone();
     tokio::task::spawn_blocking(move || {
-        let _ = settings.migrate_existing();
+        if let Err(error) = settings.migrate_existing() {
+            tracing::warn!(%error, "settings migration failed");
+        }
         // Same resolution as the CLI: an explicit empty list disables every tool (HS2-8B3VJP).
         let enabled = hotsheet_plugins::enabled_plugins_from_setting(
             settings
@@ -4613,8 +4622,8 @@ fn schedule_worklist_regeneration(
         .await
         {
             Ok(Ok(_)) => {}
-            Ok(Err(error)) => eprintln!("worklist regenerate failed for {root}: {error}"),
-            Err(error) => eprintln!("worklist regenerate task failed for {root}: {error}"),
+            Ok(Err(error)) => tracing::warn!("worklist regenerate failed for {root}: {error}"),
+            Err(error) => tracing::warn!("worklist regenerate task failed for {root}: {error}"),
         }
     });
 }
@@ -5791,10 +5800,12 @@ async fn list_checkout_corrupt_tickets(
 /// project activation's `corrupt-tickets` request finds it warm (or coalesces onto the
 /// scan in progress under the cache lock) instead of starting a full parse (HS2-KYSBT2).
 fn prewarm_corrupt_tickets(entry: StoreEntry) {
+    // A failed spawn only skips the warm-up.
     let _ = std::thread::Builder::new()
         .name("hs-corrupt-prewarm".into())
         .spawn(move || {
             let mut cache = entry.corrupt.lock_or_recover();
+            // Warm-up only: a scan failure is reported by the next on-demand read.
             let _ = cache.corrupt_tickets(&entry.store);
         });
 }
@@ -6517,7 +6528,7 @@ async fn batch_update_checkout_tickets(
             .store
             .autocommit_paths("Update selected Hot Sheet tickets", &paths)
         {
-            eprintln!("warning: hotsheet batch autocommit failed: {error}");
+            tracing::warn!("hotsheet batch autocommit failed: {error}");
         }
         git_time += git_started.elapsed();
         let [index, events, worklist] = state.changed_many_in(&entry, "updated", &tickets);
@@ -9276,7 +9287,10 @@ async fn send_drive_turn(
                             session: Some(thread_id.clone()),
                         },
                     );
-                    let _ = hotsheet_ticketing::metrics::record(&thread_store, &priced);
+                    if let Err(error) = hotsheet_ticketing::metrics::record(&thread_store, &priced)
+                    {
+                        tracing::warn!(%error, "recording turn usage metrics failed");
+                    }
                     hotsheet_aitools::TurnEvent::Usage(hotsheet_aitools::Usage {
                         model: priced.model,
                         tokens_in: priced.tokens_in,
@@ -9299,7 +9313,9 @@ async fn send_drive_turn(
                     if let Some(mut activity) = mapped {
                         activity.session = Some(thread_id.clone());
                         activity.project = Some(activity_project.clone());
-                        let _ = thread_state.record_activity(&thread_store, activity);
+                        if let Err(error) = thread_state.record_activity(&thread_store, activity) {
+                            tracing::warn!(%error, "recording native activity failed");
+                        }
                     }
                     event.clone()
                 }
@@ -10353,11 +10369,11 @@ fn release_session_claims_blocking(host: &multistore::StoreHost, worker: &str) -
         };
         match ops::release_worker(&entry.store, now(), worker) {
             Ok(tickets) => released.extend(tickets.into_iter().map(|ticket| ticket.slug)),
-            Err(error) => eprintln!("releasing {worker}'s claims in {id} failed: {error}"),
+            Err(error) => tracing::warn!("releasing {worker}'s claims in {id} failed: {error}"),
         }
     }
     if !released.is_empty() {
-        eprintln!("released claims left by {worker}: {}", released.join(", "));
+        tracing::info!("released claims left by {worker}: {}", released.join(", "));
     }
     released
 }
@@ -10458,7 +10474,7 @@ pub async fn release_orphaned_drive_sessions(state: &AppState) -> Vec<String> {
                         .map_err(|error| error.to_string())
                 }) {
                 Ok(tickets) => released.extend(tickets.into_iter().map(|ticket| ticket.slug)),
-                Err(error) => eprintln!(
+                Err(error) => tracing::warn!(
                     "releasing {}'s claims in {} failed: {error}",
                     drive.worker_id,
                     drive.store_path.display()
@@ -10466,7 +10482,7 @@ pub async fn release_orphaned_drive_sessions(state: &AppState) -> Vec<String> {
             }
         }
         if !released.is_empty() {
-            eprintln!(
+            tracing::warn!(
                 "released claims left by ended chat drives: {}",
                 released.join(", ")
             );
@@ -10530,7 +10546,7 @@ pub async fn prune_orphaned_terminal_names(state: &AppState) -> Vec<String> {
     match terminal_names::retain_live(&Settings::new(state.store.root()), &live) {
         Ok(pruned) => pruned,
         Err(error) => {
-            eprintln!("pruning saved terminal names failed: {error}");
+            tracing::warn!("pruning saved terminal names failed: {error}");
             Vec::new()
         }
     }
@@ -11122,7 +11138,7 @@ fn emit_terminal_renamed(state: &AppState, id: &str, name: Option<String>) {
 /// tab name.
 fn forget_terminal_name(state: &AppState, id: &str) {
     if let Err(error) = terminal_names::set(&Settings::new(state.store.root()), id, None) {
-        eprintln!("forgetting terminal {id}'s name failed: {error}");
+        tracing::warn!("forgetting terminal {id}'s name failed: {error}");
     }
 }
 
@@ -11477,6 +11493,7 @@ async fn terminal_attach_loop(
                 Err(RecvError::Closed) => break,
             },
             inbound = socket.recv() => match inbound {
+                // A write to an exited PTY is dropped; the exit is reported separately.
                 Some(Ok(Message::Binary(b))) => { let _ = term.write(&b); }
                 Some(Ok(Message::Text(t))) => {
                     match classify_terminal_text(&t) {
@@ -11663,7 +11680,7 @@ async fn resolve_permission(
     if let (Some(rule), Some(path)) = (&resolved.persisted_rule, rules_path.as_ref()) {
         match hotsheet_aitools::append_permission_rule(path, rule) {
             Ok(()) => persisted = true,
-            Err(e) => eprintln!("failed to persist permission rule: {e}"),
+            Err(e) => tracing::warn!("failed to persist permission rule: {e}"),
         }
     }
     // Resolution can happen through another client or transport. Publish a replayable
@@ -12962,7 +12979,7 @@ fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Re
                 }) {
                     Ok(watcher) => watcher,
                     Err(error) => {
-                        eprintln!(
+                        tracing::warn!(
                             "watcher for {} failed to start: {error}",
                             tickets_dir.display()
                         );
@@ -12970,7 +12987,7 @@ fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Re
                     }
                 };
                 if let Err(error) = watcher.watch(&tickets_dir, RecursiveMode::Recursive) {
-                    eprintln!(
+                    tracing::warn!(
                         "watcher for {} failed to start: {error}",
                         tickets_dir.display()
                     );
@@ -13305,7 +13322,7 @@ fn run_native_repository_monitor(
                     continue;
                 }
                 if let Err(error) = watcher.watch(git_dir, RecursiveMode::Recursive) {
-                    eprintln!(
+                    tracing::warn!(
                         "repository watcher for {} could not watch {}: {error}",
                         watch_root.display(),
                         git_dir.display()
@@ -13321,7 +13338,7 @@ fn run_native_repository_monitor(
         match ready_rx.recv_timeout(REPOSITORY_FINGERPRINT_INTERVAL) {
             Ok(Ok(watcher)) => break watcher,
             Ok(Err(error)) => {
-                eprintln!(
+                tracing::warn!(
                     "native repository watcher for {} failed to start ({error}); falling back to Git status",
                     root.display()
                 );
@@ -13452,7 +13469,7 @@ fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, targ
                     .any(|root| same_path(FsPath::new(root), target.entry.store.root()))
                 {
                     if let Err(e) = regenerate_checkout_worklist_indexed(&target.host, &checkout) {
-                        eprintln!("worklist regenerate failed for {}: {e}", checkout.root);
+                        tracing::warn!("worklist regenerate failed for {}: {e}", checkout.root);
                     }
                 }
             }
@@ -13582,7 +13599,9 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
         });
         {
             let index = index.lock_or_recover();
-            let _ = index.delete(&id);
+            if let Err(error) = index.delete(&id) {
+                tracing::warn!(ticket = %id, %error, "watcher index delete failed");
+            }
         }
         if local_echo {
             return false;
@@ -13616,7 +13635,9 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
         // the stale hash and is incorrectly treated as a no-op.
         {
             let index = index.lock_or_recover();
-            let _ = index.record_source_hash(&id, &hash);
+            if let Err(error) = index.record_source_hash(&id, &hash) {
+                tracing::warn!(ticket = %id, %error, "watcher could not record a corrupt file's hash");
+            }
         }
         let (_, slug) = hotsheet_ticketing::recover_ticket_identity(path);
         // Keep the last healthy indexed row available, but wake every client so its
@@ -13626,7 +13647,9 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
     };
     {
         let index = index.lock_or_recover();
-        let _ = index.upsert(&ticket, &path.display().to_string(), &hash);
+        if let Err(error) = index.upsert(&ticket, &path.display().to_string(), &hash) {
+            tracing::warn!(ticket = %ticket.id, %error, "watcher index upsert failed");
+        }
     }
     emit("changed", ticket.id.to_string(), ticket.slug.clone());
     true
@@ -14355,6 +14378,53 @@ mod index_repair_tests {
         state.changed_in(&entry, "changed", &other);
         assert_eq!(indexed_hash(&entry, &first), None);
         assert!(state.pending_index_repairs.lock_or_recover().is_empty());
+    }
+
+    /// HS2-PD8NJ6: the failure is a structured `tracing` warning naming the ticket.
+    #[test]
+    fn a_failed_index_write_emits_a_structured_warning() {
+        #[derive(Clone, Default)]
+        struct Buffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+        impl std::io::Write for Buffer {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock_or_recover().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        let state = AppState::new(store.clone(), "secret".into()).unwrap();
+        let entry = state.host.get(&multistore::store_url_id(&store)).unwrap();
+        let ticket = ops::create(
+            &store,
+            id,
+            "HS",
+            Timestamp::new("2026-09-02T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let buffer = Buffer::default();
+        let writer = buffer.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || writer.clone())
+            .with_ansi(false)
+            .finish();
+        state.index_write_faults.store(1, Ordering::SeqCst);
+        tracing::subscriber::with_default(subscriber, || {
+            state.changed_in(&entry, "created", &ticket);
+        });
+        let logged = String::from_utf8(buffer.0.lock_or_recover().clone()).unwrap();
+        assert!(logged.contains("WARN"), "{logged}");
+        assert!(
+            logged.contains("index write failed; scheduled repair"),
+            "{logged}"
+        );
+        assert!(logged.contains(&format!("ticket={id}")), "{logged}");
+        assert!(logged.contains("injected index write fault"), "{logged}");
     }
 
     /// HS2-ZGQJZP: a panic while holding a server lock must not wedge later writes.

@@ -59,6 +59,8 @@ notify = "6"
 toml = "0.8"
 include_dir = "0.7"
 portable-pty = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "env-filter"] }
 # Tier-1 mTLS (HS2-VT3JMF): rustls server + rcgen cert generation + a manual TLS accept
 # loop (axum 0.8 has no built-in TLS) via hyper/hyper-util (already in the tree under axum).
 rustls = "0.23"

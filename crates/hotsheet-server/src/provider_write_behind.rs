@@ -290,7 +290,7 @@ pub fn spawn_jira_dispatch_loop(state: AppState) -> Option<tokio::task::JoinHand
     Some(tokio::spawn(async move {
         loop {
             if let Err(error) = dispatch_jira_once(&state).await {
-                eprintln!("Jira outbox dispatch failed: {}", error.message);
+                tracing::warn!("Jira outbox dispatch failed: {}", error.message);
             }
             tokio::time::sleep(Duration::from_secs(2)).await;
         }

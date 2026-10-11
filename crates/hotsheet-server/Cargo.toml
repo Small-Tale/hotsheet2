@@ -22,6 +22,10 @@ hotsheet-aitools.workspace = true
 hotsheet-terminals.workspace = true
 hotsheet-tls.workspace = true
 hotsheet-sync.workspace = true
+# Structured diagnostics (HS2-PD8NJ6): the library emits events, the binary installs
+# the stderr subscriber.
+tracing.workspace = true
+tracing-subscriber.workspace = true
 axum.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util"] }
 rustls.workspace = true

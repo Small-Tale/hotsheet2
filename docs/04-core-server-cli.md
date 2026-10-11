@@ -455,6 +455,13 @@ The flag is safe even when the dead owner also held the server's stdout and stde
 shutdown diagnostics never panic on a broken pipe, and the reader begins stopping
 before it logs anything.
 
+**Diagnostics (HS2-PD8NJ6).** Server stdout carries only the startup contract lines
+(URL, `secret:`, `index:`, hosting summaries). Every other diagnostic is a `tracing`
+event written to stderr by the binary's `fmt` subscriber, at `info` level by default;
+set `RUST_LOG` (for example `RUST_LOG=debug` or `RUST_LOG=hotsheet_server=warn`) to
+change the filter. Failures that are deliberately ignored carry a reason comment or
+are logged rather than discarded with a bare `let _ =`.
+
 Detached client launches never pass this flag, because they must outlive their
 client. Stdin on `/dev/null` would read EOF immediately, so the flag requires a held
 pipe.
