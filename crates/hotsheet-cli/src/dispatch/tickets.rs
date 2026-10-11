@@ -1,9 +1,23 @@
 //! Git-backed ticket, note, attachment, transfer, and people commands.
 
-use anyhow::Result;
+use std::collections::HashSet;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result, bail};
+use clap::{Args, Subcommand};
+use hotsheet_model::{
+    Confidence, NoteKind, ReviewRequest, StartedPhase, Status, Ulid, to_file_string,
+};
+use hotsheet_ticketing::{FsStore, NewTicket, Person, Roster, TicketPatch, TicketQuery, ops};
+
+use crate::{
+    Cmd, confidence_change, default_index_path, now_ts, parse_close_reason, parse_confidence_arg,
+    parse_note_kind, parse_priority, parse_review_kind, parse_status_str, read_note_input, resolve,
+    validate_note_modifiers,
+};
 
 use super::{Ctx, misrouted};
-use crate::*;
 
 pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let path = &ctx.path;

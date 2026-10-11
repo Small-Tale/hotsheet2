@@ -1,10 +1,25 @@
 //! External ticket-provider connections, provider-native tickets, keys, and accounts.
 
-use anyhow::{Result, bail};
-use hotsheet_ticketing::FsStore;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use anyhow::{Context, Result, bail};
+use clap::{Args, Subcommand};
+use hotsheet_model::{Confidence, NoteKind, ReviewRequest, Status, Ulid};
+use hotsheet_ticketing::{
+    FsStore, GitProvider, KeyRegistry, MutationContext, OsKeychain, ProviderConfigRegistry,
+    ProviderDraft, ProviderPatch, ProviderRegistry, TicketProvider, TicketQuery, TicketRef,
+    copy_between, git_connection_id, move_between, ops,
+};
+use time::OffsetDateTime;
+
+use crate::{
+    Cmd, confidence_change, feedback_synthesis, now_ts, parse_close_reason, parse_note_kind,
+    parse_priority, parse_review_kind, parse_status_str, read_note_input, validate_note_modifiers,
+};
 
 use super::{Ctx, misrouted};
-use crate::*;
 
 pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let path = &ctx.path;

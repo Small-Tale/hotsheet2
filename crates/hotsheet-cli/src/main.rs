@@ -2,10 +2,9 @@
 //! `hotsheet-ticketing`: it reads and writes ticket files directly on disk
 //! (`docs/04-core-server-cli.md` §4.4) and imports HS1 exports (`docs/07`).
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::io::{Read, Write};
+use std::collections::BTreeMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 mod dispatch;
 
@@ -16,19 +15,12 @@ use dispatch::store::CheckoutCmd;
 use dispatch::tickets::{AttachArgs, LsFilters, NewArgs, PeopleCmd, TicketEditArgs};
 
 use anyhow::{Context, Result, bail};
-use clap::{Args, Parser, Subcommand};
-use hotsheet_cli::{git_init, run_import};
+use clap::{Parser, Subcommand};
 use hotsheet_model::{
-    CloseReason, Confidence, NoteKind, Priority, ReviewKind, ReviewRequest, StartedPhase, Status,
-    Ticket, Timestamp, Ulid, parse_file, to_file_string,
+    CloseReason, Confidence, NoteKind, Priority, ReviewKind, Status, Ticket, Timestamp, Ulid,
 };
-use hotsheet_ticketing::{
-    FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, OsKeychain, Person,
-    ProviderConfigRegistry, ProviderDraft, ProviderPatch, ProviderRegistry, Roster, SortKey,
-    StoreMetadata, TicketPatch, TicketProvider, TicketQuery, TicketRef, copy_between,
-    git_connection_id, move_between, ops,
-};
-use time::{Duration, OffsetDateTime};
+use hotsheet_ticketing::{FsStore, TicketQuery};
+use time::OffsetDateTime;
 
 mod feedback_synthesis;
 
@@ -1210,6 +1202,8 @@ fn now_ts() -> Timestamp {
 
 #[cfg(test)]
 mod server_wrapper_tests {
+    use hotsheet_ticketing::{NewTicket, StoreMetadata, ops};
+
     use super::*;
 
     /// HS2-V08DXW: every subcommand (recursively) has its own non-empty help, and the

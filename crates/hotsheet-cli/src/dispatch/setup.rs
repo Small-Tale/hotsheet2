@@ -1,9 +1,19 @@
 //! AI tool setup, settings, plugins, permission hooks, launch, and driven turns.
 
-use anyhow::Result;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result, bail};
+use clap::{Args, Subcommand};
+use hotsheet_cli::git_init;
+use hotsheet_model::Ulid;
+use hotsheet_ticketing::{FsStore, SortKey, StoreMetadata, TicketQuery, ops};
+
+use crate::{
+    Cmd, ai_settings_target, binary_on_path, confirm, discovered_ai_tools, effective_ai_defaults,
+    now_ts, settings_for_cli, stored_ai_defaults, urlencoding_component,
+};
 
 use super::{Ctx, misrouted};
-use crate::*;
 
 pub(super) fn run(cmd: Cmd, ctx: &Ctx) -> Result<()> {
     let path = &ctx.path;
