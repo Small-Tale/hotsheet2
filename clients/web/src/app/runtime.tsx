@@ -12,20 +12,17 @@ import { batch, effect, mount, signal } from 'kerfjs';
 import { claimEtaPresentation, isTicketActivelyWorkedOn, projectTabTicketState } from '../active-ticket-work';
 import { filterAdvancedSearchResults, usesAdvancedSearchExpression } from '../advanced-search';
 import {
-  type AiToolDefaults,
   Api,
   type Capabilities,
   type CheckoutTicketCounts,
   type CheckoutTicketQuery,
   type CommandDefinition,
-  type CommandRun,
   type CorruptTicket,
   type CustomView,
   type DuplicateBacklink,
   type FullTicket,
   type PollResponse,
   type ProviderOutboxOperation,
-  type RepositoryStatus,
   type TicketRow as WireTicketRow,
   TurnStreamReplayGuard,
 } from '../api';
@@ -95,7 +92,6 @@ import {
 import { SavedViewDeleteDialog, SavedViewDialog } from '../components/saved-view-dialog';
 import { ServerBusyBars, ServerBusyMessage } from '../components/server-busy-bars';
 import { type SettingsCategory, settingsCategoryTitle } from '../components/settings-navigation';
-import { SettingsWorkspace } from '../components/settings-workspace';
 import type { TicketStatus } from '../components/status-badge';
 import {
   TerminalCopyDialog,
@@ -134,7 +130,6 @@ import {
   GlobalWorkspaceSurface,
   ProjectTerminalDrawerSurface,
   sidebarSurfacePanel,
-  type SidebarSurfaceProps,
   terminalOperationsSurfacePanel,
   type TerminalOperationsSurfaceProps,
   terminalRailSurfacePanel,
@@ -155,12 +150,6 @@ import {
 import { withControlledOpen } from '../controlled-open';
 import { syncConversationScroll } from '../conversation-scroll';
 import { customAiCommandSignalConnection, customAiCommandTicket, HOTSHEET_SKILL_SIGNAL } from '../custom-ai-command';
-import {
-  drawerInputFocusRequestStillOwned,
-  drawerTabFocusRequestStillOwned,
-  drawerTabSelectionAfterClose,
-  selectedDrawerInput,
-} from '../drawer-tab-order';
 import { createAiConfigurationController } from '../features/ai-configuration';
 import { createBoardColumnPaging } from '../features/board-column-paging';
 import { createClaimClockController } from '../features/claim-clock';
@@ -174,10 +163,18 @@ import { createPermissionsController } from '../features/permissions';
 import { createProjectChangeStreamsController } from '../features/project-change-streams';
 import { createProjectCloseController } from '../features/project-close';
 import { createProjectLifecycleController } from '../features/project-lifecycle';
-import { nextProjectAfterClose, pruneProjectRecords } from '../features/project-teardown';
+import {
+  type CachedProjectProjection,
+  createProjectRefresh,
+  type ProjectRefreshOptions,
+} from '../features/project-refresh';
+import { createProjectTeardown } from '../features/project-teardown';
 import { createRepositoryController } from '../features/repository';
 import { createSavedViewsController } from '../features/saved-views';
+import { createSettingsSurface } from '../features/settings-surface';
+import { createSidebarSurface } from '../features/sidebar-surface';
 import { createTerminalDashboardController } from '../features/terminal-dashboard';
+import { createTerminalDrawerController } from '../features/terminal-drawer';
 import {
   createTerminalDrawerGeometryController,
   currentMobileViewportGeometry,
@@ -206,16 +203,15 @@ import { isAppleShortcutPlatform, loadShortcutOverrides, type ShortcutChord } fr
 import { localBridge } from '../local-bridge-client';
 import { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { migrationPercent, migrationPhaseLabel } from '../migration-progress';
-import { automaticInputFocusAllowed, isMobileViewport, isSidePanelPortal } from '../mobile-layout';
+import { isMobileViewport, isSidePanelPortal } from '../mobile-layout';
 import { loadMobileTerminalColumns } from '../mobile-terminal-columns';
 import { INACTIVE_MOBILE_TERMINAL_FOCUS } from '../mobile-terminal-focus';
 import { mobileViewChoices } from '../mobile-view-choices';
 import { type ProjectTicketSources, resolveNewTicketSource, writableTicketSources } from '../new-ticket-source';
 import { mergeRetainedCreatedRows, PendingCreatedTickets, prependCreatedTicketRow } from '../pending-created-tickets';
-import { PERMISSION_DELAYS } from '../permission-notifications';
 import { priorityFromWire } from '../priority-wire';
 import { afterBrowserPaint } from '../project-activation';
-import { type DrawerAIChat, projectChatConnectionId, projectDriveControlState } from '../project-drive';
+import { type DrawerAIChat } from '../project-drive';
 import { openProjectFetch, restoreRememberedProjects } from '../project-startup';
 import { createProjectTabRefreshCoordinator } from '../project-tab-refresh';
 import {
@@ -233,10 +229,8 @@ import { TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH } from '../ter
 import { consumeTerminalModifiers, NO_TERMINAL_MODIFIERS, type TerminalModifiers } from '../terminal-keys';
 import { parseTerminalNames } from '../terminal-names';
 import { terminalDrawerActivation } from '../terminal-project-scope';
-import type { TerminalFocusRequest } from '../terminal-viewport';
 import {
   activeTerminalVisibilityGroup,
-  hideNewTerminalInNamedGroups,
   parseTerminalVisibilityState,
   TERMINAL_DASHBOARD_VISIBILITY_SCOPE,
   TERMINAL_VISIBILITY_STORAGE_KEY,
@@ -261,7 +255,6 @@ import { animateTicketMotion, captureTicketMotion, waitForTicketMotionSettled } 
 import { type ClipboardTicket, type TicketHistory, type TicketSnapshot } from '../ticket-operations';
 import {
   activeTicketReaderProject,
-  disposeTicketReaderFrames,
   popTicketReaderFrame,
   pushTicketReaderFrame,
   ticketReaderEditState,
@@ -370,14 +363,6 @@ export async function startHotSheetWebClient() {
     inaccessibleProjects: [],
   });
   const resolvedDuplicateTargets = signal<Record<string, DuplicateTarget>>({});
-  interface CachedProjectProjection {
-    corruptTickets: CorruptTicket[];
-    repository: RepositoryStatus | null;
-    repositoryError: string;
-    commandDefinitions: CommandDefinition[];
-    commandRuns: CommandRun[];
-    searchMatchKeys?: Set<string>;
-  }
   const projectProjectionById = signal<Record<string, CachedProjectProjection>>({});
   // Bounded LRU of projects whose loaded projection stays resident so tab switches paint instantly and
   // revalidate silently; evicted projects fall back to a cold (loading) activation (HS2-AZZ9TF).
@@ -529,10 +514,7 @@ export async function startHotSheetWebClient() {
       terminalGroupLoaded: (projectId) => terminalGroupLoaded(projectId),
       refreshTerminalDashboard: () => refreshTerminalDashboard(),
     });
-  let terminalCreateChain: Promise<unknown> = Promise.resolve();
-  let terminalDrawerTransitionTimer: number | undefined, terminalPreviewClickTimer: number | undefined;
-  let pendingTerminalFocus: TerminalFocusRequest | undefined;
-  let drawerInputFocusGeneration = 0;
+  let terminalPreviewClickTimer: number | undefined;
   const { syncTerminalViewportMounts, parkProjectViewports } = createTerminalViewportsController({
     projects,
     mobileTerminalColumns: () => mobileTerminalColumns.peek(),
@@ -543,10 +525,10 @@ export async function startHotSheetWebClient() {
       },
     },
     get pendingTerminalFocus() {
-      return pendingTerminalFocus;
+      return terminalDrawer.pendingTerminalFocus;
     },
     set pendingTerminalFocus(value) {
-      pendingTerminalFocus = value;
+      terminalDrawer.pendingTerminalFocus = value;
     },
     openTicketReference(element, slug, projectId, preferredProject) {
       ticketLinkReturnFocus = element;
@@ -896,9 +878,13 @@ export async function startHotSheetWebClient() {
     project: () => project(),
     error,
     terminalDrawerChatsByProject,
-    createDrawerAIChat,
-    selectDrawerItem,
-    setTerminalDrawerVisible,
+    createDrawerAIChat: (selection, options) => terminalDrawer.createDrawerAIChat(selection, options),
+    selectDrawerItem: (id) => {
+      terminalDrawer.selectDrawerItem(id);
+    },
+    setTerminalDrawerVisible: (visible) => {
+      terminalDrawer.setTerminalDrawerVisible(visible);
+    },
     aiConfiguration: () => aiConfigurationController,
   });
   const {
@@ -931,7 +917,7 @@ export async function startHotSheetWebClient() {
     driveConnectionsByProject,
     conversationStates,
     conversationOpen,
-    createDrawerAIChat,
+    createDrawerAIChat: (selection) => terminalDrawer.createDrawerAIChat(selection),
     showToast,
     beginConversation,
     updateConversation,
@@ -991,8 +977,12 @@ export async function startHotSheetWebClient() {
       persistTerminalVisibility(next);
     },
     replaceConversationStates,
-    selectDrawerItem,
-    setTerminalDrawerVisible,
+    selectDrawerItem: (id) => {
+      terminalDrawer.selectDrawerItem(id);
+    },
+    setTerminalDrawerVisible: (visible) => {
+      terminalDrawer.setTerminalDrawerVisible(visible);
+    },
   });
   let appRegionResizeDrag:
     | {
@@ -1190,7 +1180,6 @@ export async function startHotSheetWebClient() {
   } = projectLifecycleController;
   let projectSelectionGeneration = 0;
   let projectActivationGeneration = 0,
-    projectRefreshGeneration = 0,
     ticketCollectionGeneration = 0,
     commandRefreshGeneration = 0,
     projectSessionRestoreRun = 0;
@@ -1439,48 +1428,6 @@ export async function startHotSheetWebClient() {
     refreshTerminalDashboard,
     clearTerminalHalt,
   } = terminalDashboardController;
-  function focusDrawerTab(projectId: string, id: string) {
-    const scheduled = document.activeElement;
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const drawer = [...document.querySelectorAll<HTMLElement>('[data-component="terminal-drawer"]')].find(
-            (item) => item.dataset.projectId === projectId,
-          ),
-          tab =
-            id === 'grid'
-              ? drawer?.querySelector<HTMLElement>('[data-item-id="grid"]')
-              : [...(drawer?.querySelectorAll<HTMLElement>('[data-tab-id]') ?? [])]
-                  .find((item) => item.dataset.tabId === id)
-                  ?.querySelector<HTMLElement>('.kui-app-tab__select');
-        tab?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        if (drawerTabFocusRequestStillOwned(scheduled, document.activeElement, document.body)) tab?.focus();
-      }),
-    );
-  }
-  function focusDrawerInput(projectId: string) {
-    if (!automaticInputFocusAllowed(window.innerWidth)) return;
-    const scheduled = document.activeElement,
-      generation = ++drawerInputFocusGeneration;
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const drawer = [...document.querySelectorAll<HTMLElement>('[data-component="terminal-drawer"]')].find(
-            (item) => item.dataset.projectId === projectId,
-          ),
-          input = drawer ? selectedDrawerInput(drawer) : undefined;
-        if (
-          input &&
-          drawerInputFocusRequestStillOwned(
-            generation,
-            drawerInputFocusGeneration,
-            scheduled,
-            document.activeElement,
-            document.body,
-          )
-        )
-          input.focus();
-      }),
-    );
-  }
   // The workspace grid and drawer sizes follow whichever element currently renders them: a re-render
   // that replaces the measured node must re-bind the observer, or the size freezes (HS2-0PF13V).
   const terminalDashboardSizeObserver = createTrackedSizeObserver({
@@ -1518,277 +1465,57 @@ export async function startHotSheetWebClient() {
   function observeTerminalDrawer() {
     queueMicrotask(terminalDrawerSizeObserver.sync);
   }
-  function requestDrawerInputFocus(projectId: string, id: string, chat: DrawerAIChat | undefined) {
-    if (id === 'grid') return;
-    if (!chat) pendingTerminalFocus = { projectId, terminalId: id };
-    focusDrawerInput(projectId);
-  }
-  function setTerminalDrawerVisible(visible: boolean, refresh = true) {
-    if (!visible) exitMobileTerminalFocus();
-    if (visible === terminalDrawerVisible.value) {
-      if (visible) {
-        terminalDrawerMounted.value = true;
-        if (refresh) void refreshTerminalDashboard();
-        observeTerminalDrawer();
-        settleTerminalDrawerGeometry();
-      }
-      return;
-    }
-    if (terminalDrawerTransitionTimer !== undefined) window.clearTimeout(terminalDrawerTransitionTimer);
-    if (visible) {
-      const current = project(),
-        chat = current
-          ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-            terminalDrawerChatsByProject.value[current.id]?.find((item) => item.id === terminalDrawerSelected.value)
-          : undefined;
-      if (current) requestDrawerInputFocus(current.id, terminalDrawerSelected.value, chat);
-      terminalDrawerMounted.value = true;
-    }
-    terminalDrawerTransitioning.value = true;
-    terminalDrawerVisible.value = visible;
-    localStorage.setItem('hotsheet.terminals.drawer-open', String(visible));
-    terminalDrawerTransitionTimer = window.setTimeout(() => {
-      terminalDrawerTransitionTimer = undefined;
-      terminalDrawerTransitioning.value = false;
-      if (!terminalDrawerVisible.value) terminalDrawerMounted.value = false;
-    }, 220);
-    if (visible) {
-      if (refresh) void refreshTerminalDashboard();
-      observeTerminalDrawer();
-    } else terminalDrawerSizeObserver.disconnect();
-  }
-  function selectDrawerItem(id: string, focusInput = true) {
-    if (id !== terminalDrawerSelected.value) exitMobileTerminalFocus();
-    const current = project(),
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      chat = current ? terminalDrawerChatsByProject.value[current.id]?.find((item) => item.id === id) : undefined;
-    if (chat) conversationConnectionId.value = chat.connectionId;
-    terminalDrawerSelected.value = id;
-    if (current) {
-      localStorage.setItem(`hotsheet.project.${current.id}.terminal-drawer-selection`, id);
-      if (focusInput) requestDrawerInputFocus(current.id, id, chat);
-    }
-  }
-  function openTerminalInProject(key: string) {
-    const session = terminalSession(key);
-    if (!session) return;
-    const activated =
-      session.projectId === selectedProjectId.value ? undefined : activateOpenProject(session.projectId);
-    pendingTerminalFocus = { projectId: session.projectId, terminalId: session.id };
-    selectDrawerItem(session.id);
-    terminalContextMenu.value = undefined;
-    setShellMode('project');
-    setTerminalDrawerVisible(true);
-    if (activated) void refreshActivatedProject(activated, false);
-    else void Promise.all([refreshProject({ showLoading: false }), refreshCommands()]);
-  }
-  function openGridAIChat(projectId: string, chatId: string) {
-    const target = projects.value.find((item) => item.id === projectId),
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      chat = terminalDrawerChatsByProject.value[projectId]?.find((item) => item.id === chatId);
-    if (!target || !chat) return;
-    const activated = projectId === selectedProjectId.value ? undefined : activateOpenProject(projectId);
-    setShellMode('project');
-    selectDrawerItem(chat.id);
-    setTerminalDrawerVisible(true);
-    if (activated) void refreshActivatedProject(activated, false);
-    else void Promise.all([refreshProject({ showLoading: false }), refreshCommands()]);
-  }
-  // Serialize terminal creation so a create in flight (including its dashboard refresh) never *drops* a
-  // later request — each click still opens its own terminal instead of being silently swallowed, which
-  // looked like the same terminal being reused and shell commands not starting (HS2-2BKPGK).
-  function queueTerminalCreate(run: () => Promise<void>): Promise<void> {
-    const next = terminalCreateChain.then(run, run);
-    terminalCreateChain = next.catch(() => undefined);
-    return next;
-  }
-  async function createProjectTerminal(selection?: AiToolDefaults) {
-    const current = project();
-    if (!current) return;
-    await queueTerminalCreate(async () => {
-      if (project()?.id !== current.id) return;
-      terminalDashboardLoading.value = true;
-      terminalDashboardMessage.value = '';
-      try {
-        const created = await new Api(current.apiPath).createTerminal({
-          cwd: current.root,
-          ...(selection ? { connect: selection.tool, model: selection.model, effort: selection.effort } : {}),
-        });
-        persistTerminalVisibility(
-          hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${created.id}`),
-        );
-        pendingTerminalFocus = { projectId: current.id, terminalId: created.id };
-        selectDrawerItem(created.id);
-        await refreshTerminalDashboard();
-        focusDrawerTab(current.id, created.id);
-      } catch (reason) {
-        pendingTerminalFocus = undefined;
-        terminalDashboardMessage.value = reason instanceof Error ? reason.message : String(reason);
-        terminalDashboardLoading.value = false;
-      }
-    });
-  }
-  async function createShellCommandTerminal(command: CommandDefinition, current: Project) {
-    if (!command.command) return;
-    await queueTerminalCreate(async () => {
-      if (project()?.id !== current.id) return;
-      terminalDashboardLoading.value = true;
-      terminalDashboardMessage.value = '';
-      try {
-        const created = await new Api(current.apiPath).createTerminal({
-          shell_command: command.command,
-          cwd: command.cwd || current.root,
-        });
-        saveTerminalName(current.id, created.id, command.title);
-        persistTerminalVisibility(
-          hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${created.id}`),
-        );
-        pendingTerminalFocus = { projectId: current.id, terminalId: created.id };
-        selectDrawerItem(created.id);
-        setTerminalDrawerVisible(true, false);
-        await refreshTerminalDashboard();
-      } catch (reason) {
-        pendingTerminalFocus = undefined;
-        terminalDashboardMessage.value = reason instanceof Error ? reason.message : String(reason);
-        terminalDashboardLoading.value = false;
-      }
-    });
-  }
-  async function createDrawerAIChat(
-    selection: AiToolDefaults,
-    options: { connectionId?: string; drive?: boolean } = {},
-  ) {
-    const current = project();
-    if (!current) return;
-    const connectionId = options.connectionId ?? `hotsheet-drawer-chat-${browserRandomId()}`,
-      existing = (terminalDrawerChatsByProject.value[current.id] ?? []).find(
-        (item) => item.connectionId === connectionId,
-      );
-    if (existing) {
-      selectDrawerItem(existing.id);
-      setTerminalDrawerVisible(true);
-      return existing;
-    }
-    drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: true };
-    try {
-      const created = await new Api(current.apiPath).createToolConnection({
-        tool: selection.tool,
-        checkout: current.id,
-        connection_id: connectionId,
-        model: selection.model,
-        effort: selection.effort,
-      });
-      if (project()?.id !== current.id) return;
-      driveConnectionsByProject.value = {
-        ...driveConnectionsByProject.value,
-        [current.id]: (driveConnectionsByProject.value[current.id] ?? [])
-          .filter((item) => item.id !== created.id)
-          .concat(created),
-      };
-      const tab = {
-        id: `ai-chat:${created.id}`,
-        connectionId: created.id,
-        tool: selection.tool,
-        name: options.drive ? `${aiToolLabel(selection.tool)} Drive` : `${aiToolLabel(selection.tool)} chat`,
-        model: selection.model,
-        effort: selection.effort,
-        drive: options.drive,
-      };
-      terminalDrawerChatsByProject.value = {
-        ...terminalDrawerChatsByProject.value,
-        [current.id]: [...(terminalDrawerChatsByProject.value[current.id] ?? []), tab],
-      };
-      persistTerminalVisibility(hideNewTerminalInNamedGroups(terminalVisibility.value, `${current.id}:${tab.id}`));
-      selectDrawerItem(tab.id);
-      setTerminalDrawerVisible(true);
-      return tab;
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    } finally {
-      drivePendingByProject.value = { ...drivePendingByProject.value, [current.id]: false };
-    }
-  }
-  function disposeProjectTicketReaders(ids: readonly string[]) {
-    const closing = new Set(ids),
-      result = disposeTicketReaderFrames(linkedReaderStack.value, closing);
-    // Undo callbacks may capture complete tickets and attachments from a closed checkout.
-    for (const id of ids) histories.delete(id);
-    for (const frame of result.disposed) {
-      const saves = linkedReaderAutosaves.get(frame.id);
-      saves?.details.cancel();
-      saves?.note.cancel();
-      saves?.blocked.cancel();
-      linkedReaderAutosaves.delete(frame.id);
-      readerReturnFocus.delete(frame.id);
-      readerClosing.delete(frame.id);
-      readerApprovedClose.delete(frame.id);
-    }
-    linkedReaderStack.value = result.retained;
-    if (closing.has(selectedProjectId.value)) {
-      readerDetailsAutosave.cancel();
-      readerNoteAutosave.cancel();
-      readerBlockedReasonAutosave.cancel();
-      readerOpen.value = false;
-      readerReturnFocus.delete('workspace-reader');
-      readerClosing.delete('workspace-reader');
-      readerApprovedClose.delete('workspace-reader');
-    }
-  }
-  function closeProjectIds(ids: readonly string[]) {
-    disposeProjectTicketReaders(ids);
-    for (const item of projects.value)
-      if (ids.includes(item.id)) void new Api(item.apiPath).closeProjectSession().catch(() => undefined);
-    /* Lets the server stop hosting what no open project needs (HS2-ARJ9J1). */ const closing = new Set(ids),
-      before = projects.value,
-      selectedIndex = before.findIndex((item) => item.id === selectedProjectId.value);
-    let activation: ReturnType<typeof activateOpenProject>;
-    for (const id of ids) {
-      projectTabRefresh.cancel(id);
-      pendingCreatedTickets.forgetProject(id);
-      projectsPendingActivation.delete(id);
-      warmProjects.forget(id);
-      aiConfigurationController.forgetAiConfiguration(id);
-    }
-    projects.value = before.filter((item) => !closing.has(item.id));
-    pruneProjectRecords(
-      [
-        ticketRowsByProject,
-        ticketCursorsByProject,
-        boardPagesByProject,
-        ticketCountsByProject,
-        ticketTrendByProject,
-        projectProjectionById,
-        customViewsByProject,
-        terminalDrawerChatsByProject,
-        commandSettingsDraftsByProject,
-        commandSettingsMessagesByProject,
-        commandSettingsSelectedByProject,
-        commandSettingsExtraGroupsByProject,
-      ],
-      closing,
-    );
-    if (statsProjectId.value && closing.has(statsProjectId.value)) statsProjectId.value = undefined;
-    if (closing.has(selectedProjectId.value)) {
-      resetTicketComposer();
-      const next = nextProjectAfterClose(before, projects.value, selectedIndex);
-      if (next) activation = activateOpenProject(next);
-      else selectedProjectId.value = '';
-      if (!selectedProjectId.value && projectRestoreFailures.value.length)
-        selectedProjectRestoreRoot.value = projectRestoreFailures.value[0].root;
-    }
-    pruneProjectRecords([defaultProviders, driveConnectionsByProject, drivePendingByProject], closing);
-    localStorage.setItem('hotsheet.open-projects', JSON.stringify(currentRememberedProjectRoots()));
-    syncProjectChangeStreams();
-    commandDialogId.value = undefined;
-    commandSettingsEditingId.value = undefined;
-    if (activation) void refreshActivatedProject(activation, terminalDrawerVisible.value);
-    else if (project())
-      void Promise.all([refreshProject(), refreshCommands(), refreshCustomViews(), refreshDriveConnections()]);
-    else {
-      commandDefinitions.value = [];
-      commandRuns.value = [];
-    }
-  }
+  const terminalDrawer = createTerminalDrawerController({
+    projects,
+    selectedProjectId,
+    terminalGroups,
+    terminalDrawerVisible,
+    terminalDrawerMounted,
+    terminalDrawerTransitioning,
+    terminalDrawerSelected,
+    terminalDrawerChatsByProject,
+    terminalDashboardLoading,
+    terminalDashboardMessage,
+    terminalVisibility,
+    terminalContextMenu,
+    appTabContextMenu,
+    error,
+    project: () => project(),
+    conversationConnectionId,
+    driveConnectionsByProject,
+    drivePendingByProject,
+    aiToolLabel,
+    exitMobileTerminalFocus,
+    settleTerminalDrawerGeometry,
+    observeTerminalDrawer,
+    disconnectTerminalDrawerSize: () => {
+      terminalDrawerSizeObserver.disconnect();
+    },
+    refreshTerminalDashboard,
+    terminalSession,
+    currentDrawerTabIds,
+    persistDrawerTabOrder,
+    persistTerminalVisibility,
+    saveTerminalName,
+    activateOpenProject,
+    refreshActivatedProject,
+    refreshProject,
+    refreshCommands,
+    setShellMode,
+  });
+  const {
+    focusDrawerTab,
+    setTerminalDrawerVisible,
+    selectDrawerItem,
+    openTerminalInProject,
+    openGridAIChat,
+    createProjectTerminal,
+    createShellCommandTerminal,
+    createDrawerAIChat,
+    closeDrawerTabIds,
+    closeTerminalIds,
+    closeDrawerAIChat,
+  } = terminalDrawer;
   const {
     requestProjectClose,
     confirmProjectClose,
@@ -1805,55 +1532,6 @@ export async function startHotSheetWebClient() {
     aiToolLabel,
     closeProjectIds,
   });
-  async function closeDrawerTabIds(ids: readonly string[]) {
-    const current = project(),
-      group = current && terminalGroups.value.find((item) => item.projectId === current.id);
-    if (!current || !group || ids.length === 0) return;
-    const order = currentDrawerTabIds(current.id),
-      requested = new Set(ids),
-      terminalIds = new Set(group.sessions.map((item) => item.id)),
-      chatIds = new Set((terminalDrawerChatsByProject.value[current.id] ?? []).map((item) => item.id)),
-      closing = order.filter((id) => requested.has(id) && (terminalIds.has(id) || chatIds.has(id))),
-      closingTerminals = closing.filter((id) => terminalIds.has(id));
-    if (closing.length === 0) return;
-    appTabContextMenu.value = undefined;
-    if (closingTerminals.length) {
-      terminalDashboardLoading.value = true;
-      try {
-        await Promise.all(closingTerminals.map((id) => new Api(current.apiPath).deleteTerminal(id)));
-        await refreshTerminalDashboard();
-      } catch (reason) {
-        terminalDashboardMessage.value = reason instanceof Error ? reason.message : String(reason);
-        terminalDashboardLoading.value = false;
-        return;
-      }
-    }
-    const nextSelected = drawerTabSelectionAfterClose(order, terminalDrawerSelected.value, closing),
-      selectionChanges = nextSelected !== terminalDrawerSelected.value,
-      before = terminalDrawerChatsByProject.value[current.id] ?? [];
-    terminalDrawerChatsByProject.value = {
-      ...terminalDrawerChatsByProject.value,
-      [current.id]: before.filter((item) => !requested.has(item.id)),
-    };
-    persistDrawerTabOrder(
-      current.id,
-      order.filter((id) => !requested.has(id)),
-    );
-    if (selectionChanges) {
-      // Closing from the tab bar keeps keyboard focus on the tabs, so repeated Delete keeps
-      // closing; do not also schedule input focus into the newly selected item.
-      drawerInputFocusGeneration += 1;
-      selectDrawerItem(nextSelected, false);
-      pendingTerminalFocus = undefined;
-      focusDrawerTab(current.id, nextSelected);
-    }
-  }
-  async function closeTerminalIds(ids: readonly string[]) {
-    await closeDrawerTabIds(ids);
-  }
-  function closeDrawerAIChat(id: string) {
-    void closeDrawerTabIds([id]);
-  }
   function setShellMode(mode: ProjectTabBarMode) {
     if (terminalPreviewClickTimer !== undefined) {
       window.clearTimeout(terminalPreviewClickTimer);
@@ -2908,165 +2586,51 @@ export async function startHotSheetWebClient() {
     }
   }
 
-  async function refreshProject({
-    showLoading = true,
-    quiet = false,
-    refreshRepository = false,
-    onAvailable,
-  }: { showLoading?: boolean; quiet?: boolean; refreshRepository?: boolean; onAvailable?: () => void } = {}) {
-    const current = project(),
-      generation = ++projectRefreshGeneration;
-    if (!current) return;
-    if (showLoading) loading.value = true;
-    const active = () => generation === projectRefreshGeneration && project()?.id === current.id;
-    try {
-      // A read racing an in-flight save can answer with pre-save values; reconciled into the open editor after
-      // that save committed, the user's own older text would look like someone else's edit and raise a merge
-      // prompt. Direct refreshes (after an attachment upload, a restore, …) wait for local writes like
-      // event-driven ones do; a write that begins later bumps the generation and drops this refresh (HS2-RE1PS6).
-      await localTicketMutationBarrier.wait();
-      if (!active()) return;
-      const client = new Api(current.apiPath, '', { trackBusy: !quiet }),
-        view = selectedView.value,
-        query = sortedTicketQuery(ticketViewQuery(view)),
-        board = boardRefreshSpec(view, current.id, { rows: tickets.value, pages: boardColumnPages.value });
-      let fullSettled = false;
-      const fullRefresh = loadProjectTicketRefresh(client, current.id, query, board);
-      void fullRefresh.then(
-        () => {
-          fullSettled = true;
-        },
-        () => {
-          fullSettled = true;
-        },
-      );
-      // The complete merge can wait on an OS keychain prompt. Let the local git
-      // source make the workspace useful first, then replace this partial view with
-      // the authoritative mixed-source result when access is granted.
-      const hasExternalSource =
-        defaultProviders.value[current.id]?.sources.some((source) => source.provider !== 'git') ?? true;
-      if (showLoading && hasExternalSource && !Object.hasOwn(ticketRowsByProject.value, current.id)) {
-        void loadProjectTicketRefresh(client, current.id, { ...query, source: 'git' }, board)
-          .then((local) => {
-            if (!active() || fullSettled) return;
-            if (!local.tickets || selectedView.value !== view || workspaceSearchActive()) {
-              onAvailable?.();
-              return;
-            }
-            markProjectWarm(current.id);
-            const rows = mergeRetainedCreatedRows(
-              local.tickets,
-              pendingCreatedTickets.retain(current.id, local.tickets),
-            );
-            tickets.value = rows;
-            ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: rows };
-            ticketNextCursor.value = undefined;
-            boardColumnPages.value = {};
-            if (local.ticketCounts)
-              ticketCountsByProject.value = { ...ticketCountsByProject.value, [current.id]: local.ticketCounts };
-            partialSourcesByProject.value = { ...partialSourcesByProject.value, [current.id]: true };
-            loading.value = false;
-            onAvailable?.();
-          })
-          .catch(() => {
-            /* The complete refresh still reports the authoritative error. */
-          });
-      }
-      const [index, repositoryResult] = await Promise.all([
-        fullRefresh,
-        refreshRepository
-          ? client
-              .repositoryStatus(current.id)
-              .then((status) => ({ status, error: '' }))
-              .catch((reason: unknown) => ({
-                status: null,
-                error: reason instanceof Error ? reason.message : String(reason),
-              }))
-          : Promise.resolve(undefined),
-      ]);
-      if (!active()) return;
-      markProjectWarm(current.id);
-      if (index.tickets)
-        partialSourcesByProject.value = {
-          ...partialSourcesByProject.value,
-          [current.id]: Boolean(index.sourceErrors?.length),
-        };
-      const mergedTickets = index.tickets
-          ? mergeRetainedCreatedRows(index.tickets, pendingCreatedTickets.retain(current.id, index.tickets))
-          : undefined,
-        searchActive = workspaceSearchActive();
-      if (index.tickets && mergedTickets) {
-        if (index.ticketCounts) {
-          ticketCountsByProject.value = { ...ticketCountsByProject.value, [current.id]: index.ticketCounts };
-          recordAuthoritativeTicketTrend(current.id, index.ticketCounts);
-        }
-        // When a workspace search is active the visible rows are the search results, not this base-view page,
-        // so replacing tickets/selection with the base page here would deselect a matching ticket that is not
-        // on the first base page — and an autosave edit's own change event would keep re-triggering that,
-        // yanking focus out of the field being edited (HS2-6AXG6Z). Leave the rows and selection to the
-        // trailing refreshTicketSearch, which merges results and preserves selection.
-        if (!searchActive && selectedView.value === view) {
-          const finalTickets: WireTicketRow[] = mergedTickets;
-          // Board columns load independently and restore any column the user had paged to its loaded length
-          // in the same refresh, so the commit below is one assignment with no collapse-then-expand flash
-          // (HS2-8NBGBX, HS2-HNZZHC). A list refresh leaves no per-column pages behind.
-          boardColumnPages.value = boardPagesWithVisibleLimit(index.boardPages ?? {});
-          tickets.value = finalTickets;
-          ticketNextCursor.value = index.nextCursor;
-          ticketRowsByProject.value = { ...ticketRowsByProject.value, [current.id]: finalTickets };
-          const live = new Set(finalTickets.map((ticket) => ticket.slug)),
-            selected = selectedTicketSlugs.value.filter((slug) => live.has(slug));
-          if (selected.length !== selectedTicketSlugs.value.length) {
-            selectedTicketSlugs.value = selected;
-            if (ticketSelectionAnchor && !live.has(ticketSelectionAnchor)) ticketSelectionAnchor = undefined;
-            if (selected.length !== 1) selectedTicket.value = null;
-          }
-        }
-        scheduleClaimLeaseExpiry();
-      }
-      corruptTickets.value = index.corruptTickets ?? [];
-      if (corruptTickets.value.length === 0 && selectedView.value === 'errors') selectedView.value = 'all';
-      if (
-        selectedCorruptKey.value &&
-        !corruptTickets.value.some((ticket) => corruptTicketKey(ticket) === selectedCorruptKey.value)
-      )
-        selectedCorruptKey.value = undefined;
-      if (repositoryResult) {
-        repository.value = repositoryResult.status;
-        repositoryError.value = repositoryResult.error;
-      }
-      projectProjectionById.value = {
-        ...projectProjectionById.value,
-        [current.id]: {
-          corruptTickets: corruptTickets.value,
-          repository: repository.value,
-          repositoryError: repositoryError.value,
-          commandDefinitions: commandDefinitions.value,
-          commandRuns: commandRuns.value,
-        },
-      };
-      error.value = [index.ticketsError, index.corruptTicketsError].filter(Boolean).join(' · ');
-      if (selectedTicket.value && mergedTickets) {
-        const previous = selectedTicket.value,
-          matching = mergedTickets.find((item) => item.id === previous.id);
-        if (!matching && !searchActive) {
-          selectedTicket.value = null;
-          return;
-        }
-        // During an active search the selected ticket may legitimately be absent from the base-view page; keep
-        // it selected and still reconcile its latest fields into the open inspector (HS2-6AXG6Z).
-        if (matching || searchActive) {
-          const refreshed = (await client.checkoutTicket(current.id, previous.qualified_id)).ticket;
-          if (active() && selectedTicketSlugs.value.includes(refreshed.slug))
-            reconcileRefreshedSelected(previous, refreshed);
-        }
-      }
-      if (searchActive) void refreshTicketSearch();
-    } catch (reason) {
-      if (active()) error.value = reason instanceof Error ? reason.message : String(reason);
-    } finally {
-      if (showLoading && active()) loading.value = false;
-    }
+  const projectRefresh = createProjectRefresh({
+    loading,
+    error,
+    selectedView,
+    tickets,
+    ticketRowsByProject,
+    ticketNextCursor,
+    ticketCountsByProject,
+    partialSourcesByProject,
+    boardColumnPages,
+    defaultProviders,
+    selectedTicketSlugs,
+    selectedTicket,
+    corruptTickets,
+    selectedCorruptKey,
+    repository,
+    repositoryError,
+    commandDefinitions,
+    commandRuns,
+    projectProjectionById,
+    localTicketMutationBarrier,
+    pendingCreatedTickets,
+    ticketSelectionAnchor: {
+      get: () => ticketSelectionAnchor,
+      set: (value) => {
+        ticketSelectionAnchor = value;
+      },
+    },
+    project: () => project(),
+    sortedTicketQuery: (query) => sortedTicketQuery(query),
+    // Built later by the board column paging owner, so it is read through a callback.
+    boardRefreshSpec: (view, projectId, loaded) => boardRefreshSpec(view, projectId, loaded),
+    boardPagesWithVisibleLimit: (pages) => boardPagesWithVisibleLimit(pages),
+    workspaceSearchActive: () => workspaceSearchActive(),
+    refreshTicketSearch: () => refreshTicketSearch(),
+    markProjectWarm,
+    recordAuthoritativeTicketTrend,
+    scheduleClaimLeaseExpiry: () => {
+      scheduleClaimLeaseExpiry();
+    },
+    reconcileRefreshedSelected,
+  });
+  // A hoisted entry point: earlier-built owners and handlers call it before this line runs.
+  function refreshProject(options?: ProjectRefreshOptions) {
+    return projectRefresh.refreshProject(options);
   }
   async function loadNextTicketPage() {
     const current = project(),
@@ -3287,7 +2851,7 @@ export async function startHotSheetWebClient() {
     // A refresh may already have passed the barrier and be waiting on an older
     // ticket snapshot. Invalidate that active-project response before applying
     // optimistic rows; later refreshes still wait for the mutation to settle.
-    projectRefreshGeneration += 1;
+    projectRefresh.invalidate();
     return localTicketMutationBarrier.begin();
   }
   function beginLocalTicketCreation() {
@@ -3566,6 +3130,66 @@ export async function startHotSheetWebClient() {
     ago,
     beginBulkUpdateProgress: bulkUpdateActivities.begin,
   });
+  const projectTeardown = createProjectTeardown({
+    projects,
+    selectedProjectId,
+    statsProjectId,
+    projectRestoreFailures,
+    selectedProjectRestoreRoot,
+    terminalDrawerVisible,
+    commandDialogId,
+    commandSettingsEditingId,
+    commandDefinitions,
+    commandRuns,
+    readerOpen,
+    linkedReaderStack,
+    projectRecords: [
+      ticketRowsByProject,
+      ticketCursorsByProject,
+      boardPagesByProject,
+      ticketCountsByProject,
+      ticketTrendByProject,
+      projectProjectionById,
+      customViewsByProject,
+      terminalDrawerChatsByProject,
+      commandSettingsDraftsByProject,
+      commandSettingsMessagesByProject,
+      commandSettingsSelectedByProject,
+      commandSettingsExtraGroupsByProject,
+    ],
+    connectionRecords: [defaultProviders, driveConnectionsByProject, drivePendingByProject],
+    histories,
+    linkedReaderAutosaves,
+    readerReturnFocus,
+    readerClosing,
+    readerApprovedClose,
+    readerDetailsAutosave,
+    readerNoteAutosave,
+    readerBlockedReasonAutosave,
+    projectTabRefresh,
+    pendingCreatedTickets,
+    projectsPendingActivation,
+    warmProjects,
+    forgetAiConfiguration: (id) => {
+      aiConfigurationController.forgetAiConfiguration(id);
+    },
+    project: () => project(),
+    resetTicketComposer: () => {
+      resetTicketComposer();
+    },
+    activateOpenProject,
+    refreshActivatedProject,
+    currentRememberedProjectRoots,
+    syncProjectChangeStreams,
+    refreshProject: () => refreshProject(),
+    refreshCommands,
+    refreshCustomViews,
+    refreshDriveConnections,
+  });
+  // A hoisted entry point: the project-close owner built earlier receives it as its teardown callback.
+  function closeProjectIds(ids: readonly string[]) {
+    projectTeardown.closeProjectIds(ids);
+  }
 
   async function queueAiCommand(command: CommandDefinition, current: Project) {
     if (!(defaultProvider()?.capabilities.create ?? true)) {
@@ -3675,131 +3299,44 @@ export async function startHotSheetWebClient() {
       error.value = reason instanceof Error ? reason.message : String(reason);
     }
   }
-  function sidebarSurfaceProps(): SidebarSurfaceProps {
-    const current = project()!;
-    if (viewMode.value === 'settings') return { kind: 'settings', selected: settingsCategory() };
-    if (viewMode.value === 'notifications') {
-      const history = projectPermissionHistory(current.id),
-        now = Date.now();
-      return {
-        kind: 'notifications',
-        selected: notificationView.value,
-        counts: {
-          pending: projectPendingPermissions(current.id).length,
-          day: history.filter((item) => item.resolvedAt >= now - 24 * 60 * 60 * 1000).length,
-          week: history.length,
-        },
-        paused: notificationsPaused.value,
-      };
-    }
-    const counts = projectTicketCounts(current.id),
-      countsPartial = partialSourcesByProject.value[current.id] ?? false,
-      searchCounts = sidebarSearchCounts.value,
-      searchActive =
-        searchBarActive() && searchCounts?.projectId === current.id && searchCounts.signature === searchSignature(),
-      searchView = (id: TicketView, fallback?: number) => ({
-        count: searchActive ? searchCounts.values[id] : fallback,
-        countLoading: searchActive && searchCounts.pending.includes(id),
-        searchCount: searchActive && !searchCounts.pending.includes(id) && searchCounts.values[id] !== undefined,
-        countPartial: !searchActive && countsPartial,
-      }),
-      repo = repository.value,
-      completionTrend = counts.completion_trend ?? ticketCompletionTrend(tickets.value),
-      views = [
-        { id: 'all', label: 'Queue', ...searchView('all', counts.queued), icon: 'all' as const },
-        { id: 'backlog', label: 'Backlog', ...searchView('backlog', counts.backlog), icon: 'backlog' as const },
-        { id: 'archive', label: 'Archive', ...searchView('archive', counts.archive), icon: 'archive' as const },
-        ...((counts.trash ?? 0) > 0 || selectedView.value === 'trash'
-          ? [
-              {
-                id: 'trash' as const,
-                label: 'Trash',
-                count: counts.trash ?? 0,
-                countPartial: countsPartial,
-                icon: 'trash' as const,
-              },
-            ]
-          : []),
-        ...customViewsFor(current.id).map((view) => {
-          const id = customTicketViewId(view.id);
-          return { id, label: view.name, ...searchView(id), icon: 'custom' as const, manageable: true };
-        }),
-        ...(corruptTickets.value.length
-          ? [
-              {
-                id: 'errors',
-                label: 'Ticket errors',
-                count: corruptTickets.value.length,
-                attention: true,
-                icon: 'errors' as const,
-              },
-            ]
-          : []),
-      ],
-      selection = effectiveDriveSelection(current.id),
-      tool = selection.tool,
-      drive = projectDriveControlState(
-        driveConnectionsByProject.value[current.id] ?? [],
-        current.id,
-        drivePendingByProject.value[current.id] ?? false,
-        tool,
-      );
-    return {
-      kind: 'project',
-      sidebar: {
-        completedToday: counts.completed_today,
-        inProgress: counts.started,
-        completionTrend,
-        branch: repo?.branch ?? 'No git branch',
-        unpushed: repo?.ahead ?? 0,
-        behind: repo?.behind ?? 0,
-        uncommitted: (repo?.staged ?? 0) + (repo?.unstaged ?? 0) + (repo?.untracked ?? 0),
-        conflicted: repo?.conflicted ?? 0,
-        repositoryError: Boolean(repositoryError.value),
-        views,
-        selectedViewId: selectedView.value,
-        commandGroupLabel: 'Project commands',
-        commands: commandDefinitions.value.map((command) => {
-          const latest = commandRunFor(command.id);
-          return {
-            id: command.id,
-            label: command.title,
-            color: command.color ?? 'transparent',
-            icon: commandIcon(command),
-            kind: command.kind,
-            group: command.group,
-            running: latest?.state === 'running',
-            lastRun: latest
-              ? `${latest.state}${latest.exit_code === undefined ? '' : ` (exit ${latest.exit_code})`}`
-              : undefined,
-          };
-        }),
-        commandGroupExpanded: commandGroupExpanded.value,
-        collapsedCommandGroups: commandGroupsCollapsed.value[current.id],
-        driveRunning: drive.running,
-        driveTool: tool,
-        driveToolLabel: aiToolLabel(tool),
-        driveDisabled: drive.disabled,
-        driveDisabledReason: drive.disabledReason,
-        driveOptionsOpen: driveOptionsOpen.value,
-        driveOptionsAnchor: driveOptionsAnchor.value,
-        driveTools: aiTools.value,
-        driveToolsLoading: aiSettingsLoading.value,
-        driveToolsError: aiSettingsMessage.value,
-        driveSelection: driveOverridesByProject.value[current.id] ?? {},
-        driveDefaultSelection: aiDefaults.value,
-        conversationOpen:
-          conversationOpen.value &&
-          conversationConnectionId.value === projectChatConnectionId(current.id, aiDefaults.value.tool),
-        conversationDisabled: drivePendingByProject.value[current.id],
-        openCount: counts.open,
-        upNextCount: counts.up_next,
-        activeCount: counts.active,
-        countsPartial,
-        collapseControl: true,
-      },
-    };
-  }
+  const { sidebarSurfaceProps } = createSidebarSurface({
+    viewMode,
+    notificationView,
+    notificationsPaused,
+    partialSourcesByProject,
+    sidebarSearchCounts,
+    repository,
+    repositoryError,
+    tickets,
+    selectedView,
+    corruptTickets,
+    driveConnectionsByProject,
+    drivePendingByProject,
+    commandDefinitions,
+    commandGroupExpanded,
+    commandGroupsCollapsed,
+    driveOptionsOpen,
+    driveOptionsAnchor,
+    aiTools,
+    aiSettingsLoading,
+    aiSettingsMessage,
+    driveOverridesByProject,
+    aiDefaults,
+    conversationOpen,
+    conversationConnectionId,
+    project: () => project(),
+    settingsCategory: () => settingsCategory(),
+    projectPermissionHistory,
+    projectPendingPermissions,
+    projectTicketCounts,
+    searchBarActive,
+    searchSignature,
+    customViewsFor,
+    effectiveDriveSelection,
+    commandRunFor,
+    commandIcon,
+    aiToolLabel,
+  });
   function notWorkingSurfaceProps(
     target: NotWorkingTarget,
     note: string,
@@ -4076,79 +3613,38 @@ export async function startHotSheetWebClient() {
     };
   }
   /** This project's own ticket sources — never another project's (HS2-3SCH1K, HS2-SM9PM8). */
-  function projectSourcesSettings(current: Project) {
-    const sources = defaultProviders.value[current.id]?.sources ?? [];
-    return {
-      sources: sources.map((source) => {
-        const connection = providerConnections.value.find((item) => item.id === source.connectionId);
-        return {
-          connectionId: source.connectionId,
-          name: source.name,
-          provider: source.provider,
-          locator: source.locator,
-          default: source.default,
-          color: source.color,
-          disabled: Boolean(connection?.disabled),
-          unverifiedRecovery: source.unverifiedRecovery,
-          identityReviewRequired: source.identityReviewRequired,
-          identityMismatch: source.identityMismatch,
-          storeUnavailable: source.storeUnavailable,
-          sharedWith: (connection?.projects ?? [])
-            .filter((project) => project.id !== current.id)
-            .map((project) => project.alias),
-        };
-      }),
-      error: providerSettingsError.value,
-      setupOpen: Boolean(ticketSourceSetupProject.value),
-    };
-  }
-  function settingsWorkspace(current: Project) {
-    return (
-      <SettingsWorkspace
-        category={settingsCategory()}
-        sources={projectSourcesSettings(current)}
-        accounts={{
-          accounts: providerAccounts.value,
-          error: providerAccountsError.value,
-          signingOut: signingOutAccount.value,
-          sourceRemovalChoice: unusedAccountSourceChoice.value,
-          removingSource: removingUnusedAccountSource.value,
-        }}
-        ai={{
-          tools: aiTools.value,
-          selection: aiDefaults.value,
-          loading: aiSettingsLoading.value,
-          message: aiSettingsMessage.value,
-        }}
-        commands={{
-          commands: commandSettingsDefinitions(current.id),
-          extraGroups: commandSettingsExtraGroups(current.id),
-          editingId: commandSettingsEditingId.value,
-          selectedIds: commandSelection(current.id),
-          iconSearch: commandIconSearch.value,
-          message: commandSettingsMessage(current.id),
-          aiTools: aiTools.value,
-          aiDefaults: aiDefaults.value,
-        }}
-        lifecycle={{
-          days: trashCleanupDaysByProject.value[current.id] ?? 30,
-          message: trashSettingsMessagesByProject.value[current.id] ?? '',
-        }}
-        terminals={{
-          inheritGlobalShellHistory: inheritGlobalShellHistory.value,
-          message: terminalSettingsMessage.value,
-        }}
-        permissions={{ automation: permissionAutomation(current.id), delays: PERMISSION_DELAYS }}
-        columns={{ hideVerified: hideVerifiedColumn() }}
-        general={{ showLoadingActivity: showLoadingActivity.value }}
-        keyboard={{
-          overrides: keyboardShortcutOverrides.value,
-          capturingId: capturingShortcutId.value,
-          apple: appleShortcutPlatform,
-        }}
-      />
-    );
-  }
+  const { settingsWorkspace } = createSettingsSurface({
+    settingsCategory: () => settingsCategory(),
+    defaultProviders,
+    providerConnections,
+    providerSettingsError,
+    ticketSourceSetupProject,
+    providerAccounts,
+    providerAccountsError,
+    signingOutAccount,
+    unusedAccountSourceChoice,
+    removingUnusedAccountSource,
+    aiTools,
+    aiDefaults,
+    aiSettingsLoading,
+    aiSettingsMessage,
+    commandSettingsDefinitions,
+    commandSettingsExtraGroups,
+    commandSettingsEditingId,
+    commandSelection,
+    commandIconSearch,
+    commandSettingsMessage,
+    trashCleanupDaysByProject,
+    trashSettingsMessagesByProject,
+    inheritGlobalShellHistory,
+    terminalSettingsMessage,
+    permissionAutomation,
+    hideVerifiedColumn,
+    showLoadingActivity,
+    keyboardShortcutOverrides,
+    capturingShortcutId,
+    appleShortcutPlatform,
+  });
   function workspaceEmptyState(): TicketEmptyStateProps | undefined {
     if (loading.value) return { kind: 'loading' };
     const query = orderedSearchText(searchQuery.value, searchTokens.value, () => true);
@@ -5688,10 +5184,10 @@ export async function startHotSheetWebClient() {
       terminalPreviewClickTimer = value;
     },
     get pendingTerminalFocus() {
-      return pendingTerminalFocus;
+      return terminalDrawer.pendingTerminalFocus;
     },
     set pendingTerminalFocus(value) {
-      pendingTerminalFocus = value;
+      terminalDrawer.pendingTerminalFocus = value;
     },
     get bulkTicketSlugs() {
       return bulkTicketSlugs;

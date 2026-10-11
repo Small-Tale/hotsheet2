@@ -90,7 +90,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       project-change-streams.ts # Per-project WebSocket/long-poll change streams, event fan-out, debounced repository refresh (HS2-3JGWTV)
       terminal-dashboard.ts # Terminal dashboard snapshot: per-project terminal fetch/merge, AI-connection grace, visibility scopes, drawer tab order (HS2-ZJ67VE)
       board-column-paging.ts # Per-column board paging: refresh spec, bulk status-change refill, one column's Load more (HS2-H2R2JB)
-      project-teardown.ts # Closing project tabs: per-project record pruning and the next selected tab (HS2-DCTS07)
+      project-teardown.ts # Closing project tabs: per-project record pruning and the next selected tab (HS2-DCTS07); createProjectTeardown runs the closeProjectIds orchestration and reader disposal (HS2-BSSWGV)
+      project-refresh.ts # refreshProject: stale-response generation, git-only first paint, authoritative row/count/selection/projection merge (HS2-BSSWGV)
+      terminal-drawer.ts # Terminal drawer visibility, selection, tab/input focus, serialized terminal/shell/AI-chat creation, closeDrawerTabIds (HS2-BSSWGV)
+      settings-surface.tsx # Settings workspace projection, including shared ticket-source connections (HS2-BSSWGV)
+      sidebar-surface.ts # Left sidebar projection: settings/notification navigation or project stats, views, commands, Drive (HS2-BSSWGV)
       terminal-drawer-geometry.ts # Terminal drawer min/max/maximize geometry and the phone terminal viewport: focus-mode transitions, keyboard geometry, magnified columns (HS2-T1DX2V)
       conversation-archive.tsx # Range selection, copy, export, and saved-chat opening
       saved-views.ts          # Shared-view dialog/query state, validation, persistence, rename, and deletion

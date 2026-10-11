@@ -342,6 +342,31 @@ HS2-DCTS07 lifted the pure project-teardown helpers:
   creation, `closeDrawerTabIds`, surface-prop builders and `HotSheetShell`,
   `refreshProject`, the `closeProjectIds` orchestration) is tracked as `HS2-BSSWGV`.
 
+HS2-BSSWGV lifted five more behavior-preserving owners:
+
+- `terminal-drawer.ts`: drawer visibility (mount, close transition, remembered open state),
+  item selection, tab and input focus requests (`pendingTerminalFocus`,
+  `drawerInputFocusGeneration`), the serialized `queueTerminalCreate` chain behind
+  terminal, shell-command, and drawer AI-chat creation, opening a terminal or grid chat
+  in its project, and `closeDrawerTabIds`. The drawer signals and size observers stay in
+  the runtime. Earlier-built owners (drive conversations, AI configuration, terminal
+  dashboard) reach the drawer through lazy wrappers, and the terminal viewport owner reads
+  `pendingTerminalFocus` through the controller.
+- `project-refresh.ts`: `refreshProject` and its stale-response generation (local writes
+  invalidate it through `invalidate()`), the git-only first paint, and the authoritative
+  merge into rows, counts, board pages, selection, corrupt tickets, repository status,
+  and the warm projection (`CachedProjectProjection`).
+- `project-teardown.ts` (`createProjectTeardown`): the `closeProjectIds` orchestration and
+  ticket-reader disposal, next to the pure DCTS07 helpers.
+- `settings-surface.tsx` and `sidebar-surface.ts`: the Settings workspace and left-sidebar
+  projections.
+
+`refreshProject` and `closeProjectIds` stay hoisted runtime functions that delegate to their
+owners, so the owners built earlier keep calling them. The remaining surface-prop builders
+(inspector, reader layers, workspace, terminal rail, terminal operations, ticket context
+menu) and `HotSheetShell` / `HotSheetApp` close over 37-139 runtime bindings each. Splitting
+them first needs domain context objects; that work is tracked as `HS2-K0VC2C`.
+
 Owners created before these read them through lazy accessors (saved views read
 `availableSearchTags`, the project lifecycle reads `syncProjectChangeStreams`).
 
