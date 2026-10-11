@@ -232,6 +232,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in UI and binary-PTY load traces (`profile:ui`, `profile:pty`)
     tests/real-pty-profile.spec.ts  #   Opt-in isolated local-server/OS-PTY transport profile (`profile:pty:real`)
     tests/firefox-pty-profile.spec.ts  #   Opt-in Firefox WebGL/DOM PTY throughput and park/resume profile (`profile:pty:firefox`)
+    tests/ticket-page-fixture.ts # ticketsJson(request, rows): Playwright fake mirroring the real checkout ticket page envelope/plain-list split with client-derived counts (HS2-5T7QHE)
     tests/insecure-origin.ts # Streaming HTTP proxy preserving actual non-loopback browser security rules
     tests/browser-ids-lan.spec.ts # LAN WebKit draft/attachment persistence, visibility and chat identity transitions
     tests/terminal-safari.spec.ts # Real WebKit on ordinary HTTP origin: real PTY glyph pixels across preview/magnified/drawer, resize/reconnect and visible startup failures

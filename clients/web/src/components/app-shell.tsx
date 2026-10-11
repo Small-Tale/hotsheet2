@@ -169,6 +169,11 @@ export function AppShell({
           responsiveOverlayAt: 'never',
         }
       : undefined;
+  // The phone scrim belongs to an open overlay rail. Modes that compose no rail (stats, a fullscreen
+  // grid) keep the rails' remembered visibility, so the scrim must follow the rendered rails, not
+  // those flags; otherwise it covers the whole UI with nothing to dismiss it (HS2-S2XQP8).
+  const scrimVisible =
+    mobile && ((leftRail !== undefined && sidebarVisible) || (rightRail !== undefined && inspectorVisible));
   const bottomDrawer: WorkbenchStaticPanel | undefined =
     mode === 'project' && terminalDrawer
       ? {
@@ -301,7 +306,7 @@ export function AppShell({
             rails (z 41) and over everything else in the main column; Kerf's Workbench overlays have no
             backdrop of their own, so this dims the column and keeps a tap from reaching the control
             beneath it while `wireWorkbench` treats that tap as the outside press that closes the rail. */}
-            {mobile && (sidebarVisible || inspectorVisible) && <div class="app-shell__scrim" aria-hidden="true" />}
+            {scrimVisible && <div class="app-shell__scrim" aria-hidden="true" />}
           </main>
         }
       />

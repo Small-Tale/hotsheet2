@@ -1644,3 +1644,35 @@ test('pane chrome draws scroll dividers only while content scrolls beneath it (H
   });
   await expect(header).not.toHaveAttribute('data-scroll-divider', /b/);
 });
+
+test('opening project statistics on a phone leaves the UI interactive, with no stranded scrim (HS2-S2XQP8)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openDemoProject(page);
+  const shell = page.locator('[data-component="app-shell"]'),
+    scrim = page.locator('.app-shell__scrim');
+  await expect(shell).toHaveAttribute('data-mobile', 'true');
+  // Open stats from the open phone sidebar (its project summary) and from the strip's chart button.
+  await page.getByRole('button', { name: 'Show project sidebar' }).click();
+  await expect(scrim).toBeVisible();
+  await page.locator('[data-component="project-summary"]').click();
+  await expect(shell).toHaveAttribute('data-mode', 'stats');
+  await expect(page.getByRole('region', { name: 'demo project statistics' })).toBeVisible();
+  await expect(scrim).toHaveCount(0);
+  // Nothing covers the page: the topmost element at the centre belongs to the statistics region.
+  const hit = await page.evaluate(() =>
+    Boolean(
+      document
+        .elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)
+        ?.closest('[data-component="project-statistics"]'),
+    ),
+  );
+  expect(hit).toBe(true);
+  await page.screenshot({ path: 'target/visual-captures/hs2-s2xqp8-phone-stats.png' });
+  // The project Select returns to the project, where the scrim follows the remembered rail again.
+  const strip = page.locator('.project-tab-bar');
+  await strip.getByRole('button', { name: 'Cross-project stats' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Cross-project stats' })).toBeVisible();
+  await expect(scrim).toHaveCount(0);
+});

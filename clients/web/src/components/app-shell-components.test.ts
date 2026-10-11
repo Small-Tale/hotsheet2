@@ -101,6 +101,28 @@ describe('application shell components', () => {
     expect(edge({ mobile: false, terminalDrawer: drawer, terminalDrawerVisible: false })).toBe('false');
   });
 
+  it('shows the phone scrim only for a rendered open rail, never in rail-less stats mode (HS2-S2XQP8)', () => {
+    const scrim = (props: Partial<Parameters<typeof AppShell>[0]>) =>
+      String(
+        AppShell({
+          tabs: [],
+          header: 'head' as never,
+          workspace: 'work' as never,
+          sidebar: { content: 'side' } as never,
+          inspector: { content: 'insp' } as never,
+          ...props,
+        }),
+      ).includes('app-shell__scrim');
+    expect(scrim({ mobile: true, sidebarVisible: true, inspectorVisible: false })).toBe(true);
+    expect(scrim({ mobile: true, sidebarVisible: false, inspectorVisible: true })).toBe(true);
+    expect(scrim({ mobile: true, sidebarVisible: false, inspectorVisible: false })).toBe(false);
+    expect(scrim({ mobile: false, sidebarVisible: true })).toBe(false);
+    // Stats and a fullscreen grid compose no rails, so remembered rail visibility must not dim them.
+    expect(scrim({ mobile: true, mode: 'stats', sidebarVisible: true, inspectorVisible: true })).toBe(false);
+    expect(scrim({ mobile: true, gridFullscreen: true, sidebarVisible: true, inspectorVisible: true })).toBe(false);
+    expect(scrim({ mobile: true, sidebar: undefined, inspector: undefined, sidebarVisible: true })).toBe(false);
+  });
+
   it('clips the shell without making it a focus-scroll owner while preserving workspace scrolling (HS2-JBTPNR)', () => {
     const css = readFileSync(new URL('./app-shell.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.app-shell \{[^}]*overflow: clip;/);
