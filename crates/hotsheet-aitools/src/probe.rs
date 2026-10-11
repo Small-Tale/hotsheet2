@@ -20,6 +20,11 @@ pub const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 static PROBE_TIMEOUT_MS: AtomicU64 = AtomicU64::new(DEFAULT_PROBE_TIMEOUT.as_millis() as u64);
 
 /// Process ids (each its own process-group leader) of probes still running.
+///
+/// Why process-global (HS2-YEYF6Y): these registries track OS child processes, which belong
+/// to the process, not to any one server state. Shutdown (`stop_probes`) must reach every
+/// probe started by any caller (detection, catalog listing, tests) from a signal path that
+/// has no `AppState`, and the timeout is set once from a process-level CLI flag.
 static IN_FLIGHT: Mutex<Option<HashSet<u32>>> = Mutex::new(None);
 
 /// Set once the process is stopping: no new probe starts, and one that raced the stop is

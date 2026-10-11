@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 use axum::body::{Body, Bytes};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
@@ -138,9 +138,11 @@ pub fn cached_video_poster(root: &Path, bytes: &[u8]) -> Result<Option<Vec<u8>>,
 /// Last-write-wins publication for a content-addressed browser-generated poster
 /// under the cache `root`.
 pub fn cache_video_poster(root: &Path, bytes: &[u8], poster: &[u8]) -> Result<(), MediaError> {
-    static POSTER_WRITER: OnceLock<Mutex<()>> = OnceLock::new();
+    // Why process-global (HS2-YEYF6Y): the cache is a directory on disk addressed by
+    // content hash, shared by every server state in this process; one lock serializes the
+    // stage-and-persist publication across all of them. Writes are rare and tiny.
+    static POSTER_WRITER: Mutex<()> = Mutex::new(());
     let _writer = POSTER_WRITER
-        .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let path = video_poster_cache_path(root, bytes);

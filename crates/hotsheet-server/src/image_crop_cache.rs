@@ -3,16 +3,18 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 use std::time::SystemTime;
 
 const MAX_ENTRIES: usize = 128;
 const MAX_BYTES: u64 = 256 * 1024 * 1024;
 
+/// Why process-global (HS2-YEYF6Y): the cache is one bounded directory on disk shared by
+/// every server state in this process, and eviction enforces its entry/byte budget across
+/// all writers, so publication and eviction must share a single lock.
 fn writer_lock() -> std::sync::MutexGuard<'static, ()> {
-    static WRITER: OnceLock<Mutex<()>> = OnceLock::new();
+    static WRITER: Mutex<()> = Mutex::new(());
     WRITER
-        .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }

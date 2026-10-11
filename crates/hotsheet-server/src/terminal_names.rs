@@ -16,6 +16,11 @@ pub const MAX_NAME_CHARS: usize = 120;
 
 /// Serializes read-modify-write updates of the map so two concurrent renames cannot drop
 /// each other's write.
+///
+/// Why process-global (HS2-YEYF6Y): the map lives in a settings file on disk, and every
+/// `Settings` handle (any `AppState`, embedder, or test) rewriting it in this process must
+/// share one lock; a per-state lock would let two states race on the same file. Renames are
+/// rare, so one coarse lock costs nothing.
 static WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 /// Every saved name. A missing, malformed, or non-string entry reads as "no name" rather than
