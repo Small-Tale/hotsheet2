@@ -7,6 +7,8 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+mod dispatch;
+
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use hotsheet_cli::{git_init, run_import};
@@ -122,28 +124,7 @@ enum Cmd {
         json: bool,
     },
     /// Create a new ticket.
-    New {
-        /// Ticket title (positional). Alternatively pass --title.
-        title: Option<String>,
-        /// Ticket title (alias for the positional form).
-        #[arg(long = "title")]
-        title_flag: Option<String>,
-        #[arg(long, default_value = "issue")]
-        category: String,
-        #[arg(long, default_value = "default")]
-        priority: String,
-        #[arg(long)]
-        details: Option<String>,
-        /// Mark the new ticket Up Next.
-        #[arg(long)]
-        up_next: bool,
-        /// Add a tag (repeatable): `--tag a --tag b`.
-        #[arg(long = "tag")]
-        tags: Vec<String>,
-        /// Blocker ticket (slug or ULID), repeatable: `--blocked-by HS2-ABC --blocked-by HS2-DEF`.
-        #[arg(long = "blocked-by")]
-        blocked_by: Vec<String>,
-    },
+    New(NewArgs),
     /// List / query tickets with optional filters and sort.
     Ls {
         #[command(flatten)]
@@ -162,38 +143,7 @@ enum Cmd {
         web_base: String,
     },
     /// Create or update a GitHub Issues connection in this ticket store, safely repeatable.
-    GithubConnect {
-        /// Owner/repository reachable by the Hot Sheet GitHub App.
-        locator: String,
-        /// Credential reference printed by `github-sign-in` or created with `key set`.
-        #[arg(long)]
-        credential: String,
-        /// Display name (defaults to GitHub Issues).
-        #[arg(long)]
-        name: Option<String>,
-        /// Explicit connection id; otherwise use the existing locator or generate an id.
-        #[arg(long)]
-        id: Option<String>,
-        /// Make this connection the default for its store and, with --checkout, that checkout.
-        #[arg(long)]
-        default: bool,
-        /// Also link the connection to this registered checkout (id, alias, or path).
-        #[arg(long)]
-        checkout: Option<String>,
-        /// Enable attachments by committing files to this `owner/repo` assets repository
-        /// and linking them from issue comments (HS2-HSA64D). Kept on a later reconnect.
-        #[arg(long, value_name = "OWNER/REPO", conflicts_with = "no_attachments")]
-        attachment_repo: Option<String>,
-        /// Folder inside the assets repository (default `hotsheet-attachments`).
-        #[arg(long, requires = "attachment_repo")]
-        attachment_folder: Option<String>,
-        /// Branch uploads are committed to (default `main`).
-        #[arg(long, requires = "attachment_repo")]
-        attachment_branch: Option<String>,
-        /// Remove the assets repository; the connection then reports no attachment support.
-        #[arg(long)]
-        no_attachments: bool,
-    },
+    GithubConnect(GithubConnectArgs),
     /// Attach files to a provider-native ticket through its connection (for GitHub, its
     /// configured assets repository). Fails explicitly when the provider cannot.
     ProviderAttach {
@@ -316,7 +266,7 @@ enum Cmd {
         #[arg(required = true)]
         ids: Vec<String>,
         #[command(flatten)]
-        update: BatchEditArgs,
+        update: TicketEditArgs,
     },
     /// Delete one note from a git-backed ticket.
     DeleteNote { id: String, note_id: String },
@@ -327,26 +277,7 @@ enum Cmd {
         note_id: String,
     },
     /// Attach one or more files as a single durable batch.
-    Attach {
-        id: String,
-        #[arg(required = true)]
-        files: Vec<PathBuf>,
-        /// Print attachment ids and filenames as JSON.
-        #[arg(long)]
-        json: bool,
-        #[arg(long)]
-        batch_id: Option<String>,
-        #[arg(long)]
-        batch_label: Option<String>,
-        #[arg(long)]
-        actor_role: Option<String>,
-        #[arg(long)]
-        actor_id: Option<String>,
-        #[arg(long)]
-        actor_name: Option<String>,
-        #[arg(long)]
-        purpose: Option<String>,
-    },
+    Attach(AttachArgs),
     /// Rename a git-backed attachment by stable ULID.
     AttachmentRename {
         id: String,
@@ -390,69 +321,8 @@ enum Cmd {
     /// Edit a ticket's fields (by slug or ULID).
     Edit {
         id: String,
-        #[arg(long)]
-        title: Option<String>,
-        #[arg(long)]
-        details: Option<String>,
-        #[arg(long)]
-        category: Option<String>,
-        #[arg(long)]
-        priority: Option<String>,
-        /// One of not_started|started|completed|verified|backlog|archive|deleted|moved.
-        #[arg(long)]
-        status: Option<String>,
-        /// Progress within Started (analyzing|planning|working|initial_testing|integrating|final_testing).
-        #[arg(long, conflicts_with = "clear_started_phase")]
-        started_phase: Option<String>,
-        /// Clear the Started phase.
-        #[arg(long)]
-        clear_started_phase: bool,
-        /// Replace the tag list (repeatable): `--tag a --tag b`.
-        #[arg(long = "tag")]
-        tags: Vec<String>,
-        /// Replace the blocker set (slug or ULID), repeatable. Ignored if --clear-blocked-by is set.
-        #[arg(long = "blocked-by", conflicts_with = "clear_blocked_by")]
-        blocked_by: Vec<String>,
-        /// Clear all blockers.
-        #[arg(long)]
-        clear_blocked_by: bool,
-        /// Set the user-facing explanation for why this ticket is blocked.
-        #[arg(long, conflicts_with = "clear_blocked_reason")]
-        blocked_reason: Option<String>,
-        /// Clear the blocked reason without changing dependency blockers.
-        #[arg(long)]
-        clear_blocked_reason: bool,
-        /// Mark Up Next.
-        #[arg(long, conflicts_with = "no_up_next")]
-        up_next: bool,
-        /// Clear Up Next.
-        #[arg(long)]
-        no_up_next: bool,
-        /// Append a note to the ticket.
-        #[arg(long)]
-        note: Option<String>,
-        /// Read the note body from a UTF-8 file, or from stdin with `-`.
-        #[arg(long, value_name = "PATH", conflicts_with = "note")]
-        note_file: Option<PathBuf>,
-        /// Permit literal `\\n` text outside Markdown code spans/blocks.
-        #[arg(long, requires = "note")]
-        allow_literal_backslash_n: bool,
-        /// Edit this existing note ULID instead of appending a note.
-        #[arg(long, conflicts_with = "note_kind")]
-        edit_note: Option<String>,
-        /// Kind for --note: regular | activity | feedback_needed | status.
-        #[arg(long)]
-        note_kind: Option<String>,
-        /// Concise plain-text timeline headline for an activity/status note.
-        #[arg(long, conflicts_with = "edit_note")]
-        note_summary: Option<String>,
-        /// AI completion confidence (integer 0-100) recorded on the appended note, or the
-        /// corrected score of the note named by --edit-note (note text then optional).
-        #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
-        note_confidence: Option<Confidence>,
-        /// Remove the completion confidence from the note named by --edit-note.
-        #[arg(long, requires = "edit_note", conflicts_with = "note_confidence")]
-        clear_note_confidence: bool,
+        #[command(flatten)]
+        update: TicketEditArgs,
     },
     /// Record why a ticket was closed (close outcome; orthogonal to status).
     Close {
@@ -810,61 +680,147 @@ enum Cmd {
     },
     /// Drive a real AI tool for this project (the headless "play"): launch/inject a turn
     /// and stream it. Applies HS2-103 launch safety. No server or client required.
-    Trigger {
-        /// The tool to drive (e.g. `claude`, `codex`).
-        tool: String,
-        /// The turn content. Defaults to a "work the top Up Next ticket" prompt.
-        #[arg(long)]
-        prompt: Option<String>,
-        /// Project directory the tool runs in (defaults to the store path).
-        #[arg(long)]
-        project: Option<PathBuf>,
-        /// Resume a prior session id (channel tools).
-        #[arg(long)]
-        resume: Option<String>,
-        /// Restrict a channel tool to only this MCP config (`--strict-mcp-config`), so it
-        /// can't reach anything but the Hot Sheet shim (HS2-103 isolation).
-        #[arg(long)]
-        mcp_config: Option<PathBuf>,
-        /// Claude permission mode for headless work (e.g. `acceptEdits`,
-        /// `bypassPermissions`). Defaults to `acceptEdits`.
-        #[arg(long)]
-        permission_mode: Option<String>,
-        /// Set an env var for the launched tool (repeatable): `--env CODEX_HOME=/path`.
-        #[arg(long = "env")]
-        envs: Vec<String>,
-        /// Register the connection as a self-claim worker rather than the main session.
-        #[arg(long)]
-        worker: bool,
-        /// Codex only: drive the shared app-server **daemon** for the (isolated) CODEX_HOME
-        /// — reuse one codex instance across turns instead of a fresh process per turn
-        /// (HS2-B7C66H). Needs the managed standalone install available to symlink.
-        #[arg(long = "shared-daemon")]
-        shared_daemon: bool,
-    },
+    Trigger(TriggerArgs),
     /// Work the Up Next queue headlessly: drive the tool one turn at a time until Up Next
     /// is drained (or `--max` turns / a thrash stall). Applies HS2-103 launch safety.
-    Work {
-        /// The tool to drive (e.g. `claude`).
-        tool: String,
-        /// Project directory the tool runs in (defaults to the store path).
-        #[arg(long)]
-        project: Option<PathBuf>,
-        /// Maximum turns before stopping (a hard safety cap).
-        #[arg(long, default_value_t = 50)]
-        max: u32,
-        /// Stop after this many consecutive turns that change nothing (thrash guard).
-        #[arg(long = "max-stall", default_value_t = 3)]
-        max_stall: u32,
-        /// Register connections as a self-claim worker rather than the main session.
-        #[arg(long)]
-        worker: bool,
-        /// Codex only: drive the shared app-server **daemon** for the isolated CODEX_HOME —
-        /// one codex instance reused across the whole loop's turns instead of a fresh
-        /// process per turn (HS2-B7C66H); the daemon is stopped when the loop ends.
-        #[arg(long = "shared-daemon")]
-        shared_daemon: bool,
-    },
+    Work(WorkArgs),
+}
+
+#[derive(Args)]
+struct NewArgs {
+    /// Ticket title (positional). Alternatively pass --title.
+    title: Option<String>,
+    /// Ticket title (alias for the positional form).
+    #[arg(long = "title")]
+    title_flag: Option<String>,
+    #[arg(long, default_value = "issue")]
+    category: String,
+    #[arg(long, default_value = "default")]
+    priority: String,
+    #[arg(long)]
+    details: Option<String>,
+    /// Mark the new ticket Up Next.
+    #[arg(long)]
+    up_next: bool,
+    /// Add a tag (repeatable): `--tag a --tag b`.
+    #[arg(long = "tag")]
+    tags: Vec<String>,
+    /// Blocker ticket (slug or ULID), repeatable: `--blocked-by HS2-ABC --blocked-by HS2-DEF`.
+    #[arg(long = "blocked-by")]
+    blocked_by: Vec<String>,
+}
+
+#[derive(Args)]
+struct GithubConnectArgs {
+    /// Owner/repository reachable by the Hot Sheet GitHub App.
+    locator: String,
+    /// Credential reference printed by `github-sign-in` or created with `key set`.
+    #[arg(long)]
+    credential: String,
+    /// Display name (defaults to GitHub Issues).
+    #[arg(long)]
+    name: Option<String>,
+    /// Explicit connection id; otherwise use the existing locator or generate an id.
+    #[arg(long)]
+    id: Option<String>,
+    /// Make this connection the default for its store and, with --checkout, that checkout.
+    #[arg(long)]
+    default: bool,
+    /// Also link the connection to this registered checkout (id, alias, or path).
+    #[arg(long)]
+    checkout: Option<String>,
+    /// Enable attachments by committing files to this `owner/repo` assets repository
+    /// and linking them from issue comments (HS2-HSA64D). Kept on a later reconnect.
+    #[arg(long, value_name = "OWNER/REPO", conflicts_with = "no_attachments")]
+    attachment_repo: Option<String>,
+    /// Folder inside the assets repository (default `hotsheet-attachments`).
+    #[arg(long, requires = "attachment_repo")]
+    attachment_folder: Option<String>,
+    /// Branch uploads are committed to (default `main`).
+    #[arg(long, requires = "attachment_repo")]
+    attachment_branch: Option<String>,
+    /// Remove the assets repository; the connection then reports no attachment support.
+    #[arg(long)]
+    no_attachments: bool,
+}
+
+#[derive(Args)]
+struct AttachArgs {
+    id: String,
+    #[arg(required = true)]
+    files: Vec<PathBuf>,
+    /// Print attachment ids and filenames as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long)]
+    batch_id: Option<String>,
+    #[arg(long)]
+    batch_label: Option<String>,
+    #[arg(long)]
+    actor_role: Option<String>,
+    #[arg(long)]
+    actor_id: Option<String>,
+    #[arg(long)]
+    actor_name: Option<String>,
+    #[arg(long)]
+    purpose: Option<String>,
+}
+
+#[derive(Args)]
+struct TriggerArgs {
+    /// The tool to drive (e.g. `claude`, `codex`).
+    tool: String,
+    /// The turn content. Defaults to a "work the top Up Next ticket" prompt.
+    #[arg(long)]
+    prompt: Option<String>,
+    /// Project directory the tool runs in (defaults to the store path).
+    #[arg(long)]
+    project: Option<PathBuf>,
+    /// Resume a prior session id (channel tools).
+    #[arg(long)]
+    resume: Option<String>,
+    /// Restrict a channel tool to only this MCP config (`--strict-mcp-config`), so it
+    /// can't reach anything but the Hot Sheet shim (HS2-103 isolation).
+    #[arg(long)]
+    mcp_config: Option<PathBuf>,
+    /// Claude permission mode for headless work (e.g. `acceptEdits`,
+    /// `bypassPermissions`). Defaults to `acceptEdits`.
+    #[arg(long)]
+    permission_mode: Option<String>,
+    /// Set an env var for the launched tool (repeatable): `--env CODEX_HOME=/path`.
+    #[arg(long = "env")]
+    envs: Vec<String>,
+    /// Register the connection as a self-claim worker rather than the main session.
+    #[arg(long)]
+    worker: bool,
+    /// Codex only: drive the shared app-server **daemon** for the (isolated) CODEX_HOME
+    /// — reuse one codex instance across turns instead of a fresh process per turn
+    /// (HS2-B7C66H). Needs the managed standalone install available to symlink.
+    #[arg(long = "shared-daemon")]
+    shared_daemon: bool,
+}
+
+#[derive(Args)]
+struct WorkArgs {
+    /// The tool to drive (e.g. `claude`).
+    tool: String,
+    /// Project directory the tool runs in (defaults to the store path).
+    #[arg(long)]
+    project: Option<PathBuf>,
+    /// Maximum turns before stopping (a hard safety cap).
+    #[arg(long, default_value_t = 50)]
+    max: u32,
+    /// Stop after this many consecutive turns that change nothing (thrash guard).
+    #[arg(long = "max-stall", default_value_t = 3)]
+    max_stall: u32,
+    /// Register connections as a self-claim worker rather than the main session.
+    #[arg(long)]
+    worker: bool,
+    /// Codex only: drive the shared app-server **daemon** for the isolated CODEX_HOME —
+    /// one codex instance reused across the whole loop's turns instead of a fresh
+    /// process per turn (HS2-B7C66H); the daemon is stopped when the loop ends.
+    #[arg(long = "shared-daemon")]
+    shared_daemon: bool,
 }
 
 #[derive(Subcommand)]
@@ -1053,8 +1009,9 @@ enum AiSettingsCmd {
     },
 }
 
+/// Field edits shared by `edit` (one ticket) and `batch` (many tickets).
 #[derive(Args)]
-struct BatchEditArgs {
+struct TicketEditArgs {
     #[arg(long)]
     title: Option<String>,
     #[arg(long)]
@@ -1063,40 +1020,59 @@ struct BatchEditArgs {
     category: Option<String>,
     #[arg(long)]
     priority: Option<String>,
+    /// One of not_started|started|completed|verified|backlog|archive|deleted|moved.
     #[arg(long)]
     status: Option<String>,
+    /// Progress within Started (analyzing|planning|working|initial_testing|integrating|final_testing).
     #[arg(long, conflicts_with = "clear_started_phase")]
     started_phase: Option<String>,
+    /// Clear the Started phase.
     #[arg(long)]
     clear_started_phase: bool,
+    /// Replace the tag list (repeatable): `--tag a --tag b`.
     #[arg(long = "tag")]
     tags: Vec<String>,
+    /// Replace the blocker set (slug or ULID), repeatable. Ignored if --clear-blocked-by is set.
     #[arg(long = "blocked-by", conflicts_with = "clear_blocked_by")]
     blocked_by: Vec<String>,
+    /// Clear all blockers.
     #[arg(long)]
     clear_blocked_by: bool,
+    /// Set the user-facing explanation for why this ticket is blocked.
     #[arg(long, conflicts_with = "clear_blocked_reason")]
     blocked_reason: Option<String>,
+    /// Clear the blocked reason without changing dependency blockers.
     #[arg(long)]
     clear_blocked_reason: bool,
+    /// Mark Up Next.
     #[arg(long, conflicts_with = "no_up_next")]
     up_next: bool,
+    /// Clear Up Next.
     #[arg(long)]
     no_up_next: bool,
+    /// Append a note to the ticket.
     #[arg(long)]
     note: Option<String>,
+    /// Read the note body from a UTF-8 file, or from stdin with `-`.
     #[arg(long, value_name = "PATH", conflicts_with = "note")]
     note_file: Option<PathBuf>,
+    /// Permit literal `\\n` text outside Markdown code spans/blocks.
     #[arg(long, requires = "note")]
     allow_literal_backslash_n: bool,
+    /// Edit this existing note ULID instead of appending a note.
     #[arg(long, conflicts_with = "note_kind")]
     edit_note: Option<String>,
+    /// Kind for --note: regular | activity | feedback_needed | status.
     #[arg(long)]
     note_kind: Option<String>,
+    /// Concise plain-text timeline headline for an activity/status note.
     #[arg(long, conflicts_with = "edit_note")]
     note_summary: Option<String>,
+    /// AI completion confidence (integer 0-100) recorded on the appended note, or the
+    /// corrected score of the note named by --edit-note (note text then optional).
     #[arg(long, value_name = "0-100", value_parser = parse_confidence_arg)]
     note_confidence: Option<Confidence>,
+    /// Remove the completion confidence from the note named by --edit-note.
     #[arg(long, requires = "edit_note", conflicts_with = "note_confidence")]
     clear_note_confidence: bool,
 }
@@ -1291,642 +1267,18 @@ fn main() -> Result<()> {
     // Resolve which store to operate on: an explicit -C, else $HOTSHEET_STORE, else a
     // `.hotsheet2/store` link walked up from cwd — so a standalone store is found without -C
     // (HS2-5CXKZ0). `init`/`link` operate on the literal path, not a resolved one.
-    if !matches!(
-        cli.command,
-        Cmd::Init { .. }
-            | Cmd::Bootstrap { .. }
-            | Cmd::Link { .. }
-            | Cmd::Checkout { .. }
-            | Cmd::Launch { .. }
-            | Cmd::HookDiagnose { .. }
-    ) && !matches!(cli.command, Cmd::Serve { list: true, .. })
-    {
+    if cli.command.resolves_store_path() {
         cli.path = hotsheet_cli::resolve_store_path(cli.path, &cwd);
     }
-    let refresh = !matches!(
-        cli.command,
-        Cmd::Init { .. }
-            | Cmd::Bootstrap { .. }
-            | Cmd::Link { .. }
-            | Cmd::Checkout { .. }
-            | Cmd::Commands { .. }
-            | Cmd::Lifecycle { .. }
-            | Cmd::TicketFlow
-            | Cmd::Activity { .. }
-            | Cmd::Notifications { .. }
-            | Cmd::Launch { .. }
-            | Cmd::HookDiagnose { .. }
-            | Cmd::Serve { .. }
-            | Cmd::Ls { .. }
-            | Cmd::Show { .. }
-            | Cmd::Reindex { .. }
-            | Cmd::Import {
-                diagnose_attachments: true,
-                ..
-            }
-    );
-    let actor = cli.actor()?;
-    let result = match cli.command {
-        Cmd::Init {
-            prefix,
-            standalone,
-            at,
-            remote,
-        } => cmd_init(
-            &cli.path,
-            &prefix,
-            standalone,
-            at.as_deref(),
-            remote.as_deref(),
-        ),
-        Cmd::Bootstrap {
-            project,
-            store,
-            prefix,
-            remote,
-            tools,
-        } => cmd_bootstrap(
-            &project,
-            store.as_deref(),
-            &prefix,
-            remote.as_deref(),
-            &tools,
-        ),
-        Cmd::Link { store } => cmd_link(&store),
-        Cmd::ActivateFormat {
-            acknowledge_pre_release_breakage,
-        } => {
-            if !acknowledge_pre_release_breakage {
-                bail!(
-                    "format activation can break older pre-release HS2 processes; announce the change, stop them, then rerun with --acknowledge-pre-release-breakage"
-                );
-            }
-            println!(
-                "Activating a pre-release HS2 format boundary. Older HS2 processes may no longer open this store."
-            );
-            use std::io::Write as _;
-            std::io::stdout().flush()?;
-            FsStore::open(&cli.path)?.activate_current_format()?;
-            println!(
-                "Activated store format {}.",
-                hotsheet_ticketing::STORE_SCHEMA_VERSION
-            );
-            Ok(())
-        }
-        Cmd::Compatibility { json } => {
-            let selected_store = cli
-                .path
-                .join(hotsheet_ticketing::STORE_METADATA_FILE)
-                .is_file()
-                .then(|| std::fs::read(cli.path.join(hotsheet_ticketing::STORE_METADATA_FILE)))
-                .transpose()?
-                .map(|bytes| serde_json::from_slice::<hotsheet_ticketing::StoreMetadata>(&bytes))
-                .transpose()?
-                .map(|metadata| metadata.schema_version);
-            let value = serde_json::json!({
-                "generation": "hs2",
-                "application_version": env!("CARGO_PKG_VERSION"),
-                "setup_assets_fingerprint": hotsheet_plugins::builtin_setup_assets_fingerprint(),
-                "store_schema": {
-                    "min": 1,
-                    "max": hotsheet_ticketing::STORE_SCHEMA_VERSION,
-                    "creates": hotsheet_ticketing::STORE_SCHEMA_VERSION,
-                },
-                "selected_store_schema": selected_store,
-            });
-            if json {
-                println!("{}", serde_json::to_string(&value)?);
-            } else {
-                println!(
-                    "Hot Sheet 2 CLI {} creates store schema {} and opens schemas 1–{}.",
-                    env!("CARGO_PKG_VERSION"),
-                    hotsheet_ticketing::STORE_SCHEMA_VERSION,
-                    hotsheet_ticketing::STORE_SCHEMA_VERSION
-                );
-                if let Some(schema) = selected_store {
-                    println!("Selected store uses schema {schema}.");
-                }
-            }
-            Ok(())
-        }
-        Cmd::New {
-            title,
-            title_flag,
-            category,
-            priority,
-            details,
-            up_next,
-            tags,
-            blocked_by,
-        } => cmd_new(
-            &cli.path,
-            title.or(title_flag),
-            category,
-            &priority,
-            details,
-            up_next,
-            tags,
-            blocked_by,
-        ),
-        Cmd::Ls { filters } => cmd_ls(&cli.path, &filters),
-        Cmd::Providers { json } => cmd_providers(&cli.path, json),
-        Cmd::GithubSignIn { web_base } => cmd_github_sign_in(&web_base),
-        Cmd::GithubConnect {
-            locator,
-            credential,
-            name,
-            id,
-            default,
-            checkout,
-            attachment_repo,
-            attachment_folder,
-            attachment_branch,
-            no_attachments,
-        } => cmd_github_connect(
-            &cli.path,
-            &locator,
-            &credential,
-            name,
-            id,
-            default,
-            checkout,
-            GitHubAttachmentChange::from_flags(
-                attachment_repo,
-                attachment_folder,
-                attachment_branch,
-                no_attachments,
-            ),
-        ),
-        Cmd::ProviderAttach {
-            connection,
-            id,
-            files,
-        } => cmd_provider_attach(&cli.path, &connection, &id, &files),
-        Cmd::ProviderLs { connection } => cmd_provider_ls(&cli.path, &connection),
-        Cmd::ProviderGet { connection, id } => cmd_provider_get(&cli.path, &connection, &id),
-        Cmd::FeedbackSynthesis { command } => match command {
-            FeedbackSynthesisCmd::Prepare { connections } => {
-                cmd_feedback_synthesis_prepare(&cli.path, &connections)
-            }
-            FeedbackSynthesisCmd::Accept { reviewed } => {
-                if !reviewed {
-                    bail!("review the draft, then pass --reviewed to accept its source cursor");
-                }
-                if actor.as_ref().map(|actor| actor.role)
-                    != Some(hotsheet_model::AttachmentActorRole::Human)
-                {
-                    bail!("accepting AI feedback synthesis requires --actor-role human");
-                }
-                let dir = feedback_synthesis::state_dir(FsStore::open(&cli.path)?.root())?;
-                let cursor = feedback_synthesis::accept_review(&dir)?;
-                println!(
-                    "Marked feedback reviewed through {cursor}. Repository guidance was not published."
-                );
-                Ok(())
-            }
-        },
-        Cmd::ProviderDisable { connection } => {
-            cmd_provider_set_disabled(&cli.path, &connection, true)
-        }
-        Cmd::ProviderEnable { connection } => {
-            cmd_provider_set_disabled(&cli.path, &connection, false)
-        }
-        Cmd::ProviderRemove { connection, json } => {
-            cmd_provider_remove(&cli.path, &connection, json)
-        }
-        Cmd::ProviderNew {
-            connection,
-            title,
-            category,
-            priority,
-            details,
-            tags,
-        } => cmd_provider_new(
-            &cli.path,
-            &connection,
-            title,
-            category,
-            &priority,
-            details.unwrap_or_default(),
-            tags,
-        ),
-        Cmd::ProviderEdit {
-            connection,
-            id,
-            title,
-            details,
-            status,
-            expected_token,
-            note,
-            note_file,
-            allow_literal_backslash_n,
-            note_kind,
-            note_summary,
-            note_confidence,
-            clear_note_confidence,
-            edit_note,
-        } => {
-            let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
-            let note_confidence = confidence_change(note_confidence, clear_note_confidence);
-            validate_note_modifiers(
-                &note,
-                note_kind.as_ref(),
-                note_summary.as_ref(),
-                note_confidence,
-                edit_note.as_ref(),
-            )?;
-            cmd_provider_edit(
-                actor.as_ref(),
-                &cli.path,
-                &connection,
-                &id,
-                ProviderEditInput {
-                    title,
-                    details,
-                    status,
-                    expected_token,
-                    note,
-                    note_kind: parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
-                    note_summary,
-                    note_confidence,
-                    edit_note,
-                },
-            )
-        }
-        Cmd::ProviderClose {
-            connection,
-            id,
-            reason,
-        } => cmd_provider_close(&cli.path, &connection, &id, &reason),
-        Cmd::ProviderAssign {
-            connection,
-            id,
-            to,
-            clear,
-            reviews,
-        } => cmd_provider_assign(&cli.path, &connection, &id, to, clear, reviews),
-        Cmd::ProviderRestore { connection, id } => {
-            cmd_provider_restore(&cli.path, &connection, &id)
-        }
-        Cmd::ProviderReportNotWorking {
-            connection,
-            id,
-            note,
-            note_file,
-            evidence,
-            expected_token,
-        } => cmd_provider_report_not_working(
-            &cli.path,
-            &connection,
-            &id,
-            note,
-            note_file,
-            &evidence,
-            expected_token,
-        ),
-        Cmd::Show { id } => cmd_show(&cli.path, &id),
-        Cmd::Batch { ids, update } => cmd_batch(actor.as_ref(), &cli.path, &ids, update),
-        Cmd::DeleteNote { id, note_id } => cmd_delete_note(&cli.path, &id, &note_id),
-        Cmd::ProviderDeleteNote {
-            connection,
-            id,
-            note_id,
-        } => cmd_provider_delete_note(&cli.path, &connection, &id, &note_id),
-        Cmd::Attach {
-            id,
-            files,
-            json,
-            batch_id,
-            batch_label,
-            actor_role,
-            actor_id,
-            actor_name,
-            purpose,
-        } => cmd_attach(
-            &cli.path,
-            &id,
-            &files,
-            json,
-            batch_id,
-            batch_label,
-            actor_role,
-            actor_id,
-            actor_name,
-            purpose,
-        ),
-        Cmd::AttachmentRename {
-            id,
-            attachment,
-            filename,
-        } => cmd_attachment_rename(&cli.path, &id, &attachment, &filename),
-        Cmd::AttachmentDelete { id, attachment } => {
-            cmd_attachment_delete(&cli.path, &id, &attachment)
-        }
-        Cmd::AttachmentMetadata {
-            id,
-            attachments,
-            file,
-        } => cmd_attachment_metadata(&cli.path, &id, &attachments, &file),
-        Cmd::Annotate {
-            id,
-            attachment,
-            file,
-            clear,
-            json,
-        } => cmd_annotate(
-            &cli.path,
-            &id,
-            &attachment,
-            file.as_deref(),
-            clear,
-            json,
-            actor.as_ref(),
-        ),
-        Cmd::AttachmentActor {
-            id,
-            attachment_ids,
-            actor_role,
-            actor_id,
-            actor_name,
-        } => cmd_attachment_actor(
-            &cli.path,
-            &id,
-            &attachment_ids,
-            &actor_role,
-            actor_id,
-            actor_name,
-        ),
-        Cmd::Edit {
-            id,
-            title,
-            details,
-            category,
-            priority,
-            status,
-            started_phase,
-            clear_started_phase,
-            tags,
-            blocked_by,
-            clear_blocked_by,
-            blocked_reason,
-            clear_blocked_reason,
-            up_next,
-            no_up_next,
-            note,
-            note_file,
-            allow_literal_backslash_n,
-            note_kind,
-            note_summary,
-            note_confidence,
-            clear_note_confidence,
-            edit_note,
-        } => {
-            let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
-            let note_confidence = confidence_change(note_confidence, clear_note_confidence);
-            validate_note_modifiers(
-                &note,
-                note_kind.as_ref(),
-                note_summary.as_ref(),
-                note_confidence,
-                edit_note.as_ref(),
-            )?;
-            cmd_edit(
-                actor.as_ref(),
-                &cli.path,
-                &id,
-                title,
-                details,
-                category,
-                priority,
-                status,
-                started_phase,
-                clear_started_phase,
-                tags,
-                blocked_by,
-                clear_blocked_by,
-                blocked_reason,
-                clear_blocked_reason,
-                up_next,
-                no_up_next,
-                note,
-                parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
-                note_summary,
-                note_confidence,
-                edit_note,
-                false,
-            )
-        }
-        Cmd::Close {
-            id,
-            reason,
-            duplicate_of,
-        } => cmd_close(actor.as_ref(), &cli.path, &id, &reason, duplicate_of),
-        Cmd::Restore { id } => cmd_restore(&cli.path, &id),
-        Cmd::PurgeTrash { older_than_days } => cmd_purge_trash(&cli.path, &cwd, older_than_days),
-        Cmd::Setup {
-            tool,
-            detect,
-            refresh,
-            project,
-            json,
-        } => cmd_setup(&cli.path, tool, detect, refresh, project, json),
-        Cmd::Plugin { cmd } => cmd_plugin(cmd),
-        Cmd::AiTools { json } => cmd_ai_tools(json),
-        Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, &cwd, cmd),
-        Cmd::Settings { cmd } => cmd_settings(&cli.path, &cwd, cmd),
-        Cmd::Commands { cmd } => cmd_commands(&cli.path, cmd),
-        Cmd::Lifecycle { cmd } => match cmd {
-            LifecycleCmd::Status => {
-                print_local_server_json(&cli.path, "GET", "lifecycle/quiescence")
-            }
-            LifecycleCmd::Restart => {
-                print_local_server_json(&cli.path, "POST", "lifecycle/restart")
-            }
-        },
-        Cmd::TicketFlow => print_local_server_json(&cli.path, "GET", "analytics/tickets"),
-        Cmd::Activity {
-            ticket,
-            session,
-            min_importance,
-            limit,
-        } => cmd_activity(&cli.path, ticket, session, min_importance, limit),
-        Cmd::Notifications { cmd } => cmd_notifications(&cli.path, cmd),
-        Cmd::Key { cmd } => cmd_key(cmd),
-        Cmd::Checkout { cmd } => cmd_checkout(
-            cmd,
-            &hotsheet_cli::resolve_store_path(cli.path.clone(), &cwd),
-        ),
-        Cmd::Account { cmd } => cmd_account(cmd, &cli.path),
-        Cmd::Import {
-            file,
-            prefix,
-            diagnose_attachments,
-            restore_attachment,
-            confirm_omission,
-        } => {
-            if diagnose_attachments {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&hotsheet_cli::import_recovery::diagnose(
-                        &cli.path, &file
-                    )?)?
-                );
-                Ok(())
-            } else if !restore_attachment.is_empty() || !confirm_omission.is_empty() {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&hotsheet_cli::import_recovery::recover(
-                        &cli.path,
-                        &file,
-                        &restore_attachment,
-                        &confirm_omission
-                    )?)?
-                );
-                Ok(())
-            } else {
-                cmd_import(&cli.path, &file, &prefix)
-            }
-        }
-        Cmd::Copy { id, to } => cmd_copy(&cli.path, &id, &to),
-        Cmd::ProviderCopy {
-            id,
-            to,
-            operation_id,
-        } => cmd_provider_transfer(&cli.path, &id, &to, &operation_id, false),
-        Cmd::Move { id, to, yes } => cmd_move(&cli.path, &id, &to, yes),
-        Cmd::ProviderMove {
-            id,
-            to,
-            operation_id,
-            yes,
-        } => {
-            if !yes {
-                bail!("provider-move requires --yes");
-            }
-            cmd_provider_transfer(&cli.path, &id, &to, &operation_id, true)
-        }
-        Cmd::Assign {
-            id,
-            to,
-            clear,
-            review,
-        } => cmd_assign(&cli.path, &id, to, clear, review),
-        Cmd::People { cmd } => cmd_people(&cli.path, cmd),
-        Cmd::Read { id } => cmd_read(&cli.path, &id),
-        Cmd::Sync => cmd_sync(&cli.path),
-        Cmd::Doctor { project } => cmd_doctor(&cli.path, &project),
-        Cmd::Reindex { index } => cmd_reindex(&cli.path, index),
-        Cmd::Worklist => cmd_worklist(&cli.path, &cwd),
-        Cmd::ConfidenceReport { json } => cmd_confidence_report(&cli.path, json),
-        Cmd::Metrics {
-            roll_up,
-            prune_before,
-            team,
-        } => cmd_metrics(&cli.path, roll_up, prune_before, team),
-        Cmd::PermissionHook { agent } => cmd_permission_hook(agent.as_deref()),
-        Cmd::HookDiagnose { json } => cmd_hook_diagnose(json),
-        Cmd::Launch {
-            tool,
-            project,
-            ticket_store,
-            create_ticket_store,
-            args,
-        } => cmd_launch(
-            &cli.path,
-            &cwd,
-            &tool,
-            project,
-            ticket_store,
-            create_ticket_store,
-            args,
-        ),
-        Cmd::Serve {
-            bind,
-            secret,
-            stop,
-            kill_all_terminals,
-            list,
-        } => cmd_serve(&cli.path, &bind, secret, stop, kill_all_terminals, list),
-        Cmd::Cert { cmd } => cmd_cert(&cli.path, &cmd),
-        Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
-        Cmd::ClaimNext {
-            worker,
-            label,
-            lease_minutes,
-            eta,
-        } => cmd_claim_next(&cli.path, &worker, label, lease_minutes, eta.as_deref()),
-        Cmd::Claim {
-            id,
-            worker,
-            label,
-            lease_minutes,
-            start,
-            eta,
-        } => cmd_claim(
-            &cli.path,
-            &id,
-            &worker,
-            label,
-            lease_minutes,
-            start,
-            eta.as_deref(),
-        ),
-        Cmd::Release {
-            id,
-            worker,
-            force,
-            all,
-        } => match id {
-            Some(id) if !all => cmd_release(&cli.path, &id, &worker, force),
-            _ => cmd_release_worker(&cli.path, &worker),
-        },
-        Cmd::Renew {
-            id,
-            worker,
-            lease_minutes,
-            eta,
-        } => cmd_renew(&cli.path, &id, &worker, lease_minutes, eta.as_deref()),
-        Cmd::Trigger {
-            tool,
-            prompt,
-            project,
-            resume,
-            mcp_config,
-            permission_mode,
-            envs,
-            worker,
-            shared_daemon,
-        } => cmd_trigger(
-            &cli.path,
-            &tool,
-            prompt,
-            project,
-            resume,
-            mcp_config,
-            permission_mode,
-            envs,
-            worker,
-            shared_daemon,
-        ),
-        Cmd::Work {
-            tool,
-            project,
-            max,
-            max_stall,
-            worker,
-            shared_daemon,
-        } => cmd_work(
-            &cli.path,
-            &tool,
-            project,
-            max,
-            max_stall,
-            worker,
-            shared_daemon,
-        ),
+    let refresh = cli.command.refreshes_worklists();
+    let ctx = dispatch::Ctx {
+        actor: cli.actor()?,
+        path: cli.path,
+        cwd,
     };
+    let result = dispatch::run(cli.command, &ctx);
     if result.is_ok() && refresh {
-        refresh_checkout_worklists(&cli.path, &cwd)?;
+        refresh_checkout_worklists(&ctx.path, &ctx.cwd)?;
     }
     result
 }
@@ -1958,19 +1310,19 @@ fn stream_to_stdout(ev: &hotsheet_aitools::TurnEvent) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn cmd_trigger(
-    store_path: &Path,
-    tool: &str,
-    prompt: Option<String>,
-    project: Option<PathBuf>,
-    resume: Option<String>,
-    mcp_config: Option<PathBuf>,
-    permission_mode: Option<String>,
-    envs: Vec<String>,
-    worker: bool,
-    shared_daemon: bool,
-) -> Result<()> {
+fn cmd_trigger(store_path: &Path, args: TriggerArgs) -> Result<()> {
+    let TriggerArgs {
+        tool,
+        prompt,
+        project,
+        resume,
+        mcp_config,
+        permission_mode,
+        envs,
+        worker,
+        shared_daemon,
+    } = args;
+    let tool = tool.as_str();
     use hotsheet_aitools::{ConnectionRegistry, DoneReason, prepare_trigger};
 
     let safe = prepare_trigger(
@@ -2014,16 +1366,16 @@ fn cmd_trigger(
 /// `hotsheet-cli work <tool>`: drive the tool one turn at a time until Up Next is
 /// drained, a turn cap is hit, or the queue stops changing (thrash guard). The
 /// north-star headless loop (HS2-118), reusing `trigger`'s HS2-103 launch safety.
-#[allow(clippy::too_many_arguments)]
-fn cmd_work(
-    store_path: &Path,
-    tool: &str,
-    project: Option<PathBuf>,
-    max: u32,
-    max_stall: u32,
-    worker: bool,
-    shared_daemon: bool,
-) -> Result<()> {
+fn cmd_work(store_path: &Path, args: WorkArgs) -> Result<()> {
+    let WorkArgs {
+        tool,
+        project,
+        max,
+        max_stall,
+        worker,
+        shared_daemon,
+    } = args;
+    let tool = tool.as_str();
     use hotsheet_aitools::{ConnectionRegistry, DoneReason, prepare_trigger};
     use hotsheet_cli::workloop::{Stall, queue_signature};
 
@@ -2393,18 +1745,21 @@ fn cmd_link(store: &Path) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn cmd_new(
-    path: &PathBuf,
-    title: Option<String>,
-    category: String,
-    priority: &str,
-    details: Option<String>,
-    up_next: bool,
-    tags: Vec<String>,
-    blocked_by: Vec<String>,
-) -> Result<()> {
-    let title = title.context("a title is required (positional or --title)")?;
+fn cmd_new(path: &PathBuf, args: NewArgs) -> Result<()> {
+    let NewArgs {
+        title,
+        title_flag,
+        category,
+        priority,
+        details,
+        up_next,
+        tags,
+        blocked_by,
+    } = args;
+    let priority = priority.as_str();
+    let title = title
+        .or(title_flag)
+        .context("a title is required (positional or --title)")?;
     let store = FsStore::open(path)?;
     let prefix = store.metadata()?.ticket_prefix;
     let blocked_by = ops::resolve_blockers(&store, None, &blocked_by)?;
@@ -2641,17 +1996,26 @@ impl GitHubAttachmentChange {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn cmd_github_connect(
-    path: &Path,
-    locator: &str,
-    credential: &str,
-    name: Option<String>,
-    id: Option<String>,
-    make_default: bool,
-    checkout: Option<String>,
-    attachments: GitHubAttachmentChange,
-) -> Result<()> {
+fn cmd_github_connect(path: &Path, args: GithubConnectArgs) -> Result<()> {
+    let GithubConnectArgs {
+        locator,
+        credential,
+        name,
+        id,
+        default: make_default,
+        checkout,
+        attachment_repo,
+        attachment_folder,
+        attachment_branch,
+        no_attachments,
+    } = args;
+    let (locator, credential) = (locator.as_str(), credential.as_str());
+    let attachments = GitHubAttachmentChange::from_flags(
+        attachment_repo,
+        attachment_folder,
+        attachment_branch,
+        no_attachments,
+    );
     let store = FsStore::open(path)?;
     let home = hotsheet_plugins::hotsheet_home();
     let keys = KeyRegistry::new(&home, OsKeychain);
@@ -4933,19 +4297,19 @@ fn cmd_show(path: &PathBuf, needle: &str) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn cmd_attach(
-    path: &PathBuf,
-    needle: &str,
-    files: &[PathBuf],
-    json: bool,
-    batch_id: Option<String>,
-    batch_label: Option<String>,
-    actor_role: Option<String>,
-    actor_id: Option<String>,
-    actor_name: Option<String>,
-    purpose: Option<String>,
-) -> Result<()> {
+fn cmd_attach(path: &PathBuf, args: AttachArgs) -> Result<()> {
+    let AttachArgs {
+        id,
+        files,
+        json,
+        batch_id,
+        batch_label,
+        actor_role,
+        actor_id,
+        actor_name,
+        purpose,
+    } = args;
+    let (needle, files) = (id.as_str(), files.as_slice());
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, needle)?;
     let batch_id = Some(batch_id.unwrap_or_else(|| format!("batch-{}", Ulid::new())));
@@ -5190,11 +4554,9 @@ fn cmd_attachment_actor(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn cmd_edit(
-    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
-    path: &PathBuf,
-    id: &str,
+/// A validated ticket edit: [`TicketEditArgs`] with its note input read and checked.
+#[derive(Clone)]
+struct TicketEdit {
     title: Option<String>,
     details: Option<String>,
     category: Option<String>,
@@ -5214,8 +4576,72 @@ fn cmd_edit(
     note_summary: Option<String>,
     note_confidence: Option<Option<Confidence>>,
     edit_note: Option<String>,
+}
+
+impl TicketEdit {
+    /// Read `--note`/`--note-file` and validate the note modifiers before any write.
+    fn prepare(args: TicketEditArgs) -> Result<Self> {
+        let note = read_note_input(args.note, args.note_file, args.allow_literal_backslash_n)?;
+        let note_confidence = confidence_change(args.note_confidence, args.clear_note_confidence);
+        validate_note_modifiers(
+            &note,
+            args.note_kind.as_ref(),
+            args.note_summary.as_ref(),
+            note_confidence,
+            args.edit_note.as_ref(),
+        )?;
+        Ok(Self {
+            title: args.title,
+            details: args.details,
+            category: args.category,
+            priority: args.priority,
+            status: args.status,
+            started_phase: args.started_phase,
+            clear_started_phase: args.clear_started_phase,
+            tags: args.tags,
+            blocked_by: args.blocked_by,
+            clear_blocked_by: args.clear_blocked_by,
+            blocked_reason: args.blocked_reason,
+            clear_blocked_reason: args.clear_blocked_reason,
+            up_next: args.up_next,
+            no_up_next: args.no_up_next,
+            note,
+            note_kind: parse_note_kind(args.note_kind.as_deref().unwrap_or("regular"))?,
+            note_summary: args.note_summary,
+            note_confidence,
+            edit_note: args.edit_note,
+        })
+    }
+}
+
+fn cmd_edit(
+    actor: Option<&hotsheet_ticketing::actor::MutationActor>,
+    path: &PathBuf,
+    id: &str,
+    edit: TicketEdit,
     quiet: bool,
 ) -> Result<()> {
+    let TicketEdit {
+        title,
+        details,
+        category,
+        priority,
+        status,
+        started_phase,
+        clear_started_phase,
+        tags,
+        blocked_by,
+        clear_blocked_by,
+        blocked_reason,
+        clear_blocked_reason,
+        up_next,
+        no_up_next,
+        note,
+        note_kind,
+        note_summary,
+        note_confidence,
+        edit_note,
+    } = edit;
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
     let edit_note = edit_note
@@ -5330,50 +4756,13 @@ fn cmd_batch(
     actor: Option<&hotsheet_ticketing::actor::MutationActor>,
     path: &PathBuf,
     ids: &[String],
-    update: BatchEditArgs,
+    update: TicketEditArgs,
 ) -> Result<()> {
-    let note = read_note_input(
-        update.note,
-        update.note_file,
-        update.allow_literal_backslash_n,
-    )?;
-    let note_confidence = confidence_change(update.note_confidence, update.clear_note_confidence);
-    validate_note_modifiers(
-        &note,
-        update.note_kind.as_ref(),
-        update.note_summary.as_ref(),
-        note_confidence,
-        update.edit_note.as_ref(),
-    )?;
-    let note_kind = parse_note_kind(update.note_kind.as_deref().unwrap_or("regular"))?;
+    let edit = TicketEdit::prepare(update)?;
     let mut updated = Vec::new();
     let mut errors = Vec::new();
     for id in ids {
-        match cmd_edit(
-            actor,
-            path,
-            id,
-            update.title.clone(),
-            update.details.clone(),
-            update.category.clone(),
-            update.priority.clone(),
-            update.status.clone(),
-            update.started_phase.clone(),
-            update.clear_started_phase,
-            update.tags.clone(),
-            update.blocked_by.clone(),
-            update.clear_blocked_by,
-            update.blocked_reason.clone(),
-            update.clear_blocked_reason,
-            update.up_next,
-            update.no_up_next,
-            note.clone(),
-            note_kind,
-            update.note_summary.clone(),
-            note_confidence,
-            update.edit_note.clone(),
-            true,
-        ) {
+        match cmd_edit(actor, path, id, edit.clone(), true) {
             Ok(()) => updated.push(resolve(&FsStore::open(path)?, id)?.slug),
             Err(error) => errors.push(serde_json::json!({
                 "id": id,
