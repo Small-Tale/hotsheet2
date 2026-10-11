@@ -191,16 +191,18 @@ pub(crate) fn spawn_watcher_for(
                     Ok(watcher) => watcher,
                     Err(error) => {
                         tracing::warn!(
-                            "watcher for {} failed to start: {error}",
-                            tickets_dir.display()
+                            dir = %tickets_dir.display(),
+                            %error,
+                            "store watcher failed to start"
                         );
                         return;
                     }
                 };
                 if let Err(error) = watcher.watch(&tickets_dir, RecursiveMode::Recursive) {
                     tracing::warn!(
-                        "watcher for {} failed to start: {error}",
-                        tickets_dir.display()
+                        dir = %tickets_dir.display(),
+                        %error,
+                        "store watcher failed to start"
                     );
                     return;
                 }
@@ -534,9 +536,10 @@ pub(crate) fn run_native_repository_monitor(
                 }
                 if let Err(error) = watcher.watch(git_dir, RecursiveMode::Recursive) {
                     tracing::warn!(
-                        "repository watcher for {} could not watch {}: {error}",
-                        watch_root.display(),
-                        git_dir.display()
+                        checkout_root = %watch_root.display(),
+                        dir = %git_dir.display(),
+                        %error,
+                        "repository watcher could not watch directory"
                     );
                 }
             }
@@ -710,7 +713,7 @@ fn regenerate_target_worklists(target: &WatchTarget) {
                 .any(|root| same_path(FsPath::new(root), target.entry.store.root()))
             {
                 if let Err(e) = regenerate_checkout_worklist_indexed(&target.host, &checkout) {
-                    tracing::warn!("worklist regenerate failed for {}: {e}", checkout.root);
+                    tracing::warn!(checkout_root = %checkout.root, error = %e, "worklist regenerate failed");
                 }
             }
         }

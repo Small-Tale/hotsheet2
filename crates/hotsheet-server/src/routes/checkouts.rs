@@ -148,8 +148,12 @@ pub(crate) fn schedule_worklist_regeneration(
         .await
         {
             Ok(Ok(_)) => {}
-            Ok(Err(error)) => tracing::warn!("worklist regenerate failed for {root}: {error}"),
-            Err(error) => tracing::warn!("worklist regenerate task failed for {root}: {error}"),
+            Ok(Err(error)) => {
+                tracing::warn!(checkout_root = %root, %error, "worklist regenerate failed")
+            }
+            Err(error) => {
+                tracing::warn!(checkout_root = %root, %error, "worklist regenerate task failed")
+            }
         }
     });
 }

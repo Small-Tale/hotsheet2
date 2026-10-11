@@ -633,7 +633,7 @@ pub(crate) async fn batch_update_checkout_tickets(
             .store
             .autocommit_paths("Update selected Hot Sheet tickets", &paths)
         {
-            tracing::warn!("hotsheet batch autocommit failed: {error}");
+            tracing::warn!(%error, "hotsheet batch autocommit failed");
         }
         git_time += git_started.elapsed();
         let [index, events, worklist] = state.changed_many_in(&entry, "updated", &tickets);

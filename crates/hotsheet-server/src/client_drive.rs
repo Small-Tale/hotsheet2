@@ -348,7 +348,7 @@ impl ClientDriveManager {
                 store_path: connection.store_path.clone(),
             });
         }) {
-            tracing::warn!("recording drive {}: {error}", connection.id);
+            tracing::warn!(drive = %connection.id, %error, "recording drive failed");
         }
         if let Some(session_id) = session_id {
             if let Err(error) = self.record_session(&connection, session_id) {
@@ -563,7 +563,7 @@ impl ClientDriveManager {
                 .live_drives
                 .retain(|drive| drive.worker_id != worker_id);
         }) {
-            tracing::warn!("forgetting drive {worker_id}: {error}");
+            tracing::warn!(worker = %worker_id, %error, "forgetting drive failed");
         }
     }
 

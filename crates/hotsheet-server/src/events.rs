@@ -221,7 +221,7 @@ impl AppState {
                     .any(|root| same_path(FsPath::new(root), entry.store.root()))
             }) {
                 if let Err(error) = regenerate_checkout_worklist_indexed(&self.host, &checkout) {
-                    tracing::warn!("worklist regenerate failed for {}: {error}", checkout.root);
+                    tracing::warn!(checkout_root = %checkout.root, %error, "worklist regenerate failed");
                 }
             }
         }
@@ -265,7 +265,7 @@ impl AppState {
                     .any(|root| same_path(FsPath::new(root), entry.store.root()))
             }) {
                 if let Err(error) = regenerate_checkout_worklist_indexed(&self.host, &checkout) {
-                    tracing::warn!("worklist regenerate failed for {}: {error}", checkout.root);
+                    tracing::warn!(checkout_root = %checkout.root, %error, "worklist regenerate failed");
                 }
             }
         }

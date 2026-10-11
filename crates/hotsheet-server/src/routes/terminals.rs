@@ -864,11 +864,13 @@ pub(crate) fn release_session_claims_blocking(
         };
         match ops::release_worker(&entry.store, now(), worker) {
             Ok(tickets) => released.extend(tickets.into_iter().map(|ticket| ticket.slug)),
-            Err(error) => tracing::warn!("releasing {worker}'s claims in {id} failed: {error}"),
+            Err(error) => {
+                tracing::warn!(worker, store = %id, %error, "releasing worker claims failed")
+            }
         }
     }
     if !released.is_empty() {
-        tracing::info!("released claims left by {worker}: {}", released.join(", "));
+        tracing::info!(worker, tickets = %released.join(", "), "released claims left by worker");
     }
     released
 }
@@ -970,16 +972,17 @@ pub async fn release_orphaned_drive_sessions(state: &AppState) -> Vec<String> {
                 }) {
                 Ok(tickets) => released.extend(tickets.into_iter().map(|ticket| ticket.slug)),
                 Err(error) => tracing::warn!(
-                    "releasing {}'s claims in {} failed: {error}",
-                    drive.worker_id,
-                    drive.store_path.display()
+                    worker = %drive.worker_id,
+                    store = %drive.store_path.display(),
+                    %error,
+                    "releasing chat drive claims failed"
                 ),
             }
         }
         if !released.is_empty() {
             tracing::warn!(
-                "released claims left by ended chat drives: {}",
-                released.join(", ")
+                tickets = %released.join(", "),
+                "released claims left by ended chat drives"
             );
         }
         released
@@ -1041,7 +1044,7 @@ pub async fn prune_orphaned_terminal_names(state: &AppState) -> Vec<String> {
     match terminal_names::retain_live(&Settings::new(state.store.root()), &live) {
         Ok(pruned) => pruned,
         Err(error) => {
-            tracing::warn!("pruning saved terminal names failed: {error}");
+            tracing::warn!(%error, "pruning saved terminal names failed");
             Vec::new()
         }
     }
@@ -1640,7 +1643,7 @@ pub(crate) fn emit_terminal_renamed(state: &AppState, id: &str, name: Option<Str
 /// tab name.
 pub(crate) fn forget_terminal_name(state: &AppState, id: &str) {
     if let Err(error) = terminal_names::set(&Settings::new(state.store.root()), id, None) {
-        tracing::warn!("forgetting terminal {id}'s name failed: {error}");
+        tracing::warn!(terminal = id, %error, "forgetting terminal name failed");
     }
 }
 
@@ -2156,7 +2159,7 @@ pub(crate) async fn resolve_permission(
     if let (Some(rule), Some(path)) = (&resolved.persisted_rule, rules_path.as_ref()) {
         match hotsheet_aitools::append_permission_rule(path, rule) {
             Ok(()) => persisted = true,
-            Err(e) => tracing::warn!("failed to persist permission rule: {e}"),
+            Err(e) => tracing::warn!(error = %e, "failed to persist permission rule"),
         }
     }
     // Resolution can happen through another client or transport. Publish a replayable

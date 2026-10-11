@@ -459,7 +459,9 @@ before it logs anything.
 (URL, `secret:`, `index:`, hosting summaries). Every other diagnostic is a `tracing`
 event written to stderr by the binary's `fmt` subscriber, at `info` level by default;
 set `RUST_LOG` (for example `RUST_LOG=debug` or `RUST_LOG=hotsheet_server=warn`) to
-change the filter. Failures that are deliberately ignored carry a reason comment or
+change the filter. Server events use a constant message plus structured fields
+(`store`, `checkout`, `checkout_root`, `worker`, `terminal`, `ticket`, `error`) rather
+than interpolated text, so logs can be filtered and parsed (HS2-79TVFH). Failures that are deliberately ignored carry a reason comment or
 are logged rather than discarded with a bare `let _ =`.
 
 Detached client launches never pass this flag, because they must outlive their

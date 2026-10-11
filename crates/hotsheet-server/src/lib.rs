@@ -797,8 +797,9 @@ impl AppState {
                     configured = Some(configured.map_or(days, |current: u32| current.max(days)))
                 }
                 Err(error) => tracing::warn!(
-                    "Trash retention ignored for checkout {}: {error}",
-                    checkout.id
+                    checkout = %checkout.id,
+                    %error,
+                    "trash retention setting ignored"
                 ),
             }
         }
@@ -984,7 +985,9 @@ impl AppState {
                 let mut w = self.watchers.lock_or_recover();
                 w.insert(watched_id, handle);
             }
-            Err(e) => tracing::warn!("watcher for {} failed to start: {e}", store_root.display()),
+            Err(e) => {
+                tracing::warn!(store = %store_root.display(), error = %e, "store watcher failed to start")
+            }
         }
         // Advertise the newly-hosted store for discovery (real run only; a no-op in tests).
         self.register_store_instance(&store_root);
@@ -1010,8 +1013,9 @@ impl AppState {
                 watchers.insert(checkout.id.clone(), handle);
             }
             Err(error) => tracing::warn!(
-                "repository watcher for {} failed to start: {error}",
-                root.display()
+                checkout_root = %root.display(),
+                %error,
+                "repository watcher failed to start"
             ),
         }
     }
@@ -1066,7 +1070,7 @@ impl AppState {
         let lock = self.writer_locks.with_lock(|w| w.remove(&root));
         // Stop the watcher and release the files outside every lock.
         drop((watcher, guard, lock));
-        tracing::info!("unhosted store {root}: no open project references it");
+        tracing::info!(store = %root, "unhosted store: no open project references it");
     }
 
     /// Ask for an unhost sweep `delay` from now; an earlier pending request wins.
@@ -1162,8 +1166,9 @@ impl AppState {
                 g.insert(store_path.display().to_string(), guard);
             }
             Err(e) => tracing::warn!(
-                "instance registration failed for {}: {e}",
-                store_path.display()
+                store = %store_path.display(),
+                error = %e,
+                "instance registration failed"
             ),
         }
     }
@@ -1263,7 +1268,9 @@ impl AppState {
                     Ok(checkout) => checkout,
                     Err(error) => {
                         tracing::warn!(
-                            "activity distillation skipped for unresolved checkout {reference}: {error}"
+                            checkout = reference,
+                            %error,
+                            "activity distillation skipped for unresolved checkout"
                         );
                         return;
                     }
@@ -1281,8 +1288,9 @@ impl AppState {
                 });
                 if !linked {
                     tracing::warn!(
-                        "activity distillation skipped because checkout {} does not own store {store_id}",
-                        checkout.id
+                        checkout = %checkout.id,
+                        store = store_id,
+                        "activity distillation skipped: checkout does not own store"
                     );
                     return;
                 }
@@ -1299,7 +1307,7 @@ impl AppState {
         let policy = match hotsheet_ticketing::DistillationPolicy::from_local_settings(&settings) {
             Ok(policy) => policy,
             Err(error) => {
-                tracing::warn!("activity distillation policy ignored: {error}");
+                tracing::warn!(%error, "activity distillation policy ignored");
                 return;
             }
         };
@@ -1337,7 +1345,7 @@ impl AppState {
         ) {
             // Activity capture is authoritative and must not fail because an optional
             // distillation adapter or ticket mutation is temporarily unavailable.
-            tracing::warn!("activity distillation note failed: {error}");
+            tracing::warn!(%error, "activity distillation note failed");
         }
     }
 }
