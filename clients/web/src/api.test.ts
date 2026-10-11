@@ -10,6 +10,32 @@ import {
 } from './api';
 import { serverInFlightCount } from './server-busy';
 
+/** A full ticket in the server's `ApiTicket` wire shape (crates/hotsheet-ticketing/src/wire.rs). */
+const fullTicket = (overrides: Record<string, unknown> = {}) => ({
+  connection_id: 'git',
+  native_id: '01M4TICKET',
+  qualified_id: 'git:01M4TICKET',
+  id: '01M4TICKET',
+  slug: 'HS2-ONE',
+  title: 'One',
+  details: '',
+  category: 'task',
+  priority: 'default',
+  status: 'not_started',
+  up_next: false,
+  feedback_needed: false,
+  tags: [],
+  blocked_by: [],
+  claim_count: 0,
+  notes: [],
+  attachments: [],
+  ...overrides,
+});
+const urlOf = (input: RequestInfo | URL) =>
+  typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+/** A checkout-scoped ticket response, which also names its source store. */
+const storedTicket = (store = 'git', overrides: Record<string, unknown> = {}) => ({ store, ...fullTicket(overrides) });
+
 describe('server-busy tracking option (HS2-AZZ9TF)', () => {
   it('tracks ordinary requests but leaves quiet background clients off the busy indicator', async () => {
     let release: (() => void) | undefined;
@@ -41,9 +67,21 @@ describe('server-busy tracking option (HS2-AZZ9TF)', () => {
 
 describe('qualified checkout ticket routes (HS2-HX0VM9)', () => {
   it('preserves the source and native id on both read and write', async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockImplementation(async () => new Response(JSON.stringify({ store: 'jira-1', id: 'PROJ-7' }), { status: 200 }));
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify(
+            storedTicket('jira-1', {
+              connection_id: 'jira-1',
+              native_id: 'PROJ-7',
+              qualified_id: 'jira-1:PROJ-7',
+              id: 'PROJ-7',
+              slug: 'PROJ-7',
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
     try {
       const api = new Api('/api');
       await api.checkoutTicket('mixed', 'jira-1:PROJ-7');
@@ -66,7 +104,20 @@ describe('qualified checkout ticket routes (HS2-HX0VM9)', () => {
 
 describe('Jira outbox client contract (HS2-YSF8TV)', () => {
   it('uses stable operation ids and provider-scoped status, retry, and discard paths', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('[]', { status: 200 }));
+    const operation = {
+      operation_id: 'op-1',
+      connection_id: 'jira eng',
+      native_id: 'ENG-9',
+      state: 'queued',
+      attempts: 0,
+      next_attempt_at: 0,
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(
+        async (input) =>
+          new Response(urlOf(input).endsWith('/op-1') ? JSON.stringify(operation) : '[]', { status: 200 }),
+      );
     try {
       const api = new Api('/api');
       await api.queueProviderUpdates('jira eng', [
@@ -141,9 +192,7 @@ describe('attachment filename transport', () => {
     };
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(
-        new Response(JSON.stringify({ store: 'git-local', ticket: { attachments: [] } }), { status: 200 }),
-      );
+      .mockResolvedValue(new Response(JSON.stringify(storedTicket('git-local')), { status: 200 }));
     await new Api('/api').updateCheckoutAttachmentAnnotations('folder', 'ticket', 'attachment', [annotation]);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/checkouts/folder/tickets/ticket/attachments/attachment',
@@ -152,7 +201,7 @@ describe('attachment filename transport', () => {
     fetchMock.mockRestore();
   });
   it('sends one batch identity and actor across uploads and supports regrouping and rename', async () => {
-    const response = { store: 'git', ticket: { attachments: [] } };
+    const response = storedTicket('git');
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockImplementation(async () => new Response(JSON.stringify(response), { status: 200 }));
@@ -194,9 +243,13 @@ describe('corrupt ticket transport', () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockImplementation(
-        async () =>
+        async (input) =>
           new Response(
-            JSON.stringify([{ store: 'local', store_path: '/store', path: '/store/ticket.md', error: 'bad ticket' }]),
+            JSON.stringify(
+              urlOf(input).endsWith('/repair')
+                ? fullTicket()
+                : [{ store: 'local', store_path: '/store', path: '/store/ticket.md', error: 'bad ticket' }],
+            ),
             { status: 200 },
           ),
       );
@@ -328,9 +381,16 @@ describe('client-owned AI drive transport', () => {
       busy: false,
       actions: ['send_turn', 'interrupt', 'close'],
     };
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockImplementation(async () => new Response(JSON.stringify(connection), { status: 202 }));
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = urlOf(input),
+        body =
+          url.endsWith('/drive/sessions') || url.includes('/ai-tools')
+            ? []
+            : url.endsWith('/ai-settings')
+              ? { tool: 'codex', model: 'gpt-5.4', effort: 'high' }
+              : connection;
+      return new Response(JSON.stringify(body), { status: 202 });
+    });
     const api = new Api('/api');
     await api.toolSessions();
     await api.aiTools();
@@ -764,7 +824,7 @@ describe('structured ticket close transport', () => {
   it('sends duplicate outcomes and canonical target identity through the checkout route', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('{"store":"git","ticket":{}}', { status: 200 }));
+      .mockResolvedValue(new Response(JSON.stringify(storedTicket('git')), { status: 200 }));
     await new Api('/api').closeCheckoutTicket('folder with spaces', 'source/1', 'duplicate', {
       project_id: 'other-project',
       connection_id: 'git-other',
@@ -882,7 +942,9 @@ describe('atomic Not Working transport', () => {
   it('sends note, evidence, and concurrency token in one multipart request', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ status: 'not_started', up_next: true }), { status: 200 }));
+      .mockResolvedValue(
+        new Response(JSON.stringify(fullTicket({ status: 'not_started', up_next: true })), { status: 200 }),
+      );
     const proof = new File(['proof'], 'proof ünicode.txt', { type: 'text/plain' });
     await new Api('/api').reportNotWorking('git local', 'ticket/1', ' regressed ', [proof], 'token-1');
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

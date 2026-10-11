@@ -144,7 +144,9 @@ describe('runtime-extracted feature owners (HS2-K7SYHQ)', () => {
     await first;
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(owner.corruptRecovery.value[key]).toEqual({ message: 'denied', failed: true });
-    fetchMock.mockResolvedValueOnce(Response.json({ slug: 'HS2-AAAAAA' }));
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ id: '01M4REPAIR', slug: 'HS2-AAAAAA', title: 'Repair', notes: [], attachments: [] }),
+    );
     await owner.queueCorruptTicketRepair(key);
     expect(owner.corruptRecovery.value[key]).toEqual({});
     expect(showToast).toHaveBeenCalledWith('Queued HS2-AAAAAA for AI repair.');

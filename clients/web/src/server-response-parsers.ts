@@ -1,4 +1,43 @@
-import type { Checkout, CheckoutSource } from './api';
+import type {
+  AiToolDefaults,
+  AiToolDescriptor,
+  CalibrationReport,
+  Checkout,
+  CheckoutSource,
+  CheckoutTicketPage,
+  CheckoutTicketRowsPage,
+  CodeReview,
+  CodeReviewCommit,
+  CommandDefinition,
+  CommandRun,
+  CorruptTicket,
+  CustomView,
+  DuplicateBacklinkResponse,
+  FullTicket,
+  GitHubAuthStart,
+  GitHubAuthStatus,
+  GitHubRepositoryAccess,
+  PermissionRequest,
+  PollResponse,
+  ProviderAccount,
+  ProviderConnection,
+  ProviderDescriptor,
+  ProviderOutboxOperation,
+  QueuedProviderResult,
+  RepositoryFile,
+  RepositoryPage,
+  RepositoryStatus,
+  SourceDetach,
+  TerminalInfo,
+  TerminalName,
+  TerminalRead,
+  TerminalSettings,
+  Ticket,
+  TicketRow,
+  ToolConnection,
+  ToolSession,
+  TrashSettings,
+} from './api';
 import type { CompatibilityRange, ServerCompatibility } from './compatibility';
 import { isRecord } from './json-value';
 
@@ -146,3 +185,338 @@ export const parseTrashPurge: ResponseParser<{ purged: number; tickets: string[]
   if (typeof body.purged !== 'number' || !isStringArray(body.tickets)) invalid('trash purge');
   return body as { purged: number; tickets: string[] };
 };
+
+/* ---- Declarative DTO shapes (HS2-E0AG5E) -------------------------------------------------
+ * Each shape names the fields callers rely on. Required fields must have the stated type;
+ * optional fields may be absent or `null` (the Rust DTOs serialize `Option::None` as `null`
+ * unless skipped) but must otherwise have the stated type. Unlisted fields pass through. */
+
+type Check = (field: unknown) => boolean;
+
+const isNumber: Check = (field) => typeof field === 'number' && Number.isFinite(field);
+const isObject: Check = (field) => isRecord(field);
+const listOf =
+  (check: Check): Check =>
+  (field) =>
+    Array.isArray(field) && field.every(check);
+const valuesOf =
+  (check: Check): Check =>
+  (field) =>
+    isRecord(field) && Object.values(field).every(check);
+const accepts =
+  <T>(parse: ResponseParser<T>): Check =>
+  (field) => {
+    try {
+      parse(field);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+/** A parser for one DTO, with its boolean `check` for nesting and a `list` parser for arrays of it. */
+export interface Shape<T> extends ResponseParser<T> {
+  check: Check;
+  list: ResponseParser<T[]>;
+}
+
+function shape<T>(what: string, required: Record<string, Check>, optional: Record<string, Check> = {}): Shape<T> {
+  const check: Check = (value) =>
+    isRecord(value) &&
+    Object.entries(required).every(([key, field]) => field(value[key])) &&
+    Object.entries(optional).every(
+      ([key, field]) => value[key] === undefined || value[key] === null || field(value[key]),
+    );
+  const parse = (value: unknown) => (check(value) ? (value as T) : invalid(what));
+  const parseList = (value: unknown) => (listOf(check)(value) ? (value as T[]) : invalid(`${what} list`));
+  return Object.assign(parse, { check, list: parseList });
+}
+
+const project = shape<{ id: string; alias: string }>('project', { id: isString, alias: isString });
+
+export const parseProviderDescriptor = shape<ProviderDescriptor>(
+  'provider',
+  { connection_id: isString, provider: isString, display_name: isString, locator: isString, capabilities: isObject },
+  { default: isBoolean, color: isString },
+);
+
+export const parseProviderConnection = shape<ProviderConnection>(
+  'provider connection',
+  { id: isString, provider: isString, locator: isString },
+  { name: isString, default: isBoolean, settings: isObject, disabled: isBoolean, projects: listOf(project.check) },
+);
+
+export const parseSourceDetach = shape<SourceDetach>(
+  'source removal',
+  { checkout_id: isString, connection_id: isString },
+  { unlinked: isBoolean, removed_connection: isBoolean, still_used_by: isStringArray },
+);
+
+export const parseProviderAccount = shape<ProviderAccount>(
+  'account',
+  { id: isString, provider: isString, sources: listOf(isObject), projects: listOf(project.check) },
+  { host: isString, base_url: isString, identity: isString, managed: isBoolean },
+);
+
+export const parseGitHubRepositoryAccess = shape<GitHubRepositoryAccess>(
+  'GitHub repositories',
+  { repositories: isStringArray },
+  { installations: listOf(isObject), install_url: isString },
+);
+
+export const parseGitHubAuthStart = shape<GitHubAuthStart>('GitHub sign-in', {
+  session_id: isString,
+  user_code: isString,
+  verification_uri: isString,
+  expires_in: isNumber,
+});
+
+export const parseGitHubAuthStatus = shape<GitHubAuthStatus>(
+  'GitHub sign-in status',
+  { state: isString },
+  { credential_reference: isString, message: isString },
+);
+
+const note = shape('note', { id: isString, kind: isString, text: isString }, { created_at: isString });
+const attachment = shape('attachment', { id: isString, filename: isString }, { annotations: listOf(isObject) });
+
+export const parseTicket = shape<Ticket>(
+  'ticket',
+  { qualified_id: isString, native_id: isString, connection_id: isString, title: isString },
+  { status: isString, notes: listOf(note.check), attachments: listOf(attachment.check) },
+);
+
+const rowOptional: Record<string, Check> = {
+  id: isString,
+  title: isString,
+  status: isString,
+  up_next: isBoolean,
+  feedback_needed: isBoolean,
+  tags: isStringArray,
+  blocked_by: isStringArray,
+  claim_count: isNumber,
+  notes: listOf(note.check),
+};
+const fullTicketRequired: Record<string, Check> = {
+  id: isString,
+  slug: isString,
+  title: isString,
+  notes: listOf(note.check),
+  attachments: listOf(attachment.check),
+};
+
+/** A checkout ticket row: a `fields=` projection keeps only `slug` (plus `store`), so only it is required. */
+export const parseTicketRow = shape<TicketRow>('ticket row', { slug: isString }, rowOptional);
+
+export const parseFullTicket = shape<FullTicket>('ticket', fullTicketRequired, {
+  ...rowOptional,
+  warnings: isStringArray,
+});
+
+/**
+ * A checkout-scoped full ticket, which names its source `store` when the route knows it; the
+ * field is type-checked when present but not required, as before this parser existed.
+ */
+export const parseStoredTicket = shape<FullTicket & { store: string }>('ticket', fullTicketRequired, {
+  ...rowOptional,
+  store: isString,
+  warnings: isStringArray,
+});
+
+export const parseProviderOutboxOperation = shape<ProviderOutboxOperation>(
+  'provider outbox operation',
+  { operation_id: isString, connection_id: isString, native_id: isString, state: isString },
+  { attempts: isNumber, next_attempt_at: isNumber, last_error: isString, conflict: isObject },
+);
+
+export const parseQueuedProviderResult = shape<QueuedProviderResult>('queued provider update', {
+  operation_id: isString,
+  state: isString,
+  ticket: parseFullTicket.check,
+});
+
+export const parseCheckoutRelink = shape<{ checkouts: Checkout[]; connection_id: string }>('source relink', {
+  checkouts: accepts(parseCheckouts),
+  connection_id: isString,
+});
+
+const ticketPage = shape<CheckoutTicketPage>(
+  'ticket page',
+  { items: listOf(parseTicketRow.check), counts: isObject },
+  { next_cursor: isString, source_errors: isStringArray },
+);
+const ticketRowsPage = shape<CheckoutTicketRowsPage>(
+  'ticket page',
+  { items: listOf(parseTicketRow.check) },
+  { next_cursor: isString, source_errors: isStringArray },
+);
+/**
+ * A legacy (unpaged) server answers a page request with a bare row list. The rows are validated
+ * and passed through under the page type because the page loaders already detect and normalize
+ * that list with `Array.isArray` (`project-ticket-refresh.ts`); HS2-5T7QHE tracks
+ * widening the declared return type.
+ */
+const orLegacyRows =
+  <T>(page: ResponseParser<T>): ResponseParser<T> =>
+  (value) =>
+    Array.isArray(value) ? (parseTicketRow.list(value) as unknown as T) : page(value);
+
+export const parseCheckoutTicketPage = orLegacyRows(ticketPage);
+export const parseCheckoutTicketRowsPage = orLegacyRows(ticketRowsPage);
+
+export const parseCalibrationReport = shape<CalibrationReport>('confidence report', {
+  completions: isNumber,
+  scored: isNumber,
+  bands: listOf(isObject),
+  events: listOf(isObject),
+});
+
+export const parseCorruptTicket = shape<CorruptTicket>(
+  'corrupt ticket',
+  { store: isString, path: isString, error: isString },
+  { store_path: isString, id: isString, slug: isString, error_code: isString },
+);
+
+export const parseDuplicateBacklinks = shape<DuplicateBacklinkResponse>('duplicate backlinks', {
+  backlinks: listOf(isObject),
+  inaccessible_projects: listOf(isObject),
+});
+
+export const parseFilePath = shape<{ path: string }>('file path', { path: isString });
+
+const repositoryFile = shape<RepositoryFile>(
+  'repository file',
+  { path: isString },
+  { original_path: isString, staged: isString, unstaged: isString, untracked: isBoolean, conflicted: isBoolean },
+);
+const commit = shape<CodeReviewCommit>(
+  'commit',
+  { sha: isString, short_sha: isString, subject: isString },
+  { body: isString, committed_at: isString, refs: listOf(isObject) },
+);
+
+/** `repository/status|init|remote`: an uninitialized repository omits the counts, so every field is optional. */
+export const parseRepositoryStatus = shape<RepositoryStatus>(
+  'repository status',
+  {},
+  {
+    initialized: isBoolean,
+    branch: isString,
+    ahead: isNumber,
+    behind: isNumber,
+    staged: isNumber,
+    unstaged: isNumber,
+    untracked: isNumber,
+    conflicted: isNumber,
+    files: listOf(repositoryFile.check),
+    commits: listOf(commit.check),
+    ranges: listOf(isObject),
+  },
+);
+
+export const parseRepositoryFilePage = shape<RepositoryPage<RepositoryFile>>(
+  'repository files',
+  { items: listOf(repositoryFile.check) },
+  { next_cursor: isNumber },
+);
+
+export const parseRepositoryCommitPage = shape<RepositoryPage<CodeReviewCommit>>(
+  'repository commits',
+  { items: listOf(commit.check) },
+  { next_cursor: isNumber },
+);
+
+export const parseCodeReview = shape<CodeReview>(
+  'code review',
+  { commits: listOf(commit.check), ranges: listOf(isObject) },
+  { difftool: isString, truncated: isBoolean, summary: isObject, files: listOf(isObject) },
+);
+
+export const parsePermissionRequest = shape<PermissionRequest>(
+  'permission request',
+  { id: isNumber, connection: isString, tool: isString, action: isString },
+  { project: isString, agent: isString, always_allow_supported: isBoolean },
+);
+
+export const parsePermissionDecision = shape<{ connection: string; decision: 'allow' | 'deny'; persisted: boolean }>(
+  'permission decision',
+  { connection: isString, decision: (field) => field === 'allow' || field === 'deny' },
+  { persisted: isBoolean },
+);
+
+export const parseToolConnection = shape<ToolConnection>(
+  'tool connection',
+  { id: isString, tool: isString, project: isString, role: isString, busy: isBoolean },
+  { source: isString, actions: isStringArray, session_id: isString, last_error: isString },
+);
+
+export const parseAiToolDescriptor = shape<AiToolDescriptor>(
+  'AI tool',
+  { id: isString, display_name: isString, models: listOf(isObject) },
+  { default_model: isString, default_effort: isString, actions: isStringArray },
+);
+
+export const parseAiToolDefaults = shape<AiToolDefaults>(
+  'AI settings',
+  { tool: isString },
+  { model: isString, effort: isString, providers: valuesOf(isObject) },
+);
+
+export const parseToolSession = shape<ToolSession>('tool session', {
+  connection_id: isString,
+  tool: isString,
+  project: isString,
+  session_id: isString,
+});
+
+const terminalOptional: Record<string, Check> = {
+  kind: isString,
+  tool: isString,
+  cwd: isString,
+  name: isString,
+  progress: isNumber,
+  halt: isObject,
+  question: isObject,
+  ai_connection: isObject,
+  last_hook_report: isObject,
+};
+
+export const parseTerminalInfo = shape<TerminalInfo>(
+  'terminal',
+  { id: isString, alive: isBoolean, busy: isBoolean },
+  terminalOptional,
+);
+
+export const parseTerminalRead = shape<TerminalRead>(
+  'terminal',
+  { id: isString, alive: isBoolean, busy: isBoolean, scrollback: isString },
+  terminalOptional,
+);
+
+export const parseTerminalName = shape<TerminalName>('terminal name', { id: isString }, { name: isString });
+
+export const parseTerminalSettings = shape<TerminalSettings>('terminal settings', {
+  inherit_global_shell_history: isBoolean,
+});
+
+export const parseTrashSettings = shape<TrashSettings>('trash settings', { trash_cleanup_days: isNumber });
+
+export const parseCommandDefinition = shape<CommandDefinition>(
+  'command',
+  { id: isString, title: isString },
+  { kind: isString, program: isString, args: isStringArray, group: isString, command: isString, prompt: isString },
+);
+
+export const parseCustomView = shape<CustomView>('view', { id: isString, name: isString, query: isString });
+
+export const parseCommandRun = shape<CommandRun>(
+  'command run',
+  { id: isString, command_id: isString, state: isString, output: listOf(isObject) },
+  { exit_code: isNumber },
+);
+
+export const parsePollResponse = shape<PollResponse>('change poll', {
+  cursor: isNumber,
+  events: listOf((event) => isRecord(event) && isString(event.kind)),
+  overflow: isBoolean,
+});

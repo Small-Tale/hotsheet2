@@ -5,10 +5,49 @@ import { beginServerRequest, describeServerRequest, endServerRequest } from './s
 import {
   ignoreBody,
   parseAccountIdentity,
+  parseAiToolDefaults,
+  parseAiToolDescriptor,
+  parseCalibrationReport,
   parseCheckout,
+  parseCheckoutRelink,
+  parseCheckoutTicketPage,
+  parseCheckoutTicketRowsPage,
+  parseCodeReview,
+  parseCommandDefinition,
+  parseCommandRun,
+  parseCorruptTicket,
+  parseCustomView,
+  parseDuplicateBacklinks,
+  parseFilePath,
+  parseFullTicket,
+  parseGitHubAuthStart,
+  parseGitHubAuthStatus,
+  parseGitHubRepositoryAccess,
+  parsePermissionDecision,
+  parsePermissionRequest,
+  parsePollResponse,
+  parseProviderAccount,
+  parseProviderConnection,
+  parseProviderDescriptor,
+  parseProviderOutboxOperation,
+  parseQueuedProviderResult,
+  parseRepositoryCommitPage,
+  parseRepositoryFilePage,
+  parseRepositoryStatus,
   parseServerCompatibility,
+  parseSourceDetach,
+  parseStoredTicket,
   parseStringList,
+  parseTerminalInfo,
+  parseTerminalName,
+  parseTerminalRead,
+  parseTerminalSettings,
+  parseTicket,
+  parseTicketRow,
+  parseToolConnection,
+  parseToolSession,
   parseTrashPurge,
+  parseTrashSettings,
   type ResponseParser,
 } from './server-response-parsers';
 import type { TicketCloseReason } from './ticket-close';
@@ -814,20 +853,17 @@ export class Api {
   // Idle long-poll streams (e.g. pollEvents) pass false: they sit pending by design and must not
   // read as the server being busy (HS2-MW1V3M).
   /**
-   * Legacy unchecked request: casts the 2xx body to `T`. Endpoints move to {@link parsed} one
-   * family at a time (HS2-34P6XY); new endpoints must use `parsed`.
+   * Request an endpoint and validate its 2xx body with the endpoint's response parser
+   * (HS2-34P6XY, HS2-E0AG5E). Every endpoint goes through a parser; there is no unchecked cast.
    */
-  private async request<T>(
+  private async parsed<T>(
+    parse: ResponseParser<T>,
     path: string,
     requested: RequestInit = {},
     trackRequest = true,
     onResponse?: (response: Response) => void,
   ): Promise<T> {
-    return (await this.requestBody(path, requested, trackRequest, onResponse)) as T;
-  }
-  /** Request an endpoint and validate its 2xx body with the endpoint's response parser. */
-  private async parsed<T>(parse: ResponseParser<T>, path: string, requested: RequestInit = {}): Promise<T> {
-    return parse(await this.requestBody(path, requested));
+    return parse(await this.requestBody(path, requested, trackRequest, onResponse));
   }
   private async requestBody(
     path: string,
@@ -853,31 +889,33 @@ export class Api {
     }
   }
   compatibility = () => this.parsed(parseServerCompatibility, '/compatibility');
-  providers = () => this.request<ProviderDescriptor[]>('/providers');
+  providers = () => this.parsed(parseProviderDescriptor.list, '/providers');
   /** This project's own ticket-source connections; the bridge scopes the path to the checkout (HS2-SM9PM8). */
-  connections = () => this.request<ProviderConnection[]>('/provider-connections');
-  tickets = (id: string) => this.request<Ticket[]>(`/providers/${encodeURIComponent(id)}/tickets`);
+  connections = () => this.parsed(parseProviderConnection.list, '/provider-connections');
+  tickets = (id: string) => this.parsed(parseTicket.list, `/providers/${encodeURIComponent(id)}/tickets`);
   queueProviderUpdates = (
     connection: string,
     operations: Array<{ operation_id: string; native_id: string; patch: Record<string, unknown> }>,
   ) =>
-    this.request<QueuedProviderResult[]>(`/providers/${encodeURIComponent(connection)}/tickets/queued`, {
+    this.parsed(parseQueuedProviderResult.list, `/providers/${encodeURIComponent(connection)}/tickets/queued`, {
       method: 'POST',
       body: JSON.stringify({
         operations: operations.map((item) => ({ ...item, patch: prioritiesToWire(item.patch) })),
       }),
     });
   providerOutbox = (connection: string) =>
-    this.request<ProviderOutboxOperation[]>(`/providers/${encodeURIComponent(connection)}/outbox`);
+    this.parsed(parseProviderOutboxOperation.list, `/providers/${encodeURIComponent(connection)}/outbox`);
   retryProviderOutbox = (connection: string, operation: string) =>
-    this.request<ProviderOutboxOperation>(
+    this.parsed(
+      parseProviderOutboxOperation,
       `/providers/${encodeURIComponent(connection)}/outbox/${encodeURIComponent(operation)}`,
       {
         method: 'POST',
       },
     );
   discardProviderOutbox = (connection: string, operation: string) =>
-    this.request<ProviderOutboxOperation>(
+    this.parsed(
+      parseProviderOutboxOperation,
       `/providers/${encodeURIComponent(connection)}/outbox/${encodeURIComponent(operation)}`,
       {
         method: 'DELETE',
@@ -885,12 +923,12 @@ export class Api {
     );
   /** Create a ticket source owned by this project: the record and its checkout link in one request. */
   createConnection = (value: ProviderConnection, makeDefault = false) =>
-    this.request<ProviderConnection>('/provider-connections', {
+    this.parsed(parseProviderConnection, '/provider-connections', {
       method: 'POST',
       body: JSON.stringify({ ...value, make_default: makeDefault }),
     });
   /** Machine-wide sign-ins with the sources and projects using each (HS2-SM9PM8). */
-  accounts = () => this.request<ProviderAccount[]>('/accounts');
+  accounts = () => this.parsed(parseProviderAccount.list, '/accounts');
   identifyAccount = (id: string) =>
     this.parsed(parseAccountIdentity, `/accounts/${encodeURIComponent(id)}/identity`, { method: 'POST' });
   signOutAccount = (id: string) => this.parsed(ignoreBody, `/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -900,23 +938,23 @@ export class Api {
       method: 'DELETE',
     });
   accountGithubRepositories = (id: string) =>
-    this.request<GitHubRepositoryAccess>(`/accounts/${encodeURIComponent(id)}/github-repositories`);
+    this.parsed(parseGitHubRepositoryAccess, `/accounts/${encodeURIComponent(id)}/github-repositories`);
   updateConnection = (id: string, value: ProviderConnection) =>
-    this.request<ProviderConnection>(`/provider-connections/${encodeURIComponent(id)}`, {
+    this.parsed(parseProviderConnection, `/provider-connections/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(value),
     });
   setConnectionDisabled = (id: string, disabled: boolean) =>
-    this.request<ProviderConnection>(`/provider-connections/${encodeURIComponent(id)}/disabled`, {
+    this.parsed(parseProviderConnection, `/provider-connections/${encodeURIComponent(id)}/disabled`, {
       method: 'PUT',
       body: JSON.stringify({ disabled }),
     });
   startGitHubAuth = (web_base = 'https://github.com') =>
-    this.request<GitHubAuthStart>('/github-auth/device', { method: 'POST', body: JSON.stringify({ web_base }) });
+    this.parsed(parseGitHubAuthStart, '/github-auth/device', { method: 'POST', body: JSON.stringify({ web_base }) });
   waitGitHubAuth = (session: string) =>
-    this.request<GitHubAuthStatus>(`/github-auth/device/${encodeURIComponent(session)}`);
+    this.parsed(parseGitHubAuthStatus, `/github-auth/device/${encodeURIComponent(session)}`);
   githubAuthRepositories = (session: string) =>
-    this.request<GitHubRepositoryAccess>(`/github-auth/device/${encodeURIComponent(session)}/repositories`);
+    this.parsed(parseGitHubRepositoryAccess, `/github-auth/device/${encodeURIComponent(session)}/repositories`);
   cancelGitHubAuth = (session: string) =>
     this.parsed(ignoreBody, `/github-auth/device/${encodeURIComponent(session)}`, { method: 'DELETE' });
   addCheckoutSource = (checkout: string, connection: ProviderConnection, makeDefault = false) =>
@@ -933,7 +971,8 @@ export class Api {
    * its account stays signed in (HS2-SM9PM8).
    */
   removeCheckoutSource = (checkout: string, connectionId: string) =>
-    this.request<SourceDetach>(
+    this.parsed(
+      parseSourceDetach,
       `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}`,
       { method: 'DELETE' },
     );
@@ -943,17 +982,19 @@ export class Api {
       body: JSON.stringify({ connection_id: connectionId }),
     });
   setCheckoutSourceColor = (checkout: string, connectionId: string, color: string) =>
-    this.request<Checkout>(
+    this.parsed(
+      parseCheckout,
       `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/color`,
       { method: 'PATCH', body: JSON.stringify({ color }) },
     );
   relinkCheckoutGitSource = (checkout: string, connectionId: string, path: string, reviewUnverifiedRecovery = false) =>
-    this.request<{ checkouts: Checkout[]; connection_id: string }>(
+    this.parsed(
+      parseCheckoutRelink,
       `/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connectionId)}/relink`,
       { method: 'PATCH', body: JSON.stringify({ path, review_unverified_recovery: reviewUnverifiedRecovery }) },
     );
   transfer = (kind: 'copy' | 'move', source: Ticket, destination_connection: string) =>
-    this.request(`/provider-transfers/${kind}`, {
+    this.parsed(ignoreBody, `/provider-transfers/${kind}`, {
       method: 'POST',
       body: JSON.stringify({
         source: { connection_id: source.connection_id, native_id: source.native_id },
@@ -966,7 +1007,7 @@ export class Api {
     source: { connection_id: string; native_id: string; attachment_id: string },
     destination: { connection_id: string; native_id: string },
   ) =>
-    this.request<FullTicket>('/provider-attachments/copy', {
+    this.parsed(parseFullTicket, '/provider-attachments/copy', {
       method: 'POST',
       body: JSON.stringify({ source, destination }),
     });
@@ -975,7 +1016,8 @@ export class Api {
     if (note.trim()) body.append('note', note.trim());
     if (expectedToken) body.append('expected_token', expectedToken);
     for (const file of files) body.append('evidence', file, file.name);
-    return this.request<FullTicket>(
+    return this.parsed(
+      parseFullTicket,
       `/providers/${encodeURIComponent(connection)}/tickets/${encodeURIComponent(id)}/not-working`,
       { method: 'POST', body },
     );
@@ -991,7 +1033,8 @@ export class Api {
     const suffix = params.size ? `?${params}` : '';
     let partial = false,
       truncated = false;
-    const items = await this.request<TicketRow[]>(
+    const items = await this.parsed(
+      parseTicketRow.list,
       `/checkouts/${encodeURIComponent(checkout)}/tickets${suffix}`,
       {},
       true,
@@ -1003,12 +1046,14 @@ export class Api {
     return { items, partial, truncated };
   };
   checkoutTicketPage = (checkout: string, pageSize = 200, cursor?: string, query: CheckoutTicketQuery = {}) =>
-    this.request<CheckoutTicketPage>(
+    this.parsed(
+      parseCheckoutTicketPage,
       `/checkouts/${encodeURIComponent(checkout)}/tickets?${checkoutPageParams(pageSize, cursor, query, true)}`,
     );
   /** One checkout page without counts (`counts=false`, HS2-VPEAM4), for callers that already hold them. */
   checkoutTicketRowsPage = (checkout: string, pageSize: number, cursor?: string, query: CheckoutTicketQuery = {}) =>
-    this.request<CheckoutTicketRowsPage>(
+    this.parsed(
+      parseCheckoutTicketRowsPage,
       `/checkouts/${encodeURIComponent(checkout)}/tickets?${checkoutPageParams(pageSize, cursor, query, false)}`,
     );
   /**
@@ -1036,20 +1081,21 @@ export class Api {
   };
   /** Completion-confidence calibration across the checkout's git stores (HS2-Q1WCCY). */
   checkoutConfidenceReport = (checkout: string) =>
-    this.request<CalibrationReport>(`/checkouts/${encodeURIComponent(checkout)}/confidence-report`);
+    this.parsed(parseCalibrationReport, `/checkouts/${encodeURIComponent(checkout)}/confidence-report`);
   checkoutCorruptTickets = (checkout: string) =>
-    this.request<CorruptTicket[]>(`/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets`);
+    this.parsed(parseCorruptTicket.list, `/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets`);
   createCorruptTicketRepair = (checkout: string, path: string) =>
-    this.request<FullTicket>(`/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets/repair`, {
+    this.parsed(parseFullTicket, `/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets/repair`, {
       method: 'POST',
       body: JSON.stringify({ path }),
     });
   checkoutTicket = (checkout: string, id: string) =>
-    this.request<FullTicket & { store: string }>(
-      `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`,
-    ).then((ticket) => ({ store: ticket.store, ticket }));
+    this.parsed(parseStoredTicket, `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`).then(
+      (ticket) => ({ store: ticket.store, ticket }),
+    );
   checkoutTicketDuplicateBacklinks = (checkout: string, id: string) =>
-    this.request<DuplicateBacklinkResponse>(
+    this.parsed(
+      parseDuplicateBacklinks,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/duplicate-backlinks`,
     );
   createCheckoutTicket = (
@@ -1066,7 +1112,8 @@ export class Api {
     /** Target ticket source (connection id); omitted to use the checkout's default source. */
     source?: string,
   ) =>
-    this.request<FullTicket>(
+    this.parsed(
+      parseFullTicket,
       `/checkouts/${encodeURIComponent(checkout)}/tickets${source ? `?source=${encodeURIComponent(source)}` : ''}`,
       {
         method: 'POST',
@@ -1074,23 +1121,25 @@ export class Api {
       },
     );
   updateCheckoutTicket = (checkout: string, id: string, value: Record<string, unknown>) =>
-    this.request<FullTicket & { store: string }>(
-      `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`,
-      { method: 'PATCH', body: JSON.stringify(prioritiesToWire(value)) },
-    ).then((ticket) => ({ store: ticket.store, ticket }));
+    this.parsed(parseStoredTicket, `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(prioritiesToWire(value)),
+    }).then((ticket) => ({ store: ticket.store, ticket }));
   closeCheckoutTicket = (
     checkout: string,
     id: string,
     reason: TicketCloseReason,
     duplicateOf?: string | { project_id: string; connection_id: string; native_id: string },
   ) =>
-    this.request<FullTicket & { store: string }>(
+    this.parsed(
+      parseStoredTicket,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/close`,
       { method: 'POST', body: JSON.stringify({ reason, ...(duplicateOf ? { duplicate_of: duplicateOf } : {}) }) },
     ).then((ticket) => ({ store: ticket.store, ticket }));
   /** Return a Trash ticket to the status it held before deletion (git provider only). */
   restoreCheckoutTicket = (checkout: string, id: string) =>
-    this.request<FullTicket & { store: string }>(
+    this.parsed(
+      parseStoredTicket,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/restore`,
       { method: 'POST' },
     ).then((ticket) => ({ store: ticket.store, ticket }));
@@ -1100,12 +1149,13 @@ export class Api {
       method: 'POST',
     });
   batchUpdateCheckoutTickets = (checkout: string, updates: Array<{ id: string; patch: Record<string, unknown> }>) =>
-    this.request<Array<FullTicket & { store: string }>>(`/checkouts/${encodeURIComponent(checkout)}/batch`, {
+    this.parsed(parseStoredTicket.list, `/checkouts/${encodeURIComponent(checkout)}/batch`, {
       method: 'POST',
       body: JSON.stringify({ updates: updates.map(({ id, patch }) => ({ id, ...prioritiesToWire(patch) })) }),
     });
   deleteCheckoutNote = (checkout: string, id: string, noteId: string) =>
-    this.request<FullTicket & { store: string }>(
+    this.parsed(
+      parseStoredTicket,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,
       { method: 'DELETE' },
     ).then((ticket) => ({ store: ticket.store, ticket }));
@@ -1123,7 +1173,8 @@ export class Api {
     if (metadata.actor?.display_name)
       headers['X-Hotsheet-Actor-Name'] = encodeURIComponent(metadata.actor.display_name);
     if (metadata.purpose) headers['X-Hotsheet-Attachment-Purpose'] = metadata.purpose;
-    return this.request<FullTicket & { store: string }>(
+    return this.parsed(
+      parseStoredTicket,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments`,
       { method: 'POST', headers, body: file },
     ).then((ticket) => ({ store: ticket.store, ticket }));
@@ -1134,15 +1185,16 @@ export class Api {
     attachment_ids: string[],
     metadata: AttachmentMetadata,
   ) =>
-    this.request<FullTicket & { store: string }>(
+    this.parsed(
+      parseStoredTicket,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments`,
       { method: 'PATCH', body: JSON.stringify({ attachment_ids, ...metadata }) },
     ).then((ticket) => ({ store: ticket.store, ticket }));
   renameCheckoutAttachment = (checkout: string, id: string, attachmentId: string, filename: string) =>
-    this.request<FullTicket & { store: string }>(
-      this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length),
-      { method: 'PATCH', body: JSON.stringify({ filename }) },
-    ).then((ticket) => ({ store: ticket.store, ticket }));
+    this.parsed(parseStoredTicket, this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length), {
+      method: 'PATCH',
+      body: JSON.stringify({ filename }),
+    }).then((ticket) => ({ store: ticket.store, ticket }));
   checkoutAttachmentUrl = (checkout: string, id: string, attachmentId: string) =>
     `${this.origin}/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`;
   checkoutAttachmentThumbnailUrl = (checkout: string, id: string, attachmentId: string) =>
@@ -1150,7 +1202,8 @@ export class Api {
   checkoutAttachmentByNameUrl = (checkout: string, id: string, filename: string) =>
     `${this.origin}/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/by-name/${encodeURIComponent(filename)}`;
   checkoutAttachmentAction = (checkout: string, id: string, attachmentId: string, action: 'open' | 'reveal' | 'path') =>
-    this.request<{ path: string }>(
+    this.parsed(
+      parseFilePath,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}/action`,
       { method: 'POST', body: JSON.stringify({ action }) },
     );
@@ -1160,25 +1213,25 @@ export class Api {
     filename: string,
     action: 'open' | 'reveal' | 'path',
   ) =>
-    this.request<{ path: string }>(
+    this.parsed(
+      parseFilePath,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/by-name/${encodeURIComponent(filename)}/action`,
       { method: 'POST', body: JSON.stringify({ action }) },
     );
   deleteCheckoutAttachment = (checkout: string, id: string, attachmentId: string) =>
-    this.request<FullTicket & { store: string }>(
-      this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length),
-      { method: 'DELETE' },
-    ).then((ticket) => ({ store: ticket.store, ticket }));
+    this.parsed(parseStoredTicket, this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length), {
+      method: 'DELETE',
+    }).then((ticket) => ({ store: ticket.store, ticket }));
   updateCheckoutAttachmentAnnotations = (
     checkout: string,
     id: string,
     attachmentId: string,
     annotations: MediaAnnotation[],
   ) =>
-    this.request<FullTicket & { store: string }>(
-      this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length),
-      { method: 'PUT', body: JSON.stringify({ annotations }) },
-    ).then((ticket) => ({ store: ticket.store, ticket }));
+    this.parsed(parseStoredTicket, this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length), {
+      method: 'PUT',
+      body: JSON.stringify({ annotations }),
+    }).then((ticket) => ({ store: ticket.store, ticket }));
   updateCheckoutAttachmentMarkup = (
     checkout: string,
     id: string,
@@ -1187,18 +1240,21 @@ export class Api {
     crop: Attachment['crop'],
     expectedRevision?: string,
   ) =>
-    this.request<FullTicket & { store: string }>(
+    this.parsed(
+      parseStoredTicket,
       `${this.checkoutAttachmentUrl(checkout, id, attachmentId).slice(this.origin.length)}/markup`,
       { method: 'PUT', body: JSON.stringify({ annotations, crop: crop ?? null, expected_revision: expectedRevision }) },
     ).then((ticket) => ({ store: ticket.store, ticket }));
   checkoutAttachmentOriginalUrl = (checkout: string, id: string, attachmentId: string) =>
     `${this.checkoutAttachmentUrl(checkout, id, attachmentId)}/original`;
   repositoryStatus = (checkout: string) =>
-    this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/status`);
+    this.parsed(parseRepositoryStatus, `/checkouts/${encodeURIComponent(checkout)}/repository/status`);
   initializeRepository = (checkout: string) =>
-    this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/init`, { method: 'POST' });
+    this.parsed(parseRepositoryStatus, `/checkouts/${encodeURIComponent(checkout)}/repository/init`, {
+      method: 'POST',
+    });
   configureRepositoryRemote = (checkout: string, remote: string) =>
-    this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/remote`, {
+    this.parsed(parseRepositoryStatus, `/checkouts/${encodeURIComponent(checkout)}/repository/remote`, {
       method: 'POST',
       body: JSON.stringify({ remote }),
     });
@@ -1208,39 +1264,46 @@ export class Api {
     cursor = 0,
     limit = 50,
   ) =>
-    this.request<RepositoryPage<RepositoryFile>>(
+    this.parsed(
+      parseRepositoryFilePage,
       `/checkouts/${encodeURIComponent(checkout)}/repository/files?view=${view}&cursor=${cursor}&limit=${limit}`,
     );
   repositoryCommits = (checkout: string, cursor = 0, limit = 50) =>
-    this.request<RepositoryPage<CodeReviewCommit>>(
+    this.parsed(
+      parseRepositoryCommitPage,
       `/checkouts/${encodeURIComponent(checkout)}/repository/commits?cursor=${cursor}&limit=${limit}`,
     );
   repositoryFileAction = (checkout: string, path: string, action: 'open' | 'reveal') =>
-    this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/repository/files/action`, {
+    this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/repository/files/action`, {
       method: 'POST',
       body: JSON.stringify({ path, action }),
     });
   openRepositoryReview = (checkout: string, target: CodeReviewTarget) =>
-    this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/repository/review`, {
+    this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/repository/review`, {
       method: 'POST',
       body: JSON.stringify(target),
     });
   codeReview = (checkout: string, id: string) =>
-    this.request<CodeReview>(
+    this.parsed(
+      parseCodeReview,
       `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`,
     );
   openCodeReview = (checkout: string, id: string, target: CodeReviewTarget) =>
-    this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`, {
-      method: 'POST',
-      body: JSON.stringify(target),
-    });
-  permissions = () => this.request<PermissionRequest[]>('/permissions');
-  activeToolConnections = () => this.request<ToolConnection[]>('/connections');
-  aiTools = (refresh = false) => this.request<AiToolDescriptor[]>(`/ai-tools${refresh ? '?refresh=true' : ''}`);
-  aiSettings = () => this.request<AiToolDefaults>('/ai-settings');
+    this.parsed(
+      ignoreBody,
+      `/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`,
+      {
+        method: 'POST',
+        body: JSON.stringify(target),
+      },
+    );
+  permissions = () => this.parsed(parsePermissionRequest.list, '/permissions');
+  activeToolConnections = () => this.parsed(parseToolConnection.list, '/connections');
+  aiTools = (refresh = false) => this.parsed(parseAiToolDescriptor.list, `/ai-tools${refresh ? '?refresh=true' : ''}`);
+  aiSettings = () => this.parsed(parseAiToolDefaults, '/ai-settings');
   saveAiSettings = (value: AiToolDefaults) =>
-    this.request<AiToolDefaults>('/ai-settings', { method: 'PUT', body: JSON.stringify(value) });
-  toolSessions = () => this.request<ToolSession[]>('/drive/sessions');
+    this.parsed(parseAiToolDefaults, '/ai-settings', { method: 'PUT', body: JSON.stringify(value) });
+  toolSessions = () => this.parsed(parseToolSession.list, '/drive/sessions');
   createToolConnection = (value: {
     tool: string;
     checkout: string;
@@ -1249,32 +1312,32 @@ export class Api {
     session_id?: string;
     model?: string;
     effort?: string;
-  }) => this.request<ToolConnection>('/drive/connections', { method: 'POST', body: JSON.stringify(value) });
+  }) => this.parsed(parseToolConnection, '/drive/connections', { method: 'POST', body: JSON.stringify(value) });
   sendToolTurn = (id: string, content: string, session_id?: string, selection?: { model?: string; effort?: string }) =>
-    this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/turns`, {
+    this.parsed(parseToolConnection, `/drive/connections/${encodeURIComponent(id)}/turns`, {
       method: 'POST',
       body: JSON.stringify({ content, ...(session_id ? { session_id } : {}), ...selection }),
     });
   interruptToolTurn = (id: string) =>
-    this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/interrupt`, { method: 'POST' });
+    this.parsed(parseToolConnection, `/drive/connections/${encodeURIComponent(id)}/interrupt`, { method: 'POST' });
   deleteToolConnection = (checkout: string, id: string) =>
-    this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/drive/connections/${encodeURIComponent(id)}`, {
+    this.parsed(ignoreBody, `/checkouts/${encodeURIComponent(checkout)}/drive/connections/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
-  terminals = () => this.request<TerminalInfo[]>('/terminals');
-  terminalSettings = () => this.request<TerminalSettings>('/terminal-settings');
+  terminals = () => this.parsed(parseTerminalInfo.list, '/terminals');
+  terminalSettings = () => this.parsed(parseTerminalSettings, '/terminal-settings');
   saveTerminalSettings = (value: TerminalSettings) =>
-    this.request<TerminalSettings>('/terminal-settings', { method: 'PUT', body: JSON.stringify(value) });
+    this.parsed(parseTerminalSettings, '/terminal-settings', { method: 'PUT', body: JSON.stringify(value) });
   trashSettings = (checkoutId: string) =>
-    this.request<TrashSettings>(`/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`);
+    this.parsed(parseTrashSettings, `/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`);
   saveTrashSettings = (checkoutId: string, value: TrashSettings) =>
-    this.request<TrashSettings>(`/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`, {
+    this.parsed(parseTrashSettings, `/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`, {
       method: 'PUT',
       body: JSON.stringify(value),
     });
-  terminal = (id: string) => this.request<TerminalRead>(`/terminals/${encodeURIComponent(id)}`);
+  terminal = (id: string) => this.parsed(parseTerminalRead, `/terminals/${encodeURIComponent(id)}`);
   answerTerminalQuestion = (id: string, question: TerminalQuestion, answers?: Record<string, string>) =>
-    this.request<void>(`/terminals/${encodeURIComponent(id)}/question/answer`, {
+    this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/question/answer`, {
       method: 'POST',
       body: JSON.stringify({
         tool_use_id: question.tool_use_id,
@@ -1293,20 +1356,23 @@ export class Api {
       model?: string;
       effort?: string;
     } = {},
-  ) => this.request<TerminalInfo>('/terminals', { method: 'POST', body: JSON.stringify(value) });
-  deleteTerminal = (id: string) => this.request<void>(`/terminals/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  ) => this.parsed(parseTerminalInfo, '/terminals', { method: 'POST', body: JSON.stringify(value) });
+  deleteTerminal = (id: string) =>
+    this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}`, { method: 'DELETE' });
   /** Clear only the stopped episode the user saw; a newer failure remains visible. */
   clearTerminalHalt = (id: string, at: string) =>
-    this.request<void>(`/terminals/${encodeURIComponent(id)}/halt?at=${encodeURIComponent(at)}`, { method: 'DELETE' });
+    this.parsed(ignoreBody, `/terminals/${encodeURIComponent(id)}/halt?at=${encodeURIComponent(at)}`, {
+      method: 'DELETE',
+    });
   /** Save (or, with `null`, clear) a terminal's shared tab name (HS2-89FPV1). */
   renameTerminal = (id: string, name: string | null) =>
-    this.request<TerminalName>(`/terminals/${encodeURIComponent(id)}/name`, {
+    this.parsed(parseTerminalName, `/terminals/${encodeURIComponent(id)}/name`, {
       method: 'PUT',
       body: JSON.stringify({ name }),
     });
-  commands = () => this.request<CommandDefinition[]>('/commands');
+  commands = () => this.parsed(parseCommandDefinition.list, '/commands');
   saveCommands = (definitions: CommandDefinition[], options: { keepalive?: boolean } = {}) =>
-    this.request<CommandDefinition[]>('/commands', {
+    this.parsed(parseCommandDefinition.list, '/commands', {
       method: 'PUT',
       body: JSON.stringify(definitions),
       ...(options.keepalive ? { keepalive: true } : {}),
@@ -1315,15 +1381,16 @@ export class Api {
   commandGroups = () => this.parsed(parseStringList, '/command-groups');
   saveCommandGroups = (groups: string[]) =>
     this.parsed(parseStringList, '/command-groups', { method: 'PUT', body: JSON.stringify(groups) });
-  customViews = () => this.request<CustomView[]>('/views');
+  customViews = () => this.parsed(parseCustomView.list, '/views');
   saveCustomViews = (views: CustomView[]) =>
-    this.request<CustomView[]>('/views', { method: 'PUT', body: JSON.stringify(views) });
-  commandRuns = () => this.request<CommandRun[]>('/command-runs');
-  runCommand = (id: string) => this.request<CommandRun>(`/commands/${encodeURIComponent(id)}/run`, { method: 'POST' });
+    this.parsed(parseCustomView.list, '/views', { method: 'PUT', body: JSON.stringify(views) });
+  commandRuns = () => this.parsed(parseCommandRun.list, '/command-runs');
+  runCommand = (id: string) =>
+    this.parsed(parseCommandRun, `/commands/${encodeURIComponent(id)}/run`, { method: 'POST' });
   commandRun = (id: string, after = 0) =>
-    this.request<CommandRun>(`/command-runs/${encodeURIComponent(id)}?after=${after}`);
+    this.parsed(parseCommandRun, `/command-runs/${encodeURIComponent(id)}?after=${after}`);
   cancelCommandRun = (id: string) =>
-    this.request<CommandRun>(`/command-runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+    this.parsed(parseCommandRun, `/command-runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
   changeWebSocketUrl = () => {
     const url = new URL(`${this.origin}/ws/sync`, typeof location === 'undefined' ? 'http://localhost' : location.href);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1331,16 +1398,17 @@ export class Api {
     return url.toString();
   };
   pollEvents = (since?: number, signal?: AbortSignal, timeoutMs = 25_000) =>
-    this.request<PollResponse>(
+    this.parsed(
+      parsePollResponse,
       `/ws/poll?timeout_ms=${timeoutMs}${since === undefined ? '' : `&since=${since}`}&client=${encodeURIComponent(CHANGE_STREAM_CLIENT_ID)}`,
       { signal },
       false,
     );
   /** Tell the server this tab closed the project, so it can stop hosting what nothing else needs. */
   closeProjectSession = () =>
-    this.request<void>(`/close?client=${encodeURIComponent(CHANGE_STREAM_CLIENT_ID)}`, { method: 'POST' });
+    this.parsed(ignoreBody, `/close?client=${encodeURIComponent(CHANGE_STREAM_CLIENT_ID)}`, { method: 'POST' });
   resolvePermission = (id: number, decision: 'allow' | 'deny', scope: 'once' | 'always') =>
-    this.request<{ connection: string; decision: 'allow' | 'deny'; persisted: boolean }>(`/permissions/${id}`, {
+    this.parsed(parsePermissionDecision, `/permissions/${id}`, {
       method: 'POST',
       body: JSON.stringify({ decision, scope }),
     });
