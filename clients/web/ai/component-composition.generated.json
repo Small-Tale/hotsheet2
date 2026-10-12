@@ -6572,13 +6572,9 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": [
-          "trash-settings"
-        ],
+        "publicClasses": [],
         "publicTokens": [],
-        "placeableClasses": [
-          "trash-settings"
-        ]
+        "placeableClasses": []
       },
       "diagnostics": [],
       "provenance": {

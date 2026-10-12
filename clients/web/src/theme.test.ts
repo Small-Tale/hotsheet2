@@ -54,7 +54,6 @@ const kerfSpacingMigratedComponents = [
   'ticket-timeline.css',
   'ticket-row.css',
   'ticket-tag-editor.css',
-  'trash-settings.css',
   'view-navigation.css',
 ].map((file) => resolve(sourceRoot, 'components', file));
 
