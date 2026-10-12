@@ -1,5 +1,7 @@
 import './project-summary.css';
 
+import { Text } from '@kerfjs/ui/text';
+
 import { NAVIGATION_AND_TABS_ACTIONS } from '../interaction-attrs/navigation-and-tabs';
 
 export interface ProjectSummaryProps {
@@ -91,8 +93,12 @@ export function ProjectSummary({
           })}
         </span>
         <span class="project-summary__counts">
-          <strong>{completedToday} completed today</strong>
-          <span>{inProgress} in progress</span>
+          <Text variant="span" size="compact" lineHeight="tight">
+            <strong>{completedToday} completed today</strong>
+          </Text>
+          <Text variant="span" size="compact" lineHeight="tight" tone="quiet">
+            {inProgress} in progress
+          </Text>
         </span>
       </span>
     </button>

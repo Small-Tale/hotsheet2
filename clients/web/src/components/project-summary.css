@@ -1,7 +1,10 @@
+/* The summary is a domain data-visualization tile (Kerf has no chart component): an app-owned native
+   button whose chart height drives its minimum height. */
 .project-summary {
+  --_project-summary-chart-height: remify(51.2px);
   display: block;
   width: 100%;
-  min-height: calc(remify(51.2px) + remify(20px));
+  min-height: calc(var(--_project-summary-chart-height) + remify(20px));
   padding: var(--kui-space-xs);
   border: 0;
   border-radius: var(--wa-border-radius-m);
@@ -11,9 +14,21 @@
   font: inherit;
   text-align: left;
 }
+/* The compact size is the terminal operations sidebar's shorter per-project summary (HS2-4APEJP). */
 .project-summary[data-size='compact'] {
+  --_project-summary-chart-height: remify(44px);
   min-height: remify(68px);
 }
+/* Hover feedback for the tile's native button. */
+.project-summary:hover {
+  background: var(--wa-color-neutral-fill-quiet);
+}
+/* An inset focus ring, so the ring stays inside the sidebar's inline inset. */
+.project-summary:focus-visible {
+  outline: 2px solid var(--wa-color-focus);
+  outline-offset: -2px;
+}
+/* The chart fills the free width and the counts hug the trailing edge, sharing a bottom baseline. */
 .project-summary__content {
   display: grid;
   width: 100%;
@@ -21,23 +36,15 @@
   align-items: end;
   gap: var(--kui-space-s);
 }
-.project-summary:hover {
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.project-summary:focus-visible {
-  outline: 2px solid var(--wa-color-focus);
-  outline-offset: -2px;
-}
+/* Bottom-aligned bar row at the size's chart height. */
 .project-summary__chart {
   display: flex;
   min-width: 0;
-  height: remify(51.2px);
+  height: var(--_project-summary-chart-height);
   align-items: end;
   gap: remify(4.8px);
 }
-.project-summary[data-size='compact'] .project-summary__chart {
-  height: remify(44px);
-}
+/* One day's slot: bars shrink with the sidebar but never past a visible minimum. */
 .project-summary__bar-slot {
   position: relative;
   width: remify(14.4px);
@@ -56,20 +63,25 @@
   min-height: remify(2px);
   border-radius: remify(2.88px) remify(2.88px) 0 0;
 }
+/* The aggregate (all-projects) series sits behind the project's bar. */
 .project-summary__bar-background {
   inset-inline: 0;
   background: var(--wa-color-neutral-fill-normal);
 }
+/* The project's own bar, inset inside the aggregate bar when one is drawn. */
 .project-summary__bar-foreground {
   inset-inline: remify(1.28px);
   background: var(--wa-color-brand-fill-loud);
 }
+/* Without an aggregate series the project's bar takes the whole slot. */
 .project-summary:not([data-chart-background='true']) .project-summary__bar-foreground {
   inset-inline: 0;
 }
+/* The aggregate summary's success tone. */
 .project-summary[data-chart-tone='success'] .project-summary__bar-foreground:not([data-zero='true']) {
   background: var(--wa-color-success-fill-loud);
 }
+/* A zero day is a 1px baseline rather than an empty slot. */
 .project-summary__bar-foreground[data-zero='true'],
 .project-summary__bar-background[data-background-zero='true'] {
   height: 1px;
@@ -77,13 +89,7 @@
   border-radius: 0;
   background: var(--wa-color-neutral-border-loud);
 }
+/* The two count lines stack; Kerf Text sets their size and tone. */
 .project-summary__counts {
   display: grid;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  line-height: 1.35;
-}
-.project-summary__counts strong {
-  color: var(--wa-color-neutral-on-normal);
-  font-weight: 650;
 }

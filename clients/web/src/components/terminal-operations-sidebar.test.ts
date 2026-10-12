@@ -67,8 +67,9 @@ describe('TerminalOperationsSidebar', () => {
     );
     const summaryCss = readFileSync(new URL('./project-summary.css', import.meta.url), 'utf8');
     expect(summaryCss).toMatch(/\.project-summary\[data-size='compact'\] \{[^}]*min-height: remify\(68px\);/);
+    // The compact size sets the chart height through the summary's private property (HS2-H0THQW).
     expect(summaryCss).toMatch(
-      /\.project-summary\[data-size='compact'\] \.project-summary__chart \{[^}]*height: remify\(44px\)/,
+      /\.project-summary\[data-size='compact'\] \{[^}]*--_project-summary-chart-height: remify\(44px\);/,
     );
   });
 });
