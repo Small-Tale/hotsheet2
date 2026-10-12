@@ -1,15 +1,11 @@
-.command-run-dialog__summary {
-  display: flex;
-  margin-bottom: var(--kui-space-m);
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--kui-space-xs);
+/* Web Awesome's native-dialog styles own the shell (width, inset, surface, centering) but start-align the
+   dialog's flex children; stretch so the composed Kerf List fills the dialog width. */
+.command-run-dialog {
+  align-items: stretch;
 }
+/* Bounded, scrolling, pre-wrapped command log; no Kerf or Web Awesome primitive presents raw output. */
 .command-run-dialog__output {
   box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
   max-height: min(remify(448px), 55vh);
   margin: 0;
   padding: var(--kui-space-xs);
@@ -23,49 +19,4 @@
     Menlo,
     monospace;
   white-space: pre-wrap;
-}
-.command-run-dialog__actions {
-  display: flex;
-  width: 100%;
-  margin-top: var(--kui-space-m);
-  justify-content: flex-end;
-  gap: var(--kui-space-xs);
-}
-.command-run-dialog__actions button {
-  display: inline-flex;
-  min-height: remify(36px);
-  padding: 0 remify(12.8px);
-  border: 1px solid var(--wa-color-surface-border);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-surface-default);
-  cursor: pointer;
-  align-items: center;
-  gap: var(--kui-space-2xs);
-}
-.command-run-dialog__actions .command-run-dialog__stop {
-  border-color: var(--wa-color-danger-fill-loud);
-  color: var(--wa-color-neutral-on-loud);
-  background: var(--wa-color-danger-fill-loud);
-}
-.command-run-dialog {
-  position: fixed;
-  z-index: 1100;
-  box-sizing: border-box;
-  inset: 50% remify(16px) auto;
-  width: min(remify(512px), calc(100vw - remify(32px)));
-  max-width: calc(100vw - remify(32px));
-  margin: 0 auto;
-  padding: var(--kui-space-l);
-  overflow: hidden;
-  transform: translateY(-50%);
-  border: 1px solid var(--wa-color-surface-border);
-  border-radius: var(--wa-border-radius-l);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-xl);
-  color: var(--wa-color-text-normal);
-}
-.command-run-dialog__title {
-  margin: 0 0 var(--kui-space-m);
-  font-size: var(--wa-font-size-m);
 }

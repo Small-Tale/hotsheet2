@@ -7963,7 +7963,7 @@ test('swaps the CommandRunDialog demo between run output and stop confirmation (
     await expect(output).toHaveCount(0);
     await expect(stop.getByRole('heading', { name: 'Stop Run checks?' })).toBeVisible();
     await expect(stop.getByRole('button', { name: 'Keep running' })).toBeVisible();
-    await expect(stop.getByRole('button', { name: 'Stop command' })).toHaveAttribute('data-run-id', 'run-43');
+    await expect(stop.locator('[data-action="confirm-stop-command"]')).toHaveAttribute('data-run-id', 'run-43');
     const box = await stop.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
