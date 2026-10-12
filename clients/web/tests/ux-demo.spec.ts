@@ -7968,12 +7968,14 @@ test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKK
   await page.screenshot({ path: 'target/visual-captures/hs2-qkks05-conversation-export-dialog.png', fullPage: true });
 });
 
-test('renders the CommandRunDialog demo as an opened native modal (HS2-Z0CTHN)', async ({ page }) => {
+test('renders the CommandRunDialog demo opened in a DialogSurface (HS2-Z0CTHN)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=command-run-dialog');
   const dialog = page.locator('[data-component="command-run-dialog"]');
-  // Native <dialog> opened via showModal wiring (not an inline wa-dialog).
+  // A Web Awesome dialog composed in Kerf DialogSurface, open while mounted (HS2-Z7C27E).
+  await expect(dialog).toHaveJSProperty('tagName', 'WA-DIALOG');
   await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog.locator('xpath=ancestor::*[@data-component="dialog-surface"]')).toHaveCount(1);
   await expect(dialog).toContainText('Run checks');
   await expect(dialog).toContainText('completed');
   await expect(dialog).toContainText('Exit 0');
@@ -7997,18 +7999,18 @@ test('swaps the CommandRunDialog demo between run output and stop confirmation (
 
     // Close is wired to the demo's dismiss stand-in; the modal must close before the settings are reachable.
     await output.getByRole('button', { name: 'Close' }).click();
-    await expect(output).toHaveJSProperty('open', false);
+    await expect(output).toHaveCount(0);
     await expect(event).toHaveText('Closed Run checks output');
     await page.locator('[data-action="toggle-settings"]').first().click();
     await expect(presentation).toHaveJSProperty('value', 'output');
 
-    // Swapping the presentation re-opens the native dialog modally with the stop confirmation.
+    // Swapping the presentation mounts the open wa-dialog with the stop confirmation.
     await presentation.evaluate((control: HTMLElement & { value: string }) => {
       control.value = 'stop';
       control.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await expect(stop).toHaveJSProperty('open', true);
-    await expect(stop.evaluate((dialog) => dialog.matches(':modal'))).resolves.toBe(true);
+    await expect(stop.getByRole('dialog')).toBeVisible();
     await expect(output).toHaveCount(0);
     await expect(stop.getByRole('heading', { name: 'Stop Run checks?' })).toBeVisible();
     await expect(stop.getByRole('button', { name: 'Keep running' })).toBeVisible();
@@ -8019,14 +8021,14 @@ test('swaps the CommandRunDialog demo between run output and stop confirmation (
     await page.screenshot({ path: `target/visual-captures/claude/hs2-cwwx7s-stop-confirmation-${width}.png` });
 
     await stop.getByRole('button', { name: 'Keep running' }).click();
-    await expect(stop).toHaveJSProperty('open', false);
+    await expect(stop).toHaveCount(0);
     await expect(event).toHaveText('Kept Run checks running');
     // With settings open at phone width the stage is a sliver beside the inspector; reopen by keyboard.
     await page.locator('[data-action="open-command-run-dialog-demo"]').focus();
     await page.keyboard.press('Enter');
     await expect(stop).toHaveJSProperty('open', true);
     await stop.getByRole('button', { name: 'Stop command' }).click();
-    await expect(stop).toHaveJSProperty('open', false);
+    await expect(stop).toHaveCount(0);
     await expect(event).toHaveText('Stop requested for run-43');
     await expect(presentation).toHaveJSProperty('value', 'stop');
 
@@ -8039,7 +8041,7 @@ test('swaps the CommandRunDialog demo between run output and stop confirmation (
     // Escape would first dismiss the phone-width settings overlay, so close it before dismissing the dialog.
     await setDemoSettingsOpen(page, false);
     await page.keyboard.press('Escape');
-    await expect(output).toHaveJSProperty('open', false);
+    await expect(output).toHaveCount(0);
     await setDemoSettingsOpen(page, true);
     await presentation.evaluate((control: HTMLElement & { value: string }) => {
       control.value = 'stop';

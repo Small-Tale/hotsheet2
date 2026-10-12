@@ -1656,16 +1656,19 @@ capability-aware sections when their underlying features and data contracts land
 - A context or overflow menu owns alternate actions: “Run in new terminal” for shell
   commands and capability-aware “Create task from command” for AI commands. These do not
   replace the history gesture (HS2-NT3F3Q).
-- `CommandRunDialog` owns output and cancellation presentation. Its dialog surface uses a
-  24 px major inset, 16 px between regions, 8 px within output/action groups, and 4 px between
-  an action icon and its label (HS2-4Y6SM9). Completion and stop changes arrive through the
-  existing long poll; the client never interval-polls. Both native dialogs style only their
-  own `command-run-dialog` classes (root, `__title`, `__output`, `__actions`) and size their
-  action icons through the `LucideIcon` `size` prop, never through `[data-component]` roots or
-  descendant `svg` selectors (HS2-29Q3XG). The `/ux-demo` entry exposes both presentations
-  through a Presentation setting (Run output, Stop confirmation). Each swap reopens the native
-  `<dialog>` with `showModal`, and an Open dialog stage action reopens it after Close, Keep running,
-  or Stop command, which the demo reports as fixture events (HS2-CWWX7S).
+- `CommandRunDialog` owns output and cancellation presentation. Both presentations are an open
+  `wa-dialog` inside Kerf `DialogSurface size="small"` (comfortable body and footer insets), each
+  keyed separately so a morph never reuses one dialog's host for the other (HS2-Z7C27E). The app
+  mounts the dialog while a command dialog is selected; there is no `showModal` call. The run
+  output dialog is dismissed through Web Awesome's header close or Escape; the stop confirmation
+  carries a footer `Row` with Keep running and Stop command. A captured `wa-hide` clears the
+  command dialog state. Completion and stop changes arrive through the existing long poll; the
+  client never interval-polls. The component CSS owns only the bounded, scrolling
+  `command-run-dialog__output` log, and action icons are sized through the `LucideIcon` `size`
+  prop (HS2-29Q3XG). The `/ux-demo` entry exposes both presentations through a Presentation
+  setting (Run output, Stop confirmation). Each swap remounts the open dialog, and an Open dialog
+  stage action remounts it after Close, Escape, Keep running, or Stop command, which the demo
+  reports as fixture events (HS2-CWWX7S).
 - `CommandSettingsEditor` (Project Settings → Commands) is an HS1-style WYSIWYG editor:
   a sidebar-aligned grouped list of command rows (drag handle, colored icon, name, type)
   whose group headers come from each command's `group`, with ungrouped commands at the top.

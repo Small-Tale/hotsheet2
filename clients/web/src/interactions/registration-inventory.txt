@@ -224,7 +224,7 @@ commands-and-ai	delegate	document.body	'submit'	'[data-action="submit-ai-feedbac
 commands-and-ai	delegateCapture	document.body	'wa-hide'	'[data-component="ai-feedback-dialog"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="run-command"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="dismiss-command-dialog"]'
-commands-and-ai	delegateCapture	document.body	'close'	'[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]'
+commands-and-ai	delegateCapture	document.body	'wa-hide'	'[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="confirm-stop-command"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="edit-command-setting"]'
 commands-and-ai	delegate	document.body	'click'	'[data-action="add-command-setting"]'

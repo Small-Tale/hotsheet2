@@ -130,16 +130,16 @@ describe('extracted handlers retain live application bindings', () => {
     click(new Event('click'), button);
     expect(run).toHaveBeenCalledExactlyOnceWith('check');
     const close = handler(
-      'close',
+      'wa-hide',
       '[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]',
       true,
     );
-    close(new Event('close'), button);
+    close(new Event('wa-hide'), button);
     expect(dialog.value).toBeUndefined();
     expect(confirmation.value).toBe(false);
     dialog.value = 'reopened';
     confirmation.value = true;
-    close(new Event('close'), button);
+    close(new Event('wa-hide'), button);
     expect(dialog.value).toBeUndefined();
     expect(confirmation.value).toBe(false);
   });

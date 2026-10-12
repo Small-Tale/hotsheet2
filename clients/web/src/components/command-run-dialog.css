@@ -1,8 +1,3 @@
-/* Web Awesome's native-dialog styles own the shell (width, inset, surface, centering) but start-align the
-   dialog's flex children; stretch so the composed Kerf List fills the dialog width. */
-.command-run-dialog {
-  align-items: stretch;
-}
 /* Bounded, scrolling, pre-wrapped command log; no Kerf or Web Awesome primitive presents raw output. */
 .command-run-dialog__output {
   box-sizing: border-box;

@@ -357,15 +357,6 @@ export function createCommandsController({
     return commandRuns.value.find((run) => run.command_id === commandId);
   }
 
-  function showCommandDialog() {
-    queueMicrotask(() => {
-      const dialog = document.querySelector<HTMLDialogElement>(
-        '[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]',
-      );
-      if (dialog && !dialog.open) dialog.showModal();
-    });
-  }
-
   function commandIcon(command: CommandDefinition): string {
     return (
       command.icon ??
@@ -417,7 +408,6 @@ export function createCommandsController({
     deleteCommandGroup,
     flushCommandAutosaves,
     commandRunFor,
-    showCommandDialog,
     commandIcon,
     commandDialogSurface,
   };

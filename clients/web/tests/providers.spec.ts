@@ -12420,8 +12420,9 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await expect(page.getByRole('button', { name: 'Running Run checks' })).toBeVisible();
   await page.getByRole('button', { name: 'Running Run checks' }).click();
   const stop = page.locator('[data-component="command-cancellation-dialog"]');
-  await expect(stop).toBeVisible();
+  await expect(stop.getByRole('dialog', { name: 'Stop Run checks?' })).toBeVisible();
   await stop.getByRole('button', { name: 'Stop command' }).click();
+  await expect(stop).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Run checks' })).toHaveAttribute('title', /Last run: cancelled/);
   await page.getByRole('button', { name: 'Run checks' }).dispatchEvent('pointerdown');
   await page.waitForTimeout(600);
@@ -12430,6 +12431,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await expect(history).toContainText('Stopped by user');
   await page.screenshot({ path: 'target/visual-captures/hs2-jn3x4w-commands-wide.png', fullPage: true });
   await history.getByRole('button', { name: 'Close' }).click();
+  await expect(history).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   const hiddenNarrowCommand = page.locator('[data-action="run-command"]');
   await hiddenNarrowCommand.dispatchEvent('pointerdown');
@@ -12437,7 +12439,9 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await hiddenNarrowCommand.dispatchEvent('pointerup');
   await expect(history).toContainText('Stopped by user');
   await page.screenshot({ path: 'target/visual-captures/hs2-jn3x4w-commands-narrow.png', fullPage: true });
-  await history.getByRole('button', { name: 'Close' }).click();
+  // Escape is Web Awesome's own dismissal; wa-hide clears the command dialog state (HS2-Z7C27E).
+  await page.keyboard.press('Escape');
+  await expect(history).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 720 });
   const settingsView = page.getByLabel('Settings view');
   await settingsView.dispatchEvent('click');
@@ -26258,7 +26262,7 @@ test('preserves feature-controller command editing and run-dialog parity across 
   await page.getByRole('button', { name: 'Feature parity', exact: true }).click();
   await page.getByRole('button', { name: 'Running Feature parity' }).click();
   const stop = page.locator('[data-component="command-cancellation-dialog"]');
-  await expect(stop).toBeVisible();
+  await expect(stop.getByRole('dialog', { name: 'Stop Feature parity?' })).toBeVisible();
   await stop.getByRole('button', { name: 'Stop command' }).click();
   await expect(page.getByRole('button', { name: 'Feature parity', exact: true })).toHaveAttribute('title', /cancelled/);
   await page.getByLabel('Settings view').click();

@@ -776,7 +776,6 @@ export async function startHotSheetWebClient() {
     deleteCommandGroup,
     flushCommandAutosaves,
     commandRunFor,
-    showCommandDialog,
     commandIcon,
     commandDialogSurface,
   } = createCommandsController({ projects, selectedProjectId, storedWorkspacePreferences });
@@ -3168,7 +3167,6 @@ export async function startHotSheetWebClient() {
     if (active?.state === 'running') {
       commandDialogId.value = commandId;
       commandStopConfirmation.value = true;
-      showCommandDialog();
       return;
     }
     if (command.confirmation && !window.confirm(command.confirmation)) return;
@@ -3193,7 +3191,6 @@ export async function startHotSheetWebClient() {
       run = commandRunFor(commandId);
     commandDialogId.value = commandId;
     commandStopConfirmation.value = false;
-    showCommandDialog();
     if (!current || !run) return;
     try {
       const full = await new Api(current.apiPath).commandRun(run.id);

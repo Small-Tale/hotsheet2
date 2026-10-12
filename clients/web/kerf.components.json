@@ -3221,7 +3221,7 @@
       "id": "command-run-dialog",
       "name": "CommandRunDialog",
       "kind": "component",
-      "purpose": "Native modal dialog presenting the latest run state and output for a configured command, or the stop confirmation for a running one.",
+      "purpose": "Web Awesome dialog in Kerf DialogSurface presenting the latest run state and output for a configured command, or the stop confirmation for a running one.",
       "source": "src/components/command-run-dialog.tsx",
       "publicExports": [
         {

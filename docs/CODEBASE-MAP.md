@@ -242,7 +242,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ux-demo/             #   Kerf Catalog of real components: main.tsx (chrome + wireCatalog), components/{demo-app.tsx,demo-state.ts}, display-preferences.ts, registry.ts (id -> demoModule entries + ordered wire()), demo-module.ts (Kerf Catalog settings pane hosts each entry Settings), fixtures.ts, and one *-demo.tsx module per area (HS2-HMVBZW)
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
-      command-run-dialog-demo.tsx # CommandRunDialog fixture: run-output / stop-confirmation Presentation setting, showModal reopen, dismiss/stop fixture events (HS2-CWWX7S)
+      command-run-dialog-demo.tsx # CommandRunDialog fixture: run-output / stop-confirmation Presentation setting, open-signal remount, wa-hide/dismiss/stop fixture events (HS2-CWWX7S, HS2-Z7C27E)
       demo-actions.ts      # Kerf attr() specs (DEMO_ACTIONS/COMPONENTS/FIELDS/MARKERS) for every simple selector the catalog delegates on (HS2-G838PZ)
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in UI and binary-PTY load traces (`profile:ui`, `profile:pty`)
     tests/real-pty-profile.spec.ts  #   Opt-in isolated local-server/OS-PTY transport profile (`profile:pty:real`)

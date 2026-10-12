@@ -33,9 +33,9 @@ describe('dialog lifecycle event contracts', () => {
     );
   });
 
-  it('uses captured native close for the remaining HTML command dialogs', () => {
+  it('clears command dialog state on a captured wa-hide (HS2-Z7C27E)', () => {
     expect(source).toMatchSource(
-      /delegateCapture\(document\.body,'close','\[data-component="command-run-dialog"\], \[data-component="command-cancellation-dialog"\]'/,
+      /delegateCapture\(document\.body,'wa-hide','\[data-component="command-run-dialog"\], \[data-component="command-cancellation-dialog"\]'/,
     );
     expect(source).not.toMatch(/wa-request-close[^\n]*command-run-dialog/);
     expect(source).not.toContain("'wa-request-close'");

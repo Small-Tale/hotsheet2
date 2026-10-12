@@ -1,11 +1,11 @@
 import { Select } from '@kerfjs/ui/select';
-import { delegate, signal } from 'kerfjs';
+import { delegate, delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import type { CommandDefinition, CommandRun } from '../api';
 import { CommandRunDialog } from '../components/command-run-dialog';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
-import { onDemoSelected, selectedId } from './components/demo-state';
+import { onDemoSelected } from './components/demo-state';
 import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
@@ -13,8 +13,12 @@ import { syncSettingsControls } from './settings-controls';
 /** The two public presentations of CommandRunDialog: run output, or the `confirmStop` confirmation. */
 export type CommandRunDialogPresentation = 'output' | 'stop';
 
+const COMMAND_RUN_DIALOG_DEMO_SELECTOR =
+  '[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]';
+
 export const commandRunDialogSettings = {
   presentation: signal<CommandRunDialogPresentation>('output'),
+  open: signal(true),
   event: signal(''),
 };
 
@@ -50,41 +54,39 @@ const runningRun: CommandRun = {
 };
 
 /**
- * CommandRunDialog is a standalone native `<dialog>` that stays hidden until `showModal`, so the
- * demo opens it after every mount, selection, or presentation swap, the same way the app does
- * (HS2-Z0CTHN, HS2-CWWX7S).
+ * CommandRunDialog renders an open `wa-dialog` whenever it is mounted, the same way the app shows it
+ * while a command dialog is selected; the demo mounts it on selection, presentation swap, or Open
+ * dialog, and unmounts it on dismiss or Web Awesome's own `wa-hide` (HS2-Z7C27E).
  */
-export function showCommandRunDialogDemo(root: ParentNode): void {
-  requestAnimationFrame(() => {
-    const dialog = root.querySelector<HTMLDialogElement>('dialog.command-run-dialog');
-    if (dialog && !dialog.open) dialog.showModal();
-  });
+export function showCommandRunDialogDemo(): void {
+  commandRunDialogSettings.open.value = true;
 }
 
-function closeCommandRunDialogDemo(root: ParentNode): void {
-  root.querySelector<HTMLDialogElement>('dialog.command-run-dialog')?.close();
+function closeCommandRunDialogDemo(): void {
+  commandRunDialogSettings.open.value = false;
 }
 
-export function setCommandRunDialogPresentation(root: ParentNode, presentation: CommandRunDialogPresentation): void {
+export function setCommandRunDialogPresentation(presentation: CommandRunDialogPresentation): void {
   commandRunDialogSettings.presentation.value = presentation;
   commandRunDialogSettings.event.value = '';
-  showCommandRunDialogDemo(root);
+  showCommandRunDialogDemo();
 }
 
 export function resetCommandRunDialogDemo(root: ParentNode): void {
-  setCommandRunDialogPresentation(root, 'output');
+  setCommandRunDialogPresentation('output');
   syncSettingsControls(root, 'command-run-dialog', { values: { presentation: 'output' } });
 }
 
 /** Demo stand-ins for the app's dismiss and stop side effects: close the dialog and report the request. */
-export function dismissCommandRunDialogDemo(root: ParentNode): void {
-  closeCommandRunDialogDemo(root);
+export function dismissCommandRunDialogDemo(): void {
+  if (!commandRunDialogSettings.open.value) return;
+  closeCommandRunDialogDemo();
   commandRunDialogSettings.event.value =
     commandRunDialogSettings.presentation.value === 'stop' ? 'Kept Run checks running' : 'Closed Run checks output';
 }
 
-export function confirmStopCommandRunDemo(root: ParentNode, runId: string | undefined): void {
-  closeCommandRunDialogDemo(root);
+export function confirmStopCommandRunDemo(runId: string | undefined): void {
+  closeCommandRunDialogDemo();
   commandRunDialogSettings.event.value = `Stop requested for ${runId ?? 'the run'}`;
 }
 
@@ -92,7 +94,9 @@ export function CommandRunDialogDemo() {
   const stop = commandRunDialogSettings.presentation.value === 'stop';
   return (
     <section class="component-stage" aria-label="CommandRunDialog demo">
-      <CommandRunDialog command={command} run={stop ? runningRun : completedRun} confirmStop={stop} />
+      {commandRunDialogSettings.open.value && (
+        <CommandRunDialog command={command} run={stop ? runningRun : completedRun} confirmStop={stop} />
+      )}
       <button type="button" {...DEMO_ACTIONS.openCommandRunDialogDemo.attrs}>
         Open dialog
       </button>
@@ -127,29 +131,33 @@ function wireCommandRunDialogDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
   demoListeners.add(
     onDemoSelected((id) => {
-      if (id === 'command-run-dialog') showCommandRunDialogDemo(root);
+      if (id === 'command-run-dialog') showCommandRunDialogDemo();
     }),
   );
-  if (selectedId.value === 'command-run-dialog') showCommandRunDialogDemo(root);
   // CommandRunDialog demo: swap between its run-output and stop-confirmation presentations and stand in
   // for the app's dismiss/stop side effects (HS2-CWWX7S).
   demoListeners.add(
     delegate(root, 'change', '[data-settings="command-run-dialog"] [name="presentation"]', (_event, target) => {
-      setCommandRunDialogPresentation(root, (target as FormControl).value as CommandRunDialogPresentation);
+      setCommandRunDialogPresentation((target as FormControl).value as CommandRunDialogPresentation);
     }),
   );
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.openCommandRunDialogDemo.selector, () => {
-      showCommandRunDialogDemo(root);
+      showCommandRunDialogDemo();
+    }),
+  );
+  demoListeners.add(
+    delegateCapture(root, 'wa-hide', COMMAND_RUN_DIALOG_DEMO_SELECTOR, () => {
+      dismissCommandRunDialogDemo();
     }),
   );
   demoListeners.add(
     delegate(
       root,
       'click',
-      `dialog.command-run-dialog ${COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.selector}`,
+      `[aria-label="CommandRunDialog demo"] ${COMMANDS_AND_AI_ACTIONS.dismissCommandDialog.selector}`,
       () => {
-        dismissCommandRunDialogDemo(root);
+        dismissCommandRunDialogDemo();
       },
     ),
   );
@@ -157,9 +165,9 @@ function wireCommandRunDialogDemo(root: HTMLElement): () => void {
     delegate(
       root,
       'click',
-      `dialog.command-run-dialog ${COMMANDS_AND_AI_ACTIONS.confirmStopCommand.selector}`,
+      `[aria-label="CommandRunDialog demo"] ${COMMANDS_AND_AI_ACTIONS.confirmStopCommand.selector}`,
       (_event, target) => {
-        confirmStopCommandRunDemo(root, (target as HTMLElement).dataset.runId);
+        confirmStopCommandRunDemo((target as HTMLElement).dataset.runId);
       },
     ),
   );

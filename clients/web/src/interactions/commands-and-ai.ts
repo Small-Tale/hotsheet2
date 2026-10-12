@@ -640,7 +640,7 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
   lifetime.add(
     delegateCapture(
       document.body,
-      'close',
+      'wa-hide',
       '[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]',
       () => {
         commandDialogId.value = undefined;
