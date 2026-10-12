@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { type TicketCollectionBindings, type TicketCollectionMenu, wireTicketCollection } from './ticket-collection-interactions';
+import {
+  type TicketCollectionBindings,
+  type TicketCollectionMenu,
+  wireTicketCollection,
+} from './ticket-collection-interactions';
 
 interface Registration {
   root: unknown;
@@ -24,7 +28,11 @@ function handler(event: string, selector: string) {
 }
 const rows = new Map<string, HTMLElement>();
 function row(slug: string) {
-  const element = { dataset: { ticketSlug: slug }, closest: () => null, focus: () => focused.push(slug) } as unknown as HTMLElement;
+  const element = {
+    dataset: { ticketSlug: slug },
+    closest: () => null,
+    focus: () => focused.push(slug),
+  } as unknown as HTMLElement;
   rows.set(slug, element);
   return element;
 }
@@ -84,7 +92,13 @@ describe('wireTicketCollection (HS2-RWY78R)', () => {
     wireTicketCollection(root, state);
     const click = handler('click', rowSelector);
     click(event('click', { shiftKey: true }), row('B'));
-    expect(state.select).toHaveBeenCalledWith('B', { range: true, toggle: false }, ['A', 'B', 'C'], rows.get('B'), expect.anything());
+    expect(state.select).toHaveBeenCalledWith(
+      'B',
+      { range: true, toggle: false },
+      ['A', 'B', 'C'],
+      rows.get('B'),
+      expect.anything(),
+    );
     click(event('click', {}, true), row('C'));
     expect(state.select).toHaveBeenCalledOnce();
   });
@@ -97,14 +111,32 @@ describe('wireTicketCollection (HS2-RWY78R)', () => {
     row('C');
     keydown(event('keydown', { key: 'ArrowDown', shiftKey: true }), row('B'));
     expect(focused).toEqual(['C']);
-    expect(state.select).toHaveBeenLastCalledWith('C', { range: true }, ['A', 'B', 'C'], rows.get('C'), expect.anything());
+    expect(state.select).toHaveBeenLastCalledWith(
+      'C',
+      { range: true },
+      ['A', 'B', 'C'],
+      rows.get('C'),
+      expect.anything(),
+    );
     keydown(event('keydown', { key: 'ArrowUp' }), rows.get('A')!);
     // The top row clamps to itself.
-    expect(state.select).toHaveBeenLastCalledWith('A', { range: false }, ['A', 'B', 'C'], rows.get('A'), expect.anything());
+    expect(state.select).toHaveBeenLastCalledWith(
+      'A',
+      { range: false },
+      ['A', 'B', 'C'],
+      rows.get('A'),
+      expect.anything(),
+    );
     keydown(event('keydown', { key: 'a', metaKey: true }), rows.get('A')!);
     expect(state.selectAll).toHaveBeenCalledOnce();
     keydown(event('keydown', { key: 'Enter', metaKey: true }), rows.get('A')!);
-    expect(state.select).toHaveBeenLastCalledWith('A', { range: false, toggle: true }, ['A', 'B', 'C'], rows.get('A'), expect.anything());
+    expect(state.select).toHaveBeenLastCalledWith(
+      'A',
+      { range: false, toggle: true },
+      ['A', 'B', 'C'],
+      rows.get('A'),
+      expect.anything(),
+    );
   });
 
   it('opens a context menu, selecting an unselected row first, then routes field and action choices', () => {

@@ -174,7 +174,15 @@ export function wireRepositoryBrowser(root: HTMLElement, bindings: RepositoryBro
         const absolute = bindings.absolutePath(item);
         return absolute ? [absolute] : [];
       });
-    fileMenu.value = { path, paths: selected, absolutePath: absolutePaths[0], absolutePaths, diff, source, ...position };
+    fileMenu.value = {
+      path,
+      paths: selected,
+      absolutePath: absolutePaths[0],
+      absolutePaths,
+      diff,
+      source,
+      ...position,
+    };
   }
   lifetime.add(
     delegate(root, 'click', triggerSelector, (event, target) => {

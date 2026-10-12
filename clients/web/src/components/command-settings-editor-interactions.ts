@@ -2,7 +2,11 @@ import { delegate, delegateCapture } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import type { CommandDropTarget } from '../command-order';
-import { COMMAND_FIELD_SELECTOR, COMMANDS_AND_AI_ACTIONS, COMMANDS_AND_AI_TARGETS } from '../interaction-attrs/commands-and-ai';
+import {
+  COMMAND_FIELD_SELECTOR,
+  COMMANDS_AND_AI_ACTIONS,
+  COMMANDS_AND_AI_TARGETS,
+} from '../interaction-attrs/commands-and-ai';
 import { COMMAND_EDITOR_DIALOG_ID } from './command-settings-editor';
 
 /** A command's AI menu choice: inherit the default, or pick a tool, model, or effort. */
@@ -88,8 +92,16 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
       if (id && bindings.ownsCommand(id)) bindings.openEditor(id);
     }),
   );
-  lifetime.add(delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.addCommandSetting.selector, () => { bindings.addCommand(); }));
-  lifetime.add(delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.closeCommandEditor.selector, () => { bindings.closeEditor(); }));
+  lifetime.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.addCommandSetting.selector, () => {
+      bindings.addCommand();
+    }),
+  );
+  lifetime.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.closeCommandEditor.selector, () => {
+      bindings.closeEditor();
+    }),
+  );
   lifetime.add(
     delegateCapture(
       root,
@@ -107,7 +119,11 @@ export function wireCommandSettingsEditor(root: HTMLElement, bindings: CommandSe
       if (id) bindings.deleteCommand(id);
     }),
   );
-  lifetime.add(delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.addCommandGroup.selector, () => { bindings.addGroup(); }));
+  lifetime.add(
+    delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.addCommandGroup.selector, () => {
+      bindings.addGroup();
+    }),
+  );
   lifetime.add(
     delegate(root, 'click', COMMANDS_AND_AI_ACTIONS.deleteCommandGroup.selector, (_event, target) => {
       const group = target.closest<HTMLElement>('[data-group]')?.dataset.group;

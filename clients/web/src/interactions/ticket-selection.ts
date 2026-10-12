@@ -217,7 +217,10 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
           return;
         }
         if (action === 'Add tag' || action === 'Remove tag' || action === 'Delete ticket') {
-          openBulkTicketDialog(action === 'Add tag' ? 'add-tag' : action === 'Remove tag' ? 'remove-tag' : 'delete', slugs);
+          openBulkTicketDialog(
+            action === 'Add tag' ? 'add-tag' : action === 'Remove tag' ? 'remove-tag' : 'delete',
+            slugs,
+          );
           return;
         }
         if (action === 'Restore ticket') void restoreTrashedTickets(slugs);

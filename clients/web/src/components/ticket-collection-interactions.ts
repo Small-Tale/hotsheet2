@@ -90,7 +90,8 @@ export function wireTicketCollection(root: HTMLElement, bindings: TicketCollecti
       const pointer = event as MouseEvent,
         row = target as HTMLElement,
         slug = slugOf(row);
-      if (!bindings.selectedSlugs().includes(slug)) bindings.select(slug, {}, bindings.selectionOrder(row), row, pointer);
+      if (!bindings.selectedSlugs().includes(slug))
+        bindings.select(slug, {}, bindings.selectionOrder(row), row, pointer);
       bindings.setContextMenu({
         ...viewportSafePointerPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight),
         ticketSlug: slug,
