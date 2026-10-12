@@ -73,6 +73,19 @@ vi.mock('@xterm/xterm', () => ({
     }
   },
 }));
+// Theme resolution needs a real style engine; the runtime only has to apply and follow it (HS2-QNSS9C).
+const terminalTheme = vi.hoisted(() => ({
+  theme: { background: 'rgb(0, 0, 0)' },
+  stopFollowing: [] as Array<() => void>,
+}));
+vi.mock('./terminal-theme', () => ({
+  resolveTerminalTheme: () => terminalTheme.theme,
+  followTerminalTheme: () => {
+    const stop = vi.fn();
+    terminalTheme.stopFollowing.push(stop);
+    return stop;
+  },
+}));
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class {
     fit = vi.fn();
@@ -320,6 +333,23 @@ describe('transactional terminal initialization (HS2-3ZBQDG)', () => {
     handler('touchend')(pinchEnd);
     expect(pinchEnd.preventDefault).not.toHaveBeenCalled();
     dispose();
+  });
+
+  it('applies the resolved light/dark theme and stops following it on dispose (HS2-QNSS9C)', () => {
+    terminalTheme.stopFollowing.length = 0;
+    const live = mountTerminalViewportRuntime(element().viewport, {
+        url: 'ws://localhost/terminal',
+        viewerId: 'theme',
+      }),
+      preview = mountStaticTerminalViewportRuntime(element().viewport, { output: 'hello' });
+    expect(allocated.terminals.map((terminal) => terminal.options.theme)).toEqual([
+      terminalTheme.theme,
+      terminalTheme.theme,
+    ]);
+    expect(terminalTheme.stopFollowing).toHaveLength(2);
+    live();
+    preview();
+    for (const stop of terminalTheme.stopFollowing) expect(stop).toHaveBeenCalledTimes(1);
   });
 
   it('cleans a static mount when observation fails after terminal/render allocation, then supports refill', () => {

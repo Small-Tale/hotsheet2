@@ -141,9 +141,10 @@ describe('shared client theme', () => {
     expect(allCss).toContain('var(--hs-ticket-row-intrinsic-size,');
   });
 
-  it('keeps terminal initialization errors readable on the fixed dark terminal surface', () => {
-    expect(css(tokenPath)).toContain('--hs-terminal-background: #000;');
-    expect(css(tokenPath)).toContain('--hs-terminal-foreground: #fff;');
+  it('keeps terminal initialization errors readable on the light and dark terminal surfaces (HS2-QNSS9C)', () => {
+    expect(css(tokenPath)).toContain('--hs-terminal-background: light-dark(var(--wa-color-surface-default), #000);');
+    expect(css(tokenPath)).toContain('--hs-terminal-foreground: var(--wa-color-text-normal);');
+    expect(css(tokenPath)).toContain('--hs-command-on: #fff;');
     const viewport = css(resolve(sourceRoot, 'terminal-viewport-error.css'));
     expect(viewport).toMatch(/\.terminal-viewport-error\s*\{[^}]*color: var\(--hs-terminal-foreground\)/);
   });

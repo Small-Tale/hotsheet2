@@ -149,6 +149,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and guarded lazy runtime loader with visible startup errors
     src/terminal-viewport-error.css # The loader's own initialization-error message block (HS2-WP69TD)
     src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
+    src/terminal-theme.ts    # Light/dark xterm themes resolved from the terminal tokens, followed live on scheme changes (HS2-QNSS9C)
     src/terminal-viewport-runtime.ts # Transactional lazy live/static xterm setup/cleanup, input, leased claims, server-size scaling, and reconnect lifecycle
     src/terminal-touch-scroll.ts # Phone finger-drag scrolling: gesture/momentum controller and pixel-to-row scrollback/arrow-key conversion (HS2-KFBRSB)
     src/terminal-long-press.ts # Touch long-press controller (500 ms, 10px tolerance) that opens the terminal edit menu (HS2-KKP8YJ)
@@ -157,6 +158,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/terminal-key-bar.tsx # Phone terminal accessory bar above the soft keyboard (HS2-CKS78M)
     src/terminal-clipboard.ts # Phone terminal copy/paste: buffer-text snapshot, viewport events, clipboard read/write fallbacks (HS2-FRB545)
     src/components/terminal-clipboard-dialogs.tsx # Phone terminal Copy sheet and Paste-fallback sheet (HS2-FRB545), and the long-press TerminalEditMenu (HS2-KKP8YJ)
+    tests/terminal-theme.spec.ts # Terminals switch between light and dark xterm themes with the app/system scheme (HS2-QNSS9C)
     tests/terminal-clipboard.spec.ts # Phone terminal copy/paste flows, denied/unavailable fallback, desktop absence (HS2-FRB545)
     tests/touch-field-font.spec.ts # Touch screens keep native text fields at 16px+ so iOS never zooms on focus; desktop stays compact (HS2-8JPRRC); walks every UX demo for editable fields under 16px (HS2-JDXSND); walks interaction-only fields of the composed app on a touch phone and tablet (HS2-R2H1BA); walks populated settings editors, the git source form, and saved-view/terminal renames (HS2-NYGR2Q) plus AI tools, non-git provider forms, and the repository remote field (HS2-ME1XBC) on a touch phone and tablet
     tests/mobile-project-fixture.ts # openDemoProject(page, ...): shared mocked one-project app fixture for mobile-layout and touch-field-font specs

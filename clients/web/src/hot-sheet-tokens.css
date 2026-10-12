@@ -24,7 +24,9 @@
   --hs-category-requirement-change: #3b82f6;
   --hs-category-issue: #6b7280;
   --hs-category-fallback: var(--hs-category-issue);
-  --hs-command-on: var(--hs-terminal-foreground);
+  /* Command rows are colored fills in every scheme, so their text stays white rather than following
+     the terminal foreground, which turns dark with the light terminal theme (HS2-QNSS9C). */
+  --hs-command-on: #fff;
   --hs-command-blue: var(--hs-category-requirement-change);
   --hs-command-green: #22c55e;
   --hs-command-orange: var(--hs-category-investigation);
@@ -43,12 +45,16 @@
   --hs-annotation-yellow: #f2ce55;
   --hs-annotation-neutral: #d4d9e3;
   --hs-annotation-halo: #10151d;
-  --hs-terminal-background: #000;
-  --hs-terminal-foreground: #fff;
+  /* Terminals follow the app's light/dark appearance (HS2-QNSS9C): the light terminal takes the page
+     surface and text tokens, the dark one keeps the original black canvas with the dark text token.
+     xterm resolves these through terminal-theme.ts, which derives the cursor, selection, and light
+     ANSI palette from them. */
+  --hs-terminal-background: light-dark(var(--wa-color-surface-default), #000);
+  --hs-terminal-foreground: var(--wa-color-text-normal);
   /* Opaque floating controls remain legible over transparent and light content after Kerf
      beta.76 made the default neutral fill translucent (HS2-170JC3). */
   --hs-floating-control-surface: #3a3a3c;
-  /* Key-bar group outline on the fixed dark terminal surface; mirrors Kerf's dark toolbar
+  /* Key-bar group outline for Kerf's forced-dark key groups on the terminal surface; mirrors Kerf's dark toolbar
      control border so the bar reads as one family with the terminal toolbar. */
   --hs-terminal-control-border: var(--kui-toolbar-control-dark-border, #353536);
   /* Large reader text multiplies every reading surface by this scale (HS2-MGVE50). */

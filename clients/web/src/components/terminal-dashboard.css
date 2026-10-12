@@ -353,8 +353,11 @@
 .terminal-viewport .terminal {
   transform-origin: top left;
 }
-.terminal-viewport .xterm-viewport {
+/* xterm's stock stylesheet paints its viewport black; any space the rows leave must show the
+   current light or dark terminal surface instead (HS2-QNSS9C). */
+.terminal-viewport .xterm .xterm-viewport {
   overflow-y: auto;
+  background-color: var(--hs-terminal-background);
 }
 .terminal-tile__footer {
   display: flex;

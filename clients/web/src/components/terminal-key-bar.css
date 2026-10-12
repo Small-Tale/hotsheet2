@@ -1,5 +1,5 @@
 /* Phone terminal accessory bar (HS2-CKS78M): one horizontally scrolling row of Kerf
-   ToolbarControlGroups on the always-dark terminal surface, directly above the soft keyboard. The
+   ToolbarControlGroups on the terminal surface (light or dark, HS2-QNSS9C), directly above the soft keyboard. The
    sticky Fn group must share this scroll container with the keys, which a Toolbar's clipped zone
    cannot provide, so the bar owns its scroller, safe-area inset and terminal backing. */
 .terminal-key-bar {

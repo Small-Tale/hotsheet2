@@ -2407,8 +2407,17 @@ therefore paints the complete card layout before terminal initialization, and le
 detached runtime disposal in bounded post-paint batches rather than blocking project navigation.
 This progressive boundary supports dozens of sessions without creating dozens of xterms or
 WebSockets at once; dedicated and magnified interactive terminals still mount immediately.
+**Terminal appearance (HS2-QNSS9C).** Every terminal surface (drawer, dashboard tile, magnified
+view, previews, and the phone key bar backing) follows the app's light/dark appearance automatically;
+there is no per-terminal theme choice yet (generic terminal theming is deferred). The surface colors
+come from the `--hs-terminal-background` / `--hs-terminal-foreground` tokens: the light terminal uses
+the page surface and text tokens, and the dark terminal keeps the original black canvas. Each xterm
+resolves those tokens into its theme, derives its cursor and selection colors from them, and uses a
+light-tuned ANSI palette on the light surface (xterm's stock palette in dark). A mounted terminal
+re-themes in place when the system preference or the app's explicit theme changes, without
+remounting or losing scrollback.
 Each mounted dashboard xterm uses an exact 80×24 character grid at a
-stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to the black PTY
+stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to the PTY
 viewport: the surrounding card adds the measured spacing-token inset and footer height outside
 that viewport, without another outer border. One canonical font geometry is established when the 80×24 xterm
 is constructed, then a single uniform physical scale fits it to the available preview without

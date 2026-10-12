@@ -4160,7 +4160,10 @@ test('uses independent width and height terminal dashboard zoom scales', async (
   await expect(dashboard.locator('[data-terminal-key="demo-checkout:codex-main"] .xterm-rows')).toContainText(
     'Live terminal ready',
   );
-  await expect(dashboard.locator('.terminal-tile__preview').first()).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+  await expect(dashboard.locator('.terminal-tile__preview').first()).toHaveCSS(
+    'background-color',
+    'rgb(255, 255, 255)',
+  ); // light terminal surface (HS2-QNSS9C)
   const terminalSurface = dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]');
   const scaledPreview = terminalSurface.locator('[data-display-mode="scaled-preview"]');
   await expect(scaledPreview.locator('.terminal')).toBeVisible();

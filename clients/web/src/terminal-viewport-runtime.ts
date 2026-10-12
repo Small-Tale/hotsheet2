@@ -29,6 +29,7 @@ import {
   type TerminalSpecialKey,
 } from './terminal-keys';
 import { createLongPressController } from './terminal-long-press';
+import { followTerminalTheme, resolveTerminalTheme } from './terminal-theme';
 import { registerTerminalTicketLinkProvider } from './terminal-ticket-links';
 import { createTerminalLineScroller, createTouchScrollController } from './terminal-touch-scroll';
 import { createTouchSelectionController } from './terminal-touch-selection';
@@ -178,7 +179,7 @@ function initializeStaticTerminalViewport(
     // A demo TerminalPreview renders the mirroring preview's 80×24 fallback grid (HS2-XHBDRV).
     mirrorPtyGrid = scaledPreview && !fixedDashboardGrid,
     fixedGrid = fixedDashboardGrid || mirrorPtyGrid,
-    background = getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim() || '#000';
+    theme = resolveTerminalTheme(element);
   if (scaledPreview) {
     element.style.width = `${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;
     element.style.height = `${TERMINAL_PREVIEW_NATURAL_HEIGHT}px`;
@@ -194,11 +195,12 @@ function initializeStaticTerminalViewport(
     scrollback: terminalScrollbackLimit(element.dataset.displayMode, fixedDashboardGrid || !scaledPreview),
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     fontSize: fixedGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12,
-    theme: { background },
+    theme,
   });
   own(() => {
     terminal.dispose();
   });
+  own(followTerminalTheme(element, terminal));
   terminal.open(element);
   const fit = new FitAddon();
   terminal.loadAddon(fit);
@@ -338,7 +340,7 @@ function initializeTerminalViewport(
     // and scales it to fill the canvas, so its glyphs stay legible (HS2-XHBDRV).
     mirrorPtyGrid = scaledPreview && !fixedDashboardGrid,
     fixedGrid = fixedDashboardGrid || mirrorPtyGrid;
-  const background = getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim() || '#000';
+  const theme = resolveTerminalTheme(element);
   if (scaledPreview) {
     element.style.width = `${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;
     element.style.height = `${TERMINAL_PREVIEW_NATURAL_HEIGHT}px`;
@@ -366,12 +368,13 @@ function initializeTerminalViewport(
       scrollback,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
       fontSize: fixedGrid ? TERMINAL_DASHBOARD_FONT_SIZE : 12,
-      theme: { background },
+      theme,
     }),
     fit = new FitAddon();
   own(() => {
     terminal.dispose();
   });
+  own(followTerminalTheme(element, terminal));
   terminal.loadAddon(fit);
   terminal.open(element);
   const ticketLinks =
