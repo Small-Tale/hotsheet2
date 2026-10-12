@@ -401,8 +401,8 @@ and identity-less legacy entries remain conservatively blocking.
   same local bridge as the dev server:
   `/__hotsheet` project open, API proxy, folder picking, migration, and the terminal and
   change-stream WebSocket bridge. It never loads Vite. Hashed assets are immutable, the document
-  revalidates, and client routes fall back to `index.html`. Development-only surfaces (`/ux-demo`
-  and its modification feed) return 404. Maintainer shortcuts: `server:rebuild`
+  revalidates, and client routes fall back to `index.html`. Development-only surfaces (`/ux-demo`)
+  return 404. Maintainer shortcuts: `server:rebuild`
   rebuilds the server and CLI and stops the running machine server (found via the bridge's
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
   open starts the new binary; `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`

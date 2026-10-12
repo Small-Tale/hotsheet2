@@ -2088,16 +2088,29 @@ These remain in the component architecture but are not initial-client blockers:
 component implementation. Its Hono route is registered only for Vite `serve`, whose
 host is fixed to loopback; it is absent from the production build. The initial shell
 uses `@kerfjs/ui/catalog`: `Catalog` owns its responsive sidebar, titled detail canvas,
-footer/status surface, related-component menu, theme control, and collapse control,
-while `wireCatalog` synchronizes the selected entry with `?component=`. The nested Hot
+footer/status surface, related-component menu, and its theme, contrast, reduced-motion,
+preview-background, and collapse controls, while `wireCatalog` wires them and mirrors the
+selected entry into `?component=` with `replaceState` (selection does not add Back/Forward
+history; HS2-HMVBZW). The nested Hot
 Sheet inventory is flattened into path-labelled Kerf sections; phase, implementation,
 and dependency metadata remain visible as tags and native related menus. Kerf beta.82
 keeps the `TokenSearchField` filter in the fixed sidebar header while entries scroll;
 its conditional Clear filter button clears the query and returns focus to the field.
 Filtering still matches entry and section names without regard to case, and rerenders
 retain the query. The app retains
-ownership of the selected entry and persisted collapsed/theme state and an optional manually closed settings inspector
-that keeps the demo visible during live adjustment. The settings action lives with the
+ownership of the selected entry, the display choices it persists as one
+`hotsheet.ux-demo.display` record (`src/ux-demo/display-preferences.ts`), and an optional
+manually closed settings inspector that keeps the demo visible during live adjustment.
+
+The demo is registry-driven (HS2-HMVBZW). Every `src/ux-demo/*-demo.tsx` file exports a
+`demoModule` naming the catalog entries it renders (`Demo`, optional `Settings`, and `reset`)
+and an optional `wire(root)` that installs that file's delegated, window, and document
+listeners in one disposable scope. `src/ux-demo/registry.ts` maps catalog ids to entries and
+wires the modules in their original listener-registration order; `settings-inspector.tsx`
+renders any entry's `Settings`, and the Settings action appears only for entries that have one.
+`main.tsx` keeps only the catalog chrome: mounting, Kerf `wireCatalog`, the staged context-menu
+and top-layer helpers, Settings/Reset, and the shared ticket and project-tab menu dismissal.
+Shared fixtures live in `src/ux-demo/fixtures.ts`. The settings action lives with the
 other catalog-header tools; while the inspector is open, its Close settings action stays
 viewport anchored. Stateful Web Awesome control properties stay synchronized when a demo
 reset restores its canonical mock state. Every settings form ends with a Reset action, including the
@@ -2119,10 +2132,8 @@ the catalog inventory, and `npm run catalog:check` prevents drift. AI and human 
 must search this extension before the installed Kerf component catalog, retain the source
 package identity, and use the ownership fields to avoid duplicate wrappers or insets.
 
-Implemented entries' tags include a dependency-aware last-modified time: changes to a demo, recursively
-imported component/style dependencies, or global catalog code make the demo current again.
-The development server reads and parses each source file at most once per request, so the
-shared component graph is not re-walked for every demo (HS2-GGHVTQ).
+Entries carry their phase as a Catalog tag; the per-entry last-modified stamps and their
+development feed were removed (HS2-HMVBZW).
 The demo stylesheet imports the same shared global token sheets as the app entry
 (`cursor-semantics.css` and `textarea-sizing.css`), so touch textarea auto-grow under a coarse
 pointer is representable in the catalog without duplicating component CSS (HS2-YBBJEN).
