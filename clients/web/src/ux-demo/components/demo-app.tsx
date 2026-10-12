@@ -1,4 +1,5 @@
 import { Catalog } from '@kerfjs/ui/catalog';
+import { Text } from '@kerfjs/ui/text';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 
 import { ProjectTabContextMenu } from '../../components/project-tab-context-menu';
@@ -70,11 +71,11 @@ export function DemoApp() {
               {Demo ? <Demo /> : <PlannedDemo item={selected} />}
             </section>
           }
+          // Each entry's phase and Planned state are Catalog tags on its sidebar row (HS2-HMVBZW).
           status={
-            <span>
-              <strong>{selected.phase.replace('-', ' ')}</strong>
-              {selected.implemented ? ' · Implemented' : ' · Planned'}
-            </span>
+            <Text variant="span" size="compact" tone="quiet">
+              Production components · deterministic fixtures
+            </Text>
           }
           headerActions={
             entry?.Settings && !settingsOpen.value ? (

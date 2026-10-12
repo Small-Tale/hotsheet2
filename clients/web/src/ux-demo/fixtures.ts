@@ -1,4 +1,14 @@
 import type { ProviderAccount } from '../api';
+import { createDebouncedAutosave } from '../debounced-autosave';
+import {
+  inspectorBlockedReason,
+  markdownEvent,
+  markdownSavedValue,
+  noteDemoNotes,
+  readerNotes,
+  readerTitle,
+} from './content-components-demo';
+import { inspectorTags, inspectorTitle } from './workspace-components-demo';
 
 /** One project's linked ticket sources and the machine's connection catalog (HS2-3SCH1K). */
 export const DEMO_PROJECT_SOURCES = [
@@ -78,3 +88,32 @@ export const TERMINAL_DRAWER_DEMO_PROVIDERS = [
   { id: 'codex', name: 'Codex' },
   { id: 'claude', name: 'Claude' },
 ] as const;
+
+// Debounced-autosave fixtures for the inspector and reader editors: each "save" writes the demo state the
+// next render reads, like the production autosave writes the ticket (HS2-HMVBZW).
+export const markdownAutosave = createDebouncedAutosave((value: string) => {
+  markdownSavedValue.value = value;
+  markdownEvent.value = 'Markdown autosaved.';
+  return Promise.resolve(true);
+});
+export const blockedReasonAutosave = createDebouncedAutosave((value: string) => {
+  inspectorBlockedReason.value = value.trim();
+  return Promise.resolve(true);
+});
+export const noteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value: string }) => {
+  readerNotes.value = readerNotes.value.map((note) => (note.id === id ? { ...note, body: value } : note));
+  noteDemoNotes.value = noteDemoNotes.value.map((note) => (note.id === id ? { ...note, body: value } : note));
+  return Promise.resolve(true);
+});
+export const titleAutosave = createDebouncedAutosave((value: string) => {
+  inspectorTitle.value = value.trim();
+  return Promise.resolve(true);
+});
+export const readerTitleAutosave = createDebouncedAutosave((value: string) => {
+  readerTitle.value = value.trim();
+  return Promise.resolve(true);
+});
+export const tagsAutosave = createDebouncedAutosave((value: string[]) => {
+  inspectorTags.value = value;
+  return Promise.resolve(true);
+});

@@ -11,13 +11,20 @@ import { TAG_CHIP_REMOVE_ACTION } from '../components/tag-chip';
 import type { InspectorTab } from '../components/ticket-inspector';
 import { showTicketReaderDialog, TicketReader } from '../components/ticket-reader';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
-import { createDebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { clickBeginsMarkdownEdit, keyBeginsMarkdownEdit, repeatPressWouldLeaveNewEditor } from '../markdown-click-edit';
 import { normalizeTicketTitleField, ticketTitleKeyFinishesEdit } from '../ticket-title-editing';
 import { selectDemo, selectedId } from './components/demo-state';
 import { DEMO_ACTIONS, DEMO_COMPONENTS, DEMO_FIELDS, DEMO_MARKERS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
+import {
+  blockedReasonAutosave,
+  markdownAutosave,
+  noteAutosave,
+  readerTitleAutosave,
+  tagsAutosave,
+  titleAutosave,
+} from './fixtures';
 import { syncSettingsControls } from './settings-controls';
 import { collectionTickets, recordCollectionEvent, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 import { inspectorTags, inspectorTitle, inspectorTitleDraft, inspectorTitleEditing } from './workspace-components-demo';
@@ -437,32 +444,6 @@ export function openDemoTicketReader(root: HTMLElement): void {
 /** Install this file's demo interactions on the catalog root (HS2-HMVBZW). */
 function wireContentComponentsDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
-  const markdownAutosave = createDebouncedAutosave((value: string) => {
-    markdownSavedValue.value = value;
-    markdownEvent.value = 'Markdown autosaved.';
-    return Promise.resolve(true);
-  });
-  const blockedReasonAutosave = createDebouncedAutosave((value: string) => {
-    inspectorBlockedReason.value = value.trim();
-    return Promise.resolve(true);
-  });
-  const noteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value: string }) => {
-    readerNotes.value = readerNotes.value.map((note) => (note.id === id ? { ...note, body: value } : note));
-    noteDemoNotes.value = noteDemoNotes.value.map((note) => (note.id === id ? { ...note, body: value } : note));
-    return Promise.resolve(true);
-  });
-  const titleAutosave = createDebouncedAutosave((value: string) => {
-    inspectorTitle.value = value.trim();
-    return Promise.resolve(true);
-  });
-  const readerTitleAutosave = createDebouncedAutosave((value: string) => {
-    readerTitle.value = value.trim();
-    return Promise.resolve(true);
-  });
-  const tagsAutosave = createDebouncedAutosave((value: string[]) => {
-    inspectorTags.value = value;
-    return Promise.resolve(true);
-  });
   if (selectedId.value === 'ticket-reader') queueMicrotask(() => showTicketReaderDialog(root, 'ux-demo-ticket-reader'));
   demoListeners.add(
     delegate(root, 'change', '[data-settings="markdown-editor"] [name="markdown-appearance"]', (_event, target) => {
