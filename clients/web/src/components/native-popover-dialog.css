@@ -1,4 +1,6 @@
-/* Product popovers retain native top-layer ownership; Kerf supplies their internal primitives. */
+/* Chrome shared by the app's native popover="auto" dialogs (command editor, Repository Status, change
+   evidence), which keep native top-layer ownership instead of a Web Awesome dialog, so Kerf's
+   DialogSurface cannot supply it. Moving them onto DialogSurface is tracked in HS2-T1MVPV. */
 .dialog-surface {
   box-sizing: border-box;
   padding: 0;
@@ -9,6 +11,7 @@
   background: var(--wa-color-surface-default);
   box-shadow: var(--wa-shadow-xl);
 }
+/* The native popover's dimmed backdrop, matching Web Awesome's modal overlay. */
 .dialog-surface::backdrop {
   background: var(--wa-color-overlay-modal);
 }

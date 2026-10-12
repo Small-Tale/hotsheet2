@@ -1,7 +1,6 @@
 import './heading.css';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ai-conversation.css';
-import './native-popover-dialog.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 
 import { uiColor } from '@kerfjs/ui/css-values';
