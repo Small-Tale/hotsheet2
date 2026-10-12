@@ -94,10 +94,14 @@ describe('active claim presentation (HS2-QKNQXC)', () => {
     expect(custom).toContain('title="verylongcustomworkeridentity is actively working on this ticket"');
   });
 
-  it('owns the spinner and ETA styles it renders', () => {
+  it('styles only the Web Awesome progress ring and the notice gap; Kerf Text owns the ETA', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'active-claim.css'), 'utf8');
-    for (const selector of ['.claim-eta', '.claim-eta__ring', '.live-claim-notice'])
-      expect(css).toContain(`${selector} {`);
+    expect(css).toContain('.claim-eta__ring {');
+    expect(css).toContain('.live-claim-notice {');
+    expect(css.match(/^[^\s/*][^{]*\{/gm)).toHaveLength(2);
+    expect(String(ClaimEta({ eta: { kind: 'estimate', label: '~45m left', title: 'ETA', percent: 40 } }))).toContain(
+      'kui-text',
+    );
     expect(css).not.toContain('.kui-state-banner');
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     expect(rowCss).not.toContain('.ticket-list-row__eta');

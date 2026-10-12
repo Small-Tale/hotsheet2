@@ -4,6 +4,7 @@ import './active-claim.css';
 import { type CssForegroundColor, foregroundColorVar } from '@kerfjs/ui/css-values';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { Text } from '@kerfjs/ui/text';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
 
@@ -44,9 +45,9 @@ export function ActiveClaimIndicator({
 /** The time-left label remains beside the holder when the ring moves to the activity slot. */
 export function ClaimEta({ eta }: { eta: ClaimEtaPresentation }) {
   return (
-    <span class="claim-eta" data-claim-eta={eta.kind} title={eta.title}>
-      <span class="claim-eta__label">{eta.label}</span>
-    </span>
+    <Text variant="span" tone="quiet" size="compact" wrap="nowrap" data-claim-eta={eta.kind} title={eta.title}>
+      {eta.label}
+    </Text>
   );
 }
 
