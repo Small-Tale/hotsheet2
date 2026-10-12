@@ -15607,8 +15607,13 @@ for (const width of [1280, 390]) {
       return {
         summaryWidth: summary.getBoundingClientRect().width,
         detailsWidth: details.getBoundingClientRect().width,
-        arrowWidth: getComputedStyle(summary, '::before').width,
-        nativeArrow: getComputedStyle(summary, '::after').display,
+        // HS2-XSBED3: the visible label carries a Kerf DisclosureArrow drawn open; no pseudo chevron remains.
+        arrowOpen: summary.querySelector('.note-card__ai-feedback-hide .kui-disclosure-arrow')?.getBoundingClientRect()
+          .width,
+        closedArrowHidden: summary.querySelector<HTMLElement>('.note-card__ai-feedback-show')!.offsetParent === null,
+        pseudoArrow: getComputedStyle(summary, '::before').content,
+        themeArrow: getComputedStyle(summary, '::after').display,
+        nativeMarker: getComputedStyle(summary).listStyleType,
         detailsBorder: getComputedStyle(details).borderTopWidth,
         detailsInset: getComputedStyle(details).paddingLeft,
         firstBorder: getComputedStyle(firstEntry).borderTopWidth,
@@ -15617,8 +15622,11 @@ for (const width of [1280, 390]) {
       };
     });
     expect(feedbackLayout.summaryWidth).toBeLessThan(feedbackLayout.detailsWidth * 0.75);
-    expect(feedbackLayout.arrowWidth).not.toBe('auto');
-    expect(feedbackLayout.nativeArrow).toBe('none');
+    expect(feedbackLayout.arrowOpen).toBeGreaterThan(0);
+    expect(feedbackLayout.closedArrowHidden).toBe(true);
+    expect(feedbackLayout.pseudoArrow).toBe('none');
+    expect(feedbackLayout.themeArrow).toBe('none');
+    expect(feedbackLayout.nativeMarker).toBe('none');
     expect(feedbackLayout.detailsBorder).toBe('0px');
     expect(feedbackLayout.detailsInset).toBe('0px');
     expect(feedbackLayout.firstBorder).toBe('0px');

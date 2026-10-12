@@ -1,7 +1,8 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './note-card.css';
 
-import { foregroundColor, uiColor } from '@kerfjs/ui/css-values';
+import { foregroundColor, rem, uiColor } from '@kerfjs/ui/css-values';
+import { DisclosureArrow } from '@kerfjs/ui/disclosure-arrow';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Activity, Check, CircleAlert, FilePenLine, MessageSquareText, Plus, RefreshCw, Trash2, X } from 'lucide';
 
@@ -414,8 +415,15 @@ export function NoteCard({
       {aiFeedback.length > 0 && (
         <details class="note-card__ai-feedback">
           <summary>
-            <span class="note-card__ai-feedback-show">Show AI Feedback</span>
-            <span class="note-card__ai-feedback-hide">Hide AI Feedback</span>
+            {/* The native details owns open state, so each label carries its own controlled arrow. */}
+            <span class="note-card__ai-feedback-show">
+              <DisclosureArrow open={false} size={rem(0.875)} />
+              Show AI Feedback
+            </span>
+            <span class="note-card__ai-feedback-hide">
+              <DisclosureArrow open size={rem(0.875)} />
+              Hide AI Feedback
+            </span>
           </summary>
           <div class="note-card__ai-feedback-list">
             {aiFeedback.map((feedback) => (

@@ -404,6 +404,17 @@ describe('NoteEditor and RespondToFeedbackButton (HS2-3X404M)', () => {
     expect(markup).toMatch(/data-note-id="details"[^>]*>\s*Respond\s*</);
   });
 
+  it('draws the AI feedback disclosure arrows with Kerf DisclosureArrow (HS2-XSBED3)', () => {
+    const feedback = { id: 'fb', kind: 'regular' as const, author: 'Human', time: 'Now', body: 'Helpful' };
+    const markup = String(
+      NoteCard({ id: 'parent', kind: 'activity', author: 'AI', time: 'Now', body: 'Body', aiFeedback: [feedback] }),
+    );
+    expect(markup).toMatch(/note-card__ai-feedback-show">[\s\S]*?kui-disclosure-arrow[\s\S]*?Show AI Feedback/);
+    expect(markup).toMatch(/note-card__ai-feedback-hide">[\s\S]*?kui-disclosure-arrow[\s\S]*?Hide AI Feedback/);
+    const css = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    expect(css).not.toMatch(/summary::before/);
+  });
+
   it('labels a non-response editor action Submit', () => {
     expect(String(NoteEditor({ id: 'd', source: 'x', actions: true }))).toMatch(/>\s*Submit\s*</);
   });

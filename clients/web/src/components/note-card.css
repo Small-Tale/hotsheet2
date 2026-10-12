@@ -304,30 +304,22 @@
 .note-card__ai-feedback summary::-webkit-details-marker {
   display: none;
 }
+/* The shared native-details theme paints its own summary chevron; this disclosure uses DisclosureArrow. */
 .note-card__ai-feedback summary::after {
   display: none;
-}
-.note-card__ai-feedback summary::before {
-  width: remify(6px);
-  height: remify(6px);
-  border: solid currentColor;
-  border-width: 0 1px 1px 0;
-  content: '';
-  transform: rotate(-45deg);
-}
-.note-card__ai-feedback[open] summary::before {
-  transform: rotate(45deg);
 }
 .note-card__ai-feedback summary:focus-visible {
   outline: 2px solid var(--wa-color-focus);
   outline-offset: 2px;
 }
+.note-card__ai-feedback-show,
+.note-card__ai-feedback[open] .note-card__ai-feedback-hide {
+  display: inline-flex;
+  align-items: center;
+}
 .note-card__ai-feedback-hide,
 .note-card__ai-feedback[open] .note-card__ai-feedback-show {
   display: none;
-}
-.note-card__ai-feedback[open] .note-card__ai-feedback-hide {
-  display: inline;
 }
 .note-card__ai-feedback-list {
   margin-top: var(--kui-space-s);
