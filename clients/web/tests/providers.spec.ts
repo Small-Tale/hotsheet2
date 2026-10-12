@@ -24848,7 +24848,8 @@ test('dismisses every remaining dialog through its native close event (HS2-3RQ7V
   await page.waitForTimeout(600);
   await command.dispatchEvent('pointerup');
   dialog = page.locator('[data-component="command-run-dialog"]');
-  await expect(dialog).toBeVisible();
+  // CommandRunDialog is a wa-dialog now (HS2-Z7C27E); its host box stays zero-size like the others.
+  await expect(dialog).toHaveJSProperty('open', true);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-3rq7v7-native-dialog-dismissal.png', fullPage: true });
