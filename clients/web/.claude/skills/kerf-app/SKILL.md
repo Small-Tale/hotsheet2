@@ -10,7 +10,7 @@ kerf-skill-version: 1.25.0
 > project's `.claude/skills/kerf-app/SKILL.md`) so Claude Code activates
 > it whenever you work on a kerf app.
 
-kerf is a ~13 KB reactive UI framework (still ~13 KB with `arraySignal`): signals + DOM morphing + JSX → HTML strings. No virtual DOM, no compiler, no scheduler. The whole public surface fits in 17 exports.
+kerf is a ~15 KB reactive UI framework (still ~15 KB with `arraySignal`): signals + DOM morphing + JSX → HTML strings. No virtual DOM, no compiler, no scheduler. The whole public surface fits in 17 exports.
 
 ## Setup
 
