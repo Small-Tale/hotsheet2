@@ -8362,7 +8362,7 @@ test('renders project-owned ticket sources and machine-wide accounts at wide and
     await expect(sources.locator('input[name="project-source-color"]')).toHaveCount(0);
     await expect(sources.locator('[data-component="ticket-source-icon"]')).toHaveCount(3);
     const gitSourceCopy = sources.locator(
-      '.ticket-provider-settings__source-row[data-source-provider="git"] .ticket-provider-settings__connection-copy',
+      '[data-source-row][data-source-provider="git"] .ticket-provider-settings__connection-copy',
     );
     expect((await gitSourceCopy.boundingBox())!.width).toBeGreaterThan(100);
     await expect(sources).toContainText('Some ticket sources look alike');

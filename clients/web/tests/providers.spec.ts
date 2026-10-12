@@ -2864,9 +2864,9 @@ test('changes a sole project source color in settings and inspector while cards 
   await expect(ticketRow.locator('[data-component="ticket-source-icon"]')).toHaveCount(0);
   await ticketRow.screenshot({ path: 'target/visual-captures/hs2-myw20v-single-list-wide.png' });
   await page.getByLabel('Settings view').click();
-  const sourceRow = page.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]');
+  const sourceRow = page.locator('[data-source-row][data-source-id="git-local"]');
   await expect(sourceRow).not.toContainText('Edit icon color');
-  await sourceRow.locator('[data-action="edit-provider-connection"]').click();
+  await sourceRow.click();
   const appearance = page.locator('[data-ticket-source-setup-dialog] [data-component="git-source-editor"]');
   await expect(appearance).toContainText('Default ticket source for this project.');
   await expect(appearance).toContainText('Location');
@@ -2891,7 +2891,7 @@ test('changes a sole project source color in settings and inspector while cards 
     'rgb(59, 130, 246)',
   );
   await page.getByLabel('Settings view').click();
-  await sourceRow.locator('[data-action="edit-provider-connection"]').click();
+  await sourceRow.click();
   await appearance.locator('input[name="project-source-color"][value="#6b7280"]').check();
   await expect(appearance.locator('input[name="project-source-color"][value="#6b7280"]')).toBeChecked();
   await page.locator('[data-ticket-source-setup-dialog]').getByRole('button', { name: 'Done' }).click();
@@ -2907,11 +2907,7 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, 
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
-  await page
-    .locator(
-      '.ticket-provider-settings__source-row[data-source-id="git-local"] [data-action="edit-provider-connection"]',
-    )
-    .click();
+  await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
   await page.screenshot({ path: testInfo.outputPath('git-relink-wide.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2933,7 +2929,7 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, 
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(page.locator('.app-toast')).toContainText('Location is unchanged.');
   await dialog.getByRole('button', { name: 'Done' }).click();
-  await expect(page.locator('.ticket-provider-settings__source-row[data-source-id="git-moved"]')).toBeVisible();
+  await expect(page.locator('[data-source-row][data-source-id="git-moved"]')).toBeVisible();
 });
 
 test('requires review and keeps an unverified recovery visible for a moved legacy store (HS2-RAQSX7)', async ({
@@ -2944,11 +2940,7 @@ test('requires review and keeps an unverified recovery visible for a moved legac
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
-  await page
-    .locator(
-      '.ticket-provider-settings__source-row[data-source-id="git-local"] [data-action="edit-provider-connection"]',
-    )
-    .click();
+  await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
   await dialog.getByRole('textbox', { name: 'Location' }).fill('/work/recovered.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
@@ -2957,7 +2949,7 @@ test('requires review and keeps an unverified recovery visible for a moved legac
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(page.locator('.app-toast')).toContainText('Ticket repository location updated.');
   await dialog.getByRole('button', { name: 'Done' }).click();
-  const recovered = page.locator('.ticket-provider-settings__source-row[data-source-id="git-recovered"]');
+  const recovered = page.locator('[data-source-row][data-source-id="git-recovered"]');
   await expect(recovered).toContainText('Unverified recovery');
   await page.screenshot({ path: 'target/visual-captures/hs2-raqsx7-recovery-wide.png', animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2970,9 +2962,7 @@ test('reviews a legacy store at its unchanged path before adopting it (HS2-RQXJQ
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
-  await expect(page.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]')).toContainText(
-    'Review required',
-  );
+  await expect(page.locator('[data-source-row][data-source-id="git-local"]')).toContainText('Review required');
   await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-review-required-wide.png', animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
@@ -2980,11 +2970,7 @@ test('reviews a legacy store at its unchanged path before adopting it (HS2-RQXJQ
     animations: 'disabled',
   });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page
-    .locator(
-      '.ticket-provider-settings__source-row[data-source-id="git-local"] [data-action="edit-provider-connection"]',
-    )
-    .click();
+  await page.locator('[data-source-row][data-source-id="git-local"][data-action="edit-provider-connection"]').click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
   await expect(dialog.getByRole('textbox', { name: 'Location' })).toHaveValue('/work/demo.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
@@ -2997,9 +2983,7 @@ test('reviews a legacy store at its unchanged path before adopting it (HS2-RQXJQ
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(page.locator('.app-toast')).toContainText('Ticket repository location updated.');
   await dialog.getByRole('button', { name: 'Done' }).click();
-  await expect(page.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]')).toContainText(
-    'Unverified recovery',
-  );
+  await expect(page.locator('[data-source-row][data-source-id="git-local"]')).toContainText('Unverified recovery');
   await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-same-path-wide.png', animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-same-path-narrow.png', animations: 'disabled' });
@@ -3043,8 +3027,8 @@ test('aligns ticket source marks with their names in project settings (HS2-Q93H9
   await page.getByLabel('Settings view').click();
   const settings = page.locator('[data-component="ticket-sources-settings"]');
   for (const row of [
-    settings.locator('.ticket-provider-settings__source-row[data-source-id="git-local"]'),
-    settings.locator('.ticket-provider-settings__source-row[data-source-provider="github"]').first(),
+    settings.locator('[data-source-row][data-source-id="git-local"]'),
+    settings.locator('[data-source-row][data-source-provider="github"]').first(),
   ]) {
     const icon = await row.locator('[data-component="ticket-source-icon"]').first().boundingBox();
     const name = await row.locator('.ticket-provider-settings__connection-copy strong').first().boundingBox();

@@ -1,22 +1,3 @@
-/* Each source row is an app wrapper (source id hooks) around a Kerf ListItem/ListActionRow that must
-   fill it and wrap its copy under the icon on phones. */
-.ticket-provider-settings__source-row {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-@media (max-width: 600px) {
-  .ticket-provider-settings__source-row {
-    flex-wrap: wrap;
-  }
-  .ticket-provider-settings__source-row > :first-child {
-    flex-basis: 100%;
-  }
-}
-.ticket-provider-settings__source-row > :first-child {
-  flex: 1 1 auto;
-  min-width: 0;
-}
 /* An inline text link that is a button (it switches the settings category, not a URL). */
 .ticket-provider-settings__link {
   padding: 0;

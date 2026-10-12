@@ -230,29 +230,25 @@ export function TicketSourcesSettings({ sources, error = '', setupOpen = false }
                       />
                     ),
                     label: copy,
+                    // The source hooks ride on the Kerf row root itself, so no app wrapper (or CSS)
+                    // has to size that root (HS2-Y49C09).
+                    rootAttributes: {
+                      'data-source-row': '',
+                      'data-source-id': source.connectionId,
+                      'data-source-provider': source.provider,
+                    },
                   };
-                  return (
-                    <div
-                      class="ticket-provider-settings__source-row"
-                      data-source-id={source.connectionId}
-                      data-source-provider={source.provider}
-                    >
-                      {source.provider === 'git' ? (
-                        <ListItem
-                          {...row}
-                          trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />}
-                        />
-                      ) : (
-                        <ListActionRow
-                          {...row}
-                          trailingAction="remove-project-source"
-                          trailingActionLabel={`Remove ${source.name} from this project`}
-                          trailingActionTitle="Remove from this project"
-                          trailingActionIcon={<LucideIcon icon={Unlink} name="unlink" />}
-                          trailingActionAttributes={{ 'data-source-id': source.connectionId }}
-                        />
-                      )}
-                    </div>
+                  return source.provider === 'git' ? (
+                    <ListItem {...row} trailing={<LucideIcon icon={ChevronRight} name="chevron-right" size={16} />} />
+                  ) : (
+                    <ListActionRow
+                      {...row}
+                      trailingAction="remove-project-source"
+                      trailingActionLabel={`Remove ${source.name} from this project`}
+                      trailingActionTitle="Remove from this project"
+                      trailingActionIcon={<LucideIcon icon={Unlink} name="unlink" />}
+                      trailingActionAttributes={{ 'data-source-id': source.connectionId }}
+                    />
                   );
                 })}
               </List>
