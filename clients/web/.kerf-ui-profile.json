@@ -422,12 +422,6 @@
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`ticket-list-row ticket-list-row--${props.presentation}${props.selected ? ' ticket-list-row--selected' : ''}`} | class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`} | class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`}"
     },
     {
-      "id": "state-modifier-classes-main",
-      "rules": ["KUI-L008"],
-      "target": "src/ux-demo/main.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: className={shellClass}"
-    },
-    {
       "id": "state-modifier-classes-sidebar-panel",
       "rules": ["KUI-L008"],
       "target": "src/components/sidebar-panel.tsx",

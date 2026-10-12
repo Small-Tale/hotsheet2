@@ -111,14 +111,8 @@ describe('Kerf application UI profile', () => {
         ],
       }),
     );
-    // The remaining Kerf-owned Catalog headerActions gap has one exact suppression (HS2-PC9DVB).
-    expect(config.suppressions.map(({ id, rules, target }) => ({ id, rules, target }))).toEqual([
-      {
-        id: 'hs2-pc9dvb-ux-demo-header-actions',
-        rules: ['KUI-L201'],
-        target: 'src/ux-demo/main.tsx',
-      },
-    ]);
+    // The Catalog headerActions gap closed once the demo renders its tool group only with settings (HS2-HMVBZW).
+    expect(config.suppressions).toEqual([]);
     for (const suppression of config.suppressions)
       expect(suppression.rationale).toContain(suppression.id.slice(0, 9).replace('kf-', 'KF-').toUpperCase());
     // The doctor replaced the app CSS ownership check, so `npm run lint` ends with it (HS2-R9GQJE).

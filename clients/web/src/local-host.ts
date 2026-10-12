@@ -152,7 +152,7 @@ function cacheControl(value: string): MiddlewareHandler {
     context.res = new Response(context.res.body, { status: context.res.status, headers });
   };
 }
-const DEVELOPMENT_ONLY = /^\/(?:ux-demo|__hotsheet\/(?:demo-modified))(?:[/?]|$)/;
+const DEVELOPMENT_ONLY = /^\/ux-demo(?:[/?]|$)/;
 
 /** Build the host app: development-only routes 404, the bridge owns `/__hotsheet`, the rest is static. */
 export function createLocalHostApp(distRoot: string, bridge: Hono = createDevApp(true)): Hono {

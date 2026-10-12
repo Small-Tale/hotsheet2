@@ -1,21 +1,11 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  utimesSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
 import componentCatalogExtension from '../../ai/component-catalog-extension.json';
-import { createDevApp, demoModifiedTimes } from '../dev-server';
+import { createDevApp } from '../dev-server';
 import {
   aiConversationDemoOpen,
   aiConversationPresentation,
@@ -271,7 +261,7 @@ describe('UX demo catalog', () => {
   });
 
   it('maps nested categories and relationship metadata into the flat kerf catalog contract', () => {
-    const sections = kerfCatalogSections(demoCatalog, { 'ticket-row': '2026-09-21T00:00:00Z' }),
+    const sections = kerfCatalogSections(demoCatalog),
       ticketList = sections.find((section) => section.category === 'Ticket workspace · List'),
       ticketRow = ticketList?.entries.find((entry) => entry.id === 'ticket-row');
     expect(ticketList?.entries.map((entry) => entry.id)).toEqual([
@@ -280,7 +270,7 @@ describe('UX demo catalog', () => {
       'ticket-page-more',
       'ticket-row',
     ]);
-    expect(ticketRow?.tags).toEqual(expect.arrayContaining(['Feature floor']));
+    expect(ticketRow?.tags).toEqual(['Feature floor']);
     expect(ticketRow?.related?.filter((entry) => entry.group === 'Uses').map((entry) => entry.id)).toEqual([
       'status-badge',
       'confidence-badge',
@@ -562,49 +552,6 @@ describe('UX demo catalog', () => {
     expect(dev.status).toBe(200);
     expect(await dev.text()).toContain('/src/ux-demo/main.tsx');
     expect((await createDevApp(false).request('/ux-demo')).status).toBe(404);
-  });
-
-  it('reports dependency-aware modification times only in development', async () => {
-    const response = await createDevApp(true).request('/__hotsheet/demo-modified');
-    expect(response.status).toBe(200);
-    const modified = (await response.json()) as Record<string, string>;
-    expect(Date.parse(modified['app-shell'])).not.toBeNaN();
-    expect(Date.parse(modified['ticket-reader'])).not.toBeNaN();
-    expect(modified['attachment-list']).toBeUndefined();
-    expect((await createDevApp(false).request('/__hotsheet/demo-modified')).status).toBe(404);
-  });
-
-  it('derives each demo modification time from its own import graph with fixed fixture times', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'hotsheet-demo-modified-'));
-    try {
-      mkdirSync(join(root, 'ux-demo'));
-      mkdirSync(join(root, 'components'));
-      const files: Record<string, [string, number]> = {
-        'ux-demo/main.tsx': ['', 1_000],
-        'ux-demo/style.css': ['', 2_000],
-        // a.tsx -> shared.tsx -> deep.css (newest) and a cycle back to a.tsx plus a missing import.
-        'ux-demo/a-demo.tsx': ["import { shared } from '../components/shared';\nimport './missing';", 3_000],
-        'components/shared.tsx': ["import './deep.css';\nimport '../ux-demo/a-demo';", 4_000],
-        'components/deep.css': ['', 9_000],
-        // b.tsx imports only an older file, so the shared demo files decide its time.
-        'ux-demo/b-demo.tsx': ["import { old } from './old';", 1_500],
-        'ux-demo/old.ts': ['', 500],
-      };
-      for (const [file, [source]] of Object.entries(files)) writeFileSync(join(root, file), source);
-      for (const [file, [, seconds]] of Object.entries(files)) utimesSync(join(root, file), seconds, seconds);
-      const modified = await demoModifiedTimes(root, {
-        a: 'ux-demo/a-demo.tsx',
-        b: 'ux-demo/b-demo.tsx',
-        gone: 'ux-demo/removed-demo.tsx',
-      });
-      expect(modified).toEqual({
-        a: new Date(9_000_000).toISOString(),
-        b: new Date(2_000_000).toISOString(),
-        gone: new Date(2_000_000).toISOString(),
-      });
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
   });
 
   it('offers and resets the AppShell presentation and focus-ring settings (HS2-8ZJMCE)', () => {

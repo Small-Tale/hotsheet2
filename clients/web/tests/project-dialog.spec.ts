@@ -49,7 +49,9 @@ for (const systemTheme of ['light', 'dark'] as const) {
     });
     await switchTheme('light');
     await expect.poll(palette).toEqual(light);
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('hotsheet.ux-demo.theme'))).toBe('light');
+    await expect
+      .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hotsheet.ux-demo.display') ?? '{}').theme))
+      .toBe('light');
     await page.setViewportSize({ width: 390, height: 844 });
     await expect.poll(palette).toEqual(light);
     await page.screenshot({
@@ -65,7 +67,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.addInitScript(() => {
-    localStorage.setItem('hotsheet.ux-demo.theme', 'dark');
+    localStorage.setItem('hotsheet.ux-demo.display', JSON.stringify({ theme: 'dark' }));
   });
   await page.goto('/ux-demo?component=project-dialog');
   const remote = page.locator('[data-remote-project-dialog]');

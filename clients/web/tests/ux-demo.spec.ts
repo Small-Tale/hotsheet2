@@ -3772,7 +3772,10 @@ test('organizes search syntax help in the WorkspaceHeader demo', async ({ page }
     await help.evaluate((node) => {
       const panel = node.getBoundingClientRect(),
         finalNote = node.lastElementChild!.getBoundingClientRect();
-      return panel.bottom <= innerHeight - 120 && finalNote.bottom <= panel.bottom - 4;
+      // The panel ends above the catalog's fixed footer pane (HS2-HMVBZW: the header now also carries
+      // Kerf's display controls, so measure the footer instead of a fixed allowance).
+      const footer = document.querySelector('.kui-workbench__main > .kui-pane > .kui-pane__footer')!;
+      return panel.bottom <= footer.getBoundingClientRect().top && finalNote.bottom <= panel.bottom - 4;
     }),
   ).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-pv2ag1-search-phone-bottom.png', fullPage: true });
@@ -4953,16 +4956,8 @@ test('styles and edits attachment group labels while preserving drag regrouping'
 });
 
 test('keeps a demo attachment label edit open across a late catalog rerender (HS2-SG0AZY)', async ({ page }) => {
-  // The demo's startup catalog metadata response rerenders the whole demo. Hold it until the editor is
-  // open and typed into, so the rerender deterministically lands mid-edit.
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.route('**/__hotsheet/demo-modified', async (route) => {
-    await held;
-    await route.fulfill({ json: { 'ticket-attachments': '2026-10-03T00:00:00Z' } });
-  });
+  // A catalog display change rerenders the whole demo. Apply one after the editor is open and typed
+  // into, without moving focus, so the rerender deterministically lands mid-edit.
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-attachments');
   const surface = page
@@ -4973,9 +4968,10 @@ test('keeps a demo attachment label edit open across a late catalog rerender (HS
   const editor = first.getByRole('textbox', { name: /Batch label/ });
   await expect(editor).toBeFocused();
   await editor.fill('Typed before the rerender');
-  const responded = page.waitForResponse('**/__hotsheet/demo-modified');
-  release();
-  await responded;
+  await page.evaluate(() => {
+    document.querySelector<HTMLElement>('[data-action="catalog-toggle-theme"]')!.click();
+  });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.evaluate(
     () =>
       new Promise<void>((resolve) =>
@@ -5032,7 +5028,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`keeps the gallery filename legible with Kerf dark tone in ${theme} (HS2-V5VS0A)`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme });
     await page.addInitScript((value) => {
-      localStorage.setItem('hotsheet.ux-demo.theme', value);
+      localStorage.setItem('hotsheet.ux-demo.display', JSON.stringify({ theme: value }));
     }, theme);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/ux-demo?component=attachment-gallery');
@@ -6990,14 +6986,6 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
 });
 
 test('previews and resets important PermissionRequestCard variants', async ({ page }) => {
-  let releaseDemoModified!: () => void;
-  const demoModifiedReady = new Promise<void>((resolve) => {
-    releaseDemoModified = resolve;
-  });
-  await page.route('**/__hotsheet/demo-modified', async (route) => {
-    await demoModifiedReady;
-    await route.fulfill({ json: { 'permission-request': new Date().toISOString() } });
-  });
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=permission-request');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -7028,7 +7016,6 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   });
   await presentation.click();
   await expect(presentation).toHaveJSProperty('open', true);
-  releaseDemoModified();
   const initialCountdown = await card.locator('.permission-request-card__timer').textContent();
   await expect.poll(() => card.locator('.permission-request-card__timer').textContent()).not.toBe(initialCountdown);
   await expect(presentation).toHaveJSProperty('open', true);
@@ -7039,10 +7026,10 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   ).toBe(true);
   await page.keyboard.press('Escape');
   await expect(presentation).toHaveJSProperty('open', false);
-  // Kerf 5.0.0-beta.51's catalog shows phase and recency as one status line (HS2-KMDJRH).
+  // The catalog row's status line carries the entry's phase tag (HS2-KMDJRH, HS2-HMVBZW).
   await expect(
     page.locator('[data-action="catalog-select"][data-item-id="permission-request"] .kui-list-item__status'),
-  ).toHaveText(/^Feature floor · \S+/);
+  ).toHaveText('Feature floor');
   await choose(presentation, 'list');
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
   // The shell popup variant is a manual popover lifted into the top layer, anchored to the stage that
@@ -7920,7 +7907,9 @@ test('swaps the CommandRunDialog demo between run output and stop confirmation (
     await stop.getByRole('button', { name: 'Keep running' }).click();
     await expect(stop).toHaveJSProperty('open', false);
     await expect(event).toHaveText('Kept Run checks running');
-    await page.locator('[data-action="open-command-run-dialog-demo"]').click();
+    // With settings open at phone width the stage is a sliver beside the inspector; reopen by keyboard.
+    await page.locator('[data-action="open-command-run-dialog-demo"]').focus();
+    await page.keyboard.press('Enter');
     await expect(stop).toHaveJSProperty('open', true);
     await stop.getByRole('button', { name: 'Stop command' }).click();
     await expect(stop).toHaveJSProperty('open', false);
@@ -7946,7 +7935,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`uses native AI toolbar actions in dialog and embedded views in ${theme} (HS2-WXVAF3)`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme });
     await page.addInitScript((value) => {
-      localStorage.setItem('hotsheet.ux-demo.theme', value);
+      localStorage.setItem('hotsheet.ux-demo.display', JSON.stringify({ theme: value }));
     }, theme);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/ux-demo?component=ai-conversation');

@@ -24,12 +24,5 @@
   },
   "cache": true,
   "failOn": "warning",
-  "suppressions": [
-    {
-      "id": "hs2-pc9dvb-ux-demo-header-actions",
-      "rules": ["KUI-L201"],
-      "target": "src/ux-demo/main.tsx",
-      "rationale": "The UX demo passes this group to Kerf Catalog.headerActions, which forwards it to a Toolbar trailing zone. Catalog has no upstream composition entry for the analyzer to recognize (HS2-PC9DVB)."
-    }
-  ]
+  "suppressions": []
 }

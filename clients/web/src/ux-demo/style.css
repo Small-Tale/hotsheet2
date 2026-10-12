@@ -22,11 +22,30 @@ body {
   min-width: remify(832px);
   background: var(--wa-color-neutral-fill-quiet);
 }
+/* Catalog display controls (HS2-HMVBZW): contrast strengthens the shared border and focus tokens;
+   reduced motion collapses animation and transition durations across the previewed components. */
+html.demo-contrast {
+  --kui-color-neutral-border-normal: currentColor;
+  --kui-focus-ring: remify(3px) solid currentColor;
+  --wa-color-surface-border: currentColor;
+  --wa-color-neutral-border-normal: currentColor;
+  --wa-focus-ring: remify(3px) solid currentColor;
+}
+html.demo-reduced-motion *,
+html.demo-reduced-motion *::before,
+html.demo-reduced-motion *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 1ms !important;
+  transition-duration: 1ms !important;
+}
 body[data-resizing-project-sidebar='true'] {
   cursor: row-resize;
   user-select: none;
 }
-.demo-shell--settings-open {
+.demo-shell {
+  height: 100%;
+}
+.demo-shell[data-settings-open='true'] {
   width: calc(100% - min(remify(432px), calc(100vw - remify(32px))));
 }
 .demo-catalog-examples {

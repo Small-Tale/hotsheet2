@@ -46,7 +46,6 @@ describe('local production host (HS2-587N4D)', () => {
     const host = app();
     expect((await host.request('/ux-demo')).status).toBe(404);
     expect((await host.request('/ux-demo?component=tag-chip')).status).toBe(404);
-    expect((await host.request('/__hotsheet/demo-modified')).status).toBe(404);
     // A missing hashed asset is a 404, not the application document.
     expect((await host.request('/assets/missing.js')).status).not.toBe(200);
   });
