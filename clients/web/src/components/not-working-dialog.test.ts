@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { NotWorkingDialog } from './not-working-dialog';
+import { PendingAttachmentPicker } from './pending-attachment-picker';
 
 describe('NotWorkingDialog', () => {
   it('accepts either notes or pending attachments and exposes stable handlers', () => {
@@ -52,8 +53,11 @@ describe('NotWorkingDialog', () => {
   });
 
   it('keeps long filenames shrinkable and uses pointer/not-allowed cursor semantics', () => {
+    // Long names truncate through Kerf Text; the picker CSS no longer lays out rows (HS2-0NGK56).
+    const picker = String(PendingAttachmentPicker({ attachments: [{ id: 'long', name: 'a'.repeat(120) }] }));
+    expect(picker).toContain('data-wrap="truncate"');
     const css = readFileSync(resolve(import.meta.dirname, 'pending-attachment-picker.css'), 'utf8');
-    expect(css).toContainSource('min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis');
+    expect(css).not.toContain('__item');
     // Web Awesome buttons own their pointer/not-allowed cursors; the dialog no longer styles buttons (HS2-P6ZJDS).
     const dialogCss = readFileSync(resolve(import.meta.dirname, 'not-working-dialog.css'), 'utf8');
     expect(dialogCss).not.toMatch(/button|::part|__footer|__form|__hint/);
