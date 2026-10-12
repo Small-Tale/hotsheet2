@@ -53,12 +53,7 @@ export function CommandRunDialog({
   return (
     <div class="command-run-dialog" data-key="command-run-dialog">
       <DialogSurface size="small" bodyInset="comfortable" footerInset="comfortable">
-        <wa-dialog
-          data-key="command-run-dialog"
-          open
-          label={command.title}
-          data-component="command-run-dialog"
-        >
+        <wa-dialog data-key="command-run-dialog" open label={command.title} data-component="command-run-dialog">
           <List gap="m">
             <Row hAlign="full" vAlign="middle" gap="xs">
               <strong>{run ? run.state : 'Never run'}</strong>

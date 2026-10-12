@@ -153,7 +153,7 @@ describe('feature-owned interaction wiring (HS2-YWF98M)', () => {
   });
 
   it('keeps main.tsx as a bounded side-effect bootstrap', () => {
-    expect(main.split('\n')).toHaveLength(26);
+    expect(main.split('\n')).toHaveLength(28);
     // Page-lifetime iOS keyboard root-scroll restore (HS2-BCA512).
     expect(main).toContain('installDocumentScrollRestore(window);');
     expect(main).toContain('const { appRoot } = await startHotSheetWebClient();');

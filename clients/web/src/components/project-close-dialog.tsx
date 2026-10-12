@@ -128,9 +128,11 @@ function ResourceDetail({ resource, projectId }: { resource: ProjectCloseResourc
  * button to delegate to, and land on the first focusable area instead: the scrollable running-items List,
  * whose square scroller outline the aside clips. Callers run this after presenting a new dialog.
  */
-export function focusProjectCloseDialogDefault(root: ParentNode = document): void {
+export function focusProjectCloseDialogDefault(root?: ParentNode): void {
+  // Non-DOM callers (unit-tested feature owners) have nothing to focus.
+  if (typeof document === 'undefined' || typeof requestAnimationFrame === 'undefined') return;
   requestAnimationFrame(() => {
-    const target = root.querySelector<HTMLElement & { updateComplete?: Promise<unknown> }>(
+    const target = (root ?? document).querySelector<HTMLElement & { updateComplete?: Promise<unknown> }>(
       '[data-component="project-close-dialog"] [autofocus]',
     );
     if (!target) return;

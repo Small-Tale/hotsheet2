@@ -239,7 +239,14 @@ function CommandDetailFields({
       </Grid>
       {type === 'program' && (
         <>
-          <wa-input label="Program" name="program" data-command-field required value={command.program ?? ''} placeholder="npm" />
+          <wa-input
+            label="Program"
+            name="program"
+            data-command-field
+            required
+            value={command.program ?? ''}
+            placeholder="npm"
+          />
           <wa-textarea
             label="Arguments"
             name="args"

@@ -37,14 +37,14 @@ describe('LucideIcon colors come from the color prop (HS2-GQ57YW)', () => {
     // The agent identity icon keeps its success fill tone in every state.
     expect(iconColor(card({ item: pending }), 'bot')).toBe('var(--wa-color-success-fill-loud)');
     // Pending and resolving requests take the card's accent; failures turn danger.
-    expect(iconColor(card({ item: pending }), 'shield-check')).toBe('var(--permission-accent)');
-    expect(iconColor(card({ item: pending, state: 'resolving' }), 'clock-3')).toBe('var(--permission-accent)');
+    expect(iconColor(card({ item: pending }), 'shield-check')).toBe('var(--wa-color-brand-fill-loud)');
+    expect(iconColor(card({ item: pending, state: 'resolving' }), 'clock-3')).toBe('var(--wa-color-brand-fill-loud)');
     expect(iconColor(card({ item: pending, state: 'failed' }), 'circle-alert')).toBe(token('danger-on-quiet'));
     expect(iconColor(card({ item: pending, state: 'disconnected' }), 'circle-alert')).toBe(token('danger-on-quiet'));
-    // History: allowed keeps the accent, denied is danger, externally resolved is neutral.
+    // History: allowed is success in the list presentation, denied is danger, externally resolved is neutral.
     const resolved = (decision: PermissionHistoryItem['decision']) =>
       card({ item: { ...pending, decision, resolvedAt: 20 } });
-    expect(iconColor(resolved('allow'), 'check')).toBe('var(--permission-accent)');
+    expect(iconColor(resolved('allow'), 'check')).toBe('var(--wa-color-success-fill-loud)');
     expect(iconColor(resolved('deny'), 'x')).toBe(token('danger-on-quiet'));
     expect(iconColor(resolved('external'), 'external-link')).toBe(token('neutral-on-quiet'));
   });

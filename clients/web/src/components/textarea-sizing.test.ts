@@ -38,8 +38,8 @@ describe('touch textarea sizing (HS2-6PC150)', () => {
     );
     // The details editor, notes, note replies, the composer, blocked reason, conflict merges,
     // command settings, the not-working note, and dev review. The field-conflict merge now uses a
-    // Web Awesome textarea that owns its own sizing (HS2-4GBYYZ).
-    expect(resizable.length).toBeGreaterThanOrEqual(9);
+    // Web Awesome textarea that owns its own sizing (HS2-4GBYYZ), as does the command editor (HS2-WNXRG3).
+    expect(resizable.length).toBeGreaterThanOrEqual(8);
     for (const { path, selector, body } of resizable) {
       expect({ path, selector, resize: body.match(/resize: [^;]+;/)?.[0] }).toEqual({
         path,

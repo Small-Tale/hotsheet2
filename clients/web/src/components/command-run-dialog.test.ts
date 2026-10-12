@@ -19,9 +19,7 @@ describe('CommandRunDialog', () => {
     expect(css).not.toContain('--wa-space-');
     expect(css).not.toContain('[data-component');
     expect(css).not.toMatch(/\bsvg\b|\bbutton\b|__title|__summary|__actions/);
-    expect([...css.matchAll(/^\.[\w-]+ \{/gm)].map((match) => match[0])).toEqual([
-      '.command-run-dialog__output {',
-    ]);
+    expect([...css.matchAll(/^\.[\w-]+ \{/gm)].map((match) => match[0])).toEqual(['.command-run-dialog__output {']);
     const output = String(CommandRunDialog({ command, run })),
       stop = String(CommandRunDialog({ command, run, confirmStop: true }));
     for (const markup of [output, stop]) {
