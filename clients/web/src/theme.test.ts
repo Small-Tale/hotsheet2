@@ -202,20 +202,9 @@ describe('shared client theme', () => {
     expect(source).not.toMatch(/--wa-[\w-]+\s*:/);
   });
 
-  it('mirrors the Kerf spacing scale so components can author against it (HS2-4Y6SM9)', () => {
-    const source = css(tokenPath);
-    // Identical to kerf's foundation.css so the canonical scale resolves app-wide without importing
-    // foundation wholesale (which also carries color-scheme/color/font foundations).
-    for (const declaration of [
-      '--kui-space-none: 0',
-      '--kui-space-2xs: var(--wa-space-2xs, 0.25rem)',
-      '--kui-space-xs: var(--wa-space-xs, 0.5rem)',
-      '--kui-space-s: var(--wa-space-s, 0.75rem)',
-      '--kui-space-m: var(--wa-space-m, 1rem)',
-      '--kui-space-l: var(--wa-space-l, 1.5rem)',
-      '--kui-space-xl: var(--wa-space-xl, 2rem)',
-    ])
-      expect(source).toContain(declaration);
+  it('takes the Kerf spacing scale from Kerf foundation instead of mirroring it (HS2-4Y6SM9, HS2-0HT772)', () => {
+    expect(css(tokenPath)).not.toMatch(/--kui-[\w-]+\s*:/);
+    expect(readFileSync(resolve(sourceRoot, 'main.tsx'), 'utf8')).toContain("import '@kerfjs/ui/foundation.css';");
     // Components consume the scale for real semantic separation.
     const consumers = clientCss.map(css).join('\n');
     expect(consumers).toContain('var(--kui-space-xs)');

@@ -3,6 +3,8 @@ import '@kerfjs/ui/popup-menu/register';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
+// Kerf's foundation owns the canonical --kui-space-* scale and typography tokens (HS2-0HT772).
+import '@kerfjs/ui/foundation.css';
 import '@kerfjs/ui/webawesome.css';
 import './components/heading.css';
 import './hot-sheet-tokens.css';

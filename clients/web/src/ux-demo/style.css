@@ -2,6 +2,14 @@
 /* The shared touch textarea tokens (HS2-6PC150), imported like the app entry so the catalog shows touch
    auto-grow (HS2-YBBJEN). */
 @import '../components/textarea-sizing.css';
+/* The demo's theme picker sets data-theme; an explicit choice outranks Kerf's system-preference
+   color-scheme (the production app follows the system, HS2-0HT772). */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
 :root {
   font-family:
     Inter,

@@ -1,3 +1,4 @@
+import '@kerfjs/ui/foundation.css';
 import '@kerfjs/ui/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
