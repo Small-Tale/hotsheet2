@@ -110,12 +110,6 @@
       "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
     },
     {
-      "id": "web-awesome-ticket-row-menu-parts",
-      "rules": ["KUI-L011"],
-      "target": "src/components/ticket-row-context-menu.css",
-      "rationale": "This stylesheet customizes documented Web Awesome shadow parts at the external component boundary."
-    },
-    {
       "id": "web-awesome-ticket-status-menu-parts",
       "rules": ["KUI-L011"],
       "target": "src/components/ticket-status-menu.css",
