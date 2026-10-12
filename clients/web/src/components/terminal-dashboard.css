@@ -55,28 +55,14 @@
   --kui-select-selected-font-size: var(--wa-font-size-xs);
   --kui-select-selected-font-weight: var(--wa-font-weight-semibold);
 }
-/* The tile's own footer actions. Kerf control groups (the zoom toolbar, the terminal key bar) own
-   their buttons' chrome (HS2-CKS78M, HS2-DR549A). */
-:is(
-  .terminal-tile__identity,
-  .terminal-tile__menu,
-  .terminal-tile__open,
-  .terminal-tile__close,
-  .terminal-tile__text-size,
-  .terminal-tile__clipboard
-) {
+/* The tile identity is the footer's one app-owned native button; its icon actions sit in Kerf
+   borderless ToolbarControlGroups that own their chrome (HS2-XHA5QA, HS2-DR549A). */
+.terminal-tile__identity {
   border: 0;
   color: var(--wa-color-neutral-on-quiet);
   background: transparent;
 }
-:is(
-  .terminal-tile__identity,
-  .terminal-tile__menu,
-  .terminal-tile__open,
-  .terminal-tile__close,
-  .terminal-tile__text-size,
-  .terminal-tile__clipboard
-):focus-visible {
+.terminal-tile__identity:focus-visible {
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
 }
@@ -359,14 +345,20 @@
   overflow-y: auto;
   background-color: var(--hs-terminal-background);
 }
+/* The footer slot holds the card's fixed footer band (the grid geometry reserves exactly this height)
+   and sizes the Kerf Toolbar inside it through its public tokens: a 32px control band plus a 5.6px
+   inset fills the 43.2px band (HS2-XHA5QA). */
 .terminal-tile__footer {
-  display: flex;
-  min-height: var(--terminal-tile-footer-height);
+  --kui-toolbar-group-size: remify(32px);
+  --kui-toolbar-inset: remify(5.6px);
+  --kui-toolbar-gap: remify(6.4px);
   height: var(--terminal-tile-footer-height);
-  padding: remify(5.6px) remify(6.4px) remify(5.6px) remify(8.8px);
-  align-items: center;
   flex: none;
-  gap: remify(6.4px);
+}
+/* Phone magnified chrome uses 40px touch targets, so the inset shrinks to keep the same band. */
+.terminal-tile[data-mobile-chrome='true'] .terminal-tile__footer {
+  --kui-toolbar-group-size: remify(40px);
+  --kui-toolbar-inset: remify(1.6px);
 }
 .terminal-tile__halt {
   display: inline-flex;
@@ -406,20 +398,6 @@
 .terminal-tile__progress {
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
-}
-.terminal-tile__menu,
-.terminal-tile__open {
-  display: grid;
-  width: remify(32px);
-  height: remify(32px);
-  padding: 0;
-  border-radius: var(--wa-border-radius-m);
-  flex: none;
-  place-items: center;
-}
-.terminal-tile__menu:hover,
-.terminal-tile__open:hover {
-  background: var(--wa-color-neutral-fill-quiet);
 }
 /* Zero-size positioned anchor at the safe-area corner: the Kerf FloatingToolbar keeps its own
    bottom-end inset relative to this anchor, so it clears the device inset without app CSS on the
@@ -530,13 +508,6 @@
 .terminal-tile[data-mobile-chrome='true'] .terminal-tile__identity-project {
   color: color-mix(in srgb, var(--hs-terminal-foreground) 70%, transparent);
 }
-.terminal-tile[data-mobile-chrome='true'] .terminal-tile__footer button {
-  color: var(--hs-terminal-foreground);
-}
-.terminal-tile[data-mobile-chrome='true'] .terminal-tile__footer button:hover,
-.terminal-tile[data-mobile-chrome='true'] .terminal-tile__footer button:active {
-  background: color-mix(in srgb, var(--hs-terminal-foreground) 16%, transparent);
-}
 .terminal-tile[data-mobile-chrome='true'][data-keyboard-visible='true'] .terminal-tile__footer {
   display: none;
 }
@@ -562,33 +533,6 @@
   inset: auto;
   width: 100%;
   aspect-ratio: 5 / 3;
-}
-.terminal-tile__close,
-.terminal-tile__text-size,
-.terminal-tile__clipboard {
-  display: inline-flex;
-  min-width: remify(40px);
-  height: remify(40px);
-  padding: 0 remify(8px);
-  border-radius: var(--wa-border-radius-m);
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  gap: remify(4px);
-}
-.terminal-tile__text-size span {
-  font-size: var(--wa-font-size-xs);
-  font-variant-numeric: tabular-nums;
-}
-.terminal-tile__close:hover,
-.terminal-tile__text-size:hover,
-.terminal-tile__clipboard:hover {
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.terminal-tile[data-mobile-chrome='true'] .terminal-tile__menu,
-.terminal-tile[data-mobile-chrome='true'] .terminal-tile__open {
-  width: remify(40px);
-  height: remify(40px);
 }
 /* The empty, loading and message states stay compact app copy: a short drawer grid (about 100px) is
    shorter than Kerf EmptyState's icon-slot geometry, which clipped the title there. */

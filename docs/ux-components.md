@@ -1890,9 +1890,14 @@ At every scale, dashboard tiles are keyboard-focusable, non-interactive previews
 xterm retains a fixed 1280×768 natural geometry and the complete terminal is uniformly
 scaled into the tile instead of being refit to the tile. This keeps the PTY stable as grid
 zoom changes and keeps the preview, inset frame, and unused terminal area on the terminal
-background color. Only the black viewport follows that 5:3 aspect; the borderless tile card adds its
+background color. Only the terminal viewport follows that 5:3 aspect; the borderless tile card adds its
 measured spacing-token inset and footer height outside the viewport. `FixedAspectTerminalCard`
-owns this structure for both grid-preview and magnified-interactive variants. It withholds the
+owns this structure for both grid-preview and magnified-interactive variants. Its footer is a Kerf
+footer `Toolbar` inside an app-owned slot that holds the fixed footer band (HS2-XHA5QA). The leading
+zone holds the state, the identity, and the progress, and it truncates first. The trailing zone holds
+one borderless `ToolbarControlGroup` of native icon actions: compact 32px controls on cards, and 40px
+touch targets in the phone toolbar, whose Close action leads in its own group. The slot sizes the
+toolbar only through `--kui-toolbar-group-size`, `--kui-toolbar-inset`, and `--kui-toolbar-gap`. It withholds the
 xterm surface until bounded font-metric fitting is stable, so transitions do not expose each
 intermediate fitting pass. A plain activation
 magnifies and focuses an interactive copy in place over the same grid. During magnification,

@@ -308,140 +308,166 @@ function TerminalCard({
         <div class="terminal-tile__viewport-frame">{viewport}</div>
       </div>
       {magnified && mobile?.keyboardVisible && mobile.keyBar && <TerminalKeyBar {...mobile.keyBar} />}
-      <footer class="terminal-tile__footer">
-        {magnified && mobile && (
-          <button
-            type="button"
-            class="terminal-tile__close"
-            {...TERMINALS_ACTIONS.closeMagnifiedTerminal.attrs}
-            aria-label={`Close ${session.title ?? session.id}`}
-            title="Close"
-          >
-            <LucideIcon size="s" icon={X} name="x" />
-          </button>
-        )}
-        {session.halt ? (
-          // A halted AI session (HS2-HJ4D1H) replaces the state dot: it is waiting for the user.
-          <span
-            class="terminal-tile__halt"
-            role="img"
-            aria-label={`Stopped: ${session.halt.message}`}
-            title={`Stopped: ${session.halt.message}`}
-          >
-            <LucideIcon size="s" icon={TriangleAlert} name="triangle-alert" color={uiColor('danger-on-quiet')} />
-          </span>
-        ) : (
-          <>
-            <TileState state={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'} />
-            {session.aiConnection && (
-              <span
-                class="terminal-tile__ai-connection"
-                data-ai-connection={session.aiConnection}
-                role="img"
-                aria-label={aiConnectionLabel(
-                  session.aiConnection,
-                  session.ai_connection?.agent,
-                  session.tool,
-                  session.last_hook_report ?? session.ai_connection,
-                )}
-                title={aiConnectionLabel(
-                  session.aiConnection,
-                  session.ai_connection?.agent,
-                  session.tool,
-                  session.last_hook_report ?? session.ai_connection,
-                )}
-              >
-                {session.aiConnection === 'connected' ? (
-                  <LucideIcon size="s" icon={Plug} name="plug" color={uiColor('neutral-on-quiet')} />
-                ) : (
-                  <LucideIcon size="s" icon={Unplug} name="unplug" color={uiColor('warning-on-quiet')} />
-                )}
-              </span>
-            )}
-          </>
-        )}
-        <button
-          type="button"
-          class="terminal-tile__identity"
-          {...TERMINALS_ACTIONS.openTerminalProject.attrs}
-          data-item-id={key}
-          aria-label={`Open ${session.title ?? session.id} in ${session.projectName}`}
-        >
-          {magnified && mobile ? (
-            // Phone toolbar: the terminal's own name leads, with its project as a subtitle, so a narrow
-            // identity still names the terminal instead of truncating inside the project (HS2-8NQRJB).
+      {/* App-owned footer slot: it keeps the card's fixed footer band and phone ordering, and tunes the
+          Kerf Toolbar inside it only through public toolbar tokens (HS2-XHA5QA). */}
+      <div class="terminal-tile__footer">
+        <Toolbar
+          position="footer"
+          label={`${session.title ?? session.id} terminal`}
+          leading={
             <>
-              <strong>{session.title ?? session.id}</strong>
-              <span class="terminal-tile__identity-project">{session.projectName}</span>
+              {magnified && mobile && (
+                <ToolbarControlGroup single appearance="borderless" content="icon">
+                  <button
+                    type="button"
+                    class="terminal-tile__close"
+                    {...TERMINALS_ACTIONS.closeMagnifiedTerminal.attrs}
+                    aria-label={`Close ${session.title ?? session.id}`}
+                    title="Close"
+                  >
+                    <LucideIcon size="s" icon={X} name="x" />
+                  </button>
+                </ToolbarControlGroup>
+              )}
+              {session.halt ? (
+                // A halted AI session (HS2-HJ4D1H) replaces the state dot: it is waiting for the user.
+                <span
+                  class="terminal-tile__halt"
+                  role="img"
+                  aria-label={`Stopped: ${session.halt.message}`}
+                  title={`Stopped: ${session.halt.message}`}
+                >
+                  <LucideIcon size="s" icon={TriangleAlert} name="triangle-alert" color={uiColor('danger-on-quiet')} />
+                </span>
+              ) : (
+                <>
+                  <TileState state={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'} />
+                  {session.aiConnection && (
+                    <span
+                      class="terminal-tile__ai-connection"
+                      data-ai-connection={session.aiConnection}
+                      role="img"
+                      aria-label={aiConnectionLabel(
+                        session.aiConnection,
+                        session.ai_connection?.agent,
+                        session.tool,
+                        session.last_hook_report ?? session.ai_connection,
+                      )}
+                      title={aiConnectionLabel(
+                        session.aiConnection,
+                        session.ai_connection?.agent,
+                        session.tool,
+                        session.last_hook_report ?? session.ai_connection,
+                      )}
+                    >
+                      {session.aiConnection === 'connected' ? (
+                        <LucideIcon size="s" icon={Plug} name="plug" color={uiColor('neutral-on-quiet')} />
+                      ) : (
+                        <LucideIcon size="s" icon={Unplug} name="unplug" color={uiColor('warning-on-quiet')} />
+                      )}
+                    </span>
+                  )}
+                </>
+              )}
+              <button
+                type="button"
+                class="terminal-tile__identity"
+                {...TERMINALS_ACTIONS.openTerminalProject.attrs}
+                data-item-id={key}
+                aria-label={`Open ${session.title ?? session.id} in ${session.projectName}`}
+              >
+                {magnified && mobile ? (
+                  // Phone toolbar: the terminal's own name leads, with its project as a subtitle, so a narrow
+                  // identity still names the terminal instead of truncating inside the project (HS2-8NQRJB).
+                  <>
+                    <strong>{session.title ?? session.id}</strong>
+                    <span class="terminal-tile__identity-project">{session.projectName}</span>
+                  </>
+                ) : (
+                  <strong>
+                    {session.projectName}
+                    <span aria-hidden="true"> › </span>
+                    {session.title ?? session.id}
+                  </strong>
+                )}
+              </button>
+              {/* Progress follows the identity in the shrinking leading zone, so the trailing zone holds
+                  one unwrappable action group and a narrow card truncates the identity instead. */}
+              {session.progress !== undefined && <span class="terminal-tile__progress">{session.progress}%</span>}
             </>
-          ) : (
-            <strong>
-              {session.projectName}
-              <span aria-hidden="true"> › </span>
-              {session.title ?? session.id}
-            </strong>
-          )}
-        </button>
-        {session.progress !== undefined && <span class="terminal-tile__progress">{session.progress}%</span>}
-        {magnified && mobile && (
-          <button
-            type="button"
-            class="terminal-tile__text-size"
-            {...TERMINALS_ACTIONS.cycleMobileTerminalColumns.attrs}
-            data-columns={String(mobile.columns)}
-            aria-label={`Text size: ${mobile.columns} columns. Change text size`}
-            title="Change text size"
-          >
-            <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
-          </button>
-        )}
-        {clipboardActions && (
-          <button
-            type="button"
-            class="terminal-tile__clipboard"
-            {...TERMINALS_ACTIONS.copyTerminalText.attrs}
-            aria-label="Copy terminal text"
-            title="Copy terminal text"
-          >
-            <LucideIcon size="s" icon={Copy} name="copy" />
-          </button>
-        )}
-        {clipboardActions && (
-          <button
-            type="button"
-            class="terminal-tile__clipboard"
-            {...TERMINALS_ACTIONS.pasteTerminalText.attrs}
-            aria-label="Paste"
-            title="Paste"
-          >
-            <LucideIcon size="s" icon={ClipboardPaste} name="clipboard-paste" />
-          </button>
-        )}
-        <button
-          type="button"
-          class="terminal-tile__menu"
-          {...TERMINALS_ACTIONS.openTerminalContextMenu.attrs}
-          data-item-id={key}
-          aria-label={`More actions for ${session.title ?? session.id}`}
-          title="More actions"
-        >
-          <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
-        </button>
-        {/* The phone toolbar leaves this to More actions → Open (and the identity), so the identity keeps
-            room beside Copy and Paste at 390px (HS2-8NQRJB). */}
-        {magnified && !mobile && (
-          <button
-            type="button"
-            class="terminal-tile__open"
-            {...TERMINALS_ACTIONS.openTerminalProject.attrs}
-            data-terminal-key={key}
-            aria-label={`Open ${session.title ?? session.id} in project terminal drawer`}
-            title="Open in project terminal drawer"
-          >
-            <LucideIcon size="s" icon={ExternalLink} name="external-link" />
-          </button>
-        )}
-      </footer>
+          }
+          trailing={
+            <>
+              {/* Kerf's borderless control group owns the actions' sizing, hover, and focus chrome. */}
+              <ToolbarControlGroup
+                appearance="borderless"
+                content="icon"
+                size={magnified && mobile ? 'default' : 'compact'}
+                label="Terminal actions"
+              >
+                {magnified && mobile && (
+                  <button
+                    type="button"
+                    class="terminal-tile__text-size"
+                    {...TERMINALS_ACTIONS.cycleMobileTerminalColumns.attrs}
+                    data-columns={String(mobile.columns)}
+                    aria-label={`Text size: ${mobile.columns} columns. Change text size`}
+                    title="Change text size"
+                  >
+                    <LucideIcon size="s" icon={ALargeSmall} name="a-large-small" />
+                  </button>
+                )}
+                {clipboardActions && (
+                  <button
+                    type="button"
+                    class="terminal-tile__clipboard"
+                    {...TERMINALS_ACTIONS.copyTerminalText.attrs}
+                    aria-label="Copy terminal text"
+                    title="Copy terminal text"
+                  >
+                    <LucideIcon size="s" icon={Copy} name="copy" />
+                  </button>
+                )}
+                {clipboardActions && (
+                  <button
+                    type="button"
+                    class="terminal-tile__clipboard"
+                    {...TERMINALS_ACTIONS.pasteTerminalText.attrs}
+                    aria-label="Paste"
+                    title="Paste"
+                  >
+                    <LucideIcon size="s" icon={ClipboardPaste} name="clipboard-paste" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  class="terminal-tile__menu"
+                  {...TERMINALS_ACTIONS.openTerminalContextMenu.attrs}
+                  data-item-id={key}
+                  aria-label={`More actions for ${session.title ?? session.id}`}
+                  title="More actions"
+                >
+                  <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
+                </button>
+                {/* The phone toolbar leaves this to More actions → Open (and the identity), so the identity keeps
+                    room beside Copy and Paste at 390px (HS2-8NQRJB). */}
+                {magnified && !mobile && (
+                  <button
+                    type="button"
+                    class="terminal-tile__open"
+                    {...TERMINALS_ACTIONS.openTerminalProject.attrs}
+                    data-terminal-key={key}
+                    aria-label={`Open ${session.title ?? session.id} in project terminal drawer`}
+                    title="Open in project terminal drawer"
+                  >
+                    <LucideIcon size="s" icon={ExternalLink} name="external-link" />
+                  </button>
+                )}
+              </ToolbarControlGroup>
+            </>
+          }
+        />
+      </div>
     </article>
   );
 }
@@ -579,24 +605,32 @@ export function WorkspaceGridChatCard({ chat, previewScale = 1 }: { chat: Worksp
           </div>
         </div>
       </div>
-      <footer class="terminal-tile__footer">
-        <TileState state={state} />
-        <button
-          type="button"
-          class="terminal-tile__identity"
-          {...TERMINALS_ACTIONS.openGridAiChat.attrs}
-          data-item-id={key}
-          data-project-id={chat.projectId}
-          data-chat-id={chat.id}
-          aria-label={`Open ${chat.name} in ${chat.projectName}`}
-        >
-          <strong>
-            {chat.projectName}
-            <span aria-hidden="true"> › </span>
-            {chat.name}
-          </strong>
-        </button>
-      </footer>
+      <div class="terminal-tile__footer">
+        <Toolbar
+          position="footer"
+          label={`${chat.name} AI chat`}
+          leading={
+            <>
+              <TileState state={state} />
+              <button
+                type="button"
+                class="terminal-tile__identity"
+                {...TERMINALS_ACTIONS.openGridAiChat.attrs}
+                data-item-id={key}
+                data-project-id={chat.projectId}
+                data-chat-id={chat.id}
+                aria-label={`Open ${chat.name} in ${chat.projectName}`}
+              >
+                <strong>
+                  {chat.projectName}
+                  <span aria-hidden="true"> › </span>
+                  {chat.name}
+                </strong>
+              </button>
+            </>
+          }
+        />
+      </div>
     </article>
   );
 }

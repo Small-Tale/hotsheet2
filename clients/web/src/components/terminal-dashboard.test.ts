@@ -189,6 +189,19 @@ describe('TerminalDashboard', () => {
     const tablet = String(FixedAspectTerminalCard({ session, mode: 'magnified', touchClipboard: true }));
     expect(tablet.match(/class="terminal-tile__clipboard"/g)).toHaveLength(2);
     expect(tablet).toContain('Open Codex in project terminal drawer');
+    // HS2-XHA5QA: the icon actions sit in one borderless Kerf group, compact on desktop and default on the
+    // phone toolbar, whose Close button gets its own single group.
+    const actions = (html: string) =>
+      /<[^>]*data-component="toolbar-control-group"[^>]*aria-label="Terminal actions"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(actions(tablet)).toContain('data-appearance="borderless"');
+    expect(actions(tablet)).toContain('data-size="compact"');
+    expect(actions(markup)).toContain('data-size="default"');
+    // The footer slot hosts a Kerf footer Toolbar, tuned only through public toolbar tokens.
+    expect(tablet).toMatch(/<div class="terminal-tile__footer">\s*<footer[^>]*class="kui-toolbar"/);
+    expect(css).toMatchSource(
+      /\.terminal-tile__footer \{[^}]*--kui-toolbar-group-size: [^;]+;[^}]*--kui-toolbar-inset:/,
+    );
+    expect(markup).toMatch(/data-appearance="borderless"[^>]*>\s*<button[^>]*class="terminal-tile__close"/);
     expect(tablet).not.toContain('terminal-tile__identity-project');
     expect(tablet).not.toContain('cycle-mobile-terminal-columns');
     expect(String(FixedAspectTerminalCard({ session, touchClipboard: true }))).not.toContain('copy-terminal-text');
@@ -367,9 +380,12 @@ describe('TerminalDashboard', () => {
     expect(css).not.toContain('.terminal-dashboard__zoom button');
     // HS2-KKP8YJ: iOS must not raise its own callout over a long-pressed interactive terminal.
     expect(css).toContainSource(".terminal-viewport[data-display-mode='interactive'] { -webkit-touch-callout: none; }");
-    expect(css).toMatchSource(
-      /:is\( \.terminal-tile__identity, \.terminal-tile__menu, \.terminal-tile__open, \.terminal-tile__close, \.terminal-tile__text-size, \.terminal-tile__clipboard \) \{ border: 0; color: var\(--wa-color-neutral-on-quiet\); background: transparent; \}/,
+    expect(css).toContainSource(
+      '.terminal-tile__identity { border: 0; color: var(--wa-color-neutral-on-quiet); background: transparent; }',
     );
+    // The tile's icon actions sit in Kerf borderless ToolbarControlGroups, which own their chrome (HS2-XHA5QA).
+    for (const action of ['menu', 'open', 'close', 'text-size', 'clipboard'])
+      expect(css, action).not.toContain(`.terminal-tile__${action}`);
     const controls = String(
       TerminalVisibilityControls({ groups: [{ id: 'default', name: 'Default', hiddenKeys: [] }], activeId: 'default' }),
     );
