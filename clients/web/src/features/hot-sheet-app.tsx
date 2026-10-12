@@ -9,7 +9,6 @@ import type {
   ProviderAccount,
   ProviderConnection,
   TicketRow as WireTicketRow,
-  ToolConnection,
 } from '../api';
 import { type BulkUpdateProgress } from '../bulk-update-progress';
 import { AiFeedbackDialog, type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
@@ -70,8 +69,6 @@ import { animateTicketMotion, captureTicketMotion } from '../ticket-motion';
 import type { TicketScrollMemory } from '../ticket-scroll-state';
 import { type TicketView } from '../ticket-views';
 import type { TrackedSizeObserver } from '../tracked-size-observer';
-import type { UiStabilityDiagnostics } from '../ui-stability-diagnostics';
-import { renderStormSuppressionReason } from '../ui-stability-diagnostics';
 import { syncVideoPosters } from '../video-posters';
 
 /** Live application bindings createHotSheetApp reads (HS2-K0VC2C). */
@@ -90,7 +87,6 @@ export interface HotSheetAppDependencies {
     insideGallery?: boolean;
     readerScope?: string;
   }) => Parameters<typeof AttachmentContextMenuSurface>[0]['menu'];
-  backgroundProjectRefresh: () => boolean;
   bulkTicketDialog: Signal<BulkTicketDialogState | undefined>;
   bulkUpdateProgress: Signal<BulkUpdateProgress | undefined>;
   canStageNewTicketAttachments: () => boolean;
@@ -115,7 +111,6 @@ export interface HotSheetAppDependencies {
   defaultProvider: () => ProjectTicketSources | undefined;
   defaultProviders: Signal<Record<string, ProjectTicketSources | undefined>>;
   deferContainedListScrollRestore: boolean;
-  driveConnectionsByProject: Signal<Record<string, ToolConnection[]>>;
   error: Signal<string>;
   gallerySurface: () => SafeHtml;
   githubAuth: Signal<GithubAuthState | undefined>;
@@ -123,7 +118,6 @@ export interface HotSheetAppDependencies {
   hs1MigrationBusy: Signal<boolean>;
   hs1MigrationError: Signal<string>;
   hs1MigrationProject: Signal<Project | undefined>;
-  initialProjectRestoreComplete: () => boolean;
   loading: Signal<boolean>;
   manualModelDialog: Signal<ManualModelDialogState | undefined>;
   newTicketSource: () => TicketSourceChoice | undefined;
@@ -206,7 +200,6 @@ export interface HotSheetAppDependencies {
   ticketSourceSetupError: Signal<string>;
   ticketSourceSetupNavigation: Signal<'pop' | 'push' | 'none'>;
   ticketSourceSetupProject: Signal<Project | undefined>;
-  uiStabilityDiagnostics: UiStabilityDiagnostics | undefined;
   unhealthyServerRecovery: Signal<UnhealthyServerRecovery | undefined>;
   unhealthyServerRecoveryBusy: Signal<boolean>;
   viewMode: Signal<WorkspaceViewMode>;
@@ -226,7 +219,6 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     appRoot,
     appTabContextMenu,
     attachmentMenuSurfaceProps,
-    backgroundProjectRefresh,
     bulkTicketDialog,
     bulkUpdateProgress,
     canStageNewTicketAttachments,
@@ -251,7 +243,6 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     defaultProvider,
     defaultProviders,
     deferContainedListScrollRestore,
-    driveConnectionsByProject,
     error,
     gallerySurface,
     githubAuth,
@@ -259,7 +250,6 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     hs1MigrationBusy,
     hs1MigrationError,
     hs1MigrationProject,
-    initialProjectRestoreComplete,
     loading,
     manualModelDialog,
     newTicketSource,
@@ -336,7 +326,6 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
     ticketSourceSetupError,
     ticketSourceSetupNavigation,
     ticketSourceSetupProject,
-    uiStabilityDiagnostics,
     unhealthyServerRecovery,
     unhealthyServerRecoveryBusy,
     viewMode,
@@ -357,18 +346,6 @@ export function createHotSheetApp(dependencies: HotSheetAppDependencies) {
         : { scope: '', rows: new Map() };
     renderedTicketCollectionKey = nextTicketCollectionKey;
     renderMetrics?.recordPass();
-    if (renderMetrics && uiStabilityDiagnostics) {
-      const suppression = renderStormSuppressionReason({
-        initialProjectRestoreComplete: initialProjectRestoreComplete(),
-        foregroundLoading: loading.value,
-        progressiveTicketRendering: progressiveRenderPass,
-        backgroundProjectRefresh: backgroundProjectRefresh(),
-        activeToolTurn: Object.values(driveConnectionsByProject.value).some((connections) =>
-          connections.some((connection) => connection.busy),
-        ),
-      });
-      uiStabilityDiagnostics.recordRender(renderMetrics.snapshot(), suppression);
-    }
     queueMicrotask(() => {
       const ticketCollectionPending =
         shellMode.value === 'project' &&

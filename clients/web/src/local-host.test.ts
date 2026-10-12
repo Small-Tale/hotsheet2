@@ -23,7 +23,6 @@ describe('local production host (HS2-587N4D)', () => {
   const app = () => {
     const bridge = new Hono();
     bridge.get('/__hotsheet/checkouts', (context) => context.json([{ id: 'one' }]));
-    bridge.post('/__hotsheet/dev-review/tickets', (context) => context.json({ leaked: true }));
     bridge.get('/ux-demo', (context) => context.text('catalog'));
     return createLocalHostApp(dist, bridge);
   };
@@ -45,7 +44,6 @@ describe('local production host (HS2-587N4D)', () => {
 
   it('never serves development-only surfaces, even when the bridge defines them', async () => {
     const host = app();
-    expect((await host.request('/__hotsheet/dev-review/tickets', { method: 'POST' })).status).toBe(404);
     expect((await host.request('/ux-demo')).status).toBe(404);
     expect((await host.request('/ux-demo?component=tag-chip')).status).toBe(404);
     expect((await host.request('/__hotsheet/demo-modified')).status).toBe(404);

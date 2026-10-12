@@ -346,7 +346,7 @@ test('keeps immediate saved-view query replacement focused when opening frames r
   // deferred placement yields when focus has moved to the name field (KF-DNVMQE, HS2-TNE7V7).
   await mockSavedViews(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project', exact: true }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const frames = await holdAnimationFrames(page);
@@ -406,7 +406,7 @@ test('keeps saved-view cancel and reopen authoritative across delayed frames and
   page,
 }) => {
   await mockSavedViews(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project', exact: true }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const frames = await holdAnimationFrames(page);

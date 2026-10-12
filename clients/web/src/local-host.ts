@@ -4,7 +4,7 @@
  *
  * The bridge is `createDevApp(true)`: every local endpoint (project open, API proxy with the server
  * secret, folder picking, migration) stays enabled because this is the same local-machine host as
- * `npm run dev`. The development-only surfaces, Dev Review, the `/ux-demo` catalog, and its
+ * `npm run dev`. The development-only surfaces, the `/ux-demo` catalog and its
  * modification feed, are not served; the production bundle already omits their client code.
  */
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs';
@@ -152,7 +152,7 @@ function cacheControl(value: string): MiddlewareHandler {
     context.res = new Response(context.res.body, { status: context.res.status, headers });
   };
 }
-const DEVELOPMENT_ONLY = /^\/(?:ux-demo|__hotsheet\/(?:dev-review|demo-modified))(?:[/?]|$)/;
+const DEVELOPMENT_ONLY = /^\/(?:ux-demo|__hotsheet\/(?:demo-modified))(?:[/?]|$)/;
 
 /** Build the host app: development-only routes 404, the bridge owns `/__hotsheet`, the rest is static. */
 export function createLocalHostApp(distRoot: string, bridge: Hono = createDevApp(true)): Hono {

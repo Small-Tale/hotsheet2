@@ -108,13 +108,13 @@ test('lays out dialog footers through the ContentTransition action-row variant (
         }, value);
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.goto('/ux-demo?component=content-transition&dev-review=false');
+    await page.goto('/ux-demo?component=content-transition');
     await expect(page.locator('[data-transition-region="content"]')).toHaveAttribute('data-side-layout', 'block');
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     const demoSide = await actionRow(page.locator('[data-transition-region="footer"]'));
     expect(await right(demoSide.getByRole('button', { name: 'Connect' }))).toBeCloseTo(await right(demoSide), 0);
 
-    await page.goto('/ux-demo?component=ticket-source-setup-dialog&dev-review=false');
+    await page.goto('/ux-demo?component=ticket-source-setup-dialog');
     const setup = page.locator('[data-ticket-source-setup-dialog]'),
       setupFooter = setup.locator('[data-transition-region="footer"]'),
       label = setup.locator('[data-transition-region="label"]'),
@@ -135,7 +135,7 @@ test('lays out dialog footers through the ContentTransition action-row variant (
     await expect(editSide.getByRole('button', { name: 'Save changes' })).toBeVisible();
     expect(await right(editSide.getByRole('button', { name: 'Save changes' }))).toBeCloseTo(await right(editSide), 0);
 
-    await page.goto('/ux-demo?component=conversation-export-dialog&dev-review=false');
+    await page.goto('/ux-demo?component=conversation-export-dialog');
     const exportSide = await actionRow(
       page.locator('[data-component="conversation-export-dialog"] [data-transition-region="footer"]'),
     );

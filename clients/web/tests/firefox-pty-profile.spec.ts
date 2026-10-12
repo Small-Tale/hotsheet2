@@ -98,7 +98,7 @@ for (const viewport of [
         };
         requestAnimationFrame(frame);
       }, viewport.forceDom);
-      await page.goto('/?dev-review=false');
+      await page.goto('/');
       const socketUrl =
         server.url.replace(/^http/, 'ws') +
         '/terminals/' +

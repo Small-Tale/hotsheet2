@@ -123,7 +123,7 @@ for (const viewport of [
         };
         requestAnimationFrame(frame);
       });
-      await page.goto('/?dev-review=false');
+      await page.goto('/');
       const socketUrl = `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(terminal.id)}/attach?secret=${encodeURIComponent(server.secret)}`;
       await page.evaluate(async (url) => {
         const overlay = document.createElement('section');
@@ -304,7 +304,7 @@ for (const viewport of [
         cwd: server.root,
       });
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      await page.goto('/?dev-review=false');
+      await page.goto('/');
       const socketUrl = `${server.url.replace(/^http/, 'ws')}/terminals/${encodeURIComponent(terminal.id)}/attach?secret=${encodeURIComponent(server.secret)}`;
       const markers = await page.evaluate(async (url) => {
         const socket = new WebSocket(url);

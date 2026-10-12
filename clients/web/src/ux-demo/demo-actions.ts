@@ -88,7 +88,6 @@ export const DEMO_ACTIONS = {
   toggleCodeReviewCommit: attr('data-action', 'toggle-code-review-commit'),
   toggleCommandGroup: attr('data-action', 'toggle-command-group'),
   toggleCommandSection: attr('data-action', 'toggle-command-section'),
-  toggleDevReview: attr('data-action', 'toggle-dev-review'),
   toggleDrive: attr('data-action', 'toggle-drive'),
   toggleFavorite: attr('data-action', 'toggle-favorite'),
   toggleFeedbackChoice: attr('data-action', 'toggle-feedback-choice'),

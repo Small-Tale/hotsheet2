@@ -228,8 +228,7 @@ Supporting components:
   in the leading zone, with named grouped controls in the trailing zone. Supporting copy
   is app-owned content below the toolbar; host `aria-labelledby`/`aria-describedby` point
   to the retained title and summary ids. `heading.css` owns only the icon tone and summary
-  alignment, while Kerf owns row/control geometry. The framework-neutral Dev Review
-  overlay emits the same Toolbar/ToolbarText anatomy and imports its canonical styles.
+  alignment, while Kerf owns row/control geometry.
   `ValueTable` supplies the bordered metadata surface while `ValueTableRow` supplies aligned
   label/value geometry and inset separators; consumers do not hand-author raw definition-list
   rows; the connection-details, HS1 migration, and catalog compositions all use that row
@@ -1476,7 +1475,7 @@ At this shared document boundary, an explicit root `data-theme` selects a single
 `color-scheme`, overriding the library foundation's system preference without replacing
 its palette. Catalog light/dark selection therefore controls components independently of
 the operating-system preference and survives reloads (HS2-0DD4XQ).
-The production shell, UX-demo chrome, and local Dev Review overlay all consume this
+The production shell and UX-demo chrome both consume this
 same contract. Raw product palette values are defined only in
 `hot-sheet-tokens.css`; component, demo, and development-tool styles select semantic
 surface, text, border, status, focus, overlay, and shadow tokens. Translucent effects
@@ -2093,8 +2092,7 @@ keeps the `TokenSearchField` filter in the fixed sidebar header while entries sc
 its conditional Clear filter button clears the query and returns focus to the field.
 Filtering still matches entry and section names without regard to case, and rerenders
 retain the query. The app retains
-ownership of the selected entry and persisted collapsed/theme state, its development-only
-Dev Review toggle, and an optional manually closed settings inspector
+ownership of the selected entry and persisted collapsed/theme state and an optional manually closed settings inspector
 that keeps the demo visible during live adjustment. The settings action lives with the
 other catalog-header tools; while the inspector is open, its Close settings action stays
 viewport anchored. Stateful Web Awesome control properties stay synchronized when a demo
@@ -2103,7 +2101,7 @@ TicketInspector, AIConversation, QuickTicketComposer, and ContentTransition form
 Further catalog review tooling is tracked by HS2-89692E.
 
 Kerf beta.83 removes the Catalog geometry overlay API. The UX demo no longer outlines
-transparent component bounds or external margins; HS2-WWRMFY tracks a supported replacement.
+transparent component bounds or external margins.
 The beta.83 Catalog keeps its checkerboard preview stage and responsive controls. Long desktop
 sidebars reveal both the initial deep link and later controlled selection without moving keyboard
 focus; compact layouts retain Kerf's default no-forced-scroll guard.
@@ -2124,8 +2122,7 @@ shared component graph is not re-walked for every demo (HS2-GGHVTQ).
 The demo stylesheet imports the same shared global token sheets as the app entry
 (`cursor-semantics.css` and `textarea-sizing.css`), so touch textarea auto-grow under a coarse
 pointer is representable in the catalog without duplicating component CSS (HS2-YBBJEN).
-Planned entries retain an explicit Planned tag. A development-only header toggle enables
-or disables Dev Review without coupling that state to component selection.
+Planned entries retain an explicit Planned tag.
 
 - a searchable component index grouped by the sections above
 - isolated examples plus composed screen scenarios
@@ -2519,14 +2516,14 @@ Since Kerf 5.0.0-beta.72 (HS2-R9GQJE) the doctor runs strict:
   `src/ux-demo/catalog.test.ts` requires it to name an existing module.
 - `"implicitComponentOwnership": true` judges uncataloged modules that import CSS, such as
   `LoadingSpinner`'s `active-claim.tsx`.
-- `"ownershipGroups"` declares the three shell stylesheets (`src/style.css`,
-  `src/ux-demo/style.css`, `src/dev-review/dev-review.css`) with the modules they serve.
+- `"ownershipGroups"` declares the shell stylesheets (`src/style.css` and
+  `src/ux-demo/style.css`) with the modules they serve.
 - `"ownershipContext": "any-package"` also reports Kerf classes used as selector context.
 
-Two app findings were real. The dev-review dialog restyled the shared `.app-heading`; it now uses
-the heading's `data-summary-size="small"` variant and reserves the row on its own form grid. Its
-module also imports `native-popover-dialog.css` directly instead of through a CSS `@import`, so it
-co-owns the `.dialog-surface` it renders.
+Two app findings were real. The since-removed dev-review dialog restyled the shared `.app-heading`; it was changed to use
+the heading's `data-summary-size="small"` variant and reserve the row on its own form grid. Its
+module also imported `native-popover-dialog.css` directly instead of through a CSS `@import`, so it
+co-owned the `.dialog-surface` it rendered.
 
 HS2-R9GQJE reran the probe matrix on Kerf 5.0.0-beta.73, with each rule placed in an unrelated
 component stylesheet or the markup in an unrelated module. The doctor now reports every case the
@@ -2559,9 +2556,8 @@ reports the same cases.
 Ownership comes from the TSX sources, not from file names:
 
 - A stylesheet's owners are the modules that import it, directly or through CSS `@import`.
-- Three shell stylesheets also own every style-less module in their scope: `src/style.css` owns
-  `main.tsx` and `src/app/`, `src/ux-demo/style.css` owns the demo modules, and
-  `dev-review.css` owns `src/dev-review/`.
+- Two shell stylesheets also own every style-less module in their scope: `src/style.css` owns
+  `main.tsx` and `src/app/`, and `src/ux-demo/style.css` owns the demo modules.
 - A class block's owners are the modules whose literals render it, including raw HTML
   `class="…"` attributes. When several modules render the same block, ownership goes to the
   stylesheet named after the block, and otherwise to the stylesheet that uses the block as a
@@ -2611,7 +2607,7 @@ The migration sized about 130 icon renders through `size` and removed the svg ru
 stylesheets. Before/after captures of all 83 UX demo components at 1280 and 390 are pixel-identical.
 
 The markup rule's residue at introduction was 15 findings: shell markup in `runtime.tsx`
-(`HS2-T35VN7`), four modules that render a sibling's class (`HS2-WP69TD`), and the dev review
+(`HS2-T35VN7`), four modules that render a sibling's class (`HS2-WP69TD`), and the since-removed dev review
 page's raw copy of Kerf Toolbar markup (`HS2-PX4JNP`). `CorruptTicketRow` was fixed first
 (HS2-QSR1TG). `WorkspaceHeader` and the app runtime now import the header and heading stylesheets
 whose root blocks they render.
@@ -2638,10 +2634,10 @@ HS2-T35VN7 removed the last two runtime shell entries: AppShell now renders the 
 through its `mobileView` prop. The Trash action at 1280 and the Queue and Trash phone headers at
 390 are identical before and after.
 
-HS2-PX4JNP composes Kerf `Toolbar`, `ToolbarText`, and `ToolbarControlGroup` for the dev review
-dialog's heading row. Its earlier version was a raw HTML copy of their markup. The module writes
-the dialog through `innerHTML`, so it inserts the components' SafeHtml string output. Only the
-close button inside the group stays a literal `raw()` string. The heading at 1280 and 390 is
+HS2-PX4JNP composed Kerf `Toolbar`, `ToolbarText`, and `ToolbarControlGroup` for the since-removed
+dev review dialog's heading row. Its earlier version was a raw HTML copy of their markup. The module wrote
+the dialog through `innerHTML`, so it inserted the components' SafeHtml string output. Only the
+close button inside the group stayed a literal `raw()` string. The heading at 1280 and 390 is
 identical before and after. This fix removed the last seven entries, so the allowlist is now
 empty.
 

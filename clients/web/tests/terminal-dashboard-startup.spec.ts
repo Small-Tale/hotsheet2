@@ -172,7 +172,7 @@ test('reveals a restored terminal workspace atomically and separates All Project
     return route.continue();
   });
   const video = page.video();
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   const restoring = page.locator('[data-project-restore-state="true"]');
   await expect(restoring).toBeVisible();
   await page.waitForTimeout(450);

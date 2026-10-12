@@ -107,7 +107,7 @@ test('profile WebKit memory through a real ticket and terminal session (HS2-2G23
       route.connectToServer();
     });
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto(`${remoteOrigin}/?dev-review=false`);
+    await page.goto(`${remoteOrigin}/`);
     await expect(page.locator('[data-component="ticket-list"]')).toBeVisible();
     await expect(page.locator('[data-ticket-slug]').first()).toBeVisible();
     await page.getByRole('button', { name: 'Workspace grid', exact: true }).click();

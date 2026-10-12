@@ -119,23 +119,6 @@ export default tseslint.config(
     },
   },
   {
-    // These dev-only browser/file/CLI boundaries validate data at runtime. Keep the
-    // exceptions file-local so equivalent mistakes remain errors everywhere else.
-    files: ['src/dev-review/index.ts'],
-    rules: {
-      '@typescript-eslint/no-base-to-string': 'off',
-      '@typescript-eslint/no-misused-promises': 'off',
-      '@typescript-eslint/prefer-promise-reject-errors': 'off',
-    },
-  },
-  {
-    files: ['src/dev-review/server.ts'],
-    rules: {
-      '@typescript-eslint/no-unnecessary-condition': 'off',
-      '@typescript-eslint/no-unnecessary-type-conversion': 'off',
-    },
-  },
-  {
     files: ['src/dev-server.ts'],
     rules: { '@typescript-eslint/no-unsafe-return': 'off' },
   },

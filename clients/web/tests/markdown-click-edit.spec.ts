@@ -157,7 +157,7 @@ async function mockTickets(page: Page, fixture: { note?: string; noteKind?: stri
 }
 
 async function openTicket(page: Page, tap = false) {
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const row = page.locator('[data-action="select-ticket-row"][data-ticket-slug="HS2-EDIT01"]');

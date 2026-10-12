@@ -13,10 +13,6 @@
     {
       "styleSources": ["src/ux-demo/style.css"],
       "sources": ["src/ux-demo/"]
-    },
-    {
-      "styleSources": ["src/dev-review/dev-review.css"],
-      "sources": ["src/dev-review/"]
     }
   ],
   "stages": {

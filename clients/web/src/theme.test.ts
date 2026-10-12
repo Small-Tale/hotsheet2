@@ -12,7 +12,7 @@ const productionCss = [
     .filter((file) => file.endsWith('.css'))
     .map((file) => resolve(sourceRoot, 'components', file)),
 ];
-const auxiliaryClientCss = [resolve(sourceRoot, 'dev-review/dev-review.css'), resolve(sourceRoot, 'ux-demo/style.css')];
+const auxiliaryClientCss = [resolve(sourceRoot, 'ux-demo/style.css')];
 const clientCss = [...productionCss, ...auxiliaryClientCss];
 const kerfSpacingMigratedComponents = [
   'ai-content-label.css',
@@ -61,7 +61,6 @@ const kerfSpacingMigratedComponents = [
   'trash-settings.css',
   'view-navigation.css',
 ].map((file) => resolve(sourceRoot, 'components', file));
-kerfSpacingMigratedComponents.push(resolve(sourceRoot, 'dev-review/dev-review.css'));
 
 function css(path: string): string {
   return readFileSync(path, 'utf8');

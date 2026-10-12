@@ -1,12 +1,11 @@
 import { expect, type Locator, test } from '@playwright/test';
 
-import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 import { editLongTitleThroughWrappingEditor } from './title-editor-geometry';
 
 test('clears the halted terminal example from its menu at wide and phone widths (HS2-6J79SA)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.goto('/ux-demo?component=terminal-dashboard&dev-review=false');
+    await page.goto('/ux-demo?component=terminal-dashboard');
     const tile = page.locator('[data-component="terminal-tile"][data-terminal-key="demo:halted"]');
     await expect(tile).toHaveAttribute('data-halted', 'true');
     await tile.getByRole('button', { name: 'More actions' }).click();
@@ -46,7 +45,7 @@ test('previews project loading and ticket update progress in the app indicator (
 test('previews every ticket-source dialog state at wide and narrow widths (HS2-7FYYN9)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.goto('/ux-demo?component=ticket-source-setup-dialog&dev-review=false');
+    await page.goto('/ux-demo?component=ticket-source-setup-dialog');
     const dialog = page.locator('[data-ticket-source-setup-dialog]'),
       scenario = dialog.locator('[data-demo-ticket-source-scenario] wa-select');
     for (const [value, expected] of [
@@ -111,7 +110,7 @@ test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', asy
       ['settings-navigation', 'Project Settings', 7],
       ['notification-navigation', 'Notification views', 3],
     ] as const) {
-      await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+      await page.goto(`/ux-demo?component=${component}`);
       // The navigator's Pane content is the navigation landmark; its group list sits in an app wrapper.
       // The notification demo also shows a paused variant (HS2-QYA9SC); measure the first navigator.
       const navigation = page.getByRole('navigation', { name: label, exact: true }).first(),
@@ -154,7 +153,7 @@ test('preserves navigation geometry through Kerf List layouts (HS2-ZMN977)', asy
 test('demonstrates native List gap and bounded scroll ownership (HS2-ZMN977)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.goto('/ux-demo?component=list&dev-review=false');
+    await page.goto('/ux-demo?component=list');
     const examples = page.getByRole('region', { name: 'List layout variants', exact: true }),
       lists = examples.locator('[data-component="list"]'),
       scroller = lists.nth(2);
@@ -176,20 +175,20 @@ test('demonstrates native List gap and bounded scroll ownership (HS2-ZMN977)', a
 });
 
 test('preserves a selected catalog component through a real reload (HS2-9TZ9AF)', async ({ page }) => {
-  await page.goto('/ux-demo?dev-review=false');
+  await page.goto('/ux-demo');
   const catalog = page.getByRole('navigation', { name: 'UX components components' });
   await expect(catalog).toBeVisible();
   await catalog.getByRole('button', { name: /TicketRow/ }).click();
-  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
+  await expect(page).toHaveURL('/ux-demo?component=ticket-row');
   await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
   await page.reload();
-  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
+  await expect(page).toHaveURL('/ux-demo?component=ticket-row');
   await expect(page.getByRole('heading', { name: 'TicketRow', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
 });
 
 test('keeps the catalog filter and placeholder across rerenders (HS2-458BS5, HS2-WATFM5)', async ({ page }) => {
-  await page.goto('/ux-demo?dev-review=false');
+  await page.goto('/ux-demo');
   const sidebar = page.locator('[data-catalog-sidebar]');
   const filter = page.locator('[data-catalog-filter]');
   const filterField = filter.locator('xpath=..');
@@ -204,7 +203,7 @@ test('keeps the catalog filter and placeholder across rerenders (HS2-458BS5, HS2
   await expect(sidebar.locator('[data-item-id="ticket-row"]')).toBeVisible();
   await expect(sidebar.locator('[data-item-id="app-shell"]')).toBeHidden();
   await sidebar.locator('[data-item-id="ticket-row"]').click();
-  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
+  await expect(page).toHaveURL('/ux-demo?component=ticket-row');
   await expect(filter).toHaveText('TiCkEtRoW');
   await expect(filterField).toHaveAttribute('data-placeholder-visible', 'false');
 
@@ -230,20 +229,8 @@ test('keeps the catalog filter and placeholder across rerenders (HS2-458BS5, HS2
 test('presents catalog navigation, controls, and responsive stage (HS2-9TZ9AF, HS2-ARMAX3)', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
-  const catalogShell = page.locator('[data-component="catalog"]'),
-    reviewToggle = page.locator('[data-action="toggle-dev-review"]');
+  const catalogShell = page.locator('[data-component="catalog"]');
   await expect(catalogShell).toBeVisible();
-  // Dev Review is opt-in (HS2-TCACFR): off by default, the toggle opts in and back out through the URL.
-  await expect(reviewToggle).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('.hs-dev-review')).toHaveCount(0);
-  await reviewToggle.click();
-  await expect(page).toHaveURL('/ux-demo?dev-review=1');
-  await expect(reviewToggle).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.hs-dev-review')).toBeVisible();
-  await reviewToggle.click();
-  await expect(page).toHaveURL('/ux-demo');
-  await expect(reviewToggle).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('.hs-dev-review')).toHaveCount(0);
   const catalog = page.getByRole('navigation', { name: 'UX components components' });
   await expect(catalog.locator('[data-item-id="app-shell"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
   await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
@@ -322,7 +309,7 @@ test('reveals deep-linked and newly selected catalog entries without moving focu
   await expect
     .poll(() => page.evaluate(() => (window as Window & { catalogReveals?: string[] }).catalogReveals ?? []))
     .toContain('hs1-migration-banner');
-  const focus = page.locator('[data-action="toggle-dev-review"]');
+  const focus = page.getByRole('searchbox', { name: 'Filter catalog' });
   await focus.focus();
   await page
     .locator('[data-item-id="tag-chip"]')
@@ -338,7 +325,7 @@ test('reveals deep-linked and newly selected catalog entries without moving focu
 
 test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/ux-demo?component=list-item&dev-review=false');
+  await page.goto('/ux-demo?component=list-item');
   const listItemDemo = page.getByRole('region', { name: 'ListItem demo' });
   await expect(page.getByRole('heading', { name: 'ListItem', exact: true })).toBeVisible();
   await expect(listItemDemo).toBeVisible();
@@ -348,7 +335,7 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
   await expect(page.getByRole('region', { name: 'ListItem planned demo' })).toHaveCount(0);
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-item-wide.png', fullPage: true });
 
-  await page.goto('/ux-demo?component=list-header&dev-review=false');
+  await page.goto('/ux-demo?component=list-header');
   const listHeaderDemo = page.getByRole('region', { name: 'ListHeader demo' });
   await expect(page.getByRole('heading', { name: 'ListHeader', exact: true })).toBeVisible();
   await expect(listHeaderDemo).toBeVisible();
@@ -362,7 +349,7 @@ test('renders the canonical ListItem and ListHeader demo routes (HS2-YGWNY7)', a
   // Kerf 5.0.0-beta.56 collapses the catalog sidebar into a transient overlay on a small screen.
   await expect(page.locator('[data-component="catalog"]')).toHaveAttribute('data-sidebar-collapsed', 'true');
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-header-narrow.png', fullPage: true });
-  await page.goto('/ux-demo?component=list-item&dev-review=false');
+  await page.goto('/ux-demo?component=list-item');
   await expect(page.getByRole('region', { name: 'ListItem demo' })).toBeVisible();
   await page.screenshot({ path: 'target/visual-captures/hs2-ygwny7-list-item-narrow.png', fullPage: true });
 });
@@ -382,22 +369,22 @@ test('styles demo captions through demo-owned classes, not the demoed components
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     for (const [component, selector, count] of captions) {
-      await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+      await page.goto(`/ux-demo?component=${component}`);
       const caption = page.locator(selector);
       await expect(caption).toHaveCount(count);
       await expect(caption.first()).toBeVisible();
       await expect(caption.first()).toHaveCSS('margin-top', '0px');
     }
-    await page.goto('/ux-demo?component=list-item&dev-review=false');
+    await page.goto('/ux-demo?component=list-item');
     await expect(page.locator('.list-item-demo__caption').first()).toHaveCSS('text-transform', 'uppercase');
     await expect(page.locator('.list-item-demo__detail')).toHaveCount(3);
     await expect(page.locator('.list-item-demo__detail').first()).toHaveCSS('font-variant-numeric', 'tabular-nums');
-    await page.goto('/ux-demo?component=ticket-list&dev-review=false');
+    await page.goto('/ux-demo?component=ticket-list');
     await expect(page.locator('.collection-demo__empty-state')).toHaveCount(3);
     await expect(page.locator('.collection-demo__empty-state').first()).toHaveCSS('border-top-style', 'solid');
-    await page.goto('/ux-demo?component=ticket-code-review&dev-review=false');
+    await page.goto('/ux-demo?component=ticket-code-review');
     await expect(page.locator('.code-review-demo__case')).toHaveCount(4);
-    await page.goto('/ux-demo?component=floating-toolbar&dev-review=false');
+    await page.goto('/ux-demo?component=floating-toolbar');
     await expect(page.locator('.floating-toolbar-demo__copy')).toHaveCSS('margin-top', '0px');
   }
 });
@@ -495,7 +482,7 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
 test('uses Kerf layout primitives across migrated settings and dialog surfaces (HS2-S3BXC0)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
 
-  await page.goto('/ux-demo?component=manual-model-dialog&dev-review=false');
+  await page.goto('/ux-demo?component=manual-model-dialog');
   const manual = page.locator('[data-component="manual-model-dialog"]');
   await expect(manual).toHaveJSProperty('open', true);
   await expect(manual.locator('[data-component="list"]')).toHaveCount(1);
@@ -508,18 +495,18 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
     animations: 'disabled',
   });
 
-  await page.goto('/ux-demo?component=trash-settings&dev-review=false');
+  await page.goto('/ux-demo?component=trash-settings');
   const trash = page.locator('[data-component="trash-settings"]');
   await expect(trash.locator('[data-component="list"]')).toHaveCount(2);
   await expect(trash.locator('[data-component="row"]')).toHaveCount(1);
 
-  await page.goto('/ux-demo?component=keyboard-settings&dev-review=false');
+  await page.goto('/ux-demo?component=keyboard-settings');
   const keyboard = page.locator('[data-component="keyboard-settings"]');
   // HS2-57MAAH moved the layout class onto an app-owned wrapper around the Kerf List root.
   await expect(keyboard.locator(':scope > .keyboard-settings > [data-component="list"]')).toHaveCount(1);
   await expect(keyboard.locator('li[data-shortcut-id] [data-component="row"]').first()).toBeVisible();
 
-  await page.goto('/ux-demo?component=provider-setup-form&dev-review=false');
+  await page.goto('/ux-demo?component=provider-setup-form');
   const provider = page.locator('[data-component="provider-setup-form"]');
   const grid = provider.locator('[data-component="grid"]');
   await expect(grid).toHaveAttribute('data-min-column-width', 'true');
@@ -584,35 +571,9 @@ test('renders keyboard shortcut rows edge-to-edge without a transparent left gut
   await list.screenshot({ path: 'target/visual-captures/hs2-186wjt-keyboard-list-narrow.png' });
 });
 
-test('reopens dialog demos and keeps Feedback above the modal top layer', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/ux-demo?component=hs1-migration-dialog&dev-review=1');
-  const migration = page.locator('[data-component="hs1-migration-dialog"]');
-  await expect(migration).toHaveJSProperty('open', true);
-  const feedback = page.locator('.hs-dev-review__feedback');
-  await expect(feedback).toBeVisible();
-  expect(
-    await feedback.evaluate((node) => {
-      const box = node.getBoundingClientRect(),
-        top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-      return top === node || Boolean(top?.closest('.hs-dev-review__feedback'));
-    }),
-  ).toBe(true);
-  await migration.getByRole('button', { name: 'Not now' }).click();
-  await expect(migration).toHaveJSProperty('open', false);
-  await page.getByRole('button', { name: 'Open import dialog' }).click();
-  await expect(migration).toHaveJSProperty('open', true);
-  await page.mouse.move(1000, 700);
-  await page.waitForTimeout(200);
-  await page.screenshot({ path: 'target/visual-captures/hs2-9a6ssk-dialog-reopened-wide.png', fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(feedback).toBeVisible();
-  await page.screenshot({ path: 'target/visual-captures/hs2-9a6ssk-dialog-feedback-narrow.png', fullPage: true });
-});
-
 test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2-750WSY)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/ux-demo?component=hs1-migration-banner&dev-review=false');
+  await page.goto('/ux-demo?component=hs1-migration-banner');
   const migration = page.locator('.hs1-migration-banner > [data-component="state-banner"]'),
     cleanup = page.locator('.hs1-cleanup-banner > [data-component="state-banner"]');
   for (const [banner, tone] of [
@@ -652,7 +613,7 @@ test('uses StateBanner for the responsive HS1 migration and cleanup notices (HS2
 
 test('uses canonical spacing in the HS1 migration dialog (HS2-4Y6SM9)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/ux-demo?component=hs1-migration-dialog&dev-review=false');
+  await page.goto('/ux-demo?component=hs1-migration-dialog');
   const dialog = page.locator('[data-component="hs1-migration-dialog"]'),
     form = dialog.locator('.hs1-migration-dialog');
   await expect(dialog).toHaveJSProperty('open', true);
@@ -676,7 +637,7 @@ test('uses canonical spacing in the HS1 migration dialog (HS2-4Y6SM9)', async ({
 
 test('represents the shared repository-status composition in the UX catalog', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
-  await page.goto('/ux-demo?component=repository-status-popover&dev-review=false');
+  await page.goto('/ux-demo?component=repository-status-popover');
   const dialog = page.locator('[data-component="repository-status-popover"]');
   await expect(dialog).toBeVisible();
   const compare = dialog.getByRole('button', { name: 'Compare two commits' }),
@@ -819,7 +780,7 @@ test('represents the shared repository-status composition in the UX catalog', as
 
 test('contains the embedded repository status dialog and header actions (HS2-MCHTAW)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=repository-status-popover&dev-review=false');
+  await page.goto('/ux-demo?component=repository-status-popover');
   const dialog = page.locator('[data-component="repository-status-popover"]');
   const compare = dialog.getByRole('button', { name: 'Compare two commits' });
   const refresh = dialog.getByRole('button', { name: 'Refresh repository status' });
@@ -1059,7 +1020,7 @@ test('represents aggregate and per-project terminal operations in the UX catalog
 
 test('represents the compact terminal ticket rail in the UX catalog', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
+  await page.goto('/ux-demo?component=terminal-ticket-rail');
   // The rail is a navigation panel (HS2-FY06N4): its root NavStack view's toolbar holds the project
   // selector before the standard toggle, above the pinned controls and the scrolling ticket list.
   const panel = page.locator('.terminal-ticket-rail-demo'),
@@ -1244,7 +1205,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
 for (const component of ['workspace-header', 'terminal-ticket-rail']) {
   test(`projects selected Up Next state through the ${component} demo (HS2-WP15AF)`, async ({ page }) => {
     await page.setViewportSize({ width: 1728, height: 971 });
-    await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+    await page.goto(`/ux-demo?component=${component}`);
     const demo =
       component === 'workspace-header'
         ? page.getByRole('region', { name: 'WorkspaceHeader demo' })
@@ -1297,7 +1258,7 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
+  await page.goto('/ux-demo?component=terminal-ticket-rail');
   const rail = page.locator('[data-component="terminal-ticket-rail"]');
   const group = rail.locator('.ticket-search-field');
   const search = rail.getByRole('searchbox', { name: 'Search tickets' });
@@ -1365,7 +1326,7 @@ test('keeps the ticket rail search bordered across focus, blur, collapse, and re
 
 test('keeps rail view tabs above search and parks the closed trigger at the right (HS2-JJ6ZE1)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
+  await page.goto('/ux-demo?component=terminal-ticket-rail');
   const stage = page.locator('.terminal-ticket-rail-demo');
   const toolbar = stage.locator('.terminal-ticket-rail__controls');
   const closedGroupMargins = () =>
@@ -1593,380 +1554,6 @@ test('represents interactive terminal visibility groups in the UX catalog', asyn
   await expect(menu.getByText('Delete')).toBeVisible();
 });
 
-test('captures, reviews, cancels, and submits dev-review feedback', async ({ page }) => {
-  let submitted: Record<string, unknown> | undefined;
-  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
-    submitted = route.request().postDataJSON();
-    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ slug: 'HS2-REVIEW' }) });
-  });
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=ticket-row&dev-review=1');
-  const captureTarget = page.locator('.kui-workbench__rail--left [data-item-id="ticket-row"]');
-  await captureTarget.scrollIntoViewIfNeeded();
-  await captureTarget.evaluate((node) => {
-    (node as HTMLElement).style.color = 'oklab(55% 0.1 0.1)';
-  });
-  await page.locator('.kui-workbench__main > .kui-pane > .kui-pane__header').evaluate((node) => {
-    (node as HTMLElement).style.boxShadow = '0 0 2px oklab(55% 0.1 0.1)';
-  });
-  expect(await captureTarget.evaluate((node) => getComputedStyle(node).color)).toMatch(/^(?:oklab|rgb)/);
-  const markerBox = (await captureTarget.boundingBox())!;
-  const tool = page.locator('.hs-dev-review');
-  await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();
-  await tool.getByRole('button', { name: 'Feedback' }).click();
-  await expect(tool.getByRole('button', { name: 'New Ticket' })).toBeVisible();
-  const hint = tool.locator('.hs-dev-review__hint');
-  await expect(hint).toBeVisible();
-  await page.waitForTimeout(3200);
-  await expect(hint).toHaveClass(/hs-dev-review__hint--hidden/);
-  await page.keyboard.down('Alt');
-  await expect(page.locator('html')).toHaveClass(/hs-dev-review--crosshair/);
-  await expect(page.locator('body')).toHaveCSS('cursor', 'crosshair');
-  await page.mouse.move(markerBox.x, markerBox.y);
-  await page.mouse.down();
-  await page.mouse.move(markerBox.x + markerBox.width, markerBox.y + markerBox.height);
-  await page.mouse.up();
-  await page.keyboard.up('Alt');
-  await expect(page.locator('html')).not.toHaveClass(/hs-dev-review--crosshair/);
-  const selection = tool.locator('.hs-dev-review__rect');
-  await expect(selection).toHaveCount(1);
-  await expect(selection.locator('.hs-dev-review__handle')).toHaveCount(8);
-  const beforeScroll = await selection.boundingBox();
-  // Kerf 5.0.0-beta.55's catalog sidebar is a Workbench rail Pane whose content region owns scrolling.
-  const scroller = page.locator('.kui-workbench__rail--left .kui-pane__content');
-  const initialScroll = await scroller.evaluate((node) => node.scrollTop);
-  await scroller.evaluate((node) => {
-    node.scrollBy(0, -80);
-  });
-  await expect.poll(() => scroller.evaluate((node) => node.scrollTop)).toBeLessThan(initialScroll);
-  const scrollDelta = await scroller.evaluate((node, start) => node.scrollTop - start, initialScroll);
-  await expect.poll(async () => (await selection.boundingBox())!.y).toBeCloseTo(beforeScroll!.y - scrollDelta, 0);
-  const stableSelectionNode = await selection.elementHandle();
-  const before = await selection.boundingBox();
-  const resize = selection.getByRole('button', { name: /Resize capture 1 from se/ });
-  const handle = await resize.boundingBox();
-  await page.mouse.move(handle!.x + 4, handle!.y + 4);
-  await page.mouse.down();
-  await page.mouse.move(handle!.x + 54, handle!.y + 34);
-  await page.mouse.up();
-  const after = await selection.boundingBox();
-  expect(after!.width).toBeGreaterThan(before!.width);
-  expect(after!.height).toBeGreaterThan(before!.height);
-  expect(await stableSelectionNode.evaluate((node) => node.isConnected)).toBe(true);
-  const corner = await resize.boundingBox();
-  expect(Math.abs(corner!.width - corner!.height)).toBeLessThanOrEqual(1);
-  const eastResize = selection.getByRole('button', { name: /Resize capture 1 from e$/ });
-  await expect(eastResize).toHaveCSS('cursor', 'ew-resize');
-  const eastHandle = await eastResize.boundingBox();
-  const beforeEast = await selection.boundingBox();
-  await page.mouse.move(eastHandle!.x + 4, eastHandle!.y + 10);
-  await page.mouse.down();
-  await page.mouse.move(eastHandle!.x + 34, eastHandle!.y + 10);
-  await page.mouse.up();
-  const afterEast = await selection.boundingBox();
-  expect(afterEast!.width).toBeGreaterThan(beforeEast!.width);
-  expect(Math.abs(afterEast!.height - beforeEast!.height)).toBeLessThanOrEqual(1);
-  await page.keyboard.down('Alt');
-  await page.mouse.move(720, 300);
-  await page.mouse.down();
-  await page.mouse.move(920, 500);
-  await page.mouse.up();
-  await page.keyboard.up('Alt');
-  await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(2);
-  const removable = tool.locator('.hs-dev-review__rect').last();
-  const removableBox = await removable.boundingBox();
-  await page.keyboard.down('Alt');
-  await page.keyboard.down('Shift');
-  await page.mouse.move(removableBox!.x + 30, removableBox!.y + 30);
-  await expect(removable).toHaveCSS('cursor', 'not-allowed');
-  await page.mouse.click(removableBox!.x + 30, removableBox!.y + 30);
-  await page.keyboard.up('Shift');
-  await page.keyboard.up('Alt');
-  await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(1);
-  await page.keyboard.down('Alt');
-  await page.mouse.move(720, 300);
-  await page.mouse.down();
-  await page.mouse.move(920, 500);
-  await page.mouse.up();
-  await page.keyboard.up('Alt');
-  await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(2);
-  await page.waitForTimeout(400);
-  await tool.getByRole('button', { name: 'New Ticket' }).click();
-  const dialog = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
-  await expect(dialog).toBeVisible();
-  expect(
-    await dialog.evaluate((node) => {
-      const style = (selector: string) => getComputedStyle(node.querySelector(selector)!);
-      return {
-        body: [style('.hs-dev-review__dialog-body').padding, style('.hs-dev-review__dialog-body').gap],
-        footer: [style('footer').padding, style('footer').gap],
-        evidence: style('.hs-dev-review__evidence').gap,
-        dropzone: style('.hs-dev-review__dropzone').padding,
-        label: style('.hs-dev-review__notes').gap,
-        textarea: style('textarea').padding,
-        button: style('footer button').padding,
-      };
-    }),
-  ).toEqual({
-    body: ['24px', '24px'],
-    footer: ['12px 24px', '8px'],
-    evidence: '16px',
-    dropzone: '16px',
-    label: '4px',
-    textarea: '16px',
-    button: '0px 16px',
-  });
-  await expect(dialog.locator('.app-heading')).toHaveCSS('border-bottom-width', '0px');
-  await expect(dialog.locator('footer')).toHaveCSS('border-top-width', '0px');
-  expect(
-    await dialog.evaluate((node) => {
-      const probe = document.createElement('span');
-      probe.style.background = 'var(--wa-color-surface-border)';
-      document.body.append(probe);
-      const result = {
-        border: getComputedStyle(node).borderColor,
-        dividerMatches: getComputedStyle(node).borderColor === getComputedStyle(probe).backgroundColor,
-        surface: getComputedStyle(node).backgroundColor,
-      };
-      probe.remove();
-      return result;
-    }),
-  ).toEqual({ border: 'rgba(0, 0, 28, 0.18)', dividerMatches: true, surface: 'rgb(255, 255, 255)' });
-  await expect(dialog.getByRole('button', { name: 'Review captured region 1' })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
-  await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute(
-    'src',
-    /^data:image\/png;base64,/,
-  );
-  await page.screenshot({ path: 'target/visual-captures/hs2-66m88k-dev-review-theme-wide.png', fullPage: true });
-  await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-dev-review-wide.png', fullPage: true });
-  await page.setViewportSize({ width: 760, height: 900 });
-  await expect(dialog).toBeVisible();
-  await page.screenshot({ path: 'target/visual-captures/hs2-66m88k-dev-review-theme-narrow.png', fullPage: true });
-  await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-dev-review-narrow.png', fullPage: true });
-  await page.setViewportSize({ width: 1280, height: 900 });
-  const capturedPixels = await dialog
-    .getByRole('img', { name: 'Captured region 1 preview' })
-    .evaluate(async (image) => {
-      if (!(image as HTMLImageElement).complete)
-        await new Promise((resolve) => {
-          image.addEventListener('load', resolve, { once: true });
-        });
-      const canvas = document.createElement('canvas');
-      canvas.width = (image as HTMLImageElement).naturalWidth;
-      canvas.height = (image as HTMLImageElement).naturalHeight;
-      const context = canvas.getContext('2d')!;
-      context.drawImage(image as HTMLImageElement, 0, 0);
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-      let green = 0;
-      for (let index = 0; index < pixels.length; index += 4)
-        if (pixels[index] === 12 && pixels[index + 1] === 200 && pixels[index + 2] === 34) green += 1;
-      return {
-        center: [...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data],
-        green,
-        width: canvas.width,
-        height: canvas.height,
-      };
-    });
-  expect(capturedPixels.center.slice(0, 3), JSON.stringify(capturedPixels)).toEqual([214, 233, 249]);
-  await dialog.getByRole('button', { name: 'Review captured region 2' }).click();
-  await expect(dialog.getByRole('img', { name: 'Captured region 2 preview' })).toBeVisible();
-  const attachmentInput = dialog.getByLabel('Add attachments');
-  await attachmentInput.setInputFiles({
-    name: 'notes.txt',
-    mimeType: 'text/plain',
-    buffer: Buffer.from('review notes'),
-  });
-  await expect(dialog.getByText('notes.txt')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Remove attachment notes.txt' }).click();
-  await expect(dialog.getByText('notes.txt')).toHaveCount(0);
-  const dropzone = dialog.locator('.hs-dev-review__dropzone');
-  await dropzone.evaluate((node) => {
-    const transfer = new DataTransfer();
-    transfer.items.add(new File(['log'], 'debug.log', { type: 'text/plain' }));
-    node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
-  });
-  await expect(dialog.getByText('debug.log')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Remove captured region 2' }).click();
-  await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toHaveCount(0);
-  await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(1);
-  await expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveCount(1);
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(tool.getByRole('button', { name: 'New Ticket' })).toBeVisible();
-  page.once('dialog', (dialog) => void dialog.dismiss());
-  await tool.getByRole('button', { name: 'Feedback' }).click();
-  await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(1);
-  page.once('dialog', (dialog) => void dialog.accept());
-  await tool.getByRole('button', { name: 'Feedback' }).click();
-  await expect(tool.getByRole('button', { name: 'New Ticket' })).toHaveCount(0);
-  await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(0);
-  await tool.getByRole('button', { name: 'Feedback' }).click();
-  await page.keyboard.down('Alt');
-  await page.mouse.move(500, 240);
-  await page.mouse.down();
-  await page.mouse.move(900, 480);
-  await page.mouse.up();
-  await page.keyboard.up('Alt');
-  await tool.getByRole('button', { name: 'New Ticket' }).click();
-  const reopened = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
-  await reopened
-    .getByLabel('Add attachments')
-    .setInputFiles({ name: 'context.txt', mimeType: 'text/plain', buffer: Buffer.from('context') });
-  await reopened.getByRole('textbox', { name: 'Feedback notes' }).fill('The selected row spacing is inconsistent.');
-  await reopened.getByRole('button', { name: 'Create Ticket' }).click();
-  await expect(reopened.getByRole('status')).toContainText('HS2-REVIEW created');
-  await expect.poll(() => submitted).toBeTruthy();
-  expect(submitted).toMatchObject({
-    notes: 'The selected row spacing is inconsistent.',
-    captures: [{ filename: expect.stringMatching(/^ux-feedback-\d+\.png$/) }],
-    attachments: [{ filename: 'context.txt', mimeType: 'text/plain' }],
-  });
-  expect((submitted!.captures as Array<{ dataUrl: string }>)[0].dataUrl).toMatch(/^data:image\/png;base64,/);
-  await expect(tool.getByRole('button', { name: 'New Ticket' })).toHaveCount(0);
-});
-
-test('inspects catalog component bounds and margins while skipping compositions', async ({ page }) => {
-  await page.goto('/ux-demo?component=tag-chip&dev-review=1');
-  const review = page.locator('.hs-dev-review'),
-    toolbar = review.locator('.hs-dev-review__toolbar');
-  await toolbar.getByRole('button', { name: 'Additional review utilities' }).click();
-  await toolbar.getByRole('menuitem', { name: 'Inspect geometry' }).click();
-  const overlay = review.locator('.hs-dev-review__geometry');
-  await expect(overlay.locator('[data-kind="bounds"]')).not.toHaveCount(0);
-  await toolbar.getByRole('button', { name: 'Additional review utilities' }).click();
-  await expect(toolbar.getByRole('menuitem', { name: 'Inspect geometry' })).toHaveCount(0);
-  await toolbar.getByRole('button', { name: 'Additional review utilities' }).click();
-  await page
-    .locator('[data-catalog-example-stack] [data-component]')
-    .first()
-    .evaluate((element) => {
-      (element as HTMLElement).style.margin = '12px';
-    });
-  await expect(overlay.locator('[data-kind="margin"]')).not.toHaveCount(0);
-  await page.screenshot({ path: 'target/visual-captures/hs2-wwrmfy-geometry-wide.png', fullPage: true });
-  await page
-    .getByRole('navigation', { name: 'UX components components' })
-    .locator('[data-item-id="app-shell"]')
-    .click();
-  await expect(page.locator('[data-catalog-example-stack]')).toHaveAttribute('data-catalog-geometry-skip', '');
-  await expect(overlay.locator('[data-kind="bounds"]')).toHaveCount(0);
-  await page.getByRole('navigation', { name: 'UX components components' }).locator('[data-item-id="tag-chip"]').click();
-  await expect(overlay.locator('[data-kind="bounds"]')).not.toHaveCount(0);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(overlay).toHaveAttribute('viewBox', '0 0 390 844');
-  await page.screenshot({ path: 'target/visual-captures/hs2-wwrmfy-geometry-narrow.png', fullPage: true });
-  await toolbar.getByRole('button', { name: 'Geometry' }).click();
-  await expect(overlay).toHaveCount(0);
-  await toolbar.getByRole('button', { name: 'Additional review utilities' }).click();
-  await toolbar.getByRole('menuitem', { name: 'Inspect geometry' }).click();
-  await toolbar.getByRole('button', { name: 'Feedback' }).click();
-  await expect(overlay).toHaveCount(0);
-  await page.locator('[data-action="toggle-dev-review"]').click();
-  await expect(review).toHaveCount(0);
-});
-
-test('captures before and after CSSOM snapshots through CSS Live Edit', async ({ page }) => {
-  let submitted: Record<string, unknown> | undefined;
-  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
-    submitted = route.request().postDataJSON();
-    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ slug: 'HS2-CSS' }) });
-  });
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=ticket-row&dev-review=1');
-  const tool = page.locator('.hs-dev-review');
-  const utilities = tool.getByRole('button', { name: 'Additional review utilities' });
-  await utilities.click();
-  await expect(utilities).toHaveAttribute('aria-expanded', 'true');
-  await expect(tool.getByRole('menuitem', { name: 'CSS Live Edit' })).toBeVisible();
-  await page.screenshot({ path: 'target/visual-captures/hs2-x36s5n-css-live-edit-menu-wide.png', fullPage: true });
-  await tool.getByRole('menuitem', { name: 'CSS Live Edit' }).click();
-  await expect(tool.getByRole('button', { name: 'Feedback' })).toHaveCount(0);
-  await expect(tool.getByRole('button', { name: 'CSS Live Edit' })).toHaveAttribute('title', 'Cancel CSS Live Edit');
-  await expect(tool.locator('.hs-dev-review__hint')).toContainText('Live-edit CSS in browser developer tools');
-  await tool.getByRole('button', { name: 'CSS Live Edit' }).click();
-  await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();
-  expect(submitted).toBeUndefined();
-  await utilities.click();
-  await tool.getByRole('menuitem', { name: 'CSS Live Edit' }).click();
-  // Establish the evidence viewport before editing. Resizing can legitimately rerender the demo
-  // composition, which would replace a DevTools-authored inline declaration before capture.
-  await page.setViewportSize({ width: 760, height: 900 });
-  // Wait for that rerender to finish (no DOM mutations for several frames) instead of assuming it is
-  // already over; under full-suite load it could land after the edit and drop it (HS2-MHPHZB).
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        let quietFrames = 0;
-        const observer = new MutationObserver(() => {
-          quietFrames = 0;
-        });
-        observer.observe(document.body, { subtree: true, childList: true, attributes: true });
-        const tick = () => {
-          quietFrames += 1;
-          if (quietFrames >= 10) {
-            observer.disconnect();
-            resolve();
-          } else requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      }),
-  );
-  await page.evaluate(() => {
-    const style = document.createElement('style');
-    style.id = 'playwright-css-live-edit';
-    style.textContent = '.kui-workbench__main { outline: 6px solid rgb(12, 200, 34); }';
-    document.head.append(style);
-    document.querySelector<HTMLElement>('.kui-workbench__main > .kui-pane > .kui-pane__header')!.style.paddingTop =
-      '31px';
-  });
-  await expect(page.locator('.kui-workbench__main')).toHaveCSS('outline-width', '6px');
-  await page.screenshot({ path: 'target/visual-captures/hs2-x36s5n-css-live-edit-active-narrow.png', fullPage: true });
-  // Reassert the DevTools-authored inline declaration after screenshot/layout work so the
-  // captured "after" CSSOM cannot race a responsive catalog rerender under full-suite load.
-  await page.locator('.kui-workbench__main > .kui-pane > .kui-pane__header').evaluate((node) => {
-    (node as HTMLElement).style.paddingTop = '31px';
-  });
-  await expect(page.locator('.kui-workbench__main > .kui-pane > .kui-pane__header')).toHaveCSS('padding-top', '31px');
-  await tool.getByRole('button', { name: 'New Ticket' }).click();
-  await expect.poll(() => submitted).toBeTruthy();
-  expect(submitted).toMatchObject({
-    notes: expect.stringContaining(
-      'Compare the attached css-live-edit-before.css and css-live-edit-after.css snapshots',
-    ),
-    captures: [],
-    attachments: [
-      { filename: 'css-live-edit-before.css', mimeType: 'text/css' },
-      { filename: 'css-live-edit-after.css', mimeType: 'text/css' },
-    ],
-  });
-  const attachments = submitted!.attachments as Array<{ dataUrl: string }>;
-  const decode = (value: string) => Buffer.from(value.slice(value.indexOf(',') + 1), 'base64').toString('utf8');
-  const before = decode(attachments[0].dataUrl),
-    after = decode(attachments[1].dataUrl);
-  expect(before).not.toContain('playwright-css-live-edit');
-  expect(after).toContain('stylesheet');
-  expect(after).toContain('.kui-workbench__main { outline: rgb(12, 200, 34) solid 6px; }');
-  expect(after).toContain('padding-top: 31px');
-  expect(after).not.toBe(before);
-  await expect(tool.getByText('HS2-CSS created.')).toBeVisible();
-  await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();
-});
-
-test('keeps feedback rectangle input within its frame budget in the UX demo', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=ticket-row&dev-review=1');
-  const measurement = await measureFeedbackRectangle(page, { x: 460, y: 260 }, { x: 780, y: 460 });
-  await testInfo.attach('feedback-performance.json', {
-    body: JSON.stringify(measurement, null, 2),
-    contentType: 'application/json',
-  });
-  expectResponsiveFeedbackRectangle(measurement);
-  await page.screenshot({ path: 'target/visual-captures/hs2-6ppvjc-ux-demo-wide.png', fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: 'target/visual-captures/hs2-6ppvjc-ux-demo-narrow.png', fullPage: true });
-});
-
 test('round-trips ConfidenceCalibration states through reset and a post-reset edit (HS2-Q1WCCY)', async ({ page }) => {
   await page.goto('/ux-demo?component=confidence-calibration');
   const panel = page.locator('.component-stage [data-component="confidence-calibration"]');
@@ -2052,7 +1639,7 @@ test('resets the TicketInspector, AIConversation, QuickTicketComposer, and Conte
       node.dispatchEvent(new Event('change', { bubbles: true }));
     }, value);
   const openSettings = async (component: string, name: string) => {
-    await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+    await page.goto(`/ux-demo?component=${component}`);
     const inspector = page.getByRole('complementary', { name: `${name} settings` });
     if (component === 'ai-conversation') {
       // The demo opens the conversation as a modal dialog; close it so the catalog chrome is reachable.
@@ -3058,7 +2645,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
 test('switches the MarkdownEditor demo appearance and inset, then resets them (HS2-QBR5HC)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/ux-demo?component=markdown-editor&dev-review=false');
+    await page.goto('/ux-demo?component=markdown-editor');
     const editor = page.locator('[data-component="markdown-editor"]'),
       settings = page.locator('[data-settings="markdown-editor"]'),
       appearance = settings.locator('[name="markdown-appearance"]'),
@@ -3120,7 +2707,7 @@ test('switches the MarkdownEditor demo appearance and inset, then resets them (H
 test('catalogs ProviderIcon kinds at the m and l size variants (HS2-PK8THJ)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/ux-demo?component=provider-icon&dev-review=false');
+    await page.goto('/ux-demo?component=provider-icon');
     const demo = page.locator('.provider-icon-demo');
     for (const size of ['m', 'l'] as const) {
       const variant = demo.locator(`[data-size-variant="${size}"]`);
@@ -3156,7 +2743,7 @@ test('previews every BulkTicketDialog presentation through demo settings, then r
 }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/ux-demo?component=bulk-ticket-dialog&dev-review=false');
+    await page.goto('/ux-demo?component=bulk-ticket-dialog');
     const tagDialog = page.locator('[data-component="bulk-tag-dialog"]'),
       deleteDialog = page.locator('[data-component="bulk-delete-dialog"]'),
       trashDialog = page.locator('[data-component="empty-trash-dialog"]'),
@@ -3249,7 +2836,7 @@ test('switches the SettingsWorkspace demo across every category, then resets (HS
   ] as const;
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/ux-demo?component=settings-workspace&dev-review=false');
+    await page.goto('/ux-demo?component=settings-workspace');
     const workspace = page.locator('[data-component="settings-workspace"]'),
       settings = page.locator('[data-settings="settings-workspace"]'),
       category = settings.locator('[name="workspace-category"]'),
@@ -3322,7 +2909,7 @@ test('lets the TicketReader native dialog complete dismissal before leaving the 
 test('exposes every MarkdownPreview and AIContentLabel presentation variant', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/ux-demo?component=markdown-preview&dev-review=false');
+    await page.goto('/ux-demo?component=markdown-preview');
     const variant = (label: string) =>
       page
         .locator('.markdown-preview-demo__variant')
@@ -3360,7 +2947,7 @@ test('exposes every MarkdownPreview and AIContentLabel presentation variant', as
       page.locator('.markdown-preview-demo [data-component="markdown-preview"].markdown-preview--empty'),
     ).toHaveText('Nothing to preview.');
   }
-  await page.goto('/ux-demo?component=ai-content-label&dev-review=false');
+  await page.goto('/ux-demo?component=ai-content-label');
   const labels = page.locator('[data-component="ai-content-label"]');
   await expect(labels).toHaveCount(4);
   const inherit = page.locator('[data-component="ai-content-label"][data-tone="inherit"]');
@@ -3410,7 +2997,7 @@ test('keeps inverse inline code legible on the brand fill in the demo and the AI
     await page.emulateMedia({ colorScheme });
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto('/ux-demo?component=markdown-preview&dev-review=false');
+      await page.goto('/ux-demo?component=markdown-preview');
       const variant = (label: string) =>
         page
           .locator('.markdown-preview-demo__variant')
@@ -3426,7 +3013,7 @@ test('keeps inverse inline code legible on the brand fill in the demo and the AI
       // The default tone keeps its neutral chip.
       expect(await codeChipContrast(variant('Default').locator('code').first())).toBeGreaterThanOrEqual(4.5);
 
-      await page.goto('/ux-demo?component=ai-conversation&dev-review=false');
+      await page.goto('/ux-demo?component=ai-conversation');
       const userCode = page.locator('[data-component="markdown-preview"][data-tone="inverse"] code').first();
       await expect(userCode).toHaveText('api.ts');
       expect(await codeChipContrast(userCode)).toBeGreaterThanOrEqual(4.5);
@@ -3679,7 +3266,7 @@ test('omits status sorting from column view and restores it in list view', async
 test('keeps the opened inline search on the wide header row (HS2-NZK4KA)', async ({ page }) => {
   for (const width of [1440, 1100]) {
     await page.setViewportSize({ width, height: 800 });
-    await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+    await page.goto('/ux-demo?component=workspace-header');
     const header = page.locator('.workspace-header'),
       search = header.locator('.ticket-search-field');
     await expect(search).toHaveAttribute('data-sizing', 'content');
@@ -3693,7 +3280,7 @@ test('keeps the opened inline search on the wide header row (HS2-NZK4KA)', async
 test('keeps expanded workspace search inline with More at narrow widths (HS2-NZK4KA)', async ({ page }) => {
   for (const width of [1280, 760, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+    await page.goto('/ux-demo?component=workspace-header');
     const header = page.locator('.workspace-header');
     await header.getByRole('button', { name: 'Search tickets' }).click();
     const search = header.getByRole('searchbox', { name: 'Search tickets' });
@@ -3737,7 +3324,7 @@ test('keeps expanded workspace search inline with More at narrow widths (HS2-NZK
 
 test('fits open search around the rendered project name and fills the remaining row (HS2-NZK4KA)', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 800 });
-  await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+  await page.goto('/ux-demo?component=workspace-header');
   const header = page.locator('.workspace-header');
   await header.getByRole('button', { name: 'Search tickets' }).click();
   await expect(header.locator('.view-mode-switcher')).toBeVisible();
@@ -3785,7 +3372,7 @@ test('fits open search around the rendered project name and fills the remaining 
 
 test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+  await page.goto('/ux-demo?component=workspace-header');
   const header = page.locator('.workspace-header');
   const sort = header.locator('wa-select[name="workspace-sort"]');
   const group = header.locator('.workspace-header__sort-group');
@@ -3837,7 +3424,7 @@ test('draws the workspace sort focus ring as a true pill (HS2-M1DF1D)', async ({
 
 test('switches workspace header groups at Kerf toolbar width thresholds (HS2-BBG8ZC)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+  await page.goto('/ux-demo?component=workspace-header');
   const toolbar = page.locator('.workspace-header.kui-toolbar'),
     identity = toolbar.locator('.workspace-header__identity'),
     view = toolbar.locator('.view-mode-switcher'),
@@ -4090,7 +3677,7 @@ test('connects WorkspaceHeader notifications, actions, reset and badge count acr
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 1200 });
-  await page.goto('/ux-demo?component=workspace-header&dev-review=false');
+  await page.goto('/ux-demo?component=workspace-header');
   const demo = page.getByRole('region', { name: 'WorkspaceHeader demo', exact: true }),
     notifications = demo.getByRole('button', { name: /^Notifications view/ }),
     center = demo.locator('[data-component="notification-center"]'),
@@ -4398,7 +3985,7 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
 
 test('catalogs forced-dark FloatingToolbar children across page themes (HS2-HW02QG)', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=floating-toolbar&dev-review=false');
+  await page.goto('/ux-demo?component=floating-toolbar');
   const toolbar = page.getByRole('toolbar', { name: 'Preview zoom controls' }),
     stage = page.locator('.floating-toolbar-demo');
   await expect(toolbar).toHaveAttribute('data-component', 'floating-toolbar');
@@ -5165,7 +4752,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
 
 test('uses canonical spacing in the standalone TicketCodeReview demo (HS2-4Y6SM9, HS2-737H3X)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=ticket-code-review&dev-review=false');
+  await page.goto('/ux-demo?component=ticket-code-review');
   const review = page.locator('[data-component="ticket-code-review"]').first();
   await expect(review).toBeVisible();
   const spacing = await review.evaluate((node) => {
@@ -5460,7 +5047,7 @@ for (const theme of ['light', 'dark'] as const) {
       localStorage.setItem('hotsheet.ux-demo.theme', value);
     }, theme);
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
+    await page.goto('/ux-demo?component=attachment-gallery');
     const gallery = page.locator('[data-component="attachment-gallery"]'),
       filename = gallery.locator('.attachment-gallery__filename'),
       filenameText = filename.locator('.kui-toolbar-text__text');
@@ -5491,7 +5078,7 @@ test('navigates and zooms the standalone attachment gallery demo', async ({ page
     });
   });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
+  await page.goto('/ux-demo?component=attachment-gallery');
   let gallery = page.locator('[data-component="attachment-gallery"]');
   await expect(gallery).toHaveAttribute('aria-label', /Image 1 of 3/);
   await expect(
@@ -5597,7 +5184,7 @@ test('navigates and zooms the standalone attachment gallery demo', async ({ page
 
 test('uses canonical spacing throughout the attachment gallery chrome (HS2-4Y6SM9)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
+  await page.goto('/ux-demo?component=attachment-gallery');
   const gallery = page.locator('[data-component="attachment-gallery"]');
   await expect(gallery).toBeVisible();
   const imageSpacing = await gallery.evaluate((node) => {
@@ -5741,7 +5328,7 @@ test('renders every annotation shape and intent on image and timed video at fixe
 
 test('previews and manipulates custom video and annotation timeline controls', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
+  await page.goto('/ux-demo?component=attachment-gallery');
   const gallery = page.locator('[data-component="attachment-gallery"]');
   await gallery.getByRole('button', { name: 'Next image' }).click();
   await gallery.getByRole('button', { name: 'Next image' }).click();
@@ -7800,7 +7387,7 @@ test('lets inspector Markdown keep its own typography in sidebar and reader (HS2
   ] as const) {
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+      await page.goto(`/ux-demo?component=${component}`);
       const details = page.locator(`${root} .ticket-info-panel__details-surface .markdown-preview`).first();
       // A Markdown heading is a Markdown heading, not an uppercase inspector section label.
       await expect(details.locator('h2').first()).toHaveCSS('text-transform', 'none');
@@ -7862,7 +7449,7 @@ test('sizes inspector editors and titles through child tokens and own classes (H
           isMobile: coarse,
         }),
         page = await context.newPage();
-      await page.goto(`/ux-demo?component=${component}&dev-review=false`);
+      await page.goto(`/ux-demo?component=${component}`);
       expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(coarse);
       const root = page.locator(`[data-component="${component}"]`).first();
       await expect(root).toBeVisible();
@@ -7997,7 +7584,7 @@ test('keeps the Markdown preview focus ring inset so an overflow-hidden editor c
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/ux-demo?component=markdown-editor&dev-review=false');
+  await page.goto('/ux-demo?component=markdown-editor');
   const preview = page.locator('.markdown-editor__preview');
   await expect(preview).toBeVisible();
   // Keyboard focus so :focus-visible applies, then verify the ring is inset and within the editor's clip box.
@@ -8034,7 +7621,7 @@ test('previews a running terminal through the shared TerminalPreview in the Proj
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');
+  await page.goto('/ux-demo?component=project-close-dialog');
   const dialog = page.locator('[data-component="project-close-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
   await dialog.getByRole('button', { name: /Tests/ }).click();
@@ -8081,7 +7668,7 @@ test('scales the ProjectCloseDialog TerminalPreview canvas to fit its frame at w
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');
+  await page.goto('/ux-demo?component=project-close-dialog');
   const dialog = page.locator('[data-component="project-close-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
   await dialog.getByRole('button', { name: /Tests/ }).click();
@@ -8133,7 +7720,7 @@ test('renders the ProjectCloseDialog TerminalPreview at a legible glyph size at 
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');
+  await page.goto('/ux-demo?component=project-close-dialog');
   const dialog = page.locator('[data-component="project-close-dialog"]');
   await expect(dialog).toHaveJSProperty('open', true);
   await dialog.getByRole('button', { name: /Tests/ }).click();
@@ -8226,7 +7813,7 @@ test('renders the ProjectCloseDialog TerminalPreview at a legible glyph size at 
 
 test('renders the ProjectCloseDialog and ConversationExportDialog demos (HS2-QKKS05)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/ux-demo?component=project-close-dialog&dev-review=false');
+  await page.goto('/ux-demo?component=project-close-dialog');
   const projectClose = page.locator('[data-component="project-close-dialog"]');
   await expect(projectClose).toHaveJSProperty('open', true);
   await expect(projectClose).toHaveAttribute('data-has-resources', 'true');
@@ -8311,7 +7898,7 @@ test('renders the CommandRunDialog demo as an opened native modal (HS2-Z0CTHN)',
 test('swaps the CommandRunDialog demo between run output and stop confirmation (HS2-CWWX7S)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/ux-demo?component=command-run-dialog&dev-review=false');
+    await page.goto('/ux-demo?component=command-run-dialog');
     const output = page.locator('[data-component="command-run-dialog"]'),
       stop = page.locator('[data-component="command-cancellation-dialog"]'),
       event = page.locator('.component-stage__event'),
@@ -8374,7 +7961,7 @@ for (const theme of ['light', 'dark'] as const) {
       localStorage.setItem('hotsheet.ux-demo.theme', value);
     }, theme);
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/ux-demo?component=ai-conversation&dev-review=false');
+    await page.goto('/ux-demo?component=ai-conversation');
     const host = page.locator('[data-component="ai-conversation"]'),
       save = host.getByRole('button', { name: 'Save conversation' }),
       stop = host.getByRole('button', { name: 'Stop Codex' });
@@ -8431,7 +8018,7 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 test('keeps equal notification card gaps across pending and history groups (HS2-D38KZF)', async ({ page }) => {
-  await page.goto('/ux-demo?component=notification-center&dev-review=false');
+  await page.goto('/ux-demo?component=notification-center');
   const center = page.locator('[data-component="notification-center"]'),
     cards = center.locator('[data-component="permission-request-card"]');
   for (const width of [1280, 560]) {
@@ -8997,7 +8584,7 @@ test('pushes and pops ticket detail on the TerminalTicketRail NavStack with one 
 }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/ux-demo?component=terminal-ticket-rail&dev-review=false');
+    await page.goto('/ux-demo?component=terminal-ticket-rail');
     const rail = page.locator('[data-component="terminal-ticket-rail"]'),
       chromeToolbars = rail.locator(
         '[data-nav-stack-chrome] [data-component="toolbar"]:not([data-nav-stack-header] *)',
@@ -9048,7 +8635,7 @@ test('pushes and pops ticket detail on the TerminalTicketRail NavStack with one 
 test('composes startup and inspector feedback without app CSS (HS2-JMYRT3)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/ux-demo?component=app-empty-state&dev-review=false');
+    await page.goto('/ux-demo?component=app-empty-state');
     const variants = page.getByRole('region', { name: 'Application empty state variants' });
     await expect(variants.locator('[data-component="empty-state"]')).toHaveCount(3);
     await expect(variants.locator('[data-busy="true"]')).toContainText('Opening Hot Sheet');

@@ -15,7 +15,7 @@ Related docs: [06-clients.md](06-clients.md) (client requirements),
 tradeoff rules, and review gates),
 [ux-components.md](ux-components.md) (component contract and `/ux-demo` catalog),
 [09-technology-decisions.md](09-technology-decisions.md) §9.5 (Kerf + Web Awesome,
-Lucide), [18-dev-review-tool.md](18-dev-review-tool.md), and the root
+Lucide), and the root
 [CLAUDE.md](../CLAUDE.md) "Client UI stack" rules.
 
 ---

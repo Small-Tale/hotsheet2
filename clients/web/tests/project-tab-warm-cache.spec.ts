@@ -256,7 +256,7 @@ async function installWorkspace(page: Page) {
 type Workspace = Awaited<ReturnType<typeof installWorkspace>>;
 
 async function bootWorkspace(page: Page, workspace: Workspace) {
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect(workspace.tab(0)).toHaveAttribute('aria-selected', 'true');
   await expect(workspace.ticketRow('HS2-P0A')).toBeVisible();
   // Startup stays active-only (HS2-V9ZVW0): inactive projects load when first selected.

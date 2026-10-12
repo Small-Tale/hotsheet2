@@ -38,7 +38,6 @@ export interface ProjectChangeStreamsDependencies {
   refreshRepositoryStatus: () => Promise<unknown>;
   loadConfidenceReport: (target: Project) => Promise<unknown>;
   /** Marks a stream-triggered refresh so the ticket refresh treats it as background work. */
-  setBackgroundProjectRefresh: (value: boolean) => void;
 }
 
 /**
@@ -70,7 +69,6 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     refreshCustomViews,
     refreshRepositoryStatus,
     loadConfidenceReport,
-    setBackgroundProjectRefresh,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
   const repositoryRefreshTimers = new Map<string, number>();
@@ -123,13 +121,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
             ]);
           },
           refresh: async () => {
-            setBackgroundProjectRefresh(true);
-            try {
-              await projectTabRefresh.request(current);
-              await refreshProviderOutbox(current);
-            } finally {
-              setBackgroundProjectRefresh(false);
-            }
+            await projectTabRefresh.request(current);
+            await refreshProviderOutbox(current);
             // Ticket changes can complete, reopen, or verify: keep an open calibration current.
             if (shellMode.peek() === 'stats' && statsProjectId.peek() === current.id)
               await loadConfidenceReport(current);

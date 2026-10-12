@@ -108,7 +108,6 @@ describe('Kerf application UI profile', () => {
         ownershipGroups: [
           { styleSources: ['src/style.css'], sources: ['src/main.tsx', 'src/app/'] },
           { styleSources: ['src/ux-demo/style.css'], sources: ['src/ux-demo/'] },
-          { styleSources: ['src/dev-review/dev-review.css'], sources: ['src/dev-review/'] },
         ],
       }),
     );

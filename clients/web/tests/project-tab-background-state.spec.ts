@@ -210,7 +210,7 @@ async function installProjects(page: Page) {
 }
 
 async function openBothProjects(page: Page) {
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add project' }).click();

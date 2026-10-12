@@ -209,7 +209,7 @@ test('marks a ticket as a duplicate of an exact ticket in another project and re
   });
 
   await page.setViewportSize({ width: 1080, height: 1190 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add project' }).click();

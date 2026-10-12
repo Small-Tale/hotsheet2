@@ -68,13 +68,6 @@ async function mockBulkProject(page: Page, { conflictFirst = false }: { conflict
   const staleRefreshResponse = new Promise<void>((resolve) => {
     releaseStaleRefresh = resolve;
   });
-  await page.addInitScript(() => {
-    if (!new URLSearchParams(location.search).has('dev-review')) {
-      const url = new URL(location.href);
-      url.searchParams.set('dev-review', 'false');
-      history.replaceState(null, '', url);
-    }
-  });
   await page.route('**/*', async (route) => {
     const request = route.request(),
       path = new URL(request.url()).pathname;

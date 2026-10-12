@@ -182,7 +182,7 @@ for (const [width, height] of [
   test(`drawer grid tiles track the drawer after a view switch remounts it at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await installWorkspace(page);
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await expect(drawer(page)).toHaveAttribute('data-mode', 'grid');
     await expect(tile(page)).toBeVisible();
     // Startup: the drawer restored open must be measured, not left at the signal's default bounds.

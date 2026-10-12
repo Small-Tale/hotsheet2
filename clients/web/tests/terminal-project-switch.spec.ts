@@ -180,7 +180,7 @@ for (const [width, height] of [
   test(`returning to a project shows its live drawer terminal on the first frame at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await installWorkspace(page);
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await expectActive(page, 'a');
     await expect(dedicated(page, 'a')).toHaveAttribute('data-connection', 'connected');
     await expect(dedicated(page, 'a')).toHaveAttribute('data-geometry-ready', 'true');

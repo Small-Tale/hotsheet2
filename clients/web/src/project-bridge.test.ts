@@ -354,16 +354,17 @@ describe('revealCommand', () => {
 
   it('routes a specific project and path through an injected launcher boundary', async () => {
     const reveal = vi.fn().mockResolvedValue(undefined);
-    const response = await createDevApp(true, undefined, reveal).request(
-      '/__hotsheet/projects/demo/corrupt-tickets/reveal',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"path":"/work/broken.md"}' },
-    );
+    const response = await createDevApp(true, reveal).request('/__hotsheet/projects/demo/corrupt-tickets/reveal', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"path":"/work/broken.md"}',
+    });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ revealed: true });
     expect(reveal).toHaveBeenCalledWith('demo', '/work/broken.md');
     expect(
       (
-        await createDevApp(false, undefined, reveal).request('/__hotsheet/projects/demo/corrupt-tickets/reveal', {
+        await createDevApp(false, reveal).request('/__hotsheet/projects/demo/corrupt-tickets/reveal', {
           method: 'POST',
         })
       ).status,
@@ -388,7 +389,7 @@ describe('native folder chooser', () => {
   });
   it('exposes selection and cancellation only from the local development bridge', async () => {
     const choose = vi.fn().mockResolvedValueOnce('/work/selected').mockResolvedValueOnce(undefined),
-      app = createDevApp(true, undefined, undefined, choose);
+      app = createDevApp(true, undefined, choose);
     expect(await (await app.request('/__hotsheet/folders/choose', { method: 'POST' })).json()).toEqual({
       path: '/work/selected',
     });
@@ -513,7 +514,7 @@ describe('native folder chooser', () => {
   });
   it('exposes git ticket-store setup only through the local development bridge', async () => {
     const setup = vi.fn().mockResolvedValueOnce('/work/demo.hs2').mockResolvedValueOnce('/chosen/tickets'),
-      app = createDevApp(true, undefined, undefined, undefined, setup);
+      app = createDevApp(true, undefined, undefined, setup);
     const response = await app.request('/__hotsheet/projects/setup-git', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -535,7 +536,7 @@ describe('native folder chooser', () => {
     });
     expect(
       (
-        await createDevApp(false, undefined, undefined, undefined, setup).request('/__hotsheet/projects/setup-git', {
+        await createDevApp(false, undefined, undefined, setup).request('/__hotsheet/projects/setup-git', {
           method: 'POST',
         })
       ).status,
@@ -839,7 +840,7 @@ describe('Hot Sheet 1 project import bridge', () => {
         toolsConfigured: true,
       }),
       remove = vi.fn().mockResolvedValue(['db', 'settings.json']),
-      app = createDevApp(true, undefined, undefined, undefined, undefined, undefined, migrate, remove);
+      app = createDevApp(true, undefined, undefined, undefined, undefined, migrate, remove);
     const imported = await app.request('/__hotsheet/projects/migrate-hs1', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -851,7 +852,7 @@ describe('Hot Sheet 1 project import bridge', () => {
     const cleaned = await app.request('/__hotsheet/projects/demo/hs1-data', { method: 'DELETE' });
     expect(await cleaned.json()).toEqual({ removed: ['db', 'settings.json'] });
     expect(remove).toHaveBeenCalledWith('demo');
-    const disabled = createDevApp(false, undefined, undefined, undefined, undefined, undefined, migrate, remove);
+    const disabled = createDevApp(false, undefined, undefined, undefined, undefined, migrate, remove);
     expect((await disabled.request('/__hotsheet/projects/migrate-hs1', { method: 'POST' })).status).toBe(404);
     expect((await disabled.request('/__hotsheet/projects/demo/hs1-data', { method: 'DELETE' })).status).toBe(404);
   });
@@ -937,7 +938,7 @@ describe('Git ticket-store remote setup', () => {
   });
   it('exposes remote connection only through the local bridge', async () => {
     const connect = vi.fn().mockResolvedValue(undefined),
-      app = createDevApp(true, undefined, undefined, undefined, undefined, connect),
+      app = createDevApp(true, undefined, undefined, undefined, connect),
       request = {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -948,7 +949,7 @@ describe('Git ticket-store remote setup', () => {
     expect(connect).toHaveBeenCalledWith('/tickets', 'git@example.com:team/tickets.git');
     expect(
       (
-        await createDevApp(false, undefined, undefined, undefined, undefined, connect).request(
+        await createDevApp(false, undefined, undefined, undefined, connect).request(
           '/__hotsheet/projects/setup-git-remote',
           request,
         )
@@ -958,7 +959,7 @@ describe('Git ticket-store remote setup', () => {
   it('returns the complete actionable Git diagnostic through the local bridge', async () => {
     const message = 'The remote repository was not found. Git details: ERROR: Repository not found.',
       connect = vi.fn().mockRejectedValue(new Error(message)),
-      app = createDevApp(true, undefined, undefined, undefined, undefined, connect),
+      app = createDevApp(true, undefined, undefined, undefined, connect),
       response = await app.request('/__hotsheet/projects/setup-git-remote', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -984,7 +985,6 @@ describe('remote project checkouts (HS2-QMR41J, HS2-VFNCXG)', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
         list,
       ).request('/__hotsheet/checkouts');
       expect(response.status).toBe(200);
@@ -996,7 +996,6 @@ describe('remote project checkouts (HS2-QMR41J, HS2-VFNCXG)', () => {
     const list = vi.fn().mockRejectedValue(new Error('server unreachable'));
     const response = await createDevApp(
       true,
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -1249,7 +1248,6 @@ describe('machine server supervision', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       recover,
     ).request('/__hotsheet/server/recover-unhealthy', request);
     expect(response.status).toBe(200);
@@ -1257,17 +1255,10 @@ describe('machine server supervision', () => {
     expect(recover).toHaveBeenCalledWith(body);
     expect(
       (
-        await createDevApp(
-          false,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          recover,
-        ).request('/__hotsheet/server/recover-unhealthy', request)
+        await createDevApp(false, undefined, undefined, undefined, undefined, undefined, undefined, recover).request(
+          '/__hotsheet/server/recover-unhealthy',
+          request,
+        )
       ).status,
     ).toBe(404);
   });

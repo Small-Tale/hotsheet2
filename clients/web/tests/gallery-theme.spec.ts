@@ -6,7 +6,7 @@ for (const width of [1280, 390]) {
   }, testInfo) => {
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ colorScheme: 'light' });
-    await page.goto('/ux-demo?component=attachment-gallery&dev-review=false');
+    await page.goto('/ux-demo?component=attachment-gallery');
     const gallery = page.locator('[data-component="attachment-gallery"]');
     await expect(gallery).toBeVisible();
     await gallery.getByRole('button', { name: 'Annotate media, 1 annotation' }).click();

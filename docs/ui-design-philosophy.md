@@ -8,9 +8,8 @@
 > design tradeoffs; it does not replace product requirements or component contracts.
 
 Related docs: [00-vision-and-principles.md](00-vision-and-principles.md),
-[06-clients.md](06-clients.md), [design-guidelines.md](design-guidelines.md),
-[ux-components.md](ux-components.md), and
-[18-dev-review-tool.md](18-dev-review-tool.md).
+[06-clients.md](06-clients.md), [design-guidelines.md](design-guidelines.md), and
+[ux-components.md](ux-components.md).
 
 ---
 
@@ -495,7 +494,7 @@ the philosophy.
 | Placement and timing carry meaning                | HS2-8DYEQM, HS2-9QCCH3, HS2-FW96JM                         | Put actions by what they affect and reveal transient UI only when requested.                                 |
 | Scope fidelity protects learned behavior          | HS2-7CTQJC, HS2-CV0J2E, HS2-E729WG                         | Solve the requested problem without gratuitous redesign; simplify only where the workflow calls for it.      |
 
-Clusters of automated UI-stability reports should first be treated as evidence of a
+Clusters of related UI defect reports should first be treated as evidence of a
 shared ownership, identity, focus, or render-lifecycle defect. Fix and suppress the
 systemic cause rather than styling each symptom independently.
 

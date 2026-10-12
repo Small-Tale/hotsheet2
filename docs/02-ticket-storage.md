@@ -847,7 +847,7 @@ strip the same list through `clients/web/scripts/repository-env.mjs`.
 
 The web client's production Node code does the same (HS2-T1H6NP). Every child process in
 `clients/web/src` (the dev bridge's git runner, store init, server launch, reveal and
-folder-chooser helpers, the HS1 backup git calls, the dev-review commit and push, and the
+folder-chooser helpers, the HS1 backup git calls, and the
 migration job and lock runners) spawns through `clients/web/src/child-process.ts`. Its
 `spawn`, `spawnSync`, and `execFileAsync` wrappers always remove the same list from the
 passed or inherited environment. ESLint forbids importing `node:child_process` anywhere

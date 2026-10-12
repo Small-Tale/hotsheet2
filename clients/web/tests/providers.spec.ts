@@ -10,7 +10,6 @@ import { withoutGitRepositoryEnv } from '../scripts/repository-env.mjs';
 import type { ConversationMessage } from '../src/ai-conversation';
 import type { FullTicket, MediaAnnotation, Note, TicketRow } from '../src/api';
 import type { ConversationExportPayload } from '../src/conversation-export';
-import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 import { seedLocalGitTickets } from './real-ticket-fixture';
 import { realTicketServer } from './real-ticket-server';
 import { ticketsJson } from './ticket-page-fixture';
@@ -56,7 +55,7 @@ test('opens a checkout and its exact ticket from a deep link @ci-smoke', async (
   await page.route('**/__hotsheet/checkouts', (route) =>
     route.fulfill({ json: [{ id: project.id, alias: 'demo', root: project.root, stores: project.stores }] }),
   );
-  await page.goto('/?store=demo-checkout&ticket=HS2-DEMO01&dev-review=false');
+  await page.goto('/?store=demo-checkout&ticket=HS2-DEMO01');
   const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
   await expect(reader).toBeVisible();
   await expect(reader).toContainText('Use real project tickets');
@@ -69,7 +68,7 @@ test('opens a ticket from the project= deep-link key and a project path (HS2-BQ0
   await page.route('**/__hotsheet/checkouts', (route) =>
     route.fulfill({ json: [{ id: project.id, alias: 'demo', root: project.root, stores: project.stores }] }),
   );
-  await page.goto('/?project=%2Fwork%2Fdemo&ticket=HS2-DEMO01&dev-review=false');
+  await page.goto('/?project=%2Fwork%2Fdemo&ticket=HS2-DEMO01');
   const reader = page.locator('[data-component="ticket-reader"][data-reader-active="true"]');
   await expect(reader).toBeVisible();
   await expect(reader).toContainText('The real ticket body');
@@ -108,7 +107,7 @@ test('keeps Git source repair controls visible after an identity mismatch (HS2-A
     });
   });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
@@ -121,7 +120,7 @@ test('keeps Git source repair controls visible after an identity mismatch (HS2-A
   const narrow = await narrowContext.newPage();
   await mockProject(narrow);
   await narrow.route('**/__hotsheet/project-api/*/providers', (route) => route.fulfill({ json: descriptors() }));
-  await narrow.goto(new URL('/?dev-review=false', page.url()).toString());
+  await narrow.goto(new URL('/', page.url()).toString());
   await narrow.getByRole('button', { name: 'Open project' }).click();
   await narrow.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await narrow.getByLabel('Settings view').click();
@@ -181,7 +180,7 @@ test('shows repair controls when the linked Git store is unavailable (HS2-N4X1WG
   };
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  const sources = await enterSettings(page, '/?dev-review=false');
+  const sources = await enterSettings(page, '/');
   await page.screenshot({ path: 'target/visual-captures/hs2-n4x1wg-unavailable-wide.png', fullPage: true });
   await sources.getByRole('button', { name: 'Edit HS git tickets' }).click();
   const editor = page.locator('[data-component="git-source-editor"]');
@@ -191,7 +190,7 @@ test('shows repair controls when the linked Git store is unavailable (HS2-N4X1WG
 
   const narrowContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const narrow = await narrowContext.newPage();
-  await enterSettings(narrow, new URL('/?dev-review=false', page.url()).toString());
+  await enterSettings(narrow, new URL('/', page.url()).toString());
   await narrow.screenshot({ path: 'target/visual-captures/hs2-n4x1wg-unavailable-narrow.png', fullPage: true });
   await narrowContext.close();
 });
@@ -219,7 +218,7 @@ test('keeps workspace toolbar visibility responsive without CSS probe work durin
   });
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const sort = page.locator('[data-hide-below="416px"]').first();
@@ -350,7 +349,7 @@ async function haltedSessionFixture(page: Page) {
 
 test('alerts for a terminal question and opens its originating session (HS2-KP9K85)', async ({ page }) => {
   const fixture = await haltedSessionFixture(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await fixture.question('tool-1');
@@ -373,7 +372,7 @@ for (const width of [1280, 390]) {
   test(`answers all AI terminal questions from the notice at ${width}px (HS2-SWY32A)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     const fixture = await haltedSessionFixture(page);
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await fixture.question('tool-multi', [
@@ -423,7 +422,7 @@ for (const width of [1280, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     const fixture = await haltedSessionFixture(page);
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
@@ -485,7 +484,7 @@ test('acknowledges a halted prompt only after modal editing releases its top-lay
   page,
 }) => {
   const fixture = await haltedSessionFixture(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…', exact: true }).click();
@@ -518,7 +517,7 @@ test('acknowledges a halted prompt only after modal editing releases its top-lay
 
 test('prioritizes an ignored foreground permission request over queued halts (HS2-E6KAWY)', async ({ page }) => {
   const fixture = await haltedSessionFixture(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -542,7 +541,7 @@ test('shows completed driven failures, preserves indicators on dismissal, and su
   page,
 }) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
@@ -582,7 +581,7 @@ test('opens a halted session in its originating project and follows another wind
           : project,
     });
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Add project' }).click();
@@ -610,7 +609,7 @@ test('opens a halted session in its originating project and follows another wind
   const key = JSON.stringify(['terminal', 'demo-checkout', 'halt-worker', 'seen-in-peer']);
   await expect(page.locator('[data-component="halted-session-popup"]')).toHaveCount(1);
   const peer = await page.context().newPage();
-  await peer.goto('/ux-demo?component=halted-session-popup&dev-review=false');
+  await peer.goto('/ux-demo?component=halted-session-popup');
   await peer.evaluate((key) => {
     localStorage.setItem('hotsheet.halted-session-seen', JSON.stringify([key]));
   }, key);
@@ -638,7 +637,7 @@ test('keeps live halt dedupe when device storage is unavailable (HS2-E6KAWY)', a
     };
   });
   const fixture = await haltedSessionFixture(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const popup = page.getByRole('dialog', { name: 'AI session halted' });
@@ -696,7 +695,7 @@ test('deduplicates actual server halt episodes, preserves duplicate timestamps, 
     await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => {
       void route.close();
     });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     const report = { error_type: 'overloaded', message: 'Real Claude model capacity failure.', agent: 'claude' },
@@ -2425,104 +2424,6 @@ async function installFakeTerminalSockets(page: import('@playwright/test').Page,
   );
 }
 
-const devReviewTestTitles = new Set([
-  'activates Dev Review when opted in and preserves its desktop/mobile lifecycle',
-  'honors the explicit Dev Review false opt-out after application readiness (HS2-9TZ9AF)',
-  'does not report intentional render bursts during remembered-project startup',
-  'suppresses interaction-bound render bursts but reports a storm that persists afterward',
-  'keeps feedback rectangle input within its frame budget in the populated main app',
-  'switches large ticket views without cloning every row into motion ghosts',
-]);
-
-// Dev Review is opt-in (HS2-TCACFR): only the Dev Review tests below opt in, unless their URL already
-// chooses a value (such as the explicit opt-out test).
-test.beforeEach(async ({ page }, testInfo) => {
-  if (!devReviewTestTitles.has(testInfo.title)) return;
-  await page.addInitScript(() => {
-    if (
-      (location.protocol === 'http:' || location.protocol === 'https:') &&
-      !new URLSearchParams(location.search).has('dev-review')
-    ) {
-      const url = new URL(location.href);
-      url.searchParams.set('dev-review', '1');
-      history.replaceState(null, '', url);
-    }
-  });
-});
-
-test('activates Dev Review when opted in and preserves its desktop/mobile lifecycle', async ({ page }) => {
-  let submission: { actorRole: string; attachments: Array<{ filename: string; mimeType: string }> } | undefined;
-  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
-    submission = route.request().postDataJSON();
-    await route.fulfill({ status: 201, json: { slug: 'HS2-DIAG01' } });
-  });
-  await page.goto('/');
-  await expect(page.locator('.hs-dev-review')).toBeVisible();
-  await page.getByRole('button', { name: 'Feedback' }).click();
-  await page.getByRole('button', { name: 'New Ticket' }).click();
-  const dialog = page.getByRole('dialog', { name: 'New Hot Sheet ticket' }),
-    diagnostics = dialog.locator('.hs-dev-review__diagnostics');
-  await expect(diagnostics.getByText('Attach diagnostic logs')).toBeVisible();
-  await expect(diagnostics.locator('input')).toBeChecked();
-  expect(
-    await diagnostics.evaluate((element) => {
-      const checkbox = element.querySelector('input')!.getBoundingClientRect(),
-        label = element.querySelector('span')!.getBoundingClientRect();
-      return Math.abs((checkbox.top + checkbox.bottom - label.top - label.bottom) / 2);
-    }),
-  ).toBeLessThanOrEqual(1);
-  await page.screenshot({ path: 'target/visual-captures/hs2-48w3ys-main-dev-review-default-wide.png', fullPage: true });
-  await dialog.getByRole('textbox', { name: 'Feedback notes' }).fill('Select menus close unexpectedly.');
-  await dialog.getByRole('button', { name: 'Create Ticket' }).click();
-  await expect.poll(() => submission).toBeTruthy();
-  expect(submission!.actorRole).toBe('human');
-  expect(submission!.attachments).toHaveLength(1);
-  expect(submission!.attachments[0]).toMatchObject({ mimeType: 'application/json' });
-  expect(submission!.attachments[0].filename).toMatch(/^hotsheet-ui-diagnostics-/);
-  // The Dev Review overlay is desktop-only: it is removed on a mobile-width viewport and returns on
-  // resize back to desktop, while the headless UI-stability diagnostics stay installed (HS2-9KT6RQ).
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('.hs-dev-review')).toHaveCount(0);
-  await page.screenshot({ path: 'target/visual-captures/hs2-sv3f5g-main-dev-review-narrow.png', fullPage: true });
-  expect(
-    await page.evaluate(() =>
-      Boolean(
-        (window as typeof window & { __hotsheetUiStabilityDiagnostics?: unknown }).__hotsheetUiStabilityDiagnostics,
-      ),
-    ),
-  ).toBe(true);
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await expect(page.locator('.hs-dev-review')).toBeVisible();
-});
-
-test('keeps Dev Review off by default in development (HS2-TCACFR)', async ({ page }) => {
-  let submissions = 0;
-  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
-    submissions += 1;
-    await route.fulfill({ status: 201, json: { slug: 'HS2-UNEXPECTED' } });
-  });
-  await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Open project' })).toBeVisible();
-  await page.waitForTimeout(500);
-  await expect(page.locator('.hs-dev-review')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Feedback' })).toHaveCount(0);
-  expect(new URL(page.url()).searchParams.has('dev-review')).toBe(false);
-  expect(submissions).toBe(0);
-});
-
-test('honors the explicit Dev Review false opt-out after application readiness (HS2-9TZ9AF)', async ({ page }) => {
-  await page.goto('/?dev-review=false');
-  await expect(page.getByRole('button', { name: 'Open project', exact: true })).toBeVisible();
-  await expect(page.locator('.hs-dev-review')).toHaveCount(0);
-  expect(
-    await page.evaluate(() =>
-      Boolean(
-        (window as typeof window & { __hotsheetUiStabilityDiagnostics?: unknown }).__hotsheetUiStabilityDiagnostics,
-      ),
-    ),
-  ).toBe(false);
-});
-
 test('opens a roomy project dialog with native browse controls and working cancel', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 760 });
   await mockProject(page);
@@ -2956,7 +2857,7 @@ test('changes a sole project source color in settings and inspector while cards 
   page,
 }, testInfo) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const ticketRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
@@ -3002,7 +2903,7 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, 
   page,
 }, testInfo) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
@@ -3039,7 +2940,7 @@ test('requires review and keeps an unverified recovery visible for a moved legac
   page,
 }) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
@@ -3065,7 +2966,7 @@ test('requires review and keeps an unverified recovery visible for a moved legac
 
 test('reviews a legacy store at its unchanged path before adopting it (HS2-RQXJQV)', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, false, true);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
@@ -3108,7 +3009,7 @@ test('centers the compact source mark with the type icon and ticket number in co
   page,
 }) => {
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, true);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const listRow = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
@@ -3136,7 +3037,7 @@ test('centers the compact source mark with the type icon and ticket number in co
 
 test('aligns ticket source marks with their names in project settings (HS2-Q93H9A) @ci-smoke', async ({ page }) => {
   await mockProject(page, true, false, 0, 0, 0, false, 2, false, false, true, false, false, false, true);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByLabel('Settings view').click();
@@ -3156,7 +3057,7 @@ test('keeps the inspector source mark unclipped and close to the ticket number (
   page,
 }) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();
@@ -6400,7 +6301,7 @@ for (const width of [2048, 760]) {
   test(`keeps the expanded search field still on every typing frame at ${width}px (HS2-3WQ9A1)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await mockProject(page);
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]');
@@ -6459,7 +6360,7 @@ test('remeasures a reopened search after a closed resize without restyling the a
 }) => {
   await page.setViewportSize({ width: 2048, height: 900 });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const toolbar = page.locator('[data-component="toolbar"][aria-label="Workspace toolbar"]'),
@@ -7066,7 +6967,7 @@ test('shows a real terminal hook report separately from MCP and bridge reachabil
         await route.fulfill({ response });
       });
     await page.routeWebSocket(/\/terminals\/[^/]+\/attach$/, (route) => void route.close());
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show terminal drawer' }).click();
@@ -7156,7 +7057,7 @@ test('marks a terminal whose AI session halted on an API error and clears it on 
       void route.close();
     });
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show terminal drawer' }).click();
@@ -7300,7 +7201,7 @@ test('recovers a missing Codex connection when its interactive permission hook r
       void route.close();
     });
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show terminal drawer' }).click();
@@ -7453,7 +7354,7 @@ test('warns when an AI tab never connects to Hot Sheet, and clears once it does 
     void route.close();
   });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
@@ -7576,7 +7477,7 @@ test('mirrors a stable non-80x24 PTY grid in the close-dialog preview through th
     });
 
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     // The drawer terminal fits the wide drawer and drives the PTY off its 80x24 spawn size.
@@ -8615,7 +8516,7 @@ test('shares a terminal rename with other devices and restores it through the re
         }
       });
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Show terminal drawer' }).click();
@@ -8908,27 +8809,10 @@ test('keeps the collapsed terminal-drawer restore action on canonical shell inse
   await page.screenshot({ path: 'target/visual-captures/hs2-w3gphw-drawer-restore-narrow.png', fullPage: true });
 });
 
-test('keeps feedback rectangle input within its frame budget in the populated main app', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await mockProject(page);
-  await page.goto('/?dev-review=1');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const measurement = await measureFeedbackRectangle(page, { x: 440, y: 220 }, { x: 820, y: 520 });
-  await testInfo.attach('feedback-performance.json', {
-    body: JSON.stringify(measurement, null, 2),
-    contentType: 'application/json',
-  });
-  expectResponsiveFeedbackRectangle(measurement);
-  await page.screenshot({ path: 'target/visual-captures/hs2-6ppvjc-main-wide.png', fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: 'target/visual-captures/hs2-6ppvjc-main-narrow.png', fullPage: true });
-});
-
 test('projects an indexed feedback-needed note into the real row and inspector rails', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page, true, true);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
@@ -8974,7 +8858,7 @@ test('clicks exact feedback character positions, removes a split, and composes a
   page,
 }) => {
   const patches = await mockProject(page, true, true);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -9036,7 +8920,7 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
   page,
 }) => {
   const patches = await mockProject(page, true, 'choices');
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -9072,7 +8956,7 @@ test('selects feedback choices with platform modifiers and preserves a freeform 
 
 test('responds to feedback choices embedded in the ticket description', async ({ page }) => {
   const patches = await mockProject(page, true, 'details');
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const ticket = page.locator('[data-ticket-slug="HS2-DEMO01"]');
@@ -9127,7 +9011,7 @@ test('responds to feedback choices embedded in the ticket description', async ({
 
 test('records No response needed as a subtle regular response and clears review state', async ({ page }) => {
   const patches = await mockProject(page, true, true);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const ticket = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
@@ -9161,7 +9045,7 @@ test('records No response needed as a subtle regular response and clears review 
 test('opens reader at the active feedback note from its inspector action', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 520 });
   await mockProject(page, true, true);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -9536,7 +9420,7 @@ test('refreshes repository status from the project long-poll stream without simp
 test('keeps exactly 24px above and below the nearly full-height ticket reader', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -9583,7 +9467,7 @@ test('enlarges reader description and note text 1.5× with a remembered global t
       ? route.fulfill({ json: { store: 'git-local', ...richFull } })
       : route.fallback(),
   );
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -9796,7 +9680,7 @@ test('renders the exact shared Code Review component in the inspector and reader
       ? route.fulfill({ json: { difftool: 'Glassbox', truncated: false, ranges: [], commits: [] } })
       : route.fallback(),
   );
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -9876,7 +9760,7 @@ test('opens every selected ticket file in one difftool launch (HS2-J7HQ5E)', asy
 test('keeps change evidence interactive when launched from the modal ticket reader (HS2-6EV2ES)', async ({ page }) => {
   const actions = await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -9927,7 +9811,7 @@ test('keeps change evidence interactive when launched from the modal ticket read
 test('owns and restores sidebar and reader tabs independently', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -10218,7 +10102,7 @@ test('shows the live claim and its ETA in the inspector and reader headers and c
     polls.push(route);
   });
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
@@ -10879,7 +10763,7 @@ test('loads every ticket page in the active workspace sort order (HS2-X23ME4)', 
       pageQueries.push(url.searchParams);
   });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect
@@ -10911,7 +10795,7 @@ test('loads every ticket page in the active workspace sort order (HS2-X23ME4)', 
 test('contains and centers inspector tabs while showing labels only when they fit (HS2-WKGMN4)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -11056,12 +10940,7 @@ test('shows no spurious permission popup or repeated work while an open project 
 });
 
 test('keeps remembered-project startup atomic and does not report its intentional work', async ({ page }) => {
-  const submissions: unknown[] = [];
   await mockProject(page);
-  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
-    submissions.push(route.request().postDataJSON());
-    await route.fulfill({ status: 201, json: { slug: 'HS2-SHOULD-NOT-EXIST' } });
-  });
   await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/tickets*', async (route) => {
     const url = new URL(route.request().url());
     if (route.request().method() === 'GET' && url.pathname.endsWith('/tickets')) {
@@ -11101,7 +10980,6 @@ test('keeps remembered-project startup atomic and does not report its intentiona
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('[data-project-restore-state="true"]')).toHaveCount(0);
   await page.waitForTimeout(500);
-  expect(submissions).toEqual([]);
 });
 
 test('retries a temporarily failed remembered project and restores every project', async ({ page }) => {
@@ -11213,32 +11091,6 @@ test('keeps a persistently failed project remembered without obscuring a success
   await expect(page.locator('.kui-toolbar-text', { hasText: 'Queue' })).toBeVisible();
 });
 
-test('suppresses interaction-bound render bursts but reports a storm that persists afterward', async ({ page }) => {
-  const submissions: unknown[] = [];
-  await mockProject(page);
-  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
-    submissions.push(route.request().postDataJSON());
-    await route.fulfill({ status: 201, json: { slug: 'HS2-DIAGNOSTIC' } });
-  });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Open project' }).click();
-  await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  await expect(page.locator('[data-project-dialog]')).toBeHidden();
-  await page.waitForTimeout(5_100);
-  await page.getByLabel('List view').click();
-  for (let index = 0; index < 14; index += 1) {
-    await page.setViewportSize({ width: 1280, height: 760 + index });
-    await page.waitForTimeout(20);
-  }
-  expect(submissions).toEqual([]);
-  await page.waitForTimeout(5_100);
-  for (let index = 0; index < 14; index += 1) {
-    await page.setViewportSize({ width: 1280, height: 800 + index });
-    await page.waitForTimeout(20);
-  }
-  await expect.poll(() => submissions.length).toBe(1);
-});
-
 test('projects background AI activity without rerendering the closed conversation surface', async ({ page }) => {
   let settledPolls = 0;
   page.on('request', (request) => {
@@ -11247,7 +11099,7 @@ test('projects background AI activity without rerendering the closed conversatio
   });
   await mockProject(page);
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
@@ -11362,7 +11214,7 @@ test('defers ticket refresh without hiding an open metadata popup', async ({ pag
 
 test('switches to Queue so a ticket created in Backlog with Up Next stays visible (HS2-F6937Q)', async ({ page }) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const sidebar = page.locator('#app-left-rail');
@@ -11388,7 +11240,7 @@ test('switches to Queue so a ticket created in Backlog with Up Next stays visibl
 
 test('drags a newly created selected ticket without requiring reselection (HS2-6E9RRS)', async ({ page }) => {
   const patches = await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const sidebar = page.locator('#app-left-rail');
@@ -11422,7 +11274,7 @@ test('drags a newly created selected ticket without requiring reselection (HS2-6
 
 test('remembers the last ticket category after cancelling and refreshing', async ({ page }) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
@@ -11505,7 +11357,7 @@ test('creates a ticket in a chosen writable source and preselects it next time i
     if (request.method() === 'POST' && url.pathname.endsWith('/checkouts/demo-checkout/tickets'))
       creates.push(url.search);
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
@@ -11650,7 +11502,7 @@ test('keeps staged files but blocks Create on an attachment-less source, then cr
     if (request.method() === 'POST' && /\/attachments$/.test(url.pathname))
       uploads.push(decodeURIComponent(request.headers()['x-hotsheet-filename'] ?? ''));
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
@@ -11854,7 +11706,7 @@ test('uploads staged files to a GitHub source with an assets repository and show
       return route.fulfill({ status: 200, contentType: 'text/plain', body: 'trace contents' });
     return route.fallback();
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const dialog = page.getByRole('dialog', { name: 'Create ticket' }),
@@ -11935,7 +11787,7 @@ test('keeps the plain source label and default routing for a single writable sou
     if (request.method() === 'POST' && url.pathname.endsWith('/checkouts/demo-checkout/tickets'))
       creates.push(url.search);
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
@@ -11951,7 +11803,7 @@ test('keeps the plain source label and default routing for a single writable sou
 test('keeps production ticket creation inside the Web Awesome modal lifecycle', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
@@ -11989,7 +11841,7 @@ test('keeps production ticket creation inside the Web Awesome modal lifecycle', 
 test('clears prior ticket text after cancel and successful creation', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const launcher = page.getByRole('button', { name: 'New ticket…' }),
@@ -12020,7 +11872,7 @@ test('clears prior ticket text after cancel and successful creation', async ({ p
 test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7)', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const inspector = page.locator('#app-right-rail');
@@ -12053,7 +11905,7 @@ test('creating a ticket on a phone opens the inspector overlay on it (HS2-QFW2A7
 test('creating a ticket on a desktop leaves the inspector as the user set it (HS2-QFW2A7)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'New ticket…' }).click();
@@ -12067,7 +11919,7 @@ test('creating a ticket on a desktop leaves the inspector as the user set it (HS
 test('does not resurrect a dismissed ticket composer after another modal closes', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByRole('button', { name: 'Show terminal drawer' }).click();
@@ -12153,7 +12005,7 @@ test('restores a saved composer draft without painting the dialog during remembe
     },
     { root: project.root, session },
   );
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect(page.getByRole('tab', { name: /demo/ })).toBeVisible();
   const dialog = page.locator('[data-component="quick-ticket-composer"]');
   await expect(dialog).not.toHaveAttribute('open', '');
@@ -13069,7 +12921,7 @@ test('persists an empty command group through the real server (HS2-EZ5KMC)', asy
     });
     page.on('dialog', (dialog) => void dialog.accept('Ideas'));
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     const editor = page.locator('[data-component="command-settings-editor"]'),
@@ -13113,7 +12965,7 @@ test('keeps a command edit made just before a reload through the real server (HS
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     const editor = page.locator('[data-component="command-settings-editor"]'),
@@ -14354,7 +14206,7 @@ test('merges unrelated external ticket fields and offers an editable merge for t
     });
   };
 
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -14449,7 +14301,7 @@ test('merges a concurrent remote edit and rides out token churn without losing t
     liveFull = { ...liveFull, ...patch, concurrency_token: `committed-${patches.length}` };
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -14508,7 +14360,7 @@ test('merges concurrent edits to different words of the same title (HS2-R8TYCG)'
     liveFull = { ...liveFull, ...patch, concurrency_token: `committed-${patches.length}` };
     return route.fulfill({ json: { store: 'git-local', ...liveFull } });
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -14994,7 +14846,7 @@ for (const viewport of [
     await page.routeWebSocket(/\/ws\/sync(?:\?|$)/, (route) => {
       sockets.push(route);
     });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByRole('button', { name: 'Add project' }).click();
@@ -15418,7 +15270,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const patches = await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
@@ -15502,7 +15354,7 @@ test('aligns Status controls without duplicating badge insets and preserves sele
 test('matches Details label spacing to Category before and after editing (HS2-S6S709)', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const patches = await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
@@ -15621,7 +15473,7 @@ test('honors the first control click while ticket details is focused', async ({ 
 
 test('creates, cancels, edits, and deletes notes through the shared inspector and reader', async ({ page }) => {
   const patches = await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
@@ -15690,7 +15542,7 @@ for (const width of [1280, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     const patches = await mockProject(page);
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByText('Use real project tickets').click();
@@ -17777,7 +17629,7 @@ test('releases video resources and event work after repeated gallery playback cy
   await page.route('**/tickets/*01/attachments/V1', (route) =>
     route.fulfill({ contentType: 'video/mp4', body: 'video fixture' }),
   );
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -17878,7 +17730,7 @@ test('releases video resources and event work after repeated gallery playback cy
 test('keeps decoded video seeks responsive across repeated real playback sessions', async ({ page }) => {
   test.setTimeout(90_000);
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   const bytes = Buffer.from(
     await page.evaluate(async () => {
       const canvas = document.createElement('canvas');
@@ -18212,7 +18064,7 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
         },
       );
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -18282,7 +18134,7 @@ test('crops a gallery image and restores hidden original annotations (HS2-VFBYZY
 
 test('keeps gallery shortcuts out of a focused annotation note (HS2-V14PVP)', async ({ page }) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -18333,7 +18185,7 @@ test.describe('phone touch annotation editing (HS2-BCA512)', () => {
   }) => {
     test.skip(browserName === 'firefox', 'Firefox has no mobile (isMobile) emulation.');
     await mockProject(page);
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -18384,7 +18236,7 @@ test('draws, edits, resizes, and deletes durable image annotations in the full-s
     if (request.method() === 'PUT' && new URL(request.url()).pathname.includes('/attachments/'))
       writes.push(request.postDataJSON());
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -18504,7 +18356,7 @@ test('keeps failed gallery markup visible until retry succeeds (HS2-VXCSMZ) @ci-
       ? route.fulfill({ status: 503, json: { error: 'Temporary save failure' } })
       : route.fallback();
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -18544,7 +18396,7 @@ test('draws all annotation tools and keeps keyboard edits in one markup batch (H
     if (request.method() === 'PUT' && new URL(request.url()).pathname.includes('/attachments/'))
       writes.push(request.postDataJSON() as { annotations: MediaAnnotation[] });
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -18847,7 +18699,7 @@ test('scrubs video without swiping and persists timed-annotation interaction bou
     });
   };
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -19108,7 +18960,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
     if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/action'))
       hostActions.push(request.postData() ?? '');
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
@@ -19308,7 +19160,7 @@ test('renders attachment identity from a selected real ticket', async ({ page })
 
 test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async ({ page }) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.getByText('Use real project tickets').click();
@@ -19371,7 +19223,7 @@ test('edits non-empty and empty details on a single click (HS2-H1K9YY)', async (
 
 test('keeps reader details, blocked reason, and note edit state independent from the sidebar', async ({ page }) => {
   const patches = await mockProject(page, true, false, 0, 0, 300);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   const row = page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
@@ -19420,7 +19272,7 @@ test('keeps reader details, blocked reason, and note edit state independent from
 
 test('persists separate sidebar, reader, and new-ticket heights through rerenders', async ({ page }) => {
   await mockProject(page);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
@@ -20090,7 +19942,7 @@ test('measures real local Git board performance for a 100-ticket verification an
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByLabel('Columns view').click();
@@ -21282,7 +21134,7 @@ test('shows local tickets and a partial-data warning when a GitHub source is rat
       },
     });
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   await expect(page.locator('[data-ticket-slug="HS2-NEXT01"]')).toBeVisible();
@@ -21685,7 +21537,6 @@ test('derives board columns from the selected view and merges Verified by projec
 });
 
 test('switches and searches large ticket views without cloning every row into motion ghosts', async ({ page }) => {
-  const submissions: unknown[] = [];
   const statuses: Array<'not_started' | 'backlog' | 'archive'> = [
     ...Array.from({ length: 60 }, () => 'not_started' as const),
     ...Array.from({ length: 18 }, () => 'backlog' as const),
@@ -21702,10 +21553,6 @@ test('switches and searches large ticket views without cloning every row into mo
     up_next: false,
   }));
   await mockProject(page);
-  await page.route('**/__hotsheet/dev-review/tickets', async (route) => {
-    submissions.push(route.request().postDataJSON());
-    await route.fulfill({ status: 201, json: { slug: 'HS2-SHOULD-NOT-EXIST' } });
-  });
   await page.route('**/checkouts/demo-checkout/tickets*', (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     const query = new URL(route.request().url()).searchParams.get('text');
@@ -21764,7 +21611,6 @@ test('switches and searches large ticket views without cloning every row into mo
     }
   }
   await page.waitForTimeout(300);
-  expect(submissions).toEqual([]);
 });
 
 test('matches HS1 multi-selection semantics and selected outlines in list and column views', async ({ page }) => {
@@ -25734,7 +25580,7 @@ test('closes a ticket as works as designed through the real server (HS2-N11T22)'
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     const row = page.locator(`[data-ticket-slug="${created.slug}"]`).first();
@@ -25809,7 +25655,7 @@ test('shows recorded completion confidence through the real server (HS2-DWTJ43)'
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
@@ -25916,7 +25762,7 @@ test('reflects a corrected or cleared note confidence from the real server (HS2-
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     const inspector = page.locator('#app-right-rail'),
@@ -26029,7 +25875,7 @@ test('shows recorded note authorship from the real server (HS2-32QDZ3)', async (
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
@@ -26137,7 +25983,7 @@ test('shows the project confidence calibration from the real server (HS2-Q1WCCY)
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.locator('[data-component="project-summary"]').first().click();
@@ -26196,7 +26042,7 @@ test('records the web client as the human actor on the real server (HS2-XF81CJ)'
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.locator(`[data-ticket-slug="${created.slug}"]`).first().click();
@@ -26248,7 +26094,7 @@ test('loads board columns independently from the real server (HS2-HNZZHC)', asyn
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await page.getByLabel('Columns view').click();
@@ -26310,7 +26156,7 @@ test('a quoting feedback reply clears Needs review through the real server (HS2-
       await route.fulfill({ response });
     });
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     const row = page.locator(`[data-component="ticket-list-row"][data-ticket-slug="${created.slug}"]`);
@@ -26592,7 +26438,7 @@ test('keeps the gallery zoom and markup toolbars visible on a phone while the in
 }, testInfo) => {
   await mockProject(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
   // Tapping the ticket opens the inspector as a Workbench rail overlay, which covers the work area.
@@ -26812,7 +26658,7 @@ test('surfaces a real server permission request through the live stream with no 
         }
       },
     );
-    await page.goto('/?dev-review=false');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
     await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();

@@ -120,7 +120,6 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
         refreshCustomViews: noop,
         refreshRepositoryStatus: noop,
         loadConfidenceReport: noop,
-        setBackgroundProjectRefresh: vi.fn(),
       });
     owner.syncProjectChangeStreams();
     owner.syncProjectChangeStreams();
@@ -160,7 +159,6 @@ describe('runtime-split feature owners (HS2-3JGWTV)', () => {
           refreshCustomViews: noop,
           refreshRepositoryStatus,
           loadConfidenceReport: noop,
-          setBackgroundProjectRefresh: vi.fn(),
         });
     const owner = build();
     owner.syncProjectChangeStreams();

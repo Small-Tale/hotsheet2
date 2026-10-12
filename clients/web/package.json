@@ -58,7 +58,6 @@
     "eslint-plugin-kerfjs": "5.0.0-beta.92",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "eslint-plugin-tsdoc": "^0.5.2",
-    "html2canvas": "^1.4.1",
     "prettier": "^3.9.8",
     "typescript": "5.9.2",
     "typescript-eslint": "^8.68.0",

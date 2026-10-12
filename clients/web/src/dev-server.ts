@@ -6,7 +6,6 @@ import { Hono } from 'hono';
 import type { Checkout } from './api';
 import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
-import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
 import { type MigrationJobApi, migrationJobApi } from './migration-job-bridge';
 import type { MigrationStart } from './migration-progress';
 import {
@@ -27,7 +26,6 @@ import {
 
 export function createDevApp(
   dev = true,
-  submitFeedback?: DevReviewSubmitter,
   reveal = revealCorruptTicket,
   chooseFolder: () => Promise<string | undefined> = () => chooseLocalFolder(),
   setupGit: (root: string, location?: string) => Promise<string> = createLocalGitTicketStore,
@@ -235,22 +233,6 @@ export function createDevApp(
   app.get('/__hotsheet/demo-modified', async (context) => {
     if (!dev) return context.notFound();
     return context.json(await demoModifiedTimes(resolve(process.cwd(), 'src')));
-  });
-  app.post('/__hotsheet/dev-review/tickets', async (context) => {
-    if (!dev || context.req.header('x-hotsheet-dev-review') !== '1') return context.notFound();
-    try {
-      const submission = validateDevReviewSubmission(await context.req.json());
-      const submit =
-        submitFeedback ??
-        createCliDevReviewSubmitter({
-          repoRoot: process.env.HOTSHEET_DEV_REVIEW_REPO_ROOT ?? resolve(process.cwd(), '../..'),
-          storePath: process.env.HOTSHEET_DEV_REVIEW_STORE,
-          cliPath: process.env.HOTSHEET_DEV_REVIEW_CLI,
-        });
-      return context.json(await submit(submission), 201);
-    } catch (error) {
-      return context.json({ error: error instanceof Error ? error.message : 'Ticket creation failed.' }, 400);
-    }
   });
   return app;
 }

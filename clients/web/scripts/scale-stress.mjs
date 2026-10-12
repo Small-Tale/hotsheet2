@@ -613,7 +613,7 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
   const scenarios = {};
   try {
     const loadStarted = performance.now();
-    await page.goto(`${baseUrl}/?dev-review=false`, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     await page.getByRole('heading', { name: 'Queue' }).waitFor();
     await page.locator('[data-component="ticket-list-row"]').first().waitFor();
     scenarios.initial_load = { wall_ms: Math.round(performance.now() - loadStarted) };

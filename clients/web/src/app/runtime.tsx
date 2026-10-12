@@ -221,14 +221,13 @@ export async function startHotSheetWebClient() {
     'data-hs-ticket-row-containment',
     supportsTicketRowContainment(navigator.userAgent),
   );
-  const uiStabilityDiagnostics = await installDevelopmentDiagnostics();
+  await installDevelopmentDiagnostics();
   const turnStreamReplayGuard = new TurnStreamReplayGuard();
   const localTicketChangeAcknowledgements = new LocalTicketChangeAcknowledgements();
   // Retains just-created rows so an eventually-consistent index that hasn't indexed them yet
   // cannot drop them from a background refresh (HS2-Y5PDHW).
   const pendingCreatedTickets = new PendingCreatedTickets();
   const turnStreamEvents = (response: PollResponse) => turnStreamReplayGuard.events(response);
-  let backgroundProjectRefresh = false;
 
   loadTicketEditorSizes(localStorage, document.documentElement.style);
 
@@ -2796,9 +2795,6 @@ export async function startHotSheetWebClient() {
     refreshCustomViews,
     refreshRepositoryStatus,
     loadConfidenceReport,
-    setBackgroundProjectRefresh: (value) => {
-      backgroundProjectRefresh = value;
-    },
   });
   const {
     restoreTicketDraft,
@@ -3631,7 +3627,6 @@ export async function startHotSheetWebClient() {
     appRoot,
     appTabContextMenu,
     attachmentMenuSurfaceProps,
-    backgroundProjectRefresh: () => backgroundProjectRefresh,
     bulkTicketDialog,
     bulkUpdateProgress,
     canStageNewTicketAttachments,
@@ -3656,7 +3651,6 @@ export async function startHotSheetWebClient() {
     defaultProvider,
     defaultProviders,
     deferContainedListScrollRestore,
-    driveConnectionsByProject,
     error,
     gallerySurface,
     githubAuth,
@@ -3664,7 +3658,6 @@ export async function startHotSheetWebClient() {
     hs1MigrationBusy,
     hs1MigrationError,
     hs1MigrationProject,
-    initialProjectRestoreComplete: () => initialProjectRestoreComplete,
     loading,
     manualModelDialog,
     newTicketSource,
@@ -3745,7 +3738,6 @@ export async function startHotSheetWebClient() {
     ticketSourceSetupError,
     ticketSourceSetupNavigation,
     ticketSourceSetupProject,
-    uiStabilityDiagnostics,
     unhealthyServerRecovery,
     unhealthyServerRecoveryBusy,
     viewMode,

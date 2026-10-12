@@ -246,7 +246,7 @@ test('shows local tickets while a mixed-source page waits for credential access'
   const fixture = await startupFixture(page, ['alpha'], 'alpha', false);
   const full = gate();
   fixture.fullTicketGates.set('alpha', full);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
   await expect(page.getByText('alpha remote work', { exact: true })).toHaveCount(0);
   expect(fixture.calls.some((path) => path.includes('/tickets?') && path.includes('source=git'))).toBe(true);
@@ -265,7 +265,7 @@ test('does not replay a saved view over a choice made during credential wait', a
   const fixture = await startupFixture(page, ['alpha'], 'alpha', false);
   const full = gate();
   fixture.fullTicketGates.set('alpha', full);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect(page.getByText('alpha restored work', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Backlog/ }).click();
   await expect(page.locator('.kui-toolbar-text', { hasText: 'Backlog' })).toBeVisible();
@@ -287,7 +287,7 @@ test('opens remembered projects concurrently, wires original order, and restores
   for (const name of ['alpha', 'beta', 'gamma']) fixture.pending.set(name, gate());
   const tickets = gate();
   fixture.ticketGates.set('beta', tickets);
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect
     .poll(() => [...fixture.attempts])
     .toEqual([
@@ -343,7 +343,7 @@ test('shows the active project while other remembered projects are still opening
   await page.setViewportSize({ width: 1440, height: 900 });
   const fixture = await startupFixture(page, ['alpha', 'beta', 'gamma'], 'beta');
   for (const name of ['alpha', 'beta', 'gamma']) fixture.pending.set(name, gate());
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect.poll(() => fixture.attempts.size).toBe(3);
   const restoring = page.locator('[data-project-restore-state="true"]'),
     tabs = page.locator('.project-tab-bar [role="tab"]');
@@ -385,7 +385,7 @@ test('retries failed roots in parallel and retains the original order when the a
   const fixture = await startupFixture(page, ['alpha', 'beta', 'gamma'], 'alpha');
   fixture.unavailable.set('alpha', { attempts: 1 });
   fixture.unavailable.set('gamma', { attempts: 1 });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect(page.getByRole('tab', { name: /^alpha/ })).toHaveAttribute('aria-selected', 'true');
   expect([...fixture.attempts]).toEqual([
     ['alpha', 2],
@@ -403,7 +403,7 @@ test('keeps each failed root and recovery identity, then recovers the selected t
   const fixture = await startupFixture(page, ['alpha', 'beta'], 'beta');
   fixture.unavailable.set('alpha', { pid: 111 });
   fixture.unavailable.set('beta', {});
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   const failure = page.locator('.project-restore-error');
   await expect(failure).toContainText('beta server unavailable');
   await expect(failure).not.toContainText('111');
@@ -440,7 +440,7 @@ test('defers inactive setup and migration prompts until their tab is activated',
     hs1DatabasePath: '/work/gamma/.hotsheet/db',
     hs1PostgresVersion: '17',
   });
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
   const setup = page.locator('[data-component="ticket-source-setup-dialog"]');
   const migration = page.locator('[data-component="hs1-migration-dialog"]');
@@ -466,7 +466,7 @@ test('survives all-failed, empty, and refilled startup transitions without retai
   const fixture = await startupFixture(page, ['alpha', 'beta'], 'beta');
   fixture.unavailable.set('alpha', {});
   fixture.unavailable.set('beta', {});
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect(page.locator('.project-restore-error')).toContainText('beta server unavailable');
   await page.evaluate(() => {
     localStorage.setItem('hotsheet.open-projects', '[]');
@@ -491,7 +491,7 @@ test('activates a passive tab after closing the active project, then opens again
 }) => {
   test.setTimeout(60_000);
   const fixture = await startupFixture(page, ['alpha', 'beta', 'gamma'], 'beta');
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: /^beta/ }).hover();
   await page.getByRole('button', { name: 'Close beta', exact: true }).click();
@@ -549,7 +549,7 @@ test('restores inactive AI chats without activating their project and loads aggr
       ],
     }),
   );
-  await page.goto('/?dev-review=false');
+  await page.goto('/');
   await expect(page.getByRole('tab', { name: /^beta/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('[data-component="terminal-drawer"]')).toBeVisible();
   expect(heavyCalls(fixture.calls).every((path) => path.includes('/beta/'))).toBe(true);

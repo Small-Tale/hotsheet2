@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('catalog halt prompt wires all actions and fits a phone viewport (HS2-E6KAWY)', async ({ page }) => {
-  await page.goto('/ux-demo?component=halted-session-popup&dev-review=false');
+  await page.goto('/ux-demo?component=halted-session-popup');
   const popup = page.getByRole('dialog', { name: 'AI session halted' });
   await expect(popup.locator('.halted-session-popup__identity')).toContainText('Claude main worker');
   await expect(popup.locator('.halted-session-popup__project')).toContainText('Hot Sheet demo');

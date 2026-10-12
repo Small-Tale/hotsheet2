@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { GIT_REPOSITORY_ENV_VARS as SCRIPT_GIT_REPOSITORY_ENV_VARS } from '../scripts/repository-env.mjs';
 import { execFileAsync, GIT_REPOSITORY_ENV_VARS, spawn, spawnSync, withoutGitRepositoryEnv } from './child-process';
-import { runCommand } from './dev-review/shell';
 import { backupGit } from './hs1-backup';
 import { runGitCommand } from './project-bridge';
 
@@ -147,7 +146,7 @@ describe('child-process git environment isolation (HS2-T1H6NP)', () => {
     await backupGit(store, [...identity, 'commit', '-q', '-m', 'store']);
     await runGitCommand('git', ['init', '-q', '--bare', remote]);
     await runGitCommand('git', ['-C', store, 'remote', 'add', 'origin', remote]);
-    await runCommand('git', ['-C', store, 'push', '-q', 'origin', 'HEAD:refs/heads/main']);
+    await runGitCommand('git', ['-C', store, 'push', '-q', 'origin', 'HEAD:refs/heads/main']);
     // The sentinel repository (config, index, refs, objects) is byte-for-byte unchanged.
     // Report changed paths without dumping Git object bytes into CI logs.
     const after = snapshot(sentinel);

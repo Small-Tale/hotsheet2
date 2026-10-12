@@ -337,7 +337,7 @@ and identity-less legacy entries remain conservatively blocking.
   `~/.cache` on Linux, `%LOCALAPPDATA%` on Windows; `HOTSHEET_WEB_STABLE_TEMP_ROOT`
   overrides it), never the OS temporary directory. macOS's daily `$TMPDIR` sweep deletes
   files not accessed for three days, and cloned snapshot files keep their source's old access
-  time, so modules Vite had not read yet (such as the lazily imported Dev Review entry)
+  time, so modules Vite had not read yet (such as a lazily imported entry)
   disappeared from a running snapshot and were served as `index.html` (HS2-ZJ6VN3). Each
   snapshot records its owning process, and startup prunes snapshots whose owner has exited. The launcher
   also exits, stopping Vite, when the process that started it dies without signalling it
@@ -401,8 +401,8 @@ and identity-less legacy entries remain conservatively blocking.
   same local bridge as the dev server:
   `/__hotsheet` project open, API proxy, folder picking, migration, and the terminal and
   change-stream WebSocket bridge. It never loads Vite. Hashed assets are immutable, the document
-  revalidates, and client routes fall back to `index.html`. Development-only surfaces (Dev Review,
-  `/ux-demo`, and its modification feed) return 404. Maintainer shortcuts: `server:rebuild`
+  revalidates, and client routes fall back to `index.html`. Development-only surfaces (`/ux-demo`
+  and its modification feed) return 404. Maintainer shortcuts: `server:rebuild`
   rebuilds the server and CLI and stops the running machine server (found via the bridge's
   bootstrap store, `${HOTSHEET_HOME:-~/.hotsheet2}/server-bootstrap.hs2`) so the next project
   open starts the new binary; `dev:rebuild-lan` runs it and then serves the dev client on `0.0.0.0`
@@ -455,38 +455,13 @@ and identity-less legacy entries remain conservatively blocking.
   emit `hotsheet:interaction-timing` after the next painted frame for project/view/mode
   navigation, ticket selection, Up Next and status changes, bulk changes, and permission
   decisions. Each event reports state-update and painted-UI latency against a 100 ms
-  budget and is copied into the bounded, value-free UI-stability event log. Ticket selection
+  budget. Ticket selection
   measures the immediate row response; its asynchronous detail fetch and inspector presentation
   are a follow-up rather than blocking the interaction sample. Optimistic list and inspector
   ticket mutations are committed in one reactive batch. The
   138-ticket browser profile enforces that budget for the primary paths. Render events include cumulative
   counters plus per-pass deltas so a captured storm distinguishes reactive rerenders
-  from unrelated DOM activity. Three unexpected quick select dismissals within ten
-  seconds or twelve root renders within two seconds after startup create a rate-limited
-  diagnostic ticket automatically. A root render-storm signature creates at most one
-  ticket per page lifecycle; quiet intervals clear stale pass history without rearming
-  an already-reported signature. Dev Review is opt-in in
-  development (HS2-TCACFR): `?dev-review` enables both the overlay and automatic
-  stability-ticket reporting, and both stay off without it, and its ticket
-  dialog offers a checked diagnostic-log attachment so a manually reported transient
-  failure carries the same context. Its adjacent utilities disclosure also offers CSS Live
-  Edit: two complete in-memory CSSOM snapshots bracket DevTools styling changes and are
-  attached to a directly created implementation ticket (HS2-X36S5N).
-  On the UX catalog, the same disclosure offers **Inspect geometry** (HS2-WWRMFY): a
-  development-only, layout-neutral overlay outlines rendered component border boxes in
-  brand blue and positive margin areas in warning amber. It updates on catalog changes, scroll, and
-  resize, and excludes composition entries whose children own their separate geometry.
-  The pressed Geometry button turns it off; feedback capture and CSS Live Edit turn it
-  off automatically. Automatic render-storm reporting remains suppressed while
-  remembered projects are restoring, a foreground operation owns the app's loading
-  state, the ticket collection is appending a scheduled progressive chunk, or a
-  multi-step UI transition is still within five seconds of its initiating pointer or
-  keyboard action; those
-  intentional renders stay in the bounded diagnostic log with their
-  suppression reason and cannot seed a later background storm. A render loop that
-  persists after the interaction grace is detected from a fresh window, so suppression
-  does not permanently mask it. This uses lifecycle state rather than a fixed startup
-  duration, so slow project opens do not become false-positive tickets. Project refreshes remain deferred while any
+  from unrelated DOM activity. Project refreshes remain deferred while any
   Web Awesome select is open, including the new-ticket composer, so a background
   ticket column move cannot replace the control or dismiss its popup.
 
@@ -1948,7 +1923,7 @@ and identity-less legacy entries remain conservatively blocking.
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
   On touch screens (a coarse primary pointer), which draw no resize grip, it and every other
   app textarea (details editor, notes, note replies, blocked reason, conflict merges, command
-  settings, the not-working note, and dev review) instead grows with its content from its
+  settings, and the not-working note) instead grows with its content from its
   minimum height and shrinks when cleared; its dialog or panel scrolls to keep the actions
   reachable, and stored desktop editor heights do not apply. Browsers without
   `field-sizing` keep the grip (HS2-6PC150). On touch screens every native text field is also

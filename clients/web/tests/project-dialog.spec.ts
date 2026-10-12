@@ -6,7 +6,7 @@ for (const systemTheme of ['light', 'dark'] as const) {
   }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.emulateMedia({ colorScheme: systemTheme });
-    await page.goto('/ux-demo?component=project-dialog&dev-review=false');
+    await page.goto('/ux-demo?component=project-dialog');
     const root = page.locator('html');
     const dialog = page.locator('[data-remote-project-dialog]');
     const stage = page.getByRole('region', { name: 'Project dialog variants' });
@@ -67,7 +67,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
   await page.addInitScript(() => {
     localStorage.setItem('hotsheet.ux-demo.theme', 'dark');
   });
-  await page.goto('/ux-demo?component=project-dialog&dev-review=false');
+  await page.goto('/ux-demo?component=project-dialog');
   const remote = page.locator('[data-remote-project-dialog]');
   const local = page.locator('[data-project-dialog]');
   const stage = page.getByRole('region', { name: 'Project dialog variants' });

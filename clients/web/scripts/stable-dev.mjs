@@ -95,7 +95,6 @@ export function stableDevEnvironment(sourceRoot, snapshotRoot, environment = pro
   return {
     ...environment,
     HOTSHEET_REPO_ROOT: repoRoot,
-    HOTSHEET_DEV_REVIEW_REPO_ROOT: environment.HOTSHEET_DEV_REVIEW_REPO_ROOT ?? repoRoot,
     HOTSHEET_WEB_STABLE_DEV: '1',
     HOTSHEET_VITE_CACHE_DIR: resolve(snapshotRoot, '.vite-cache'),
   };

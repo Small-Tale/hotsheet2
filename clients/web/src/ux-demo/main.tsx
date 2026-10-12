@@ -40,7 +40,7 @@ import { wireToolbarVisibility } from '@kerfjs/ui/wire-toolbar-visibility';
 import { wireWorkbench } from '@kerfjs/ui/wire-workbench';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
-import { Activity, FolderGit2, MessageSquareText, Minus, Plus, Terminal } from 'lucide';
+import { Activity, FolderGit2, Minus, Plus, Terminal } from 'lucide';
 
 import type { ProviderAccount } from '../api';
 import type { CommandDropTarget } from '../command-order';
@@ -90,7 +90,6 @@ import { type ContextPopupMenuElement, openContextPopupMenu } from '../context-m
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { withControlledOpen } from '../controlled-open';
 import { createDebouncedAutosave } from '../debounced-autosave';
-import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { restoreInlineSearchCaret } from '../inline-search-caret';
 import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
@@ -557,7 +556,6 @@ const catalogCollapsed = signal(localStorage.getItem('hotsheet.ux-demo.catalog-c
 const catalogTheme = signal<'light' | 'dark'>(
   localStorage.getItem('hotsheet.ux-demo.theme') === 'dark' ? 'dark' : 'light',
 );
-const devReviewOn = signal(devReviewRequested(location.href, import.meta.env.DEV));
 const demoModified = signal<Record<string, string>>({});
 function updateDemoModifiedWhenPopupsClose(value: Record<string, string>): void {
   applyAfterCatalogPopupsClose(document, () => {
@@ -621,7 +619,6 @@ const tagsAutosave = createDebouncedAutosave((value: string[]) => {
   return Promise.resolve(true);
 });
 let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
-let devReviewController: { destroy(): void } | undefined;
 const usesCollectionState = () =>
   [
     'ticket-list',
@@ -1508,19 +1505,6 @@ function DemoApp() {
         }
         headerActions={
           <ToolbarControlGroup label="Demo tools" content="mixed">
-            {import.meta.env.DEV ? (
-              <button
-                type="button"
-                data-action="toggle-dev-review"
-                aria-pressed={String(devReviewOn.value)}
-                title={`Dev Review ${devReviewOn.value ? 'On' : 'Off'}`}
-              >
-                <LucideIcon icon={MessageSquareText} name="message-square-text" />
-                <span>Review</span>
-              </button>
-            ) : (
-              <></>
-            )}
             {hasSettings && !settingsOpen.value ? (
               <button type="button" data-action="toggle-settings" aria-expanded="false" title="Open demo settings">
                 <span>Settings</span>
@@ -1812,38 +1796,6 @@ if (import.meta.env.DEV)
     .then((value) => {
       updateDemoModifiedWhenPopupsClose(value as Record<string, string>);
     });
-const setDevReview = async (active: boolean) => {
-  devReviewController?.destroy();
-  devReviewController = undefined;
-  devReviewOn.value = active;
-  const url = new URL(location.href);
-  if (active) url.searchParams.set('dev-review', '1');
-  else url.searchParams.delete('dev-review');
-  history.replaceState(null, '', url);
-  if (active)
-    devReviewController = await import('../dev-review').then(({ installDevReview }) =>
-      installDevReview({
-        submit: async (submission) => {
-          const response = await fetch('/__hotsheet/dev-review/tickets', {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'x-hotsheet-dev-review': '1',
-            },
-            body: JSON.stringify(submission),
-          });
-          const result = (await response.json()) as {
-            slug?: string;
-            error?: string;
-          };
-          if (!response.ok || !result.slug) throw new Error(result.error ?? 'Ticket creation failed.');
-          return { slug: result.slug };
-        },
-      }),
-    );
-};
-if (devReviewOn.value) void setDevReview(true);
-
 function selectDemo(id: string, push = true): void {
   if (!findDemo(id)) return;
   selectedId.value = id;
@@ -1863,11 +1815,6 @@ function selectDemo(id: string, push = true): void {
 demoListeners.add(
   delegate(root, 'click', DEMO_ACTIONS.toggleSettings.selector, () => {
     settingsOpen.value = !settingsOpen.value;
-  }),
-);
-demoListeners.add(
-  delegate(root, 'click', DEMO_ACTIONS.toggleDevReview.selector, () => {
-    void setDevReview(!devReviewOn.value);
   }),
 );
 demoListeners.add(
