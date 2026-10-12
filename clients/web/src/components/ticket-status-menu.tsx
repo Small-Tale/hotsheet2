@@ -67,15 +67,14 @@ export function TicketStatusMenu({
         hasPopup={!disabled ? 'menu' : undefined}
         actionLabel={`${disabled ? 'Status' : 'Change status'}, ${startedPhase && value === 'started' ? STARTED_PHASE_LABELS[startedPhase] : selected.label}`}
       />
+      {/* Kerf's context-mode PopupMenu owns its zero-size root and fixed pointer anchor (HS2-X2AGAE). */}
       {!disabled && (
-        <span class="ticket-status-menu__popup">
-          <PopupMenu
-            context
-            label="Change status"
-            rootAttributes={{ 'data-inspector-status-menu': 'true' }}
-            items={entries}
-          />
-        </span>
+        <PopupMenu
+          context
+          label="Change status"
+          rootAttributes={{ 'data-inspector-status-menu': 'true' }}
+          items={entries}
+        />
       )}
     </span>
   );

@@ -1,15 +1,5 @@
-.ticket-status-menu {
-  display: inline-grid;
-  width: max-content;
-}
-.ticket-status-menu__popup {
-  position: fixed;
-  z-index: 60;
-  width: 1px;
-  height: 1px;
-}
-
-/* WebKit hit-tests Web Awesome's fixed safe triangle over submenu rows, blocking hover and clicks. */
+/* WebKit hit-tests Web Awesome's fixed submenu safe triangle over the Started phase rows, blocking
+   hover and clicks; remove once Kerf's PopupMenu owns the fix (KF-YAHAZK). */
 .ticket-status-menu wa-dropdown-item::part(submenu)::before {
   pointer-events: none;
 }
