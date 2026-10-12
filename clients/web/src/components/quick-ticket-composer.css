@@ -1,3 +1,8 @@
+/* QuickTicketComposer: Kerf Row and Text own the source cluster, footer copy, and attachment messages
+   and notices (HS2-PZB8T3). These rules lay out the composer's own dialog (Web Awesome dialog parts
+   under the existing L011 exception), form grid, Up Next toggle, auto-growing details textarea,
+   staged-attachment rows and header controls, drop zone, and mobile stacking, which no Kerf component
+   expresses. */
 /* The launcher is a brand Web Awesome pill (HS2-PNCDAE): Web Awesome owns its size, fill, hover, and
    focus ring; `size="compact"` maps to the small button of a narrow heading such as the ticket rail's.
    The app styles only the host's drop-target ring while tickets or files are dragged over it. */
@@ -240,14 +245,6 @@
   border-color: var(--wa-color-focus);
   background: var(--wa-color-brand-fill-quiet);
 }
-.quick-ticket-composer__message {
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.quick-ticket-composer__message--error {
-  color: var(--wa-color-danger-on-quiet);
-}
 .quick-ticket-composer__footer {
   display: flex;
   grid-column: 1 / -1;
@@ -255,17 +252,6 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--kui-space-m);
-}
-.quick-ticket-composer__footer > span,
-.quick-ticket-composer__source > span {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.quick-ticket-composer__source {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--kui-space-xs);
 }
 .quick-ticket-composer__actions {
   display: flex;

@@ -4,15 +4,20 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import './quick-ticket-composer.css';
 
+import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { Text } from '@kerfjs/ui/text';
 import { Paperclip, Plus, Star, Trash2, TriangleAlert, Upload } from 'lucide';
 
 import { SEARCH_AND_COMPOSER_ACTIONS, SEARCH_AND_COMPOSER_TARGETS } from '../interaction-attrs/search-and-composer';
 import { SHELL_AND_GLOBAL_TARGETS } from '../interaction-attrs/shell-and-global';
 import { TicketCategorySelect } from './ticket-category-select';
 
+/** The warning foreground of the composer's attachment notices. */
+const WARNING_TEXT = foregroundColorVar('--wa-color-warning-on-quiet');
 export interface QuickTicketComposerProps {
   expanded?: boolean;
   title?: string;
@@ -258,31 +263,41 @@ export function QuickTicketComposer({
                 />
               </label>
             ) : strandedAttachments ? (
-              <p class="quick-ticket-composer__notice" role="status" data-new-ticket-attachments-stranded="true">
+              <Text
+                variant="p"
+                size="compact"
+                flush
+                color={WARNING_TEXT}
+                role="status"
+                data-new-ticket-attachments-stranded="true"
+              >
                 {providerName} does not support attachments. Remove the{' '}
                 {attachments.length === 1 ? 'staged file' : `${attachments.length} staged files`} or choose a source
                 that supports attachments to create this ticket.
-              </p>
+              </Text>
             ) : (
-              <p class="quick-ticket-composer__notice">This ticket provider does not support attachments.</p>
+              <Text variant="p" size="compact" flush color={WARNING_TEXT}>
+                This ticket provider does not support attachments.
+              </Text>
             )}
             {attachmentMessage && (
-              <p
-                class={
-                  attachmentError
-                    ? 'quick-ticket-composer__message quick-ticket-composer__message--error'
-                    : 'quick-ticket-composer__message'
-                }
+              <Text
+                variant="p"
+                size="compact"
+                flush
+                tone={attachmentError ? 'danger' : 'quiet'}
                 role={attachmentError ? 'alert' : 'status'}
               >
                 {attachmentMessage}
-              </p>
+              </Text>
             )}
           </section>
           <div class="quick-ticket-composer__footer">
             {sources.length > 1 ? (
-              <div class="quick-ticket-composer__source">
-                <span aria-hidden="true">Creating in</span>
+              <Row gap="xs" vAlign="middle" className="quick-ticket-composer__source">
+                <Text variant="span" tone="quiet" size="compact" border="none" flush aria-hidden="true">
+                  Creating in
+                </Text>
                 <Select
                   name="new-ticket-source"
                   ariaLabel="Ticket source"
@@ -292,9 +307,11 @@ export function QuickTicketComposer({
                   triggerWidth="fit-content"
                   disabled={submitting}
                 />
-              </div>
+              </Row>
             ) : (
-              <span>Creating in {providerName}</span>
+              <Text variant="span" tone="quiet" size="compact" border="none" flush>
+                Creating in {providerName}
+              </Text>
             )}
             <div class="quick-ticket-composer__actions">
               <wa-button

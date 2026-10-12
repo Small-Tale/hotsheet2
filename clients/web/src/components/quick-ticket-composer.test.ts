@@ -165,7 +165,7 @@ describe('QuickTicketComposer', () => {
         source: 'git-a',
       }),
     );
-    expect(single).toContain('<span>Creating in HS2 git tickets</span>');
+    expect(single).toMatch(/data-component="text"[^>]*>Creating in HS2 git tickets<\/span>/u);
     expect(single).not.toContain('name="new-ticket-source"');
     const multiple = String(
       QuickTicketComposer({
@@ -178,11 +178,11 @@ describe('QuickTicketComposer', () => {
         source: 'github-b',
       }),
     );
-    expect(multiple).toMatch(/class="quick-ticket-composer__source"[\s\S]*Creating in[\s\S]*name="new-ticket-source"/);
+    expect(multiple).toMatch(/class="kui-row quick-ticket-composer__source"[\s\S]*Creating in[\s\S]*name="new-ticket-source"/);
     expect(multiple).toContain('aria-label="Ticket source"');
     expect(multiple).toMatch(/<wa-select[^>]*name="new-ticket-source"[^>]*value="github-b"/);
     expect(multiple).toContain('HS2 git tickets');
-    expect(multiple).not.toContain('<span>Creating in GitHub issues</span>');
+    expect(multiple).not.toContain('>Creating in GitHub issues</span>');
     const submitting = String(
       QuickTicketComposer({
         expanded: true,
@@ -273,7 +273,7 @@ describe('QuickTicketComposer', () => {
     expect(sourceB).toContain('data-pending-attachment-id="trace"');
     expect(sourceB).not.toContain('name="new-ticket-attachments"');
     expect(sourceB).toMatch(
-      /role="status" data-new-ticket-attachments-stranded="true">GitHub issues does not support attachments\. Remove the 2 staged files or choose a source that supports attachments to create this ticket\./,
+      /data-new-ticket-attachments-stranded="true"[^>]*>GitHub issues does not support attachments\. Remove the 2 staged files or choose a source that supports attachments to create this ticket\./,
     );
     expect(sourceB).not.toContain('This ticket provider does not support attachments.');
     expect(sourceB).toMatch(
