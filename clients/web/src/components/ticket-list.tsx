@@ -1,5 +1,8 @@
 import './ticket-list.css';
 
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
+
 import type { CorruptTicket } from '../api';
 import { VIEWS_AND_SAVED_VIEWS_TARGETS } from '../interaction-attrs/views-and-saved-views';
 import { corruptTicketKey, type CorruptTicketRecoveryState, CorruptTicketRow } from './corrupt-ticket-row';
@@ -70,9 +73,11 @@ export function TicketList({
           ))
         )}
         {loadingMore && (
-          <div class="ticket-list__progress" data-ticket-progressive-loading="true" role="status">
-            Loading more tickets…
-          </div>
+          <Row hAlign="center" controlInsets="tb">
+            <Text variant="p" tone="quiet" size="compact" role="status" data-ticket-progressive-loading="true">
+              Loading more tickets…
+            </Text>
+          </Row>
         )}
       </div>
     </section>

@@ -1,33 +1,15 @@
+/* Fill the host's width even when a grid or flex host centers its items, and back the faded
+   completed/verified rows with an opaque surface. */
 .ticket-list {
-  display: grid;
   width: 100%;
-  overflow: hidden;
-  border-radius: remify(10.4px);
   background: var(--wa-color-surface-default);
 }
-.ticket-list[data-empty='true'] {
-  height: 100%;
-  min-height: remify(288px);
-}
-.ticket-list__diagnostics,
-.ticket-list__tickets {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-}
-.ticket-list__tickets {
-  display: block;
-}
-html[data-hs-ticket-row-containment] .ticket-list__tickets {
-  --hs-ticket-row-content-visibility: auto;
-  --hs-ticket-row-intrinsic-size: auto 72px;
-}
+/* Gives an empty view's centered TicketEmptyState room to center vertically. */
 .ticket-list[data-empty='true'] > .ticket-list__tickets {
   min-height: remify(288px);
 }
-.ticket-list__progress {
-  padding: var(--kui-space-m);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-s);
-  text-align: center;
+/* Opt-in TicketRow containment tokens (content-visibility sizing) for long lists. */
+html[data-hs-ticket-row-containment] .ticket-list__tickets {
+  --hs-ticket-row-content-visibility: auto;
+  --hs-ticket-row-intrinsic-size: auto 72px;
 }

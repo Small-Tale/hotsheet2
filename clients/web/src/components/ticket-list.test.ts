@@ -100,9 +100,11 @@ describe('TicketList', () => {
 
   it('fills the width supplied by its host instead of imposing an internal cap', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
-    const listRule = css.match(/\.ticket-list \{([^}]*)\}/)?.[1] ?? '';
+    // The list owns only its fill width and backing surface: no grid, radius, or cap (HS2-5G16WK).
+    const listRule = css.match(/\.ticket-list \{([^}]*)\}/u)?.[1] ?? '';
     expect(listRule).toContain('width: 100%');
-    expect(listRule).not.toContain('max-width');
+    expect(listRule).not.toContain('display');
+    expect(css).not.toContain('max-width');
   });
 
   it('projects each row confidence through the shared summary (HS2-A0Q6G6)', () => {
