@@ -258,9 +258,9 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-density="compact"');
     expect(markup).toContain('Last run: completed (exit 0). Press and hold for output.');
     const css = readFileSync(new URL('./command-navigation.css', import.meta.url), 'utf8');
-    expect(css).toContainSource(
-      ".command-navigation__command[data-command-palette='blue'] { --command-color: var(--hs-command-blue); }",
-    );
+    // The wrapper sets its palette color inline; no per-palette CSS rule (HS2-SAXCMZ).
+    expect(markup).toContain('data-command-palette="blue" style="--command-color:var(--hs-command-blue)"');
+    expect(css).not.toContain("[data-command-palette='blue']");
     // The row paints its own tones through Kerf's public ListItem tokens; no broad border-token
     // override and no wrapper fill (HS2-Z5YQWT).
     expect(css).toContainSource(
@@ -274,7 +274,7 @@ describe('ProjectSidebar component slice', () => {
     expect(css).not.toContain('--kui-color-brand-border-quiet');
     expect(css).not.toMatch(/command-navigation__command:not\([^)]*\) \{[^}]*\n {2}background:/);
     // The app wrapper, not the Kerf ListItem root, carries the command class (KUI-L022).
-    expect(markup).toContain('<div class="command-navigation__command" data-command-palette="blue"><button');
+    expect(markup).toContain('<div class="command-navigation__command" data-command-palette="blue" style="--command-color:var(--hs-command-blue)"><button');
     expect(markup).not.toContain('kui-list-item command-navigation__command');
   });
 

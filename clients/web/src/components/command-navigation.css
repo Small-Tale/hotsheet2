@@ -1,5 +1,6 @@
-/* The wrapper scopes each command's domain palette. Kerf List and ListItem own layout and row
-   chrome; every row drops its own inline margin so transparent and filled rows align. */
+/* The wrapper scopes each command's domain palette (`--command-color`, set inline from the command's
+   palette). Kerf List and ListItem own layout and row chrome. Every row drops its own inline margin, so
+   transparent and filled rows align, and takes the command weight and height through public tokens. */
 .command-navigation__command {
   --kui-layout-inline-margin: 0;
   display: grid;
@@ -8,8 +9,8 @@
   --kui-list-item-min-height: remify(40px);
 }
 /* A colored command row paints its own fill through Kerf's public ListItem tone tokens
-   (KF-0PKY5K, HS2-Z5YQWT): resting, hover, and pressed all use the command color with transparent
-   borders so the row reads as one pill in every state; the wrapper paints nothing. The ListItem
+   (KF-0PKY5K, HS2-Z5YQWT). Resting, hover, and pressed all use the command color with transparent
+   borders, so the row reads as one pill in every state; the wrapper paints nothing. The ListItem
    inherits these tokens from this wrapper since Kerf beta.64 (KF-XD6YH1, HS2-C3SPM6). */
 .command-navigation__command:not([data-command-palette='transparent']) {
   --kui-list-item-background: var(--command-color);
@@ -21,30 +22,8 @@
   --kui-list-item-selected-color: var(--hs-command-on);
   --kui-list-item-selected-background: var(--command-color);
 }
-.command-navigation__command[data-command-palette='blue'] {
-  --command-color: var(--hs-command-blue);
-}
-.command-navigation__command[data-command-palette='green'] {
-  --command-color: var(--hs-command-green);
-}
-.command-navigation__command[data-command-palette='orange'] {
-  --command-color: var(--hs-command-orange);
-}
-.command-navigation__command[data-command-palette='red'] {
-  --command-color: var(--hs-command-red);
-}
-.command-navigation__command[data-command-palette='purple'] {
-  --command-color: var(--hs-command-purple);
-}
-.command-navigation__command[data-command-palette='pink'] {
-  --command-color: var(--hs-command-pink);
-}
-.command-navigation__command[data-command-palette='teal'] {
-  --command-color: var(--hs-command-teal);
-}
-.command-navigation__command[data-command-palette='gray'] {
-  --command-color: var(--hs-command-gray);
-}
+/* The command-type glyph is dimmed relative to the row's own foreground, which a fixed quiet tone
+   cannot do on every palette fill. */
 .command-navigation__type {
   display: inline-flex;
   opacity: 0.5;

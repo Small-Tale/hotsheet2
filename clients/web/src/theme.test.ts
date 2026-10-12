@@ -122,10 +122,14 @@ describe('shared client theme', () => {
       '--hs-ticket-row-intrinsic-size',
       '--hs-touch-field-min-font-size',
     ];
+    // CommandNavigation sets its palette color inline (`--command-color: var(--hs-command-<palette>)`),
+    // so the palette tokens are referenced from TSX rather than CSS (HS2-SAXCMZ).
+    const inlineCommandPalette = (token: string) => token.startsWith('--hs-command-') && token !== '--hs-command-on';
     const cssReferences = required.filter(
       (token) =>
         !token.startsWith('--hs-priority-') &&
         !token.startsWith('--hs-ticket-row-') &&
+        !inlineCommandPalette(token) &&
         token !== '--hs-category-fallback',
     );
 
@@ -137,7 +141,7 @@ describe('shared client theme', () => {
         scopedRowTokens.includes(token) ? 2 : 1,
       );
     }
-    expect(new Set(references)).toEqual(new Set(cssReferences));
+    expect(new Set(references.filter((token) => !inlineCommandPalette(token)))).toEqual(new Set(cssReferences));
     expect(allCss).toContain('var(--hs-ticket-row-content-visibility,');
     expect(allCss).toContain('var(--hs-ticket-row-intrinsic-size,');
   });

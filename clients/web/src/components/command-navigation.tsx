@@ -117,7 +117,11 @@ export function CommandNavigation({ label, commands, expanded, collapsedGroups =
                         (option) => option.value === color,
                       )!.label.toLowerCase();
                       return (
-                        <div class="command-navigation__command" data-command-palette={palette}>
+                        <div
+                          class="command-navigation__command"
+                          data-command-palette={palette}
+                          style={palette === 'transparent' ? undefined : `--command-color:var(--hs-command-${palette})`}
+                        >
                           <ListItem
                             action="run-command"
                             itemId={command.id}
