@@ -1081,7 +1081,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
         document.querySelector<HTMLElement>('.terminal-ticket-rail-demo [data-nav-stack-chrome] .kui-toolbar')!,
       ),
       controls = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__controls')!),
-      heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading .kui-toolbar')!),
+      heading = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
       headingWrap = getComputedStyle(node.querySelector<HTMLElement>('.terminal-ticket-rail__heading')!),
       content = getComputedStyle(node.querySelector<HTMLElement>('.kui-nav-stack__view[data-nav-active="true"]')!),
       // The launcher is a brand Web Awesome pill (HS2-PNCDAE): its fill and radius live on the base part.
@@ -1107,7 +1107,10 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
       projectPadding: projectChrome.padding,
       controlsPadding: controls.padding,
       headingPadding: heading.padding,
-      headingBorderBottom: headingWrap.borderBottomWidth,
+      // The heading Toolbar's always-on bottom divider is Kerf's inset shadow (dividerSides="b").
+      headingDivider: headingWrap.boxShadow
+        .split(/,(?![^(]*\))/)
+        .some((shadow) => shadow.includes('0px -1px 0px 0px inset') && !shadow.includes('rgba(0, 0, 0, 0)')),
       contentPadding: content.padding,
       launcherBackground: launcherStyle.backgroundColor,
       launcherRadius: launcherStyle.borderRadius,
@@ -1131,7 +1134,7 @@ test('represents the compact terminal ticket rail in the UX catalog', async ({ p
     'data-appearance',
     'sunken',
   );
-  expect(geometry.headingBorderBottom).toBe('1px');
+  expect(geometry.headingDivider).toBe(true);
   expect(geometry.launcherBackground).not.toBe('rgba(0, 0, 0, 0)');
   expect(Number.parseFloat(geometry.launcherRadius)).toBeGreaterThan(geometry.railWidth / 4);
   const scroller = rail.locator('.kui-nav-stack__view[data-nav-active="true"] .kui-pane__content'),

@@ -91,7 +91,7 @@ describe('TerminalTicketRail', () => {
     // The controls fill the Toolbar's center zone; a wrapper wraps the closed full-width view
     // group without leaving a content-width control island at the right (HS2-JJ6ZE1).
     expect(source).toMatch(
-      /<Toolbar\s+className="terminal-ticket-rail__controls"[^>]*responsive="none"[^>]*centerAlign="stretch"[^>]*center=\{<div class="terminal-ticket-rail__groups">\{controls\}<\/div>\}/,
+      /<Toolbar\s+className="terminal-ticket-rail__controls"[^>]*responsive="none"[^>]*centerAlign="stretch"[^>]*center=\{\s*<Row wrap flex className="terminal-ticket-rail__groups">\s*\{controls\}\s*<\/Row>\s*\}/,
     );
     expect(css).not.toMatch(/__controls \{/);
     expect(css).not.toMatch(/__controls[^{]*\{[^}]*grid-(?:column|row)/);
@@ -125,8 +125,8 @@ describe('TerminalTicketRail', () => {
     expect(css).not.toMatch(/__project \.kui-toolbar__/);
     // The controls Toolbar keeps Kerf's own inset; the app adds no rule on that toolbar root (HS2-K9KWJJ).
     expect(css).not.toMatch(/__controls \{/);
-    // The heading wrapper only draws the rule; the Toolbar inside keeps Kerf's inset and height.
-    expect(css).toMatchSource(/__heading \{ display:grid;border-bottom:/);
+    // The heading Toolbar draws its own always-on bottom divider (`dividerSides="b"`); no app rule.
+    expect(css).not.toContain('__heading');
     expect(css).not.toContain('--kui-sunken-panel-radius');
     // The rail search's row entrance is Kerf's stacked fill-search motion (KF-XFPJSY, HS2-DAMHD1).
     expect(readFileSync(new URL('./ticket-search-field.css', import.meta.url), 'utf8')).not.toContain('translateY');
@@ -141,10 +141,8 @@ describe('TerminalTicketRail', () => {
       markup = String(
         TerminalTicketRail({ ...props, action: { kind: 'new-ticket', label: 'Ticket…', size: 'compact' } }),
       ),
-      heading = markup.match(
-        /<div class="terminal-ticket-rail__heading"><header class="kui-toolbar"[\s\S]*?<\/header>/,
-      )![0];
-    expect(css).toMatchSource(/__heading \{[^}]*border-bottom:1px solid var\(--wa-color-surface-border\)/);
+      heading = markup.match(/<header class="kui-toolbar terminal-ticket-rail__heading"[\s\S]*?<\/header>/)![0];
+    expect(heading).toContain('divider-sides="b"');
     // The rail asks the launcher for its compact size instead of restyling it (HS2-8FS5BJ).
     expect(heading).toContain('class="quick-ticket-composer__launcher" data-size="compact"');
     expect(css).not.toContain('quick-ticket-composer');

@@ -17,18 +17,8 @@
   --kui-select-selected-color: var(--wa-color-neutral-on-normal);
   --kui-select-selected-font-size: var(--wa-font-size-m);
 }
-/* App-owned wrappers around the root view's Kerf Toolbar and Select (HS2-VABS08). */
-.terminal-ticket-rail__heading {
-  display: grid;
-  border-bottom: 1px solid var(--wa-color-surface-border);
-}
-.terminal-ticket-rail__groups {
-  display: flex;
-  flex-wrap: wrap;
-  width: 100%;
-  min-width: 0;
-  gap: var(--kui-toolbar-gap, 0.5rem);
-}
+/* Kerf beta.60 public Select tokens give the view-title Select its large bold name; the wrapper caps
+   the title at 192px because Select offers only fit-content, max-content and fill trigger widths. */
 .terminal-ticket-rail__view {
   --kui-select-selected-color: var(--wa-color-neutral-on-normal);
   --kui-select-selected-font-size: var(--wa-font-size-l);

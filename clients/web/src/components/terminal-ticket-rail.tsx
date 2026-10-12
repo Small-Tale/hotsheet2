@@ -2,6 +2,7 @@ import '@kerfjs/ui/nav-stack.css';
 import './terminal-ticket-rail.css';
 
 import { NavStack, type NavStackView } from '@kerfjs/ui/nav-stack';
+import { Row } from '@kerfjs/ui/row';
 import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
@@ -117,11 +118,18 @@ export function terminalTicketRailPanel({
           dividerSides=""
           responsive="none"
           centerAlign="stretch"
-          center={<div class="terminal-ticket-rail__groups">{controls}</div>}
+          center={
+            <Row wrap flex className="terminal-ticket-rail__groups">
+              {controls}
+            </Row>
+          }
         />
-        <div class="terminal-ticket-rail__heading">
-          <Toolbar dividerSides="" leading={heading} trailing={action && <TicketViewAction action={action} />} />
-        </div>
+        <Toolbar
+          className="terminal-ticket-rail__heading"
+          dividerSides="b"
+          leading={heading}
+          trailing={action && <TicketViewAction action={action} />}
+        />
       </div>
     ),
     // The view's sunken scroll surface replaces the app's own scroller and SunkenPanel.
