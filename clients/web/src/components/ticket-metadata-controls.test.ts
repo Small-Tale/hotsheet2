@@ -115,7 +115,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(status).toContain('aria-label="Change status, Completed"');
     // The app-owned wrapper carries the placement class; the Kerf Select root keeps only its own classes.
     expect(status).toContain('<span class="ticket-status-menu">');
-    expect(status).toContain('class="status-badge status-badge--completed');
+    expect(status).toContain('class="status-badge" data-component="status-badge" data-status="completed"');
     expect(status).toContain('data-inspector-status-menu="true"');
     expect(status).toContain('data-ticket-status="verified"');
     expect(status).toContain('<wa-divider');
@@ -125,7 +125,7 @@ describe('ticket metadata controls and inspector panels', () => {
     // The app-owned badge is the trigger; Kerf PopupMenu provides the nested actions.
     expect(status).toContain('data-action="open-inspector-status-menu"');
     expect(status).toContain('aria-haspopup="menu"');
-    expect(status).toContain('status-badge--semibold');
+    expect(status).toContain('data-interactive="true"');
     const css = readFileSync(new URL('./ticket-status-menu.css', import.meta.url), 'utf8');
     expect(css).not.toContain('status-badge');
     // The submenu safe triangle is the only Web Awesome part exception (HS2-0VXN1A).
@@ -198,7 +198,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(readOnly).toContain('data-font="default" data-border="none">Tags</h2>');
     expect(readOnly).not.toContain('data-action="open-ticket-tag-popover"');
     expect(readOnly).not.toContain('data-action="add-ticket-note"');
-    expect(readOnly).toContain('status-badge--started');
+    expect(readOnly).toContain('data-status="started"');
     expect(readOnly).not.toContain('data-inspector-status-menu');
     const timeline = String(
       TicketTimeline({ entries: [{ id: 'one', time: 'Now', title: 'One event', subtitle: 'Optional detail' }] }),

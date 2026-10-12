@@ -15328,10 +15328,10 @@ test('aligns Status controls without duplicating badge insets and preserves sele
       expect(geometry.rowBorder).toBe('0px');
     }).toPass({ timeout: 5_000 });
   };
-  for (const [value, label, icon, fill] of [
-    ['not_started', 'Not started', 'circle', 'neutral-fill-normal'],
-    ['completed', 'Completed', 'circle-check', 'success-fill-quiet'],
-    ['started', 'Started', 'clock', 'warning-fill-normal'],
+  for (const [value, label, icon, tone] of [
+    ['not_started', 'Not started', 'circle', 'neutral'],
+    ['completed', 'Completed', 'circle-check', 'success'],
+    ['started', 'Started', 'clock', 'warning'],
   ] as const) {
     await status.locator('[data-action="open-inspector-status-menu"]').click();
     if (value === 'started') {
@@ -15348,7 +15348,10 @@ test('aligns Status controls without duplicating badge insets and preserves sele
     await expect(badge).toHaveText(label);
     await expect(badge.locator(`[data-lucide="${icon}"]`)).toBeVisible();
     await expect(badge.locator('svg')).toHaveCount(1);
-    await expect(badge).toHaveCSS('background-color', await resolvedColor(badge, `var(--wa-color-${fill})`));
+    // Kerf's Badge paints the status tone (HS2-3FMK0T).
+    const pill = badge.locator('[data-component="badge"]');
+    await expect(pill).toHaveAttribute('data-tone', tone);
+    await expect(pill).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expectStatusGeometry(inspector);
     if (value === 'not_started')
       await captureInspectorStatus(inspector, 'target/visual-captures/hs2-ahadnk-status-wide.png');

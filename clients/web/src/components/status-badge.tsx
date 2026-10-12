@@ -1,14 +1,15 @@
 import './status-badge.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
 import { Archive, BadgeCheck, Circle, CircleCheck, Clock, Clock3, type IconNode, Trash2 } from 'lucide';
 
 import type { StartedPhase } from '../api';
 
 export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog' | 'archive' | 'deleted';
 export type StatusBadgeAppearance = 'filled' | 'plain';
-/** Label weight: `semibold` is the quieter trigger label inside the TicketStatusMenu. */
-export type StatusBadgeWeight = 'bold' | 'semibold';
 export const STARTED_PHASE_LABELS: Record<StartedPhase, string> = {
   analyzing: 'Analyzing',
   planning: 'Planning',
@@ -25,7 +26,6 @@ export interface StatusBadgeProps {
   appearance?: StatusBadgeAppearance;
   compact?: boolean;
   interactive?: boolean;
-  weight?: StatusBadgeWeight;
   actionLabel?: string;
   action?: string;
   hasPopup?: 'menu';
@@ -46,6 +46,22 @@ export function statusPresentation(status: TicketStatus) {
   return presentation[status];
 }
 
+/** Each lifecycle status's semantic Kerf Badge tone. */
+export const STATUS_BADGE_TONES = {
+  not_started: 'neutral',
+  started: 'warning',
+  completed: 'success',
+  verified: 'info',
+  backlog: 'neutral',
+  archive: 'neutral',
+  deleted: 'neutral',
+} as const satisfies Record<TicketStatus, string>;
+
+/**
+ * A ticket's lifecycle status (and Started phase) as text plus a reinforcing Lucide icon. Kerf's
+ * `Badge` owns the filled pill, its status tone, and the compact size; `plain` is the bare icon and
+ * quiet label (HS2-3FMK0T). The interactive form is the TicketStatusMenu trigger button.
+ */
 export function StatusBadge({
   status,
   startedPhase,
@@ -53,7 +69,6 @@ export function StatusBadge({
   appearance = 'filled',
   compact = false,
   interactive = false,
-  weight = 'bold',
   actionLabel,
   action,
   hasPopup,
@@ -61,25 +76,40 @@ export function StatusBadge({
 }: StatusBadgeProps) {
   const value = statusPresentation(status);
   const phaseLabel = startedPhase && status === 'started' ? STARTED_PHASE_LABELS[startedPhase] : undefined;
-  const className = `status-badge status-badge--${status} status-badge--${appearance}${compact ? ' status-badge--compact' : ''}${interactive ? ' status-badge--interactive' : ''}${weight === 'semibold' ? ' status-badge--semibold' : ''}`;
-  const content = (
-    <>
-      {showIcon && (
-        <span class="status-badge__icon">
-          <LucideIcon icon={value.icon} name={value.iconName} size={compact ? 'xs' : 13.6} />
-        </span>
+  const label = phaseLabel ?? value.label;
+  const row = (
+    <Row gap="2xs" vAlign="middle">
+      {showIcon && <LucideIcon icon={value.icon} name={value.iconName} size={compact ? 'xs' : 's'} />}
+      {appearance === 'plain' ? (
+        <Text variant="span" tone="quiet" size="compact">
+          {label}
+        </Text>
+      ) : (
+        <span>{label}</span>
       )}
-      <span>{phaseLabel ?? value.label}</span>
-    </>
+    </Row>
   );
+  const content =
+    appearance === 'plain' ? (
+      row
+    ) : (
+      <Badge tone={STATUS_BADGE_TONES[status]} size={compact ? 'compact' : 'default'}>
+        {row}
+      </Badge>
+    );
+  const identity = {
+    'data-component': 'status-badge',
+    'data-status': status,
+    'data-appearance': appearance,
+    'data-compact': compact ? 'true' : undefined,
+  };
   return interactive ? (
     <button
       type="button"
       slot={slot}
-      class={className}
-      data-component="status-badge"
-      data-status={status}
-      data-appearance={appearance}
+      class="status-badge"
+      {...identity}
+      data-interactive="true"
       aria-label={actionLabel}
       data-action={action}
       aria-haspopup={hasPopup}
@@ -87,16 +117,19 @@ export function StatusBadge({
       {content}
     </button>
   ) : (
-    <span slot={slot} class={className} data-component="status-badge" data-status={status} data-appearance={appearance}>
+    <span slot={slot} class="status-badge" {...identity}>
       {content}
     </span>
   );
 }
 
+/** The solid neutral "Blocked" marker beside a ticket's status. */
 export function BlockedBadge({ compact = false }: { compact?: boolean }) {
   return (
-    <span class={`blocked-badge${compact ? ' blocked-badge--compact' : ''}`} data-component="blocked-badge">
-      Blocked
+    <span data-component="blocked-badge">
+      <Badge appearance="solid" size={compact ? 'compact' : 'default'}>
+        Blocked
+      </Badge>
     </span>
   );
 }

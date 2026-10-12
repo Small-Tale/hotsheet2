@@ -1878,14 +1878,8 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   const appearance = inspector.locator('wa-select[name="appearance"]');
   const icon = inspector.locator('wa-checkbox[name="show-icon"]');
   const compact = inspector.locator('wa-checkbox[name="compact"]');
-  const weight = inspector.locator('wa-select[name="weight"]');
-  await expect(badge).toHaveCSS('font-weight', '700');
-  await weight.evaluate((node: HTMLElement & { value: string }) => {
-    node.value = 'semibold';
-    node.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  await expect(badge).toHaveClass(/status-badge--semibold/);
-  await expect(badge).toHaveCSS('font-weight', '600');
+  // Kerf's Badge owns the filled pill and its status tone (HS2-3FMK0T).
+  await expect(badge.locator('[data-component="badge"]')).toHaveAttribute('data-tone', 'warning');
   await status.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'verified';
     node.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1899,23 +1893,20 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   await expect(badge).toHaveAttribute('data-appearance', 'plain');
   await expect(badge).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await compact.click();
-  await expect(badge).toHaveClass(/status-badge--compact/);
+  await expect(badge).toHaveAttribute('data-compact', 'true');
   await icon.click();
-  await expect(badge.locator('.status-badge__icon')).toHaveCount(0);
+  await expect(badge.locator('[data-lucide]')).toHaveCount(0);
   await setDemoSettingsOpen(page, true);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(status).toHaveJSProperty('value', 'started');
   await expect(appearance).toHaveJSProperty('value', 'filled');
   await expect(icon).toHaveJSProperty('checked', true);
   await expect(compact).toHaveJSProperty('checked', false);
-  await expect(weight).toHaveJSProperty('value', 'bold');
-  await expect(badge).not.toHaveClass(/status-badge--semibold/);
-  await expect(badge).toHaveCSS('font-weight', '700');
   await expect(badge).toContainText('Started');
   await expect(badge).toHaveAttribute('data-appearance', 'filled');
-  await expect(badge).not.toHaveClass(/status-badge--compact/);
+  await expect(badge).not.toHaveAttribute('data-compact', 'true');
   await expect(badge.locator('[data-lucide="clock"]')).toHaveCount(1);
-  await expect(badge.locator('.status-badge__icon')).toHaveCount(1);
+  await expect(badge.locator('[data-lucide]')).toHaveCount(1);
   await status.evaluate((node: HTMLElement & { value: string }) => {
     node.value = 'completed';
     node.dispatchEvent(new Event('change', { bubbles: true }));
@@ -2335,9 +2326,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
   // Rows use the colored (filled) status variant like the inspector (HS2-Y3H2Z5).
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-appearance', 'filled');
-  await expect(row.locator('[data-component="status-badge"]')).toHaveCSS(
-    'background-color',
-    'color(srgb 0.84 0.913412 0.977412)',
+  await expect(row.locator('[data-component="status-badge"] [data-component="badge"]')).toHaveAttribute(
+    'data-tone',
+    'info',
   );
   await expect(row.locator('[data-lucide="bug"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(239, 68, 68)');
@@ -4697,7 +4688,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const statusMenu = inspector.locator('[data-inspector-status-menu]');
   await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Planning');
   await expect(statusTrigger).toHaveAttribute('data-status', 'started');
-  await expect(statusTrigger).toHaveCSS('font-weight', '600');
+  await expect(statusTrigger.locator('[data-component="badge"]')).toHaveAttribute('data-tone', 'warning');
   // The native badge trigger keeps a visible keyboard focus ring.
   await statusTrigger.evaluate((node: HTMLElement) => {
     node.focus({ focusVisible: true } as FocusOptions);

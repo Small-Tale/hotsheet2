@@ -1322,17 +1322,16 @@ longer contains HS2 store metadata are stale registrations, not user-facing part
     both selected-value and popup-option presentations
   - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
     selected-value and popup-option presentations
-  - `TicketStatusMenu` — **demo built**: an interactive app-owned `StatusBadge` at
-    `semibold` weight opens a Kerf `PopupMenu`. The Started item contains six phase
+  - `TicketStatusMenu` — **demo built**: an interactive app-owned `StatusBadge` trigger opens a Kerf `PopupMenu`. The Started item contains six phase
     actions plus No phase for git-backed tickets; other providers omit that submenu.
     The menu keeps the canonical order: Not started, Started, Completed, Verified,
     then a separator before Backlog and Archive. Each status action has its semantic
     Lucide icon. The phone anchor leaves space above the status list for the Started
     submenu; the native badge owns its focus ring without overriding Kerf parts.
   - `StatusPicker`
-  - `StatusBadge` — **built**: readable status text with status-specific tone,
-    optional reinforcing Lucide icon, filled/plain appearances, regular/compact
-    sizing, and a bold (default) or `semibold` label `weight`; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
+  - `StatusBadge` — **built**: readable status text on a Kerf `Badge` whose semantic tone
+    follows the status (HS2-3FMK0T), optional reinforcing Lucide icon, filled/plain appearances,
+    and regular/compact sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
   - `ConfidenceCalibration` — **built** (`components/confidence-calibration.tsx`,
     HS2-Q1WCCY): a project's per-band calibration table, with a reopen-rate bar and
     recent completions. Its `/ux-demo` entry exposes the report, empty, loading, and error

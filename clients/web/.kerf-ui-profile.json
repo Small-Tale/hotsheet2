@@ -380,12 +380,6 @@
       "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={ attachmentError ? 'quick-ticket-composer__message quick-ticket-composer__message--error' : 'quick-ticket-composer__message' }"
     },
     {
-      "id": "state-modifier-classes-status-badge",
-      "rules": ["KUI-L008"],
-      "target": "src/components/status-badge.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: the dynamic class expression only composes this component's own app-owned base class with its state or variant modifier (BEM `--state`) or forwards a consumer-supplied app class; no Kerf public class is chosen dynamically. Expressions: class={`blocked-badge${compact ? ' blocked-badge--compact' : ''}`} | class={className}"
-    },
-    {
       "id": "state-modifier-classes-terminal-dashboard",
       "rules": ["KUI-L008"],
       "target": "src/components/terminal-dashboard.tsx",

@@ -1,8 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
-import { StatusBadge, statusPresentation, type TicketStatus } from './status-badge';
+import { BlockedBadge, StatusBadge, statusPresentation, type TicketStatus } from './status-badge';
 
 describe('StatusBadge', () => {
+  it('tints each status through a Kerf Badge tone and renders Blocked as a solid Badge (HS2-3FMK0T)', () => {
+    for (const [status, tone] of [
+      ['not_started', 'neutral'],
+      ['started', 'warning'],
+      ['completed', 'success'],
+      ['verified', 'info'],
+      ['backlog', 'neutral'],
+    ] as const)
+      expect(String(StatusBadge({ status }))).toContain(`data-tone="${tone}"`);
+    expect(String(StatusBadge({ status: 'started', compact: true }))).toContain('data-size="compact"');
+    expect(String(BlockedBadge({ compact: true }))).toMatch(
+      /data-appearance="solid"[^>]*data-size="compact"[^>]*>Blocked/u,
+    );
+    const trigger = String(StatusBadge({ status: 'started', interactive: true, actionLabel: 'Change status' }));
+    expect(trigger).toMatch(/^<button type="button" class="status-badge"/u);
+    expect(trigger).toContain('data-interactive="true"');
+  });
+
   it('maps every supported status to stable readable presentation', () => {
     const statuses: TicketStatus[] = [
       'not_started',
@@ -36,16 +54,18 @@ describe('StatusBadge', () => {
 
   it('offers independent plain and compact variants without changing readable status text', () => {
     const markup = String(StatusBadge({ status: 'started', appearance: 'plain', compact: true }));
-    expect(markup).toContain('status-badge--plain');
-    expect(markup).toContain('status-badge--compact');
     expect(markup).toContain('data-appearance="plain"');
+    expect(markup).toContain('data-compact="true"');
+    // Plain is the bare icon and quiet label: no Kerf Badge pill (HS2-3FMK0T).
+    expect(markup).not.toContain('data-component="badge"');
     expect(markup).toContain('Started');
   });
 
   it('defaults to the filled non-compact presentation', () => {
     const markup = String(StatusBadge({ status: 'verified' }));
-    expect(markup).toContain('status-badge--filled');
-    expect(markup).not.toContain('status-badge--compact');
+    expect(markup).toContain('data-appearance="filled"');
+    expect(markup).not.toContain('data-compact');
+    expect(markup).toMatch(/data-component="badge" data-tone="info"[^>]*data-size="default"/u);
   });
 
   it('shows a Started phase without changing the lifecycle status', () => {

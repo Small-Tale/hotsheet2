@@ -61,7 +61,6 @@ export function TicketStatusMenu({
       <StatusBadge
         status={value}
         startedPhase={startedPhase}
-        weight="semibold"
         interactive={!disabled}
         action={!disabled ? INSPECTOR_AND_EDITOR_ACTIONS.openInspectorStatusMenu.value : undefined}
         hasPopup={!disabled ? 'menu' : undefined}
