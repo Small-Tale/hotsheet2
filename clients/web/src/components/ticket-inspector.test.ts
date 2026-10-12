@@ -539,10 +539,10 @@ describe('TicketInspector', () => {
     // transparent border + 8px padding (17px text) and bordered surfaces own their border+padding at the
     // 8px column — no negative margins anywhere (HS2-R64ETQ).
     expect(panelCss).toMatchSource(/\.ticket-inspector-panel > \* \{ margin-inline: var\(--kui-space-xs\); \}/);
-    // Each tab panel owns its own header inset (HS2-MGVE50).
+    // Each tab panel owns its own header inset (HS2-MGVE50); the Timeline's Kerf ListHeader owns its
+    // own (HS2-52D1JZ).
     for (const file of [
       'ticket-info-panel.css',
-      'ticket-timeline.css',
       'ticket-attachments.css',
       'ticket-code-review.css',
     ]) {

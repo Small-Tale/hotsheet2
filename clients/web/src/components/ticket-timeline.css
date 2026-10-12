@@ -1,26 +1,14 @@
-/* TicketTimeline (HS2-MGVE50): chronological ticket activity on the TicketInspectorPanel column. */
-.ticket-timeline__section {
-  display: grid;
-  min-width: 0;
-  gap: var(--kui-space-xs);
-}
-/* The section label aligns its text to the 17px column: 1px transparent border + 8px padding. */
-.ticket-timeline__heading {
-  margin: 0;
-  padding-inline: var(--kui-space-xs);
-  border-inline: 1px solid transparent;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
+/* TicketTimeline (HS2-MGVE50): Kerf List, ListHeader, and Text own the section, heading, and copy
+   (HS2-52D1JZ); these rules draw only the chronological rail, which Kerf has no component for. */
+
+/* The ordered list is the rail: no list markers or indent. */
 .ticket-timeline__list {
   display: grid;
   margin: 0;
   padding: 0;
   list-style: none;
 }
+/* Each event: a fixed time column beside its title and subtitle, offset right of the rail. */
 .ticket-timeline__list li {
   position: relative;
   display: grid;
@@ -30,6 +18,7 @@
   align-items: start;
   gap: var(--kui-space-xs);
 }
+/* The event's hollow rail dot. */
 .ticket-timeline__list li::before {
   position: absolute;
   top: remify(3.52px);
@@ -42,9 +31,11 @@
   content: '';
   transform: translateX(-50%);
 }
+/* Emphasized events fill their dot. */
 .ticket-timeline__list li[data-emphasized='true']::before {
   background: var(--wa-color-neutral-border-loud);
 }
+/* The connector from one dot to the next. */
 .ticket-timeline__list li:not(:last-child)::after {
   position: absolute;
   top: remify(13.6px);
@@ -54,9 +45,10 @@
   background: var(--wa-color-neutral-border-normal);
   content: '';
 }
+/* The elapsed time to the next event, centered on its connector (13.6px from the top to 2.4px
+   from the bottom). */
 .ticket-timeline__duration {
   position: absolute;
-  /* The connector spans 13.6px from the top to 2.4px from the bottom. */
   top: calc(50% + remify(5.6px));
   left: remify(12px);
   color: var(--wa-color-neutral-on-quiet);
@@ -64,28 +56,4 @@
   line-height: 1;
   white-space: nowrap;
   transform: translateY(-50%);
-}
-.ticket-timeline__list time {
-  padding-top: remify(0.32px);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  white-space: nowrap;
-}
-.ticket-timeline__list strong {
-  display: block;
-  color: var(--wa-color-text-normal);
-  font-size: var(--wa-font-size-s);
-  line-height: 1.3;
-}
-.ticket-timeline__subtitle {
-  margin: var(--kui-space-2xs) 0 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  line-height: 1.4;
-}
-.ticket-timeline__summary {
-  margin: 0;
-  color: var(--wa-color-neutral-on-normal);
-  font-size: var(--wa-font-size-s);
-  line-height: 1.5;
 }

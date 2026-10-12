@@ -1,5 +1,9 @@
 import './ticket-timeline.css';
 
+import { List } from '@kerfjs/ui/list';
+import { ListHeader } from '@kerfjs/ui/list-header';
+import { Text } from '@kerfjs/ui/text';
+
 import { TicketInspectorPanel, type TicketInspectorPanelPresentation } from './ticket-inspector-panel';
 
 export interface TicketTimelineEntry {
@@ -49,15 +53,24 @@ export function TicketTimeline({
 }) {
   return (
     <TicketInspectorPanel component="ticket-timeline" className="ticket-timeline" presentation={presentation}>
-      <section class="ticket-timeline__section">
-        <h2 class="ticket-timeline__heading">Timeline</h2>
+      {/* Kerf owns the section stack, heading, and text; only the rail is app-drawn (HS2-52D1JZ). */}
+      <List gap="xs">
+        <ListHeader label="Timeline" />
         <ol class="ticket-timeline__list">
           {entries.map((entry, index) => (
             <li data-entry-id={entry.id} data-emphasized={String(Boolean(entry.emphasized))}>
-              <time>{entry.time}</time>
+              <Text variant="span" tone="quiet" size="compact" wrap="nowrap">
+                <time>{entry.time}</time>
+              </Text>
               <div>
-                <strong>{entry.title}</strong>
-                {entry.subtitle && <p class="ticket-timeline__subtitle">{entry.subtitle}</p>}
+                <Text variant="p" size="compact" lineHeight="tight" flush>
+                  <strong>{entry.title}</strong>
+                </Text>
+                {entry.subtitle && (
+                  <Text variant="p" tone="quiet" size="compact" flush>
+                    {entry.subtitle}
+                  </Text>
+                )}
               </div>
               {index < entries.length - 1 && entry.durationToNext && (
                 <span class="ticket-timeline__duration" aria-label={`Elapsed to next event: ${entry.durationToNext}`}>
@@ -67,10 +80,10 @@ export function TicketTimeline({
             </li>
           ))}
         </ol>
-        <p class="ticket-timeline__summary">
+        <Text variant="p" size="compact" flush>
           {entries.length} {entries.length === 1 ? 'event' : 'events'} total
-        </p>
-      </section>
+        </Text>
+      </List>
     </TicketInspectorPanel>
   );
 }
