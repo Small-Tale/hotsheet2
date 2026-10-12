@@ -4281,7 +4281,7 @@
       "id": "terminal-key-bar",
       "name": "TerminalKeyBar",
       "kind": "component",
-      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1\u2013F12, and Home/End/PgUp/PgDn.",
+      "purpose": "Phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn.",
       "source": "src/components/terminal-key-bar.tsx",
       "publicExports": [
         {
@@ -4336,7 +4336,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1\u2013F12, and Home/End/PgUp/PgDn."
+          "Hot Sheet needs phone terminal accessory bar above the soft keyboard: Esc, Tab, sticky Ctrl/Alt/Shift (once or locked), arrows, and an Fn row with Copy/Paste, F1–F12, and Home/End/PgUp/PgDn."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TerminalKeyBar behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -4541,7 +4541,7 @@
       "id": "terminal-edit-menu",
       "name": "TerminalEditMenu",
       "kind": "component",
-      "purpose": "Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text\u2026 opens the Copy sheet, and Paste sends the clipboard.",
+      "purpose": "Touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard.",
       "source": "src/components/terminal-clipboard-dialogs.tsx",
       "publicExports": [
         {
@@ -4596,7 +4596,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text\u2026 opens the Copy sheet, and Paste sends the clipboard."
+          "Hot Sheet needs touch terminal edit menu opened where a long-press lifts: Copy copies the text the press selected, Copy Text… opens the Copy sheet, and Paste sends the clipboard."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific TerminalEditMenu behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -5212,6 +5212,69 @@
       }
     },
     {
+      "id": "shell-banner",
+      "name": "ShellBanner",
+      "kind": "component",
+      "purpose": "Full-width shell status strip composing Kerf StateBanner in info, success, and warning tones.",
+      "source": "src/components/shell-banner.tsx",
+      "publicExports": [
+        {
+          "name": "ShellBanner"
+        }
+      ],
+      "sourceLinks": ["src/components/shell-banner.tsx"],
+      "composition": {
+        "parents": {
+          "mode": "any",
+          "entries": []
+        },
+        "contexts": ["application-ui"],
+        "zones": [],
+        "children": {
+          "mode": "any",
+          "concepts": [],
+          "requiredConcepts": []
+        },
+        "state": [],
+        "wiring": {
+          "required": false,
+          "helpers": [],
+          "obligations": []
+        },
+        "responsive": {
+          "owner": "not-applicable",
+          "behaviors": []
+        },
+        "layout": {
+          "roles": ["controls"],
+          "geometry": {
+            "margin": "none",
+            "border": "child",
+            "padding": "child"
+          }
+        }
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": ["shell-banner"],
+        "publicTokens": [],
+        "placeableClasses": ["shell-banner"]
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/shell-banner.tsx",
+        "composition": "src/components/shell-banner.tsx"
+      },
+      "selection": {
+        "useWhen": ["A Hot Sheet shell banner needs a full-width status strip above the workspace."],
+        "avoidWhen": ["The feedback belongs inline beside affected work; use Kerf StateBanner directly."],
+        "documentation": "../../docs/ux-components.md"
+      }
+    },
+    {
       "id": "project-setup-warning-banner",
       "name": "ProjectSetupWarningBanner",
       "kind": "component",
@@ -5256,9 +5319,9 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": ["project-setup-warning-banner"],
+        "publicClasses": [],
         "publicTokens": [],
-        "placeableClasses": ["project-setup-warning-banner"]
+        "placeableClasses": []
       },
       "accessibility": {
         "obligations": []
@@ -5603,7 +5666,7 @@
       "id": "accounts-settings",
       "name": "AccountsSettings",
       "kind": "component",
-      "purpose": "Machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings \u2192 Accounts).",
+      "purpose": "Machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts).",
       "source": "src/components/ticket-sources-settings.tsx",
       "publicExports": [
         {
@@ -5658,7 +5721,7 @@
       },
       "selection": {
         "useWhen": [
-          "Hot Sheet needs machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings \u2192 Accounts)."
+          "Hot Sheet needs machine-wide provider sign-ins with their sources and the projects using each; Sign out for an unused account, plus the empty and error states (App Settings → Accounts)."
         ],
         "avoidWhen": ["The interaction does not need Hot Sheet's domain-specific AccountsSettings behavior."],
         "documentation": "../../docs/ux-components.md"
@@ -6259,7 +6322,7 @@
         "publicTokens": []
       },
       "accessibility": {
-        "obligations": ["Inherits the rendered button\u2019s visible label."]
+        "obligations": ["Inherits the rendered button’s visible label."]
       },
       "diagnostics": [],
       "provenance": {

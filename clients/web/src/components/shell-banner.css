@@ -1,0 +1,22 @@
+/* Full-width shell strip: StateBanner has no square, flush, bottom-rule variant yet (KF-JQ8FB0),
+   so the app-owned host configures it through public tokens and draws the rule itself. */
+.shell-banner {
+  --kui-layout-inline-margin: 0;
+  --kui-layout-item-gap: var(--kui-space-m);
+  --kui-layout-item-padding: var(--kui-space-xs) var(--kui-space-m);
+  --kui-layout-rounded-radius: 0;
+  --kui-state-banner-border: transparent;
+  --kui-state-banner-copy-gap: var(--kui-space-2xs);
+  --kui-state-banner-info-foreground: var(--wa-color-brand-on-quiet);
+  --kui-state-banner-success-foreground: var(--wa-color-success-on-quiet);
+  --kui-state-banner-warning-foreground: var(--wa-color-warning-on-quiet);
+  display: grid;
+  border-bottom: 1px solid var(--wa-color-brand-border-quiet);
+}
+/* The strip's rule follows its tone; StateBanner cannot draw a single-edge border itself. */
+.shell-banner[data-tone='success'] {
+  border-bottom-color: var(--wa-color-success-border-quiet);
+}
+.shell-banner[data-tone='warning'] {
+  border-bottom-color: var(--wa-color-warning-border-quiet);
+}

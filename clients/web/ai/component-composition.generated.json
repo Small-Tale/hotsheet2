@@ -3224,13 +3224,9 @@
       },
       "boundaries": {
         "rootClass": null,
-        "publicClasses": [
-          "project-setup-warning-banner"
-        ],
+        "publicClasses": [],
         "publicTokens": [],
-        "placeableClasses": [
-          "project-setup-warning-banner"
-        ]
+        "placeableClasses": []
       },
       "diagnostics": [],
       "provenance": {
@@ -4139,6 +4135,74 @@
       "provenance": {
         "selection": "src/components/settings-workspace.tsx",
         "composition": "src/components/settings-workspace.tsx"
+      }
+    },
+    {
+      "key": "hotsheet-web:shell-banner",
+      "package": "hotsheet-web",
+      "id": "shell-banner",
+      "name": "ShellBanner",
+      "kind": "component",
+      "purpose": "Full-width shell status strip composing Kerf StateBanner in info, success, and warning tones.",
+      "publicExports": [
+        {
+          "name": "ShellBanner"
+        }
+      ],
+      "sourceLinks": [
+        "src/components/shell-banner.tsx"
+      ],
+      "source": "src/components/shell-banner.tsx",
+      "parents": {
+        "mode": "any",
+        "entries": []
+      },
+      "contexts": [
+        "application-ui"
+      ],
+      "zones": [],
+      "children": {
+        "mode": "any",
+        "concepts": [],
+        "requiredConcepts": []
+      },
+      "state": [],
+      "wiring": {
+        "required": false,
+        "helpers": [],
+        "obligations": []
+      },
+      "responsive": {
+        "owner": "not-applicable",
+        "behaviors": []
+      },
+      "layout": {
+        "roles": [
+          "controls"
+        ],
+        "geometry": {
+          "margin": "none",
+          "border": "child",
+          "padding": "child"
+        }
+      },
+      "accessibility": {
+        "obligations": []
+      },
+      "boundaries": {
+        "rootClass": null,
+        "publicClasses": [
+          "shell-banner"
+        ],
+        "publicTokens": [],
+        "placeableClasses": [
+          "shell-banner"
+        ]
+      },
+      "diagnostics": [],
+      "provenance": {
+        "selection": "src/components/shell-banner.tsx",
+        "composition": "src/components/shell-banner.tsx"
       }
     },
     {

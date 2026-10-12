@@ -1076,9 +1076,7 @@
       "avoidWhen": [
         "The interaction does not need Hot Sheet's domain-specific ProjectSetupWarningBanner behavior."
       ],
-      "publicClasses": [
-        "project-setup-warning-banner"
-      ],
+      "publicClasses": [],
       "publicTokens": [],
       "source": "src/components/project-setup-warning-banner.tsx",
       "geometry": {
@@ -1386,6 +1384,29 @@
       ],
       "publicTokens": [],
       "source": "src/components/settings-workspace.tsx",
+      "geometry": {
+        "margin": "none",
+        "border": "child",
+        "padding": "child"
+      },
+      "documentation": "../../docs/ux-components.md"
+    },
+    {
+      "id": "shell-banner",
+      "name": "ShellBanner",
+      "kind": "component",
+      "purpose": "Full-width shell status strip composing Kerf StateBanner in info, success, and warning tones.",
+      "useWhen": [
+        "A Hot Sheet shell banner needs a full-width status strip above the workspace."
+      ],
+      "avoidWhen": [
+        "The feedback belongs inline beside affected work; use Kerf StateBanner directly."
+      ],
+      "publicClasses": [
+        "shell-banner"
+      ],
+      "publicTokens": [],
+      "source": "src/components/shell-banner.tsx",
       "geometry": {
         "margin": "none",
         "border": "child",

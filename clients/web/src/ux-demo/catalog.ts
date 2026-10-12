@@ -845,11 +845,20 @@ export const demoCatalog: DemoCategory[] = [
         ['list', 'state-banner'],
       ),
       demo(
+        'shell-banner',
+        'ShellBanner',
+        'Full-width shell status strip composing Kerf StateBanner in info, success, and warning tones.',
+        'feature-floor',
+        true,
+        ['state-banner'],
+      ),
+      demo(
         'project-setup-warning-banner',
         'ProjectSetupWarningBanner',
         'Dismissible warning that a project opened but skipped its setup refresh, with the reason and fix.',
         'feature-floor',
         true,
+        ['shell-banner'],
       ),
       demo(
         'notifications-paused-banner',

@@ -11,6 +11,7 @@ import { AppEmptyState, AppMessageState, ProjectRestoreState } from '../componen
 import { AppError } from '../components/app-error';
 import { CodexHooksNoticeBanner } from '../components/codex-hooks-notice-banner';
 import { ProjectSetupWarningBanner } from '../components/project-setup-warning-banner';
+import { ShellBanner } from '../components/shell-banner';
 import { TicketPageMore } from '../components/ticket-page-more';
 import type { DemoModule } from './demo-module';
 
@@ -75,6 +76,29 @@ export function ProjectSetupWarningBannerDemo() {
   );
 }
 
+export function ShellBannerDemo() {
+  return (
+    <section aria-label="Shell banner tones">
+      <ShellBanner
+        component="shell-banner-demo"
+        tone="info"
+        title="Information strip"
+        detail="Info tone with a trailing action."
+        action={<button type="button">Action</button>}
+      />
+      <ShellBanner
+        component="shell-banner-demo"
+        tone="success"
+        title="Success strip"
+        detail="Success tone with the action below the copy."
+        actionPlacement="below"
+        action={<button type="button">Dismiss</button>}
+      />
+      <ShellBanner component="shell-banner-demo" tone="warning" title="Warning strip" detail="Warning tone, no action." />
+    </section>
+  );
+}
+
 export function TicketPageMoreDemo() {
   return (
     <section aria-label="Ticket page continuation states">
@@ -129,6 +153,7 @@ export const demoModule: DemoModule = {
     'floating-toolbar': { Demo: FloatingToolbarDemo },
     'app-tab': { Demo: AppTabDemo },
     'codex-hooks-notice-banner': { Demo: CodexHooksNoticeBannerDemo },
+    'shell-banner': { Demo: ShellBannerDemo },
     'project-setup-warning-banner': { Demo: ProjectSetupWarningBannerDemo },
     'ticket-page-more': { Demo: TicketPageMoreDemo },
     'app-empty-state': { Demo: AppEmptyStateDemo },
