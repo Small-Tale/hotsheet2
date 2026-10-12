@@ -200,17 +200,14 @@ export function TicketSearchSurfaces({ id, model, helpOpen = false, help = true 
     <div class="ticket-search-surfaces" data-ticket-search-for={id} data-token-search-keep-open>
       {datePrefix ? (
         <div class="ticket-search-field__date" role="group" aria-label="Date and time helper">
-          <label>
-            Date
-            <input name={TICKET_SEARCH_DATE_INPUT} type="date" />
-          </label>
-          <label>
-            Time (optional)
-            <input name={TICKET_SEARCH_TIME_INPUT} type="time" />
-          </label>
-          <button type="button" {...TICKET_SEARCH_ACTIONS.applyDate.attrs} data-date-prefix={datePrefix}>
-            Apply
-          </button>
+          {/* Web Awesome owns the date and time fields and the Apply button (HS2-HEXGFB). */}
+          <wa-input name={TICKET_SEARCH_DATE_INPUT} type="date" label="Date" size="small" />
+          <wa-input name={TICKET_SEARCH_TIME_INPUT} type="time" label="Time (optional)" size="small" />
+          <div class="ticket-search-field__date-apply">
+            <wa-button size="small" {...TICKET_SEARCH_ACTIONS.applyDate.attrs} data-date-prefix={datePrefix}>
+              Apply
+            </wa-button>
+          </div>
         </div>
       ) : (
         <></>

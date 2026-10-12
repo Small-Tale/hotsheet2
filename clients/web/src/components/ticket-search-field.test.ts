@@ -77,8 +77,9 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
   it('offers the date helper for a trailing lifecycle filter and the syntax help on request', () => {
     const date = String(TicketSearchField({ id: 'f', label: 'Search', model: model('', 'updated-after:') }));
     expect(date).toContain('role="group" aria-label="Date and time helper"');
-    expect(date).toContain('name="ticket-search-date" type="date"');
-    expect(date).toContain('name="ticket-search-time" type="time"');
+    expect(date).toContain('<wa-input name="ticket-search-date" type="date" label="Date" size="small">');
+    expect(date).toContain('<wa-button size="small"');
+    expect(date).toContain('<wa-input name="ticket-search-time" type="time" label="Time (optional)" size="small">');
     expect(date).toContain(`data-action="${TICKET_SEARCH_ACTIONS.applyDate.value}" data-date-prefix="updated-after"`);
     expect(date).not.toContain('aria-label="Search syntax"');
     const help = String(TicketSearchField({ id: 'f', label: 'Search', model: model(), helpOpen: true }));
@@ -280,8 +281,11 @@ describe('TicketSearchField (HS2-N5G6JS, HS2-5JXBQY)', () => {
       '.ticket-search-field__date, .ticket-search-field__help { right: auto; left: 0; width: min(remify(304px), calc(100vw - 2 * var(--wa-space-s))); }',
     );
     expect(css).toContainSource('.ticket-search-field__date { grid-template-columns: repeat(2, minmax(0, 1fr)); }');
-    expect(css).toContainSource('.ticket-search-field__date input { width: 100%; min-width: 0; }');
-    expect(css).toContainSource('.ticket-search-field__date button { grid-column: 1 / -1; }');
+    // Web Awesome owns the date/time fields and Apply button chrome (HS2-HEXGFB).
+    expect(css).not.toContain('.ticket-search-field__date input');
+    expect(css).not.toContain('.ticket-search-field__date label');
+    expect(css).toContainSource('.ticket-search-field__date-apply { display: grid; grid-column: 1 / -1; }');
+    expect(css).not.toContain('wa-button');
     expect(css).toContainSource(
       '.ticket-search-field__help code { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }',
     );

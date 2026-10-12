@@ -71,24 +71,6 @@
   gap: var(--wa-space-s);
   align-items: end;
 }
-.ticket-search-field__date label {
-  display: grid;
-  gap: var(--wa-space-3xs);
-  font-size: var(--wa-font-size-xs);
-  font-weight: 650;
-}
-.ticket-search-field__date input,
-.ticket-search-field__date button {
-  min-height: remify(32px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-s);
-  color: var(--wa-color-neutral-on-normal);
-  background: var(--wa-color-surface-default);
-}
-.ticket-search-field__date button {
-  padding: 0 var(--wa-space-s);
-  cursor: pointer;
-}
 .ticket-search-field__help {
   width: min(remify(480px), calc(100vw - 2 * var(--wa-space-s)));
   max-height: min(remify(512px), calc(100vh - remify(224px)));
@@ -117,11 +99,9 @@
   .ticket-search-field__date {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .ticket-search-field__date input {
-    width: 100%;
-    min-width: 0;
-  }
-  .ticket-search-field__date button {
+  /* On phones the Apply button's own cell spans both columns and stretches it full width. */
+  .ticket-search-field__date-apply {
+    display: grid;
     grid-column: 1 / -1;
   }
   .ticket-search-field__help code {

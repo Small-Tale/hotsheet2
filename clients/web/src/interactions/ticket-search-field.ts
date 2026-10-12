@@ -43,6 +43,7 @@ function withField(root: HTMLElement, target: Element, run: (id: string, scope: 
 
 function applyDate(root: HTMLElement, target: Element, handlers: TicketSearchFieldHandlers) {
   withField(root, target, (id, scope) => {
+    // Web Awesome inputs expose `value` on the host (HS2-HEXGFB).
     const date = scope.querySelector<HTMLInputElement>(`[name="${TICKET_SEARCH_DATE_INPUT}"]`)?.value;
     if (!date) return;
     const time = scope.querySelector<HTMLInputElement>(`[name="${TICKET_SEARCH_TIME_INPUT}"]`)?.value ?? '',
@@ -109,7 +110,7 @@ export function wireTicketSearchFields(root: HTMLElement, handlers: TicketSearch
   );
   // Enter inside the date helper applies it instead of submitting an enclosing form.
   lifetime.add(
-    delegate(root, 'keydown', '.ticket-search-field__date input', (event, target) => {
+    delegate(root, 'keydown', '.ticket-search-field__date wa-input', (event, target) => {
       if ((event as KeyboardEvent).key !== 'Enter') return;
       event.preventDefault();
       applyDate(root, target, handlers);
