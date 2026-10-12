@@ -1,6 +1,8 @@
 import './ticket-row.css';
 
+import { Badge } from '@kerfjs/ui/badge';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { CircleAlert, Star } from 'lucide';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
@@ -222,9 +224,7 @@ export function TicketRow(raw: TicketRowProps) {
                   aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
                   title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}
                 >
-                  <span class="ticket-list-row__up-next-icon">
-                    <LucideIcon icon={Star} name="star" size="s" appearance={props.upNext ? 'solid' : 'outline'} />
-                  </span>
+                  <LucideIcon icon={Star} name="star" size="s" appearance={props.upNext ? 'solid' : 'outline'} />
                 </button>
               )}
               {(props.presentation === 'list' ||
@@ -233,11 +233,13 @@ export function TicketRow(raw: TicketRowProps) {
               )}
               {props.busy && <RowClaimIndicator agentName={props.agentName} claimEta={props.claimEta} />}
               {needsReview && (
-                <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review">
-                  <span class="ticket-list-row__feedback-icon">
-                    <LucideIcon icon={CircleAlert} name="circle-alert" size={12.8} />
-                  </span>
-                  Needs review
+                <span class="ticket-list-row__feedback" role="img" aria-label="Needs review" title="Needs review">
+                  <Badge tone="warning" appearance="outline" size="compact" ariaHidden>
+                    <Row gap="2xs" vAlign="middle">
+                      <LucideIcon icon={CircleAlert} name="circle-alert" size={12.8} />
+                      <span>Needs review</span>
+                    </Row>
+                  </Badge>
                 </span>
               )}
               {props.blocked && <BlockedBadge compact />}
@@ -247,14 +249,17 @@ export function TicketRow(raw: TicketRowProps) {
                   data-state={props.pendingSyncState ?? 'queued'}
                   title={`${props.pendingOperationCount} local edit${props.pendingOperationCount === 1 ? '' : 's'} awaiting Jira confirmation`}
                 >
-                  {props.pendingSyncState === 'needs_attention'
-                    ? 'Sync needs attention'
-                    : props.pendingSyncState === 'sending'
-                      ? 'Sending…'
-                      : props.pendingSyncState === 'rate_limited'
-                        ? 'Waiting for Jira'
-                        : 'Pending sync'}
-                  {props.pendingOperationCount! > 1 ? ` (${props.pendingOperationCount})` : ''}
+                  <Badge tone={props.pendingSyncState === 'needs_attention' ? 'danger' : 'warning'} size="compact">
+                    {`${
+                      props.pendingSyncState === 'needs_attention'
+                        ? 'Sync needs attention'
+                        : props.pendingSyncState === 'sending'
+                          ? 'Sending…'
+                          : props.pendingSyncState === 'rate_limited'
+                            ? 'Waiting for Jira'
+                            : 'Pending sync'
+                    }${props.pendingOperationCount! > 1 ? ` (${props.pendingOperationCount})` : ''}`}
+                  </Badge>
                 </span>
               )}
               {props.busy && (
@@ -265,9 +270,9 @@ export function TicketRow(raw: TicketRowProps) {
               {props.busy && props.claimEta && <ClaimEta eta={props.claimEta} />}
               {confidence !== undefined && <ConfidenceBadge value={confidence} />}
               {props.tags.length > 0 && (
-                <div class="ticket-list-row__tags">
+                <Row wrap gap="xs" vAlign="middle" rootAttributes={{ 'data-row-tags': 'true' }}>
                   {props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}
-                </div>
+                </Row>
               )}
             </div>
           </div>

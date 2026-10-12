@@ -6970,7 +6970,10 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
         ],
         reviewMatches: railNode !== null && getComputedStyle(railNode).backgroundColor === review,
         surfaceMatches: getComputedStyle(node).backgroundColor === surface,
-        warningMatches: feedbackNode !== null && getComputedStyle(feedbackNode).backgroundColor === warning,
+        // The Needs review pill is a warning-toned Kerf Badge (HS2-P5597T).
+        warningMatches:
+          feedbackNode?.querySelector('[data-component="badge"]')?.getAttribute('data-tone') === 'warning' &&
+          warning !== surface,
       };
     }),
   ).toEqual({

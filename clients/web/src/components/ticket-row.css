@@ -1,3 +1,7 @@
+/* TicketRow (HS2-P5597T): a selectable responsive summary used by TicketList and TicketBoard.
+   Kerf has no selectable summary-row/card component yet (KF-XCFMX8), so the row chrome below is
+   app-owned; Kerf Badge, Chip, Row, and LucideIcon own the pills, tags, and icons inside it.
+   The container is the query container and opt-in content-visibility host for long lists. */
 .ticket-list-row-container {
   width: 100%;
   min-width: 0;
@@ -5,6 +9,7 @@
   content-visibility: var(--hs-ticket-row-content-visibility, visible);
   contain-intrinsic-size: var(--hs-ticket-row-intrinsic-size, none);
 }
+/* The row/card surface: a full-width selectable option with a bottom rule. */
 .ticket-list-row {
   position: relative;
   display: block;
@@ -35,15 +40,19 @@
   position: relative;
   margin-top: var(--hs-selected-row-overlap);
 }
+/* Hover outlines the row as a selection target. */
 .ticket-list-row:hover {
   border-color: var(--wa-color-brand-border-normal);
 }
+/* A cut (pending move) row fades until it is pasted. */
 .ticket-list-row[data-cut-pending='true'] {
   opacity: 0.5;
 }
+/* Keyboard focus ring for the option. */
 .ticket-list-row:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 24%, transparent);
 }
+/* The leading state rail (Up Next, blocked, needs review) and its tones. */
 .ticket-list-row__indicator {
   position: absolute;
   inset: 0 auto 0 0;
@@ -58,6 +67,7 @@
 .ticket-list-row__indicator--needs-review {
   background: var(--hs-ticket-state-needs-review);
 }
+/* List layout: category glyph, optional source mark, then the content column. */
 .ticket-list-row__body {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
@@ -69,6 +79,7 @@
 .ticket-list-row__body[data-has-source='false'] {
   grid-template-columns: auto minmax(0, 1fr);
 }
+/* The compact source mark beside a column card number. */
 .ticket-list-row__source {
   display: inline-flex;
   align-items: center;
@@ -76,15 +87,18 @@
   vertical-align: middle;
   line-height: 0;
 }
+/* The content column: identity line above the metadata line. */
 .ticket-list-row__content {
   display: grid;
   gap: remify(4.8px);
   min-width: 0;
 }
+/* The identity line wraps inline around the floated timestamp. */
 .ticket-list-row__first-line {
   display: block;
   min-width: 0;
 }
+/* Number, priority, and title flow inline, clamped to two lines in lists. */
 .ticket-list-row__identity {
   display: block;
   min-width: 0;
@@ -92,23 +106,28 @@
   overflow: hidden;
   line-height: 1.3;
 }
+/* Column cards keep category, source, and number together on one line. */
 .ticket-list-row__identifier {
   display: inline-flex;
   align-items: center;
   white-space: nowrap;
   vertical-align: middle;
 }
+/* Column cards allow four title lines. */
 .ticket-list-row--column .ticket-list-row__identity {
   max-height: 5.2em;
 }
+/* Column cards are borderless rounded cards. */
 .ticket-list-row--column {
   border-color: transparent;
   border-radius: remify(10.4px);
 }
+/* The title wraps inline after the number and priority. */
 .ticket-list-row__identity strong {
   display: inline;
   white-space: normal;
 }
+/* Finished titles are struck through. */
 .ticket-list-row:is([data-status='completed'], [data-status='verified']) .ticket-list-row__identity strong {
   color: var(--wa-color-neutral-on-quiet);
   text-decoration: line-through;
@@ -121,6 +140,7 @@
 .ticket-list-row--list:is([data-status='completed'], [data-status='verified']).ticket-list-row--selected {
   opacity: 1;
 }
+/* The list category glyph cell, its icon box, and the text-abbreviation fallback. */
 .ticket-list-row__category {
   display: grid;
   width: remify(32px);
@@ -142,6 +162,7 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
+/* Column cards: one column, with the category glyph inline before the number. */
 .ticket-list-row--column .ticket-list-row__body {
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
@@ -161,6 +182,7 @@
   width: auto;
   font-size: var(--wa-font-size-3xs);
 }
+/* The inline priority glyph after the number. */
 .ticket-list-row__priority {
   display: inline;
   margin-right: 0.5em;
@@ -172,8 +194,8 @@
   line-height: 0;
   vertical-align: -0.15em;
 }
-.ticket-list-row__metadata,
-.ticket-list-row__tags {
+/* The metadata line wraps its badges, chips, and quiet owner text (tags nest as a Kerf Row). */
+.ticket-list-row__metadata {
   display: flex;
   align-items: center;
   min-width: 0;
@@ -182,6 +204,7 @@
   color: var(--wa-color-neutral-on-quiet);
   font-size: var(--wa-font-size-xs);
 }
+/* The monospace ticket number. */
 .ticket-list-row__slug {
   display: inline-block;
   min-width: 5em;
@@ -190,6 +213,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 700;
 }
+/* The relative timestamp floats to the identity line end. */
 .ticket-list-row__updated {
   float: right;
   margin-left: remify(12px);
@@ -198,38 +222,7 @@
   line-height: remify(20.8px);
   white-space: nowrap;
 }
-.ticket-list-row__feedback {
-  display: inline-flex;
-  align-items: center;
-  gap: remify(4px);
-  flex: none;
-  padding: remify(0.8px) remify(6.4px);
-  border: 1px solid var(--wa-color-warning-border-normal);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-warning-on-quiet);
-  background: var(--wa-color-warning-fill-quiet);
-  font-size: var(--wa-font-size-2xs);
-  font-weight: 700;
-  white-space: nowrap;
-}
-.ticket-list-row__pending-sync {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--wa-border-radius-pill);
-  padding: remify(2px) remify(7px);
-  color: var(--wa-color-warning-on-quiet);
-  background: var(--wa-color-warning-fill-quiet);
-  font-size: var(--wa-font-size-2xs);
-}
-.ticket-list-row__pending-sync[data-state='needs_attention'] {
-  color: var(--wa-color-danger-on-quiet);
-  background: var(--wa-color-danger-fill-quiet);
-}
-.ticket-list-row__feedback-icon {
-  display: inline-flex;
-  width: remify(12.8px);
-  height: remify(12.8px);
-}
+/* The live-claim spinner sized to the metadata line. */
 .ticket-list-row__claim {
   display: inline-flex;
   width: remify(16.8px);
@@ -237,6 +230,7 @@
   color: var(--hs-ticket-state-up-next);
   flex: none;
 }
+/* The claiming agent name truncates within the card. */
 .ticket-list-row__owner {
   display: inline-block;
   max-width: min(24ch, calc(100cqw - remify(30px)));
@@ -247,6 +241,7 @@
   white-space: nowrap;
   vertical-align: middle;
 }
+/* The Up Next star toggle: a bare icon button above the row target. */
 .ticket-list-row__up-next {
   position: relative;
   z-index: 2;
@@ -273,14 +268,11 @@
   border-radius: remify(3.2px);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--wa-color-focus) 28%, transparent);
 }
+/* An active Up Next star is filled in the Up Next tone. */
 .ticket-list-row__up-next--active {
   color: var(--hs-ticket-state-up-next);
 }
-.ticket-list-row__up-next-icon {
-  display: inline-flex;
-  width: remify(16px);
-  height: remify(16px);
-}
+/* Narrow rows: a visible border and tighter insets. */
 @container (max-width: remify(384px)) {
   .ticket-list-row--list {
     border-color: var(--wa-color-neutral-border-quiet);
@@ -299,6 +291,7 @@
     max-height: 3.9em;
   }
 }
+/* Selected rows take the brand selection fill and outline. */
 .ticket-list-row.ticket-list-row--selected {
   border-color: var(--wa-color-brand-border-normal);
   background: var(--wa-color-brand-fill-quiet);

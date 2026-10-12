@@ -517,7 +517,7 @@ describe('TicketRow', () => {
         // The labeled form stays in the inspector/reader header.
         expect(markup).not.toContain('Confidence 82%');
         // The pill sits with the other metadata pills, before the tags.
-        expect(markup).toMatch(/ticket-list-row__metadata[\s\S]*confidence-badge[\s\S]*ticket-list-row__tags/u);
+        expect(markup).toMatch(/ticket-list-row__metadata[\s\S]*confidence-badge[\s\S]*data-row-tags/u);
       }
     }
     for (const status of ['not_started', 'started', 'backlog'] as const) {
