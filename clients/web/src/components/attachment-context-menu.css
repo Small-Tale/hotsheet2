@@ -1,9 +1,0 @@
-/* Rendered inside the active surface (the side inspector, or — inside the modal ticket reader —
-   as a descendant of that dialog so it is neither inert nor painted beneath it, HS2-EZ10RS). The
-   menu itself is a context-mode Kerf PopupMenu anchored at viewport coordinates (HS2-2EHD8R). */
-.attachment-context-menu {
-  position: fixed;
-  z-index: 1410;
-  width: 1px;
-  height: 1px;
-}

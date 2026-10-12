@@ -18,7 +18,6 @@ const kerfSpacingMigratedComponents = [
   'ai-content-label.css',
   'app-error.css',
   'app-shell.css',
-  'attachment-context-menu.css',
   'attachment-gallery.css',
   'command-navigation.css',
   'command-run-dialog.css',

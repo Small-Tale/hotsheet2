@@ -1,10 +1,8 @@
-import './attachment-context-menu.css';
-
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuItem } from '@kerfjs/ui/popup-menu';
 import { Clipboard, Copy, Download, ExternalLink, FolderOpen, Pencil, Trash2 } from 'lucide';
 
-import { contextPopupMenuAnchor } from '../context-menu-position';
+import { ContextMenuAnchor } from './context-menu-anchor';
 
 export type AttachmentContextMenuKind = 'item' | 'host';
 
@@ -39,13 +37,12 @@ export function AttachmentContextMenu({
   revealLabel = 'Show in file manager',
 }: AttachmentContextMenuProps) {
   return (
-    <div
-      class="attachment-context-menu"
-      data-component="attachment-context-menu"
-      data-kind={kind}
-      role="menu"
-      aria-label="Attachment actions"
-      {...contextPopupMenuAnchor(x, y)}
+    <ContextMenuAnchor
+      x={x}
+      y={y}
+      component="attachment-context-menu"
+      label="Attachment actions"
+      attributes={{ 'data-kind': kind }}
     >
       <PopupMenu
         context
@@ -62,6 +59,6 @@ export function AttachmentContextMenu({
           item('remove', 'Remove', Trash2, 'trash-2', 'danger'),
         ]}
       />
-    </div>
+    </ContextMenuAnchor>
   );
 }

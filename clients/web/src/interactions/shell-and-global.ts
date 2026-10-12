@@ -651,7 +651,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     'pointerdown',
     (event) => {
       if (ticketContextMenu.value && !eventTargetsContextMenu(event)) ticketContextMenu.value = undefined;
-      if (appTabContextMenu.value && !(event.target as Element).closest('.app-tab-context-menu'))
+      if (appTabContextMenu.value && !(event.target as Element).closest('[data-component="app-tab-context-menu"]'))
         appTabContextMenu.value = undefined;
       if (terminalContextMenu.value && !(event.target as Element).closest('[data-component="terminal-context-menu"]'))
         terminalContextMenu.value = undefined;
@@ -659,7 +659,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
         terminalEditMenu.value = undefined;
       if (
         terminalVisibilityContextMenu.value &&
-        !(event.target as Element).closest('.terminal-visibility-dialog__context-menu')
+        !(event.target as Element).closest('[data-component="terminal-visibility-group-context-menu"]')
       )
         terminalVisibilityContextMenu.value = undefined;
       if (

@@ -31,7 +31,6 @@ import {
 } from 'lucide';
 
 import type { TerminalAiConnection, TerminalHalt } from '../api';
-import { contextPopupMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
 import type { MobileTerminalViewport } from '../mobile-terminal-focus';
 import { aiConnectionLabel, type AiConnectionState } from '../terminal-ai-connection';
@@ -44,6 +43,7 @@ import {
 } from '../terminal-grid-layout';
 import { terminalPhysicalScale } from '../terminal-viewport';
 import type { TerminalVisibilityGroup } from '../terminal-visibility';
+import { ContextMenuAnchor } from './context-menu-anchor';
 import { TerminalKeyBar, type TerminalKeyBarProps } from './terminal-key-bar';
 
 export interface TerminalDashboardSession {
@@ -815,13 +815,12 @@ export function TerminalDashboard({
         </div>
       )}
       {contextMenu && menuTargetsThisGrid && (
-        <div
-          class="terminal-dashboard__context-menu"
-          data-component="terminal-context-menu"
-          role="menu"
-          aria-label="Terminal actions"
-          {...contextPopupMenuAnchor(contextMenu.x, contextMenu.y)}
-          data-terminal-key={contextMenu.key}
+        <ContextMenuAnchor
+          x={contextMenu.x}
+          y={contextMenu.y}
+          component="terminal-context-menu"
+          label="Terminal actions"
+          attributes={{ 'data-terminal-key': contextMenu.key }}
         >
           <PopupMenu
             context
@@ -860,7 +859,7 @@ export function TerminalDashboard({
                 : []),
             ]}
           />
-        </div>
+        </ContextMenuAnchor>
       )}
     </section>
   );

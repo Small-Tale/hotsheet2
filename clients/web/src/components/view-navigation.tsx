@@ -160,7 +160,13 @@ export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
 
 export function SavedViewContextMenu({ id, label, x, y }: SavedViewContextMenuState) {
   return (
-    <ContextMenuAnchor x={x} y={y} component="saved-view-context-menu" label={`${label} view actions`}>
+    <ContextMenuAnchor
+      x={x}
+      y={y}
+      component="saved-view-context-menu"
+      label={`${label} view actions`}
+      attributes={{ 'data-saved-view-id': id }}
+    >
       <PopupMenu
         context
         label={`${label} view actions`}

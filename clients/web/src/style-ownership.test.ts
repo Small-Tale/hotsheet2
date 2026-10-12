@@ -21,7 +21,7 @@ describe('global stylesheet ownership', () => {
         ['.ticket-sources-settings', '.ticket-provider-settings'],
       ],
       ['settings workspace', 'settings-workspace.css', ['.settings-workspace']],
-      ['ticket row context menu', 'ticket-row-context-menu.css', ['.ticket-row-context-menu', '.ticket-context-menu']],
+      ['ticket row context menu', 'ticket-row-context-menu.css', ['.ticket-context-menu__icon']],
       ['app loading indicator', 'app-loading-indicator.css', ['.app-loading-indicator']],
     ] as const;
     // TicketPageMore composes a pill `wa-button` with no stylesheet at all (HS2-TCM7WC).

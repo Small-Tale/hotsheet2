@@ -139,7 +139,7 @@ demoListeners.add(
     'pointerdown',
     (event) => {
       if (contextMenu.value && !eventTargetsContextMenu(event)) contextMenu.value = undefined;
-      if (tabContextMenu.value && !eventTargetsContextMenu(event, '.project-tab-context-menu'))
+      if (tabContextMenu.value && !eventTargetsContextMenu(event, '[data-component="app-tab-context-menu"]'))
         tabContextMenu.value = undefined;
     },
     { capture: true },

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -48,10 +48,9 @@ describe('TerminalVisibilityDialog', () => {
     expect(markup).not.toContain('data-component="list-header"');
     expect(markup).not.toContain('data-action="toggle-terminal-visibility"');
   });
-  it('composes Kerf TabBar, List and DialogSurface with only the context-menu anchor in CSS (HS2-W68SWJ)', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'terminal-visibility-dialog.css'), 'utf8');
-    expect(css.match(/\{/g)).toHaveLength(1);
-    expect(css).toContain('.terminal-visibility-dialog__context-menu');
+  it('composes Kerf TabBar, List and DialogSurface with no stylesheet (HS2-W68SWJ, HS2-N940N4)', () => {
+    // The group menu's anchor is the shared ContextMenuAnchor, so the dialog owns no CSS at all.
+    expect(existsSync(resolve(import.meta.dirname, 'terminal-visibility-dialog.css'))).toBe(false);
     const markup = String(
       TerminalVisibilityDialog({ open: true, state: initialTerminalVisibilityState(), scope: 'dashboard', groups }),
     );

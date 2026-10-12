@@ -14,12 +14,16 @@ export function ContextMenuAnchor({
   y,
   component,
   label,
+  attributes,
   children,
 }: {
   x: number;
   y: number;
+  /** `data-component` name that identifies the menu for delegated dismissal and tests. */
   component: string;
   label: string;
+  /** Extra identifying `data-*` attributes (the menu's target ids). */
+  attributes?: Record<string, string | undefined>;
   children: SafeHtml;
 }) {
   return (
@@ -28,6 +32,7 @@ export function ContextMenuAnchor({
       data-component={component}
       role="menu"
       aria-label={label}
+      {...attributes}
       {...contextPopupMenuAnchor(x, y)}
     >
       {children}

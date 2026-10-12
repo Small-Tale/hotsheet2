@@ -587,12 +587,6 @@
   width: remify(40px);
   height: remify(40px);
 }
-.terminal-dashboard__context-menu {
-  position: fixed;
-  z-index: 1001;
-  width: 1px;
-  height: 1px;
-}
 /* The empty, loading and message states stay compact app copy: a short drawer grid (about 100px) is
    shorter than Kerf EmptyState's icon-slot geometry, which clipped the title there. */
 .terminal-dashboard__empty {

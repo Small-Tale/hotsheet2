@@ -1,7 +1,6 @@
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@kerfjs/ui/surface-scaffold/register';
-import './terminal-visibility-dialog.css';
 
 import { AppTab } from '@kerfjs/ui/app-tab';
 import { remify } from '@kerfjs/ui/css-values';
@@ -18,7 +17,6 @@ import { Text } from '@kerfjs/ui/text';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Eye, EyeOff, Globe, MessageSquare, Pencil, Plus, Sparkles, Terminal, Trash2 } from 'lucide';
 
-import { contextPopupMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS } from '../interaction-attrs/terminals';
 import {
   DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,
@@ -27,6 +25,7 @@ import {
   type TerminalVisibilityState,
   type TerminalVisibilityType,
 } from '../terminal-visibility';
+import { ContextMenuAnchor } from './context-menu-anchor';
 import type { TerminalDashboardGroup } from './terminal-dashboard';
 
 export interface TerminalVisibilityDialogProps {
@@ -222,12 +221,12 @@ export function TerminalVisibilityDialog({
         {contextMenu && contextMenu.id !== DEFAULT_TERMINAL_VISIBILITY_GROUP_ID && (
           // A context-mode Kerf PopupMenu anchored at the pointer (HS2-84751P); the app owns the open
           // state through `contextMenu` and reveals the rendered menu with `revealContextPopupMenu`.
-          <div
-            class="terminal-visibility-dialog__context-menu"
-            role="menu"
-            aria-label="Visibility group actions"
-            data-context-group-id={contextMenu.id}
-            {...contextPopupMenuAnchor(contextMenu.x, contextMenu.y)}
+          <ContextMenuAnchor
+            x={contextMenu.x}
+            y={contextMenu.y}
+            component="terminal-visibility-group-context-menu"
+            label="Visibility group actions"
+            attributes={{ 'data-context-group-id': contextMenu.id }}
           >
             <PopupMenu
               context
@@ -247,7 +246,7 @@ export function TerminalVisibilityDialog({
                 },
               ]}
             />
-          </div>
+          </ContextMenuAnchor>
         )}
       </wa-dialog>
     </DialogSurface>

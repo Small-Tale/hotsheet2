@@ -1,7 +1,0 @@
-/* A context-mode Kerf PopupMenu anchored at the pointer (HS2-2EHD8R). */
-.project-tab-context-menu {
-  position: fixed;
-  z-index: 60;
-  width: 1px;
-  height: 1px;
-}

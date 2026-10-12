@@ -13,7 +13,7 @@ import {
 describe('TicketRowContextMenu', () => {
   it('uses the composed path so shadow-menu interactions are inside and rows are outside', () => {
     const shadowPart = { matches: () => false };
-    const menu = { matches: (selector: string) => selector === '.ticket-context-menu' };
+    const menu = { matches: (selector: string) => selector === '[data-component="ticket-context-menu"]' };
     expect(eventTargetsContextMenu({ composedPath: () => [shadowPart, menu] })).toBe(true);
     expect(
       eventTargetsContextMenu({

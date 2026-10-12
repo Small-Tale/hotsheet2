@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -75,7 +76,8 @@ describe('DriveOptionsMenu', () => {
     expect(
       markup.match(/slot="submenu" data-action="select-drive-[a-z]+" value="[^"]+" type="checkbox"/g)?.length,
     ).toBeGreaterThan(0);
-    // The shared ContextMenuAnchor owns the fixed 1px wrapper; Kerf's PopupMenu owns the popup (HS2-EG31YP).
-    expect(markup).toContain('class="context-menu-anchor" data-component="drive-options-menu" role="menu"');
+    // The shared ContextMenuAnchor owns the zero-footprint wrapper; the menu has no stylesheet (HS2-N940N4).
+    expect(markup).toContain('class="context-menu-anchor" data-component="drive-options-menu"');
+    expect(existsSync(new URL('./drive-options-menu.css', import.meta.url))).toBe(false);
   });
 });

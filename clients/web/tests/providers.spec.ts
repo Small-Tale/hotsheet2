@@ -24253,7 +24253,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   await page.goto('/');
   await page.getByRole('button', { name: 'Open project' }).click();
   await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
-  const menu = page.locator('.ticket-context-menu[role="menu"]');
+  const menu = page.locator('[data-component="ticket-context-menu"][role="menu"]');
   await expect(page.locator('[data-action="select-ticket-row"]').first()).toBeVisible();
   // List view: scroll the workspace, then open the context menu on a currently-visible row.
   const list = await page.evaluate(() => {
@@ -24370,7 +24370,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   await expect(menu).toBeVisible();
   const edgeMenu = await menu.locator('wa-dropdown').evaluate((node) => {
     const rect = (node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect(),
-      host = node.closest('.ticket-context-menu')!.getBoundingClientRect();
+      host = node.closest('[data-component="ticket-context-menu"]')!.getBoundingClientRect();
     return {
       left: rect.left,
       right: rect.right,

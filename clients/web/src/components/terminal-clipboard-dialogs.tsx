@@ -10,8 +10,8 @@ import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { ClipboardPaste, Copy, TextSelect } from 'lucide';
 
-import { contextPopupMenuAnchor } from '../context-menu-position';
 import { TERMINALS_ACTIONS, TERMINALS_TARGETS } from '../interaction-attrs/terminals';
+import { ContextMenuAnchor } from './context-menu-anchor';
 
 /** The terminal a clipboard sheet acts on, plus a generation that gives every opening a fresh field. */
 export interface TerminalClipboardTarget {
@@ -49,12 +49,11 @@ const SHEET_WIDTH = remify(672);
 export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
   if (!state) return null;
   return (
-    <div
-      class="terminal-edit-menu"
-      {...TERMINALS_TARGETS.terminalEditMenu.attrs}
-      role="menu"
-      aria-label="Terminal edit actions"
-      {...contextPopupMenuAnchor(state.x, state.y)}
+    <ContextMenuAnchor
+      x={state.x}
+      y={state.y}
+      component="terminal-edit-menu"
+      label="Terminal edit actions"
     >
       <PopupMenu
         context
@@ -83,7 +82,7 @@ export function TerminalEditMenu({ state }: { state?: TerminalEditMenuState }) {
           },
         ]}
       />
-    </div>
+    </ContextMenuAnchor>
   );
 }
 

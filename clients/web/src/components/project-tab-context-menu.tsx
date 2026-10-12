@@ -1,10 +1,9 @@
-import './project-tab-context-menu.css';
-
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PopupMenu, type PopupMenuEntry } from '@kerfjs/ui/popup-menu';
 import { ArrowLeft, ArrowRight, CircleX, type IconNode, Pencil, Trash2, X } from 'lucide';
 
-import { contextPopupMenuAnchor } from '../context-menu-position';
+import { ContextMenuAnchor } from './context-menu-anchor';
+
 
 export type AppTabKind = 'project' | 'terminal' | 'ai-chat';
 export function AppTabContextMenu({
@@ -56,14 +55,12 @@ export function AppTabContextMenu({
     }
   })();
   return (
-    <div
-      class="project-tab-context-menu app-tab-context-menu"
-      role="menu"
-      aria-label={`${label} tab actions`}
-      {...contextPopupMenuAnchor(x, y)}
-      data-tab-kind={kind}
-      data-tab-id={id}
-      {...legacyId}
+    <ContextMenuAnchor
+      x={x}
+      y={y}
+      component="app-tab-context-menu"
+      label={`${label} tab actions`}
+      attributes={{ 'data-tab-kind': kind, 'data-tab-id': id, ...legacyId }}
     >
       <PopupMenu
         context
@@ -80,7 +77,7 @@ export function AppTabContextMenu({
           },
         ])}
       />
-    </div>
+    </ContextMenuAnchor>
   );
 }
 
