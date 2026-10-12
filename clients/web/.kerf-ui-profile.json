@@ -224,12 +224,6 @@
       "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: quick-ticket-composer__attachment, quick-ticket-composer__attachments, quick-ticket-composer__details, quick-ticket-composer__drop."
     },
     {
-      "id": "intentional-nested-inset-repository-setup",
-      "rules": ["KUI-L004"],
-      "target": "src/components/repository-setup.tsx",
-      "rationale": "Reviewed HS2-M6B8AD: these elements are deliberate inset surfaces (cards, chips, badges, fields, drop zones, callouts, dialog bodies, or popovers) that carry their own padding inside a padded parent by design: repository-setup__error."
-    },
-    {
       "id": "intentional-nested-inset-terminal-dashboard",
       "rules": ["KUI-L004"],
       "target": "src/components/terminal-dashboard.tsx",

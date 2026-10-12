@@ -30,14 +30,10 @@ describe('RepositorySetup', () => {
     expect(String(RepositorySetup({ busy: true }))).toContain('Initializing…');
     expect(String(RepositorySetup({ step: 'remote', busy: true }))).toContain('Adding origin…');
     const css = readFileSync(resolve(import.meta.dirname, 'repository-setup.css'), 'utf8');
-    expect(css).toMatch(/@media \(max-width: remify\(512px\)\)/);
     expect(css).toMatch(/width: min\(remify\(480px\), 100%\)/);
-    expect(css).toMatchSource(
-      /data-step="initialize"[^}]*footer \{[^}]*align-items: center;[^}]*justify-content: center;/,
-    );
     expect(css).not.toContain('--wa-space-');
     expect(css).toMatch(/\.repository-setup \{[^}]*padding: var\(--kui-space-l\)[^}]*gap: var\(--kui-space-l\)/);
-    expect(css).toMatch(/\.repository-setup__error \{[^}]*padding: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/\.repository-setup footer \{[^}]*gap: var\(--kui-space-xs\)/);
+    // Kerf StateBanner, Row, List, and Text own the error, footers, and copy (HS2-AP13JM).
+    expect(css).not.toMatch(/__error|footer|__message|@media/);
   });
 });

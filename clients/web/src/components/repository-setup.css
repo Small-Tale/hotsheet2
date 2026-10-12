@@ -1,3 +1,4 @@
+/* The bounded setup panel centered in the repository popover's empty state. */
 .repository-setup {
   display: grid;
   width: min(remify(480px), 100%);
@@ -6,64 +7,20 @@
   box-sizing: border-box;
   gap: var(--kui-space-l);
 }
-.repository-setup__message {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--kui-space-m);
-}
-.repository-setup__message strong {
-  display: block;
-  margin-bottom: var(--kui-space-xs);
-  font-size: var(--wa-font-size-l);
-}
-.repository-setup__message p {
-  margin: 0;
-  color: var(--wa-color-text-quiet);
-  line-height: 1.5;
-}
+/* The brand-tinted circle behind the ready icon; no Kerf icon presentation draws a filled disc. */
 .repository-setup__icon {
   display: grid;
+  flex: none;
   width: remify(40px);
   height: remify(40px);
   border-radius: var(--wa-border-radius-circle);
   background: var(--wa-color-brand-fill-quiet);
   place-items: center;
 }
-.repository-setup__error {
+/* The initialize step's centered explanation (Kerf Text has no alignment prop). */
+.repository-setup__lead {
   margin: 0;
-  padding: var(--kui-space-xs);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-danger-on-quiet);
-  background: var(--wa-color-danger-fill-quiet);
-  overflow-wrap: anywhere;
-}
-.repository-setup footer {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: var(--kui-space-xs);
-}
-.repository-setup[data-step='initialize'] .repository-setup__message {
-  display: block;
+  color: var(--wa-color-text-quiet);
+  line-height: 1.5;
   text-align: center;
-}
-.repository-setup[data-step='initialize'] footer {
-  min-height: remify(80px);
-  align-items: center;
-  justify-content: center;
-}
-@media (max-width: remify(512px)) {
-  .repository-setup {
-    padding: var(--kui-space-l);
-  }
-  .repository-setup__message {
-    grid-template-columns: 1fr;
-  }
-  /* Equal-width actions come from the app-owned footer grid, not from styling the buttons. */
-  .repository-setup footer {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-  }
 }

@@ -1,7 +1,11 @@
 import './repository-setup.css';
 
 import { uiColor } from '@kerfjs/ui/css-values';
+import { List } from '@kerfjs/ui/list';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
+import { StateBanner } from '@kerfjs/ui/state-banner';
+import { Text } from '@kerfjs/ui/text';
 import { CircleCheck } from 'lucide';
 
 import { REPOSITORY_ACTIONS } from '../interaction-attrs/repository';
@@ -25,18 +29,20 @@ export function RepositorySetup({
         data-step="remote"
         {...REPOSITORY_ACTIONS.connectRepositoryRemote.attrs}
       >
-        <div class="repository-setup__message">
+        <Row gap="m" vAlign="top">
           <span class="repository-setup__icon">
             <LucideIcon size="m" icon={CircleCheck} name="circle-check" color={uiColor('brand-on-quiet')} />
           </span>
-          <div>
-            <strong>Git is ready</strong>
-            <p>
+          <List gap="xs" flex>
+            <Text variant="h2" size="large" flush lineHeight="tight">
+              Git is ready
+            </Text>
+            <Text tone="quiet" flush>
               Add an <code>origin</code> remote now, or skip this step and configure one later. Hot Sheet will not
               stage, commit, or push project files.
-            </p>
-          </div>
-        </div>
+            </Text>
+          </List>
+        </Row>
         <wa-input
           name="repository-remote"
           type="text"
@@ -45,12 +51,8 @@ export function RepositorySetup({
           required
           autofocus
         />
-        {error && (
-          <p class="repository-setup__error" role="alert">
-            {error}
-          </p>
-        )}
-        <footer>
+        {error && <StateBanner tone="danger" urgency="alert" title={error} />}
+        <Row hAlign="right" gap="xs" wrap>
           <wa-button
             appearance="plain"
             type="button"
@@ -62,28 +64,22 @@ export function RepositorySetup({
           <wa-button appearance="accent" type="submit" disabled={busy}>
             {busy ? 'Adding origin…' : 'Add origin'}
           </wa-button>
-        </footer>
+        </Row>
       </form>
     );
 
   return (
     <div class="repository-setup" data-component="repository-setup" data-step="initialize">
-      <div class="repository-setup__message">
-        <p>
-          Initialize Git here to enable branch, change, and commit status. Existing project files will remain untracked;
-          Hot Sheet will not stage or commit them.
-        </p>
-      </div>
-      {error && (
-        <p class="repository-setup__error" role="alert">
-          {error}
-        </p>
-      )}
-      <footer>
+      <p class="repository-setup__lead">
+        Initialize Git here to enable branch, change, and commit status. Existing project files will remain untracked;
+        Hot Sheet will not stage or commit them.
+      </p>
+      {error && <StateBanner tone="danger" urgency="alert" title={error} />}
+      <Row hAlign="center">
         <wa-button appearance="accent" type="button" {...REPOSITORY_ACTIONS.initializeRepository.attrs} disabled={busy}>
           {busy ? 'Initializing…' : 'Initialize Git repository'}
         </wa-button>
-      </footer>
+      </Row>
     </div>
   );
 }

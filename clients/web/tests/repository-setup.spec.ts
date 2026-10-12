@@ -178,7 +178,7 @@ test('recovers a project folder without Git and optionally connects origin', asy
     .poll(() =>
       initialize.evaluate((node) => {
         const button = node.getBoundingClientRect(),
-          footer = node.closest('footer')!.getBoundingClientRect();
+          footer = node.closest('[data-component="row"]')!.getBoundingClientRect();
         return Math.max(
           Math.abs(button.x + button.width / 2 - footer.x - footer.width / 2),
           Math.abs(button.y + button.height / 2 - footer.y - footer.height / 2),
