@@ -15,6 +15,8 @@ const requestedDemo = findDemo(
 export const selectedId = signal(requestedDemo?.id ?? DEFAULT_DEMO);
 /** Kerf's Catalog settings pane starts collapsed and collapses again on every selection (KF-0AY6AE). */
 export const settingsCollapsed = signal(true);
+/** The local project directory Kerf's UX Review capture link files under; unset on static hosting (HS2-41YZSB). */
+export const uxReviewProject = signal<string | null>(null);
 
 let displayStorage: Storage | null = null;
 try {

@@ -26,6 +26,24 @@ async function setDemoSettingsOpen(page: Page, open: boolean): Promise<void> {
   }).toPass({ timeout: 10_000 });
 }
 
+test('offers one UX Review capture link for the active entry on the dev server (HS2-41YZSB)', async ({
+  page,
+  request,
+}) => {
+  const project = (await (await request.get('/__ux-review/project.json')).json()) as { projectDirectory: string };
+  expect(project.projectDirectory).toBeTruthy();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/ux-demo?component=tag-chip');
+    const link = page.getByRole('link', { name: /in UX Review$/ });
+    await expect(link).toHaveCount(1);
+    const href = new URL((await link.getAttribute('href')) ?? '');
+    expect(href.protocol).toBe('uxreview:');
+    expect(href.searchParams.get('project')).toBe(project.projectDirectory);
+    expect(href.searchParams.get('title')).toContain('TagChip');
+  }
+});
+
 test('clears the halted terminal example from its menu at wide and phone widths (HS2-6J79SA)', async ({ page }) => {
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });

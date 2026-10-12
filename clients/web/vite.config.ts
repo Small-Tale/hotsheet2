@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 
 import devServer, { defaultOptions } from '@hono/vite-dev-server';
+import { uxReviewPlugin } from '@kerfjs/ui/vite-ux-review';
 import { defineConfig, type Plugin, type UserConfig } from 'vite';
 
 import remifyCss from './scripts/remify-css.mjs';
@@ -108,6 +109,9 @@ export default defineConfig(({ command, isSsrBuild }) => ({
     command === 'serve'
       ? [
           clientDiscoveryPlugin(),
+          // Serves `__ux-review/project.json` so the UX demo catalog can offer Kerf's Capture region link
+          // (HS2-41YZSB); registered before the Hono dev server so its middleware answers first.
+          uxReviewPlugin(),
           { name: 'hotsheet-project-websocket-bridge', configureServer: installProjectWebSocketBridge },
           devServer({
             entry: 'src/dev-server.ts',

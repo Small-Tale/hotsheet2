@@ -48,6 +48,7 @@ import {
   tabContextMenu,
   theme,
   URL_PARAM,
+  uxReviewProject,
 } from './components/demo-state';
 import { DEMO_ACTIONS } from './demo-actions';
 import { listen } from './demo-module';
@@ -98,6 +99,7 @@ demoListeners.add(
     settingsCollapsed,
     toggleSettingsAction: 'toggle-settings',
     onSelect: selectDemo,
+    onUxReviewProject: (directory) => (uxReviewProject.value = directory),
     onToggleSidebar: () => {
       collapsed.value = !collapsed.value;
       saveDisplayPreferences();

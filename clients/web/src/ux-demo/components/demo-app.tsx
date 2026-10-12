@@ -18,6 +18,7 @@ import {
   settingsCollapsed,
   tabContextMenu,
   theme,
+  uxReviewProject,
 } from './demo-state';
 
 function PlannedDemo({ item }: { item: DemoDefinition }) {
@@ -63,6 +64,7 @@ export function DemoApp() {
         settingsCollapsed={settingsCollapsed.value}
         settingsPanel={{ size: 368 }}
         toggleSettingsAction="toggle-settings"
+        uxReview={uxReviewProject.value ? { projectDirectory: uxReviewProject.value } : undefined}
         content={
           <section
             class="demo-catalog-examples"
