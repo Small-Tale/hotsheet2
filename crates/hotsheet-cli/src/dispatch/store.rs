@@ -787,6 +787,12 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
             &registry.set_source_color(&reference, &connection_id, &color)?,
             &connection_id,
         )?,
+        CheckoutCmd::ReviewSource {
+            reference,
+            connection_id,
+            store,
+            yes,
+        } => review_checkout_source(&registry, &reference, &connection_id, store, yes)?,
         CheckoutCmd::SetDefault {
             reference,
             connection_id,
@@ -803,6 +809,70 @@ pub(crate) fn cmd_checkout(cmd: CheckoutCmd, store: &Path) -> Result<()> {
             );
         }
     }
+    Ok(())
+}
+
+/// The headless twin of Ticket sources' "review its location" recovery: the same registry
+/// workflows the server relink route calls, gated on an explicit --yes.
+fn review_checkout_source(
+    registry: &hotsheet_ticketing::checkouts::CheckoutRegistry,
+    reference: &str,
+    connection_id: &str,
+    store: Option<PathBuf>,
+    yes: bool,
+) -> Result<()> {
+    let checkout = registry.describe(reference)?;
+    let Some(source) = checkout
+        .source(connection_id)
+        .filter(|s| s.provider == "git")
+    else {
+        bail!(
+            "checkout {} has no linked Git source '{connection_id}'",
+            checkout.id
+        );
+    };
+    let recorded = checkout.store_instance_ids.get(connection_id).cloned();
+    let destination = store.unwrap_or_else(|| PathBuf::from(&source.locator));
+    let moved = destination.canonicalize().ok() != Path::new(&source.locator).canonicalize().ok();
+    if recorded.is_some() && !moved {
+        println!(
+            "Source '{connection_id}' of checkout {} already has a recorded store identity; nothing to do.",
+            checkout.id
+        );
+        return Ok(());
+    }
+    let destination_identity = FsStore::open_without_maintenance(&destination)
+        .with_context(|| format!("{} is not a Hot Sheet ticket store", destination.display()))?
+        .metadata()?
+        .instance_id;
+    println!("Checkout:          {} ({})", checkout.id, checkout.root);
+    println!("Source:            {connection_id}");
+    println!("Linked location:   {}", source.locator);
+    println!("Reviewed location: {}", destination.display());
+    println!(
+        "Recorded identity: {}",
+        recorded
+            .as_deref()
+            .unwrap_or("none (linked before identities were recorded)")
+    );
+    println!(
+        "Store identity:    {}",
+        destination_identity
+            .as_deref()
+            .unwrap_or("none yet (assigned on confirmation)")
+    );
+    if !yes {
+        println!(
+            "\nConfirm this is the project's ticket store, then rerun with --yes to record its identity."
+        );
+        return Ok(());
+    }
+    let updated = if recorded.is_some() {
+        registry.relink_git_source(reference, connection_id, &destination)?
+    } else {
+        registry.recover_unverified_git_source(reference, connection_id, &destination)?
+    };
+    println!("{}", serde_json::to_string_pretty(&updated)?);
     Ok(())
 }
 
@@ -873,6 +943,19 @@ pub(crate) enum CheckoutCmd {
         reference: String,
         connection_id: String,
         color: String,
+    },
+    /// Review a linked Git store that has no recorded identity, or relink a moved one, and
+    /// record its identity only with --yes. Without --yes this only prints the review; a
+    /// repeated --yes is a no-op once the identity is recorded (HS2-47AFBK).
+    ReviewSource {
+        reference: String,
+        connection_id: String,
+        /// The store's current location when it moved; defaults to the linked location.
+        #[arg(long)]
+        store: Option<PathBuf>,
+        /// Confirm the reviewed store and record its identity.
+        #[arg(long)]
+        yes: bool,
     },
     /// Select the source used by unqualified creates, or clear it with --clear.
     SetDefault {

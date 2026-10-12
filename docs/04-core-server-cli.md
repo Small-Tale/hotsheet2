@@ -616,6 +616,7 @@ hotsheet checkout remove-source web github-main [--json]  # this project only; d
 hotsheet checkout source-color web github-main              # JSON: checkout_id, connection_id, effective color
 hotsheet checkout set-source-color web github-main '#3b82f6' # set this project's source accent
 hotsheet checkout set-source-color web github-main '#6b7280' # restore the default Gray mark
+hotsheet checkout review-source web <git-source-id> [--store <path>] [--yes] # review/record a Git store identity; writes only with --yes
 hotsheet account list [--json]            # machine-wide sign-ins, their sources, and the projects using each
 hotsheet account backfill-logins [--limit 5] # resolve missing managed GitHub usernames in a bounded batch
 hotsheet account sign-out github-app-<id> # refused while a ticket source still uses it
@@ -681,6 +682,13 @@ mismatch. The updated checkout records
 the old locator in `unverified_store_sources` under the new connection id; the checkout
 provider descriptor exposes `unverified_recovery: true`, and the marker survives later
 verified moves and restart (HS2-RAQSX7).
+The same recovery is available headless through
+`hotsheet-cli checkout review-source <checkout> <source-id> [--store <path>] [--yes]`.
+Without `--yes` it only prints the checkout, linked and reviewed locations, and the
+recorded and on-disk identities. With `--yes` it calls the same registry workflow:
+reviewed unverified recovery when no identity was recorded, or a verified relink when
+`--store` names the moved location of a recorded store. A repeated `--yes` is a
+no-op (HS2-47AFBK).
 Checkout ticket and data reads also compare the recorded identity with the current
 store at a linked path. A mismatch returns a conflict with restore/replacement guidance,
 including when that path was already hosted before replacement. Other projects

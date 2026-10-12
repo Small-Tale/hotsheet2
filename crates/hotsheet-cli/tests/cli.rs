@@ -7594,3 +7594,87 @@ fn lifecycle_cli_reports_quiescence_and_requests_safe_restart() {
     let none = cli("status");
     assert!(!none.status.success());
 }
+
+/// Headless parity for Ticket sources' "review its location" recovery (HS2-47AFBK): a Git
+/// source linked before identities were recorded is reviewed read-only, recorded only on
+/// --yes, idempotent afterwards, and a moved store relinks through the same command.
+#[test]
+fn checkout_review_source_records_a_missing_store_identity_only_on_confirmation() {
+    let checkout = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let stores = tempfile::tempdir().unwrap();
+    std::fs::create_dir(stores.path().join("tickets")).unwrap();
+    let store = stores.path().join("tickets").canonicalize().unwrap();
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let cli = || {
+        let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+        command.env("HOTSHEET_HOME", home.path());
+        command
+    };
+    cli()
+        .args(["checkout", "register", checkout.path().to_str().unwrap()])
+        .args(["--alias", "web", "--store", store.to_str().unwrap()])
+        .assert()
+        .success();
+    // Simulate a link made before store identities were recorded.
+    let registry_path = home.path().join("checkouts.json");
+    let mut registry: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&registry_path).unwrap()).unwrap();
+    let entry = &mut registry["checkouts"][0];
+    let source_id = entry["sources"][0]["connection_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    entry["store_instance_ids"] = serde_json::json!({});
+    std::fs::write(&registry_path, registry.to_string()).unwrap();
+    let recorded = || {
+        let value: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&registry_path).unwrap()).unwrap();
+        value["checkouts"][0]["store_instance_ids"][&source_id].clone()
+    };
+
+    cli()
+        .args(["checkout", "review-source", "web", &source_id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Recorded identity: none"))
+        .stdout(predicate::str::contains("rerun with --yes"));
+    assert!(recorded().is_null(), "review without --yes must not write");
+
+    cli()
+        .args(["checkout", "review-source", "web", &source_id, "--yes"])
+        .assert()
+        .success();
+    assert!(recorded().is_string());
+
+    cli()
+        .args(["checkout", "review-source", "web", &source_id, "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nothing to do"));
+
+    let moved = stores.path().join("moved");
+    std::fs::rename(&store, &moved).unwrap();
+    cli()
+        .args([
+            "checkout",
+            "review-source",
+            "web",
+            &source_id,
+            "--yes",
+            "--store",
+        ])
+        .arg(&moved)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            moved.canonicalize().unwrap().to_str().unwrap(),
+        ));
+
+    cli()
+        .args(["checkout", "review-source", "web", "missing-source"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no linked Git source"));
+}
