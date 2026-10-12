@@ -1,33 +1,11 @@
-/* CommandSettingsEditor still hand-styles most of its surface. Each section below is tracked for
-   recomposition from Kerf and Web Awesome components: the command list rows and groups (HS2-7BBRJT)
-   and the swatches, heading, and group-delete button (HS2-EBY4E3). The heading actions and the empty
-   list use wa-button and EmptyState (HS2-F9ECMZ), and the edit dialog's fields are Web Awesome
-   controls (HS2-WNXRG3). */
-/* The editor root stacks its sections and is the container for the narrow heading layout. */
+/* CommandSettingsEditor still hand-styles part of its surface. The command list rows and groups are
+   tracked by HS2-7BBRJT; the color swatches wait on a wrapping Kerf choice component (KF-EJPYWD,
+   HS2-EBY4E3). The heading is a Kerf Toolbar (HS2-EBY4E3), the empty list is EmptyState (HS2-F9ECMZ),
+   and the edit dialog's fields are Web Awesome controls (HS2-WNXRG3). */
+/* The editor root stacks its sections; the Kerf Toolbar heading wraps on its own (HS2-EBY4E3). */
 .command-settings-editor {
   display: grid;
-  container-type: inline-size;
   gap: var(--kui-space-l);
-}
-.command-settings-editor__heading {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: var(--kui-space-m);
-}
-.command-settings-editor__heading h2,
-.command-settings-editor__heading p {
-  margin: 0;
-}
-.command-settings-editor__heading p {
-  max-width: remify(520px);
-  margin-top: var(--kui-space-2xs);
-  color: var(--wa-color-text-quiet);
-}
-.command-settings-editor__heading-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: var(--kui-space-2xs);
 }
 /* The editor's own buttons carry this class rather than every descendant <button> being styled,
    so nested components (the Lucide icon picker in the edit dialog) keep their own geometry and
@@ -226,15 +204,6 @@
   flex: 1 1 auto;
 }
 
-@container (max-width:remify(672px)) {
-  .command-settings-editor__heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .command-settings-editor__heading-actions {
-    flex-wrap: wrap;
-  }
-}
 /* Color and icon pickers for custom command buttons (HS2-656XJ2). */
 .command-settings-editor__swatches {
   display: flex;

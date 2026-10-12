@@ -391,30 +391,38 @@ export function CommandSettingsEditor({
       data-component="command-settings-editor"
       data-icon-catalog={lucideCatalogVersion.value}
     >
-      <header class="command-settings-editor__heading">
-        <div>
-          <h2>Custom commands</h2>
-          <p>
+      {/* Kerf Toolbar owns the heading row: the title, then the standalone Add group and primary
+          Add command buttons, which wrap below the title in a narrow editor (HS2-EBY4E3). */}
+      <List gap="2xs">
+        <Toolbar
+          dividerSides=""
+          responsive="wrap"
+          leading={<ToolbarText text="Custom commands" size="xlarge" headingLevel={2} />}
+          trailing={
+            <>
+              <wa-button appearance="outlined" size="small" {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}>
+                <LucideIcon slot="start" size="s" icon={FolderPlus} name="folder-plus" />
+                Add group
+              </wa-button>
+              <wa-button
+                variant="brand"
+                appearance="accent"
+                size="small"
+                {...COMMANDS_AND_AI_ACTIONS.addCommandSetting.attrs}
+              >
+                <LucideIcon slot="start" size="s" icon={Plus} name="plus" />
+                Add command
+              </wa-button>
+            </>
+          }
+        />
+        <List textInsets="rl">
+          <Text flush tone="quiet">
             Create the buttons shown in this project's sidebar. Drag to reorder or move between groups; changes save
             automatically.
-          </p>
-        </div>
-        <div class="command-settings-editor__heading-actions">
-          <wa-button appearance="outlined" size="small" {...COMMANDS_AND_AI_ACTIONS.addCommandGroup.attrs}>
-            <LucideIcon slot="start" size="s" icon={FolderPlus} name="folder-plus" />
-            Add group
-          </wa-button>
-          <wa-button
-            variant="brand"
-            appearance="accent"
-            size="small"
-            {...COMMANDS_AND_AI_ACTIONS.addCommandSetting.attrs}
-          >
-            <LucideIcon slot="start" size="s" icon={Plus} name="plus" />
-            Add command
-          </wa-button>
-        </div>
-      </header>
+          </Text>
+        </List>
+      </List>
       {sections.length > 0 ? (
         <ul class="command-settings-editor__list" aria-label="Custom commands" aria-multiselectable="true">
           {sections.map((section) => (

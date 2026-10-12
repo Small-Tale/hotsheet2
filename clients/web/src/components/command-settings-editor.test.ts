@@ -35,6 +35,13 @@ describe('CommandSettingsEditor', () => {
     expect(markup).toContain('data-action="add-command-setting"');
     expect(markup).not.toContain('data-action="save-command-settings"');
     expect(markup).toContain('save automatically');
+    // The heading is a Kerf Toolbar with a level-2 ToolbarText title; no app heading CSS remains (HS2-EBY4E3).
+    expect(markup).toContain('data-component="toolbar"');
+    expect(markup).toContain('aria-level="2"');
+    expect(markup).toContain('Custom commands');
+    expect(markup).not.toContain('command-settings-editor__heading');
+    expect(css).not.toContain('__heading');
+    expect(css).not.toContain('@container');
   });
 
   it('marks the multi-selected rows as selected for drag-together reordering (HS2-VJYQHG)', () => {
