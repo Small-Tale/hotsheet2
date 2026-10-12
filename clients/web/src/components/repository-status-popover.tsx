@@ -389,7 +389,9 @@ export function RepositoryStatusPopover({
           {!recoveryStep && Boolean(error) && <StateBanner tone="danger" urgency="alert" title={error} />}
         </Pane>
       )}
-      {fileMenu && fileMenu.source !== 'ticket' && <RepositoryFileContextMenu menu={fileMenu} platform={status?.platform} />}
+      {fileMenu && fileMenu.source !== 'ticket' && (
+        <RepositoryFileContextMenu menu={fileMenu} platform={status?.platform} />
+      )}
     </section>
   );
 }
