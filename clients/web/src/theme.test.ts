@@ -31,7 +31,6 @@ const kerfSpacingMigratedComponents = [
   'flow-back-button.css',
   'hs1-migration.css',
   'keyboard-settings.css',
-  'manual-model-dialog.css',
   'markdown-preview.css',
   'note-card.css',
   'not-working-dialog.css',
