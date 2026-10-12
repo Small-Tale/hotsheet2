@@ -467,8 +467,9 @@ describe('TicketInspector', () => {
       }),
     );
     expect(markup).toContain('ticket-inspector__tab-count');
-    // A compact Kerf Badge carries the count and its accessible name (HS2-MMHS28).
-    expect(markup).toMatch(/ticket-inspector__tab-count"><span class="kui-badge"[^>]*aria-label="2 attachments">2</u);
+    // A decorative compact Kerf Badge shows the count; a visually hidden label speaks it (HS2-MMHS28).
+    expect(markup).toMatch(/ticket-inspector__tab-count"><span class="kui-badge"[^>]*aria-hidden="true">2</u);
+    expect(markup).toContain('<span class="wa-visually-hidden">2 attachments</span>');
     expect(String(TicketInspector({ ...base, attachments: [] }))).not.toContain('ticket-inspector__tab-count');
   });
 

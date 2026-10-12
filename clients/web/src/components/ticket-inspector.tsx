@@ -1,4 +1,5 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@awesome.me/webawesome/dist/styles/utilities/visually-hidden.css';
 import '@kerfjs/ui/tab-bar.css';
 import './ticket-inspector.css';
 
@@ -400,9 +401,12 @@ export function ticketInspectorPanel({
               trailing={
                 tab.id === 'attachments' && attachments?.length ? (
                   <span class="ticket-inspector__tab-count">
-                    <Badge size="compact" label={`${attachments.length} attachments`}>
+                    {/* A generic span cannot carry an accessible name, so the badge is decorative and a
+                        visually hidden label speaks the count (HS2-MMHS28). */}
+                    <Badge size="compact" ariaHidden>
                       {attachments.length}
                     </Badge>
+                    <span class="wa-visually-hidden">{attachments.length} attachments</span>
                   </span>
                 ) : undefined
               }
