@@ -1,45 +1,17 @@
-import { type CssForegroundColor, foregroundColorVar } from '@kerfjs/ui/css-values';
+import { foregroundColorVar } from '@kerfjs/ui/css-values';
 import { Select } from '@kerfjs/ui/select';
-import { ChevronDown, ChevronsUp, ChevronUp, type IconNode, Minus } from 'lucide';
 
-import type { TicketPriority } from './ticket-row';
+import { TICKET_PRIORITIES, type TicketPriority } from './priority-presentation';
 
-const PRIORITIES: readonly {
-  value: TicketPriority;
-  label: string;
-  color: CssForegroundColor;
-  icon: IconNode;
-  iconName: string;
-}[] = [
-  {
-    value: 'urgent',
-    label: 'Urgent',
-    color: foregroundColorVar('--hs-priority-urgent'),
-    icon: ChevronsUp,
-    iconName: 'chevrons-up',
-  },
-  {
-    value: 'high',
-    label: 'High',
-    color: foregroundColorVar('--hs-priority-high'),
-    icon: ChevronUp,
-    iconName: 'chevron-up',
-  },
-  {
-    value: 'default',
-    label: 'Default',
-    color: foregroundColorVar('--hs-priority-default'),
-    icon: Minus,
-    iconName: 'minus',
-  },
-  {
-    value: 'low',
-    label: 'Low',
-    color: foregroundColorVar('--hs-priority-low'),
-    icon: ChevronDown,
-    iconName: 'chevron-down',
-  },
-];
+/** Kerf Select choices from the shared priority presentation that TicketRow also reads (HS2-8MT5KG). */
+const PRIORITY_CHOICES = TICKET_PRIORITIES.map(({ value, label, colorToken, icon, iconName }) => ({
+  value,
+  label,
+  color: foregroundColorVar(colorToken),
+  icon,
+  iconName,
+}));
+
 export interface TicketPrioritySelectProps {
   name: string;
   value: TicketPriority;
@@ -63,7 +35,7 @@ export function TicketPrioritySelect({
       name={name}
       value={value}
       {...accessibleName}
-      choices={PRIORITIES}
+      choices={PRIORITY_CHOICES}
       disabled={disabled}
       placeholder={placeholder}
       triggerWidth="fill"

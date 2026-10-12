@@ -1,7 +1,7 @@
 import './ticket-row.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { ChevronDown, ChevronsUp, ChevronUp, CircleAlert, type IconNode, Minus, Star } from 'lucide';
+import { CircleAlert, Star } from 'lucide';
 
 import type { ClaimEtaPresentation } from '../active-ticket-work';
 import type { StartedPhase } from '../api';
@@ -16,11 +16,12 @@ import {
   resolveCategoryIconColor,
 } from './category-presentation';
 import { ConfidenceBadge } from './confidence-badge';
+import { priorityPresentation, type TicketPriority } from './priority-presentation';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
 import { TicketSourceIcon, type TicketSourceIdentity } from './ticket-source-icon';
 
-export type TicketPriority = 'low' | 'default' | 'high' | 'urgent';
+export type { TicketPriority } from './priority-presentation';
 export type TicketRowPresentation = 'list' | 'column';
 /**
  * Where a list row sits against its rounded, clipping list container: its matching corners round so the
@@ -68,20 +69,15 @@ export interface TicketRowProps {
 
 export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;
 
-const priorityPresentation: Record<TicketPriority, { icon: IconNode; name: string; color: string }> = {
-  urgent: { icon: ChevronsUp, name: 'chevrons-up', color: 'var(--hs-priority-urgent)' },
-  high: { icon: ChevronUp, name: 'chevron-up', color: 'var(--hs-priority-high)' },
-  default: { icon: Minus, name: 'minus', color: 'var(--hs-priority-default)' },
-  low: { icon: ChevronDown, name: 'chevron-down', color: 'var(--hs-priority-low)' },
-};
-
 /** The confidence a summary shows: only a completed/verified ticket carries one. */
 export function ticketRowConfidence(props: Pick<TicketRowProps, 'status' | 'latestConfidence'>): number | undefined {
   return props.status === 'completed' || props.status === 'verified' ? props.latestConfidence : undefined;
 }
 
+/** The row's priority indicator reads the shared priority presentation (HS2-8MT5KG). */
 export function getPriorityPresentation(priority: TicketPriority) {
-  return priorityPresentation[priority];
+  const { icon, iconName, colorToken } = priorityPresentation(priority);
+  return { icon, name: iconName, color: `var(${colorToken})` };
 }
 
 export function ticketRowIndicator(
