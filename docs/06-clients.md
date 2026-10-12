@@ -1410,6 +1410,12 @@ and identity-less legacy entries remain conservatively blocking.
   workspace. The existing local-mutation barrier,
   acknowledgement suppression, overflow recovery, and event consumers receive the same
   `PollResponse` batches regardless of which transport delivered them.
+  With the off-by-default `hotsheet.change-stream-worker` local setting, one dedicated
+  worker runs these transports for every open project and posts only validated, ordered,
+  coalesced change events. The main thread applies them through the same consumer. A
+  version mismatch, an unavailable worker, or repeated crashes fall back to this
+  main-thread stream; a crash restart replays from the last applied cursor
+  ([22](22-ui-responsiveness-profile.md#shared-change-stream-worker-prototype)).
   While the dialog is closed, streamed transcript/activity state remains retained but the
   conversation surface is not mounted and does not subscribe the application root to those
   high-frequency signals. Opening it projects the accumulated transcript in one pass; background

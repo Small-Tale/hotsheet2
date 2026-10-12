@@ -51,11 +51,11 @@ export const containsRepositoryChange = (response: PollResponse, checkoutId: str
 
 const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => {
-    const timeout = window.setTimeout(resolve, milliseconds);
+    const timeout = globalThis.setTimeout(resolve, milliseconds);
     signal.addEventListener(
       'abort',
       () => {
-        window.clearTimeout(timeout);
+        globalThis.clearTimeout(timeout);
         resolve();
       },
       { once: true },
@@ -72,22 +72,82 @@ const resync = async (options: ProjectChangePollOptions, reason: ProjectChangeRe
   }
 };
 
-/** Start one replay-safe long-poll loop. The returned function aborts it permanently. */
-export function startProjectChangePoll(options: ProjectChangePollOptions): () => void {
-  const controller = new AbortController();
+/**
+ * Where a change transport hands what it read (HS2-SH9179). The transport owns the network side:
+ * handshake, WebSocket, JSON validation, cursor gap checks, replay, and backoff. The sink owns
+ * what the application does with it. Each call is awaited before the transport reads further, so
+ * a sink controls back-pressure and per-project ordering.
+ */
+export interface ProjectChangeSink {
+  /** Continuity was (re)established; `cursor` is the replay position at that moment. */
+  resync(reason: ProjectChangeResync, cursor: number): Promise<void>;
+  /** A replayed or live page; `forceRefresh` reconciles ticket state even without ticket events. */
+  deliver(response: PollResponse, forceRefresh: boolean): Promise<void>;
+}
+
+export interface ProjectChangeTransportOptions {
+  client: Pick<Api, 'pollEvents'> & Partial<Pick<Api, 'changeWebSocketUrl'>>;
+  sink: ProjectChangeSink;
+  onError?(reason: unknown): void;
+  retryMs?: number;
+  maxRetryMs?: number;
+  wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  openWebSocket?: (url: string) => WebSocket;
+  webSocketOpenTimeoutMs?: number;
+  /**
+   * Resume a stream another owner already followed (a restarted worker, or the main-thread
+   * fallback taking over): `cursor` replays from the last acknowledged position, and an
+   * undefined cursor performs a fresh handshake that reconciles as a reconnect.
+   */
+  resume?: { cursor?: number };
+}
+
+/**
+ * The main-thread half of a change stream: turns transport output into resync, event, barrier,
+ * and refresh calls in the same order the original single-function stream made them.
+ */
+export function createProjectChangeConsumer(options: ProjectChangePollOptions, signal: AbortSignal): ProjectChangeSink {
+  return {
+    resync: (reason) => resync(options, reason),
+    deliver: async (response, forceRefresh) => {
+      if (wasAborted(signal)) return;
+      if (response.overflow) await resync(options, 'overflow');
+      if (wasAborted(signal)) return;
+      if (response.events.length && options.onEvents)
+        await options.onEvents(response).catch((reason: unknown) => {
+          options.onError?.(reason);
+        });
+      const candidate = forceRefresh || containsTicketChange(response);
+      if (!candidate) return;
+      await options.beforeRefresh?.().catch((reason: unknown) => {
+        options.onError?.(reason);
+      });
+      if (wasAborted(signal)) return;
+      const reconcile = forceRefresh || (options.shouldRefresh?.(response) ?? containsTicketChange(response));
+      if (reconcile)
+        await options.refresh().catch((reason: unknown) => {
+          options.onError?.(reason);
+        });
+    },
+  };
+}
+
+/** Run one replay-safe long-poll transport until `signal` aborts. */
+export function runProjectChangePollTransport(options: ProjectChangeTransportOptions, signal: AbortSignal): void {
   const wait = options.wait ?? abortableWait;
   const retryMs = options.retryMs ?? 500;
   const maxRetryMs = options.maxRetryMs ?? 30_000;
+  const { sink } = options;
   void (async () => {
-    let cursor: number | undefined;
-    let reconnecting = false;
+    let cursor: number | undefined = options.resume?.cursor;
+    let reconnecting = options.resume !== undefined && options.resume.cursor === undefined;
     let retryDelay = retryMs;
     for (;;) {
       let response: PollResponse;
       try {
-        response = await options.client.pollEvents(cursor, controller.signal);
+        response = await options.client.pollEvents(cursor, signal);
       } catch (reason) {
-        if (wasAborted(controller.signal)) return;
+        if (wasAborted(signal)) return;
         options.onError?.(reason);
         // A failure is not itself a ticket invalidation. In particular, an older
         // server may not implement polling at all. Remember the outage and
@@ -95,38 +155,36 @@ export function startProjectChangePoll(options: ProjectChangePollOptions): () =>
         // the workspace on every retry.
         reconnecting = true;
         cursor = undefined;
-        await wait(retryDelay, controller.signal);
+        await wait(retryDelay, signal);
         retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
-        if (wasAborted(controller.signal)) return;
+        if (wasAborted(signal)) return;
         continue;
       }
-      if (controller.signal.aborted) return;
+      if (signal.aborted) return;
       retryDelay = retryMs;
       const handshake = cursor === undefined;
       cursor = response.cursor;
-      if (handshake) await resync(options, reconnecting ? 'reconnect' : 'initial');
-      else if (response.overflow) await resync(options, 'overflow');
-      if (wasAborted(controller.signal)) return;
-      if (!handshake && response.events.length && options.onEvents)
-        await options.onEvents(response).catch((reason: unknown) => {
-          options.onError?.(reason);
-        });
-      const reconnect = handshake && reconnecting;
-      const candidate = reconnect || (!handshake && containsTicketChange(response));
+      if (handshake) {
+        await sink.resync(reconnecting ? 'reconnect' : 'initial', cursor);
+        if (wasAborted(signal)) return;
+        // A handshake's own page is not replay: only an outage forces the reconcile.
+        if (reconnecting) await sink.deliver({ cursor, events: [], overflow: false }, true);
+      } else await sink.deliver(response, false);
       reconnecting = false;
-      if (candidate) {
-        await options.beforeRefresh?.().catch((reason: unknown) => {
-          options.onError?.(reason);
-        });
-        if (wasAborted(controller.signal)) return;
-        const reconcile = reconnect || (options.shouldRefresh?.(response) ?? containsTicketChange(response));
-        if (!reconcile) continue;
-        await options.refresh().catch((reason: unknown) => {
-          options.onError?.(reason);
-        });
-      }
+      if (wasAborted(signal)) return;
     }
   })();
+}
+
+/** Start one replay-safe long-poll loop. The returned function aborts it permanently. */
+export function startProjectChangePoll(
+  options: ProjectChangePollOptions & Pick<ProjectChangeTransportOptions, 'resume'>,
+): () => void {
+  const controller = new AbortController();
+  runProjectChangePollTransport(
+    { ...options, sink: createProjectChangeConsumer(options, controller.signal) },
+    controller.signal,
+  );
   return () => {
     controller.abort();
   };
@@ -159,45 +217,31 @@ const changeEventFromMessage = async (data: unknown): Promise<ChangeEvent> => {
 };
 
 /**
- * Start the browser's WebSocket-first project change stream. A short poll handshake obtains the
+ * Run the browser's WebSocket-first project change transport until `signal` aborts. A short poll handshake obtains the
  * replay cursor before the socket opens; another zero-wait poll after `open` closes the subscribe
  * race. Disconnects replay through long-poll before a bounded-backoff reconnect, so older servers
  * and environments that reject upgrades retain the complete long-poll behavior.
  */
-export function startProjectChangeStream(options: ProjectChangeStreamOptions): () => void {
-  if (!options.client.changeWebSocketUrl || (!options.openWebSocket && typeof WebSocket === 'undefined'))
-    return startProjectChangePoll(options);
-  const controller = new AbortController(),
+export function runProjectChangeTransport(options: ProjectChangeTransportOptions, signal: AbortSignal): void {
+  if (!options.client.changeWebSocketUrl || (!options.openWebSocket && typeof WebSocket === 'undefined')) {
+    runProjectChangePollTransport(options, signal);
+    return;
+  }
+  const controller = { signal },
+    { sink } = options,
     wait = options.wait ?? abortableWait,
     retryMs = options.retryMs ?? 500,
     maxRetryMs = options.maxRetryMs ?? 30_000,
     openTimeoutMs = options.webSocketOpenTimeoutMs ?? 2_000;
   const openSocket = options.openWebSocket ?? ((url: string) => new WebSocket(url));
-  let socket: WebSocket | undefined;
 
   void (async () => {
-    let cursor: number | undefined,
-      reconnecting = false,
+    let cursor: number | undefined = options.resume?.cursor,
+      reconnecting = options.resume !== undefined,
       retryDelay = retryMs;
     const consume = async (response: PollResponse, forceRefresh = false) => {
       if (wasAborted(controller.signal)) return;
-      if (response.overflow) await resync(options, 'overflow');
-      if (wasAborted(controller.signal)) return;
-      if (response.events.length && options.onEvents)
-        await options.onEvents(response).catch((reason: unknown) => {
-          options.onError?.(reason);
-        });
-      const candidate = forceRefresh || containsTicketChange(response);
-      if (!candidate) return;
-      await options.beforeRefresh?.().catch((reason: unknown) => {
-        options.onError?.(reason);
-      });
-      if (wasAborted(controller.signal)) return;
-      const reconcile = forceRefresh || (options.shouldRefresh?.(response) ?? containsTicketChange(response));
-      if (reconcile)
-        await options.refresh().catch((reason: unknown) => {
-          options.onError?.(reason);
-        });
+      await sink.deliver(response, forceRefresh);
     };
     const poll = async (since: number | undefined, timeoutMs?: number) =>
       options.client.pollEvents(since, controller.signal, timeoutMs);
@@ -209,7 +253,7 @@ export function startProjectChangeStream(options: ProjectChangeStreamOptions): (
           const handshake = await poll(undefined);
           if (wasAborted(controller.signal)) return;
           cursor = handshake.cursor;
-          await resync(options, reconnecting ? 'reconnect' : 'initial');
+          await sink.resync(reconnecting ? 'reconnect' : 'initial', cursor);
           if (wasAborted(controller.signal)) return;
           if (reconnecting) await consume(handshake, true);
           reconnecting = false;
@@ -275,7 +319,6 @@ export function startProjectChangeStream(options: ProjectChangeStreamOptions): (
         controller.signal.addEventListener('abort', abort, { once: true });
         try {
           activeSocket = openSocket(options.client.changeWebSocketUrl!());
-          socket = activeSocket;
         } catch (reason) {
           fail(reason);
           return;
@@ -315,7 +358,6 @@ export function startProjectChangeStream(options: ProjectChangeStreamOptions): (
           { once: true },
         );
       });
-      socket = undefined;
       if (wasAborted(controller.signal)) return;
       reconnecting = true;
       if (!outcome.reason) options.onError?.(new Error('Project change WebSocket closed.'));
@@ -338,8 +380,22 @@ export function startProjectChangeStream(options: ProjectChangeStreamOptions): (
       retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
     }
   })();
+}
+
+/**
+ * Start the browser's main-thread WebSocket-first project change stream: the transport above
+ * feeding the main-thread consumer. It is the default stream and the fallback whenever the
+ * shared change-stream worker is disabled or unavailable (HS2-SH9179).
+ */
+export function startProjectChangeStream(
+  options: ProjectChangeStreamOptions & Pick<ProjectChangeTransportOptions, 'resume'>,
+): () => void {
+  const controller = new AbortController();
+  runProjectChangeTransport(
+    { ...options, sink: createProjectChangeConsumer(options, controller.signal) },
+    controller.signal,
+  );
   return () => {
     controller.abort();
-    socket?.close();
   };
 }

@@ -279,3 +279,52 @@ main-thread processing bottleneck.
 The rendering follow-ups are `HS2-KCXMAT` (ticket list) and `HS2-9B8QHF`
 (terminal tab). The shared-worker experiment is `HS2-SH9179`, sequenced
 after both rendering investigations.
+
+## Shared change-stream worker prototype
+
+`HS2-SH9179` adds an opt-in dedicated worker that owns every open project's
+change transport. It is off by default. Set the local setting
+`hotsheet.change-stream-worker` to `true` in the browser's `localStorage`,
+then reload, to use it.
+
+- **Split.** `project-change-poll.ts` is now a _transport_ (handshake,
+  WebSocket, JSON validation, cursor gap/repeat checks, long-poll replay,
+  and backoff) feeding a _consumer_ (resync, events, refresh barrier, and
+  refresh). The default main-thread stream composes both, unchanged.
+- **Worker.** `change-stream.worker.ts` runs one transport per project.
+  Each project has a bounded delivery queue with one delivery in flight.
+  Adjacent event pages coalesce while the main thread is busy. Past
+  1,000 queued events, the queue collapses into one overflow page, which
+  reconciles from the server. Only change events cross the boundary, never
+  ticket collections.
+- **Host.** `change-stream-worker-host.ts` applies each delivery through
+  the same consumer and acknowledges it. Every subscription carries a
+  generation token, and closing a project aborts its transport. The host
+  falls back to the main-thread stream on a protocol-version mismatch, a
+  missing `ready`, or an unavailable worker. A crashed worker restarts with
+  bounded backoff and replays each project from its last applied cursor,
+  dropping repeated events. More than three crashes within a minute fall
+  back for the rest of the session.
+
+`npm run profile:ui:worker` repeats the `HS2-WDTN3W` scenario with the worker
+on. Playwright cannot route WebSockets opened inside a worker, so that
+profile delivers the same events through held long polls. One run on the
+same build and machine gave:
+
+| `ai-stream` window (30 AI events) | Before | Main thread after | Worker |
+| --------------------------------- | -----: | ----------------: | -----: |
+| Desktop renderer task time        | 180 ms |            189 ms |  92 ms |
+| Desktop JavaScript function time  |  77 ms |             86 ms |  23 ms |
+| Narrow renderer task time         | 152 ms |            150 ms | 118 ms |
+| Narrow JavaScript function time   |  83 ms |             75 ms |  31 ms |
+| Desktop p95 click-to-paint, all   |  81 ms |             82 ms |  76 ms |
+| Narrow p95 click-to-paint, all    |  86 ms |             85 ms |  79 ms |
+
+Main-thread JavaScript time during the AI stream fell by about 60–70% and
+renderer task time by 22–49%; p95 click-to-paint did not regress. The worker's narrow `ai-stream`
+wall time rose to 3.5 s. In this fixture the worker's socket upgrade is
+refused, so events wait for the next long-poll window. This measures
+fixture delivery lag, not the real WebSocket path. Real-server delivery lag
+and retained memory are still unmeasured; `HS2-MH5PWD` covers them and the
+default-on decision. `HS2-9XF60G` adds browser coverage for crash recovery
+and the skew fallback, which unit tests cover today.

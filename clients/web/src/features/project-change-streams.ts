@@ -1,12 +1,18 @@
 import type { Signal } from 'kerfjs';
 
 import { applyConversationActivity, applyConversationEvent } from '../ai-conversation';
-import { Api, type PollResponse } from '../api';
+import { Api, CHANGE_STREAM_CLIENT_ID, type PollResponse } from '../api';
+import { type ChangeStreamWorkerLike, createChangeStreamWorkerHost } from '../change-stream-worker-host';
 import type { ProjectTabBarMode } from '../components/project-tab-bar';
 import type { Project } from '../interactions/types';
 import type { LocalTicketChangeAcknowledgements } from '../local-ticket-changes';
 import { parsePermissionResolution } from '../permission-notifications';
-import { containsRepositoryChange, containsTicketChange, startProjectChangeStream } from '../project-change-poll';
+import {
+  containsRepositoryChange,
+  containsTicketChange,
+  type ProjectChangeStreamOptions,
+  startProjectChangeStream,
+} from '../project-change-poll';
 import type { createRefreshBarrier } from '../refresh-barrier';
 import type { createDriveConversationsController } from './drive-conversations';
 import type { createPermissionsController } from './permissions';
@@ -37,8 +43,34 @@ export interface ProjectChangeStreamsDependencies {
   refreshCustomViews: (current?: Project) => Promise<unknown>;
   refreshRepositoryStatus: () => Promise<unknown>;
   loadConfidenceReport: (target: Project) => Promise<unknown>;
-  /** Marks a stream-triggered refresh so the ticket refresh treats it as background work. */
+  /**
+   * Run every project's transport in the shared change-stream worker (HS2-SH9179). Off by default;
+   * defaults to the `hotsheet.change-stream-worker` local setting. The main-thread stream remains
+   * the fallback whenever the worker is disabled, unavailable, version-skewed, or crash-looping.
+   */
+  useChangeStreamWorker?: boolean;
+  /** Injected for tests; defaults to the bundled module worker. */
+  createChangeStreamWorker?: () => ChangeStreamWorkerLike | undefined;
 }
+
+/** Local setting that opts this browser into the shared change-stream worker (HS2-SH9179). */
+export const CHANGE_STREAM_WORKER_SETTING = 'hotsheet.change-stream-worker';
+
+export function changeStreamWorkerEnabled(): boolean {
+  try {
+    return localStorage.getItem(CHANGE_STREAM_WORKER_SETTING) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+const createBundledChangeStreamWorker = (): ChangeStreamWorkerLike | undefined =>
+  typeof Worker === 'undefined'
+    ? undefined
+    : new Worker(new URL('../change-stream.worker.ts', import.meta.url), {
+        type: 'module',
+        name: 'hotsheet-change-stream',
+      });
 
 /**
  * Owns one live change stream per open project (WebSocket or long poll, never a polling timer)
@@ -71,6 +103,20 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     loadConfidenceReport,
   } = dependencies;
   const projectChangeStreams = new Map<string, () => void>();
+  const useWorker = dependencies.useChangeStreamWorker ?? changeStreamWorkerEnabled();
+  let workerHost: ReturnType<typeof createChangeStreamWorkerHost> | undefined;
+  const startStream = (current: Project, streamOptions: ProjectChangeStreamOptions): (() => void) => {
+    if (!useWorker) return startProjectChangeStream(streamOptions);
+    workerHost ??= createChangeStreamWorkerHost({
+      createWorker: dependencies.createChangeStreamWorker ?? createBundledChangeStreamWorker,
+      clientId: CHANGE_STREAM_CLIENT_ID,
+    });
+    const api = new Api(current.apiPath);
+    return workerHost.start(current.id, streamOptions, {
+      apiUrl: new URL(current.apiPath, location.href).href.replace(/\/$/u, ''),
+      webSocketUrl: api.changeWebSocketUrl(),
+    });
+  };
   const repositoryRefreshTimers = new Map<string, number>();
   let disposed = false;
   function scheduleRepositoryRefresh(current: Project) {
@@ -101,7 +147,7 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
       }
     for (const current of projects.value)
       if (!projectChangeStreams.has(current.id)) {
-        const stop = startProjectChangeStream({
+        const stop = startStream(current, {
           client: new Api(current.apiPath),
           beforeRefresh: () => localTicketMutationBarrier.wait(),
           shouldRefresh: (response) =>
@@ -189,6 +235,8 @@ export function createProjectChangeStreamsController(dependencies: ProjectChange
     disposed = true;
     for (const stop of projectChangeStreams.values()) stop();
     projectChangeStreams.clear();
+    workerHost?.dispose();
+    workerHost = undefined;
     for (const timer of repositoryRefreshTimers.values()) window.clearTimeout(timer);
     repositoryRefreshTimers.clear();
   }

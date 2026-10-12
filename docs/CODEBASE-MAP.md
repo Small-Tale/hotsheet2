@@ -86,7 +86,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       terminal-names.ts       # Terminal tab names: local in-flight copy, serialized writes, reset, reconcile, live rename events
       workspace-search.ts     # Workspace token search: debounced server search, boolean paging, sidebar match counts, partial warning (HS2-3JGWTV)
       project-close.ts        # Project-close confirmation queue, live-resource inventory, confirm/close-all/cancel (HS2-3JGWTV)
-      project-change-streams.ts # Per-project WebSocket/long-poll change streams, event fan-out, debounced repository refresh (HS2-3JGWTV)
+      project-change-streams.ts # Per-project WebSocket/long-poll change streams, event fan-out, debounced repository refresh (HS2-3JGWTV); `hotsheet.change-stream-worker` local setting routes transports through the shared worker (HS2-SH9179, off by default)
       terminal-dashboard.ts # Terminal dashboard snapshot: per-project terminal fetch/merge, AI-connection grace, visibility scopes, drawer tab order (HS2-ZJ67VE)
       board-column-paging.ts # Per-column board paging: refresh spec, bulk status-change refill, one column's Load more (HS2-H2R2JB)
       project-teardown.ts # Closing project tabs: per-project record pruning and the next selected tab (HS2-DCTS07); createProjectTeardown runs the closeProjectIds orchestration and reader disposal (HS2-BSSWGV)
@@ -168,7 +168,12 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     tests/project-sidebar-state.spec.ts # Atomic new-project activation, project-keyed sidebar count/trend isolation, and stale background-snapshot rejection
-    src/project-change-poll.ts # Replay-safe per-open-project long poll; ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle
+    src/project-change-poll.ts # Replay-safe per-open-project change transport (WebSocket-first, long-poll fallback, `resume`) plus the main-thread consumer it feeds (HS2-SH9179); ticket invalidation, overflow/reconnect recovery, onResync hook (initial/reconnect/overflow) that replaces permission polling (HS2-NKCXW4), and abortable lifecycle
+    src/change-stream-worker-protocol.ts # Versioned main<->worker change-stream messages (generation tokens, acks), their validators, and the bounded coalescing per-project delivery queue (HS2-SH9179)
+    src/change-stream-worker-runtime.ts # Worker-side runtime: one transport per open project, worker poll client, open/close/ack handling (HS2-SH9179)
+    src/change-stream.worker.ts # Dedicated module-worker entry for the shared change stream (HS2-SH9179)
+    src/change-stream-worker-host.ts # Main-thread worker owner: ordered per-project apply + ack, crash restart replaying from the last applied cursor, skew/ready/crash-loop fallback to the main-thread stream (HS2-SH9179)
+    src/change-stream-worker.test.ts # Transition-matrix tests: handshake, gap, repeat, out-of-order, reconnect, cancel, restart, skew, coalescing/overflow
     src/local-bridge-client.ts # Typed `/__hotsheet/*` local-bridge adapter: JSON parse as unknown, server-error surfacing, and per-endpoint response parsers (HS2-313JET)
     src/json-value.ts # Shared untrusted-JSON helpers (parse as unknown, isRecord, error-body extraction) used instead of unchecked JSON.parse/json() casts (HS2-3DA0FQ)
     src/server-response-parsers.ts # Per-endpoint parsers for successful server bodies used by `Api.parsed` and the project bridge's `serverRequest` for every endpoint: hand-written parsers (compatibility, checkouts, project open) plus declarative `shape()` DTO parsers for tickets, providers, repository, terminals, AI drive, commands, and the change poll; `Api` has no unchecked cast (HS2-34P6XY, HS2-E0AG5E)
@@ -247,7 +252,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
       command-run-dialog-demo.tsx # CommandRunDialog fixture: run-output / stop-confirmation Presentation setting, open-signal remount, wa-hide/dismiss/stop fixture events (HS2-CWWX7S, HS2-Z7C27E)
       demo-actions.ts      # Kerf attr() specs (DEMO_ACTIONS/COMPONENTS/FIELDS/MARKERS) for every simple selector the catalog delegates on (HS2-G838PZ)
-    tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in UI and binary-PTY load traces (`profile:ui`, `profile:pty`)
+    tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in UI and binary-PTY load traces (`profile:ui`, `profile:ui:worker`, `profile:pty`)
+    tests/change-stream-worker.spec.ts # Two projects followed through the opt-in shared change-stream worker while switching/searching/updating; bounded idle long polls; close cancels one project; setting off keeps the main-thread stream (HS2-SH9179)
     tests/real-pty-profile.spec.ts  #   Opt-in isolated local-server/OS-PTY transport profile (`profile:pty:real`)
     tests/firefox-pty-profile.spec.ts  #   Opt-in Firefox WebGL/DOM PTY throughput and park/resume profile (`profile:pty:firefox`)
     tests/ticket-page-fixture.ts # ticketsJson(request, rows): Playwright fake mirroring the real checkout ticket page envelope/plain-list split with client-derived counts (HS2-5T7QHE)

@@ -14765,7 +14765,13 @@ for (const viewport of [
   }, testInfo) => {
     test.skip(process.env.HOTSHEET_UI_PROFILE !== '1', 'Run npm run profile:ui.');
     const ptyProfile = process.env.HOTSHEET_PTY_PROFILE === '1';
+    // HS2-SH9179: profile the opt-in shared change-stream worker instead of the main-thread stream.
+    const workerStream = process.env.HOTSHEET_CHANGE_STREAM_WORKER === '1';
     test.setTimeout(ptyProfile ? 120_000 : 60_000);
+    if (workerStream)
+      await page.addInitScript(() => {
+        localStorage.setItem('hotsheet.change-stream-worker', 'true');
+      });
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.addInitScript((enablePtyFrames) => {
       const scope = window as typeof window & { __interactionTimings?: unknown[] };
@@ -14862,10 +14868,34 @@ for (const viewport of [
       const match = new URL(request.url()).pathname.match(/\/drive\/connections\/([^/]+)\/turns$/);
       if (match && request.method() === 'POST') connectionId = decodeURIComponent(match[1]);
     });
-    await page.route('**/ws/poll*', (route) => route.fulfill({ json: { cursor, events: [], overflow: false } }));
+    // Worker WebSockets bypass Playwright's page WebSocket routing, so the worker profile delivers
+    // the same change events through genuine long polls held until an event arrives.
+    const changeLog: Array<{ cursor: number }> = [];
+    let releaseHeldPolls: Array<() => void> = [];
+    await page.route('**/ws/poll*', async (route) => {
+      const params = new URL(route.request().url()).searchParams,
+        since = params.get('since');
+      const pending = () => (since === null ? [] : changeLog.filter((item) => item.cursor > Number(since)));
+      if (workerStream && since !== null && params.get('timeout_ms') !== '0' && !pending().length)
+        await new Promise<void>((resolve) => {
+          releaseHeldPolls.push(resolve);
+          setTimeout(resolve, Math.min(Number(params.get('timeout_ms') ?? 0), 2_000));
+        });
+      await route.fulfill({ json: { cursor, events: pending(), overflow: false } }).catch(() => undefined);
+    });
     await page.routeWebSocket(/\/ws\/sync(?:\?|$)/, (route) => {
       sockets.push(route);
     });
+    const publishChange = (change: { cursor: number; [key: string]: unknown }) => {
+      if (!workerStream) {
+        sockets[0].send(JSON.stringify(change));
+        return;
+      }
+      changeLog.push(change);
+      const held = releaseHeldPolls;
+      releaseHeldPolls = [];
+      for (const release of held) release();
+    };
     await page.goto('/');
     await page.getByRole('button', { name: 'Open project' }).click();
     await page.getByRole('button', { name: 'Open project', exact: true }).last().click();
@@ -14948,23 +14978,21 @@ for (const viewport of [
       await composer.fill('Profile a sustained response');
       await composer.press('Enter');
       await expect.poll(() => connectionId).toBeTruthy();
-      await expect.poll(() => sockets.length).toBeGreaterThan(0);
+      if (!workerStream) await expect.poll(() => sockets.length).toBeGreaterThan(0);
       await sample('ai-stream', async () => {
         for (let index = 0; index < 30; index += 1) {
           cursor += 1;
-          sockets[0].send(
-            JSON.stringify({
-              cursor,
-              store: '/work/demo.hs2',
-              kind: 'turn_event',
-              id: connectionId,
-              slug: 'codex',
-              turn: {
-                connection_id: connectionId,
-                event: { type: 'output', content: `profile stream chunk ${index} ` },
-              },
-            }),
-          );
+          publishChange({
+            cursor,
+            store: '/work/demo.hs2',
+            kind: 'turn_event',
+            id: connectionId,
+            slug: 'codex',
+            turn: {
+              connection_id: connectionId,
+              event: { type: 'output', content: `profile stream chunk ${index} ` },
+            },
+          });
           await page.waitForTimeout(20);
         }
         await expect(drawer).toContainText('profile stream chunk 29');
@@ -15021,19 +15049,17 @@ for (const viewport of [
             }
             if (index % 20 === 0) {
               cursor += 1;
-              sockets[0].send(
-                JSON.stringify({
-                  cursor,
-                  store: '/work/demo.hs2',
-                  kind: 'turn_event',
-                  id: connectionId,
-                  slug: 'codex',
-                  turn: {
-                    connection_id: connectionId,
-                    event: { type: 'output', content: `PTY concurrent AI ${index}` },
-                  },
-                }),
-              );
+              publishChange({
+                cursor,
+                store: '/work/demo.hs2',
+                kind: 'turn_event',
+                id: connectionId,
+                slug: 'codex',
+                turn: {
+                  connection_id: connectionId,
+                  event: { type: 'output', content: `PTY concurrent AI ${index}` },
+                },
+              });
               aiMessages += 1;
             }
             await page.waitForTimeout(3);
@@ -15119,7 +15145,7 @@ for (const viewport of [
       }
       await cdp.send('IO.close', { handle: stream });
       mkdirSync('target/performance-traces', { recursive: true });
-      const prefix = ptyProfile ? 'hs2-k7fjvk' : 'hs2-wdtn3w';
+      const prefix = `${ptyProfile ? 'hs2-k7fjvk' : 'hs2-wdtn3w'}${workerStream ? '-worker' : ''}`;
       const tracePath = `target/performance-traces/${prefix}-${viewport.name}-chromium-trace.json`;
       writeFileSync(tracePath, Buffer.concat(chunks));
       await testInfo.attach(`${prefix}-${viewport.name}-chromium-trace.json`, {
@@ -15130,7 +15156,7 @@ for (const viewport of [
     const timings = await page.evaluate(
       () => (window as typeof window & { __interactionTimings?: unknown[] }).__interactionTimings ?? [],
     );
-    const prefix = ptyProfile ? 'hs2-k7fjvk' : 'hs2-wdtn3w';
+    const prefix = `${ptyProfile ? 'hs2-k7fjvk' : 'hs2-wdtn3w'}${workerStream ? '-worker' : ''}`;
     const windowsPath = `target/performance-traces/${prefix}-${viewport.name}-interaction-windows.json`;
     writeFileSync(windowsPath, JSON.stringify({ viewport, windows, timings, ptyMetrics }, null, 2));
     await testInfo.attach(`${prefix}-${viewport.name}-interaction-windows.json`, {
