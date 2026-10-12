@@ -89,7 +89,7 @@ test('demonstrates project chooser states and opens again after empty, error, an
     .toBe(0);
   await remote.getByRole('button', { name: 'Demo /work/demo', exact: true }).focus();
   const firstRow = await remote.locator('[data-component="list-item"]').first().boundingBox();
-  const list = await remote.getByRole('list', { name: 'Open projects' }).boundingBox();
+  const list = await remote.getByRole('navigation', { name: 'Open projects' }).boundingBox();
   expect(firstRow!.y - list!.y).toBeGreaterThanOrEqual(4);
   await page.screenshot({ path: 'target/visual-captures/hs2-xx5y2x-remote-project-mobile-dark.png' });
   await cancel();

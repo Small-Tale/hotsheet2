@@ -28,12 +28,13 @@ describe('project dialogs', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'project-dialog.css'), 'utf8');
     expect(markup).toContain('data-checkout-root="/work/demo"');
     expect(markup).toContain('>Demo</span>');
+    expect(markup).toContain('remote-project-dialog__path"');
     expect(markup).toContain('data-component="list-item"');
     expect(markup).toContain('data-multiline="true"');
     expect(markup).toContain('data-action="open-remote-checkout"');
     expect(markup).toContain('data-item-id="demo"');
     expect(markup).toContain('aria-label="Open projects"');
-    expect(css).toContain('.remote-project-dialog__copy');
+    expect(css).not.toContain('.remote-project-dialog__copy');
     expect(css).not.toContain('.remote-project-dialog__item');
   });
 
@@ -51,7 +52,7 @@ describe('project dialogs', () => {
     );
     expect(markup).toContain(`data-checkout-root="${root}"`);
     expect(markup).toContain(`>${root.split('/').pop()}</span>`);
-    expect(markup).toContain('>/</span>');
+    expect(markup).toContain(`>${root}</span>`);
     expect(markup).toContain('&lt;script&gt;oops&lt;/script&gt;');
     expect(markup).not.toContain('<script>');
     expect(markup).toContain('data-checkout-root="/work/&quot;quoted&quot;"');
@@ -83,13 +84,20 @@ describe('project dialogs', () => {
     expect(remoteMarkup).toContain('data-component="list"');
     expect(remoteMarkup).toContain('data-gap="true"');
     expect(css).toMatch(/\.project-dialog__path \{[^}]*gap: var\(--kui-space-xs\)/);
-    expect(css).toMatch(/\.remote-project-dialog__list \{[^}]*gap: var\(--kui-space-2xs\)/);
-    expect(css).toMatch(/\.remote-project-dialog__copy \{[^}]*gap: var\(--kui-space-2xs\)/);
     expect(css).not.toContain('--kui-layout-inline-margin:');
-    expect(css).toMatch(/\.remote-project-dialog__path \{[^}]*overflow-wrap: anywhere;[^}]*word-break: break-all/);
-    expect(css).toMatch(/\.remote-project-dialog__list > li \{[^}]*min-width: 0;[^}]*margin: 0/);
-    expect(css).toMatchSource(
-      /\.project-dialog__server-recovery \{[^}]*gap:var\(--kui-space-xs\); padding:var\(--kui-space-m\)/,
+    // Kerf owns the dialog width, error tone, recovery banner, and checkout rows (HS2-FKPQW2).
+    expect([...css.matchAll(/^[.\w@][^{\n]*\{/gm)].map((match) => match[0].trim())).toEqual([
+      '.project-dialog__path {',
+      '.project-dialog__path wa-button::part(base) {',
+      '.project-dialog__error:empty {',
+      '.remote-project-dialog__list {',
+    ]);
+    expect(localMarkup).toContain('data-component="dialog-surface"');
+    const recovery = String(
+      ProjectDialog({ open: true, root: '.', error: 'Down', recovery: { expected: { pid: 7 } } }),
     );
+    expect(recovery).toContain('data-component="state-banner"');
+    expect(recovery).toContain('data-tone="warning"');
+    expect(recovery).toContain('data-tone="danger"');
   });
 });

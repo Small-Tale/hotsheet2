@@ -1,9 +1,12 @@
 import './project-dialog.css';
 
+import { remify } from '@kerfjs/ui/css-values';
 import { List } from '@kerfjs/ui/list';
 import { ListItem } from '@kerfjs/ui/list-item';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Row } from '@kerfjs/ui/row';
+import { StateBanner } from '@kerfjs/ui/state-banner';
+import { DialogSurface } from '@kerfjs/ui/surface-scaffold';
 import { Text } from '@kerfjs/ui/text';
 import { Ellipsis } from 'lucide';
 
@@ -33,9 +36,9 @@ export function ProjectDialog({
   recoveryBusy?: boolean;
 }) {
   return (
-    <wa-dialog data-project-dialog label="Open project" open={open} data-controlled-open={String(open)}>
-      <form {...REPOSITORY_ACTIONS.openProjectForm.attrs}>
-        <div class="project-dialog">
+    <DialogSurface preferredWidth={remify(768)} viewportGutter={remify(16)}>
+      <wa-dialog data-project-dialog label="Open project" open={open} data-controlled-open={String(open)}>
+        <form {...REPOSITORY_ACTIONS.openProjectForm.attrs}>
           <List gap="m">
             <Text tone="quiet">
               Select a code checkout. Hot Sheet automatically uses a valid sibling <code>&lt;project&gt;.hs2</code>{' '}
@@ -69,17 +72,23 @@ export function ProjectDialog({
                 <LucideIcon size="s" icon={Ellipsis} name="ellipsis" />
               </wa-button>
             </div>
-            <p class="project-dialog__error" role="alert">
-              {error}
-            </p>
+            <div class="project-dialog__error" role="alert">
+              {error && (
+                <Text flush tone="danger">
+                  {error}
+                </Text>
+              )}
+            </div>
             {recovery && (
-              <section class="project-dialog__server-recovery" role="alert">
-                <strong>Unresponsive local server</strong>
-                <p>
-                  Hot Sheet cannot verify active work. Recovery first asks process {recovery.expected.pid} to stop, then
-                  force-stops only that exact registered instance if necessary.
-                </p>
-                <div class="project-dialog__server-recovery-action">
+              <StateBanner
+                className="project-dialog__server-recovery"
+                tone="warning"
+                urgency="alert"
+                copyLayout="stacked"
+                actionPlacement="below"
+                title="Unresponsive local server"
+                detail={`Hot Sheet cannot verify active work. Recovery first asks process ${recovery.expected.pid} to stop, then force-stops only that exact registered instance if necessary.`}
+                action={
                   <wa-button
                     appearance="outlined"
                     type="button"
@@ -88,8 +97,8 @@ export function ProjectDialog({
                   >
                     {recoveryBusy ? 'Recovering…' : 'Stop server and retry'}
                   </wa-button>
-                </div>
-              </section>
+                }
+              />
             )}
             <footer>
               <Row hAlign="right" vAlign="middle" gap="xs">
@@ -102,9 +111,9 @@ export function ProjectDialog({
               </Row>
             </footer>
           </List>
-        </div>
-      </form>
-    </wa-dialog>
+        </form>
+      </wa-dialog>
+    </DialogSurface>
   );
 }
 
@@ -121,45 +130,49 @@ export function RemoteProjectDialog({
 }) {
   return (
     <wa-dialog data-remote-project-dialog label="Open a project" open={open} data-controlled-open={String(open)}>
-      <div class="project-dialog remote-project-dialog">
+      <div class="remote-project-dialog">
         <List gap="m">
           <Text tone="quiet">
             Pick a project that is open on the Hot Sheet server. Browsing the server’s files isn’t available from
             another device.
           </Text>
           {loading ? (
-            <p class="project-dialog__loading" role="status">
+            <Text flush role="status">
               Loading projects…
-            </p>
+            </Text>
           ) : error ? (
-            <p class="project-dialog__error" role="alert">
-              {error}
-            </p>
+            <div class="project-dialog__error" role="alert">
+              <Text flush tone="danger">
+                {error}
+              </Text>
+            </div>
           ) : checkouts.length === 0 ? (
-            <p class="remote-project-dialog__empty">
+            <Text flush tone="quiet">
               No projects are open on the server yet. Open one from the device running Hot Sheet first.
-            </p>
+            </Text>
           ) : (
-            <ul class="remote-project-dialog__list" aria-label="Open projects" role="list">
-              {checkouts.map((checkout) => (
-                <li>
+            <nav class="remote-project-dialog__list" aria-label="Open projects">
+              <List gap="2xs">
+                {checkouts.map((checkout) => (
                   <ListItem
                     action="open-remote-checkout"
                     itemId={checkout.id}
                     multiline
                     rootAttributes={{ 'data-checkout-root': checkout.root }}
                     label={
-                      <span class="remote-project-dialog__copy">
-                        <span class="remote-project-dialog__name">
-                          {checkout.alias || checkout.root.split('/').filter(Boolean).pop() || checkout.root}
-                        </span>
-                        <small class="remote-project-dialog__path">{checkout.root}</small>
-                      </span>
+                      <Text variant="span" wrap="anywhere">
+                        {checkout.alias || checkout.root.split('/').filter(Boolean).pop() || checkout.root}
+                      </Text>
+                    }
+                    description={
+                      <Text variant="span" wrap="anywhere" className="remote-project-dialog__path">
+                        {checkout.root}
+                      </Text>
                     }
                   />
-                </li>
-              ))}
-            </ul>
+                ))}
+              </List>
+            </nav>
           )}
           <footer>
             <Row hAlign="right" vAlign="middle" gap="xs">

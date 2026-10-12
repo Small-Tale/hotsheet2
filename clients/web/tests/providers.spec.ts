@@ -2506,7 +2506,7 @@ test('remote clients pick from the server open-projects list instead of the file
       listScrollWidth: list.scrollWidth,
       pathHeight: path.getBoundingClientRect().height,
       pathLineHeight: parseFloat(pathStyle.lineHeight),
-      wordBreak: pathStyle.wordBreak,
+      overflowWrap: pathStyle.overflowWrap,
       rowsFit: [...list.querySelectorAll('button')].every((button) => {
         const row = button.getBoundingClientRect();
         const bounds = list.getBoundingClientRect();
@@ -2516,7 +2516,7 @@ test('remote clients pick from the server open-projects list instead of the file
   });
   expect(geometry.listScrollWidth).toBeLessThanOrEqual(geometry.listWidth);
   expect(geometry.pathHeight).toBeGreaterThan(geometry.pathLineHeight * 2);
-  expect(geometry.wordBreak).toBe('break-all');
+  expect(geometry.overflowWrap).toBe('anywhere');
   expect(geometry.rowsFit).toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-xx5y2x-remote-project-mobile.png' });
   await page.emulateMedia({ colorScheme: 'dark' });

@@ -495,12 +495,11 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
   const spacing = await page.evaluate(() => {
     const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
     return {
-      dialogGap: style('.project-dialog > [data-component="list"]').gap,
+      dialogGap: style('.remote-project-dialog > [data-component="list"]').gap,
       pathGap: style('.project-dialog__path').gap,
-      footerGap: style('.project-dialog footer [data-component="row"]').gap,
-      listGap: style('.remote-project-dialog__list').gap,
-      itemGap: style('.remote-project-dialog__copy').gap,
-      itemPadding: style('.remote-project-dialog__list .kui-list-item').padding,
+      footerGap: style('.remote-project-dialog footer [data-component="row"]').gap,
+      listGap: style('.remote-project-dialog__list > [data-component="list"]').gap,
+      itemPadding: style('.remote-project-dialog__list [data-component="list-item"]').padding,
     };
   });
   expect(spacing).toEqual({
@@ -508,7 +507,6 @@ test('uses canonical spacing in local and remote project dialogs (HS2-4Y6SM9)', 
     pathGap: '8px',
     footerGap: '8px',
     listGap: '4px',
-    itemGap: '4px',
     itemPadding: '8px',
   });
   await page.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-project-dialog-remote-wide.png' });
