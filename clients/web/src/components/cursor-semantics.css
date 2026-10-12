@@ -1,3 +1,5 @@
+/* App cursor policy (CLAUDE.md): browsers draw the default arrow on native controls, and neither Kerf's
+   document baseline nor Web Awesome sets these cursors (a Kerf baseline is requested in KF-C336VV). */
 button:not(:disabled),
 a[href],
 [role='button']:not([aria-disabled='true']),
@@ -13,27 +15,18 @@ input:disabled {
 
 input:not([type]),
 input:is([type='text'], [type='search'], [type='email'], [type='url'], [type='password'], [type='number']),
-textarea,
-wa-input:not([disabled])::part(input) {
+textarea {
   cursor: text;
 }
 
-wa-button:not([disabled])::part(base),
-wa-checkbox:not([disabled])::part(checkbox),
-wa-select:not([disabled])::part(combobox),
-wa-tag[with-remove]:not([data-disabled='true'])::part(remove-button__base) {
-  cursor: pointer;
-}
-/* wa-dropdown-item owns its pointer and not-allowed cursors (Web Awesome's own styles), so the app
-   no longer restyles the element (Kerf doctor KUI-L019, HS2-9ME409). */
-
-wa-button[disabled]::part(base),
-wa-checkbox[disabled]::part(checkbox),
-wa-select[disabled]::part(combobox),
-wa-input[disabled]::part(input) {
-  cursor: not-allowed !important;
+/* Web Awesome keeps a pointer on a disabled wa-button's base part; every other Web Awesome control
+   owns its pointer, text, and not-allowed cursors, so the app no longer restyles them (HS2-SAMFX0). */
+wa-button[disabled]::part(base) {
+  cursor: not-allowed;
 }
 
+/* The shell's pointer-drag resize (interactions/shell-and-global.ts) keeps its cursor while the pointer
+   leaves the separator. */
 body[data-resizing-region='horizontal'] {
   cursor: col-resize;
 }
