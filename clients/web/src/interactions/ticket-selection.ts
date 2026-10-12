@@ -3,6 +3,7 @@ import { createScope } from 'kerfjs/scope';
 
 import { type FullTicket, type TicketCloseReason, type TicketRow as WireTicketRow } from '../api';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
+import { wireBulkTicketDialog } from '../components/bulk-ticket-dialog-interactions';
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
 import { wireTicketCollection } from '../components/ticket-collection-interactions';
 import { isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
@@ -280,40 +281,28 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     }),
   );
   lifetime.add(
-    delegate(document.body, 'submit', TICKET_SELECTION_ACTIONS.submitBulkTag.selector, (event, target) => {
-      event.preventDefault();
-      const value = target.querySelector<Control>('[name="bulk-ticket-tag"]')?.value ?? '',
-        mode = data(target).tagMode;
-      if (mode === 'add' || mode === 'remove')
+    wireBulkTicketDialog(document.body, {
+      submitTag: (mode, tag) => {
         void executeBulkTicketAction(
-          { kind: mode === 'add' ? 'add-tag' : 'remove-tag', tag: value },
+          { kind: mode === 'add' ? 'add-tag' : 'remove-tag', tag },
           dependencies.bulkTicketSlugs,
         );
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.chooseBulkTag.selector, (_event, target) => {
-      const input = document.querySelector<Control>('[name="bulk-ticket-tag"]');
-      if (input) {
-        input.value = data(target).tag ?? '';
-        input.focus();
-      }
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.cancelBulkTicketAction.selector, () => {
-      bulkTicketDialog.value = undefined;
-      dependencies.bulkTicketSlugs = [];
+      },
+      confirmDelete: () => {
+        void executeBulkTicketAction({ kind: 'delete' }, dependencies.bulkTicketSlugs);
+      },
+      confirmEmptyTrash: () => {
+        void emptyTrash();
+      },
+      dismiss: () => {
+        bulkTicketDialog.value = undefined;
+        dependencies.bulkTicketSlugs = [];
+      },
     }),
   );
   lifetime.add(
     delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.openEmptyTrash.selector, () => {
       openEmptyTrash();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.confirmEmptyTrash.selector, () => {
-      void emptyTrash();
     }),
   );
   lifetime.add(
@@ -368,22 +357,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       dependencies.ticketLinkReturnFocus = target as HTMLElement;
       void openDuplicateTarget(data(target).targetId ?? data(target).itemId!);
     }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.confirmBulkDelete.selector, () => {
-      void executeBulkTicketAction({ kind: 'delete' }, dependencies.bulkTicketSlugs);
-    }),
-  );
-  lifetime.add(
-    delegate(
-      document.body,
-      'wa-hide',
-      '[data-component="bulk-tag-dialog"], [data-component="bulk-delete-dialog"], [data-component="empty-trash-dialog"]',
-      () => {
-        bulkTicketDialog.value = undefined;
-        dependencies.bulkTicketSlugs = [];
-      },
-    ),
   );
   lifetime.add(
     delegate(document.body, 'input', TICKET_SELECTION_TARGETS.notWorkingNoteField.selector, (_event, target) => {
