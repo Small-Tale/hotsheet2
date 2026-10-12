@@ -105,7 +105,7 @@
   line-height: 1.4;
 }
 /* Touch screens grow New ticket details with its content from one comfortable line instead of a
-   stored resize height (textarea-sizing.css, HS2-6PC150). */
+   stored resize height (hot-sheet-tokens.css, HS2-6PC150). */
 @supports (field-sizing: content) {
   @media (pointer: coarse) {
     .quick-ticket-composer__details textarea {

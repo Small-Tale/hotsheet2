@@ -18,16 +18,15 @@ function rules(css: string): Array<{ selector: string; body: string }> {
 
 describe('touch textarea sizing (HS2-6PC150)', () => {
   it('turns on content sizing without a resize grip only for coarse pointers that support it', () => {
-    const css = readFileSync(new URL('./textarea-sizing.css', import.meta.url), 'utf8');
+    // The switch is a product token, so it lives with the other Hot Sheet tokens (HS2-V44W9T).
+    const css = readFileSync(new URL('../hot-sheet-tokens.css', import.meta.url), 'utf8');
     expect(css).toMatch(
       /@supports \(field-sizing: content\) \{\s*@media \(pointer: coarse\) \{\s*:root \{\s*--hotsheet-textarea-field-sizing: content;\s*--hotsheet-textarea-resize: none;/,
     );
-    expect(readFileSync(new URL('../style.css', import.meta.url), 'utf8')).toContain(
-      "@import './components/textarea-sizing.css';",
-    );
+    expect(readFileSync(new URL('../main.tsx', import.meta.url), 'utf8')).toContain("import './hot-sheet-tokens.css';");
     // The UX demo loads the same shared tokens so touch auto-grow is representable in the catalog (HS2-YBBJEN).
-    expect(readFileSync(new URL('../ux-demo/style.css', import.meta.url), 'utf8')).toContain(
-      "@import '../components/textarea-sizing.css';",
+    expect(readFileSync(new URL('../ux-demo/main.tsx', import.meta.url), 'utf8')).toContain(
+      "import '../hot-sheet-tokens.css';",
     );
   });
 

@@ -2139,9 +2139,9 @@ package identity, and use the ownership fields to avoid duplicate wrappers or in
 
 Entries carry their phase as a Catalog tag; the per-entry last-modified stamps and their
 development feed were removed (HS2-HMVBZW).
-The demo stylesheet imports the same shared global token sheets as the app entry
-(`cursor-semantics.css` and `textarea-sizing.css`), so touch textarea auto-grow under a coarse
-pointer is representable in the catalog without duplicating component CSS (HS2-YBBJEN).
+The demo loads the same shared global sheets as the app entry (`cursor-semantics.css` and
+`hot-sheet-tokens.css`, which carries the coarse-pointer textarea tokens), so touch textarea
+auto-grow is representable in the catalog without duplicating component CSS (HS2-YBBJEN).
 Planned entries retain an explicit Planned tag.
 
 - a searchable component index grouped by the sections above

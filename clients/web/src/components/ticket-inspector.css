@@ -79,7 +79,7 @@
   flex-basis: 100%;
 }
 /* Touch screens size these editors to their content instead of a stored resize height
-   (textarea-sizing.css, HS2-6PC150). Same specificity as the presentation rules, so it wins by order. */
+   (hot-sheet-tokens.css, HS2-6PC150). Same specificity as the presentation rules, so it wins by order. */
 @supports (field-sizing: content) {
   @media (pointer: coarse) {
     .ticket-inspector__body[data-presentation] {

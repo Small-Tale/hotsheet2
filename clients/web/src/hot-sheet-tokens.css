@@ -54,3 +54,16 @@
   /* Large reader text multiplies every reading surface by this scale (HS2-MGVE50). */
   --hs-reader-text-scale: 1.5;
 }
+
+/* Touch screens draw no textarea resize grip (iOS Safari and WKWebView ignore `resize`), so on a
+   coarse primary pointer every app textarea sizes to its content instead: it starts at its
+   component's minimum height and grows as the user types. Components opt in by reading these
+   tokens; fine pointers and browsers without `field-sizing` keep the vertical grip (HS2-6PC150). */
+@supports (field-sizing: content) {
+  @media (pointer: coarse) {
+    :root {
+      --hotsheet-textarea-field-sizing: content;
+      --hotsheet-textarea-resize: none;
+    }
+  }
+}
