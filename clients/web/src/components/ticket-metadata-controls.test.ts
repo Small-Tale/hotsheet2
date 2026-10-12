@@ -5,13 +5,21 @@ import { Bug } from 'lucide';
 import { describe, expect, it } from 'vitest';
 
 import { groupAttachments, TicketAttachments } from './ticket-attachments';
-import { TicketCategorySelect } from './ticket-category-select';
+import { categoryColorToken, TicketCategorySelect } from './ticket-category-select';
 import { TicketInfoPanel } from './ticket-info-panel';
 import { TicketPrioritySelect } from './ticket-priority-select';
 import { statusMenuAnchorY, TicketStatusMenu } from './ticket-status-menu';
 import { TicketTimeline } from './ticket-timeline';
 
 describe('ticket metadata controls and inspector panels', () => {
+  it('colors built-in categories by their shared token and custom ones by the fallback (HS2-86A5CR)', () => {
+    expect(categoryColorToken('feature')).toBe('--hs-category-feature');
+    expect(categoryColorToken('requirement_change')).toBe('--hs-category-requirement-change');
+    expect(categoryColorToken('chore')).toBe('--hs-category-fallback');
+    const select = String(TicketCategorySelect({ name: 'category', value: 'bug' }));
+    expect(select).toContain('--hs-category-bug');
+    expect(select).toContain('--hs-category-requirement-change');
+  });
   it('reserves phone space above the Started submenu', () => {
     expect(statusMenuAnchorY(269, 390, 844)).toBeCloseTo(354.48);
     expect(statusMenuAnchorY(400, 390, 844)).toBe(400);
