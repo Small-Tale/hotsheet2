@@ -17,9 +17,16 @@ describe('ConversationExportDialog', () => {
   it('uses Kerf semantic spacing for dialog regions, choices, and connected labels', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'conversation-export-dialog.css'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toContain('gap: var(--kui-space-l)');
     expect(css).toContain('padding: var(--kui-space-xs)');
     expect(css).toContainSource('gap:var(--kui-space-2xs)');
+    // DialogSurface owns the shell and Kerf List/Text/ContentItem own the layout (HS2-3Q6FXF).
+    expect(css).not.toMatch(/::part|@media|__form|__header|__options|__collision|__screen/);
+    const markup = String(
+      ConversationExportDialog({ state: { source, messages, draft: defaultConversationExportDraft(), step: 2 } }),
+    );
+    expect(markup).toContain('data-component="dialog-surface"');
+    expect(markup).toContain('data-preferred-width');
+    expect(markup).toContain('<div class="conversation-export-dialog__error" role="alert"></div>');
   });
 
   it('skips message scope when the chat has no selection', () => {

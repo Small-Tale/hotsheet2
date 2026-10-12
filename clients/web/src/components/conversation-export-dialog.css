@@ -1,45 +1,20 @@
-.conversation-export-dialog::part(dialog) {
-  width: min(remify(624px), calc(100vw - remify(32px)));
-  max-height: min(remify(704px), calc(100vh - remify(32px)));
-}
-.conversation-export-dialog::part(body) {
-  padding-block: var(--kui-space-m);
-}
-.conversation-export-dialog__form {
-  display: grid;
-  gap: var(--kui-space-l);
-}
-.conversation-export-dialog__screen {
-  min-width: 0;
-}
-.conversation-export-dialog__header {
-  display: grid;
-  gap: var(--kui-space-2xs);
-}
-.conversation-export-dialog__header > span {
-  color: var(--wa-color-brand-on-quiet);
-  font-size: var(--wa-font-size-xs);
-  font-weight: var(--wa-font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.conversation-export-dialog__header > strong {
-  font-size: var(--wa-font-size-l);
-}
+/* Native fieldset reset: the radio and checkbox groups keep fieldset/legend semantics, which carry
+   browser border, padding, and legend chrome that Kerf List does not own. */
 .conversation-export-dialog__section {
   display: grid;
   min-width: 0;
-  padding: 0;
   margin: 0;
+  padding: 0;
   border: 0;
   gap: var(--kui-space-xs);
 }
 .conversation-export-dialog__section legend {
-  padding: 0;
   margin-bottom: var(--kui-space-xs);
-  font-size: var(--wa-font-size-m);
+  padding: 0;
   font-weight: var(--wa-font-weight-semibold);
 }
+/* Selectable option cards around native radio and checkbox inputs: no Kerf or app component frames a
+   native input with a title, description, and checked/danger/disabled states yet (HS2-V7PCS6). */
 .conversation-export-dialog__choice {
   display: grid;
   padding: var(--kui-space-xs);
@@ -53,6 +28,10 @@
 .conversation-export-dialog__choice:has(input:checked) {
   border-color: var(--wa-color-brand-border-normal);
   background: var(--wa-color-brand-fill-quiet);
+}
+.conversation-export-dialog__choice--danger:has(input:checked) {
+  border-color: var(--wa-color-danger-border-normal);
+  background: var(--wa-color-danger-fill-quiet);
 }
 .conversation-export-dialog__choice:has(input:disabled) {
   cursor: default;
@@ -70,42 +49,7 @@
   color: var(--wa-color-neutral-on-quiet);
   line-height: 1.35;
 }
-.conversation-export-dialog__choice--danger:has(input:checked) {
-  border-color: var(--wa-color-danger-border-normal);
-  background: var(--wa-color-danger-fill-quiet);
-}
-.conversation-export-dialog__collision {
-  display: grid;
-  padding: var(--kui-space-xs);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-warning-fill-quiet);
-  gap: var(--kui-space-2xs);
-}
-.conversation-export-dialog__collision-tag {
-  justify-self: start;
-}
-.conversation-export-dialog__collision > p {
-  margin: 0;
-  color: var(--wa-color-warning-on-quiet);
-  font-size: var(--wa-font-size-s);
-}
-.conversation-export-dialog__options {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--kui-space-2xs);
-}
+/* Reserve one line for validation so toggling an option does not shift the dialog's actions. */
 .conversation-export-dialog__error {
   min-height: 1.2em;
-  margin: 0;
-  color: var(--wa-color-danger-on-quiet);
-  font-size: var(--wa-font-size-s);
-}
-.conversation-export-dialog__error:empty {
-  visibility: hidden;
-}
-@media (max-width: remify(576px)) {
-  .conversation-export-dialog::part(dialog) {
-    width: calc(100vw - remify(16px));
-    max-height: calc(100vh - remify(16px));
-  }
 }
