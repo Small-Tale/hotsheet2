@@ -1,8 +1,9 @@
-import { delegate, delegateCapture, signal } from 'kerfjs';
+import { delegateCapture, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import { TicketBoardColumn } from '../components/ticket-board-column';
+import { wireTicketCollection } from '../components/ticket-collection-interactions';
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
 import {
@@ -403,44 +404,100 @@ function wireTicketCollectionsDemo(root: HTMLElement): () => void {
       'quick-ticket-composer',
       'app-shell',
     ].includes(selectedId.value);
+  const rowSelector = DEMO_ACTIONS.selectTicketRow.selector;
+  /** The lone TicketRow demo keeps its selection in the row settings form. */
+  function setRowDemoSelected(selected: boolean, message: string) {
+    ticketRowSettings.selected.value = selected;
+    ticketRowSettings.event.value = message;
+    const control = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="selected"]');
+    if (control) control.checked = selected;
+  }
 
+  // The production TicketList/TicketBoard handlers, with fixture side effects (HS2-RWY78R).
   demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.selectTicketRow.selector, (event, target) => {
-      if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
-      const row = target as HTMLElement;
-      if (usesCollectionState()) {
-        const pointer = event as MouseEvent;
-        selectCollectionTicket(row.dataset.ticketSlug!, {
-          range: pointer.shiftKey,
-          toggle: pointer.metaKey || pointer.ctrlKey,
-        });
-        // Like the workspace grid's rail, a plain click in the TerminalTicketRail demo pushes that ticket's
-        // detail onto its NavStack (HS2-FY06N4).
-        if (row.closest('.terminal-ticket-rail-demo') && !pointer.shiftKey && !pointer.metaKey && !pointer.ctrlKey) {
-          terminalRailDemoTicket.value = row.dataset.ticketSlug;
-          recordCollectionEvent(`${row.dataset.ticketSlug} pushed onto the ticket rail`);
+    wireTicketCollection(root, {
+      selectedSlugs: () => {
+        if (usesCollectionState())
+          return collectionTickets.value.filter((ticket) => ticket.selected).map((ticket) => ticket.slug);
+        const slug = root.querySelector<HTMLElement>(rowSelector)?.dataset.ticketSlug;
+        return ticketRowSettings.selected.value && slug ? [slug] : [];
+      },
+      selectionOrder: (row) =>
+        [...(row.closest('[data-ticket-selection-root]') ?? root).querySelectorAll<HTMLElement>(rowSelector)].map(
+          (item) => item.dataset.ticketSlug!,
+        ),
+      select: (slug, intent, _ordered, row, event) => {
+        if (usesCollectionState()) {
+          selectCollectionTicket(slug, intent);
+          // Like the workspace grid's rail, a plain click in the TerminalTicketRail demo pushes that ticket's
+          // detail onto its NavStack (HS2-FY06N4).
+          if (event.type === 'click' && row.closest('.terminal-ticket-rail-demo') && !intent.range && !intent.toggle) {
+            terminalRailDemoTicket.value = slug;
+            recordCollectionEvent(`${slug} pushed onto the ticket rail`);
+          }
+          return;
         }
-        return;
-      }
-      ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
-      ticketRowSettings.event.value = ticketRowSettings.selected.value ? 'Ticket selected' : 'Ticket deselected';
-      const selected = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="selected"]');
-      if (selected) selected.checked = ticketRowSettings.selected.value;
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.selectTicketColumn.selector, (event, target) => {
-      event.stopImmediatePropagation();
-      const column = (target as HTMLElement).closest<HTMLElement>('[data-component="ticket-board-column"]');
-      if (!column || !usesCollectionState()) return;
-      const slugs = new Set(
-        [...column.querySelectorAll<HTMLElement>('[data-ticket-slug]')].map((row) => row.dataset.ticketSlug),
-      );
-      collectionTickets.value = collectionTickets.value.map((ticket) => ({
-        ...ticket,
-        selected: slugs.has(ticket.slug),
-      }));
-      recordCollectionEvent(`${slugs.size} tickets selected`);
+        if (event.type === 'contextmenu') setRowDemoSelected(true, 'Ticket selected');
+        else if (!ticketRowSettings.selected.value) setRowDemoSelected(true, 'Ticket selected');
+        else setRowDemoSelected(false, 'Ticket deselected');
+      },
+      isSelectAll: (keyboard) =>
+        usesCollectionState() && (keyboard.metaKey || keyboard.ctrlKey) && keyboard.key.toLowerCase() === 'a',
+      selectAll: () => {
+        selectAllCollectionTickets();
+      },
+      selectColumn: (slugs) => {
+        if (!usesCollectionState()) return;
+        const chosen = new Set(slugs);
+        collectionTickets.value = collectionTickets.value.map((ticket) => ({
+          ...ticket,
+          selected: chosen.has(ticket.slug),
+        }));
+        recordCollectionEvent(`${chosen.size} tickets selected`);
+      },
+      openReader: (slug) => {
+        if (usesCollectionState()) selectCollectionTicket(slug);
+        recordCollectionEvent(`Ticket reader opened for ${slug}`);
+        openDemoTicketReader(root);
+      },
+      contextMenu: () => {
+        const menu = contextMenu.value;
+        return menu?.ticketSlug ? { x: menu.x, y: menu.y, ticketSlug: menu.ticketSlug } : undefined;
+      },
+      setContextMenu: (menu) => {
+        contextMenu.value = menu;
+        if (!menu) return;
+        if (usesCollectionState()) recordCollectionEvent(`Context menu opened for ${menu.ticketSlug}`);
+        else ticketRowSettings.event.value = 'Context menu opened';
+      },
+      onContextField: (field, value, slugs) => {
+        if (!usesCollectionState()) return;
+        const chosen = new Set(slugs);
+        collectionTickets.value = collectionTickets.value.map((ticket) => {
+          if (!chosen.has(ticket.slug)) return ticket;
+          if (field === 'category') return { ...ticket, category: value };
+          if (field === 'priority') return { ...ticket, priority: value as typeof ticket.priority };
+          return { ...ticket, status: value as typeof ticket.status };
+        });
+        recordCollectionEvent(`${field} changed to ${value} for ${chosen.size} ticket${chosen.size === 1 ? '' : 's'}`);
+      },
+      onContextAction: (action, _slugs, menuSlug) => {
+        if (usesCollectionState()) {
+          if (action === 'Toggle Up Next') toggleCollectionTicketUpNext(menuSlug);
+          if (action === 'Report not working') {
+            selectDemo('not-working-dialog');
+            notWorkingDemoOpen.value = true;
+          }
+          recordCollectionEvent(`${action} selected for ${menuSlug}`);
+          return;
+        }
+        if (action === 'Toggle Up Next') {
+          ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
+          const control = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="up-next"]');
+          if (control) control.checked = ticketRowSettings.upNext.value;
+        }
+        ticketRowSettings.event.value = `${action} selected`;
+      },
     }),
   );
   function toggleRowUpNext(target?: Element): void {
@@ -469,124 +526,10 @@ function wireTicketCollectionsDemo(root: HTMLElement): () => void {
       toggleRowUpNext(event.target as Element);
     }),
   );
-  demoListeners.add(
-    delegate(root, 'keydown', DEMO_ACTIONS.selectTicketRow.selector, (event, target) => {
-      const keyboard = event as KeyboardEvent;
-      const key = keyboard.key;
-      const row = target as HTMLElement;
-      if (usesCollectionState() && (keyboard.metaKey || keyboard.ctrlKey) && key.toLowerCase() === 'a') {
-        event.preventDefault();
-        selectAllCollectionTickets();
-        return;
-      }
-      if (usesCollectionState() && (key === 'ArrowUp' || key === 'ArrowDown')) {
-        event.preventDefault();
-        const scope = row.closest<HTMLElement>('[data-ticket-selection-root]')!;
-        const rows = [...scope.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')];
-        const index = rows.indexOf(row);
-        const next = rows[Math.max(0, Math.min(rows.length - 1, index + (key === 'ArrowDown' ? 1 : -1)))];
-        next.focus();
-        selectCollectionTicket(next.dataset.ticketSlug!, {
-          range: keyboard.shiftKey,
-        });
-        return;
-      }
-      if (key !== 'Enter' && key !== ' ') return;
-      event.preventDefault();
-      if (usesCollectionState())
-        selectCollectionTicket(row.dataset.ticketSlug!, {
-          range: keyboard.shiftKey,
-          toggle: keyboard.metaKey || keyboard.ctrlKey,
-        });
-      else row.click();
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'contextmenu', DEMO_ACTIONS.selectTicketRow.selector, (event, target) => {
-      event.preventDefault();
-      const pointer = event as MouseEvent;
-      const row = target as HTMLElement;
-      if (usesCollectionState()) {
-        if (!collectionTickets.value.find((ticket) => ticket.slug === row.dataset.ticketSlug)?.selected)
-          selectCollectionTicket(row.dataset.ticketSlug!);
-        recordCollectionEvent(`Context menu opened for ${row.dataset.ticketSlug}`);
-        contextMenu.value = {
-          x: pointer.clientX,
-          y: pointer.clientY,
-          ticketSlug: row.dataset.ticketSlug,
-        };
-        return;
-      }
-      ticketRowSettings.selected.value = true;
-      ticketRowSettings.event.value = 'Context menu opened';
-      const selected = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="selected"]');
-      if (selected) selected.checked = true;
-      contextMenu.value = {
-        x: pointer.clientX,
-        y: pointer.clientY,
-        ticketSlug: row.dataset.ticketSlug,
-      };
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'dblclick', DEMO_ACTIONS.selectTicketRow.selector, (event, target) => {
-      if ((event.target as Element).closest('button, input, textarea, select, a, [contenteditable="true"]')) return;
-      if (usesCollectionState()) selectCollectionTicket((target as HTMLElement).dataset.ticketSlug!);
-      recordCollectionEvent(`Ticket reader opened for ${(target as HTMLElement).dataset.ticketSlug}`);
-      openDemoTicketReader(root);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', '[data-context-field]', (event, target) => {
-      event.stopPropagation();
-      const field = (target as HTMLElement).dataset.contextField as 'category' | 'priority' | 'status';
-      const value = (target as HTMLElement).dataset.contextValue!;
-      if (usesCollectionState() && contextMenu.value?.ticketSlug) {
-        const selected = new Set(
-          collectionTickets.value.filter((ticket) => ticket.selected).map((ticket) => ticket.slug),
-        );
-        if (!selected.size) selected.add(contextMenu.value.ticketSlug);
-        collectionTickets.value = collectionTickets.value.map((ticket) => {
-          if (!selected.has(ticket.slug)) return ticket;
-          if (field === 'category') return { ...ticket, category: value };
-          if (field === 'priority') return { ...ticket, priority: value as typeof ticket.priority };
-          return { ...ticket, status: value as typeof ticket.status };
-        });
-        recordCollectionEvent(
-          `${field} changed to ${value} for ${selected.size} ticket${selected.size === 1 ? '' : 's'}`,
-        );
-      }
-      contextMenu.value = undefined;
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', '[data-context-action]', (_event, target) => {
-      const action = (target as HTMLElement).dataset.contextAction!;
-      if (usesCollectionState() && contextMenu.value?.ticketSlug) {
-        const slug = contextMenu.value.ticketSlug;
-        if (action === 'Toggle Up Next') toggleCollectionTicketUpNext(slug);
-        if (action === 'Report not working') {
-          selectDemo('not-working-dialog');
-          notWorkingDemoOpen.value = true;
-        }
-        recordCollectionEvent(`${action} selected for ${slug}`);
-        contextMenu.value = undefined;
-        return;
-      }
-      if (action === 'Toggle Up Next') {
-        ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
-        const control = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="up-next"]');
-        if (control) control.checked = ticketRowSettings.upNext.value;
-      }
-      ticketRowSettings.event.value = `${action} selected`;
-      contextMenu.value = undefined;
-    }),
-  );
   return () => {
     demoListeners.dispose();
   };
 }
-
 /** The catalog entries this file renders (HS2-HMVBZW). */
 export const demoModule: DemoModule = {
   entries: {

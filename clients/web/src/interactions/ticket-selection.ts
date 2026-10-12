@@ -1,12 +1,13 @@
-import { batch, delegate, delegateCapture, type Signal } from 'kerfjs';
+import { delegate, delegateCapture, type Signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 
 import { type FullTicket, type TicketCloseReason, type TicketRow as WireTicketRow } from '../api';
 import { type BulkTicketDialogState } from '../components/bulk-ticket-dialog';
 import { type TicketCloseDialogState } from '../components/ticket-close-dialog';
-import { adjacentTicketSlug, isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
+import { wireTicketCollection } from '../components/ticket-collection-interactions';
+import { isPlainTicketReselection, selectAllTickets } from '../components/ticket-selection';
 import { wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
-import { viewportSafeContextMenuPosition, viewportSafePointerPosition } from '../context-menu-position';
+import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { TICKET_SELECTION_ACTIONS, TICKET_SELECTION_TARGETS } from '../interaction-attrs/ticket-selection';
 import { matchesShortcut, type ShortcutChord } from '../keyboard-shortcuts';
 import { shouldAutoOpenInspectorOnTap } from '../mobile-layout';
@@ -119,33 +120,107 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
     keyboardShortcutOverrides,
     appleShortcutPlatform,
   } = dependencies;
+  const menuTicket = (slug: string) => tickets.value.find((item) => item.slug === slug);
   lifetime.add(
-    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
-      if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
-      const pointer = event as MouseEvent,
-        rail = Boolean(target.closest('[data-component="terminal-ticket-rail-list"]'));
-      // Mobile has no persistent side inspector, so a plain tap on a workspace-list ticket auto-opens the
-      // right inspector overlay (tap-away on the scrim returns to the list) — HS2-N7RPFP. Range/toggle
-      // multi-select taps and the terminal rail are excluded.
-      if (
-        shouldAutoOpenInspectorOnTap({
-          mobile: viewportMobile.value,
-          rail,
-          shiftKey: pointer.shiftKey,
-          metaKey: pointer.metaKey,
-          ctrlKey: pointer.ctrlKey,
-        })
-      )
-        revealInspectorOverlay();
-      void selectTickets(
-        data(target).ticketSlug!,
-        { range: pointer.shiftKey, toggle: pointer.metaKey || pointer.ctrlKey },
-        selectionOrder(target),
-      ).then((ticket) => {
-        if (rail && ticket && selectedTicketSlugs.value.length === 1) {
-          terminalRailScreen.value = 'ticket';
+    wireTicketCollection(document.body, {
+      selectedSlugs: () => selectedTicketSlugs.value,
+      selectionOrder,
+      select: (slug, intent, ordered, row, event) => {
+        const pointer = event.type === 'click' ? (event as MouseEvent) : undefined,
+          rail = Boolean(pointer && row.closest('[data-component="terminal-ticket-rail-list"]'));
+        // Mobile has no persistent side inspector, so a plain tap on a workspace-list ticket auto-opens the
+        // right inspector overlay (tap-away on the scrim returns to the list) — HS2-N7RPFP. Range/toggle
+        // multi-select taps and the terminal rail are excluded.
+        if (
+          pointer &&
+          shouldAutoOpenInspectorOnTap({
+            mobile: viewportMobile.value,
+            rail,
+            shiftKey: pointer.shiftKey,
+            metaKey: pointer.metaKey,
+            ctrlKey: pointer.ctrlKey,
+          })
+        )
+          revealInspectorOverlay();
+        void selectTickets(slug, intent, ordered).then((ticket) => {
+          if (rail && ticket && selectedTicketSlugs.value.length === 1) terminalRailScreen.value = 'ticket';
+        });
+      },
+      isSelectAll: (keyboard) =>
+        matchesShortcut('select-all-tickets', keyboard, keyboardShortcutOverrides.value, appleShortcutPlatform),
+      selectAll: (row) => {
+        const board = row.closest('[data-component="ticket-board"]'),
+          selectable = board
+            ? [...board.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')].map(
+                (ticket) => data(ticket).ticketSlug!,
+              )
+            : visibleTickets().map((ticket) => ticket.slug),
+          next = selectAllTickets(selectable);
+        dependencies.ticketSelectionAnchor = next.anchor;
+        selectedTicketSlugs.value = [...next.selected];
+      },
+      selectColumn: (slugs) => {
+        cancelTicketDrafts();
+        selectedCorruptKey.value = undefined;
+        selectedTicketSlugs.value = slugs;
+        dependencies.ticketSelectionAnchor = slugs[0];
+        selectedTicket.value = null;
+        setInspectorVisible(true);
+      },
+      openReader: (slug, ordered, row) => {
+        void openTicketReader(slug, ordered, row);
+      },
+      contextMenu: () => ticketContextMenu.value,
+      setContextMenu: (menu) => {
+        ticketContextMenu.value = menu;
+      },
+      onContextField: (field, value, slugs) => {
+        void executeBulkTicketAction({ kind: 'field', field, value }, slugs);
+      },
+      onContextAction: (action, slugs, menuSlug) => {
+        const selected = tickets.value.filter((item) => slugs.includes(item.slug));
+        if (action === 'Report not working' || action === 'Reopen ticket' || action === 'Close ticket') {
+          // These act on the ticket the menu was opened on, not the whole selection.
+          const ticket = menuTicket(menuSlug);
+          if (!ticket) return;
+          if (action === 'Close ticket') openTicketClose(ticket);
+          else openNotWorking(ticket, action === 'Reopen ticket' ? 'reopen' : undefined);
+          return;
         }
-      });
+        if (action === 'Open ticket') {
+          const row = document.querySelector<HTMLElement>(
+            `[data-action="select-ticket-row"][data-ticket-slug="${CSS.escape(menuSlug)}"]`,
+          );
+          void openTicketReader(menuSlug, undefined, row ?? undefined);
+          return;
+        }
+        if (action === 'Verify ticket') {
+          void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'verified' }, slugs);
+          return;
+        }
+        if (action === 'Toggle Up Next' && selected.length) {
+          void executeBulkTicketAction({ kind: 'up-next', value: !selected.every((ticket) => ticket.up_next) }, slugs);
+          return;
+        }
+        if (action === 'Duplicate ticket') {
+          copySelection(false);
+          void pasteSelection();
+          return;
+        }
+        if (action === 'Move to Backlog') {
+          void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'backlog' }, slugs);
+          return;
+        }
+        if (action === 'Archive ticket') {
+          void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'archive' }, slugs);
+          return;
+        }
+        if (action === 'Add tag' || action === 'Remove tag' || action === 'Delete ticket') {
+          openBulkTicketDialog(action === 'Add tag' ? 'add-tag' : action === 'Remove tag' ? 'remove-tag' : 'delete', slugs);
+          return;
+        }
+        if (action === 'Restore ticket') void restoreTrashedTickets(slugs);
+      },
     }),
   );
   lifetime.add(
@@ -175,41 +250,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
       },
     ),
   );
-  lifetime.add(
-    delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.selectTicketColumn.selector, (event, target) => {
-      event.stopImmediatePropagation();
-      const column = target.closest<HTMLElement>('[data-component="ticket-board-column"]'),
-        columnId = column?.dataset.columnId;
-      if (!columnId) return;
-      const slugs = [...column.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')].map(
-        (ticket) => data(ticket).ticketSlug!,
-      );
-      cancelTicketDrafts();
-      selectedCorruptKey.value = undefined;
-      selectedTicketSlugs.value = slugs;
-      dependencies.ticketSelectionAnchor = slugs[0];
-      selectedTicket.value = null;
-      setInspectorVisible(true);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'dblclick', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
-      if ((event.target as Element).closest('button, input, textarea, select, a, [contenteditable="true"]')) return;
-      void openTicketReader(data(target).ticketSlug!, selectionOrder(target), target as HTMLElement);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'contextmenu', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
-      event.preventDefault();
-      const pointer = event as MouseEvent,
-        slug = data(target).ticketSlug!;
-      if (!selectedTicketSlugs.value.includes(slug)) void selectTickets(slug, {}, selectionOrder(target));
-      ticketContextMenu.value = {
-        ...viewportSafePointerPosition(pointer.clientX, pointer.clientY, window.innerWidth, window.innerHeight),
-        ticketSlug: slug,
-      };
-    }),
-  );
   lifetime.add(wireWorkspaceOverflowKeyboard(document.body));
   lifetime.add(
     delegate(document.body, 'click', TICKET_SELECTION_ACTIONS.toggleSelectedUpNext.selector, () => {
@@ -237,108 +277,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
           },
         );
       ticketContextMenu.value = { ...position, ticketSlug: selected[0].slug, hideUpNext: true };
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', '[data-context-field]', (event, target) => {
-      event.stopPropagation();
-      const menu = ticketContextMenu.value,
-        field = data(target).contextField as 'category' | 'priority' | 'status' | undefined,
-        value = data(target).contextValue;
-      if (!menu || !field || !value) return;
-      const slugs = selectedTicketSlugs.value.length ? [...selectedTicketSlugs.value] : [menu.ticketSlug];
-      batch(() => {
-        ticketContextMenu.value = undefined;
-        void executeBulkTicketAction({ kind: 'field', field, value }, slugs);
-      });
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', TICKET_SELECTION_TARGETS.reportNotWorkingContextAction.selector, (event) => {
-      event.stopImmediatePropagation();
-      const menu = ticketContextMenu.value;
-      if (!menu) return;
-      const ticket = tickets.value.find((item) => item.slug === menu.ticketSlug);
-      ticketContextMenu.value = undefined;
-      if (ticket) openNotWorking(ticket);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', TICKET_SELECTION_TARGETS.reopenTicketContextAction.selector, (event) => {
-      event.stopImmediatePropagation();
-      const menu = ticketContextMenu.value;
-      if (!menu) return;
-      const ticket = tickets.value.find((item) => item.slug === menu.ticketSlug);
-      ticketContextMenu.value = undefined;
-      if (ticket) openNotWorking(ticket, 'reopen');
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', TICKET_SELECTION_TARGETS.closeTicketContextAction.selector, (event) => {
-      event.stopImmediatePropagation();
-      const menu = ticketContextMenu.value;
-      if (!menu) return;
-      const ticket = tickets.value.find((item) => item.slug === menu.ticketSlug);
-      ticketContextMenu.value = undefined;
-      if (ticket) openTicketClose(ticket);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', '[data-context-action]', (_event, target) => {
-      const menu = ticketContextMenu.value;
-      if (!menu) return;
-      const action = data(target).contextAction,
-        slugs = selectedTicketSlugs.value.length ? [...selectedTicketSlugs.value] : [menu.ticketSlug],
-        selected = tickets.value.filter((item) => slugs.includes(item.slug)),
-        row = document.querySelector<HTMLElement>(
-          `[data-action="select-ticket-row"][data-ticket-slug="${CSS.escape(menu.ticketSlug)}"]`,
-        );
-      ticketContextMenu.value = undefined;
-      if (action === 'Open ticket') {
-        void openTicketReader(menu.ticketSlug, undefined, row ?? undefined);
-        return;
-      }
-      if (action === 'Verify ticket') {
-        void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'verified' }, slugs);
-        return;
-      }
-      if (action === 'Reopen ticket') {
-        void executeBulkTicketAction({ kind: 'reopen' }, slugs);
-        return;
-      }
-      if (action === 'Toggle Up Next' && selected.length) {
-        void executeBulkTicketAction({ kind: 'up-next', value: !selected.every((ticket) => ticket.up_next) }, slugs);
-        return;
-      }
-      if (action === 'Duplicate ticket') {
-        copySelection(false);
-        void pasteSelection();
-        return;
-      }
-      if (action === 'Move to Backlog') {
-        void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'backlog' }, slugs);
-        return;
-      }
-      if (action === 'Archive ticket') {
-        void executeBulkTicketAction({ kind: 'field', field: 'status', value: 'archive' }, slugs);
-        return;
-      }
-      if (action === 'Add tag') {
-        openBulkTicketDialog('add-tag', slugs);
-        return;
-      }
-      if (action === 'Remove tag') {
-        openBulkTicketDialog('remove-tag', slugs);
-        return;
-      }
-      if (action === 'Delete ticket') {
-        openBulkTicketDialog('delete', slugs);
-        return;
-      }
-      if (action === 'Restore ticket') {
-        void restoreTrashedTickets(slugs);
-        return;
-      }
     }),
   );
   lifetime.add(
@@ -505,40 +443,6 @@ export function wireTicketSelectionInteractions(dependencies: TicketSelectionInt
         activeLabel = target.mode === 'reopen' ? `Reopen Ticket — ${target.slug}` : `Not Working — ${target.slug}`;
       if (!notWorkingSubmitting.value && target.slug && dialog.getAttribute('aria-label') === activeLabel)
         closeNotWorking();
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'keydown', TICKET_SELECTION_ACTIONS.selectTicketRow.selector, (event, target) => {
-      const keyboard = event as KeyboardEvent,
-        row = target as HTMLElement,
-        slug = data(row).ticketSlug!,
-        ordered = selectionOrder(row);
-      if (matchesShortcut('select-all-tickets', keyboard, keyboardShortcutOverrides.value, appleShortcutPlatform)) {
-        event.preventDefault();
-        const board = row.closest('[data-component="ticket-board"]'),
-          selectable = board
-            ? [...board.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')].map(
-                (ticket) => data(ticket).ticketSlug!,
-              )
-            : visibleTickets().map((ticket) => ticket.slug),
-          next = selectAllTickets(selectable);
-        dependencies.ticketSelectionAnchor = next.anchor;
-        selectedTicketSlugs.value = [...next.selected];
-        return;
-      }
-      if (keyboard.key === 'ArrowUp' || keyboard.key === 'ArrowDown') {
-        event.preventDefault();
-        const next = adjacentTicketSlug(ordered, slug, keyboard.key === 'ArrowDown' ? 1 : -1);
-        if (next) {
-          document.querySelector<HTMLElement>(`[data-ticket-slug="${next}"]`)?.focus();
-          void selectTickets(next, { range: keyboard.shiftKey }, ordered);
-        }
-        return;
-      }
-      if (keyboard.key === 'Enter' || keyboard.key === ' ') {
-        event.preventDefault();
-        void selectTickets(slug, { range: keyboard.shiftKey, toggle: keyboard.metaKey || keyboard.ctrlKey }, ordered);
-      }
     }),
   );
   return () => {
