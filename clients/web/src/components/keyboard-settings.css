@@ -1,44 +1,5 @@
-.keyboard-settings {
-  padding: var(--kui-space-m);
-}
-.keyboard-settings__intro {
-  max-width: remify(672px);
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-s);
-  line-height: 1.5;
-}
-.keyboard-settings__reset-all {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--kui-space-2xs);
-  min-height: remify(36px);
-  padding: 0 remify(12px);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-default);
-  color: var(--wa-color-text-normal);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--wa-font-size-xs);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.keyboard-settings__reset-all:hover:not(:disabled) {
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.keyboard-settings__reset-all:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.keyboard-settings__group-title {
-  margin: 0 0 var(--kui-space-2xs);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-2xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
+/* The framed, divided shortcut list: Kerf has no framed list with row dividers for arbitrary
+   app rows (KF-2HB7RT). */
 .keyboard-settings__list {
   display: grid;
   margin: 0;
@@ -59,39 +20,12 @@
 .keyboard-settings__row:first-child {
   border-top: 0;
 }
+/* The row that is recording a new chord. */
 .keyboard-settings__row[data-capturing='true'] {
   background: var(--wa-color-brand-fill-quiet);
 }
-.keyboard-settings__row-layout,
-.keyboard-settings__meta {
-  min-width: 0;
-}
-.keyboard-settings__row-layout {
-  width: 100%;
-}
-.keyboard-settings__label {
-  color: var(--wa-color-text-normal);
-  font-size: var(--wa-font-size-s);
-  font-weight: 600;
-}
-.keyboard-settings__description {
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.keyboard-settings__conflict {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--kui-space-2xs);
-  margin-top: var(--kui-space-2xs);
-  color: var(--wa-color-warning-on-quiet);
-  font-size: var(--wa-font-size-2xs);
-  font-weight: 600;
-}
-.keyboard-settings__controls {
-  flex: none;
-}
-/* Clean, uniform chip matching the adjacent action buttons — the WA native `kbd` keycap treatment
-   (a dark bottom box-shadow plus a 2px bottom border) read as a heavy, lopsided gray edge (HS2-186WJT). */
+/* Clean, uniform keycap chip matching the adjacent action buttons — the WA native `kbd` keycap
+   treatment (a dark bottom box-shadow plus a 2px bottom border) read as a heavy, lopsided edge (HS2-186WJT). */
 .keyboard-settings__chord {
   display: inline-flex;
   align-items: center;
@@ -109,6 +43,7 @@
   font-weight: 600;
   white-space: nowrap;
 }
+/* The focused recording control that captures the next key combination as text input. */
 .keyboard-settings__capture {
   min-width: remify(128px);
   min-height: remify(30.4px);
@@ -125,46 +60,4 @@
 .keyboard-settings__capture:focus-visible {
   outline: 2px solid var(--wa-color-focus);
   outline-offset: 1px;
-}
-.keyboard-settings__action {
-  display: inline-grid;
-  place-items: center;
-  width: remify(30.4px);
-  height: remify(30.4px);
-  padding: 0;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-default);
-  color: var(--wa-color-neutral-on-quiet);
-  cursor: pointer;
-}
-.keyboard-settings__action:hover:not(:disabled) {
-  background: var(--wa-color-neutral-fill-quiet);
-  color: var(--wa-color-text-normal);
-}
-.keyboard-settings__action:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.keyboard-settings__fixed {
-  display: inline-flex;
-  align-items: center;
-  min-height: remify(30.4px);
-  padding: 0 var(--kui-space-xs);
-  border-radius: var(--wa-border-radius-pill);
-  background: var(--wa-color-neutral-fill-quiet);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-2xs);
-  font-weight: 600;
-}
-@media (max-width: remify(544px)) {
-  .keyboard-settings__row-layout {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--kui-space-2xs);
-  }
-  .keyboard-settings__controls {
-    align-self: stretch;
-    justify-content: flex-end;
-  }
 }

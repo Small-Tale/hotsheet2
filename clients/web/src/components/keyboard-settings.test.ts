@@ -74,6 +74,6 @@ describe('KeyboardSettings', () => {
     expect(apple).not.toContain('keyboard-settings__conflict');
     const other = String(KeyboardSettings({ overrides, apple: false }));
     expect(other).toContain('Ctrl+K');
-    expect(other.match(/class="keyboard-settings__conflict"/g)).toHaveLength(2);
+    expect(other.match(/class="[^"]*keyboard-settings__conflict[^"]*"/g)).toHaveLength(2);
   });
 });

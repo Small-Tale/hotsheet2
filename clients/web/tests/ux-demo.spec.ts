@@ -542,8 +542,8 @@ test('uses Kerf layout primitives across migrated settings and dialog surfaces (
 
   await page.goto('/ux-demo?component=keyboard-settings');
   const keyboard = page.locator('[data-component="keyboard-settings"]');
-  // HS2-57MAAH moved the layout class onto an app-owned wrapper around the Kerf List root.
-  await expect(keyboard.locator(':scope > .keyboard-settings > [data-component="list"]')).toHaveCount(1);
+  // The Kerf List is the screen root's direct child; no app layout wrapper remains (HS2-8YS9SD).
+  await expect(keyboard.locator(':scope > [data-component="list"]')).toHaveCount(1);
   await expect(keyboard.locator('li[data-shortcut-id] [data-component="row"]').first()).toBeVisible();
 
   await page.goto('/ux-demo?component=provider-setup-form');
