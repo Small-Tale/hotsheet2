@@ -2999,12 +2999,12 @@ test('exposes every MarkdownPreview and AIContentLabel presentation variant', as
   const labels = page.locator('[data-component="ai-content-label"]');
   await expect(labels).toHaveCount(4);
   const inherit = page.locator('[data-component="ai-content-label"][data-tone="inherit"]');
-  expect(await inherit.evaluate((node) => getComputedStyle(node).color)).toBe(
+  const attributionColor = (node: Element) =>
+    getComputedStyle(node.querySelector('.ai-content-label__attribution')!).color;
+  expect(await inherit.evaluate(attributionColor)).toBe(
     await inherit.evaluate((node) => getComputedStyle(node.parentElement!).color),
   );
-  expect(await labels.first().evaluate((node) => getComputedStyle(node).color)).not.toBe(
-    await inherit.evaluate((node) => getComputedStyle(node).color),
-  );
+  expect(await labels.first().evaluate(attributionColor)).not.toBe(await inherit.evaluate(attributionColor));
   await expect(labels.nth(1)).toHaveAccessibleName('AI-generated; may contain errors');
   await expect(labels.nth(2).getByRole('button', { name: /Helpful/ })).toBeVisible();
 });
@@ -7268,20 +7268,28 @@ test('previews AIConversation public states at wide and narrow sizes', async ({ 
   await expect(feedback).toBeVisible();
   expect(
     await label.evaluate((node) => {
-      const style = getComputedStyle(node),
-        attribution = getComputedStyle(node.querySelector('.ai-content-label__attribution')!),
-        glyph = getComputedStyle(node.querySelector('svg')!);
-      return { gap: style.gap, attributionGap: attribution.gap, glyph: [glyph.width, glyph.height] };
+      // The attribution glyph flows inline with the compact attribution text.
+      const glyph = node.querySelector('svg')!.getBoundingClientRect();
+      return { gap: getComputedStyle(node).gap, glyphFitsText: glyph.height >= 9 && glyph.height <= 13 };
     }),
-  ).toEqual({ gap: '8px', attributionGap: '4px', glyph: ['12px', '12px'] });
+  ).toEqual({ gap: '4px', glyphFitsText: true });
+  // Feedback composes plain, small Web Awesome buttons instead of app-styled native buttons (HS2-T3SE2Z).
   expect(
     await feedback.evaluate((node) => {
-      const style = getComputedStyle(node),
-        button = getComputedStyle(node.querySelector('button')!),
-        glyph = getComputedStyle(node.querySelector('button svg')!);
-      return { gap: style.gap, button: [button.width, button.height], glyph: [glyph.width, glyph.height] };
+      const buttons = [...node.querySelectorAll('wa-button')],
+        glyph = buttons[0].querySelector('svg')!.getBoundingClientRect();
+      return {
+        buttons: buttons.map((button) => [button.getAttribute('appearance'), button.getAttribute('size')]),
+        glyphFitsButton: glyph.height >= 9 && glyph.height <= 13,
+      };
     }),
-  ).toEqual({ gap: '4px', button: ['32px', '32px'], glyph: ['12px', '12px'] });
+  ).toEqual({
+    buttons: [
+      ['plain', 'small'],
+      ['plain', 'small'],
+    ],
+    glyphFitsButton: true,
+  });
   await activityCard.screenshot({ path: 'target/visual-captures/hs2-4y6sm9-ai-content-label-wide.png' });
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();

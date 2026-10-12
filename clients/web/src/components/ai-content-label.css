@@ -1,37 +1,8 @@
-.ai-content-label,
-.ai-content-label__attribution,
-.ai-content-label__feedback {
-  display: inline-flex;
-  align-items: center;
-}
+/* An inline attribution that flows inside footers and prose: Kerf Row is a block flex <div>, so
+   this one rule keeps the label, its glyph and its feedback buttons on one inline, centered line. */
 .ai-content-label {
+  display: inline-flex;
   min-width: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  gap: var(--kui-space-xs);
-}
-.ai-content-label[data-tone='inherit'] {
-  color: inherit;
-}
-.ai-content-label__attribution {
+  align-items: center;
   gap: var(--kui-space-2xs);
-}
-.ai-content-label__feedback {
-  gap: var(--kui-space-2xs);
-}
-.ai-content-label__feedback button {
-  display: inline-grid;
-  width: remify(32px);
-  height: remify(32px);
-  padding: 0;
-  border: 0;
-  border-radius: var(--wa-border-radius-pill);
-  color: inherit;
-  background: transparent;
-  cursor: pointer;
-  place-items: center;
-}
-.ai-content-label__feedback button:hover,
-.ai-content-label__feedback button:focus-visible {
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
 }
