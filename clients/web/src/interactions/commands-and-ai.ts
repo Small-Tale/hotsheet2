@@ -14,6 +14,7 @@ import { type CommandDropTarget } from '../command-order';
 import { isConversationSurfaceLifecycleEvent } from '../components/ai-conversation';
 import { type AiFeedbackDialogState } from '../components/ai-feedback-dialog';
 import { COMMAND_EDITOR_DIALOG_ID } from '../components/command-settings-editor';
+import { wireCommandSettingsEditor } from '../components/command-settings-editor-interactions';
 import { type ConversationExportDialogState } from '../components/conversation-export-dialog';
 import { type ManualModelDialogState } from '../components/manual-model-dialog';
 import { type ExternalProviderKind, type GithubAuthState } from '../components/provider-setup-form';
@@ -22,7 +23,6 @@ import { type WorkspaceViewMode } from '../components/workspace-header';
 import { revealContextPopupMenu } from '../context-menu-position';
 import { type ConversationExportDraft } from '../conversation-export';
 import {
-  COMMAND_FIELD_SELECTOR,
   COMMANDS_AND_AI_ACTIONS,
   COMMANDS_AND_AI_TARGETS,
 } from '../interaction-attrs/commands-and-ai';
@@ -106,11 +106,8 @@ export interface CommandAndAiInteractionsDependencies {
   readonly deleteCommandGroup: (projectId: string, group: string) => void;
   readonly selectCommandRow: (projectId: string, id: string, intent: { toggle?: boolean; range?: boolean }) => void;
   readonly commandSelection: (projectId?: string) => string[];
-  draggedCommandIds: string[];
   readonly commandSettingsDefinitions: (projectId?: string) => CommandDefinition[];
   readonly selectCommandSetting: (projectId: string, id: string | undefined) => void;
-  readonly clearCommandDropIndicators: () => void;
-  readonly clearCommandDrag: () => void;
   readonly reorderCommandSettings: (projectId: string, sourceIds: readonly string[], target: CommandDropTarget) => void;
   readonly updateCommandSetting: (projectId: string, id: string, field: string, value: string) => void;
   readonly updateCommandAiSelection: (
@@ -235,8 +232,6 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     commandSelection,
     commandSettingsDefinitions,
     selectCommandSetting,
-    clearCommandDropIndicators,
-    clearCommandDrag,
     reorderCommandSettings,
     updateCommandSetting,
     updateCommandAiSelection,
@@ -676,235 +671,94 @@ export function wireCommandAndAiInteractions(dependencies: CommandAndAiInteracti
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
     (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).showPopover?.();
   }
+  const projectId = () => project()?.id;
   lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.editCommandSetting.selector, (_event, target) => {
-      const id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
-        current = project();
-      // Right after a project switch the previous project's row can still be in the DOM; a command id
-      // the selected project does not own would open an empty Edit command dialog (HS2-9ZWR5D).
-      if (id && current && commandSettingsDefinitions(current.id).some((command) => command.id === id))
-        openCommandEditor(id);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.addCommandSetting.selector, () => {
-      const current = project();
-      if (current) openCommandEditor(addCommandSetting(current.id));
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.closeCommandEditor.selector, () => {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
-      (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();
-      commandSettingsEditingId.value = undefined;
-      commandIconSearch.value = '';
-    }),
-  );
-  lifetime.add(
-    delegateCapture(
-      document.body,
-      'toggle',
-      `#${COMMAND_EDITOR_DIALOG_ID}`,
-      (event) => {
-        if ((event as ToggleEvent).newState === 'closed' && manualModelDialog.value?.target !== 'command') {
-          commandSettingsEditingId.value = undefined;
-          commandIconSearch.value = '';
-        }
+    wireCommandSettingsEditor(document.body, {
+      ownsCommand: (id) => {
+        const current = projectId();
+        return Boolean(current && commandSettingsDefinitions(current).some((command) => command.id === id));
       },
-      { match: 'direct' },
-    ),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.deleteCommandSetting.selector, (_event, target) => {
-      const current = project(),
-        id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-      if (current && id) deleteCommandSetting(current.id, id);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.addCommandGroup.selector, () => {
-      const current = project();
-      if (current) addCommandGroup(current.id);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.deleteCommandGroup.selector, (_event, target) => {
-      const current = project(),
-        group = target.closest<HTMLElement>('[data-group]')?.dataset.group;
-      if (current && group) deleteCommandGroup(current.id, group);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'dblclick', '.command-settings-editor__row', (event, target) => {
-      if ((event.target as Element).closest('.command-settings-editor__row-menu')) return;
-      const id = (target as HTMLElement).dataset.commandId;
-      if (id) openCommandEditor(id);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'contextmenu', '.command-settings-editor__row', (event, target) => {
-      // Right-click opens the row's PopupMenu (a wa-dropdown root) in place of a separate context menu.
-      const menu = target.querySelector<HTMLElement & { open: boolean }>(
-        '.command-settings-editor__row-menu [data-component="popup-menu"]',
-      );
-      if (!menu) return;
-      event.preventDefault();
-      menu.open = true;
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', '.command-settings-editor__row', (event, target) => {
-      if ((event.target as Element).closest('.command-settings-editor__row-menu, .command-settings-editor__row-grip'))
-        return;
-      const current = project(),
-        id = (target as HTMLElement).dataset.commandId;
-      if (!current || !id) return;
-      const mouse = event as MouseEvent;
-      selectCommandRow(current.id, id, { toggle: mouse.metaKey || mouse.ctrlKey, range: mouse.shiftKey });
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'dragstart', '.command-settings-editor__row', (event, target) => {
-      const current = project(),
-        element = target as HTMLElement,
-        id = element.dataset.commandId;
-      if (!current || !id) return;
-      const selection = commandSelection(current.id);
-      dependencies.draggedCommandIds =
-        selection.length > 1 && selection.includes(id)
-          ? commandSettingsDefinitions(current.id)
-              .map((command) => command.id)
-              .filter((commandId) => selection.includes(commandId))
-          : [id];
-      if (dependencies.draggedCommandIds.length <= 1) {
-        selectCommandSetting(current.id, id);
-      }
-      document.querySelectorAll<HTMLElement>('.command-settings-editor__row').forEach((row) => {
-        if (dependencies.draggedCommandIds.includes(row.dataset.commandId ?? '')) row.dataset.commandDragging = 'true';
-      });
-      const transfer = (event as DragEvent).dataTransfer;
-      if (transfer) {
-        transfer.effectAllowed = 'move';
-        transfer.setData('text/plain', dependencies.draggedCommandIds.join(','));
-      }
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'dragover', '.command-settings-editor__list', (event) => {
-      if (!dependencies.draggedCommandIds.length) return;
-      const drag = event as DragEvent,
-        over = drag.target as Element,
-        row = over.closest<HTMLElement>('[data-command-id]');
-      clearCommandDropIndicators();
-      if (row && row.dataset.commandId && !dependencies.draggedCommandIds.includes(row.dataset.commandId)) {
-        drag.preventDefault();
-        const bounds = row.getBoundingClientRect();
-        row.dataset.commandDropPosition = drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
-        if (drag.dataTransfer) drag.dataTransfer.dropEffect = 'move';
-        return;
-      }
-      const container = over.closest<HTMLElement>('[data-command-group-drop]');
-      if (container) {
-        drag.preventDefault();
-        container.dataset.commandDropActive = 'true';
-        if (drag.dataTransfer) drag.dataTransfer.dropEffect = 'move';
-      }
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'drop', '.command-settings-editor__list', (event) => {
-      const sources = dependencies.draggedCommandIds,
-        current = project();
-      if (!sources.length) {
-        clearCommandDrag();
-        return;
-      }
-      const drag = event as DragEvent,
-        over = drag.target as Element,
-        row = over.closest<HTMLElement>('[data-command-id]');
-      drag.preventDefault();
-      let dropTarget: CommandDropTarget | undefined;
-      if (row && row.dataset.commandId && !sources.includes(row.dataset.commandId)) {
-        const bounds = row.getBoundingClientRect();
-        dropTarget = {
-          kind: 'row',
-          id: row.dataset.commandId,
-          position: drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
-        };
-      } else {
-        const container = over.closest<HTMLElement>('[data-command-group-drop]');
-        if (container) dropTarget = { kind: 'group', group: container.dataset.commandGroupDrop ?? '' };
-      }
-      clearCommandDrag();
-      if (current && dropTarget) reorderCommandSettings(current.id, sources, dropTarget);
-    }),
-  );
-  lifetime.add(delegate(document.body, 'dragend', '.command-settings-editor__row', clearCommandDrag));
-  lifetime.add(
-    delegate(document.body, 'input', COMMAND_FIELD_SELECTOR, (_event, target) => {
-      const current = project(),
-        field = (target as HTMLInputElement).name,
-        id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-      if (current && id && field) updateCommandSetting(current.id, id, field, (target as HTMLInputElement).value);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'input', COMMANDS_AND_AI_TARGETS.commandIconSearchField.selector, (_event, target) => {
-      commandIconSearch.value = (target as HTMLInputElement).value;
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandIcon.selector, (_event, target) => {
-      const current = project(),
-        id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
-        name = (target as HTMLElement).dataset.iconName;
-      if (current && id && name) updateCommandSetting(current.id, id, 'icon', name);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandAiDefault.selector, (_event, target) => {
-      const current = project(),
-        id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-      if (current && id) updateCommandAiSelection(current.id, id, {});
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandAiTool.selector, (_event, target) => {
-      const current = project(),
-        id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
-        tool = data(target).value,
-        descriptor = aiTools.value.find((item) => item.id === tool);
-      if (!current || !id || !tool || !descriptor) return;
-      const selection = normalizedAiSelection({ tool });
-      updateCommandAiSelection(current.id, id, selection);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandAiModel.selector, (_event, target) => {
-      const current = project(),
-        id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
-        model = data(target).value,
-        command = id ? commandSettingsDefinitions(current?.id).find((item) => item.id === id) : undefined;
-      if (!current || !id || !model || !command) return;
-      const active = effectiveCommandAiSelection(command),
-        selection = normalizedAiSelection({ tool: active.tool, model });
-      updateCommandAiSelection(current.id, id, selection);
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.selectCommandAiEffort.selector, (_event, target) => {
-      const current = project(),
-        id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId,
-        effort = data(target).value,
-        command = id ? commandSettingsDefinitions(current?.id).find((item) => item.id === id) : undefined;
-      if (!current || !id || !effort || !command) return;
-      updateCommandAiSelection(current.id, id, { ...effectiveCommandAiSelection(command), effort });
-    }),
-  );
-  lifetime.add(
-    delegate(document.body, 'click', COMMANDS_AND_AI_ACTIONS.openCommandManualModel.selector, (_event, target) => {
-      const id = target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-      if (id) openManualModel('command', id);
+      openEditor: openCommandEditor,
+      closeEditor: () => {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive runtime boundary intentionally exceeds its total static type.
+        (document.querySelector(`#${COMMAND_EDITOR_DIALOG_ID}`) as Control).hidePopover?.();
+        commandSettingsEditingId.value = undefined;
+        commandIconSearch.value = '';
+      },
+      onEditorClosed: () => {
+        if (manualModelDialog.value?.target === 'command') return;
+        commandSettingsEditingId.value = undefined;
+        commandIconSearch.value = '';
+      },
+      addCommand: () => {
+        const current = projectId();
+        if (current) openCommandEditor(addCommandSetting(current));
+      },
+      deleteCommand: (id) => {
+        const current = projectId();
+        if (current) deleteCommandSetting(current, id);
+      },
+      addGroup: () => {
+        const current = projectId();
+        if (current) addCommandGroup(current);
+      },
+      deleteGroup: (group) => {
+        const current = projectId();
+        if (current) deleteCommandGroup(current, group);
+      },
+      selection: () => {
+        const current = projectId();
+        return current ? commandSelection(current) : [];
+      },
+      orderedIds: () => {
+        const current = projectId();
+        return current ? commandSettingsDefinitions(current).map((command) => command.id) : [];
+      },
+      selectRow: (id, intent) => {
+        const current = projectId();
+        if (current) selectCommandRow(current, id, intent);
+      },
+      selectOnly: (id) => {
+        const current = projectId();
+        if (current) selectCommandSetting(current, id);
+      },
+      reorder: (sources, target) => {
+        const current = projectId();
+        if (current) reorderCommandSettings(current, sources, target);
+      },
+      updateField: (id, field, value) => {
+        const current = projectId();
+        if (current) updateCommandSetting(current, id, field, value);
+      },
+      setIconSearch: (query) => {
+        commandIconSearch.value = query;
+      },
+      chooseAi: (id, choice) => {
+        const current = projectId(),
+          command = commandSettingsDefinitions(current).find((item) => item.id === id);
+        if (!current) return;
+        if (choice.kind === 'default') {
+          updateCommandAiSelection(current, id, {});
+          return;
+        }
+        if (choice.kind === 'tool') {
+          if (aiTools.value.some((item) => item.id === choice.value))
+            updateCommandAiSelection(current, id, normalizedAiSelection({ tool: choice.value }));
+          return;
+        }
+        if (!command) return;
+        const active = effectiveCommandAiSelection(command);
+        updateCommandAiSelection(
+          current,
+          id,
+          choice.kind === 'model'
+            ? normalizedAiSelection({ tool: active.tool, model: choice.value })
+            : { ...active, effort: choice.value },
+        );
+      },
+      openManualModel: (id) => {
+        openManualModel('command', id);
+      },
     }),
   );
   lifetime.add(

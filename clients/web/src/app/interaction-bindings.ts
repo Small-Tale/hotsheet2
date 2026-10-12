@@ -26,11 +26,8 @@ type InteractionDependencies = Parameters<typeof wireProjectLifecycleInteraction
   Parameters<typeof wireShellAndGlobalInteractions>[0];
 
 type OwnedInteractionState =
-  | 'clearCommandDrag'
-  | 'clearCommandDropIndicators'
   | 'commandLongPressFired'
   | 'commandLongPressTimer'
-  | 'draggedCommandIds'
   | 'draggedGroupedAttachmentId'
   | 'draggedTickets';
 
@@ -45,31 +42,11 @@ export type InteractionBindingsPort = Omit<InteractionDependencies, OwnedInterac
 export function createHotSheetInteractionBindings(port: InteractionBindingsPort): HotSheetInteractionRegistrations {
   let commandLongPressTimer: number | undefined;
   let commandLongPressFired = false;
-  let draggedCommandIds: string[] = [];
   let draggedGroupedAttachmentId: InteractionDependencies['draggedGroupedAttachmentId'];
   let draggedTickets: InteractionDependencies['draggedTickets'];
 
-  function clearCommandDropIndicators() {
-    document
-      .querySelectorAll<HTMLElement>('[data-command-drop-position]')
-      .forEach((element) => delete element.dataset.commandDropPosition);
-    document
-      .querySelectorAll<HTMLElement>('[data-command-drop-active]')
-      .forEach((element) => delete element.dataset.commandDropActive);
-  }
-
-  function clearCommandDrag() {
-    draggedCommandIds = [];
-    document
-      .querySelectorAll<HTMLElement>('[data-command-dragging]')
-      .forEach((element) => delete element.dataset.commandDragging);
-    clearCommandDropIndicators();
-  }
-
   const dependencies = Object.create(port) as InteractionDependencies;
   Object.defineProperties(dependencies, {
-    clearCommandDrag: { value: clearCommandDrag },
-    clearCommandDropIndicators: { value: clearCommandDropIndicators },
     commandLongPressFired: {
       get: () => commandLongPressFired,
       set: (value: boolean) => {
@@ -80,12 +57,6 @@ export function createHotSheetInteractionBindings(port: InteractionBindingsPort)
       get: () => commandLongPressTimer,
       set: (value: number | undefined) => {
         commandLongPressTimer = value;
-      },
-    },
-    draggedCommandIds: {
-      get: () => draggedCommandIds,
-      set: (value: string[]) => {
-        draggedCommandIds = value;
       },
     },
     draggedGroupedAttachmentId: {

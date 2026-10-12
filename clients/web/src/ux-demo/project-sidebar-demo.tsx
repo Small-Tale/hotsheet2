@@ -1,5 +1,5 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { delegate, delegateCapture, signal } from 'kerfjs';
+import { delegate, signal } from 'kerfjs';
 import { createScope } from 'kerfjs/scope';
 import { GripHorizontal } from 'lucide';
 
@@ -8,6 +8,7 @@ import { type CommandDropTarget, keptCommandGroups, reorderCommandsMultiple } fr
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
 import { COMMAND_EDITOR_DIALOG_ID, CommandSettingsEditor } from '../components/command-settings-editor';
+import { wireCommandSettingsEditor } from '../components/command-settings-editor-interactions';
 import { DriveControl } from '../components/drive-control';
 import { type AiToolDescriptor, DriveOptionsMenu } from '../components/drive-options-menu';
 import { NotificationNavigation } from '../components/notification-navigation';
@@ -17,9 +18,9 @@ import { RepositorySummary } from '../components/repository-summary';
 import { SettingsNavigation } from '../components/settings-navigation';
 import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
-import { COMMAND_FIELD_SELECTOR, COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
+import { COMMANDS_AND_AI_ACTIONS } from '../interaction-attrs/commands-and-ai';
 import { loadLucideCatalog } from '../lucide-catalog';
-import { DEMO_ACTIONS, DEMO_FIELDS } from './demo-actions';
+import { DEMO_ACTIONS } from './demo-actions';
 import type { DemoModule, FormControl } from './demo-module';
 import { listen } from './demo-module';
 import { syncSettingsControls } from './settings-controls';
@@ -428,185 +429,39 @@ export function TerminalOperationsSidebarDemo() {
 function wireProjectSidebarDemo(root: HTMLElement): () => void {
   const demoListeners = createScope();
   let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
-  function commandEditorRowId(target: Element): string | undefined {
-    return target.closest<HTMLElement>('[data-command-id]')?.dataset.commandId;
-  }
-  let draggedCommandEditorIds: string[] = [];
-  function clearCommandEditorDropIndicators() {
-    root
-      .querySelectorAll<HTMLElement>('[data-command-drop-position]')
-      .forEach((element) => delete element.dataset.commandDropPosition);
-    root
-      .querySelectorAll<HTMLElement>('[data-command-drop-active]')
-      .forEach((element) => delete element.dataset.commandDropActive);
-  }
-  function clearCommandEditorDrag() {
-    draggedCommandEditorIds = [];
-    root
-      .querySelectorAll<HTMLElement>('[data-command-dragging]')
-      .forEach((element) => delete element.dataset.commandDragging);
-    clearCommandEditorDropIndicators();
-  }
+  // The production CommandSettingsEditor handlers over the fixture command list (HS2-RWY78R).
   demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.editCommandSetting.selector, (_event, target) => {
-      const id = commandEditorRowId(target);
-      if (id) openCommandEditorDemo(id);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.addCommandSetting.selector, () => {
-      addCommandEditorSetting();
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.closeCommandEditor.selector, () => {
-      closeCommandEditorDemo();
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.deleteCommandSetting.selector, (_event, target) => {
-      const id = commandEditorRowId(target);
-      if (id) deleteCommandEditorSetting(id);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.addCommandGroup.selector, () => {
-      addCommandEditorGroup();
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.deleteCommandGroup.selector, (_event, target) => {
-      const group = target.closest<HTMLElement>('[data-group]')?.dataset.group;
-      if (group) deleteCommandEditorGroup(group);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'dblclick', '.command-settings-editor__row', (event, target) => {
-      if ((event.target as Element).closest('.command-settings-editor__row-menu')) return;
-      const id = (target as HTMLElement).dataset.commandId;
-      if (id) openCommandEditorDemo(id);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'contextmenu', '.command-settings-editor__row', (event, target) => {
-      const menu = target.querySelector<HTMLElement & { show?(): void }>('.command-settings-editor__row-menu');
-      if (!menu) return;
-      event.preventDefault();
-      menu.show?.();
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', '.command-settings-editor__row', (event, target) => {
-      if ((event.target as Element).closest('.command-settings-editor__row-menu, .command-settings-editor__row-grip'))
-        return;
-      const id = (target as HTMLElement).dataset.commandId;
-      if (!id) return;
-      const mouse = event as MouseEvent;
-      selectCommandEditorRow(id, { toggle: mouse.metaKey || mouse.ctrlKey, range: mouse.shiftKey });
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'dragstart', '.command-settings-editor__row', (event, target) => {
-      const element = target as HTMLElement,
-        id = element.dataset.commandId;
-      if (!id) return;
-      const selection = commandEditorSelection.value;
-      draggedCommandEditorIds =
-        selection.length > 1 && selection.includes(id)
-          ? commandEditorCommands.value
-              .map((command) => command.id)
-              .filter((commandId) => selection.includes(commandId))
-          : [id];
-      if (draggedCommandEditorIds.length <= 1) selectCommandEditorRow(id, {});
-      root.querySelectorAll<HTMLElement>('.command-settings-editor__row').forEach((row) => {
-        if (draggedCommandEditorIds.includes(row.dataset.commandId ?? '')) row.dataset.commandDragging = 'true';
-      });
-      const transfer = (event as DragEvent).dataTransfer;
-      if (transfer) {
-        transfer.effectAllowed = 'move';
-        transfer.setData('text/plain', draggedCommandEditorIds.join(','));
-      }
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'dragover', '.command-settings-editor__list', (event) => {
-      if (!draggedCommandEditorIds.length) return;
-      const drag = event as DragEvent,
-        over = drag.target as Element,
-        row = over.closest<HTMLElement>('[data-command-id]');
-      clearCommandEditorDropIndicators();
-      if (row && row.dataset.commandId && !draggedCommandEditorIds.includes(row.dataset.commandId)) {
-        drag.preventDefault();
-        const bounds = row.getBoundingClientRect();
-        row.dataset.commandDropPosition = drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
-        return;
-      }
-      const container = over.closest<HTMLElement>('[data-command-group-drop]');
-      if (container) {
-        drag.preventDefault();
-        container.dataset.commandDropActive = 'true';
-      }
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'drop', '.command-settings-editor__list', (event) => {
-      const sources = draggedCommandEditorIds;
-      if (!sources.length) {
-        clearCommandEditorDrag();
-        return;
-      }
-      const drag = event as DragEvent,
-        over = drag.target as Element,
-        row = over.closest<HTMLElement>('[data-command-id]');
-      drag.preventDefault();
-      let dropTarget: CommandDropTarget | undefined;
-      if (row && row.dataset.commandId && !sources.includes(row.dataset.commandId)) {
-        const bounds = row.getBoundingClientRect();
-        dropTarget = {
-          kind: 'row',
-          id: row.dataset.commandId,
-          position: drag.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after',
-        };
-      } else {
-        const container = over.closest<HTMLElement>('[data-command-group-drop]');
-        if (container) dropTarget = { kind: 'group', group: container.dataset.commandGroupDrop ?? '' };
-      }
-      clearCommandEditorDrag();
-      if (dropTarget) reorderCommandEditorSettings(sources, dropTarget);
-    }),
-  );
-  demoListeners.add(delegate(root, 'dragend', '.command-settings-editor__row', clearCommandEditorDrag));
-  demoListeners.add(
-    delegate(root, 'input', COMMAND_FIELD_SELECTOR, (_event, target) => {
-      const input = target as HTMLInputElement;
-      const id = commandEditorRowId(target);
-      if (id && input.name) updateCommandEditorField(id, input.name, input.value);
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'input', DEMO_FIELDS.commandIconSearch.selector, (_event, target) => {
-      commandEditorIconSearch.value = (target as HTMLInputElement).value;
-    }),
-  );
-  demoListeners.add(
-    delegate(root, 'click', DEMO_ACTIONS.selectCommandIcon.selector, (_event, target) => {
-      const id = commandEditorRowId(target);
-      const name = (target as HTMLElement).dataset.iconName;
-      if (id && name) updateCommandEditorField(id, 'icon', name);
-    }),
-  );
-  demoListeners.add(
-    delegateCapture(
-      root,
-      'toggle',
-      `#${COMMAND_EDITOR_DIALOG_ID}`,
-      (event) => {
-        if ((event as ToggleEvent).newState !== 'closed') return;
+    wireCommandSettingsEditor(root, {
+      ownsCommand: (id) => commandEditorCommands.value.some((command) => command.id === id),
+      openEditor: openCommandEditorDemo,
+      closeEditor: closeCommandEditorDemo,
+      onEditorClosed: () => {
         commandEditorEditingId.value = undefined;
         commandEditorIconSearch.value = '';
       },
-      { match: 'direct' },
-    ),
+      addCommand: addCommandEditorSetting,
+      deleteCommand: deleteCommandEditorSetting,
+      addGroup: addCommandEditorGroup,
+      deleteGroup: deleteCommandEditorGroup,
+      selection: () => commandEditorSelection.value,
+      orderedIds: () => commandEditorCommands.value.map((command) => command.id),
+      selectRow: selectCommandEditorRow,
+      selectOnly: (id) => {
+        selectCommandEditorRow(id, {});
+      },
+      reorder: reorderCommandEditorSettings,
+      updateField: updateCommandEditorField,
+      setIconSearch: (query) => {
+        commandEditorIconSearch.value = query;
+      },
+      chooseAi: (id, choice) => {
+        commandEditorMessage.value =
+          choice.kind === 'default' ? `${id} uses the default AI.` : `${id} AI ${choice.kind} set to ${choice.value}.`;
+      },
+      openManualModel: (id) => {
+        commandEditorMessage.value = `Manual model entry requested for ${id}.`;
+      },
+    }),
   );
   demoListeners.add(
     delegate(root, 'click', DEMO_ACTIONS.openRepositoryStatus.selector, () => {
