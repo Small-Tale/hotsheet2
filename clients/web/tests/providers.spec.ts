@@ -21350,7 +21350,7 @@ test('shows honest loading feedback while a selected view collection is unresolv
     '[data-component="ticket-board"] [data-component="empty-state"].ticket-empty-state--view-loading',
   );
   await expect(boardLoading).toContainText('Loading Archive');
-  await expect(page.locator('.ticket-board-column__progress')).toHaveCount(0);
+  await expect(page.locator('[data-component="ticket-board-column"] [data-ticket-progressive-loading]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Load more tickets' })).toHaveCount(0);
   await page.getByRole('button', { name: /List view/ }).click();
   await page.waitForTimeout(300);

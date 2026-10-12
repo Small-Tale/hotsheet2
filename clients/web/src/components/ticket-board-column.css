@@ -1,3 +1,5 @@
+/* Header row over a scroller that takes the remaining column height; the row-containment tokens let
+   long columns skip rendering off-screen TicketRows. */
 .ticket-board-column {
   display: grid;
   min-width: 0;
@@ -7,20 +9,22 @@
   --hs-ticket-row-content-visibility: auto;
   --hs-ticket-row-intrinsic-size: auto 72px;
 }
+/* Paged board (HS2-ZYJMDP): each column is a snap target. */
 .ticket-board-column[data-scroll-snap='start'] {
   scroll-snap-align: start;
 }
+/* Drop-target feedback while a ticket is dragged over the column. */
 .ticket-board-column[data-dragging-ticket='true'] {
   background: var(--wa-color-brand-fill-quiet);
   box-shadow: inset 0 0 0 2px var(--wa-color-brand-border-normal);
 }
+/* The heading's full-width "select every ticket in this column" button: title left, count Badge right. */
 .ticket-board-column__header {
   position: relative;
   z-index: 2;
   display: flex;
   width: 100%;
   height: remify(32px);
-  min-height: remify(32px);
   padding: 0 var(--kui-space-xs);
   border: 0;
   border-radius: remify(5.6px);
@@ -33,10 +37,12 @@
   gap: var(--kui-space-xs);
   text-align: left;
 }
+/* The native h2 only names the column; it adds no heading margin or type scale. */
 .ticket-board-column > header h2 {
   margin: 0;
   font: inherit;
 }
+/* Hover and keyboard focus feedback for the column select button. */
 .ticket-board-column__header:hover {
   background: var(--wa-color-neutral-fill-quiet);
 }
@@ -44,44 +50,22 @@
   outline: var(--wa-focus-ring);
   outline-offset: 1px;
 }
+/* The column title's emphasis inside the select button. */
 .ticket-board-column__title {
   font-size: var(--wa-font-size-s);
   font-weight: 700;
-  letter-spacing: 0.01em;
 }
-.ticket-board-column__header span {
-  display: grid;
-  min-width: remify(23.2px);
-  height: remify(23.2px);
-  padding: 0 remify(5.6px);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-border-quiet);
-  font-size: var(--wa-font-size-2xs);
-  font-weight: 700;
-  place-items: center;
-}
-.ticket-board-column__header .ticket-board-column__title {
-  display: block;
-  width: auto;
-  min-width: 0;
-  height: auto;
-  padding: 0;
-  border-radius: 0;
-  color: inherit;
-  background: transparent;
-  font-size: var(--wa-font-size-s);
-}
+/* The vertical-only ticket scroller (Kerf's kui-scroll-owner would also capture and contain the
+   horizontal wheel the paged board needs); its end pads by the shell's scroll-end inset so the last
+   ticket clears the phone home indicator (HS2-4A29RR). */
 .ticket-board-column__tickets {
   position: relative;
   z-index: 1;
   display: grid;
   min-width: 0;
   min-height: 0;
-  /* The shell's scroll-end inset (the phone home indicator while the column reaches the screen
-     edge, HS2-4A29RR) pads the end of the scroller so the last ticket scrolls clear of it. */
-  padding: var(--kui-space-none) var(--kui-space-xs) calc(var(--kui-space-m) + var(--hotsheet-scroll-end-inset, 0px));
   overflow-y: auto;
+  padding: var(--kui-space-none) var(--kui-space-xs) calc(var(--kui-space-m) + var(--hotsheet-scroll-end-inset, 0px));
   overflow-anchor: none;
   align-content: start;
   gap: var(--kui-space-xs);
@@ -89,22 +73,4 @@
   scrollbar-color: var(--wa-color-neutral-border-loud) transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-}
-.ticket-board-column__tickets::-webkit-scrollbar {
-  width: remify(8px);
-}
-.ticket-board-column__tickets::-webkit-scrollbar-track {
-  background: transparent;
-}
-.ticket-board-column__tickets::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: var(--wa-border-radius-pill);
-  background: var(--wa-color-neutral-border-loud);
-  background-clip: padding-box;
-}
-.ticket-board-column__progress {
-  padding: var(--kui-space-xs);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-s);
-  text-align: center;
 }

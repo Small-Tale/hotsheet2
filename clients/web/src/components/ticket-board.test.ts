@@ -106,7 +106,9 @@ describe('TicketBoard', () => {
     expect(markup).toContain('aria-label="Select all Active tickets"');
     expect(markup).toContain('aria-label="Active tickets"');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-board-column.css'), 'utf8');
+    // Vertical-only: a both-axis scroll owner would swallow the paged board's horizontal wheel (HS2-DZY4R7).
     expect(css).toMatch(/ticket-board-column__tickets[^}]*overflow-y: auto/);
+    expect(css).not.toContain('webkit-scrollbar');
   });
 
   it('keeps a column total authoritative while progressively rendering rows', () => {

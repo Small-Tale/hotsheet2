@@ -1,5 +1,9 @@
 import './ticket-board-column.css';
 
+import { Badge } from '@kerfjs/ui/badge';
+import { Row } from '@kerfjs/ui/row';
+import { Text } from '@kerfjs/ui/text';
+
 import { TICKET_SELECTION_ACTIONS } from '../interaction-attrs/ticket-selection';
 import { TicketPageMore } from './ticket-page-more';
 import { TicketRow, type TicketRowProps } from './ticket-row';
@@ -46,11 +50,10 @@ export function TicketBoardColumn({
             aria-label={`Select all ${title} tickets`}
           >
             <span class="ticket-board-column__title">{title}</span>
-            <span
-              aria-label={`${countPartial ? 'At least ' : ''}${totalCount} tickets`}
-              title={countPartial ? `At least ${totalCount} tickets` : undefined}
-            >
-              {totalCount}
+            <span class="ticket-board-column__count" title={countPartial ? `At least ${totalCount} tickets` : undefined}>
+              <Badge size="compact" label={`${countPartial ? 'At least ' : ''}${totalCount} tickets`}>
+                {totalCount}
+              </Badge>
             </span>
           </button>
         </h2>
@@ -71,10 +74,12 @@ export function TicketBoardColumn({
           <TicketPageMore loading={continuation.loading} />
         ) : (
           totalCount > tickets.length && (
-            <div class="ticket-board-column__progress" data-ticket-progressive-loading="true" role="status">
-              {tickets.length} of {countPartial ? 'at least ' : ''}
-              {totalCount} loaded
-            </div>
+            <Row hAlign="center" controlInsets="tb">
+              <Text variant="p" tone="quiet" size="compact" role="status" data-ticket-progressive-loading="true">
+                {tickets.length} of {countPartial ? 'at least ' : ''}
+                {totalCount} loaded
+              </Text>
+            </Row>
           )
         )}
       </div>
