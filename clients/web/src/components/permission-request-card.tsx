@@ -199,43 +199,49 @@ export function PermissionRequestCard({
               </div>
             )}
             <div class="permission-request-card__buttons">
-              <wa-button
-                appearance="outlined"
-                size="small"
-                {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
-                data-decision="deny"
-                data-scope="once"
-                data-request-key={item.key}
-                disabled={state === 'resolving'}
-              >
-                Deny
-              </wa-button>
-              {alwaysSupported && (
+              <span class="permission-request-card__decision">
                 <wa-button
                   appearance="outlined"
                   size="small"
                   {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
-                  data-decision="allow"
-                  data-scope="always"
+                  data-decision="deny"
+                  data-scope="once"
                   data-request-key={item.key}
                   disabled={state === 'resolving'}
                 >
-                  Always Allow
+                  Deny
                 </wa-button>
+              </span>
+              {alwaysSupported && (
+                <span class="permission-request-card__decision">
+                  <wa-button
+                    appearance="outlined"
+                    size="small"
+                    {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
+                    data-decision="allow"
+                    data-scope="always"
+                    data-request-key={item.key}
+                    disabled={state === 'resolving'}
+                  >
+                    Always Allow
+                  </wa-button>
+                </span>
               )}
-              <wa-button
-                variant="brand"
-                appearance="accent"
-                size="small"
-                class="permission-request-card__primary"
-                {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
-                data-decision="allow"
-                data-scope="once"
-                data-request-key={item.key}
-                disabled={state === 'resolving'}
-              >
-                {alwaysSupported ? 'Allow Once' : 'Allow'}
-              </wa-button>
+              <span class="permission-request-card__decision">
+                <wa-button
+                  variant="brand"
+                  appearance="accent"
+                  size="small"
+                  class="permission-request-card__primary"
+                  {...NOTIFICATIONS_AND_LINKS_ACTIONS.resolvePermission.attrs}
+                  data-decision="allow"
+                  data-scope="once"
+                  data-request-key={item.key}
+                  disabled={state === 'resolving'}
+                >
+                  {alwaysSupported ? 'Allow Once' : 'Allow'}
+                </wa-button>
+              </span>
             </div>
           </div>
         </footer>
