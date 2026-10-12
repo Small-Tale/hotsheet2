@@ -3327,6 +3327,14 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   ).toHaveCount(8);
   await expect(colorPicker.getByRole('radio', { name: 'Neutral' })).toHaveCount(0);
   await colorPicker.scrollIntoViewIfNeeded();
+  // Each tile fills its equal grid column instead of shrink-wrapping (HS2-6MBS88).
+  const tileWidths = await colorPicker
+    .locator('.ticket-source-color-picker__choice')
+    .evaluateAll((tiles) => tiles.map((tile) => tile.getBoundingClientRect().width));
+  const tileGrid = await colorPicker
+    .locator(':scope > :last-child')
+    .evaluate((grid) => grid.getBoundingClientRect().width);
+  expect(Math.min(...tileWidths)).toBeGreaterThan(tileGrid / 4 - 16);
   await colorPicker.screenshot({ path: 'target/visual-captures/hs2-ant2r8-source-color-picker.png' });
   await colorPicker.getByRole('radio', { name: 'Purple' }).check();
   const footer = setup.locator('[data-transition-region="footer"] [data-side="b"]');

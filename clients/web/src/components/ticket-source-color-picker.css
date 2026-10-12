@@ -16,6 +16,11 @@
   background: color-mix(in srgb, var(--ticket-source-choice-color) 15%, var(--wa-color-surface-default));
   cursor: pointer;
 }
+/* Web Awesome's native radio-label rule shrink-wraps `label:has(input[type=radio])` with
+   `width: fit-content`; each tile instead fills its equal grid column (HS2-6MBS88). */
+.ticket-source-color-picker__choice:has(input[type='radio']) {
+  width: auto;
+}
 /* The selected tile. */
 .ticket-source-color-picker__choice:has(input:checked) {
   border-color: var(--wa-color-brand-border-normal);
