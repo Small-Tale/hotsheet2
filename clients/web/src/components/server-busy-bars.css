@@ -1,41 +1,41 @@
-/* Decorative server-busy indicator: a full-width 4px strip of yellow bars pinned to the top of
-   the app's safe area — just below a translucent status bar, so iOS never blurs it (HS2-KWBEC7).
-   It never allocates layout space and never intercepts input (HS2-MW1V3M). */
+/* A bespoke top-edge activity strip (HS2-MW1V3M, HS2-KWBEC7, HS2-2G1Y8X). No Kerf or Web Awesome
+   primitive expresses a layout-free, pointer-inert edge overlay with a staggered wave, so the strip
+   keeps its own rules until Kerf ships one (KF-CS729Y). */
+
+/* The strip: pinned below a translucent status bar, allocates no layout, scales in from the top. */
 .server-busy-bars {
   position: fixed;
   inset: var(--hotsheet-safe-area-top) 0 auto 0;
   z-index: 2147483000;
   display: flex;
-  align-items: flex-start;
   height: 4px;
   /* Sub-scale bar geometry, not layout spacing (HS2-M6B8AD). */
   gap: remify(2px);
   pointer-events: none;
   opacity: 0;
-  /* Scale the whole strip in/out vertically so it grows down rather than popping (HS2-2G1Y8X). */
   transform: scaleY(0);
   transform-origin: top center;
   transition:
     opacity 0.2s ease,
     transform 0.2s ease;
 }
+/* Busy: reveal the strip. */
 .server-busy-bars[data-visible='true'] {
   opacity: 1;
   transform: scaleY(1);
 }
+/* One bar of the wave; neighbors run slightly out of phase so a wave travels across the strip. */
 .server-busy-bars__bar {
   flex: 0 0 3px;
-  width: 3px;
   height: 4px;
   border-radius: 0.5px;
   background: var(--hs-ticket-state-up-next);
   transform: scaleY(0.25);
   transform-origin: top center;
   animation: server-busy-bars-scale 1s ease-in-out infinite;
-  /* Neighboring bars are slightly out of phase so a wave travels across the strip. */
   animation-delay: calc(var(--bar-index, 0) * -25ms);
 }
-/* Pause the animation while hidden so the strip costs nothing when the server is idle. */
+/* Idle: pause the wave so the hidden strip costs nothing. */
 .server-busy-bars:not([data-visible='true']) .server-busy-bars__bar {
   animation-play-state: paused;
 }
@@ -48,18 +48,16 @@
     transform: scaleY(1);
   }
 }
-/* Loading-activity label (HS2-2G1Y8X): an 11px pill hanging from the top edge, centered, with a
-   star-yellow background and rounded bottom corners; scales in/out vertically like the bars. */
+/* The loading-activity pill hangs centered from the top edge over the bars and scales in like them. */
 .server-busy-message {
   position: fixed;
-  /* Overlaps the 4px wave bars at the top of the safe area, per the design (HS2-2G1Y8X). */
   inset: var(--hotsheet-safe-area-top) auto auto 50%;
   z-index: 2147483000;
   padding: remify(1.6px) remify(9.6px);
   border-radius: 0 0 remify(6.4px) remify(6.4px);
   color: var(--hs-ticket-state-up-next-on);
   background: var(--hs-ticket-state-up-next);
-  font-size: var(--wa-font-size-2xs); /* 11px */
+  font-size: var(--wa-font-size-2xs);
   line-height: 1.4;
   white-space: nowrap;
   pointer-events: none;
@@ -70,10 +68,12 @@
     opacity 0.2s ease,
     transform 0.2s ease;
 }
+/* Shown: reveal the pill. */
 .server-busy-message[data-visible='true'] {
   opacity: 1;
   transform: translateX(-50%) scaleY(1);
 }
+/* Reduced motion: no wave and no scale; the strip and pill only fade. */
 @media (prefers-reduced-motion: reduce) {
   .server-busy-bars__bar {
     animation: none;
