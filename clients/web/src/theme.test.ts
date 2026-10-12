@@ -42,7 +42,6 @@ const kerfSpacingMigratedComponents = [
   'project-tab-bar.css',
   'repository-setup.css',
   'repository-status-popover.css',
-  'saved-view-dialog.css',
   'terminal-drawer.css',
   'terminal-ticket-rail.css',
   'ticket-duplicate-backlinks.css',

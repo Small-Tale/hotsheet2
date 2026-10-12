@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -15,9 +15,8 @@ function queryModel(text = '', typing = '', tags: readonly string[] = ['design',
 
 describe('SavedViewDialog', () => {
   it('lays the query out as a Kerf form field beside the name input, not a toolbar (HS2-E40KC0)', () => {
-    const css = readFileSync(new URL('./saved-view-dialog.css', import.meta.url), 'utf8');
-    // Kerf's form-field presentation owns the label, inset, and full width; the dialog adds no query layout CSS.
-    expect(css).not.toContain('saved-view-dialog__query');
+    // Kerf's form-field presentation owns the label, inset, and full width; the dialog has no component CSS.
+    expect(existsSync(new URL('./saved-view-dialog.css', import.meta.url))).toBe(false);
     const markup = String(SavedViewDialog({ open: true, name: 'Needs docs', searchModel: queryModel('tag:docs') }));
     expect(markup).not.toContain('kui-toolbar');
     expect(markup).not.toContain('saved-view-dialog__query-toolbar');
@@ -118,7 +117,8 @@ describe('SavedViewDialog', () => {
       const markup = String(SavedViewDialog(state));
       expect(markup.match(/autofocus/g)).toHaveLength(1);
       expect(markup).toMatch(/<wa-input[^>]*name="saved-view-name"[^>]*autofocus/);
-      const host = markup.slice(0, markup.indexOf('>') + 1);
+      const dialogStart = markup.indexOf('<wa-dialog'),
+        host = markup.slice(dialogStart, markup.indexOf('>', dialogStart) + 1);
       expect(/\sopen(?:[\s=>])/.test(host)).toBe(state.open);
       expect(markup).toContain(`value="${state.name}"`);
       expect(markup).toContain('data-token-search-editor="saved-view-query"');

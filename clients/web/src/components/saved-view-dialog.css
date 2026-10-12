@@ -1,6 +1,0 @@
-.saved-view-dialog {
-  --width: min(remify(512px), calc(100vw - remify(32px)));
-}
-.saved-view-dialog__error {
-  color: var(--wa-color-danger-on-quiet) !important;
-}
