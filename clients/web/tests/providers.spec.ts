@@ -9175,9 +9175,8 @@ test('browses repository files and commits with host-native actions', async ({ p
   const stagedRows = popover.locator('[data-action="select-repository-file"]');
   await expect(stagedRows).toHaveCount(2);
   const renamed = popover.locator('[data-state="renamed"]');
-  await expect(renamed.locator('.repository-status-popover__file-status')).toHaveText('R');
-  await expect(renamed).toHaveAttribute('aria-label', /Renamed/);
-  await expect(renamed.locator('.repository-status-popover__file-state')).toHaveCount(0);
+  await expect(renamed.locator('[data-component="badge"]')).toHaveText('R');
+  await expect(renamed.getByRole('button', { name: /Renamed/ })).toBeVisible();
   await expect(
     popover.getByRole('button', { name: /Untracked 1/ }).locator('[data-lucide="square-pen"]'),
   ).toBeVisible();
@@ -9187,15 +9186,12 @@ test('browses repository files and commits with host-native actions', async ({ p
       .first()
       .evaluate((element) => element.scrollWidth > element.clientWidth),
   ).toBe(true);
-  const staged = stagedRows
-    .filter({ has: page.locator('[data-item-id="src/staged.ts"]') })
-    .or(stagedRows.locator('[data-item-id="src/staged.ts"]'))
-    .first();
+  const staged = popover.locator('[data-action="select-repository-file"][data-item-id="src/staged.ts"]').first();
   await staged.click();
   await expect(staged).toHaveAttribute('aria-pressed', 'true');
   await expect(popover.getByRole('menu')).toHaveCount(0);
   await renamed.click({ modifiers: ['Meta'] });
-  await expect(renamed).toHaveAttribute('aria-pressed', 'true');
+  await expect(renamed.locator('[data-action="select-repository-file"]')).toHaveAttribute('aria-pressed', 'true');
   await staged.click({ button: 'right' });
   await expect(popover.getByRole('menuitem', { name: 'Open' })).toBeDisabled();
   await popover.getByRole('menuitem', { name: 'Show Diff' }).click();
@@ -9285,7 +9281,7 @@ test('browses repository files and commits with host-native actions', async ({ p
   const back = popover.getByRole('button', { name: 'Back to repository views' });
   await expect(back).toBeInViewport({ ratio: 1 });
   await back.click();
-  const repositoryNavigation = popover.locator('.repository-status-popover__navigation');
+  const repositoryNavigation = popover.getByRole('navigation', { name: 'Repository views' });
   // Re-push the same detail key while the popped view is still animating out. Kerf beta.77
   // cancels the old removal timer before the live detail can be reused (KF-8ESDJD, HS2-BED455).
   await repositoryNavigation.getByRole('button', { name: /Commits 24/ }).evaluate((button) => {
@@ -9299,8 +9295,9 @@ test('browses repository files and commits with host-native actions', async ({ p
   await back.click();
   await expect(repositoryNavigation.getByRole('button', { name: /Staged 2/ })).toBeInViewport({ ratio: 1 });
   await expect(repositoryNavigation.getByRole('button', { name: /Commits 24/ })).toBeInViewport({ ratio: 1 });
-  await repositoryNavigation.getByText('Branch').scrollIntoViewIfNeeded();
-  await expect(repositoryNavigation.getByText('Branch')).toBeInViewport({ ratio: 1 });
+  const branch = popover.locator('[aria-label="Repository identity"]').getByText('Branch');
+  await branch.scrollIntoViewIfNeeded();
+  await expect(branch).toBeInViewport({ ratio: 1 });
   // Choosing Commits pushes its detail again, with the comparison still active.
   await repositoryNavigation.getByRole('button', { name: /Commits 24/ }).click();
   await expect(back).toBeInViewport({ ratio: 1 });
@@ -9618,7 +9615,9 @@ test('lists associated commits and opens a validated commit or range in the conf
   await evidenceDialog.screenshot({ path: 'target/visual-captures/hs2-s7x4sb-change-evidence.png' });
   await testFile.click();
   await expect(evidenceDialog.getByRole('menu')).toHaveCount(0);
-  await testFile.getByRole('button', { name: /Actions for/ }).click();
+  await evidenceDialog
+    .getByRole('button', { name: /Actions for clients\/web\/src\/change-evidence\.test\.ts/ })
+    .click();
   await evidenceDialog.getByRole('menuitem', { name: 'Show Diff' }).click();
   await expect
     .poll(() =>
@@ -9779,7 +9778,9 @@ test('keeps change evidence interactive when launched from the modal ticket read
   await expect(evidenceDialog).toHaveAttribute('data-view', 'tests');
   const testFile = evidenceDialog.locator('[data-action="select-repository-file"]');
   await expect(testFile).toHaveAttribute('data-item-id', 'clients/web/src/change-evidence.test.ts');
-  await testFile.getByRole('button', { name: /Actions for/ }).click();
+  await evidenceDialog
+    .getByRole('button', { name: /Actions for clients\/web\/src\/change-evidence\.test\.ts/ })
+    .click();
   await evidenceDialog.getByRole('menuitem', { name: 'Show Diff' }).click();
   await expect
     .poll(() =>
@@ -9793,8 +9794,8 @@ test('keeps change evidence interactive when launched from the modal ticket read
     .toBe(true);
   await page.screenshot({ path: 'target/visual-captures/hs2-6ev2es-evidence-over-reader.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  const navigation = evidenceDialog.locator('.repository-status-popover__navigation'),
-    detail = evidenceDialog.locator('.repository-status-popover__detail');
+  const navigation = evidenceDialog.getByRole('navigation', { name: 'Change evidence views' }),
+    detail = evidenceDialog.getByRole('list', { name: 'tests change evidence' });
   await expect
     .poll(async () => {
       const [navigationBounds, detailBounds] = await Promise.all([navigation.boundingBox(), detail.boundingBox()]);

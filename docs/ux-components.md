@@ -304,14 +304,18 @@ does not introduce polling or another network request.
     metadata; scrollable staged/unstaged/untracked/conflicted file views with Git-letter
     badges and middle-truncated paths;
     double-click, keyboard, copy-path, and host-native reveal actions; and a Commits view
-    that reuses Code Review difftool/range presentation. The master views and detail
-    files compose the shared `ListHeader` and `ListItem` primitives, and the complete
-    dialog is represented as an embedded production component in `/ux-demo`
-    (HS2-RPVFA4, HS2-323XHG, HS2-Z0TSX4). Its roomy panes use 24px insets, constrained
-    panes and sibling value groups use 16px, menu rows and empty-state clusters use 8px,
-    and connected path/menu details use 4px. The shared view rows remain gapless below a
-    4px-separated `ListHeader`; the pointer-anchored file-action menu stays app-owned
-    because no catalog primitive owns that host-action positioning contract (HS2-4Y6SM9).
+    that reuses Code Review difftool/range presentation. The dialog is composed from Kerf
+    components rather than restyled (HS2-HBFXQY):
+    - views are `ListHeader` plus `ListItem`s with their counts in `status`;
+    - files are divided `ListActionRow`s with a `Badge` status letter and a trailing actions button;
+    - empty and busy states are `EmptyState`; errors and the compact state summary are `StateBanner`s;
+    - the pointer-anchored file menu is a context-mode Kerf `PopupMenu` inside the shared
+      `ContextMenuAnchor`, rendered only by the surface that opened it;
+    - Kerf `Pane`s own every inset and scroll owner.
+
+    App CSS keeps only the popover's viewport-relative size and the middle-ellipsis path.
+    The complete dialog is represented as an embedded production component in `/ux-demo`
+    (HS2-RPVFA4, HS2-323XHG, HS2-Z0TSX4).
     Its catalog-only example stack and fixture wrapper also opt into shrinking, keeping the
     embedded dialog and both heading toolbar actions inside the detail pane at 1280px and in the
     constrained layout without changing production popover sizing (HS2-MCHTAW).
@@ -323,11 +327,11 @@ does not introduce polling or another network request.
   surface and section rhythm use the canonical 24 px step, with 16 px between the icon/message
   columns and 8 px inside error and action groups (HS2-4Y6SM9).
 - `ChangeEvidenceDialog` — **production built**: the actionable Code Review evidence
-  summary opens a repository-style master/detail dialog whose Docs, Tests, Source, and
-  Other views reuse `ListHeader`, `ListItem`, middle-truncated paths, and Git-letter
-  badges. Selecting a file opens its diff across the server-validated complete ticket
-  commit span. It shares the phone-width stacked navigation and detail layout with
-  RepositorySummary (HS2-B2MD8Z). The dialog has a standalone interactive `/ux-demo` route (HS2-S7X4SB).
+  summary opens a repository-style master/detail dialog: a Kerf `SplitView` whose Docs, Tests,
+  Source, and Other views reuse `ListItem`, with the same `ListActionRow` file rows,
+  middle-truncated paths, and Git-letter `Badge`s as Repository Status. Selecting a file opens its diff across the server-validated complete ticket
+  commit span. On compact devices it stacks the views above the files in one `Pane`
+  (HS2-B2MD8Z). The dialog has a standalone interactive `/ux-demo` route (HS2-S7X4SB).
 - `ListItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces. Its
@@ -2668,8 +2672,8 @@ HS2-QM0C3T removed nine of its twelve list, navigation, tab, and popover entries
 findings) without changing a rendered pixel or computed style. Each fix gives app markup its own class or uses a child prop:
 
 - **Own classes.** `CommandNavigation` uses Kerf's `ListItem.busy` indicator.
-  `ViewNavigation` uses Kerf `List` and `ListActionRow` for its rows. Both popover
-  `<nav>`s are `.repository-status-popover__nav`. The workspace header's utility buttons carry
+  `ViewNavigation` uses Kerf `List` and `ListActionRow` for its rows. The popover `<nav>`s
+  have since dropped their app classes entirely and are labeled `<nav>` landmarks (HS2-HBFXQY). The workspace header's utility buttons carry
   no app class: Kerf's `ToolbarControlGroup` owns their disabled cursor, dimming, and absent hover
   chrome (`KF-FTADQT`, adopted in HS2-0MH5V1).
 - **Child props.** `RepositorySummary` and the popover's synchronization values size their icons

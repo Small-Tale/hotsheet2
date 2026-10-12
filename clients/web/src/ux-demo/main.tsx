@@ -86,7 +86,7 @@ import { statusMenuAnchorY } from '../components/ticket-status-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { TrashSettings } from '../components/trash-settings';
 import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
-import { type ContextPopupMenuElement, openContextPopupMenu } from '../context-menu-position';
+import { type ContextPopupMenuElement, openContextPopupMenu, revealContextPopupMenu } from '../context-menu-position';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { withControlledOpen } from '../controlled-open';
 import { createDebouncedAutosave } from '../debounced-autosave';
@@ -2386,7 +2386,9 @@ function openRepositoryDemoFileMenu(target: Element, x: number, y: number) {
     diff,
     x: Math.max(minimumX, Math.min(x, maximumX)),
     y: Math.max(minimumY, Math.min(y, maximumY)),
+    source: ticket ? 'ticket' : 'repository',
   };
+  revealContextPopupMenu('repository-file');
 }
 demoListeners.add(
   delegate(root, 'dblclick', repositoryDemoFileSelector, (event, target) => {

@@ -370,6 +370,8 @@ describe('UX demo catalog', () => {
       'sidebar-panel': 'Panel-parts contract and standalone Pane wrapper behind the cataloged sidebars and AppShell.',
       'notification-inspector': 'Empty notification-mode inspector chrome rendered within the cataloged AppShell.',
       'attachment-context-menu': 'Context menu rendered by the demoed attachment surfaces (inspector/gallery).',
+      'context-menu-anchor':
+        'Zero-footprint wrapper with no visual of its own around context-mode PopupMenus (demoed via their surfaces).',
       'corrupt-ticket-row': 'Parse-error row variant rendered within TicketList (demoed).',
       'flow-back-button': 'Shared back affordance rendered inside multi-step dialogs/flows.',
       'lucide-icon-picker': 'Icon-picker sub-control of CommandSettingsEditor (demoed).',

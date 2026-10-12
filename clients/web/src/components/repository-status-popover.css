@@ -1,267 +1,37 @@
+/* The native popover's own size: the viewport-relative bound a top-layer surface needs. */
 .repository-status-popover {
-  width: min(remify(1024px), calc(100vw - 2 * var(--kui-space-l)));
-  height: min(remify(640px), calc(100vh - 2 * var(--kui-space-l)));
+  width: min(remify(1024px), calc(100vw - 2 * var(--kui-space-xs)));
+  height: min(remify(640px), calc(100vh - 2 * var(--kui-space-xs)));
 }
-/* Repository Status is a list-detail layout that fills the popover: a SplitView of a list Pane and a
-   detail Pane whose header carries the title, summary, and actions (HS2-3B8345). Scoped to the open or
-   embedded popover so a closed native popover stays hidden; ChangeEvidenceDialog keeps its own grid. */
-.repository-status-popover[data-component='repository-status-popover']:is(:popover-open, [data-embedded='true']) {
-  /* At most half of a narrow popover, so the detail column always stays in view. */
+.change-evidence-dialog {
+  width: min(remify(832px), calc(100vw - 2 * var(--kui-space-xs)));
+  height: min(remify(512px), calc(100vh - 2 * var(--kui-space-xs)));
+}
+/* Only an open (or embedded) popover lays out, so a closed one stays hidden; SplitView fills it and
+   the list column never takes more than half of a narrow popover (HS2-3B8345). */
+.repository-status-popover:is(:popover-open, [data-embedded='true']) {
   --kui-split-view-list-width: min(remify(432px), 50%);
   display: grid;
   grid-template-rows: minmax(0, 1fr);
 }
-.repository-status-popover__compact-summary {
-  display: flex;
-  margin: 0;
-  padding: var(--kui-space-xs) var(--kui-space-m);
-  color: var(--wa-color-neutral-on-quiet);
-  font-size: var(--wa-font-size-s);
-  align-items: center;
-  gap: var(--kui-space-xs);
+.change-evidence-dialog:is(:popover-open, [data-embedded='true']) {
+  --kui-split-view-list-width: min(remify(240px), 40%);
 }
-/* Inside the split, the Panes own scrolling and SplitView draws the column divider, so the list and
-   detail content only keep an inset aligned with their toolbars' leading edge. */
-.repository-status-popover__split .repository-status-popover__navigation,
-.repository-status-popover__split .repository-status-popover__detail {
-  padding: var(--kui-space-xs) var(--kui-space-m) var(--kui-space-m);
-  overflow: visible;
-  border-right: 0;
-}
-.repository-status-popover__refresh:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
-.repository-status-popover__layout {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  height: calc(100% - remify(78.4px));
-  grid-template-columns: remify(432px) minmax(0, 1fr);
-}
-.repository-status-popover__navigation {
-  min-width: 0;
-  padding: var(--kui-space-l);
-  overflow: auto;
-  border-right: 1px solid var(--wa-color-surface-border);
-}
-.repository-status-popover__values + .repository-status-popover__values {
-  margin-top: var(--kui-space-m);
-}
-.repository-status-popover__nav {
-  display: grid;
-  row-gap: var(--kui-space-2xs);
-}
-.repository-status-popover__views {
-  display: grid;
-}
-.repository-status-popover__detail {
-  min-width: 0;
-  min-height: 0;
-  padding: var(--kui-space-l);
-  overflow: auto;
-}
-/* Square, divided file rows configured through ListItem's public tokens and `divider` (HS2-VABS08). */
-.repository-status-popover__files {
-  --kui-layout-rounded-radius: 0;
-  --kui-list-item-selected-color: var(--wa-color-brand-on-quiet);
-  --kui-list-item-selected-background: var(--wa-color-brand-fill-quiet);
-  display: grid;
-  min-width: 0;
-  align-content: start;
-}
-.repository-status-popover__file-status {
-  display: grid;
-  width: remify(20px);
-  height: remify(20px);
-  border-radius: var(--wa-border-radius-s);
-  color: var(--wa-color-neutral-on-quiet);
-  background: var(--wa-color-neutral-fill-normal);
-  font-family: var(--wa-font-family-mono);
-  font-size: var(--wa-font-size-2xs);
-  font-weight: var(--wa-font-weight-semibold);
-  line-height: 1;
-  place-items: center;
-}
-.repository-status-popover__file > span:nth-child(2) {
-  min-width: 0;
-}
-.repository-status-popover__file-menu-trigger {
-  display: grid;
-  width: remify(28px);
-  height: remify(28px);
-  margin: remify(-4px);
-  border-radius: var(--wa-border-radius-circle);
-  color: var(--wa-color-text-quiet);
-  place-items: center;
-}
-.repository-status-popover__file-menu-trigger:hover,
-.repository-status-popover__file-menu-trigger:focus-visible {
-  color: var(--wa-color-text-normal);
-  background: var(--wa-color-neutral-fill-normal);
-  outline: none;
-}
-.repository-status-popover__path {
-  display: flex;
-  min-width: 0;
-  font-size: var(--wa-font-size-s);
-  font-weight: var(--wa-font-weight-normal);
-  white-space: nowrap;
-}
-.repository-status-popover__path > span:first-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.repository-status-popover__path > span:last-child {
-  max-width: 55%;
-  overflow: hidden;
-  flex: none;
-}
-.repository-status-popover__file small {
-  display: flex;
-  min-width: 0;
-  margin-top: var(--kui-space-2xs);
-  overflow: hidden;
-  color: var(--wa-color-text-quiet);
-  white-space: nowrap;
-  font-size: var(--wa-font-size-2xs);
-  gap: var(--kui-space-2xs);
-}
-.repository-status-popover__file small .repository-status-popover__path {
-  flex: 1;
-}
-.repository-status-popover__file[data-state='unmerged'] .repository-status-popover__file-status {
-  color: var(--wa-color-danger-on-quiet);
-  background: var(--wa-color-danger-fill-quiet);
-}
-.repository-status-popover__file[data-state='added'] .repository-status-popover__file-status {
-  color: var(--wa-color-success-on-quiet);
-  background: var(--wa-color-success-fill-quiet);
-}
-.repository-status-popover__file[data-state='deleted'] .repository-status-popover__file-status {
-  color: var(--wa-color-danger-on-quiet);
-  background: var(--wa-color-danger-fill-quiet);
-}
-.repository-status-popover__empty {
-  display: grid;
-  min-height: remify(192px);
-  color: var(--wa-color-text-quiet);
-  place-items: center;
-  align-content: center;
-  gap: var(--kui-space-xs);
-  text-align: center;
-}
-.repository-status-popover__empty-icon {
-  display: flex;
-}
-.repository-status-popover__loading,
-.repository-status-popover__error {
-  margin: var(--kui-space-l);
-  padding: var(--kui-space-m);
-  border-radius: var(--wa-border-radius-m);
-}
-.repository-status-popover__pagination {
-  min-height: remify(40px);
-  padding: var(--kui-space-xs);
-  box-sizing: border-box;
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-xs);
-  text-align: center;
-}
-.repository-status-popover__detail-error {
-  padding: var(--kui-space-xs);
-  border-radius: var(--wa-border-radius-m);
-  color: var(--wa-color-danger-on-quiet);
-  background: var(--wa-color-danger-fill-quiet);
-  font-size: var(--wa-font-size-xs);
-}
-.repository-status-popover__error {
-  color: var(--wa-color-danger-on-quiet);
-  background: var(--wa-color-danger-fill-quiet);
-  overflow-wrap: anywhere;
-}
-.repository-status-popover__context-menu {
-  position: fixed;
-  z-index: 2;
-  display: grid;
-  min-width: remify(208px);
-  padding: var(--kui-space-2xs);
-  border: 1px solid var(--wa-color-surface-border);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-default);
-  box-shadow: var(--wa-shadow-l);
-}
-.repository-status-popover__context-menu button {
-  display: grid;
-  min-height: remify(35.2px);
-  padding: 0 var(--kui-space-m);
-  border: 0;
-  border-radius: var(--wa-border-radius-s);
-  color: var(--wa-color-text-normal);
-  background: transparent;
-  cursor: pointer;
-  grid-template-columns: remify(16px) minmax(0, 1fr);
-  align-items: center;
-  gap: var(--kui-space-xs);
-  font: inherit;
-  text-align: left;
-}
-.repository-status-popover__context-menu button:hover {
-  background: var(--wa-color-neutral-fill-quiet);
-}
-.repository-status-popover__context-menu button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.repository-status-popover__context-menu hr {
-  width: 100%;
-  margin: var(--kui-space-2xs) 0;
-  border: 0;
-  border-top: 1px solid var(--wa-color-surface-border);
-}
+/* An embedded (catalog or inline) instance stays in flow instead of the top layer. */
 .repository-status-popover[data-embedded='true'] {
   position: relative;
   inset: auto;
-  display: block;
   max-width: 100%;
   margin: 0;
 }
-.change-evidence-dialog {
-  width: min(remify(832px), calc(100vw - 2 * var(--kui-space-l)));
-  height: min(remify(512px), calc(100vh - 2 * var(--kui-space-l)));
+/* Middle ellipsis keeps a long path's file name visible; Text only truncates at the end. */
+.repository-status-popover__path {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
 }
-.change-evidence-dialog__layout {
-  grid-template-columns: remify(240px) minmax(0, 1fr);
-}
-@media (max-width: remify(768px)) {
-  .repository-status-popover {
-    width: calc(100vw - 2 * var(--kui-space-xs));
-    height: calc(100vh - 2 * var(--kui-space-xs));
-  }
-  .repository-status-popover__layout {
-    grid-template-columns: minmax(remify(240px), 55%) minmax(0, 1fr);
-  }
-  .repository-status-popover__navigation,
-  .repository-status-popover__detail {
-    padding: var(--kui-space-m);
-  }
-}
-@media (max-width: remify(600px)) {
-  .repository-status-popover__layout {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 39%) minmax(0, 1fr);
-  }
-  .repository-status-popover__navigation {
-    display: flex;
-    flex-direction: column;
-    border-right: 0;
-    border-bottom: 1px solid var(--wa-color-surface-border);
-  }
-  .repository-status-popover__navigation > :is(.repository-status-popover__nav, .repository-status-popover__metadata) {
-    flex: none;
-  }
-  .repository-status-popover__nav {
-    order: -1;
-  }
+.repository-status-popover__path > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

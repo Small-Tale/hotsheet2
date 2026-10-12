@@ -282,6 +282,7 @@ export function wireRepositoryInteractions(dependencies: RepositoryInteractionsD
       absolutePath: absolutePaths[0],
       absolutePaths,
       diff,
+      source,
       ...position,
     };
   }

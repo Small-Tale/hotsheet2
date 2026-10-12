@@ -55,17 +55,17 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).not.toContain('data-component="nav-stack"');
     // The list Pane has its own quiet toolbar title; the heading follows inside the detail column.
     const list = markup.indexOf('>Repository<'),
-      metadata = markup.indexOf('repository-status-popover__metadata'),
+      metadata = markup.indexOf('aria-label="Repository identity"'),
       heading = markup.indexOf('id="repository-status-title"'),
-      detail = markup.indexOf('class="repository-status-popover__detail" aria-live="polite"');
+      detail = markup.indexOf('aria-label="unstaged files"');
     expect(list).toBeGreaterThan(-1);
     expect(list).toBeLessThan(metadata);
     expect(metadata).toBeLessThan(heading);
     expect(heading).toBeLessThan(detail);
     expect(markup).toContain('aria-labelledby="repository-status-title"');
-    // Panes own scrolling and SplitView the divider; the old grid stays only for ChangeEvidenceDialog.
-    expect(markup).not.toContain('<aside class="repository-status-popover__navigation">');
-    expect(css).toMatch(/\.repository-status-popover__split \.repository-status-popover__navigation,/);
+    // Panes own scrolling, insets, and the content stack; SplitView draws the divider (HS2-HBFXQY).
+    expect(markup).not.toContain('repository-status-popover__navigation');
+    expect(css).not.toContain('__navigation');
     expect(css).toMatch(/--kui-split-view-list-width: min\(remify\(432px\), 50%\)/);
     expect(css).toMatch(/:is\(:popover-open, \[data-embedded='true'\]\)/);
   });
@@ -75,7 +75,7 @@ describe('RepositoryStatusPopover', () => {
     expect(list).toContain('data-component="nav-stack"');
     // The stack toolbar carries the title and actions; the list keeps the state summary.
     expect(list).toContain('Repository Status');
-    expect(list).toContain('repository-status-popover__compact-summary');
+    expect(list).toContain('data-component="state-banner"');
     expect(list).not.toContain('id="repository-status-title"');
     expect(list).toContain('aria-label="Repository Status"');
     expect(list).toContain('aria-label="Refresh repository status"');
@@ -165,39 +165,37 @@ describe('RepositoryStatusPopover', () => {
     expect(markup.match(/class="kui-value-table__row"/g)).toHaveLength(4);
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-component="list-header"');
-    expect(markup.match(/data-component="list-item"/g)).toHaveLength(7);
+    expect(markup.match(/data-component="list-item"/g)).toHaveLength(5);
+    expect(markup.match(/data-component="list-action-row"/g)).toHaveLength(2);
     expect(markup).toContain('data-action="select-repository-file" data-item-id="src/staged.ts"');
     expect(markup).toContain('data-action="open-repository-file-menu-trigger" data-item-id="src/staged.ts"');
     expect(markup).toContain('data-lucide="ellipsis"');
     expect(markup).toContain('data-state="renamed"');
     expect(markup).toContain('aria-label="src/old name.ts"');
     expect(markup).toContain('data-lucide="square-pen"');
-    expect(markup).toContain('class="repository-status-popover__file-status" aria-hidden="true">A</span>');
-    expect(markup).toContain('class="repository-status-popover__file-status" aria-hidden="true">R</span>');
-    expect(markup).not.toContain('repository-status-popover__file-state');
+    expect(markup).toContain('data-component="badge" data-tone="success"');
+    expect(markup).toMatch(/data-component="badge"[^>]*aria-hidden="true">A<\/span>/);
+    expect(markup).toMatch(/data-component="badge"[^>]*aria-hidden="true">R<\/span>/);
     expect(markup).toContain('repository-status-popover__path');
     expect(markup).toContain('data-action="refresh-repository-status"');
-    const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8'),
-      shared = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.tsx'), 'utf8');
-    expect(css).toMatch(/__layout \{[^}]*grid-template-columns:/);
-    expect(css).toMatch(/__detail \{[^}]*overflow: auto;/);
+    const shared = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.tsx'), 'utf8');
     expect(shared).toContain('dividerSides=""');
+    expect(shared).not.toContain('function CodeReviewFileList');
   });
 
-  it('uses canonical master-detail, connected-list, and menu spacing while retaining geometry', () => {
-    const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8');
+  it('composes Kerf components instead of restyling them, keeping only popover sizing and path ellipsis (HS2-HBFXQY)', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.css'), 'utf8'),
+      source = readFileSync(resolve(import.meta.dirname, 'repository-status-popover.tsx'), 'utf8');
     expect(css).not.toContain('--wa-space-');
-    expect(css).toMatch(/\.repository-status-popover \{[^}]*2 \* var\(--kui-space-l\)/);
-    expect(css).toMatch(/__navigation \{[^}]*padding: var\(--kui-space-l\)/);
-    expect(css).toMatchSource(/__values \+ \.repository-status-popover__values \{ margin-top: var\(--kui-space-m\)/);
-    // The nav spaces its header from the app-owned views wrapper; no margin on Kerf's ListHeader.
-    expect(css).toMatchSource(/nav \{ display: grid; row-gap: var\(--kui-space-2xs\)/);
-    expect(css).toMatchSource(/__views \{ display: grid/);
-    expect(css).not.toContain('.kui-list-header');
-    expect(css).toMatch(
-      /__context-menu button \{[^}]*padding: 0 var\(--kui-space-m\);[^}]*grid-template-columns: remify\(16px\)[^}]*gap: var\(--kui-space-xs\)/,
-    );
-    expect(css).toMatchSource(/__navigation, \.repository-status-popover__detail \{ padding: var\(--kui-space-m\)/);
+    expect(css).not.toMatch(/\.kui-/);
+    expect(css.match(/\{/g)?.length ?? 0).toBeLessThanOrEqual(7);
+    expect(css).toMatch(/\.repository-status-popover \{[^}]*2 \* var\(--kui-space-xs\)/);
+    // The file menu is a context-mode Kerf PopupMenu; rows, badges, and empty states are Kerf components.
+    expect(source).toContain('<PopupMenu');
+    expect(source).toContain('<ListActionRow');
+    expect(source).toContain('<EmptyState');
+    expect(css).not.toContain('__context-menu');
+    expect(css).not.toContain('__empty');
   });
 
   it('uses the canonical Git status letter for every file change kind', () => {
@@ -230,8 +228,9 @@ describe('RepositoryStatusPopover', () => {
     expect(markup).toContain('aria-label="Change evidence views"');
     expect(markup).toContain('data-action="select-repository-file" data-item-id="clients/web/src/dialog.test.ts"');
     expect(markup).toContain('data-file-menu-source="ticket"');
-    expect(markup).toContain('class="repository-status-popover__file-status" aria-hidden="true">A</span>');
-    expect(markup).not.toContain('data-item-id="docs/design.md" class="repository-status-popover__file"');
+    expect(markup).toMatch(/data-component="badge"[^>]*aria-hidden="true">A<\/span>/);
+    expect(markup).toContain('data-component="split-view"');
+    expect(markup).not.toContain('data-item-id="docs/design.md"');
   });
 
   it('filters files into non-overlapping working-tree views', () => {
@@ -324,7 +323,7 @@ describe('RepositoryStatusPopover', () => {
       String(
         ChangeEvidenceDialog({
           review: { commits: [], ranges: [], difftool: 'Glassbox', truncated: false, files: [] },
-          fileMenu: { path: 'src/file.ts', x: 10, y: 20, diff: 'ticket' },
+          fileMenu: { path: 'src/file.ts', x: 10, y: 20, diff: 'ticket', source: 'ticket' },
           platform: 'macos',
         }),
       ),
@@ -341,9 +340,12 @@ describe('RepositoryStatusPopover', () => {
         },
       }),
     );
-    expect(multiple).toMatch(/data-repository-file-action="show-diff"[^>]*><svg/);
-    expect(multiple).toMatch(/data-repository-file-action="open"[^>]*disabled/);
-    expect(multiple).toMatch(/data-repository-file-action="reveal"[^>]*disabled/);
+    const item = (action: string) =>
+      multiple.match(new RegExp(`<wa-dropdown-item[^>]*data-repository-file-action="${action}"[^>]*>`))?.[0] ?? '';
+    // A multi-file selection still diffs together but cannot open or reveal one host path.
+    expect(item('show-diff')).not.toMatch(/\sdisabled/);
+    expect(item('open')).toMatch(/\sdisabled/);
+    expect(item('reveal')).toMatch(/\sdisabled/);
   });
 
   it('renders an actionable error without inventing repository values', () => {

@@ -612,6 +612,7 @@ export function wireShellAndGlobalInteractions(dependencies: ShellAndGlobalInter
     ['terminal-visibility-group', terminalVisibilityContextMenu],
     ['saved-view', savedViewMenu],
     ['drive-options', driveOptionsOpen],
+    ['repository-file', repositoryFileMenu],
   ] as const;
   for (const [surface, menu] of contextMenus)
     effect(() => {

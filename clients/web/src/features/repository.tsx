@@ -7,6 +7,7 @@ import { ChangeEvidenceSurface, RepositoryStatusSurface } from '../components/re
 import type { RepositorySetupStep } from '../components/repository-setup';
 import {
   type ChangeEvidenceView,
+  DETAIL_SCROLL_OWNER,
   type RepositoryFileMenu,
   type RepositoryStatusView,
 } from '../components/repository-status-popover';
@@ -182,7 +183,7 @@ export function createRepositoryController(dependencies: RepositoryDependencies)
 
   function syncRepositoryPaginationObserver() {
     repositoryPaginationObserver?.disconnect();
-    const root = document.querySelector('.repository-status-popover__detail'),
+    const root = document.querySelector(`.${DETAIL_SCROLL_OWNER}`),
       sentinel = document.querySelector('[data-repository-pagination-sentinel="true"]');
     repositoryPaginationObserver = undefined;
     if (!root || !sentinel || repositoryDetail.value.loading) return;
@@ -252,6 +253,7 @@ export function createRepositoryController(dependencies: RepositoryDependencies)
     return {
       review: codeReview.value,
       view: changeEvidenceView.value,
+      compact: compactDevice.value,
       fileMenu: repositoryFileMenu.value,
       selectedFiles: repositorySelectedFiles.value,
       platform: repository.value?.platform,

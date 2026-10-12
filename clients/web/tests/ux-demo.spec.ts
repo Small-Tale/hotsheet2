@@ -670,39 +670,28 @@ test('represents the shared repository-status composition in the UX catalog', as
   expect(
     await dialog.evaluate((node) => {
       const heading = node.querySelector('.app-heading')!.getBoundingClientRect(),
-        navigation = node.querySelector('.repository-status-popover__navigation')!.getBoundingClientRect();
+        navigation = node.querySelector('nav[aria-label="Repository views"]')!.getBoundingClientRect();
       return heading.left >= navigation.right;
     }),
   ).toBe(true);
   await expect(dialog.locator('[data-component="list-header"]')).toContainText('Views');
   await expect(dialog.locator('[data-component="list-item"]')).not.toHaveCount(0);
+  // Kerf owns the pane insets and row geometry: no app wrapper pads the Pane content (HS2-HBFXQY).
   const paneSpacing = await dialog.evaluate((node) => {
-    const aside = node.querySelector<HTMLElement>('.repository-status-popover__navigation')!,
-      detail = node.querySelector<HTMLElement>('.repository-status-popover__detail')!,
-      values = [...node.querySelectorAll<HTMLElement>('.repository-status-popover__values')],
-      nav = node.querySelector<HTMLElement>('nav')!,
+    const nav = node.querySelector<HTMLElement>('nav[aria-label="Repository views"]')!,
       header = nav.querySelector<HTMLElement>('[data-component="list-header"]')!.getBoundingClientRect(),
-      items = [
-        ...nav.querySelectorAll<HTMLElement>(
-          ':scope > .repository-status-popover__views > [data-component="list-item"]',
-        ),
-      ].map((item) => item.getBoundingClientRect());
+      items = [...nav.querySelectorAll<HTMLElement>(':scope > [data-component="list-item"]')].map((item) =>
+        item.getBoundingClientRect(),
+      );
     return {
-      asidePadding: getComputedStyle(aside).padding,
-      detailPadding: getComputedStyle(detail).padding,
-      valueGap: values[1].getBoundingClientRect().top - values[0].getBoundingClientRect().bottom,
-      headerGap: items[0].top - header.bottom,
-      rowGaps: items.slice(1).map((item, index) => item.top - items[index].bottom),
+      wrappers: node.querySelectorAll('.repository-status-popover__navigation, .repository-status-popover__values')
+        .length,
+      headerAboveItems: items[0].top >= header.bottom,
+      rowGaps: items.slice(1).map((item, index) => Math.round(item.top - items[index].bottom)),
     };
   });
-  expect(paneSpacing).toEqual({
-    asidePadding: '8px 16px 16px',
-    detailPadding: '8px 16px 16px',
-    valueGap: 16,
-    headerGap: 4,
-    rowGaps: [0, 0, 0, 0],
-  });
-  await expect(dialog.locator('.repository-status-popover__count')).toHaveCount(5);
+  expect(paneSpacing).toEqual({ wrappers: 0, headerAboveItems: true, rowGaps: [0, 0, 0, 0] });
+  await expect(dialog.locator('nav[aria-label="Repository views"] .kui-list-item__status')).toHaveCount(5);
   await page.locator('[data-action="toggle-settings"]').click();
   const inspector = page.getByRole('complementary', { name: 'RepositoryStatusPopover settings' }),
     scenario = inspector.locator('wa-select[name="scenario"]');
@@ -739,7 +728,7 @@ test('represents the shared repository-status composition in the UX catalog', as
   await dialog.getByRole('button', { name: /Staged 2/ }).click();
   await expect(dialog).toHaveAttribute('data-view', 'staged');
   const file = dialog.locator('[data-action="select-repository-file"]').first(),
-    fileMenu = file.locator('[data-action="open-repository-file-menu-trigger"]');
+    fileMenu = dialog.locator('[data-action="open-repository-file-menu-trigger"]').first();
   await fileMenu.click();
   await expect(dialog.getByRole('menuitem', { name: 'Show Diff' })).toBeVisible();
   await dialog.getByRole('menuitem', { name: 'Show Diff' }).click();
@@ -759,8 +748,6 @@ test('represents the shared repository-status composition in the UX catalog', as
   // Kerf 5.0.0-beta.56 keeps the catalog sidebar inline at 760px; hide it so the composition gets the
   // constrained stage width this check is about rather than the width left beside the sidebar.
   await page.getByRole('button', { name: 'Hide UX components catalog' }).click();
-  await expect(dialog.locator('.repository-status-popover__navigation')).toHaveCSS('padding', '8px 16px 16px');
-  await expect(dialog.locator('.repository-status-popover__detail')).toHaveCSS('padding', '8px 16px 16px');
   await expect(dialog.locator('[aria-label="Repository identity"] dd').first()).toHaveCSS('white-space', 'normal');
   expect(
     await dialog
@@ -847,7 +834,9 @@ test('keeps repository file action menus visible at wide and narrow sizes', asyn
   const repository = page.locator('[data-component="repository-status-popover"]');
   await repository.getByRole('button', { name: /Staged 2/ }).click();
   await repository.locator('[data-action="open-repository-file-menu-trigger"]').first().click();
-  const repositoryMenu = repository.getByRole('menu');
+  // A context-mode Kerf PopupMenu owns the menu surface, item geometry, and placement (HS2-HBFXQY).
+  const repositoryMenu = repository.locator('[data-component="repository-file-context-menu"]'),
+    repositoryMenuPanel = repositoryMenu.locator('[data-component="popup-menu"]').getByRole('menu');
   await expect(repositoryMenu.getByRole('menuitem').allTextContents()).resolves.toEqual([
     'Show Diff',
     'Open',
@@ -855,17 +844,16 @@ test('keeps repository file action menus visible at wide and narrow sizes', asyn
     'Copy Relative Path',
     'Copy Absolute Path',
   ]);
-  expect(
-    await repositoryMenu.evaluate((node) => {
-      const menu = getComputedStyle(node),
-        item = getComputedStyle(node.querySelector('button')!);
-      return { padding: menu.padding, itemPadding: item.padding, gap: item.gap };
-    }),
-  ).toEqual({ padding: '4px', itemPadding: '0px 16px', gap: '8px' });
+  await expect(repositoryMenu.locator('[data-component="popup-menu"]')).toHaveCount(1);
+  await expect(repositoryMenuPanel).toBeVisible();
   await repository.screenshot({ path: 'target/visual-captures/hs2-3yzn0s-repository-file-menu-wide.png' });
+  // Dismiss the open menu first, as a user would, before opening another row's menu.
+  await page.keyboard.press('Escape');
+  await expect(repositoryMenuPanel).toBeHidden();
   await page.setViewportSize({ width: 760, height: 640 });
   await repository.locator('[data-action="open-repository-file-menu-trigger"]').last().click();
-  const narrowBounds = (await repositoryMenu.boundingBox())!;
+  await expect(repositoryMenuPanel).toBeVisible();
+  const narrowBounds = (await repositoryMenuPanel.boundingBox())!;
   expect(narrowBounds.x + narrowBounds.width).toBeLessThanOrEqual(752);
   expect(narrowBounds.y + narrowBounds.height).toBeLessThanOrEqual(632);
   await repository.screenshot({ path: 'target/visual-captures/hs2-3yzn0s-repository-file-menu-narrow.png' });
