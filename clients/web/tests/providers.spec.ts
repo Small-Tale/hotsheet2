@@ -9831,8 +9831,12 @@ test('owns and restores sidebar and reader tabs independently', async ({ page })
     readerAttachments = reader.getByRole('tab', { name: /Attachments/ });
   const readerInfo = reader.getByRole('tab', { name: 'Info' });
   await expect(readerInfo).toHaveAttribute('aria-selected', 'true');
-  // The reader dialog places its own initial focus as it finishes opening; under a busy browser
-  // that can land after an early focus() and swallow the key, so press through the tab itself.
+  // wa-dialog places its initial focus in a requestAnimationFrame after show(); under a busy
+  // browser that frame can land between press()'s focus and its keydown and swallow the key
+  // (HS2-Y4PSM6). Wait for the dialog to own focus before driving the tab list.
+  await expect
+    .poll(() => reader.evaluate((node) => node === document.activeElement || node.contains(document.activeElement)))
+    .toBe(true);
   await readerInfo.press('End');
   await expect(readerAttachments).toHaveAttribute('aria-selected', 'true');
   await expect(sidebarTimeline).toHaveAttribute('aria-selected', 'true');
