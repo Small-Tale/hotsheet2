@@ -2916,20 +2916,20 @@ test('relinks a moved git ticket repository from its source dialog (HS2-8BG4W9, 
   await page.screenshot({ path: testInfo.outputPath('git-relink-wide.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: testInfo.outputPath('git-relink-narrow.png'), animations: 'disabled' });
-  await dialog.locator('input[name="git-store-path"]').fill('/work/missing.hs2');
+  await dialog.getByRole('textbox', { name: 'Location' }).fill('/work/missing.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(dialog.getByRole('alert')).toContainText('Choose a Hot Sheet ticket repository');
-  await dialog.locator('input[name="git-store-path"]').fill('/work/unrelated.hs2');
+  await dialog.getByRole('textbox', { name: 'Location' }).fill('/work/unrelated.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(dialog.getByRole('alert')).toContainText('different Hot Sheet ticket repository');
   await page.screenshot({ path: testInfo.outputPath('git-wrong-store-narrow.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: testInfo.outputPath('git-wrong-store-wide.png'), animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
-  await dialog.locator('input[name="git-store-path"]').fill('/work/renamed.hs2');
+  await dialog.getByRole('textbox', { name: 'Location' }).fill('/work/renamed.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(page.locator('.app-toast')).toContainText('Ticket repository location updated.');
-  await expect(dialog.locator('input[name="git-store-path"]')).toHaveValue('/work/renamed.hs2');
+  await expect(dialog.getByRole('textbox', { name: 'Location' })).toHaveValue('/work/renamed.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(page.locator('.app-toast')).toContainText('Location is unchanged.');
   await dialog.getByRole('button', { name: 'Done' }).click();
@@ -2950,7 +2950,7 @@ test('requires review and keeps an unverified recovery visible for a moved legac
     )
     .click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
-  await dialog.locator('input[name="git-store-path"]').fill('/work/recovered.hs2');
+  await dialog.getByRole('textbox', { name: 'Location' }).fill('/work/recovered.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(dialog.getByRole('alert')).toContainText('cannot verify this destination');
   await dialog.locator('wa-checkbox[name="review-unverified-recovery"]').click();
@@ -2986,7 +2986,7 @@ test('reviews a legacy store at its unchanged path before adopting it (HS2-RQXJQ
     )
     .click();
   const dialog = page.locator('[data-ticket-source-setup-dialog]');
-  await expect(dialog.locator('input[name="git-store-path"]')).toHaveValue('/work/demo.hs2');
+  await expect(dialog.getByRole('textbox', { name: 'Location' })).toHaveValue('/work/demo.hs2');
   await dialog.getByRole('button', { name: 'Save location' }).click();
   await expect(dialog.getByRole('alert')).toContainText('identity was never recorded');
   await page.screenshot({ path: 'target/visual-captures/hs2-rqxjqv-review-dialog-wide.png', animations: 'disabled' });

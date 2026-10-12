@@ -501,9 +501,8 @@ describe('ticket source surfaces', () => {
     expect(markup).toContain('data-component="git-source-editor"');
     expect(markup).toContain('Default ticket source for this project.');
     expect(markup).toContain('<strong>Name</strong>');
-    expect(markup).toContain('<span>HS2 git tickets</span>');
-    expect(markup).toContain('<strong>Location</strong>');
-    expect(markup).toContain('name="git-store-path" type="text" value="/work/demo.hs2"');
+    expect(markup).toContain('HS2 git tickets');
+    expect(markup).toContain('<wa-input name="git-store-path" type="text" label="Location" value="/work/demo.hs2"');
     expect(markup).toContain('name="review-unverified-recovery" value="on"');
     expect(markup).toContain('cannot verify it is the same repository');
     expect(markup).toContain('data-action="relink-git-source"');

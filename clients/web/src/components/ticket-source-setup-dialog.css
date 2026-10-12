@@ -1,77 +1,31 @@
+/* The setup dialog's width: Web Awesome's documented --width, capped to the viewport. */
 wa-dialog[data-ticket-source-setup-dialog],
 wa-dialog.ticket-source-setup-dialog {
   --width: min(remify(576px), calc(100vw - remify(32px)));
 }
+/* The remote-backup card stays flush with the dialog's form controls; ContentItem's info appearance
+   adds the standard 8px inline inset, which would misalign it inside the dialog body. */
+.ticket-source-setup__remote {
+  padding: var(--wa-space-m);
+  border: 1px solid var(--wa-color-brand-border-quiet);
+  border-radius: var(--wa-border-radius-l);
+  color: var(--wa-color-brand-on-normal);
+  background: var(--wa-color-brand-fill-quiet);
+}
+/* The removal confirmation fills the ContentTransition action row instead of shrinking to content. */
 .ticket-source-setup__removal {
-  display: grid;
   width: 100%;
-  align-items: center;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: var(--wa-space-xs);
 }
 /* The root step's lone Cancel and the destructive/availability actions sit at the start of the
-   ContentTransition action row; Cancel/Save stay at its end. */
+   ContentTransition action row; Cancel/Save stay at its end. Kerf Row has no per-child push. */
 .ticket-source-setup__root-cancel,
 .ticket-source-setup__toggle,
 .ticket-source-setup__remove {
   margin-inline-end: auto;
 }
-.ticket-source-setup__removal-prompt {
-  grid-column: 1 / -1;
-  margin-block: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  line-height: 1.4;
-}
-.ticket-source-setup__removal-prompt strong {
-  color: var(--wa-color-danger-on-quiet);
-}
-.ticket-source-setup {
-  display: grid;
-  gap: var(--wa-space-m);
-}
-.ticket-source-setup__intro {
-  margin: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  line-height: 1.5;
-}
-.ticket-source-setup__source-detail {
-  display: grid;
-  gap: var(--wa-space-2xs);
-  overflow-wrap: anywhere;
-}
-.ticket-source-setup__source-detail strong {
-  font-size: var(--wa-font-size-s);
-}
-.ticket-source-setup__source-detail code {
-  color: var(--wa-color-neutral-on-quiet);
-}
-.ticket-source-setup__source-location {
-  display: grid;
-  gap: var(--wa-space-2xs);
-}
-.ticket-source-setup__source-location strong {
-  font-size: var(--wa-font-size-s);
-}
-.ticket-source-setup__source-location input {
-  box-sizing: border-box;
-  width: 100%;
-  padding: var(--wa-space-xs);
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-m);
-  background: var(--wa-color-surface-default);
-  color: var(--wa-color-text-normal);
-  font: inherit;
-}
-.ticket-source-setup__options {
-  display: grid;
-  overflow: hidden;
-  border: 1px solid var(--wa-color-neutral-border-normal);
-  border-radius: var(--wa-border-radius-l);
-  background: var(--wa-color-surface-default);
-  grid-auto-rows: max-content;
-}
-/* Tall padded option rows with a large centered icon, quiet disclosure, brand hover fill, square
-   corners, and Kerf group dividers between rows (Kerf beta.60 public ListItem tokens, KF-8SD2EP). */
+/* Tall padded option rows in a framed card with a large centered icon, quiet disclosure, brand hover
+   fill, square corners, and Kerf group dividers (public ListItem tokens, KF-8SD2EP; framed list:
+   KF-2HB7RT). */
 .ticket-source-setup__options {
   --kui-layout-inline-margin: 0;
   --kui-list-item-min-height: remify(68px);
@@ -83,91 +37,22 @@ wa-dialog.ticket-source-setup-dialog {
   --kui-list-item-gap: var(--wa-space-s);
   --kui-list-item-hover-background: var(--wa-color-brand-fill-quiet);
   --kui-list-item-trailing-color: var(--wa-color-neutral-on-quiet);
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--wa-color-neutral-border-normal);
+  border-radius: var(--wa-border-radius-l);
+  background: var(--wa-color-surface-default);
+  grid-auto-rows: max-content;
 }
+/* Option copy inside a ListItem label (phrasing content only, so a span grid, not a Kerf List). */
 .ticket-source-setup__option-copy {
   display: grid;
   min-width: 0;
   max-width: 100%;
   gap: var(--wa-space-2xs);
 }
-.ticket-source-setup__option-copy strong {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--wa-space-xs);
-  line-height: 1.25;
-}
-.ticket-source-setup__option-copy strong small {
-  padding: remify(1.6px) remify(6.4px);
-  border-radius: var(--wa-border-radius-pill);
-  color: var(--wa-color-brand-on-quiet);
-  background: var(--wa-color-brand-fill-quiet);
-  font-size: var(--wa-font-size-2xs);
-}
-.ticket-source-setup__option-copy > small {
-  min-width: 0;
-  color: var(--wa-color-neutral-on-quiet);
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
+/* Store paths in an option description wrap instead of overflowing the row. */
 .ticket-source-setup__option-copy code {
   white-space: normal;
   overflow-wrap: anywhere;
-}
-.ticket-source-setup__error {
-  min-width: 0;
-  max-width: 100%;
-  color: var(--wa-color-danger-on-quiet);
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-/* Which projects an edit affects (HS2-3SCH1K). */
-.ticket-source-setup__scope-hint {
-  margin: var(--wa-space-s) 0 0;
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-s);
-}
-.ticket-source-setup__remote {
-  display: grid;
-  padding: var(--wa-space-m);
-  border: 1px solid var(--wa-color-brand-border-quiet);
-  border-radius: var(--wa-border-radius-l);
-  color: var(--wa-color-brand-on-normal);
-  background: var(--wa-color-brand-fill-quiet);
-  grid-template-columns: var(--wa-space-l) minmax(0, 1fr);
-  gap: var(--wa-space-s);
-}
-.ticket-source-setup__remote-icon {
-  display: flex;
-  justify-content: center;
-}
-.ticket-source-setup__remote p {
-  margin: var(--wa-space-xs) 0;
-  color: var(--wa-color-neutral-on-quiet);
-  line-height: 1.45;
-}
-.ticket-source-setup__remote code {
-  display: block;
-  padding: var(--wa-space-xs);
-  border-radius: var(--wa-border-radius-s);
-  background: var(--wa-color-surface-default);
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.ticket-source-setup__remote-form {
-  display: grid;
-  gap: var(--wa-space-m);
-}
-.ticket-source-setup__remote-progress {
-  display: grid;
-  color: var(--wa-color-brand-on-quiet);
-  font-size: var(--wa-font-size-s);
-  gap: var(--kui-space-xs);
-}
-.ticket-source-setup__remote-progress p {
-  margin: 0;
-}
-.ticket-source-setup__remote-help {
-  color: var(--wa-color-text-link);
-  font-size: var(--wa-font-size-xs);
 }
