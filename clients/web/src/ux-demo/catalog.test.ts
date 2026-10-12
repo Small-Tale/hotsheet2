@@ -793,3 +793,20 @@ describe('UX demo catalog', () => {
     });
   });
 });
+
+describe('UX demo catalog metadata source (HS2-5CYRZB)', () => {
+  it('takes every app-owned component name and description from the generated consumer catalog', () => {
+    const records = new Map(componentCatalogExtension.entries.map((entry) => [entry.id, entry] as const));
+    const recorded = flattenCatalog().filter((item) => records.has(item.id));
+    expect(recorded.length).toBeGreaterThan(0);
+    for (const item of recorded) {
+      expect(item.name).toBe(records.get(item.id)?.name);
+      expect(item.description).toBe(records.get(item.id)?.purpose);
+    }
+  });
+
+  it('keeps catalog.ts free of duplicated purpose strings for recorded components', () => {
+    const source = readFileSync(fileURLToPath(new URL('./catalog.ts', import.meta.url)), 'utf8');
+    for (const entry of componentCatalogExtension.entries) expect(source).not.toContain(entry.purpose);
+  });
+});
