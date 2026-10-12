@@ -5740,6 +5740,40 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(driveAction).toHaveAccessibleName('Drive with Codex');
 });
 
+test('keeps the DriveControl label at WCAG AA contrast in both states and schemes (HS2-9G0Y8W)', async ({ page }) => {
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.goto('/ux-demo?component=drive-control');
+    const drive = page.locator('[data-component="drive-control"]');
+    for (const running of ['false', 'true']) {
+      if ((await drive.getAttribute('data-running')) !== running) await drive.click();
+      await expect(drive).toHaveAttribute('data-running', running);
+      const ratio = await drive.evaluate((element) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) throw new Error('2d context unavailable');
+        const luminance = (color: string) => {
+          context.clearRect(0, 0, 1, 1);
+          context.fillStyle = color;
+          context.fillRect(0, 0, 1, 1);
+          const [red = 0, green = 0, blue = 0] = context.getImageData(0, 0, 1, 1).data;
+          const channel = (value: number) => {
+            const srgb = value / 255;
+            return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+          };
+          return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue);
+        };
+        const style = getComputedStyle(element),
+          [light, dark] = [luminance(style.color), luminance(style.backgroundColor)].sort((a, b) => b - a);
+        return (light + 0.05) / (dark + 0.05);
+      });
+      expect(ratio, `${colorScheme} running=${running}`).toBeGreaterThanOrEqual(4.5);
+    }
+    await drive.screenshot({ path: `target/visual-captures/hs2-9g0y8w-drive-${colorScheme}.png` });
+  }
+});
+
 test('holds the AppShell at its 1024 by 600 supported floor', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 500 });
   await page.goto('/ux-demo?component=app-shell');
