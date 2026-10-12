@@ -1569,7 +1569,7 @@ test('opening project statistics on a phone leaves the UI interactive, with no s
     Boolean(
       document
         .elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)
-        ?.closest('[data-component="project-statistics"]'),
+        ?.closest('section[aria-label="demo project statistics"]'),
     ),
   );
   expect(hit).toBe(true);

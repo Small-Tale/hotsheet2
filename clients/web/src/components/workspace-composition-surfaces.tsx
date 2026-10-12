@@ -1,5 +1,7 @@
-import './project-statistics.css';
+import '@kerfjs/ui/layout.css';
 
+import { Pane } from '@kerfjs/ui/pane';
+import { Text } from '@kerfjs/ui/text';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 import { AppMessageState } from './app-empty-state';
@@ -91,14 +93,16 @@ export function GlobalWorkspaceSurface(props: GlobalWorkspaceSurfaceProps) {
   if (props.kind === 'terminals') return <TerminalDashboard {...props.dashboard} />;
   if (props.projectName)
     return (
-      <section
-        class="project-statistics"
-        data-component="project-statistics"
-        aria-label={`${props.projectName} project statistics`}
-      >
-        <h1 class="project-statistics__title">{props.projectName} project statistics</h1>
-        <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
-      </section>
+      // Per-project statistics (HS2-Q1WCCY): Kerf's Pane owns the scroll and outer inset, and a
+      // layout content stack separates the title from the report (HS2-3V3JY6).
+      <Pane element="section" label={`${props.projectName} project statistics`} deepInset>
+        <div class="kui-content">
+          <Text variant="h1" size="xlarge" flush>
+            {props.projectName} project statistics
+          </Text>
+          <ConfidenceCalibration state={props.calibration ?? { status: 'loading' }} />
+        </div>
+      </Pane>
     );
   return <AppMessageState title="Cross-project stats" message="This dashboard is still being designed." />;
 }

@@ -2724,7 +2724,8 @@ an own class or configures the child through its props:
   sized by LucideIcon `size` and tinted by its `color` prop (HS2-GQ57YW). Commit-summary rules use child combinators, so a commit body's
   Markdown bold and code keep `MarkdownPreview`'s own inherited tone.
 - `ConfidenceCalibration`: `recent-title`, `recent-list`, and `recent-item`.
-- The project statistics page: `project-statistics__title`.
+- The project statistics page composes Kerf `Pane` (`deepInset`), a `kui-content` stack, and an
+  `h1` `Text`; it owns no CSS (HS2-3V3JY6).
 - `AttachmentGallery`:
   - Its filename is `ToolbarText tone="dark"` in the inverse gallery toolbar; Kerf supplies the
     light text color while `fill` retains long-name truncation (HS2-V5VS0A, KF-7288MD).
