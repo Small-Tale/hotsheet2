@@ -1,31 +1,24 @@
-/* Completion-confidence calibration (HS2-Q1WCCY): app-owned native table and list markup. */
+/* Completion-confidence calibration (HS2-Q1WCCY). Kerf List, Row, and Text own the stacks, headings,
+   copy, and band/outcome colors (HS2-PG7R4A); these rules cover the native numeric table, which no
+   Kerf component expresses, plus the panel's reading width. */
+
+/* The panel fills its settings pane up to a readable width. */
 .confidence-calibration {
-  display: grid;
-  gap: var(--kui-space-l);
   width: 100%;
   max-width: remify(960px);
   min-width: 0;
 }
-.confidence-calibration__header {
-  display: grid;
-  gap: var(--kui-space-xs);
-}
-.confidence-calibration__header h2 {
-  margin: 0;
-  font-size: var(--wa-font-size-l);
-}
-.confidence-calibration__header p {
-  margin: 0;
-  color: var(--wa-color-text-quiet);
-}
+/* The wide table scrolls inside its own container instead of widening a narrow page. */
 .confidence-calibration__table-scroll {
   overflow-x: auto;
 }
+/* Collapsed rules and aligned digits for the numeric columns. */
 .confidence-calibration__table {
   width: 100%;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
+/* The caption names the table for assistive technology only (visually hidden). */
 .confidence-calibration__caption {
   position: absolute;
   width: 1px;
@@ -34,6 +27,7 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+/* Cells: right-aligned numbers separated by row rules. */
 .confidence-calibration__table th,
 .confidence-calibration__table td {
   padding: var(--kui-space-xs) var(--kui-space-s);
@@ -41,11 +35,13 @@
   text-align: right;
   white-space: nowrap;
 }
+/* Quiet column headings. */
 .confidence-calibration__table thead th {
   color: var(--wa-color-text-quiet);
   font-size: var(--wa-font-size-xs);
   font-weight: var(--wa-font-weight-semibold);
 }
+/* The band column reads left-aligned; its row headers keep normal weight. */
 .confidence-calibration__table th[scope='row'],
 .confidence-calibration__table thead th:first-child {
   text-align: left;
@@ -53,76 +49,21 @@
 .confidence-calibration__table th[scope='row'] {
   font-weight: var(--wa-font-weight-normal);
 }
-.confidence-calibration__band,
-.confidence-calibration__range {
-  display: block;
-}
-.confidence-calibration__band {
-  font-weight: var(--wa-font-weight-semibold);
-}
-.confidence-calibration__band[data-band='verified'] {
-  color: var(--wa-color-success-on-quiet);
-}
-.confidence-calibration__band[data-band='assumed'] {
-  color: var(--wa-color-brand-on-quiet);
-}
-.confidence-calibration__band[data-band='partial'] {
-  color: var(--wa-color-warning-on-quiet);
-}
-.confidence-calibration__band[data-band='unverified'] {
-  color: var(--wa-color-danger-on-quiet);
-}
-.confidence-calibration__range {
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-xs);
-}
+/* The reopen-rate cell is wide enough for its bar, whose track height the cell sets by inheritance
+   (no rule restyles the Web Awesome element itself). */
 .confidence-calibration__rate {
   min-width: remify(128px);
-}
-.confidence-calibration__rate-stack {
-  /* The app-owned stack spaces the label above the bar and sets the bar's track height by
-     inheritance, so no rule restyles the Web Awesome element itself. */
   --track-height: remify(4px);
-  display: grid;
-  gap: var(--kui-space-2xs);
 }
-.confidence-calibration__recent {
-  display: grid;
-  gap: var(--kui-space-s);
-}
-.confidence-calibration__recent-title {
-  margin: 0;
-  font-size: var(--wa-font-size-m);
-}
+/* The recent completions list is a plain, unindented stack. */
 .confidence-calibration__recent-list {
   display: grid;
-  gap: var(--kui-space-xs);
   margin: 0;
   padding: 0;
-  padding-inline-start: 0;
+  gap: var(--kui-space-xs);
   list-style: none;
 }
-.confidence-calibration__recent-item {
+.confidence-calibration__recent-list > li {
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--kui-space-s);
-  min-width: 0;
-}
-.confidence-calibration__slug {
-  font-family: var(--wa-font-family-code);
-  font-size: var(--wa-font-size-s);
-}
-.confidence-calibration__unscored,
-.confidence-calibration__outcome {
-  color: var(--wa-color-text-quiet);
-  font-size: var(--wa-font-size-s);
-}
-.confidence-calibration__outcome[data-outcome='reopened'] {
-  color: var(--wa-color-danger-on-quiet);
-}
-.confidence-calibration__outcome[data-outcome='verified'] {
-  color: var(--wa-color-success-on-quiet);
 }

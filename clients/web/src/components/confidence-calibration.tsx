@@ -1,9 +1,14 @@
 import '@awesome.me/webawesome/dist/components/progress-bar/progress-bar.js';
 import './confidence-calibration.css';
 
+import { type CssForegroundColor, foregroundColorVar } from '@kerfjs/ui/css-values';
 import { EmptyState } from '@kerfjs/ui/empty-state';
+import { List } from '@kerfjs/ui/list';
+import { ListHeader } from '@kerfjs/ui/list-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Row } from '@kerfjs/ui/row';
 import { StateBanner } from '@kerfjs/ui/state-banner';
+import { Text } from '@kerfjs/ui/text';
 import { CircleAlert, Gauge } from 'lucide';
 
 import type { CalibrationBand, CalibrationOutcome, CalibrationReport } from '../api';
@@ -27,6 +32,21 @@ const OUTCOME_LABELS: Record<CalibrationOutcome, string> = {
   pending: 'Awaiting outcome',
 };
 
+/** Each rubric band's label color, matching the ConfidenceBadge tones (HS2-PG7R4A). */
+const BAND_COLORS: Record<string, CssForegroundColor | undefined> = {
+  verified: foregroundColorVar('--wa-color-success-on-quiet'),
+  assumed: foregroundColorVar('--wa-color-brand-on-quiet'),
+  partial: foregroundColorVar('--wa-color-warning-on-quiet'),
+  unverified: foregroundColorVar('--wa-color-danger-on-quiet'),
+};
+
+/** A resolved outcome's color; a pending one stays quiet. */
+const OUTCOME_COLORS: Record<CalibrationOutcome, CssForegroundColor | undefined> = {
+  verified: foregroundColorVar('--wa-color-success-on-quiet'),
+  reopened: foregroundColorVar('--wa-color-danger-on-quiet'),
+  pending: undefined,
+};
+
 /** A reopen rate as a whole percentage, or a dash until a completion resolves. */
 export function reopenRateLabel(band: Pick<CalibrationBand, 'reopen_rate'>): string {
   return band.reopen_rate === undefined ? '—' : `${Math.round(band.reopen_rate * 100)}%`;
@@ -37,17 +57,21 @@ function BandRow({ band }: { band: CalibrationBand }) {
   return (
     <tr data-band={band.band} data-key={`calibration-band:${band.band}`}>
       <th scope="row">
-        <span class="confidence-calibration__band" data-band={band.band}>
-          {BAND_LABELS[band.band] ?? band.band}
-        </span>
-        <span class="confidence-calibration__range">{band.range === '-' ? 'no score' : band.range}</span>
+        <List>
+          <Text variant="span" color={BAND_COLORS[band.band]} flush data-band={band.band}>
+            <strong>{BAND_LABELS[band.band] ?? band.band}</strong>
+          </Text>
+          <Text variant="span" tone="quiet" size="compact" border="none" flush>
+            {band.range === '-' ? 'no score' : band.range}
+          </Text>
+        </List>
       </th>
       <td>{band.completions}</td>
       <td>{band.verified}</td>
       <td>{band.reopened}</td>
       <td>{band.pending}</td>
       <td class="confidence-calibration__rate">
-        <div class="confidence-calibration__rate-stack">
+        <List gap="2xs">
           <span>{reopenRateLabel(band)}</span>
           {rate !== undefined && (
             <wa-progress-bar
@@ -55,7 +79,7 @@ function BandRow({ band }: { band: CalibrationBand }) {
               label={`${BAND_LABELS[band.band] ?? band.band} reopen rate`}
             />
           )}
-        </div>
+        </List>
       </td>
       <td>{band.mean_confidence === undefined ? '—' : band.mean_confidence.toFixed(1)}</td>
     </tr>
@@ -106,58 +130,72 @@ export function ConfidenceCalibration({ state }: { state: ConfidenceCalibrationS
       data-state="ready"
       aria-labelledby="confidence-calibration-title"
     >
-      <header class="confidence-calibration__header">
-        <h2 id="confidence-calibration-title">Completion confidence calibration</h2>
-        <p>
-          {report.completions} completions, {report.scored} scored. Reopen rate counts completions with a known outcome;
-          a well-calibrated rubric reopens less as the band rises.
-        </p>
-      </header>
-      <div class="confidence-calibration__table-scroll">
-        <table class="confidence-calibration__table">
-          <caption class="confidence-calibration__caption">Reported confidence against later outcomes</caption>
-          <thead>
-            <tr>
-              <th scope="col">Band</th>
-              <th scope="col">Completions</th>
-              <th scope="col">Verified</th>
-              <th scope="col">Reopened</th>
-              <th scope="col">Pending</th>
-              <th scope="col">Reopen rate</th>
-              <th scope="col">Mean score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.bands.map((band) => (
-              <BandRow band={band} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <section class="confidence-calibration__recent" aria-labelledby="confidence-calibration-recent">
-        <h3 class="confidence-calibration__recent-title" id="confidence-calibration-recent">
-          Recent completions
-        </h3>
-        <ul class="confidence-calibration__recent-list">
-          {recent.map((event) => (
-            <li
-              class="confidence-calibration__recent-item"
-              data-key={`calibration-event:${event.slug}:${event.completed_at}`}
-              data-outcome={event.outcome}
-            >
-              <span class="confidence-calibration__slug">{event.slug}</span>
-              {event.confidence === undefined ? (
-                <span class="confidence-calibration__unscored">Unscored</span>
-              ) : (
-                <ConfidenceBadge value={event.confidence} />
-              )}
-              <span class="confidence-calibration__outcome" data-outcome={event.outcome}>
-                {OUTCOME_LABELS[event.outcome]}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <List gap="l">
+        <List gap="xs">
+          <Text variant="h2" size="large" flush id="confidence-calibration-title">
+            Completion confidence calibration
+          </Text>
+          <Text variant="p" tone="quiet" flush>
+            {report.completions} completions, {report.scored} scored. Reopen rate counts completions with a known
+            outcome; a well-calibrated rubric reopens less as the band rises.
+          </Text>
+        </List>
+        <div class="confidence-calibration__table-scroll">
+          <table class="confidence-calibration__table">
+            <caption class="confidence-calibration__caption">Reported confidence against later outcomes</caption>
+            <thead>
+              <tr>
+                <th scope="col">Band</th>
+                <th scope="col">Completions</th>
+                <th scope="col">Verified</th>
+                <th scope="col">Reopened</th>
+                <th scope="col">Pending</th>
+                <th scope="col">Reopen rate</th>
+                <th scope="col">Mean score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.bands.map((band) => (
+                <BandRow band={band} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <section class="confidence-calibration__recent" aria-label="Recent completions">
+          <List gap="xs">
+            <ListHeader label="Recent completions" headingLevel={3} />
+            <ul class="confidence-calibration__recent-list">
+              {recent.map((event) => (
+                <li data-key={`calibration-event:${event.slug}:${event.completed_at}`} data-outcome={event.outcome}>
+                  <Row wrap gap="xs" vAlign="middle" textInsets="l">
+                    <Text variant="span" font="monospace" size="compact" border="none" flush>
+                      {event.slug}
+                    </Text>
+                    {event.confidence === undefined ? (
+                      <Text variant="span" tone="quiet" size="compact" border="none" flush>
+                        Unscored
+                      </Text>
+                    ) : (
+                      <ConfidenceBadge value={event.confidence} />
+                    )}
+                    <Text
+                      variant="span"
+                      tone="quiet"
+                      size="compact"
+                      border="none"
+                      flush
+                      color={OUTCOME_COLORS[event.outcome]}
+                      data-outcome={event.outcome}
+                    >
+                      {OUTCOME_LABELS[event.outcome]}
+                    </Text>
+                  </Row>
+                </li>
+              ))}
+            </ul>
+          </List>
+        </section>
+      </List>
     </section>
   );
 }
